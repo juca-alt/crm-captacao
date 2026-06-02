@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>CRM Captação · Life Planners</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <style>
 :root{
   --navy:#0f172a; --navy2:#1e293b; --line:#e2e8f0; --bg:#f8fafc; --card:#fff;
@@ -165,8 +166,10 @@ tr.row:hover{background:#f8fafc;cursor:pointer}
     <button class="nav-item" data-view="lista"><span class="ic">☰</span> Lista</button>
     <button class="nav-item btn-mine" id="nav-mine"><span class="ic">⛏</span> Garimpo (Mineração)</button>
     <button class="nav-item" id="nav-novo"><span class="ic">＋</span> Novo lead</button>
+    <button class="nav-item" id="nav-import"><span class="ic">⬆</span> Atualizar base de dados</button>
     <div class="nav-spacer"></div>
-    <div class="nav-foot">Conectado: <span id="who-foot"></span><br/><a id="logout">Sair</a></div>
+    <button class="nav-item" id="nav-update"><span class="ic">⟳</span> Atualizar versão</button>
+    <div class="nav-foot">Versão <span id="ver"></span> · <span id="who-foot"></span><br/><a id="logout">Sair</a></div>
   </aside>
 
   <div class="main">
@@ -187,6 +190,7 @@ tr.row:hover{background:#f8fafc;cursor:pointer}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
+const APP_VERSION = 'v1.2';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -210,6 +214,14 @@ const AVA_COLORS=['#2563eb','#16a34a','#8b5cf6','#0d9488','#f59e0b','#ef4444','#
 
 // ===== STATE =====
 let LEADS=[], VIEW='funil', SEARCH='', F_ETAPA='', F_RESP='', F_MONEY=false, ME='';
+let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='';
+const SITUACOES=['Ativo','Dormente','Convertido','Descartado'];
+function situacaoOf(l){
+  if(l.etapa==='Descartado') return 'Descartado';
+  if(l.etapa==='Dormente') return 'Dormente';
+  if(l.status==='Convertido') return 'Convertido';
+  return 'Ativo';
+}
 
 // ===== HELPERS =====
 const $=s=>document.querySelector(s);
@@ -255,9 +267,12 @@ async function updateLead(id,patch){
 // ===== FILTERING =====
 function filtered(){
   let r=LEADS;
-  if(SEARCH){const q=SEARCH.toLowerCase();r=r.filter(l=>[l.nome,l.empresa,l.cargo].some(x=>(x||'').toLowerCase().includes(q)));}
+  if(F_SITUACAO!=='Todos')r=r.filter(l=>situacaoOf(l)===F_SITUACAO);
+  if(SEARCH){const q=SEARCH.toLowerCase();r=r.filter(l=>[l.nome,l.empresa,l.cargo,l.recomendante].some(x=>(x||'').toLowerCase().includes(q)));}
   if(F_ETAPA)r=r.filter(l=>l.etapa===F_ETAPA);
   if(F_RESP)r=r.filter(l=>l.responsavel===F_RESP);
+  if(F_ORIGEM)r=r.filter(l=>(l.origem||'')===F_ORIGEM);
+  if(F_RECOM)r=r.filter(l=>(l.recomendante||'')===F_RECOM);
   if(F_MONEY)r=r.filter(l=>l.renda_estimada>=10000);
   return r;
 }
@@ -275,13 +290,25 @@ function render(){
 function filtersHTML(){
   const data=filtered();
   const tot=data.length, money=data.filter(l=>l.renda_estimada>=10000).length;
+  // contagem por situação (sobre toda a base, ignorando o filtro de situação)
+  const sitCount=s=>LEADS.filter(l=>situacaoOf(l)===s).length;
+  const sitTabs=['Ativo','Dormente','Convertido','Descartado','Todos'].map(s=>{
+    const n = s==='Todos'?LEADS.length:sitCount(s);
+    const lbl = s==='Ativo'?'Ativos':s==='Dormente'?'Dormentes':s==='Convertido'?'Convertidos':s==='Descartado'?'Descartados':'Todos';
+    return `<button class="chip ${F_SITUACAO===s?'on':''}" data-sit="${s}">${lbl} <span style="opacity:.7">${n}</span></button>`;
+  }).join('');
+  const origens=[...new Set(LEADS.map(l=>l.origem).filter(Boolean))].sort();
+  const recoms=[...new Set(LEADS.map(l=>l.recomendante).filter(Boolean))].sort();
   return `
+  <div class="filters" style="margin-bottom:6px">${sitTabs}</div>
   <div class="summary">
     <div class="scard"><div class="n">${tot}</div><div class="l">leads na visão</div></div>
     <div class="scard"><div class="n" style="color:var(--green)">${money}</div><div class="l">renda ≥ 10k</div></div>
   </div>
   <div class="filters">
     <select class="fsel" id="f-etapa"><option value="">Todas as etapas</option>${ETAPAS.map(e=>`<option value="${e}" ${F_ETAPA===e?'selected':''}>${ETAPA_LABEL[e]}</option>`).join('')}</select>
+    <select class="fsel" id="f-origem"><option value="">Toda origem</option>${origens.map(o=>`<option value="${esc(o)}" ${F_ORIGEM===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
+    <select class="fsel" id="f-recom"><option value="">Todo recomendante</option>${recoms.map(o=>`<option value="${esc(o)}" ${F_RECOM===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
     <button class="chip ${F_RESP==='Gustavo'?'on':''}" data-resp="Gustavo">Juca</button>
     <button class="chip ${F_RESP==='Victor'?'on':''}" data-resp="Victor">Victor</button>
     <button class="chip money ${F_MONEY?'on':''}" id="f-money">💰 Renda ≥ 10k</button>
@@ -289,6 +316,9 @@ function filtersHTML(){
 }
 function wireFilters(){
   const fe=$('#f-etapa'); if(fe)fe.onchange=e=>{F_ETAPA=e.target.value;render();};
+  const fo=$('#f-origem'); if(fo)fo.onchange=e=>{F_ORIGEM=e.target.value;render();};
+  const fr=$('#f-recom'); if(fr)fr.onchange=e=>{F_RECOM=e.target.value;render();};
+  document.querySelectorAll('[data-sit]').forEach(b=>b.onclick=()=>{F_SITUACAO=b.dataset.sit;render();});
   document.querySelectorAll('[data-resp]').forEach(b=>b.onclick=()=>{F_RESP=F_RESP===b.dataset.resp?'':b.dataset.resp;render();});
   const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
 }
@@ -500,11 +530,84 @@ function openNovo(mine){
   setTimeout(()=>$('#n-raw').focus(),50);
 }
 
+// ===== IMPORTAR BASE (CSV) =====
+function openImport(){
+  const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:560px">
+    <h2>⬆ Atualizar base de dados</h2>
+    <p class="hint">Importe leads de um <b>CSV</b>. Eu confiro <b>duplicatas</b> (pelo LinkedIn) e <b>erros</b> e mostro a prévia — só grava no seu clique. Colunas aceitas: nome, cargo, empresa, sexo, idade, renda, telefone, email, linkedin, status, observacoes. Só <b>nome</b> é obrigatório.</p>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
+      <input type="file" id="imp-file" accept=".csv,text/csv"/>
+      <a id="imp-tpl" class="muted" style="cursor:pointer;text-decoration:underline;font-size:12px">baixar modelo CSV</a>
+    </div>
+    <div id="imp-prev"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn primary" id="imp-go" disabled>Importar novos</button>
+      <button class="btn ghost" id="imp-close">Fechar</button>
+    </div>
+  </div>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+  $('#imp-close').onclick=()=>ov.remove();
+  $('#imp-tpl').onclick=()=>{
+    const csv='nome,cargo,empresa,sexo,idade,renda,telefone,email,linkedin,status,observacoes\nFulano de Tal,Gerente Comercial,Empresa X,Masculino,34,12000,(81) 99999-9999,fulano@email.com,https://www.linkedin.com/in/fulano/,Aguardando Qualificacao,exemplo\n';
+    const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='modelo_leads.csv';a.click();
+  };
+  let toInsert=[];
+  const H=h=>(h||'').trim().toLowerCase();
+  const pick=(row,keys)=>{for(const k of Object.keys(row)){if(keys.includes(H(k)))return (row[k]==null?'':String(row[k]));}return '';};
+  $('#imp-file').onchange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    Papa.parse(f,{header:true,skipEmptyLines:true,complete:res=>{
+      const rows=res.data;toInsert=[];let dup=0,err=0;const seen=new Set();
+      const existing=new Set(LEADS.map(l=>l.linkedin_url_norm).filter(Boolean));
+      for(const r of rows){
+        const nome=pick(r,['nome','name']).trim();
+        if(!nome){err++;continue;}
+        const url=pick(r,['linkedin','linkedin_url','url']).trim();
+        const norm=normUrl(url);
+        if(norm&&(existing.has(norm)||seen.has(norm))){dup++;continue;}
+        if(norm)seen.add(norm);
+        const ph=normPhone(pick(r,['telefone','phone','tel']));
+        let status=pick(r,['status']).trim();if(!ALL_STATUS.includes(status))status='Aguardando Qualificacao';
+        const renda=pick(r,['renda','renda_estimada']).replace(/[^\d]/g,'');
+        const idade=pick(r,['idade','faixa_idade']).replace(/[^\d]/g,'');
+        toInsert.push({nome,primeiro_nome:firstName(nome),cargo:pick(r,['cargo','headline'])||null,empresa:pick(r,['empresa','company'])||null,
+          sexo:pick(r,['sexo'])||null,faixa_idade:idade?Number(idade):null,renda_estimada:renda?Number(renda):null,
+          telefone:ph.telefone,telefone_e164:ph.e164,email:pick(r,['email','e-mail'])||null,
+          linkedin_url:url||null,linkedin_url_norm:norm,status,responsavel:'Gustavo',origem:'LinkedIn',
+          observacoes:pick(r,['observacoes','obs','observações'])||null});
+      }
+      $('#imp-prev').innerHTML=`<div class="summary">
+        <div class="scard"><div class="n">${rows.length}</div><div class="l">linhas</div></div>
+        <div class="scard"><div class="n" style="color:var(--green)">${toInsert.length}</div><div class="l">novos</div></div>
+        <div class="scard"><div class="n" style="color:var(--amber)">${dup}</div><div class="l">duplicados</div></div>
+        <div class="scard"><div class="n" style="color:var(--red)">${err}</div><div class="l">sem nome</div></div>
+      </div><p class="hint">Duplicados e sem-nome são ignorados. Só os <b>novos</b> serão gravados.</p>`;
+      $('#imp-go').disabled=toInsert.length===0;
+    }});
+  };
+  $('#imp-go').onclick=async()=>{
+    $('#imp-go').disabled=true;$('#imp-go').textContent='Importando...';
+    let ok=0,fail=0;
+    for(let i=0;i<toInsert.length;i+=200){
+      const batch=toInsert.slice(i,i+200);
+      const {data,error}=await sb.from('leads').insert(batch).select();
+      if(error){for(const row of batch){const r=await sb.from('leads').insert(row).select();r.error?fail++:ok++;}}
+      else ok+=(data||[]).length;
+    }
+    toast(`Importados ${ok} leads`+(fail?` · ${fail} falharam`:''));
+    await loadLeads();ov.remove();
+  };
+}
+
 // ===== NAV =====
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;$('#sidebar').classList.remove('open');render();});
 $('#nav-novo').onclick=()=>openNovo(false);
 $('#top-novo').onclick=()=>openNovo(false);
 $('#nav-mine').onclick=()=>openNovo(true);
+$('#nav-import').onclick=()=>openImport();
+$('#nav-update').onclick=()=>{ if(confirm('Buscar a versão mais recente do app? A página recarrega (seus dados ficam salvos).')) location.replace(location.origin+location.pathname+'?v='+Date.now()); };
+const _ver=$('#ver'); if(_ver)_ver.textContent=APP_VERSION;
 $('#search').oninput=e=>{SEARCH=e.target.value;render();};
 $('#menu-btn').onclick=()=>$('#sidebar').classList.toggle('open');
 $('#logout').onclick=async()=>{await sb.auth.signOut();location.reload();};
