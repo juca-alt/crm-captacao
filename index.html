@@ -167,6 +167,7 @@ tr.row:hover{background:#f8fafc;cursor:pointer}
     <button class="nav-item btn-mine" id="nav-mine"><span class="ic">⛏</span> Garimpo (Mineração)</button>
     <button class="nav-item" id="nav-novo"><span class="ic">＋</span> Novo lead</button>
     <button class="nav-item" id="nav-import"><span class="ic">⬆</span> Atualizar base de dados</button>
+    <button class="nav-item" id="nav-dup"><span class="ic">🔎</span> Duplicatas</button>
     <div class="nav-spacer"></div>
     <button class="nav-item" id="nav-update"><span class="ic">⟳</span> Atualizar versão</button>
     <div class="nav-foot">Versão <span id="ver"></span> · <span id="who-foot"></span><br/><a id="logout">Sair</a></div>
@@ -190,7 +191,7 @@ tr.row:hover{background:#f8fafc;cursor:pointer}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v1.2';
+const APP_VERSION = 'v1.3';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -279,9 +280,11 @@ function filtered(){
 
 // ===== RENDER =====
 function render(){
+  const c=$('#content');
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  if(VIEW==='dup'){ $('#view-title').textContent='Duplicatas'; const nd=$('#nav-dup'); if(nd)nd.classList.add('active'); c.innerHTML=dupHTML(); wireDup(); return; }
   $('#view-title').textContent = VIEW==='funil'?'Funil':'Lista de leads';
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===VIEW));
-  const c=$('#content');
   c.innerHTML = filtersHTML() + (VIEW==='funil'?funilHTML():listaHTML());
   wireFilters();
   if(VIEW==='funil') wireFunil(); else wireLista();
@@ -600,12 +603,81 @@ function openImport(){
   };
 }
 
+// ===== DUPLICATAS + UNIFICAR =====
+const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
+function dupGroups(){
+  const norm=s=>(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const byKey={};
+  const add=(k,l,kind)=>{ if(!k) return; const id=kind+'::'+k; (byKey[id]=byKey[id]||{kind,leads:[]}).leads.push(l); };
+  for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(norm(l.nome),l,'Nome'); }
+  const groups=[]; const seen=new Set();
+  for(const k in byKey){
+    const uniq=[...new Map(byKey[k].leads.map(l=>[l.id,l])).values()];
+    if(uniq.length<2) continue;
+    const sig=uniq.map(l=>l.id).sort().join('|'); if(seen.has(sig)) continue; seen.add(sig);
+    groups.push({kind:byKey[k].kind, leads:uniq});
+  }
+  return groups;
+}
+function dupHTML(){
+  const groups=dupGroups();
+  if(!groups.length) return '<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone e nome.</div></div>';
+  return `<p class="hint" style="margin-bottom:12px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone ou nome). Revise cada uma e unifique escolhendo qual dado manter — os outros registros são removidos.</p>`+
+   groups.map((g,i)=>`<div class="tablewrap" style="margin-bottom:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+     <div><span class="flag warn">${g.kind} igual</span> ${g.leads.map(l=>`${esc(l.nome)} <span class="muted">(${esc(ETAPA_LABEL[l.etapa]||l.etapa)})</span>`).join(' &nbsp;·&nbsp; ')}</div>
+     <button class="btn primary" data-merge="${i}" style="flex-shrink:0">Revisar e unificar</button>
+   </div>`).join('');
+}
+function wireDup(){ const groups=dupGroups(); document.querySelectorAll('[data-merge]').forEach(b=>b.onclick=()=>openMerge(groups[+b.dataset.merge])); }
+function openMerge(g){
+  let keep=g.leads[0].id;
+  const chosen={};
+  MERGE_FIELDS.forEach(([f])=>{ const src=g.leads.find(l=>l[f]!=null&&String(l[f]).trim()!==''); chosen[f]=src?src.id:g.leads[0].id; });
+  const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
+  const cell=(l,f)=>{const v=l[f]; return (v==null||String(v).trim()==='')?'<span class="muted">—</span>':esc(String(v));};
+  function draw(){
+    const head=g.leads.map(l=>`<th style="text-align:left;padding:8px"><label style="cursor:pointer;font-weight:700"><input type="radio" name="keep" ${keep===l.id?'checked':''} data-keep="${l.id}"/> Manter este</label><div class="muted" style="font-weight:400">${esc(l.codigo||'novo')}</div></th>`).join('');
+    const rows=MERGE_FIELDS.map(([f,lbl])=>`<tr><td style="padding:6px 8px;font-weight:600;color:var(--muted);white-space:nowrap">${lbl}</td>${g.leads.map(l=>`<td data-pick="${f}|${l.id}" style="padding:6px 8px;cursor:pointer;border-radius:6px;${chosen[f]===l.id?'background:#eff6ff;outline:2px solid var(--primary)':''}">${cell(l,f)}</td>`).join('')}</tr>`).join('');
+    return `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:760px;max-width:96vw">
+    <h2>Unificar duplicata</h2>
+    <p class="hint">Escolha <b>qual registro manter</b> (radio) e <b>clique no valor</b> que vale em cada linha. Os outros registros serão <b>removidos</b>.</p>
+    <div id="mg-body" style="overflow:auto;max-height:60vh">${draw()}</div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn primary" id="mg-go">Unificar e remover os outros</button>
+      <button class="btn ghost" id="mg-close">Cancelar</button>
+    </div>
+  </div>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+  $('#mg-close').onclick=()=>ov.remove();
+  function rewire(){
+    $('#mg-body').innerHTML=draw();
+    $('#mg-body').querySelectorAll('[data-keep]').forEach(r=>r.onchange=()=>{keep=r.dataset.keep;});
+    $('#mg-body').querySelectorAll('[data-pick]').forEach(c=>c.onclick=()=>{const [f,id]=c.dataset.pick.split('|');chosen[f]=id;rewire();});
+  }
+  rewire();
+  $('#mg-go').onclick=async()=>{
+    if(!confirm('Unificar? Os dados escolhidos vão pro registro mantido e os outros '+(g.leads.length-1)+' serão removidos permanentemente.')) return;
+    $('#mg-go').disabled=true;$('#mg-go').textContent='Unificando...';
+    const patch={};
+    MERGE_FIELDS.forEach(([f])=>{ const src=g.leads.find(l=>l.id===chosen[f]); let v=src?src[f]:null; if(v==='')v=null; patch[f]=v; });
+    const ok=await updateLead(keep,patch);
+    if(ok){
+      for(const l of g.leads){ if(l.id!==keep){ const r=await sb.from('leads').delete().eq('id',l.id); if(!r.error){const i=LEADS.findIndex(x=>x.id===l.id);if(i>=0)LEADS.splice(i,1);} } }
+      toast('Unificado! '+(g.leads.length-1)+' removido(s).');
+      ov.remove(); render();
+    } else { $('#mg-go').disabled=false;$('#mg-go').textContent='Unificar e remover os outros'; }
+  };
+}
+
 // ===== NAV =====
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;$('#sidebar').classList.remove('open');render();});
 $('#nav-novo').onclick=()=>openNovo(false);
 $('#top-novo').onclick=()=>openNovo(false);
 $('#nav-mine').onclick=()=>openNovo(true);
 $('#nav-import').onclick=()=>openImport();
+$('#nav-dup').onclick=()=>{VIEW='dup';$('#sidebar').classList.remove('open');render();};
 $('#nav-update').onclick=()=>{ if(confirm('Buscar a versão mais recente do app? A página recarrega (seus dados ficam salvos).')) location.replace(location.origin+location.pathname+'?v='+Date.now()); };
 const _ver=$('#ver'); if(_ver)_ver.textContent=APP_VERSION;
 $('#search').oninput=e=>{SEARCH=e.target.value;render();};
