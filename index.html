@@ -275,7 +275,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v1.7';
+const APP_VERSION = 'v1.8';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -308,6 +308,39 @@ const LK_FLOW=[
   {s:'Em Tentativa',            l:'Em tentativa (TA)'}
 ];
 const GARIMPO_META = 10; // meta diária de garimpo (Victor)
+
+// ===== TRIAGEM NA CAPTURA — AJUSTÁVEL: edite as listas/pesos aqui =====
+// Importante: a triagem SÓ SUGERE. Nada é descartado nem bloqueado automaticamente —
+// sempre há um humano (Victor na captura, Juca na qualificação) que confirma.
+const TRIAGE = {
+  // Palavras que sugerem mercado de seguros/corretagem (regra do Gustavo: não captar).
+  // Só pinta um aviso âmbar — o humano decide.
+  segurosKw: ['seguro','seguros','corretor','corretora','corretagem','susep','prudential',
+    'metlife','icatu','porto seguro','bradesco seguros','sulamerica','sul america','sul américa',
+    'allianz','mapfre','tokio marine','life planner','previdencia','previdência'],
+  // Estimativa de renda por palavra no CARGO (heurística simples; o humano ajusta no campo).
+  rendaPorCargo: [
+    {kw:['diretor','head','vp','ceo','cfo','coo','socio','sócio','partner','superintendente'], renda:25000},
+    {kw:['gerente','manager','coordenador'], renda:14000},
+    {kw:['supervisor','especialista','consultor senior','consultor sênior','senior','sênior'], renda:9000},
+    {kw:['analista','consultor','executivo'], renda:6000},
+    {kw:['assistente','auxiliar','estagiario','estagiário','trainee','jovem aprendiz'], renda:2500}
+  ],
+  rendaDefault: null
+};
+function _norm(s){return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');}
+function triageLead({cargo,empresa}={}){
+  const hay = _norm(cargo)+' '+_norm(empresa);
+  const seguros = TRIAGE.segurosKw.find(k=>hay.includes(_norm(k))) || null;
+  let renda = TRIAGE.rendaDefault;
+  for(const r of TRIAGE.rendaPorCargo){ if(r.kw.some(k=>_norm(cargo).includes(_norm(k)))){ renda=r.renda; break; } }
+  let pts = 0;
+  if(renda>=20000) pts+=2; else if(renda>=10000) pts+=1;
+  if(cargo) pts+=0.5; if(empresa) pts+=0.5;
+  let score = pts>=2.5?'A':pts>=1.5?'B':pts>=0.5?'C':'D';
+  if(seguros) score='D';
+  return {score, renda, seguros};
+}
 
 // ===== STATE =====
 let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
@@ -1010,6 +1043,10 @@ function openNovo(mine,prefill){
       <div class="field"><label>Telefone</label><input id="n-tel"></div>
       <div class="field"><label>Cidade</label><input id="n-cidade"></div>
     </div>
+    <div class="row2">
+      <div class="field"><label>Renda estimada (R$)</label><input id="n-renda" type="number" placeholder="auto pela triagem"></div>
+      <div class="field"><label>Triagem (sugestão)</label><div id="n-triage" style="padding:8px 10px;border:1px dashed var(--line);border-radius:9px;min-height:38px;font-size:13px;color:var(--muted)">preencha cargo/empresa…</div></div>
+    </div>
     <div id="n-dup" class="auth-err"></div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn primary" id="n-save">Salvar lead</button>
@@ -1019,7 +1056,22 @@ function openNovo(mine,prefill){
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
   $('#n-close').onclick=()=>ov.remove();
-  let foto=null;
+  let foto=null, curScore='D', curSeguros=null, rendaTouched=false;
+  function updateTriage(){
+    const cargo=$('#n-cargo').value, empresa=$('#n-empresa').value;
+    const t=triageLead({cargo,empresa});
+    if(!rendaTouched){ $('#n-renda').value = t.renda!=null ? t.renda : ''; }
+    const renda = $('#n-renda').value ? Number($('#n-renda').value) : null;
+    let pts=0; if(renda>=20000)pts+=2; else if(renda>=10000)pts+=1; if(cargo)pts+=0.5; if(empresa)pts+=0.5;
+    let score = pts>=2.5?'A':pts>=1.5?'B':pts>=0.5?'C':'D'; if(t.seguros)score='D';
+    curScore=score; curSeguros=t.seguros;
+    const col=SCORE_COLOR[score], hi=renda>=10000;
+    let html=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="background:${col};color:#fff;font-weight:800;border-radius:6px;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:12px">${score}</span>
+      <span style="color:${hi?'var(--green)':'var(--muted)'}">${renda!=null?('~R$ '+renda.toLocaleString('pt-BR')+(hi?' · ≥10k ✓':' · abaixo de 10k')):'renda não estimada'}</span></div>`;
+    if(t.seguros) html+=`<div style="margin-top:6px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:6px 8px;border-radius:7px;font-size:12px">⚠ Possível seguros/corretor: "<b>${esc(t.seguros)}</b>". Regra: não captar — confirme antes de salvar. <i>(não bloqueia)</i></div>`;
+    $('#n-triage').innerHTML=html;
+  }
   $('#n-raw').oninput=e=>{
     const v=e.target.value.trim();
     if(v.startsWith('{')){try{const j=JSON.parse(v);
@@ -1032,24 +1084,32 @@ function openNovo(mine,prefill){
       e.target.dataset.url=v;
       if(!$('#n-nome').value){const slug=(v.split('/in/')[1]||'').split(/[/?]/)[0].replace(/-?\d+\w*$/,'').replace(/-/g,' ');$('#n-nome').value=slug.replace(/\b\w/g,c=>c.toUpperCase());}
     }
+    updateTriage();
   };
+  $('#n-cargo').oninput=updateTriage; $('#n-empresa').oninput=updateTriage;
+  $('#n-renda').oninput=()=>{rendaTouched=true; updateTriage();};
   $('#n-save').onclick=async()=>{
     const nome=$('#n-nome').value.trim(); if(!nome){toast('Informe o nome');return;}
     const url=$('#n-raw').dataset.url||'';const norm=normUrl(url);
     if(norm&&LEADS.some(l=>l.linkedin_url_norm===norm)){$('#n-dup').textContent='⚠ Já existe um lead com esse LinkedIn.';return;}
     const ph=normPhone($('#n-tel').value);
     const flags=ph.telefone&&!ph.e164&&$('#n-tel').value?['SEM_DDD']:[];
+    if(curSeguros) flags.push('SEGUROS?');
+    const renda=$('#n-renda').value?Number($('#n-renda').value):null;
     const rec={nome,primeiro_nome:firstName(nome),cargo:$('#n-cargo').value||null,empresa:$('#n-empresa').value||null,
       cidade:$('#n-cidade').value||null,linkedin_url:url||null,linkedin_url_norm:norm,foto_url:foto,
       telefone:ph.telefone,telefone_e164:ph.e164,flags_qualidade:flags,
+      renda_estimada:renda,renda_auto:(!rendaTouched&&renda!=null),score:curScore,
+      observacoes:curSeguros?`[Triagem: possível seguros – ${curSeguros}]`:null,
       status:'Aguardando Qualificacao',responsavel:$('#n-resp').value,origem:'LinkedIn'};
     const {data,error}=await sb.from('leads').insert(rec).select().single();
     if(error){$('#n-dup').textContent='Erro: '+error.message;return;}
     LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
-    if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade'].forEach(i=>{const el=$('#'+i);el.value='';delete el.dataset.url;});foto=null;$('#n-dup').textContent='';$('#n-raw').focus();render();}
+    if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda'].forEach(i=>{const el=$('#'+i);el.value='';delete el.dataset.url;});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
     else{ov.remove();render();}
   };
   if(prefill&&prefill.nome){$('#n-nome').value=prefill.nome;}
+  updateTriage();
   setTimeout(()=>$('#n-raw').focus(),50);
 }
 
