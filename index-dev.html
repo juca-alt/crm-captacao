@@ -302,7 +302,7 @@ const ETAPA_LABEL = {Qualificacao:'Qualificação',Conexao:'Conexão',TA:'T.A.',
 const STATUS_BY_ETAPA = {
   Qualificacao:['Aguardando Qualificacao','Qualificado'],
   Conexao:['A Enviar Convite','Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Convite Nao Aceito'],
-  TA:['Em Tentativa','Nao Atendeu','TA Agendada','Retornar em outro momento'],
+  TA:['1a Abordagem','Em Tentativa','Nao Atendeu','TA Agendada','Retornar em outro momento'],
   OT:['OT Agendada','Confirmacao de OT','OT Realizada','Delay OT','TA Reagendar OT','Nao Compareceu'],
   FIP:['FIP Agendado','Confirmacao de FIP','FIP Realizado'],
   Fechamento:['Onboarding','Convertido'],
@@ -763,56 +763,97 @@ function wireInbox(){
 // ===== INGESTÃO DO INBOX (cola o JSON da extensão) =====
 function openInboxPaste(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
-  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:600px">
-    <h2>📥 Colar conversas do LinkedIn</h2>
-    <p class="hint">Tento colar sozinho o que a extensão copiou. Se não vier, cole manual aqui (Cmd/Ctrl+V). <b>Não é um link</b> — é a lista de conversas que o botão <b>📥 Captar inbox</b> da extensão copiou no LinkedIn → Mensagens. Eu caso por nome com seus leads e marco quem <b>respondeu</b> e quem está <b>quente</b>.</p>
-    <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="4" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
-    <div id="ibp-prev"></div>
-    <div id="ibp-unmatched" style="max-height:180px;overflow:auto"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn primary" id="ibp-go" disabled>Aplicar no CRM</button>
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:940px;max-width:96vw">
+    <h2>📥 Sincronizar conversas do LinkedIn</h2>
+    <p class="hint">Colo sozinho o que a extensão copiou (<b>não é link</b> — é a lista do botão 📥 Captar inbox). Reviso cada conversa: o que <b>cria novo</b> e o que <b>atualiza</b> um lead existente, com status e telefone sugeridos. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
+    <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
+    <div id="ibp-sum"></div>
+    <div id="ibp-table" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+      <button class="btn primary" id="ibp-go" disabled>Aprovar e sincronizar</button>
       <button class="btn ghost" id="ibp-close">Fechar</button>
+      <span id="ibp-msg" class="muted" style="font-size:12px"></span>
     </div>
   </div>`;
   ov.onclick=()=>ov.remove();document.body.appendChild(ov);
   $('#ibp-close').onclick=()=>ov.remove();
-  let parsed=null,matched=[],unmatched=[];
   const byName=new Map(); LEADS.forEach(l=>{const k=normName(l.nome); if(!byName.has(k))byName.set(k,l);});
-  $('#ibp-raw').oninput=e=>{
-    matched=[];unmatched=[];parsed=null;$('#ibp-unmatched').innerHTML='';
-    let conv=null;
-    try{const j=JSON.parse(e.target.value.trim()); conv=Array.isArray(j)?j:j.conversas;}catch(_){}
-    if(!Array.isArray(conv)){$('#ibp-prev').innerHTML='<p class="hint" style="color:var(--red)">JSON inválido — copie de novo pelo botão da extensão.</p>';$('#ibp-go').disabled=true;return;}
-    parsed=conv;
-    for(const c of conv){const l=byName.get(normName(c.nome)); if(l)matched.push({l,c});else unmatched.push(c);}
-    const resp=matched.filter(m=>m.c.de_mim===false).length, hot=matched.filter(m=>m.c.hot).length;
-    $('#ibp-prev').innerHTML=`<div class="summary">
-      <div class="scard"><div class="n">${conv.length}</div><div class="l">conversas</div></div>
-      <div class="scard"><div class="n" style="color:var(--green)">${matched.length}</div><div class="l">casaram no CRM</div></div>
-      <div class="scard"><div class="n" style="color:var(--primary)">${resp}</div><div class="l">responderam</div></div>
-      <div class="scard"><div class="n" style="color:var(--amber)">${unmatched.length}</div><div class="l">fora do CRM</div></div>
+  const extractPhone=t=>{const m=(t||'').match(/\(?\d{2}\)?\s?9?\d{4}[-.\s]?\d{4}/); return m?m[0]:'';};
+  const statusOpts=sel=>ALL_STATUS.map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('');
+  let rows=[];
+  function build(conv){
+    rows=conv.map(c=>{
+      const l=byName.get(normName(c.nome))||null;
+      const responded=c.de_mim===false;
+      const newPhone=extractPhone(c.ultima_msg);
+      const phone=newPhone||(l&&l.telefone)||'';
+      let status;
+      if(l){ if(responded&&newPhone) status='1a Abordagem';
+        else if(responded&&l.status==='Convite Enviado') status='Convite Aceito (s/ telefone)';
+        else status=l.status; }
+      else { if(newPhone) status='Convite Aceito (c/ telefone)';
+        else if(responded) status='Convite Aceito (s/ telefone)';
+        else status='Aguardando Qualificacao'; }
+      return {c,l,action:l?'atualizar':'criar',status,phone,resp:(l&&l.responsavel)||MY_NAME,include:true};
+    });
+    renderTable();
+  }
+  function renderTable(){
+    const inc=rows.filter(r=>r.include);
+    const novos=inc.filter(r=>r.action==='criar').length, upd=inc.filter(r=>r.action==='atualizar').length;
+    $('#ibp-sum').innerHTML=`<div class="summary">
+      <div class="scard"><div class="n">${rows.length}</div><div class="l">conversas</div></div>
+      <div class="scard"><div class="n" style="color:var(--green)">${novos}</div><div class="l">criar novo</div></div>
+      <div class="scard"><div class="n" style="color:var(--primary)">${upd}</div><div class="l">atualizar</div></div>
+      <div class="scard"><div class="n" style="color:var(--amber)">${rows.filter(r=>r.c.hot).length}</div><div class="l">🔥 quentes</div></div>
     </div>`;
-    if(unmatched.length) $('#ibp-unmatched').innerHTML=`<p class="hint">Fora do CRM (você conversou mas não tem lead) — criar:</p>`+
-      unmatched.map((c,i)=>`<div class="qrow"><div class="qmain"><div class="qn">${esc(c.nome)}</div><div class="qsub">"${esc(c.ultima_msg||'')}"</div></div><button class="qbtn green" data-newibx="${i}">+ criar lead</button></div>`).join('');
-    $('#ibp-go').disabled=matched.length===0;
-    $('#ibp-unmatched').querySelectorAll('[data-newibx]').forEach(b=>b.onclick=()=>{const c=unmatched[+b.dataset.newibx];ov.remove();openNovo(false,{nome:c.nome});});
+    const head=`<tr><th style="width:26px"></th><th>Lead</th><th>Conversa</th><th>Ação</th><th>Status</th><th>Telefone</th><th>Resp.</th></tr>`;
+    const body=rows.map((r,i)=>`<tr style="${r.include?'':'opacity:.4'}">
+      <td><input type="checkbox" class="cbx" data-chk="${i}" ${r.include?'checked':''}></td>
+      <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}</td>
+      <td style="max-width:230px"><div class="lead-cargo" style="white-space:normal">${r.c.de_mim===false?'<b style="color:#16a34a">respondeu:</b> ':''}"${esc((r.c.ultima_msg||'').slice(0,80))}"</div></td>
+      <td><span class="due ${r.action==='criar'?'soon':'ok'}">${r.action}</span></td>
+      <td><select class="fsel" data-st="${i}" style="max-width:175px">${statusOpts(r.status)}</select></td>
+      <td><input data-ph="${i}" value="${esc(r.phone)}" style="width:122px;padding:6px;border:1px solid var(--line);border-radius:7px"></td>
+      <td><select class="fsel" data-rp="${i}"><option ${r.resp==='Gustavo'?'selected':''}>Gustavo</option><option ${r.resp==='Victor'?'selected':''}>Victor</option></select></td>
+    </tr>`).join('');
+    $('#ibp-table').innerHTML=`<div class="tablewrap"><table>${head}${body}</table></div>`;
+    $('#ibp-table').querySelectorAll('[data-chk]').forEach(b=>b.onchange=()=>{rows[+b.dataset.chk].include=b.checked;renderTable();});
+    $('#ibp-table').querySelectorAll('[data-st]').forEach(s=>s.onchange=()=>{rows[+s.dataset.st].status=s.value;});
+    $('#ibp-table').querySelectorAll('[data-ph]').forEach(s=>s.oninput=()=>{rows[+s.dataset.ph].phone=s.value;});
+    $('#ibp-table').querySelectorAll('[data-rp]').forEach(s=>s.onchange=()=>{rows[+s.dataset.rp].resp=s.value;});
+    $('#ibp-go').disabled=inc.length===0;
+    $('#ibp-go').textContent=`Aprovar e sincronizar (${inc.length})`;
+  }
+  $('#ibp-raw').oninput=e=>{
+    let conv=null; try{const j=JSON.parse(e.target.value.trim()); conv=Array.isArray(j)?j:j.conversas;}catch(_){}
+    if(!Array.isArray(conv)||!conv.length){ $('#ibp-sum').innerHTML='<p class="hint" style="color:var(--red)">Nada reconhecido — clique 📥 Captar inbox na extensão e cole de novo.</p>'; $('#ibp-table').innerHTML=''; $('#ibp-go').disabled=true; return; }
+    build(conv.filter(c=>c&&c.nome));
   };
   $('#ibp-go').onclick=async()=>{
-    $('#ibp-go').disabled=true;$('#ibp-go').textContent='Aplicando...';
-    const now=new Date().toISOString();let ok=0;
-    for(const {l,c} of matched){
-      const patch={inbox_ultima_msg:(c.ultima_msg||'').slice(0,300),inbox_de_mim:!!c.de_mim,inbox_quando:c.quando||null,inbox_nao_lida:!!c.nao_lida,inbox_hot:!!c.hot,inbox_sync:now};
-      if(await updateLead(l.id,patch))ok++;
+    const sel=rows.filter(r=>r.include); if(!sel.length)return;
+    $('#ibp-go').disabled=true; $('#ibp-msg').textContent='Sincronizando…';
+    const now=new Date().toISOString(); let criados=0,atualizados=0,erros=0;
+    for(const r of sel){
+      const ph=r.phone?normPhone(r.phone):{telefone:null,e164:null};
+      const inbox={inbox_ultima_msg:(r.c.ultima_msg||'').slice(0,300),inbox_de_mim:!!r.c.de_mim,inbox_quando:r.c.quando||null,inbox_nao_lida:!!r.c.nao_lida,inbox_hot:!!r.c.hot,inbox_sync:now};
+      if(r.action==='criar'){
+        const rec=Object.assign({nome:r.c.nome,primeiro_nome:firstName(r.c.nome),status:r.status,responsavel:r.resp,origem:'LinkedIn'},inbox);
+        if(ph.telefone){rec.telefone=ph.telefone;rec.telefone_e164=ph.e164;}
+        const {data,error}=await sb.from('leads').insert(rec).select().single();
+        if(error){erros++;} else {LEADS.push(data);criados++;}
+      }else{
+        const patch=Object.assign({status:r.status},inbox);
+        if(ph.telefone){patch.telefone=ph.telefone;patch.telefone_e164=ph.e164;}
+        if(await updateLead(r.l.id,patch))atualizados++; else erros++;
+      }
     }
-    toast(`Inbox atualizado · ${ok} conversas casadas`);
-    ov.remove();render();
+    toast(`Sincronizado · ${criados} criados, ${atualizados} atualizados${erros?', '+erros+' erro(s)':''}`);
+    ov.remove(); render();
   };
   setTimeout(()=>$('#ibp-raw').focus(),50);
-  // tenta colar sozinho o que a extensão copiou
   if(navigator.clipboard&&navigator.clipboard.readText){
-    navigator.clipboard.readText().then(txt=>{
-      if(txt&&/"tipo"\s*:\s*"inbox"|"conversas"/.test(txt)){ const ta=$('#ibp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); }
-    }).catch(()=>{});
+    navigator.clipboard.readText().then(txt=>{ if(txt&&/"tipo"\s*:\s*"inbox"|"conversas"/.test(txt)){ const ta=$('#ibp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); } }).catch(()=>{});
   }
 }
 
