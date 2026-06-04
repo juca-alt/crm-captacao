@@ -365,6 +365,7 @@ function triageLead({cargo,empresa}={}){
 let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
 let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false;
 let DAY_SCOPE='me';   // Meu Dia: 'me' | 'all'
+let INBOX_FILTER='all';   // Inbox: all | resp | enviado | semtel | tel | aguardando
 let LK_MINE=false;    // LinkedIn: só os meus?
 let SEL=new Set();    // multi-seleção da Lista
 let REAL_VICTOR=false; // identidade real logada
@@ -681,44 +682,81 @@ function respRow(l){
       <div class="qsub" style="color:#334155">"${esc(l.inbox_ultima_msg||'')}"</div></div>
     <div class="qact">${acts}</div></div>`;
 }
+function inboxCat(l){
+  if(l.inbox_de_mim===false && l.inbox_ultima_msg) return 'resp';
+  const s=l.status;
+  if(s==='Convite Enviado') return 'enviado';
+  if(s==='Convite Aceito (s/ telefone)') return 'semtel';
+  if(s==='Convite Aceito (c/ telefone)') return 'tel';
+  if(['Em Tentativa','Nao Atendeu','Retornar em outro momento'].includes(s)) return 'aguardando';
+  return null;
+}
+function inboxActs(l){
+  const s=l.status;
+  if(s==='Convite Aceito (s/ telefone)') return `<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn green" data-act="advance" data-to="Convite Aceito (c/ telefone)" data-id="${l.id}">📱 Tel recebido</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`;
+  if(s==='Convite Aceito (c/ telefone)') return `<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn" data-act="advance" data-to="Em Tentativa" data-id="${l.id}">➜ TA</button>`;
+  if(['Em Tentativa','Nao Atendeu','Retornar em outro momento'].includes(s)) return `<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`;
+  return `<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`;
+}
+function inboxListRow(l){
+  const hot=l.inbox_hot?'🔥 ':'';
+  const unread=l.inbox_nao_lida?'<span class="due">não lida</span>':'';
+  const when=l.inbox_quando?`<span class="dstuck">${esc(l.inbox_quando)}</span>`:'';
+  const body=l.inbox_ultima_msg
+    ? `<div class="qsub" style="color:#334155">"${esc(l.inbox_ultima_msg)}"</div>`
+    : `<div class="qsub">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div>`;
+  return `<div class="qrow" data-open="${l.id}">${avatarHTML(l,38)}
+    <div class="qmain"><div class="qn">${hot}${starBtn(l)}${esc(l.nome)} ${unread} ${stuckBadge(daysStuck(l))} ${when} ${dueHTML(l)}</div>
+      ${body}</div>
+    <div class="qact">${inboxActs(l)}</div></div>`;
+}
 function inboxHTML(){
-  const B=LEADS.filter(searchMatch).filter(l=>DAY_SCOPE!=='me'||l.responsavel===MY_NAME);
-  // quem RESPONDEU (snapshot do inbox: última msg não foi minha) — independente do status
   const skip=['Convertido','Dormente'];
-  const responderam=B.filter(l=>l.inbox_de_mim===false&&l.inbox_ultima_msg&&!skip.includes(l.status)&&l.etapa!=='Descartado')
-    .sort((a,b)=>(b.inbox_hot?2:0)+(b.inbox_nao_lida?1:0)-((a.inbox_hot?2:0)+(a.inbox_nao_lida?1:0)));
-  const lastSync=B.map(l=>l.inbox_sync).filter(Boolean).sort().slice(-1)[0];
-  const toolbar=`<div class="lkscope">
-    <button class="btn primary" id="ibx-paste" style="padding:8px 13px">📥 Colar inbox do LinkedIn</button>
-    <span class="muted" style="font-size:12px">${lastSync?('última captura '+new Date(lastSync).toLocaleString('pt-BR')):'nunca capturado — abra Mensagens no LinkedIn, clique 📥 Captar inbox (extensão) e cole aqui'}</span>
-    <span style="flex:1"></span>
-    <button class="chip ${DAY_SCOPE==='me'?'on':''}" id="ib-me">Meus</button><button class="chip ${DAY_SCOPE==='all'?'on':''}" id="ib-all">Todos</button>
+  const B=LEADS.filter(searchMatch)
+    .filter(l=>DAY_SCOPE!=='me'||l.responsavel===MY_NAME)
+    .filter(l=>!skip.includes(l.status)&&l.etapa!=='Descartado')
+    .map(l=>({l,cat:inboxCat(l)})).filter(x=>x.cat);
+  const all=B.map(x=>x.l);
+  const cntCat=k=>B.filter(x=>x.cat===k).length;
+  const total=all.length, respN=cntCat('resp'), semtelN=cntCat('semtel'), telN=cntCat('tel');
+  const convStatus=['Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Em Tentativa','Nao Atendeu','Retornar em outro momento'];
+  const esfriando=all.filter(l=>convStatus.includes(l.status)&&daysStuck(l)>=2).length;
+  const quentes=all.filter(l=>l.inbox_hot).length;
+  const lastSync=all.map(l=>l.inbox_sync).filter(Boolean).sort().slice(-1)[0];
+
+  const kpis=`<div class="statgrid">
+    <div class="stat"><div class="n">${total}</div><div class="l">conversas no inbox</div></div>
+    <div class="stat"><div class="n" style="color:var(--green)">${respN}</div><div class="l">responderam · sua vez</div></div>
+    <div class="stat"><div class="n" style="color:${esfriando?'var(--red)':'var(--txt)'}">${esfriando}</div><div class="l">esfriando ≥2d</div></div>
+    <div class="stat"><div class="n" style="color:var(--lk)">${semtelN}</div><div class="l">aceitos · pedir telefone</div></div>
+    <div class="stat"><div class="n" style="color:${quentes?'var(--amber)':'var(--txt)'}">${quentes}</div><div class="l">🔥 quentes</div></div>
   </div>`;
-  const respSec = responderam.length?`<div class="qsection" style="border-color:#16a34a"><div class="qhead"><span class="dotc" style="background:#16a34a"></span>Responderam — sua vez<span class="badge" style="background:#dcfce7;color:#166534">${responderam.length}</span></div><div class="qbody">${responderam.map(respRow).join('')}</div></div>`:'';
-  const buckets=[
-    {label:'Convite enviado · aguardando aceitar',color:'#2563eb',st:['Convite Enviado'],
-      acts:l=>`<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`},
-    {label:'Aceitou · puxar telefone',color:'#0a66c2',st:['Convite Aceito (s/ telefone)'],
-      acts:l=>`<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn green" data-act="advance" data-to="Convite Aceito (c/ telefone)" data-id="${l.id}">📱 Tel</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`},
-    {label:'Telefone recebido · ligar/encaminhar',color:'#16a34a',st:['Convite Aceito (c/ telefone)'],
-      acts:l=>`<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn" data-act="advance" data-to="Em Tentativa" data-id="${l.id}">➜ TA</button>`},
-    {label:'Aguardando retorno',color:'#8b5cf6',st:['Em Tentativa','Nao Atendeu','Retornar em outro momento'],
-      acts:l=>`<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`}
-  ];
-  const conv=['Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Em Tentativa','Nao Atendeu','Retornar em outro momento'];
-  const perdido=B.filter(l=>conv.includes(l.status)&&daysStuck(l)>=2).length;
-  const callout=`<div class="actbanner" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af">💬 Conversas no seu inbox, ordenadas por <b>dias paradas</b> — pra não perder o timing. <b style="margin-left:6px">${perdido} esfriando (≥2d)</b></div>`;
-  const secs=buckets.map(b=>{
-    const items=B.filter(l=>b.st.includes(l.status)).sort((a,c)=>daysStuck(c)-daysStuck(a));
-    const rows=items.length?items.map(l=>inboxRow(l,b.acts(l))).join(''):'<div class="qempty">Tudo limpo ✓</div>';
-    return `<div class="qsection"><div class="qhead"><span class="dotc" style="background:${b.color}"></span>${b.label}<span class="badge">${items.length}</span></div><div class="qbody">${rows}</div></div>`;
-  }).join('');
-  return toolbar+callout+(respSec?`<div style="margin-bottom:14px">${respSec}</div>`:'')+`<div class="daygrid">${secs}</div>`;
+
+  const cap=`<div class="actbanner" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <button class="btn primary" id="ibx-paste" style="padding:8px 13px">📥 Colar conversas do LinkedIn</button>
+    <span style="font-size:12px">1) no LinkedIn → <b>Mensagens</b>, clique <b>📥 Captar inbox</b> (extensão) · 2) volte aqui e clique no botão acima — ele cola sozinho.${lastSync?'<br>última captura '+new Date(lastSync).toLocaleString('pt-BR'):''}</span>
+  </div>`;
+
+  const F=[['all','Todas',total],['resp','🟢 Responderam',respN],['enviado','Convite enviado',cntCat('enviado')],['semtel','Aceito · pedir tel',semtelN],['tel','Telefone recebido',telN],['aguardando','Aguardando retorno',cntCat('aguardando')]];
+  const chips=`<div class="filters" style="margin-bottom:10px">`+F.map(([k,lb,n])=>`<button class="chip ${INBOX_FILTER===k?'on':''}" data-ibxf="${k}">${lb} <b style="opacity:.7">${n}</b></button>`).join('')
+    +`<span style="flex:1"></span><button class="chip ${DAY_SCOPE==='me'?'on':''}" id="ib-me">Meus</button><button class="chip ${DAY_SCOPE==='all'?'on':''}" id="ib-all">Todos</button></div>`;
+
+  let items=(INBOX_FILTER==='all'?B:B.filter(x=>x.cat===INBOX_FILTER)).map(x=>x.l);
+  items.sort((a,b)=>{
+    const p=l=>(l.inbox_de_mim===false&&l.inbox_ultima_msg?4:0)+(l.inbox_hot?2:0)+(l.inbox_nao_lida?1:0);
+    const d=p(b)-p(a); return d!==0?d:daysStuck(b)-daysStuck(a);
+  });
+  const list=items.length
+    ? `<div class="tablewrap" style="padding:6px">${items.map(inboxListRow).join('')}</div>`
+    : '<div class="qempty" style="padding:30px;text-align:center">Nada nesse filtro ✓</div>';
+
+  return kpis+cap+chips+list;
 }
 function wireInbox(){
   const me=$('#ib-me'),al=$('#ib-all');
   if(me)me.onclick=()=>{DAY_SCOPE='me';render();};
   if(al)al.onclick=()=>{DAY_SCOPE='all';render();};
+  document.querySelectorAll('[data-ibxf]').forEach(b=>b.onclick=()=>{INBOX_FILTER=b.dataset.ibxf;render();});
   const p=$('#ibx-paste'); if(p)p.onclick=openInboxPaste;
 }
 
@@ -726,9 +764,9 @@ function wireInbox(){
 function openInboxPaste(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:600px">
-    <h2>📥 Colar inbox do LinkedIn</h2>
-    <p class="hint">No LinkedIn → <b>Mensagens</b>, clique no botão <b>📥 Captar inbox</b> da extensão (canto inferior direito). Ele copia suas conversas. Cole aqui — eu caso por nome com seus leads e marco quem <b>respondeu</b> e quem está <b>quente</b>.</p>
-    <div class="field"><label>JSON do inbox</label><textarea id="ibp-raw" rows="4" placeholder='{"tipo":"inbox","conversas":[...]}'></textarea></div>
+    <h2>📥 Colar conversas do LinkedIn</h2>
+    <p class="hint">Tento colar sozinho o que a extensão copiou. Se não vier, cole manual aqui (Cmd/Ctrl+V). <b>Não é um link</b> — é a lista de conversas que o botão <b>📥 Captar inbox</b> da extensão copiou no LinkedIn → Mensagens. Eu caso por nome com seus leads e marco quem <b>respondeu</b> e quem está <b>quente</b>.</p>
+    <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="4" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
     <div id="ibp-prev"></div>
     <div id="ibp-unmatched" style="max-height:180px;overflow:auto"></div>
     <div style="display:flex;gap:8px;margin-top:12px">
@@ -770,6 +808,12 @@ function openInboxPaste(){
     ov.remove();render();
   };
   setTimeout(()=>$('#ibp-raw').focus(),50);
+  // tenta colar sozinho o que a extensão copiou
+  if(navigator.clipboard&&navigator.clipboard.readText){
+    navigator.clipboard.readText().then(txt=>{
+      if(txt&&/"tipo"\s*:\s*"inbox"|"conversas"/.test(txt)){ const ta=$('#ibp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); }
+    }).catch(()=>{});
+  }
 }
 
 // ===== LINKEDIN (aba dedicada) =====
