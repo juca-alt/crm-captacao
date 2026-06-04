@@ -780,6 +780,7 @@ function openInboxPaste(){
   const byName=new Map(); LEADS.forEach(l=>{const k=normName(l.nome); if(!byName.has(k))byName.set(k,l);});
   const extractPhone=t=>{const m=(t||'').match(/\(?\d{2}\)?\s?9?\d{4}[-.\s]?\d{4}/); return m?m[0]:'';};
   const statusOpts=sel=>ALL_STATUS.map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('');
+  const statusOptsG=sel=>ETAPAS.map(e=>`<optgroup label="${esc(ETAPA_LABEL[e]||e)}">`+STATUS_BY_ETAPA[e].map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('')+`</optgroup>`).join('');
   let rows=[];
   function build(conv){
     rows=conv.map(c=>{
@@ -813,11 +814,22 @@ function openInboxPaste(){
       <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}</td>
       <td style="max-width:230px"><div class="lead-cargo" style="white-space:normal">${r.c.de_mim===false?'<b style="color:#16a34a">respondeu:</b> ':''}"${esc((r.c.ultima_msg||'').slice(0,80))}"</div></td>
       <td><span class="due ${r.action==='criar'?'soon':'ok'}">${r.action}</span></td>
-      <td><select class="fsel" data-st="${i}" style="max-width:175px">${statusOpts(r.status)}</select></td>
+      <td><select class="fsel" data-st="${i}" style="max-width:175px">${statusOptsG(r.status)}</select></td>
       <td><input data-ph="${i}" value="${esc(r.phone)}" style="width:122px;padding:6px;border:1px solid var(--line);border-radius:7px"></td>
       <td><select class="fsel" data-rp="${i}"><option ${r.resp==='Gustavo'?'selected':''}>Gustavo</option><option ${r.resp==='Victor'?'selected':''}>Victor</option></select></td>
     </tr>`).join('');
-    $('#ibp-table').innerHTML=`<div class="tablewrap"><table>${head}${body}</table></div>`;
+    const bulk=`<div class="filters" style="margin:4px 0 8px;gap:8px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:8px 10px">
+      <button class="chip" data-ball="1">✓ Marcar todos</button>
+      <button class="chip" data-bnone="1">Desmarcar todos</button>
+      <span class="muted" style="font-size:12px">aplicar aos <b>${inc.length}</b> marcados →</span>
+      <select class="fsel" data-bresp><option value="">Responsável…</option><option>Gustavo</option><option>Victor</option></select>
+      <select class="fsel" data-bstatus style="max-width:210px"><option value="">Status (define a etapa)…</option>${statusOptsG('')}</select>
+    </div>`;
+    $('#ibp-table').innerHTML=bulk+`<div class="tablewrap"><table>${head}${body}</table></div>`;
+    const bAll=$('#ibp-table [data-ball]'); if(bAll)bAll.onclick=()=>{rows.forEach(r=>r.include=true);renderTable();};
+    const bNone=$('#ibp-table [data-bnone]'); if(bNone)bNone.onclick=()=>{rows.forEach(r=>r.include=false);renderTable();};
+    const bR=$('#ibp-table [data-bresp]'); if(bR)bR.onchange=()=>{ if(bR.value){rows.forEach(r=>{if(r.include)r.resp=bR.value;});renderTable();} };
+    const bS=$('#ibp-table [data-bstatus]'); if(bS)bS.onchange=()=>{ if(bS.value){rows.forEach(r=>{if(r.include)r.status=bS.value;});renderTable();} };
     $('#ibp-table').querySelectorAll('[data-chk]').forEach(b=>b.onchange=()=>{rows[+b.dataset.chk].include=b.checked;renderTable();});
     $('#ibp-table').querySelectorAll('[data-st]').forEach(s=>s.onchange=()=>{rows[+s.dataset.st].status=s.value;});
     $('#ibp-table').querySelectorAll('[data-ph]').forEach(s=>s.oninput=()=>{rows[+s.dataset.ph].phone=s.value;});
