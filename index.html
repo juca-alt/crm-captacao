@@ -210,6 +210,22 @@ tr.row.sel{background:#eff6ff}
 
 .sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:45}
 .sb-backdrop.on{display:block}
+/* Inbox 2 colunas (lista ↔ detalhe) */
+.ibx2{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;align-items:start}
+.ibx-list{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:72vh;overflow-y:auto}
+.ibx-list .qrow{border-bottom:1px solid #f1f5f9;border-radius:0;padding:10px}
+.ibx-list .qrow:last-child{border-bottom:none}
+.ibx-list .qrow.sel{background:#eff6ff}
+.ibx-detail{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;min-height:280px}
+.ibx-bubble{background:#f1f5f9;border-radius:12px;padding:10px 12px;color:#334155;font-size:13px;margin:10px 0;line-height:1.45}
+.ibx-back{display:none}
+@media(max-width:760px){
+  .ibx2{grid-template-columns:1fr}
+  .ibx2 .ibx-detail{display:none}
+  .ibx2.show-detail .ibx-list{display:none}
+  .ibx2.show-detail .ibx-detail{display:block}
+  .ibx2.show-detail .ibx-back{display:inline-block}
+}
 @media(max-width:760px){
   .sidebar{position:fixed;left:-260px;width:240px;z-index:50;transition:left .2s;box-shadow:2px 0 16px rgba(0,0,0,.3)}
   .sidebar.open{left:0}
@@ -293,7 +309,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v1.10 · MVP 1.0';
+const APP_VERSION = 'v1.11 · MVP 1.0';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -301,7 +317,7 @@ const ETAPA_LABEL = {Qualificacao:'Qualificação',Conexao:'Conexão',TA:'T.A.',
 const STATUS_BY_ETAPA = {
   Qualificacao:['Aguardando Qualificacao','Qualificado'],
   Conexao:['A Enviar Convite','Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Convite Nao Aceito'],
-  TA:['Em Tentativa','Nao Atendeu','TA Agendada','Retornar em outro momento'],
+  TA:['1a Abordagem','Em Tentativa','Nao Atendeu','TA Agendada','Retornar em outro momento'],
   OT:['OT Agendada','Confirmacao de OT','OT Realizada','Delay OT','TA Reagendar OT','Nao Compareceu'],
   FIP:['FIP Agendado','Confirmacao de FIP','FIP Realizado'],
   Fechamento:['Onboarding','Convertido'],
@@ -364,6 +380,9 @@ function triageLead({cargo,empresa}={}){
 let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
 let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false;
 let DAY_SCOPE='me';   // Meu Dia: 'me' | 'all'
+let INBOX_FILTER='all';   // Inbox: all | resp | enviado | semtel | tel | aguardando
+let INBOX_SEL=null;       // Inbox 2-col: id da conversa selecionada (coluna direita)
+let INBOX_MOBILE_OPEN=false; // mobile: true quando o detalhe está aberto sobre a lista
 let LK_MINE=false;    // LinkedIn: só os meus?
 let SEL=new Set();    // multi-seleção da Lista
 let REAL_VICTOR=false; // identidade real logada
@@ -680,95 +699,254 @@ function respRow(l){
       <div class="qsub" style="color:#334155">"${esc(l.inbox_ultima_msg||'')}"</div></div>
     <div class="qact">${acts}</div></div>`;
 }
+function inboxCat(l){
+  if(l.inbox_de_mim===false && l.inbox_ultima_msg) return 'resp';
+  const s=l.status;
+  if(s==='Convite Enviado') return 'enviado';
+  if(s==='Convite Aceito (s/ telefone)') return 'semtel';
+  if(s==='Convite Aceito (c/ telefone)') return 'tel';
+  if(['Em Tentativa','Nao Atendeu','Retornar em outro momento'].includes(s)) return 'aguardando';
+  return null;
+}
+function inboxActs(l){
+  const s=l.status;
+  if(s==='Convite Aceito (s/ telefone)') return `<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn green" data-act="advance" data-to="Convite Aceito (c/ telefone)" data-id="${l.id}">📱 Tel recebido</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`;
+  if(s==='Convite Aceito (c/ telefone)') return `<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn" data-act="advance" data-to="Em Tentativa" data-id="${l.id}">➜ TA</button>`;
+  if(['Em Tentativa','Nao Atendeu','Retornar em outro momento'].includes(s)) return `<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`;
+  return `<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`;
+}
+function inboxListRow(l){
+  const hot=l.inbox_hot?'🔥 ':'';
+  const unread=l.inbox_nao_lida?'<span class="due">não lida</span>':'';
+  const when=l.inbox_quando?`<span class="dstuck">${esc(l.inbox_quando)}</span>`:'';
+  const body=l.inbox_ultima_msg
+    ? `<div class="qsub" style="color:#334155">"${esc(l.inbox_ultima_msg)}"</div>`
+    : `<div class="qsub">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div>`;
+  return `<div class="qrow" data-open="${l.id}">${avatarHTML(l,38)}
+    <div class="qmain"><div class="qn">${hot}${starBtn(l)}${esc(l.nome)} ${unread} ${stuckBadge(daysStuck(l))} ${when} ${dueHTML(l)}</div>
+      ${body}</div>
+    <div class="qact">${inboxActs(l)}</div></div>`;
+}
 function inboxHTML(){
-  const B=LEADS.filter(searchMatch).filter(l=>DAY_SCOPE!=='me'||l.responsavel===MY_NAME);
-  // quem RESPONDEU (snapshot do inbox: última msg não foi minha) — independente do status
   const skip=['Convertido','Dormente'];
-  const responderam=B.filter(l=>l.inbox_de_mim===false&&l.inbox_ultima_msg&&!skip.includes(l.status)&&l.etapa!=='Descartado')
-    .sort((a,b)=>(b.inbox_hot?2:0)+(b.inbox_nao_lida?1:0)-((a.inbox_hot?2:0)+(a.inbox_nao_lida?1:0)));
-  const lastSync=B.map(l=>l.inbox_sync).filter(Boolean).sort().slice(-1)[0];
-  const toolbar=`<div class="lkscope">
-    <button class="btn primary" id="ibx-paste" style="padding:8px 13px">📥 Colar inbox do LinkedIn</button>
-    <span class="muted" style="font-size:12px">${lastSync?('última captura '+new Date(lastSync).toLocaleString('pt-BR')):'nunca capturado — abra Mensagens no LinkedIn, clique 📥 Captar inbox (extensão) e cole aqui'}</span>
-    <span style="flex:1"></span>
-    <button class="chip ${DAY_SCOPE==='me'?'on':''}" id="ib-me">Meus</button><button class="chip ${DAY_SCOPE==='all'?'on':''}" id="ib-all">Todos</button>
+  const B=LEADS.filter(searchMatch)
+    .filter(l=>DAY_SCOPE!=='me'||l.responsavel===MY_NAME)
+    .filter(l=>!skip.includes(l.status)&&l.etapa!=='Descartado')
+    .map(l=>({l,cat:inboxCat(l)})).filter(x=>x.cat);
+  const all=B.map(x=>x.l);
+  const cntCat=k=>B.filter(x=>x.cat===k).length;
+  const total=all.length, respN=cntCat('resp'), semtelN=cntCat('semtel'), telN=cntCat('tel');
+  const convStatus=['Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Em Tentativa','Nao Atendeu','Retornar em outro momento'];
+  const esfriando=all.filter(l=>convStatus.includes(l.status)&&daysStuck(l)>=2).length;
+  const quentes=all.filter(l=>l.inbox_hot).length;
+  const lastSync=all.map(l=>l.inbox_sync).filter(Boolean).sort().slice(-1)[0];
+
+  const kpis=`<div class="statgrid">
+    <div class="stat"><div class="n">${total}</div><div class="l">conversas no inbox</div></div>
+    <div class="stat"><div class="n" style="color:var(--green)">${respN}</div><div class="l">responderam · sua vez</div></div>
+    <div class="stat"><div class="n" style="color:${esfriando?'var(--red)':'var(--txt)'}">${esfriando}</div><div class="l">esfriando ≥2d</div></div>
+    <div class="stat"><div class="n" style="color:var(--lk)">${semtelN}</div><div class="l">aceitos · pedir telefone</div></div>
+    <div class="stat"><div class="n" style="color:${quentes?'var(--amber)':'var(--txt)'}">${quentes}</div><div class="l">🔥 quentes</div></div>
   </div>`;
-  const respSec = responderam.length?`<div class="qsection" style="border-color:#16a34a"><div class="qhead"><span class="dotc" style="background:#16a34a"></span>Responderam — sua vez<span class="badge" style="background:#dcfce7;color:#166534">${responderam.length}</span></div><div class="qbody">${responderam.map(respRow).join('')}</div></div>`:'';
-  const buckets=[
-    {label:'Convite enviado · aguardando aceitar',color:'#2563eb',st:['Convite Enviado'],
-      acts:l=>`<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`},
-    {label:'Aceitou · puxar telefone',color:'#0a66c2',st:['Convite Aceito (s/ telefone)'],
-      acts:l=>`<button class="qbtn" data-act="msg" data-id="${l.id}">📩</button><button class="qbtn green" data-act="advance" data-to="Convite Aceito (c/ telefone)" data-id="${l.id}">📱 Tel</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`},
-    {label:'Telefone recebido · ligar/encaminhar',color:'#16a34a',st:['Convite Aceito (c/ telefone)'],
-      acts:l=>`<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn" data-act="advance" data-to="Em Tentativa" data-id="${l.id}">➜ TA</button>`},
-    {label:'Aguardando retorno',color:'#8b5cf6',st:['Em Tentativa','Nao Atendeu','Retornar em outro momento'],
-      acts:l=>`<button class="qbtn green" data-act="call" data-id="${l.id}">📞 +1</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>`}
-  ];
-  const conv=['Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Em Tentativa','Nao Atendeu','Retornar em outro momento'];
-  const perdido=B.filter(l=>conv.includes(l.status)&&daysStuck(l)>=2).length;
-  const callout=`<div class="actbanner" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af">💬 Conversas no seu inbox, ordenadas por <b>dias paradas</b> — pra não perder o timing. <b style="margin-left:6px">${perdido} esfriando (≥2d)</b></div>`;
-  const secs=buckets.map(b=>{
-    const items=B.filter(l=>b.st.includes(l.status)).sort((a,c)=>daysStuck(c)-daysStuck(a));
-    const rows=items.length?items.map(l=>inboxRow(l,b.acts(l))).join(''):'<div class="qempty">Tudo limpo ✓</div>';
-    return `<div class="qsection"><div class="qhead"><span class="dotc" style="background:${b.color}"></span>${b.label}<span class="badge">${items.length}</span></div><div class="qbody">${rows}</div></div>`;
-  }).join('');
-  return toolbar+callout+(respSec?`<div style="margin-bottom:14px">${respSec}</div>`:'')+`<div class="daygrid">${secs}</div>`;
+
+  const cap=`<div class="actbanner" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <button class="btn primary" id="ibx-paste" style="padding:8px 13px">📥 Colar conversas do LinkedIn</button>
+    <span style="font-size:12px">1) no LinkedIn → <b>Mensagens</b>, clique <b>📥 Captar inbox</b> (extensão) · 2) volte aqui e clique no botão acima — ele cola sozinho.${lastSync?'<br>última captura '+new Date(lastSync).toLocaleString('pt-BR'):''}</span>
+  </div>`;
+
+  const F=[['all','Todas',total],['resp','🟢 Responderam',respN],['enviado','Convite enviado',cntCat('enviado')],['semtel','Aceito · pedir tel',semtelN],['tel','Telefone recebido',telN],['aguardando','Aguardando retorno',cntCat('aguardando')]];
+  const chips=`<div class="filters" style="margin-bottom:10px">`+F.map(([k,lb,n])=>`<button class="chip ${INBOX_FILTER===k?'on':''}" data-ibxf="${k}">${lb} <b style="opacity:.7">${n}</b></button>`).join('')
+    +`<span style="flex:1"></span><button class="chip ${DAY_SCOPE==='me'?'on':''}" id="ib-me">Meus</button><button class="chip ${DAY_SCOPE==='all'?'on':''}" id="ib-all">Todos</button></div>`;
+
+  let items=(INBOX_FILTER==='all'?B:B.filter(x=>x.cat===INBOX_FILTER)).map(x=>x.l);
+  items.sort((a,b)=>{
+    const p=l=>(l.inbox_de_mim===false&&l.inbox_ultima_msg?4:0)+(l.inbox_hot?2:0)+(l.inbox_nao_lida?1:0);
+    const d=p(b)-p(a); return d!==0?d:daysStuck(b)-daysStuck(a);
+  });
+  // mantém a seleção; se sumiu do filtro, cai na primeira conversa (só pra preencher o painel no desktop)
+  if(!items.some(l=>l.id===INBOX_SEL)) INBOX_SEL = items[0]?items[0].id:null;
+  const selLead = items.find(l=>l.id===INBOX_SEL)||null;
+
+  const list = items.length
+    ? `<div class="ibx-list">${items.map(inboxSelRow).join('')}</div>`
+    : '<div class="ibx-list"><div class="qempty" style="padding:30px;text-align:center">Nada nesse filtro ✓</div></div>';
+  const two = `<div class="ibx2${INBOX_MOBILE_OPEN?' show-detail':''}">${list}${inboxDetailHTML(selLead)}</div>`;
+
+  return kpis+cap+chips+two;
+}
+// linha da lista (coluna esquerda) — clique seleciona, não abre o drawer
+function inboxSelRow(l){
+  const sel=INBOX_SEL===l.id?' sel':'';
+  const hot=l.inbox_hot?'🔥 ':'';
+  const unread=l.inbox_nao_lida?' <span class="due">não lida</span>':'';
+  const when=l.inbox_quando?` <span class="dstuck">${esc(l.inbox_quando)}</span>`:'';
+  const body=l.inbox_ultima_msg
+    ? `<div class="qsub" style="color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.inbox_de_mim===false?'':'Você: '}${esc(l.inbox_ultima_msg)}</div>`
+    : `<div class="qsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div>`;
+  return `<div class="qrow${sel}" data-ibxsel="${l.id}">${avatarHTML(l,38)}
+    <div class="qmain"><div class="qn">${hot}${esc(l.nome)}${unread}${when}</div>${body}</div></div>`;
+}
+// painel de detalhe (coluna direita)
+function inboxMsgBubble(l){
+  if(!l.inbox_ultima_msg) return `<div class="muted" style="margin:10px 0;font-size:13px">Sem conversa capturada ainda. No LinkedIn → Mensagens, clique <b>📥 Captar inbox</b> (extensão) e sincronize aqui pra trazer a última mensagem.</div>`;
+  const who=l.inbox_de_mim===false?esc(firstName(l.nome)):'Você';
+  const meta=[who,l.inbox_quando?esc(l.inbox_quando):'',l.inbox_nao_lida?'<b style="color:#dc2626">não lida</b>':''].filter(Boolean).join(' · ');
+  return `<div class="ibx-bubble"><div style="font-size:11px;color:#64748b;margin-bottom:4px">${meta}</div>${esc(l.inbox_ultima_msg)}</div>`;
+}
+function inboxDetailHTML(l){
+  if(!l) return `<div class="ibx-detail"><div class="qempty" style="padding:40px;text-align:center">Selecione uma conversa à esquerda 👈</div></div>`;
+  const liBtn = l.linkedin_url?`<a class="btn ghost" href="${esc(l.linkedin_url)}" target="_blank" rel="noopener">↗ Abrir no LinkedIn</a>`:'';
+  return `<div class="ibx-detail">
+    <button class="btn ghost ibx-back" id="ibx-back">← Voltar</button>
+    <div class="dh" style="display:flex;align-items:center;gap:10px;margin-bottom:4px">${avatarHTML(l,48)}
+      <div style="flex:1;min-width:0"><h2 style="margin:0;font-size:17px">${l.inbox_hot?'🔥 ':''}${esc(l.nome)}</h2>
+        <div class="muted">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div></div>
+      ${starBtn(l)}</div>
+    <div style="margin:6px 0">${statusBadge(l)} ${stuckBadge(daysStuck(l))} ${dueHTML(l)}</div>
+    ${inboxMsgBubble(l)}
+    <div class="row2">
+      <div class="field"><label>Telefone</label><input id="ibd-tel" value="${esc(l.telefone||'')}" placeholder="(81) 9...."></div>
+      <div class="field"><label>Status</label><select id="ibd-status">${ETAPAS.map(e=>`<optgroup label="${ETAPA_LABEL[e]}">${STATUS_BY_ETAPA[e].map(s=>`<option ${l.status===s?'selected':''}>${esc(s)}</option>`).join('')}</optgroup>`).join('')}</select></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Nome</label><input id="ibd-nome" value="${esc(l.nome||'')}"></div>
+      <div class="field"><label>Responsável</label><select id="ibd-resp">${['Gustavo','Victor'].map(s=>`<option ${l.responsavel===s?'selected':''}>${s}</option>`).join('')}</select></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn primary" id="ibd-save" data-id="${l.id}">Salvar</button>
+      <button class="btn ghost" data-act="msg" data-id="${l.id}">📩 Copiar mensagem</button>
+      <button class="btn ghost" data-act="call" data-id="${l.id}">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
+      ${liBtn}
+      <button class="btn ghost" id="ibd-full" data-id="${l.id}">Ficha completa ↗</button>
+    </div>
+  </div>`;
 }
 function wireInbox(){
   const me=$('#ib-me'),al=$('#ib-all');
   if(me)me.onclick=()=>{DAY_SCOPE='me';render();};
   if(al)al.onclick=()=>{DAY_SCOPE='all';render();};
+  document.querySelectorAll('[data-ibxf]').forEach(b=>b.onclick=()=>{INBOX_FILTER=b.dataset.ibxf;render();});
   const p=$('#ibx-paste'); if(p)p.onclick=openInboxPaste;
+  // 2 colunas: selecionar conversa (esquerda) → preenche o detalhe (direita)
+  document.querySelectorAll('[data-ibxsel]').forEach(r=>r.onclick=()=>{INBOX_SEL=r.dataset.ibxsel;INBOX_MOBILE_OPEN=true;render();});
+  const bk=$('#ibx-back'); if(bk)bk.onclick=()=>{INBOX_MOBILE_OPEN=false;render();};
+  const fl=$('#ibd-full'); if(fl)fl.onclick=()=>openDrawer(fl.dataset.id);
+  const sv=$('#ibd-save'); if(sv)sv.onclick=async()=>{
+    const l=byId(sv.dataset.id); if(!l)return;
+    const ph=normPhone($('#ibd-tel').value);
+    const patch={nome:$('#ibd-nome').value||l.nome,telefone:ph.telefone,telefone_e164:ph.e164,
+      status:$('#ibd-status').value,responsavel:$('#ibd-resp').value};
+    if(await updateLead(l.id,patch)){toast('Salvo · '+firstName(patch.nome));render();}
+  };
 }
 
 // ===== INGESTÃO DO INBOX (cola o JSON da extensão) =====
 function openInboxPaste(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
-  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:600px">
-    <h2>📥 Colar inbox do LinkedIn</h2>
-    <p class="hint">No LinkedIn → <b>Mensagens</b>, clique no botão <b>📥 Captar inbox</b> da extensão (canto inferior direito). Ele copia suas conversas. Cole aqui — eu caso por nome com seus leads e marco quem <b>respondeu</b> e quem está <b>quente</b>.</p>
-    <div class="field"><label>JSON do inbox</label><textarea id="ibp-raw" rows="4" placeholder='{"tipo":"inbox","conversas":[...]}'></textarea></div>
-    <div id="ibp-prev"></div>
-    <div id="ibp-unmatched" style="max-height:180px;overflow:auto"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button class="btn primary" id="ibp-go" disabled>Aplicar no CRM</button>
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:940px;max-width:96vw">
+    <h2>📥 Sincronizar conversas do LinkedIn</h2>
+    <p class="hint">Colo sozinho o que a extensão copiou (<b>não é link</b> — é a lista do botão 📥 Captar inbox). Reviso cada conversa: o que <b>cria novo</b> e o que <b>atualiza</b> um lead existente, com status e telefone sugeridos. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
+    <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
+    <div id="ibp-sum"></div>
+    <div id="ibp-table" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+      <button class="btn primary" id="ibp-go" disabled>Aprovar e sincronizar</button>
       <button class="btn ghost" id="ibp-close">Fechar</button>
+      <span id="ibp-msg" class="muted" style="font-size:12px"></span>
     </div>
   </div>`;
   ov.onclick=()=>ov.remove();document.body.appendChild(ov);
   $('#ibp-close').onclick=()=>ov.remove();
-  let parsed=null,matched=[],unmatched=[];
   const byName=new Map(); LEADS.forEach(l=>{const k=normName(l.nome); if(!byName.has(k))byName.set(k,l);});
-  $('#ibp-raw').oninput=e=>{
-    matched=[];unmatched=[];parsed=null;$('#ibp-unmatched').innerHTML='';
-    let conv=null;
-    try{const j=JSON.parse(e.target.value.trim()); conv=Array.isArray(j)?j:j.conversas;}catch(_){}
-    if(!Array.isArray(conv)){$('#ibp-prev').innerHTML='<p class="hint" style="color:var(--red)">JSON inválido — copie de novo pelo botão da extensão.</p>';$('#ibp-go').disabled=true;return;}
-    parsed=conv;
-    for(const c of conv){const l=byName.get(normName(c.nome)); if(l)matched.push({l,c});else unmatched.push(c);}
-    const resp=matched.filter(m=>m.c.de_mim===false).length, hot=matched.filter(m=>m.c.hot).length;
-    $('#ibp-prev').innerHTML=`<div class="summary">
-      <div class="scard"><div class="n">${conv.length}</div><div class="l">conversas</div></div>
-      <div class="scard"><div class="n" style="color:var(--green)">${matched.length}</div><div class="l">casaram no CRM</div></div>
-      <div class="scard"><div class="n" style="color:var(--primary)">${resp}</div><div class="l">responderam</div></div>
-      <div class="scard"><div class="n" style="color:var(--amber)">${unmatched.length}</div><div class="l">fora do CRM</div></div>
+  const extractPhone=t=>{const m=(t||'').match(/\(?\d{2}\)?\s?9?\d{4}[-.\s]?\d{4}/); return m?m[0]:'';};
+  const statusOpts=sel=>ALL_STATUS.map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('');
+  const statusOptsG=sel=>ETAPAS.map(e=>`<optgroup label="${esc(ETAPA_LABEL[e]||e)}">`+STATUS_BY_ETAPA[e].map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('')+`</optgroup>`).join('');
+  let rows=[];
+  function build(conv){
+    rows=conv.map(c=>{
+      const l=byName.get(normName(c.nome))||null;
+      const responded=c.de_mim===false;
+      const newPhone=extractPhone(c.ultima_msg);
+      const phone=newPhone||(l&&l.telefone)||'';
+      let status;
+      if(l){ if(responded&&newPhone) status='1a Abordagem';
+        else if(responded&&l.status==='Convite Enviado') status='Convite Aceito (s/ telefone)';
+        else status=l.status; }
+      else { if(newPhone) status='Convite Aceito (c/ telefone)';
+        else if(responded) status='Convite Aceito (s/ telefone)';
+        else status='Aguardando Qualificacao'; }
+      return {c,l,action:l?'atualizar':'criar',status,phone,resp:(l&&l.responsavel)||MY_NAME,include:true};
+    });
+    renderTable();
+  }
+  function renderTable(){
+    const inc=rows.filter(r=>r.include);
+    const novos=inc.filter(r=>r.action==='criar').length, upd=inc.filter(r=>r.action==='atualizar').length;
+    $('#ibp-sum').innerHTML=`<div class="summary">
+      <div class="scard"><div class="n">${rows.length}</div><div class="l">conversas</div></div>
+      <div class="scard"><div class="n" style="color:var(--green)">${novos}</div><div class="l">criar novo</div></div>
+      <div class="scard"><div class="n" style="color:var(--primary)">${upd}</div><div class="l">atualizar</div></div>
+      <div class="scard"><div class="n" style="color:var(--amber)">${rows.filter(r=>r.c.hot).length}</div><div class="l">🔥 quentes</div></div>
     </div>`;
-    if(unmatched.length) $('#ibp-unmatched').innerHTML=`<p class="hint">Fora do CRM (você conversou mas não tem lead) — criar:</p>`+
-      unmatched.map((c,i)=>`<div class="qrow"><div class="qmain"><div class="qn">${esc(c.nome)}</div><div class="qsub">"${esc(c.ultima_msg||'')}"</div></div><button class="qbtn green" data-newibx="${i}">+ criar lead</button></div>`).join('');
-    $('#ibp-go').disabled=matched.length===0;
-    $('#ibp-unmatched').querySelectorAll('[data-newibx]').forEach(b=>b.onclick=()=>{const c=unmatched[+b.dataset.newibx];ov.remove();openNovo(false,{nome:c.nome});});
+    const head=`<tr><th style="width:26px"></th><th>Lead</th><th>Conversa</th><th>Ação</th><th>Status</th><th>Telefone</th><th>Resp.</th></tr>`;
+    const body=rows.map((r,i)=>`<tr style="${r.include?'':'opacity:.4'}">
+      <td><input type="checkbox" class="cbx" data-chk="${i}" ${r.include?'checked':''}></td>
+      <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}</td>
+      <td style="max-width:230px"><div class="lead-cargo" style="white-space:normal">${r.c.de_mim===false?'<b style="color:#16a34a">respondeu:</b> ':''}"${esc((r.c.ultima_msg||'').slice(0,80))}"</div></td>
+      <td><span class="due ${r.action==='criar'?'soon':'ok'}">${r.action}</span></td>
+      <td><select class="fsel" data-st="${i}" style="max-width:175px">${statusOptsG(r.status)}</select></td>
+      <td><input data-ph="${i}" value="${esc(r.phone)}" style="width:122px;padding:6px;border:1px solid var(--line);border-radius:7px"></td>
+      <td><select class="fsel" data-rp="${i}"><option ${r.resp==='Gustavo'?'selected':''}>Gustavo</option><option ${r.resp==='Victor'?'selected':''}>Victor</option></select></td>
+    </tr>`).join('');
+    const bulk=`<div class="filters" style="margin:4px 0 8px;gap:8px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:8px 10px">
+      <button class="chip" data-ball="1">✓ Marcar todos</button>
+      <button class="chip" data-bnone="1">Desmarcar todos</button>
+      <span class="muted" style="font-size:12px">aplicar aos <b>${inc.length}</b> marcados →</span>
+      <select class="fsel" data-bresp><option value="">Responsável…</option><option>Gustavo</option><option>Victor</option></select>
+      <select class="fsel" data-bstatus style="max-width:210px"><option value="">Status (define a etapa)…</option>${statusOptsG('')}</select>
+    </div>`;
+    $('#ibp-table').innerHTML=bulk+`<div class="tablewrap"><table>${head}${body}</table></div>`;
+    const bAll=$('#ibp-table [data-ball]'); if(bAll)bAll.onclick=()=>{rows.forEach(r=>r.include=true);renderTable();};
+    const bNone=$('#ibp-table [data-bnone]'); if(bNone)bNone.onclick=()=>{rows.forEach(r=>r.include=false);renderTable();};
+    const bR=$('#ibp-table [data-bresp]'); if(bR)bR.onchange=()=>{ if(bR.value){rows.forEach(r=>{if(r.include)r.resp=bR.value;});renderTable();} };
+    const bS=$('#ibp-table [data-bstatus]'); if(bS)bS.onchange=()=>{ if(bS.value){rows.forEach(r=>{if(r.include)r.status=bS.value;});renderTable();} };
+    $('#ibp-table').querySelectorAll('[data-chk]').forEach(b=>b.onchange=()=>{rows[+b.dataset.chk].include=b.checked;renderTable();});
+    $('#ibp-table').querySelectorAll('[data-st]').forEach(s=>s.onchange=()=>{rows[+s.dataset.st].status=s.value;});
+    $('#ibp-table').querySelectorAll('[data-ph]').forEach(s=>s.oninput=()=>{rows[+s.dataset.ph].phone=s.value;});
+    $('#ibp-table').querySelectorAll('[data-rp]').forEach(s=>s.onchange=()=>{rows[+s.dataset.rp].resp=s.value;});
+    $('#ibp-go').disabled=inc.length===0;
+    $('#ibp-go').textContent=`Aprovar e sincronizar (${inc.length})`;
+  }
+  $('#ibp-raw').oninput=e=>{
+    let conv=null; try{const j=JSON.parse(e.target.value.trim()); conv=Array.isArray(j)?j:j.conversas;}catch(_){}
+    if(!Array.isArray(conv)||!conv.length){ $('#ibp-sum').innerHTML='<p class="hint" style="color:var(--red)">Nada reconhecido — clique 📥 Captar inbox na extensão e cole de novo.</p>'; $('#ibp-table').innerHTML=''; $('#ibp-go').disabled=true; return; }
+    build(conv.filter(c=>c&&c.nome));
   };
   $('#ibp-go').onclick=async()=>{
-    $('#ibp-go').disabled=true;$('#ibp-go').textContent='Aplicando...';
-    const now=new Date().toISOString();let ok=0;
-    for(const {l,c} of matched){
-      const patch={inbox_ultima_msg:(c.ultima_msg||'').slice(0,300),inbox_de_mim:!!c.de_mim,inbox_quando:c.quando||null,inbox_nao_lida:!!c.nao_lida,inbox_hot:!!c.hot,inbox_sync:now};
-      if(await updateLead(l.id,patch))ok++;
+    const sel=rows.filter(r=>r.include); if(!sel.length)return;
+    $('#ibp-go').disabled=true; $('#ibp-msg').textContent='Sincronizando…';
+    const now=new Date().toISOString(); let criados=0,atualizados=0,erros=0;
+    for(const r of sel){
+      const ph=r.phone?normPhone(r.phone):{telefone:null,e164:null};
+      const inbox={inbox_ultima_msg:(r.c.ultima_msg||'').slice(0,300),inbox_de_mim:!!r.c.de_mim,inbox_quando:r.c.quando||null,inbox_nao_lida:!!r.c.nao_lida,inbox_hot:!!r.c.hot,inbox_sync:now};
+      if(r.action==='criar'){
+        const rec=Object.assign({nome:r.c.nome,primeiro_nome:firstName(r.c.nome),status:r.status,responsavel:r.resp,origem:'LinkedIn'},inbox);
+        if(ph.telefone){rec.telefone=ph.telefone;rec.telefone_e164=ph.e164;}
+        const {data,error}=await sb.from('leads').insert(rec).select().single();
+        if(error){erros++;} else {LEADS.push(data);criados++;}
+      }else{
+        const patch=Object.assign({status:r.status},inbox);
+        if(ph.telefone){patch.telefone=ph.telefone;patch.telefone_e164=ph.e164;}
+        if(await updateLead(r.l.id,patch))atualizados++; else erros++;
+      }
     }
-    toast(`Inbox atualizado · ${ok} conversas casadas`);
-    ov.remove();render();
+    toast(`Sincronizado · ${criados} criados, ${atualizados} atualizados${erros?', '+erros+' erro(s)':''}`);
+    ov.remove(); render();
   };
   setTimeout(()=>$('#ibp-raw').focus(),50);
+  if(navigator.clipboard&&navigator.clipboard.readText){
+    navigator.clipboard.readText().then(txt=>{ if(txt&&/"tipo"\s*:\s*"inbox"|"conversas"/.test(txt)){ const ta=$('#ibp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); } }).catch(()=>{});
+  }
 }
 
 // ===== LINKEDIN (aba dedicada) =====
