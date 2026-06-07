@@ -219,16 +219,17 @@ tr.row.sel{background:#eff6ff}
 .sb-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:45}
 .sb-backdrop.on{display:block}
 /* Inbox 2 colunas (lista ↔ detalhe) */
-.ibx2{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;align-items:start}
-.ibx-list{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:72vh;overflow-y:auto}
-.ibx-list .qrow{border-bottom:1px solid #f1f5f9;border-radius:0;padding:10px}
+.ibx2{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:14px;align-items:start}
+.ibx-list{background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:76vh;overflow-y:auto}
+.ibx-list .qrow{border-bottom:1px solid #f1f5f9;border-radius:0;padding:11px 12px;transition:background .12s}
 .ibx-list .qrow:last-child{border-bottom:none}
-.ibx-list .qrow.sel{background:#eff6ff}
-.ibx-detail{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;min-height:280px}
+.ibx-list .qrow:hover{background:#f3f6fb}
+.ibx-list .qrow.sel{background:#eaf3ff;box-shadow:inset 3px 0 0 var(--lk)}
+.ibx-detail{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px 20px;min-height:280px;max-height:76vh;overflow-y:auto}
 .ibx-bubble{background:#f1f5f9;border-radius:12px;padding:10px 12px;color:#334155;font-size:13px;margin:10px 0;line-height:1.45}
 /* histórico completo do thread (Fase 2) */
-.ibx-thread{display:flex;flex-direction:column;gap:7px;max-height:300px;overflow-y:auto;padding:10px;margin:10px 0;background:#f8fafc;border:1px solid var(--line);border-radius:12px}
-.ibx-msg{max-width:82%;padding:7px 11px;border-radius:13px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.ibx-thread{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding:12px;margin:10px 0;background:#f8fafc;border:1px solid var(--line);border-radius:12px}
+.ibx-msg{max-width:86%;padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
 .ibx-msg .w{display:block;font-size:10px;opacity:.6;margin-top:3px}
 .ibx-msg.them{align-self:flex-start;background:#fff;border:1px solid #e2e8f0;color:#0f172a;border-bottom-left-radius:4px}
 .ibx-msg.me{align-self:flex-end;background:#dbeafe;color:#1e3a5f;border-bottom-right-radius:4px}
@@ -328,7 +329,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'DEV · v1.15 staging · arquivar conversa no inbox';
+const APP_VERSION = 'DEV · v1.16 staging · Etapa×Status + UX inbox';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -347,6 +348,17 @@ const ETAPA_COLOR = {Qualificacao:'#f59e0b',Conexao:'#2563eb',TA:'#8b5cf6',OT:'#
 const STATUS_ETAPA = {}; // reverse map
 for(const e of ETAPAS){ for(const s of STATUS_BY_ETAPA[e]) STATUS_ETAPA[s]=e; }
 const ALL_STATUS = ETAPAS.flatMap(e=>STATUS_BY_ETAPA[e]);
+// B-03: seletor dependente Etapa × Status (2 caixas). Salva pelo STATUS (a etapa é derivada no banco).
+function etapaStatusHTML(idp,status){
+  const et=STATUS_ETAPA[status]||ETAPAS[0];
+  return `<div class="es-pair" style="display:flex;flex-direction:column;gap:6px"><select id="${idp}-et" class="fsel es-et" style="width:100%">${ETAPAS.map(e=>`<option value="${e}" ${e===et?'selected':''}>${ETAPA_LABEL[e]}</option>`).join('')}</select>`+
+    `<select id="${idp}-st" class="fsel es-st" style="width:100%">${STATUS_BY_ETAPA[et].map(s=>`<option ${s===status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>`;
+}
+function wireEtapaStatus(idp){
+  const et=$('#'+idp+'-et'), st=$('#'+idp+'-st'); if(!et||!st)return;
+  et.onchange=()=>{ st.innerHTML=STATUS_BY_ETAPA[et.value].map(s=>`<option>${esc(s)}</option>`).join(''); };
+}
+function etapaStatusValue(idp){ const st=$('#'+idp+'-st'); return st?st.value:null; }
 const SCORE_COLOR = {A:'#16a34a',B:'#2563eb',C:'#f59e0b',D:'#ef4444'};
 const AVA_COLORS=['#2563eb','#16a34a','#8b5cf6','#0d9488','#f59e0b','#ef4444','#0ea5e9','#db2777'];
 
@@ -396,7 +408,7 @@ function triageLead({cargo,empresa}={}){
 }
 
 // ===== STATE =====
-let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
+let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_STATUS='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
 let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false;
 let DAY_SCOPE='me';   // Meu Dia: 'me' | 'all'
 let INBOX_FILTER='all';   // Inbox: all | resp | enviado | semtel | tel | aguardando
@@ -502,6 +514,7 @@ function filtered(){
   if(F_SITUACAO!=='Todos')r=r.filter(l=>situacaoOf(l)===F_SITUACAO);
   if(SEARCH)r=r.filter(searchMatch);
   if(F_ETAPA)r=r.filter(l=>l.etapa===F_ETAPA);
+  if(F_STATUS)r=r.filter(l=>l.status===F_STATUS);
   if(F_RESP)r=r.filter(l=>l.responsavel===F_RESP);
   if(F_ORIGEM)r=r.filter(l=>(l.origem||'')===F_ORIGEM);
   if(F_RECOM)r=r.filter(l=>(l.recomendante||'')===F_RECOM);
@@ -845,7 +858,7 @@ function inboxDetailHTML(l){
     ${inboxThreadHTML(l)}
     <div class="row2">
       <div class="field"><label>Telefone</label><input id="ibd-tel" value="${esc(l.telefone||'')}" placeholder="(81) 9...."></div>
-      <div class="field"><label>Status</label><select id="ibd-status">${ETAPAS.map(e=>`<optgroup label="${ETAPA_LABEL[e]}">${STATUS_BY_ETAPA[e].map(s=>`<option ${l.status===s?'selected':''}>${esc(s)}</option>`).join('')}</optgroup>`).join('')}</select></div>
+      <div class="field"><label>Etapa / Status</label>${etapaStatusHTML('ibd',l.status)}</div>
     </div>
     <div class="row2">
       <div class="field"><label>Nome</label><input id="ibd-nome" value="${esc(l.nome||'')}"></div>
@@ -870,6 +883,7 @@ function wireInbox(){
   // 2 colunas: selecionar conversa (esquerda) → preenche o detalhe (direita)
   document.querySelectorAll('[data-ibxsel]').forEach(r=>r.onclick=()=>{INBOX_SEL=r.dataset.ibxsel;INBOX_MOBILE_OPEN=true;render();});
   const bk=$('#ibx-back'); if(bk)bk.onclick=()=>{INBOX_MOBILE_OPEN=false;render();};
+  wireEtapaStatus('ibd');
   const fl=$('#ibd-full'); if(fl)fl.onclick=()=>openDrawer(fl.dataset.id);
   const ar=$('#ibd-arch'); if(ar)ar.onclick=async()=>{
     const l=byId(ar.dataset.id); if(!l)return;
@@ -887,7 +901,7 @@ function wireInbox(){
     const l=byId(sv.dataset.id); if(!l)return;
     const ph=normPhone($('#ibd-tel').value);
     const patch={nome:$('#ibd-nome').value||l.nome,telefone:ph.telefone,telefone_e164:ph.e164,
-      status:$('#ibd-status').value,responsavel:$('#ibd-resp').value};
+      status:etapaStatusValue('ibd'),responsavel:$('#ibd-resp').value};
     if(await updateLead(l.id,patch)){toast('Salvo · '+firstName(patch.nome));render();}
   };
 }
@@ -1113,6 +1127,7 @@ function filtersHTML(){
   </div>
   <div class="filters">
     <select class="fsel" id="f-etapa"><option value="">Todas as etapas</option>${ETAPAS.map(e=>`<option value="${e}" ${F_ETAPA===e?'selected':''}>${ETAPA_LABEL[e]}</option>`).join('')}</select>
+    <select class="fsel" id="f-status"><option value="">Todo status</option>${(F_ETAPA?STATUS_BY_ETAPA[F_ETAPA]:ALL_STATUS).map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
     <select class="fsel" id="f-origem"><option value="">Toda origem</option>${origens.map(o=>`<option value="${esc(o)}" ${F_ORIGEM===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
     <select class="fsel" id="f-recom"><option value="">Todo recomendante</option>${recoms.map(o=>`<option value="${esc(o)}" ${F_RECOM===o?'selected':''}>${esc(o)}</option>`).join('')}</select>
     <button class="chip ${F_RESP==='Gustavo'?'on':''}" data-resp="Gustavo">Juca</button>
@@ -1121,7 +1136,8 @@ function filtersHTML(){
   </div>`;
 }
 function wireFilters(){
-  const fe=$('#f-etapa'); if(fe)fe.onchange=e=>{F_ETAPA=e.target.value;render();};
+  const fe=$('#f-etapa'); if(fe)fe.onchange=e=>{F_ETAPA=e.target.value;F_STATUS='';render();};
+  const fs=$('#f-status'); if(fs)fs.onchange=e=>{F_STATUS=e.target.value;render();};
   const fo=$('#f-origem'); if(fo)fo.onchange=e=>{F_ORIGEM=e.target.value;render();};
   const fr=$('#f-recom'); if(fr)fr.onchange=e=>{F_RECOM=e.target.value;render();};
   document.querySelectorAll('[data-sit]').forEach(b=>b.onclick=()=>{F_SITUACAO=b.dataset.sit;render();});
@@ -1290,7 +1306,7 @@ function openDrawer(id){
       <div class="field"><label>Sexo</label><select id="d-sexo"><option value="">—</option>${['Masculino','Feminino','Outro'].map(s=>`<option ${l.sexo===s?'selected':''}>${s}</option>`).join('')}</select></div>
     </div>
     <div class="row2">
-      <div class="field"><label>Status</label><select id="d-status">${ETAPAS.map(e=>`<optgroup label="${ETAPA_LABEL[e]}">${STATUS_BY_ETAPA[e].map(s=>`<option ${l.status===s?'selected':''}>${esc(s)}</option>`).join('')}</optgroup>`).join('')}</select></div>
+      <div class="field"><label>Etapa / Status</label>${etapaStatusHTML('d',l.status)}</div>
       <div class="field"><label>Responsável</label><select id="d-resp">${['Gustavo','Victor'].map(s=>`<option ${l.responsavel===s?'selected':''}>${s}</option>`).join('')}</select></div>
     </div>
     <div class="field"><label>Próxima ação (follow-up)</label><input id="d-prox" type="date" value="${l.data_proxima_acao?l.data_proxima_acao.slice(0,10):''}">
@@ -1315,6 +1331,7 @@ function openDrawer(id){
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
   $('#dx').onclick=()=>ov.remove();
+  wireEtapaStatus('d');
   let proxVal=l.data_proxima_acao?l.data_proxima_acao.slice(0,10):'';
   ov.querySelectorAll('[data-prox]').forEach(b=>b.onclick=()=>{const d=b.dataset.prox;proxVal=d==='clear'?'':(d==='0'?todayStr():addDays(+d));$('#d-prox').value=proxVal;});
   $('#d-prox').onchange=e=>proxVal=e.target.value;
@@ -1325,7 +1342,7 @@ function openDrawer(id){
       renda_estimada:$('#d-renda').value?Number($('#d-renda').value):null,renda_auto:false,
       faixa_idade:$('#d-idade').value?Number($('#d-idade').value):null,
       telefone:ph.telefone,telefone_e164:ph.e164,sexo:$('#d-sexo').value||null,
-      status:$('#d-status').value,responsavel:$('#d-resp').value,
+      status:etapaStatusValue('d'),responsavel:$('#d-resp').value,
       data_proxima_acao:proxVal||null,acompanhar_victor:$('#d-acomp').checked,
       linkedin_url:$('#d-url').value||null,linkedin_url_norm:normUrl($('#d-url').value),
       observacoes:$('#d-obs').value||null};
