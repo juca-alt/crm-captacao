@@ -400,7 +400,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'DEV · v1.21 staging · Onda 2 (menu Pipe + card rico + Bairro + Contatos)';
+const APP_VERSION = 'DEV · v1.22 staging · Onda 3 (Empresa multi + modelos de mensagem)';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','SitPlan','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -450,6 +450,7 @@ const LK_CONEXAO_STATUS = ['A Enviar Convite','Convite Enviado','Convite Aceito 
 const TA_PRIMEIRA = '1a Abordagem'; // destino quando consegue o telefone (já é T.A.)
 const GARIMPO_META = 10; // meta diária de garimpo (Victor) — legado/fallback
 let SETTINGS = { meta_minerados_dia:100, meta_convites_dia:40 }; // metas globais (app_settings); só admin edita
+let MSG_TEMPLATES=null; // modelos de mensagem (app_settings 'msg_templates'); null = usa o default
 let PERIOD = 'semana';     // Meu Dia: janela das réguas: 'dia'|'semana'|'mes'|'periodo'
 let PERIOD_RANGE = null;   // {ini,fim} quando PERIOD==='periodo'
 
@@ -489,7 +490,7 @@ function triageLead({cargo,empresa}={}){
 // ===== STATE =====
 let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_STATUS='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
 let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false;
-let F_EMPRESA='', F_SEGMENTO='', F_PROFISSAO='', F_IDADE='', F_SEXO=''; // Funil: filtros combináveis (Bloco 2.2)
+let F_EMPRESA=[], F_SEGMENTO='', F_PROFISSAO='', F_IDADE='', F_SEXO=''; // Funil: filtros combináveis; F_EMPRESA = lista (multiseleção)
 let CAP_MODE='kanban'; // Funil Captação: 'kanban' | 'lista'
 let QUAL_VIEW='cards', QF_RENDA='', QF_IDADE='', QF_SEXO=''; // aba Qualificar
 let DAY_SCOPE='me';   // Meu Dia: 'me' | 'all'
@@ -586,9 +587,22 @@ function flagsHTML(l){
 function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
 function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replace(/\D/g,'');if(d.startsWith('55')&&d.length>11)d=d.slice(2);if(d.length===11)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`,e164:`+55${d}`};if(d.length===10)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`,e164:`+55${d}`};return{telefone:raw,e164:null};}
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
-function copyMsg(l){
-  const msg=`Olá ${firstName(l.nome)}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.`;
-  navigator.clipboard.writeText(msg).then(()=>toast('Mensagem copiada — '+firstName(l.nome)),()=>toast('Não consegui copiar'));
+const MSG_TPL_DEFAULT=[{nome:'Conexão (padrão)',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}];
+function msgTemplates(){ return (MSG_TEMPLATES&&MSG_TEMPLATES.length)?MSG_TEMPLATES:MSG_TPL_DEFAULT; }
+function fillTpl(txt,l){ return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
+function copyTplText(txt,l){ navigator.clipboard.writeText(fillTpl(txt,l)).then(()=>toast('Mensagem copiada — '+firstName(l.nome)),()=>toast('Não consegui copiar')); }
+function copyMsg(l,anchor){
+  const tpls=msgTemplates();
+  if(tpls.length<=1){ copyTplText(tpls[0].texto,l); return; }
+  closeMenus();
+  const m=document.createElement('div'); m.className='statusmenu';
+  m.style.cssText='position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:6px;width:290px;max-height:360px;overflow:auto';
+  m.innerHTML=`<div style="font-size:10px;text-transform:uppercase;color:var(--muted);padding:6px 8px 4px;font-weight:700">Escolha o modelo · ${esc(firstName(l.nome))}</div>`+tpls.map((t,i)=>`<div class="smi" data-i="${i}" style="padding:8px 9px;border-radius:7px;cursor:pointer"><div style="font-weight:600;font-size:13px">${esc(t.nome||('Modelo '+(i+1)))}</div><div class="muted" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(fillTpl(t.texto,l))}</div></div>`).join('');
+  document.body.appendChild(m);
+  if(anchor&&anchor.getBoundingClientRect){ const r=anchor.getBoundingClientRect(); m.style.top=Math.min(r.bottom+4,window.innerHeight-380)+'px'; m.style.left=Math.min(r.left,window.innerWidth-306)+'px'; }
+  else { m.style.top='90px'; m.style.left=Math.max(8,(window.innerWidth-290)/2)+'px'; }
+  m.querySelectorAll('.smi').forEach(it=>it.onclick=()=>{ const t=tpls[+it.dataset.i]; closeMenus(); copyTplText(t.texto,l); });
+  setTimeout(()=>document.addEventListener('click',function away(e){ if(!m.contains(e.target)){ closeMenus(); document.removeEventListener('click',away,true); } },true),0);
 }
 function searchMatch(l){
   if(!SEARCH)return true;const q=SEARCH.toLowerCase();
@@ -607,6 +621,7 @@ async function loadSettings(){
     if(data) for(const r of data){
       if(r.chave==='meta_minerados_dia') SETTINGS.meta_minerados_dia=+r.valor||SETTINGS.meta_minerados_dia;
       if(r.chave==='meta_convites_dia')  SETTINGS.meta_convites_dia =+r.valor||SETTINGS.meta_convites_dia;
+      if(r.chave==='msg_templates'){ try{ const a=JSON.parse(r.valor||'[]'); if(Array.isArray(a)&&a.length) MSG_TEMPLATES=a; }catch(_){} }
     }
   }catch(e){/* tabela ainda não criada → usa defaults */}
 }
@@ -649,7 +664,7 @@ function filtered(){
   if(SEARCH)r=r.filter(searchMatch);
   if(F_ETAPA)r=r.filter(l=>l.etapa===F_ETAPA);
   if(F_STATUS)r=r.filter(l=>l.status===F_STATUS);
-  if(F_EMPRESA)r=r.filter(l=>(l.empresa||'').toLowerCase().includes(F_EMPRESA.toLowerCase()));
+  if(F_EMPRESA.length)r=r.filter(l=>F_EMPRESA.includes(l.empresa));
   if(F_PROFISSAO)r=r.filter(l=>(l.cargo||'').toLowerCase().includes(F_PROFISSAO.toLowerCase()));
   if(F_SEGMENTO)r=r.filter(l=>(l.segmento||'')===F_SEGMENTO);
   if(F_IDADE)r=r.filter(l=>idadeInRange(l.faixa_idade,F_IDADE));
@@ -943,6 +958,12 @@ function wirePerfil(){
 }
 
 // ===== CONFIGURAÇÕES (todos: trocar e-mail / senha) =====
+function tplRowHTML(t){
+  return `<div class="tpl-row" style="border:1px solid var(--line);border-radius:9px;padding:8px;margin-bottom:8px">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input class="tpl-nome" value="${esc(t.nome||'')}" placeholder="Nome do modelo" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-weight:600"><button class="btn ghost tpl-del" title="Remover">🗑</button></div>
+    <textarea class="tpl-texto" rows="3" placeholder="Texto da mensagem… use {{primeiro_nome}}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px">${esc(t.texto||'')}</textarea>
+  </div>`;
+}
 function configHTML(){
   return `<div class="profcard" style="display:block;max-width:620px">
       <div style="font-weight:600;margin-bottom:4px">✉️ Trocar e-mail de acesso</div>
@@ -958,6 +979,12 @@ function configHTML(){
         <div class="field"><label>Confirmar</label><input id="cf-pw2" type="password" autocomplete="new-password"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn primary" id="cf-pw-save">Salvar nova senha</button><span id="cf-pw-msg" style="font-size:13px"></span></div>
+    </div>
+    <div class="profcard" style="display:block;max-width:620px;margin-top:14px">
+      <div style="font-weight:600;margin-bottom:4px">💬 Modelos de mensagem</div>
+      <p class="hint" style="margin-bottom:8px">Use <b>{{primeiro_nome}}</b> — troca pelo nome do lead na hora de copiar. O botão 📩 nos cards abre esses modelos pra você escolher e copiar.</p>
+      <div id="tpl-list">${msgTemplates().map(t=>tplRowHTML(t)).join('')}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn ghost" id="tpl-add">＋ Novo modelo</button><button class="btn primary" id="tpl-save">Salvar modelos</button><span id="tpl-msg" style="font-size:13px"></span></div>
     </div>`;
 }
 function wireConfig(){
@@ -977,6 +1004,17 @@ function wireConfig(){
     const {error}=await sb.auth.updateUser({password:a});
     if(error){ m.style.color='var(--red)'; m.textContent='Erro: '+error.message; ps.disabled=false; }
     else { m.style.color='var(--green)'; m.textContent='✓ Senha atualizada! Use ela na extensão.'; $('#cf-pw').value=''; $('#cf-pw2').value=''; }
+  };
+  // ── modelos de mensagem ──
+  const tplDel=row=>{ const b=row.querySelector('.tpl-del'); if(b)b.onclick=()=>row.remove(); };
+  document.querySelectorAll('#tpl-list .tpl-row').forEach(tplDel);
+  const tadd=$('#tpl-add'); if(tadd)tadd.onclick=()=>{ const list=$('#tpl-list'); const tmp=document.createElement('div'); tmp.innerHTML=tplRowHTML({nome:'',texto:''}); const row=tmp.firstElementChild; list.appendChild(row); tplDel(row); row.querySelector('.tpl-nome').focus(); };
+  const tsave=$('#tpl-save'); if(tsave)tsave.onclick=async()=>{
+    const arr=[...document.querySelectorAll('#tpl-list .tpl-row')].map(r=>({nome:(r.querySelector('.tpl-nome').value||'').trim()||'Modelo',texto:(r.querySelector('.tpl-texto').value||'').trim()})).filter(t=>t.texto);
+    const msg=$('#tpl-msg'); if(!arr.length){ msg.style.color='var(--red)'; msg.textContent='Deixe ao menos 1 modelo com texto.'; return; }
+    MSG_TEMPLATES=arr; msg.style.color='var(--muted)'; msg.textContent='Salvando…'; tsave.disabled=true;
+    const ok=await saveSetting('msg_templates',JSON.stringify(arr)); tsave.disabled=false;
+    msg.style.color=ok?'var(--green)':'var(--red)'; msg.textContent=ok?'✓ Modelos salvos.':'Salvou nesta sessão (tabela app_settings indisponível).';
   };
 }
 
@@ -1393,7 +1431,7 @@ function filtersHTML(){
   const segmentos=[...new Set(LEADS.map(l=>l.segmento).filter(Boolean))].sort();
   const idadeOpts=[['','Idade: todas'],['_29','até 29'],['30_40','30–40'],['41_','41+']];
   const sexoOpts=[['','Sexo: todos'],['Masculino','Masculino'],['Feminino','Feminino'],['Outro','Outro']];
-  const hasFiltro = F_EMPRESA||F_PROFISSAO||F_SEGMENTO||F_IDADE||F_SEXO||F_MONEY||F_ETAPA||F_STATUS;
+  const hasFiltro = F_EMPRESA.length||F_PROFISSAO||F_SEGMENTO||F_IDADE||F_SEXO||F_MONEY||F_ETAPA||F_STATUS;
   return `
   <div class="filters" style="margin-bottom:6px">${sitTabs}</div>
   <div class="summary">
@@ -1403,7 +1441,7 @@ function filtersHTML(){
   <div class="filters">
     <select class="fsel" id="f-etapa"><option value="">Todas as etapas</option>${ETAPAS.map(e=>`<option value="${e}" ${F_ETAPA===e?'selected':''}>${ETAPA_LABEL[e]}</option>`).join('')}</select>
     <select class="fsel" id="f-status"><option value="">Todo status</option>${(F_ETAPA?STATUS_BY_ETAPA[F_ETAPA]:ALL_STATUS).map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
-    <input class="fsel" id="f-empresa" placeholder="Empresa…" value="${esc(F_EMPRESA)}" style="min-width:130px">
+    <button type="button" class="fsel" id="f-empresa" style="min-width:140px;text-align:left;cursor:pointer">${F_EMPRESA.length===0?'Empresa: todas':F_EMPRESA.length===1?('🏢 '+esc(F_EMPRESA[0])):('🏢 '+F_EMPRESA.length+' empresas')} ▾</button>
     <input class="fsel" id="f-profissao" placeholder="Profissão (cargo)…" value="${esc(F_PROFISSAO)}" style="min-width:150px">
     <select class="fsel" id="f-segmento"><option value="">Todo segmento</option>${segmentos.map(s=>`<option value="${esc(s)}" ${F_SEGMENTO===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
     <select class="fsel" id="f-idade">${idadeOpts.map(o=>`<option value="${o[0]}" ${F_IDADE===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
@@ -1421,14 +1459,29 @@ function wireTextFilter(id,setter){
 function wireFilters(){
   const fe=$('#f-etapa'); if(fe)fe.onchange=e=>{F_ETAPA=e.target.value;F_STATUS='';render();};
   const fs=$('#f-status'); if(fs)fs.onchange=e=>{F_STATUS=e.target.value;render();};
-  wireTextFilter('f-empresa', v=>F_EMPRESA=v);
+  const fEmp=$('#f-empresa'); if(fEmp)fEmp.onclick=e=>{e.stopPropagation();openEmpresaMenu(fEmp);};
   wireTextFilter('f-profissao', v=>F_PROFISSAO=v);
   const fseg=$('#f-segmento'); if(fseg)fseg.onchange=e=>{F_SEGMENTO=e.target.value;render();};
   const fi=$('#f-idade'); if(fi)fi.onchange=e=>{F_IDADE=e.target.value;render();};
   const fx=$('#f-sexo');  if(fx)fx.onchange=e=>{F_SEXO=e.target.value;render();};
   document.querySelectorAll('[data-sit]').forEach(b=>b.onclick=()=>{F_SITUACAO=b.dataset.sit;render();});
   const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
-  const fc=$('#f-clear'); if(fc)fc.onclick=()=>{F_EMPRESA='';F_PROFISSAO='';F_SEGMENTO='';F_IDADE='';F_SEXO='';F_MONEY=false;F_ETAPA='';F_STATUS='';render();};
+  const fc=$('#f-clear'); if(fc)fc.onclick=()=>{F_EMPRESA=[];F_PROFISSAO='';F_SEGMENTO='';F_IDADE='';F_SEXO='';F_MONEY=false;F_ETAPA='';F_STATUS='';render();};
+}
+function empresaOptions(){ return [...new Set(LEADS.map(l=>l.empresa).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+function openEmpresaMenu(anchor){
+  closeMenus();
+  const opts=empresaOptions(), sel=new Set(F_EMPRESA);
+  const m=document.createElement('div'); m.className='statusmenu';
+  m.style.cssText='position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:8px;width:270px';
+  m.innerHTML=`<input id="emp-q" placeholder="Buscar empresa…" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;margin-bottom:6px"><div id="emp-list" style="max-height:240px;overflow:auto">${opts.map(e=>`<label style="display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px"><input type="checkbox" class="emp-cb" value="${esc(e)}" ${sel.has(e)?'checked':''}> ${esc(e)}</label>`).join('')||'<div class="muted" style="font-size:12px;padding:6px">Sem empresas na base ainda.</div>'}</div><div style="display:flex;gap:6px;margin-top:8px"><button class="btn primary" id="emp-ok" style="flex:1">Aplicar</button><button class="btn ghost" id="emp-cl">Limpar</button></div>`;
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect(); m.style.top=Math.min(r.bottom+4,window.innerHeight-360)+'px'; m.style.left=Math.min(r.left,window.innerWidth-286)+'px';
+  const q=m.querySelector('#emp-q'); q.oninput=()=>{const t=q.value.toLowerCase();m.querySelectorAll('#emp-list label').forEach(l=>l.style.display=l.textContent.toLowerCase().includes(t)?'':'none');};
+  m.querySelectorAll('.emp-cb').forEach(cb=>cb.onchange=()=>{ if(cb.checked)sel.add(cb.value); else sel.delete(cb.value); });
+  m.querySelector('#emp-ok').onclick=()=>{ F_EMPRESA=[...sel]; closeMenus(); render(); };
+  m.querySelector('#emp-cl').onclick=()=>{ F_EMPRESA=[]; closeMenus(); render(); };
+  setTimeout(()=>document.addEventListener('click',function away(e){ if(!m.contains(e.target)&&e.target!==anchor){ closeMenus(); document.removeEventListener('click',away,true); } },true),0);
 }
 
 // ===== LISTA (com multi-seleção) =====
