@@ -359,12 +359,15 @@ tr.row.sel{background:#eff6ff}
     <button class="pchip" id="profile-chip"><div class="pav" id="pchip-av">J</div><div><div class="pn" id="pchip-name">Juca</div><div class="pr" id="pchip-role">Admin · trocar perfil</div></div></button>
     <button class="nav-item active" data-view="hoje"><span class="ic">☀</span> Meu Dia</button>
 
-    <div class="nav-sec"><span class="ic in" style="margin-right:6px">in</span>Captação · LinkedIn</div>
-    <button class="nav-item step" data-view="mineracao"><span class="stepn">1</span><span class="ic">⛏</span> Minerar</button>
-    <button class="nav-item step" data-view="qualificar"><span class="stepn">2</span><span class="ic">✓</span> Qualificar</button>
-    <button class="nav-item step" data-view="inbox"><span class="stepn">3</span><span class="ic">🔗</span> Inbox LinkedIn</button>
-    <button class="nav-item" data-view="funil"><span class="ic">▦</span> Funil LinkedIn</button>
+    <button class="nav-sec" id="cap-toggle" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px"><span class="ic in" style="margin-right:0">in</span>Captação · LinkedIn <span id="cap-caret" style="margin-left:auto">▾</span></button>
+    <div id="cap-group">
+      <button class="nav-item" data-view="funil"><span class="ic">▦</span> Pipe LinkedIn</button>
+      <button class="nav-item step" data-view="mineracao"><span class="stepn">1</span><span class="ic">⛏</span> Minerar</button>
+      <button class="nav-item step" data-view="qualificar"><span class="stepn">2</span><span class="ic">✓</span> Qualificar</button>
+      <button class="nav-item step" data-view="inbox"><span class="stepn">3</span><span class="ic">🔗</span> Inbox LinkedIn</button>
+    </div>
     <button class="nav-item" data-view="funilcap"><span class="ic">🎯</span> Funil Captação</button>
+    <button class="nav-item" data-view="contatos"><span class="ic">📇</span> Contatos</button>
 
     <div class="nav-sec">Gestão</div>
     <button class="nav-item perm-relatorio" data-view="relatorio"><span class="ic">📊</span> Relatório</button>
@@ -397,7 +400,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'DEV · v1.20 staging · Onda 1 pente-fino (Victor + drawer + consistência)';
+const APP_VERSION = 'DEV · v1.21 staging · Onda 2 (menu Pipe + card rico + Bairro + Contatos)';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','SitPlan','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -706,9 +709,10 @@ function render(){
     c.innerHTML = banner + filtersHTML() + capToggleHTML() + funilCapHTML();
     wireFilters(); wireCapToggle(); wireFunil(); wireStatusButtons(); wireBanner(); return;
   }
+  if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML() + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHTML(); wireConfig(); wireBanner(); return; }
-  // ===== FUNIL LinkedIn (default) =====
-  $('#view-title').textContent='Funil LinkedIn';
+  // ===== PIPE LinkedIn (default) =====
+  $('#view-title').textContent='Pipe LinkedIn';
   if(FUNIL_MODE==='lista'){
     c.innerHTML = banner + filtersHTML() + funilToggleHTML() + listaHTML(filtered().filter(l=>LK_FLOW.some(col=>col.s===l.status)));
     wireFilters(); wireFunilToggle(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return;
@@ -1335,15 +1339,27 @@ function lkBoardHTML(){
   return hint+`<div class="lkboard">${cols}</div>`;
 }
 function nextStatus(s){const i=LK_FLOW.findIndex(c=>c.s===s);return i>=0&&i<LK_FLOW.length-1?LK_FLOW[i+1].s:null;}
+// corpo rico do card (Pipe LinkedIn e Funil Captação): nome · cargo·empresa · status · idade·renda · bairro
+function cardCore(l){
+  const idade=l.faixa_idade?esc(l.faixa_idade)+'a':'';
+  const renda=(l.renda_estimada!=null)?rendaHTML(l):'';
+  const meta=[idade,renda].filter(Boolean).join(' · ');
+  return `<div class="top">${avatarHTML(l,34)}<div style="min-width:0;flex:1">
+      <div class="nm">${starBtn(l)}${esc(l.nome)}</div>
+      <div class="emp" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div>
+    </div></div>
+    <div style="margin-top:6px">${statusBadge(l)} ${dueHTML(l)}</div>
+    ${meta?`<div style="margin-top:4px;font-size:11px;color:var(--muted)">${meta}</div>`:''}
+    <div style="margin-top:3px;font-size:11px;color:var(--muted)">📍 ${esc(l.bairro||'—')}</div>`;
+}
 function lkcard(l,next){
   // último passo do LinkedIn (telefone na mão) → promove pra 1ª Abordagem (T.A.)
   let nextBtn = next?`<button class="qbtn green" data-act="advance" data-to="${esc(next)}" data-id="${l.id}">➜</button>`:'';
   if(l.status==='Convite Aceito (c/ telefone)') nextBtn=`<button class="qbtn green" data-act="advance" data-to="${TA_PRIMEIRA}" data-id="${l.id}" title="Tem telefone → vira T.A.">🎯 1ª Abordagem</button>`;
-  const tel=l.telefone?`<span class="muted" style="font-size:11px">📱 ${esc(l.telefone)}</span>`:'';
+  const tel=l.telefone?`<div style="margin-top:4px"><span class="muted" style="font-size:11px">📱 ${esc(l.telefone)}</span></div>`:'';
   return `<div class="kcard" draggable="true" data-id="${l.id}" data-open="${l.id}">
-    <div class="top">${avatarHTML(l,30)}<div style="min-width:0"><div class="nm">${starBtn(l)}${esc(l.nome)}</div><div class="emp">${esc(l.empresa||'—')}</div></div></div>
-    <div class="meta">${rendaHTML(l)} ${dueHTML(l)}</div>
-    ${tel?`<div style="margin-top:4px">${tel}</div>`:''}
+    ${cardCore(l)}
+    ${tel}
     <div class="kacts"><button class="qbtn" data-act="msg" data-id="${l.id}">📩 Msg</button><button class="qbtn amber" data-act="prox" data-d="2" data-id="${l.id}">+2d</button>${nextBtn}</div>
   </div>`;
 }
@@ -1502,10 +1518,7 @@ function funilHTML(){
   return `<div class="funil">${cols}</div>`;
 }
 function kcard(l){
-  return `<div class="kcard" draggable="true" data-id="${l.id}">
-    <div class="top">${avatarHTML(l,30)}<div style="min-width:0"><div class="nm">${starBtn(l)}${esc(l.nome)}</div><div class="emp">${esc(l.empresa||'—')}</div></div></div>
-    <div class="meta">${rendaHTML(l)} ${statusBadge(l)}</div>
-  </div>`;
+  return `<div class="kcard" draggable="true" data-id="${l.id}">${cardCore(l)}</div>`;
 }
 function wireFunil(){
   let dragId=null;
@@ -1590,6 +1603,7 @@ function openDrawer(id){
       <div class="field"><label>Empresa</label><input id="d-empresa" value="${esc(l.empresa||'')}"></div>
     </div>
     <div class="field"><label>Segmento (ramo da empresa)</label><input id="d-segmento" value="${esc(l.segmento||'')}" placeholder="ex.: Tecnologia, Varejo, Saúde, Indústria…"></div>
+    <div class="field"><label>Bairro / CEP</label><input id="d-bairro" value="${esc(l.bairro||'')}" placeholder="ex.: Boa Viagem · 51020-000"></div>
     <div class="row2">
       <div class="field"><label>Renda estimada (R$)</label><input id="d-renda" type="number" value="${l.renda_estimada??''}"></div>
       <div class="field"><label>Idade</label><input id="d-idade" type="number" value="${l.faixa_idade??''}"></div>
@@ -1634,7 +1648,7 @@ function openDrawer(id){
   $('#d-star').onclick=async()=>{ if(await updateLead(id,{prioridade:!l.prioridade})){l.prioridade=!l.prioridade;$('#d-star').textContent=l.prioridade?'★':'☆';$('#d-star').classList.toggle('on',l.prioridade);render();} };
   $('#d-save').onclick=async()=>{
     const ph=normPhone($('#d-tel').value);
-    const patch={nome:($('#d-nome').value||'').trim()||l.nome,cargo:$('#d-cargo').value||null,empresa:$('#d-empresa').value||null,segmento:$('#d-segmento').value||null,
+    const patch={nome:($('#d-nome').value||'').trim()||l.nome,cargo:$('#d-cargo').value||null,empresa:$('#d-empresa').value||null,segmento:$('#d-segmento').value||null,bairro:$('#d-bairro').value||null,
       renda_estimada:$('#d-renda').value?Number($('#d-renda').value):null,renda_auto:false,
       faixa_idade:$('#d-idade').value?Number($('#d-idade').value):null,
       telefone:ph.telefone,telefone_e164:ph.e164,sexo:$('#d-sexo').value||null,
@@ -2108,6 +2122,7 @@ function gcalLink(l){
 
 // ===== NAV =====
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;SEL.clear();$('#sidebar').classList.remove('open');render();});
+{ const capT=$('#cap-toggle'); if(capT)capT.onclick=()=>{ const g=$('#cap-group'),c=$('#cap-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
 $('#profile-chip').onclick=()=>{VIEW=isAdmin()?'perfil':'config';$('#sidebar').classList.remove('open');render();};
 $('#top-novo').onclick=()=>openNovo(false);
 $('#nav-dup').onclick=()=>{VIEW='dup';$('#sidebar').classList.remove('open');render();};
