@@ -397,7 +397,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'DEV · v1.19 staging · Blocos 1+2 completos · Funil filtros+Captação+Config';
+const APP_VERSION = 'DEV · v1.20 staging · Onda 1 pente-fino (Victor + drawer + consistência)';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','SitPlan','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -507,6 +507,7 @@ let MINING_TICK=null;  // setInterval do cronômetro
 // papel efetivo = real Victor OU admin escolhendo ver como Victor
 function syncProfile(){ IS_VICTOR = REAL_VICTOR || ACT_AS==='Victor'; MY_NAME = IS_VICTOR?'Victor':'Gustavo'; MY_PERMS = effectivePerms(); }
 function isAdmin(){ return !REAL_VICTOR; }
+function uiAdmin(){ return isAdmin() && ACT_AS!=='Victor'; } // admin real E fora da pré-visualização "ver como Victor"
 // ===== PERMISSÕES =====
 const DEFAULT_PERMS = {admin:{papel:'admin',ver_apenas_meus:false,pode_minerar:true,pode_importar:true,pode_relatorio:true,pode_duplicatas:true},
   assistente:{papel:'assistente',ver_apenas_meus:true,pode_minerar:true,pode_importar:false,pode_relatorio:true,pode_duplicatas:false}};
@@ -612,8 +613,12 @@ async function saveSetting(chave,valor){
   return true;
 }
 async function updateLead(id,patch){
-  // régua de convites: carimba a data na 1ª vez que o lead vira "Convite Enviado"
   const _cur=LEADS.find(l=>l.id===id);
+  // choke point de consistência: recalcula campos derivados da fonte em QUALQUER tela que salve
+  if('nome' in patch && patch.nome) patch.primeiro_nome=firstName(patch.nome);
+  if('linkedin_url' in patch && !('linkedin_url_norm' in patch)) patch.linkedin_url_norm=normUrl(patch.linkedin_url||'');
+  if('telefone' in patch && !('telefone_e164' in patch)){ const _ph=normPhone(patch.telefone||''); patch.telefone=_ph.telefone; patch.telefone_e164=_ph.e164; }
+  // régua de convites: carimba a data na 1ª vez que o lead vira "Convite Enviado"
   if(patch.status==='Convite Enviado' && _cur && !_cur.convite_enviado_em && !('convite_enviado_em' in patch)) patch.convite_enviado_em=new Date().toISOString();
   const {error}=await sb.from('leads').update(patch).eq('id',id);
   if(error){
@@ -663,9 +668,11 @@ function syncProfileChip(){
   rl.textContent=isAdmin()?(ACT_AS==='Victor'?'Admin · vendo como Victor':'Admin · trocar perfil'):'Assistente de captação';
 }
 function applyPerms(){
-  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=isAdmin()?'':'none');
-  document.querySelectorAll('.perfil-admin').forEach(el=>el.style.display=isAdmin()?'':'none'); // Perfil só admin (Victor usa Configurações)
+  const adm=uiAdmin();
+  document.querySelectorAll('.admin-only').forEach(el=>el.style.display=adm?'':'none');
+  document.querySelectorAll('.perfil-admin').forEach(el=>el.style.display=adm?'':'none'); // Perfil só admin (Victor usa Configurações)
   const rel=document.querySelector('.perm-relatorio'); if(rel)rel.style.display=can('pode_relatorio')?'':'none';
+  const dup=document.querySelector('.perm-duplicatas'); if(dup)dup.style.display=(adm&&can('pode_duplicatas'))?'':'none'; // Duplicatas: admin + permissão marcada
 }
 function render(){
   const c=$('#content');
@@ -673,10 +680,11 @@ function render(){
   // views aposentadas → caem no Funil LinkedIn
   if(VIEW==='linkedin'||VIEW==='lista') VIEW='funil';
   // trava de acesso por permissão
-  if((VIEW==='usuarios'||VIEW==='dup')&&!isAdmin()) VIEW='hoje';
+  if(VIEW==='usuarios'&&!uiAdmin()) VIEW='hoje';
+  if(VIEW==='dup'&&!(uiAdmin()&&can('pode_duplicatas'))) VIEW='hoje';
   if(VIEW==='relatorio'&&!can('pode_relatorio')) VIEW='hoje';
   if(VIEW==='mineracao'&&!can('pode_minerar')) VIEW='hoje';
-  if(VIEW==='perfil'&&!isAdmin()) VIEW='config'; // Victor não tem Perfil; cai em Configurações
+  if(VIEW==='perfil'&&!uiAdmin()) VIEW='config'; // Victor não tem Perfil; cai em Configurações
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===VIEW));
   stopMiningTick(); // pausa o cronômetro ao sair da Mineração; religa abaixo se for o caso
@@ -705,19 +713,14 @@ function render(){
     c.innerHTML = banner + filtersHTML() + funilToggleHTML() + listaHTML(filtered().filter(l=>LK_FLOW.some(col=>col.s===l.status)));
     wireFilters(); wireFunilToggle(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return;
   }
-  if(FUNIL_MODE==='completo'&&isAdmin()){
-    c.innerHTML = banner + filtersHTML() + funilToggleHTML() + funilHTML();
-    wireFilters(); wireFunilToggle(); wireFunil(); wireStatusButtons(); wireBanner(); return;
-  }
   c.innerHTML = banner + filtersHTML() + funilToggleHTML() + lkBoardHTML();
   wireFilters(); wireFunilToggle(); wireLinkedin(); wireActions(c); wireStatusButtons(); wireBanner();
 }
 function funilToggleHTML(){
-  const adminBtn=isAdmin()?`<button class="${FUNIL_MODE==='completo'?'on':''}" data-funmode="completo">🗂 Funil completo</button>`:'';
   return `<div class="filters" style="margin:-4px 0 14px"><div class="seg">
-    <button class="${FUNIL_MODE==='linkedin'?'on':''}" data-funmode="linkedin">▦ Processo LinkedIn</button>
+    <button class="${FUNIL_MODE==='linkedin'?'on':''}" data-funmode="linkedin">▦ Kanban</button>
     <button class="${FUNIL_MODE==='lista'?'on':''}" data-funmode="lista">☰ Lista</button>
-    ${adminBtn}</div></div>`;
+    </div></div>`;
 }
 function wireFunilToggle(){ document.querySelectorAll('[data-funmode]').forEach(b=>b.onclick=()=>{FUNIL_MODE=b.dataset.funmode;SEL.clear();render();}); }
 function wireBanner(){ const b=$('#act-back'); if(b)b.onclick=()=>{ACT_AS=null;syncProfile();render();}; }
@@ -1581,6 +1584,7 @@ function openDrawer(id){
       <button class="star ${l.prioridade?'on':''}" id="d-star" style="font-size:22px;margin-left:auto" title="Prioridade">${l.prioridade?'★':'☆'}</button>
       <span class="x" id="dx">×</span></div>
     <div style="margin:6px 0 4px">${statusBadge(l)} ${flagsHTML(l)} ${dueHTML(l)}</div>
+    <div class="field"><label>Nome</label><input id="d-nome" value="${esc(l.nome||'')}" placeholder="Nome do lead"></div>
     <div class="row2">
       <div class="field"><label>Cargo</label><input id="d-cargo" value="${esc(l.cargo||'')}"></div>
       <div class="field"><label>Empresa</label><input id="d-empresa" value="${esc(l.empresa||'')}"></div>
@@ -1605,7 +1609,7 @@ function openDrawer(id){
       <div class="minichips" id="d-gcal-wrap">${l.agendamento?`<a class="minichip" href="${gcalLink(l)}" target="_blank" rel="noopener">📅 Adicionar ao Google Calendar</a>`:'<span class="muted" style="font-size:11px">defina data+hora e salve — aí libera o botão do Google Calendar</span>'}</div>
     </div>
     <label class="acompbox"><input type="checkbox" class="cbx" id="d-acomp" ${l.acompanhar_victor?'checked':''}> 👁 Victor acompanha esta OT (follow-up de delay/reagendar)</label>
-    <div class="field"><label>LinkedIn</label><input id="d-url" value="${esc(l.linkedin_url||'')}"></div>
+    <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${esc(l.linkedin_url||'#')}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn primary" id="d-save">Salvar</button>
@@ -1630,7 +1634,7 @@ function openDrawer(id){
   $('#d-star').onclick=async()=>{ if(await updateLead(id,{prioridade:!l.prioridade})){l.prioridade=!l.prioridade;$('#d-star').textContent=l.prioridade?'★':'☆';$('#d-star').classList.toggle('on',l.prioridade);render();} };
   $('#d-save').onclick=async()=>{
     const ph=normPhone($('#d-tel').value);
-    const patch={cargo:$('#d-cargo').value||null,empresa:$('#d-empresa').value||null,segmento:$('#d-segmento').value||null,
+    const patch={nome:($('#d-nome').value||'').trim()||l.nome,cargo:$('#d-cargo').value||null,empresa:$('#d-empresa').value||null,segmento:$('#d-segmento').value||null,
       renda_estimada:$('#d-renda').value?Number($('#d-renda').value):null,renda_auto:false,
       faixa_idade:$('#d-idade').value?Number($('#d-idade').value):null,
       telefone:ph.telefone,telefone_e164:ph.e164,sexo:$('#d-sexo').value||null,
@@ -1642,6 +1646,7 @@ function openDrawer(id){
     if(await updateLead(id,patch)){toast('Salvo');ov.remove();render();}
   };
   $('#d-msg').onclick=()=>copyMsg(l);
+  const _du=$('#d-url'),_duo=$('#d-url-open'); if(_du&&_duo)_du.oninput=()=>{const v=_du.value.trim();_duo.href=v||'#';_duo.style.display=v?'':'none';};
   $('#d-call').onclick=async()=>{
     const n=(l.tentativas_ligacao||0)+1;
     if(await updateLead(id,{tentativas_ligacao:n})){await sb.from('lead_events').insert({lead_id:id,tipo:'ligacao',texto:'Tentativa de ligação #'+n,usuario:ME});toast('Ligação registrada');loadTimeline(id);}
