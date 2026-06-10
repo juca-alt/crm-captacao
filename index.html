@@ -368,7 +368,7 @@ tr.row.sel{background:#eff6ff}
     <button class="nav-item" data-view="funilcap"><span class="ic">🎯</span> Funil Captação</button>
     <button class="nav-item" data-view="contatos"><span class="ic">📇</span> Contatos</button>
 
-    <div class="nav-sec">Gestão</div>
+    <div class="nav-sec" id="sec-gestao">Gestão</div>
     <button class="nav-item perm-relatorio" data-view="relatorio"><span class="ic">📊</span> Relatório</button>
     <button class="nav-item admin-only" data-view="usuarios"><span class="ic">👥</span> Usuários</button>
     <button class="nav-item admin-only perm-duplicatas" id="nav-dup"><span class="ic">🔎</span> Duplicatas</button>
@@ -399,7 +399,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v1.22 · MVP 1.0';
+const APP_VERSION = 'v1.24 · MVP 1.0';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','SitPlan','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -690,6 +690,7 @@ function applyPerms(){
   document.querySelectorAll('.perfil-admin').forEach(el=>el.style.display=adm?'':'none'); // Perfil só admin (Victor usa Configurações)
   const rel=document.querySelector('.perm-relatorio'); if(rel)rel.style.display=can('pode_relatorio')?'':'none';
   const dup=document.querySelector('.perm-duplicatas'); if(dup)dup.style.display=(adm&&can('pode_duplicatas'))?'':'none'; // Duplicatas: admin + permissão marcada
+  const sg=document.querySelector('#sec-gestao'); if(sg)sg.style.display=(adm||can('pode_relatorio'))?'':'none'; // esconde o header "Gestão" se não sobra item visível nele (ex.: Victor sem relatório)
 }
 function render(){
   const c=$('#content');
@@ -1421,9 +1422,10 @@ function wireLinkedin(){
 function filtersHTML(){
   const data=filtered();
   const tot=data.length, money=data.filter(l=>l.renda_estimada>=10000).length;
-  const sitCount=s=>LEADS.filter(l=>situacaoOf(l)===s).length;
+  const scope=baseLeads(); // contagens dos chips respeitam a visão (Victor vê só a base dele; admin vê tudo)
+  const sitCount=s=>scope.filter(l=>situacaoOf(l)===s).length;
   const sitTabs=['Ativo','Dormente','Convertido','Descartado','Todos'].map(s=>{
-    const n = s==='Todos'?LEADS.length:sitCount(s);
+    const n = s==='Todos'?scope.length:sitCount(s);
     const lbl = s==='Ativo'?'Ativos':s==='Dormente'?'Dormentes':s==='Convertido'?'Convertidos':s==='Descartado'?'Descartados':'Todos';
     return `<button class="chip ${F_SITUACAO===s?'on':''}" data-sit="${s}">${lbl} <span style="opacity:.7">${n}</span></button>`;
   }).join('');
@@ -1754,6 +1756,7 @@ function openNovo(mine,prefill){
       <div class="field"><label>Telefone</label><input id="n-tel"></div>
       <div class="field"><label>Cidade</label><input id="n-cidade"></div>
     </div>
+    <div class="field"><label>Bairro / CEP</label><input id="n-bairro" placeholder="ex.: Boa Viagem · 51020-000"></div>
     <div class="row2">
       <div class="field"><label>Renda estimada (R$)</label><input id="n-renda" type="number" placeholder="auto pela triagem"></div>
       <div class="field"><label>Triagem (sugestão)</label><div id="n-triage" style="padding:8px 10px;border:1px dashed var(--line);border-radius:9px;min-height:38px;font-size:13px;color:var(--muted)">preencha cargo/empresa…</div></div>
@@ -1808,7 +1811,7 @@ function openNovo(mine,prefill){
     if(curSeguros) flags.push('SEGUROS?');
     const renda=$('#n-renda').value?Number($('#n-renda').value):null;
     const rec={nome,primeiro_nome:firstName(nome),cargo:$('#n-cargo').value||null,empresa:$('#n-empresa').value||null,
-      cidade:$('#n-cidade').value||null,linkedin_url:url||null,linkedin_url_norm:norm,foto_url:foto,
+      cidade:$('#n-cidade').value||null,bairro:$('#n-bairro').value||null,linkedin_url:url||null,linkedin_url_norm:norm,foto_url:foto,
       telefone:ph.telefone,telefone_e164:ph.e164,flags_qualidade:flags,
       renda_estimada:renda,renda_auto:(!rendaTouched&&renda!=null),score:curScore,
       observacoes:curSeguros?`[Triagem: possível seguros – ${curSeguros}]`:null,
@@ -1910,16 +1913,56 @@ function dupGroups(){
   }
   return groups;
 }
+// rank de avanço no funil (Descartado/Dormente contam como baixo, pra não "manter" um lead descartado)
+function statusRank(s){ const et=STATUS_ETAPA[s]; if(et==='Descartado'||et==='Dormente') return -1; const i=ALL_STATUS.indexOf(s); return i<0?0:i; }
+// plano de unificação automática de um grupo: mantém o mais avançado, junta observações, preenche campos
+function autoMergePlan(g){
+  const filled=l=>MERGE_FIELDS.reduce((n,[f])=>n+((l[f]!=null&&String(l[f]).trim()!=='')?1:0),0);
+  const keepLead=[...g.leads].sort((a,b)=>(statusRank(b.status)-statusRank(a.status))||((b.codigo?1:0)-(a.codigo?1:0))||(filled(b)-filled(a)))[0];
+  const patch={};
+  for(const [f] of MERGE_FIELDS){
+    if(f==='observacoes'){ const parts=[...new Set(g.leads.map(l=>(l.observacoes||'').trim()).filter(Boolean))]; patch.observacoes=parts.join(' · ')||null; continue; }
+    let v=keepLead[f];
+    if(v==null||String(v).trim()===''){ const src=g.leads.find(l=>l[f]!=null&&String(l[f]).trim()!==''); v=src?src[f]:null; }
+    if(v==='')v=null; patch[f]=v;
+  }
+  return {keep:keepLead.id, patch};
+}
+async function applyMerge(g,keep,patch){
+  if(!await updateLead(keep,patch)) return false;
+  for(const l of g.leads){ if(l.id!==keep){ const r=await sb.from('leads').delete().eq('id',l.id); if(!r.error){ const i=LEADS.findIndex(x=>x.id===l.id); if(i>=0)LEADS.splice(i,1); } } }
+  return true;
+}
 function dupHTML(){
   const groups=dupGroups();
   if(!groups.length) return '<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone e nome.</div></div>';
-  return `<p class="hint" style="margin-bottom:12px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone ou nome). Revise cada uma e unifique escolhendo qual dado manter — os outros registros são removidos.</p>`+
-   groups.map((g,i)=>`<div class="tablewrap" style="margin-bottom:10px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px">
-     <div><span class="flag warn">${g.kind} igual</span> ${g.leads.map(l=>`${esc(l.nome)} <span class="muted">(${esc(ETAPA_LABEL[l.etapa]||l.etapa)})</span>`).join(' &nbsp;·&nbsp; ')}</div>
-     <button class="btn primary" data-merge="${i}" style="flex-shrink:0">Revisar e unificar</button>
+  return `<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone ou nome). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
+  <div class="filters" style="margin-bottom:10px;gap:12px;align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="dup-all"> Selecionar todos</label>
+    <span class="muted" id="dup-count" style="font-size:13px">0 selecionados</span>
+    <button class="btn primary" id="dup-merge-sel" disabled>⚡ Unificar selecionados (auto)</button>
+  </div>`+
+   groups.map((g,i)=>`<div class="tablewrap" style="margin-bottom:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:10px">
+     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;min-width:0"><input type="checkbox" class="dup-cb" data-i="${i}">
+       <span style="min-width:0"><span class="flag warn">${g.kind} igual</span> ${g.leads.map(l=>`${esc(l.nome)} <span class="muted">(${esc(ETAPA_LABEL[l.etapa]||l.etapa)})</span>`).join(' &nbsp;·&nbsp; ')}</span></label>
+     <button class="btn ghost" data-merge="${i}" style="flex-shrink:0">Revisar</button>
    </div>`).join('');
 }
-function wireDup(){ const groups=dupGroups(); document.querySelectorAll('[data-merge]').forEach(b=>b.onclick=()=>openMerge(groups[+b.dataset.merge])); }
+function wireDup(){
+  const groups=dupGroups();
+  document.querySelectorAll('[data-merge]').forEach(b=>b.onclick=()=>openMerge(groups[+b.dataset.merge]));
+  const cbs=()=>[...document.querySelectorAll('.dup-cb')];
+  const upd=()=>{ const n=cbs().filter(c=>c.checked).length; const cnt=$('#dup-count'); if(cnt)cnt.textContent=n+' selecionado'+(n===1?'':'s'); const b=$('#dup-merge-sel'); if(b)b.disabled=!n; };
+  cbs().forEach(c=>c.onchange=upd);
+  const all=$('#dup-all'); if(all)all.onchange=()=>{ cbs().forEach(c=>c.checked=all.checked); upd(); };
+  const go=$('#dup-merge-sel'); if(go)go.onclick=async()=>{
+    const sel=cbs().filter(c=>c.checked).map(c=>groups[+c.dataset.i]); if(!sel.length) return;
+    if(!confirm(`Unificar ${sel.length} grupo(s) no automático?\n\nEm cada um: mantém o lead mais avançado no funil, junta observações e campos preenchidos, e REMOVE os duplicados (não dá pra desfazer). Os casos delicados, prefira o "Revisar".`)) return;
+    go.disabled=true; let ok=0, fail=0;
+    for(const g of sel){ const {keep,patch}=autoMergePlan(g); if(await applyMerge(g,keep,patch))ok++; else fail++; go.textContent=`Unificando… ${ok}/${sel.length}`; }
+    toast(`${ok} grupo(s) unificado(s)`+(fail?`, ${fail} falhou`:'')); render();
+  };
+}
 function openMerge(g){
   let keep=g.leads[0].id;
   const chosen={};
