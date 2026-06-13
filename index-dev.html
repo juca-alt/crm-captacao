@@ -415,6 +415,14 @@ tr.row.sel{background:#eff6ff}
     <button class="nav-item" data-view="funilcap"><span class="ic">🎯</span> Funil Captação</button>
     <button class="nav-item" data-view="contatos"><span class="ic">📇</span> Contatos</button>
 
+    <button class="nav-sec vendas-nav" id="vd-toggle" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px"><span class="ic" style="margin-right:0">💼</span>Vendas · Clientes <span id="vd-caret" style="margin-left:auto">▾</span></button>
+    <div id="vd-group" class="vendas-nav">
+      <button class="nav-item" data-view="vhoje"><span class="ic">☀</span> Dia de Vendas</button>
+      <button class="nav-item" data-view="vclientes"><span class="ic">📇</span> Clientes</button>
+      <button class="nav-item" data-view="vta"><span class="ic">📞</span> Sessão TA</button>
+      <button class="nav-item" data-view="vatrasos"><span class="ic">⏰</span> Atrasos & Cobrança</button>
+    </div>
+
     <div class="nav-sec" id="sec-gestao">Gestão</div>
     <button class="nav-item perm-relatorio" data-view="relatorio"><span class="ic">📊</span> Relatório</button>
     <button class="nav-item admin-only" data-view="usuarios"><span class="ic">👥</span> Usuários</button>
@@ -446,7 +454,7 @@ tr.row.sel{background:#eff6ff}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'DEV · v1.25 staging · Visão Geral + busca ⌘K + Agora + fix base >1000';
+const APP_VERSION = 'DEV · v2.0 staging · Módulo Vendas·Clientes (LP)';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','SitPlan','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -745,6 +753,7 @@ function applyPerms(){
   const rel=document.querySelector('.perm-relatorio'); if(rel)rel.style.display=can('pode_relatorio')?'':'none';
   const dup=document.querySelector('.perm-duplicatas'); if(dup)dup.style.display=(adm&&can('pode_duplicatas'))?'':'none'; // Duplicatas: admin + permissão marcada
   const sg=document.querySelector('#sec-gestao'); if(sg)sg.style.display=(adm||can('pode_relatorio'))?'':'none'; // esconde o header "Gestão" se não sobra item visível nele (ex.: Victor sem relatório)
+  document.querySelectorAll('.vendas-nav').forEach(el=>el.style.display=IS_VICTOR?'none':''); // módulo Vendas: Master e LPs (assistente de captação não vê)
 }
 function render(){
   const c=$('#content');
@@ -757,6 +766,7 @@ function render(){
   if(VIEW==='relatorio'&&!can('pode_relatorio')) VIEW='hoje';
   if(VIEW==='mineracao'&&!can('pode_minerar')) VIEW='hoje';
   if(VIEW==='perfil'&&!uiAdmin()) VIEW='config'; // Victor não tem Perfil; cai em Configurações
+  if(vIsView()&&IS_VICTOR) VIEW='hoje'; // módulo Vendas não é do assistente de captação
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===VIEW));
   stopMiningTick(); // pausa o cronômetro ao sair da Mineração; religa abaixo se for o caso
@@ -770,6 +780,10 @@ function render(){
   if(VIEW==='qualificar'){ $('#view-title').textContent='Qualificar'; c.innerHTML=banner+qualificarHTML(); wireQualificar(); wireActions(c); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='hoje'){ $('#view-title').textContent='Meu Dia'; c.innerHTML=banner+hojeHTML(); wireActions(c); wireHojeTop(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='inbox'){ $('#view-title').textContent='Inbox LinkedIn'; c.innerHTML=banner+inboxHTML(); wireActions(c); wireInbox(); wireStatusButtons(); wireBanner(); return; }
+  if(VIEW==='vhoje'){ $('#view-title').textContent='Dia de Vendas'; c.innerHTML=banner+vhojeHTML(); vhojeWire(); wireBanner(); return; }
+  if(VIEW==='vclientes'){ $('#view-title').textContent='Clientes · Vendas'; c.innerHTML=banner+vclientesHTML(); vclientesWire(); wireBanner(); return; }
+  if(VIEW==='vta'){ $('#view-title').textContent='Sessão de TA'; c.innerHTML=banner+vtaHTML(); vtaWire(); wireBanner(); return; }
+  if(VIEW==='vatrasos'){ $('#view-title').textContent='Atrasos & Cobrança'; c.innerHTML=banner+vatrasosHTML(); vatrasosWire(); wireBanner(); return; }
   if(VIEW==='funilcap'){
     $('#view-title').textContent='Funil Captação';
     if(CAP_MODE==='lista'){
@@ -2431,6 +2445,7 @@ document.addEventListener('keydown',e=>{
 // ===== NAV =====
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;SEL.clear();$('#sidebar').classList.remove('open');render();});
 { const capT=$('#cap-toggle'); if(capT)capT.onclick=()=>{ const g=$('#cap-group'),c=$('#cap-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
+{ const vdT=$('#vd-toggle'); if(vdT)vdT.onclick=()=>{ const g=$('#vd-group'),c=$('#vd-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
 $('#profile-chip').onclick=()=>{VIEW=isAdmin()?'perfil':'config';$('#sidebar').classList.remove('open');render();};
 $('#top-novo').onclick=()=>openNovo(false);
 $('#nav-dup').onclick=()=>{VIEW='dup';$('#sidebar').classList.remove('open');render();};
@@ -2460,6 +2475,366 @@ $('#su-btn').onclick=async()=>{
   await sb.auth.signInWithPassword({email:$('#su-email').value.trim(),password:$('#su-pass').value});
 };
 
+// ============================================================
+// ===== MÓDULO VENDAS · CLIENTES (v2.0 — operação LP) =====
+// Port do CRM Life Planner v0.2 (vocabulário LP Business; features Sekos).
+// Tabelas: vendas_contatos / vendas_atrasos (migration_v2_0_vendas.sql).
+// Sem migração rodada → telas mostram o gate com Modo Demonstração (não grava nada).
+// ============================================================
+const V_ETAPAS=['Novo','TA','OI/FF','P/C','C2','Revisita','Cliente'];
+const V_ETAPA_COLOR={'Novo':'#64748b','TA':'#8b5cf6','OI/FF':'#2563eb','P/C':'#f59e0b','C2':'#0d9488','Revisita':'#a855f7','Cliente':'#059669'};
+const V_TA_STATUS=['—','Não respondeu','Retornar contato','Sucesso','Declinado'];
+const V_PLANO_STATUS=['Criado','Enviado ao parceiro','Apresentado','Ativado','Declinado'];
+const V_TRATATIVAS=['Pendente','Ligou','Não atendeu','Aguardando retorno','Mensagem enviada','Promessa de pagamento','Boleto enviado','Boleto pago','Repique realizado','Cartão alterado','Aguardando aceite','Recusa','Ajuda do LP','Não tratar'];
+let VC=[],VATR=[],V_DB=null,V_DEMO=false,V_MODE='kanban',V_TA_POS=0,V_BUSY=false;
+let VSET={metas:{ligacoes:120,novasRec:50,oiAgendado:20,oiRealizado:10},proxCPP:'',templates:[]};
+const V_TPL_FALLBACK=[
+ {id:'t1',nome:'Info Alterar Pagto',corpo:'Olá {{respPagto}}, tudo bem?\n\nPara alterar a forma de pagamento da apólice {{apolice}} (atualmente: {{formaPagto}}), existem 3 opções:\n\n1) Baixar o app da Prudential no celular\n2) Ligar no Canal do Cliente: 3003-7783 (Seg-Sex 08h-20h)\n3) Me enviar o número do cartão, nome impresso e data de validade\n\nO que prefere?'},
+ {id:'t2',nome:'Aviso de Atraso',corpo:'Olá {{respPagto}}! Passando pra avisar que a apólice {{apolice}} do segurado {{segurado}} está com {{diasAtraso}} dias em atraso (prêmio {{premio}}, vencido em {{vencidoEm}}). Posso te enviar o boleto atualizado?'}];
+function vIsView(){ return ['vhoje','vclientes','vta','vatrasos'].includes(VIEW); }
+// Visão Master vs LP: Master (papel admin) vê tudo; LP (papel 'lp', ex. Daniel no futuro) vê só o que é dele.
+// Hoje é trava de visão client-side (mesmo modelo da trava do Victor); antes de dar login ao Daniel → RLS por lp_email no banco.
+function vIsMaster(){ const r=APP_USERS.find(u=>(u.email||'').toLowerCase()===ME_EMAIL); return uiAdmin() && (!r || r.papel!=='lp'); }
+function vbase(){ const list=vIsMaster()?VC:VC.filter(c=>(c.lp_email||'')===ME_EMAIL); const q=(SEARCH||'').toLowerCase(); return q?list.filter(c=>[c.nome,c.profissao,c.telefone,c.origem,c.notas].some(x=>(x||'').toLowerCase().includes(q))):list; }
+function vatrBase(){ return vIsMaster()?VATR:VATR.filter(a=>(a.lp_email||'')===ME_EMAIL); }
+function vbyId(id){ return VC.find(c=>String(c.id)===String(id)); }
+function vDias(c){ const d=(c.etapa_desde||'').slice(0,10); if(!d)return 0; return Math.max(0,Math.round((new Date(todayStr()+'T00:00:00')-new Date(d+'T00:00:00'))/864e5)); }
+function vDiasCls(n){ return n>14?'#ef4444':(n>7?'#f59e0b':'#16a34a'); }
+function vAtrDias(a){ const d=(a.vencido_em||'').slice(0,10); if(!d)return 0; return Math.max(0,Math.round((new Date(todayStr()+'T00:00:00')-new Date(d+'T00:00:00'))/864e5)); }
+function vBRL(x){ return (+x||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function vStars(n,id){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="star ${i<=(+n||0)?'on':''}" data-vstar="${i}" data-vsid="${id||''}" style="cursor:pointer">${i<=(+n||0)?'★':'☆'}</span>`; return `<span>${h}</span>`; }
+function vEtapaBadge(c){ return `<span class="badge" style="background:${V_ETAPA_COLOR[c.etapa]||'#64748b'}22;color:${V_ETAPA_COLOR[c.etapa]||'#64748b'};border:1px solid ${V_ETAPA_COLOR[c.etapa]||'#64748b'}44">${esc(c.etapa)}</span>`; }
+
+// ---- dados ----
+async function loadVendas(){
+  if(V_DEMO) return;
+  try{
+    const r1=await sb.from('vendas_contatos').select('*').order('criado_em',{ascending:true}).range(0,999);
+    if(r1.error){ if(/does not exist|relation|schema cache/i.test(r1.error.message)){ V_DB=false; if(vIsView())render(); return; } toast('Vendas: '+r1.error.message); return; }
+    VC=r1.data||[];
+    const r2=await sb.from('vendas_atrasos').select('*').order('vencido_em',{ascending:true}).range(0,999);
+    VATR=r2.data||[];
+    const r3=await sb.from('app_settings').select('*').in('chave',['vendas_metas','vendas_prox_cpp','vendas_templates']);
+    if(r3.data) for(const r of r3.data){
+      if(r.chave==='vendas_metas'){ try{ VSET.metas=Object.assign(VSET.metas,JSON.parse(r.valor||'{}')); }catch(_){ } }
+      if(r.chave==='vendas_prox_cpp') VSET.proxCPP=r.valor||'';
+      if(r.chave==='vendas_templates'){ try{ const a=JSON.parse(r.valor||'[]'); if(Array.isArray(a)&&a.length) VSET.templates=a; }catch(_){ } }
+    }
+    V_DB=true; if(vIsView())render();
+  }catch(e){ /* offline etc — mantém estado */ }
+}
+function vTemplates(){ return (VSET.templates&&VSET.templates.length)?VSET.templates:V_TPL_FALLBACK; }
+function vDemoSeed(){
+  V_DEMO=true; V_DB=true;
+  const T=todayStr();
+  VC=[
+   {id:'d1',lp_email:ME_EMAIL,nome:'Artur do Vale Ferreira',sexo:'M',idade:26,profissao:'Engenheiro',telefone:'(81) 9 9999-0001',estrelas:4,etapa:'P/C',etapa_desde:addDays(-4),origem:'Parceiro CINQ',ligar_em:'',ta_status:'Sucesso',ta_tentativas:1,notas:'Premissa: complementar o seguro empresarial. Exigências: invalidez por doença e temporário 30 anos.',infoclient:{pessoais:true,familiar:true,financeiro:false,saude:false},recs:[],eventos:[{tipo:'Retorno ao parceiro (CINQ)',data:T,hora:'12:00',status:'Pendente',formato:'WhatsApp'}],planos:[{id:'p1',nome:'Variante 1 — Enxuta',base:'Temporário Pref. 30a',capital:1000000,premio:490.77,parceiro:'CINQ',status:'Enviado ao parceiro',cobs:'IPTA 1MM · Perda de Autonomia 400k · Funeral'},{id:'p3',nome:'Variante 3 — Recomendada',base:'Temporário Pref. 30a',capital:1000000,premio:587.42,parceiro:'CINQ',status:'Enviado ao parceiro',cobs:'DG Modular 350k · Renda Hospitalar · IPTA 2MM'}]},
+   {id:'d2',lp_email:ME_EMAIL,nome:'Mariana Cavalcanti',sexo:'F',idade:35,profissao:'Médica',telefone:'(81) 9 9999-0003',estrelas:4,etapa:'OI/FF',etapa_desde:addDays(-10),origem:'LinkedIn',ligar_em:'',ta_status:'Sucesso',ta_tentativas:1,notas:'',infoclient:{pessoais:true,familiar:false,financeiro:false,saude:false},recs:[],eventos:[{tipo:'OI/FF',data:addDays(2),hora:'10:00',status:'Pendente',formato:'Virtual'}],planos:[]},
+   {id:'d3',lp_email:ME_EMAIL,nome:'Paulo Sérgio Lima',sexo:'M',idade:38,profissao:'Gerente comercial',telefone:'(81) 9 9999-0004',estrelas:3,etapa:'TA',etapa_desde:addDays(-2),origem:'Indicação',ligar_em:T,ta_status:'Retornar contato',ta_tentativas:2,notas:'Pediu retorno.',infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false},recs:[],eventos:[],planos:[]},
+   {id:'d4',lp_email:ME_EMAIL,nome:'Fernanda Brito',sexo:'F',idade:31,profissao:'Advogada',telefone:'(81) 9 9999-0005',estrelas:0,etapa:'TA',etapa_desde:addDays(-1),origem:'Evento',ligar_em:'',ta_status:'—',ta_tentativas:0,notas:'',infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false},recs:[],eventos:[],planos:[]},
+   {id:'d5',lp_email:'daniel@exemplo.com',nome:'Eduardo Vasconcelos',sexo:'M',idade:45,profissao:'Diretor de operações',telefone:'(81) 9 9999-0008',estrelas:5,etapa:'P/C',etapa_desde:addDays(-18),origem:'Recomendação',ligar_em:'',ta_status:'Sucesso',ta_tentativas:1,notas:'Proposta em montagem. (contato do LP Daniel — só o Master vê)',infoclient:{pessoais:true,familiar:true,financeiro:true,saude:false},recs:[],eventos:[],planos:[]},
+   {id:'d6',lp_email:ME_EMAIL,nome:'Ricardo Albuquerque',sexo:'M',idade:42,profissao:'Empresário',telefone:'(81) 9 9999-0002',estrelas:5,etapa:'Cliente',etapa_desde:addDays(-40),origem:'Indicação',ta_status:'Sucesso',ta_tentativas:2,notas:'Apólices em transição — módulo de Substituição.',infoclient:{pessoais:true,familiar:true,financeiro:true,saude:true},recs:[{nome:'Referral Médico',tel:'',idade:29,perfil:'Médico · casado · filhos'}],eventos:[],planos:[]}
+  ];
+  VATR=[
+   {id:'a1',lp_email:ME_EMAIL,segurado:'Maria Souza',resp_pagto:'Maria Souza',apolice:'WL-104.221',premio:412.30,vencido_em:addDays(-25),forma_pagto:'Boleto',celular:'5581999990010',status:'Boleto enviado',responsavel:'Gustavo',ultima:addDays(-3)},
+   {id:'a2',lp_email:'daniel@exemplo.com',segurado:'Everton Dias',resp_pagto:'Ludmila Dias',apolice:'TP-220.918',premio:289.90,vencido_em:addDays(-13),forma_pagto:'Cartão',celular:'5581999990011',status:'Não atendeu',responsavel:'Daniel',ultima:addDays(-2)},
+   {id:'a3',lp_email:ME_EMAIL,segurado:'Ricardo Albuquerque',resp_pagto:'Ricardo Albuquerque',apolice:'WL-088.450',premio:655.00,vencido_em:addDays(-9),forma_pagto:'Boleto',celular:'5581999990012',status:'Pendente',responsavel:'Gustavo',ultima:''}
+  ];
+  toast('🧪 Modo demonstração: nada é gravado no banco'); render();
+}
+async function vSaveContato(id,patch){
+  patch.atualizado_em=new Date().toISOString();
+  if('telefone' in patch){ const p=normPhone(patch.telefone||''); patch.telefone=p.telefone||patch.telefone; }
+  if(V_DEMO){ const c=vbyId(id); if(c)Object.assign(c,patch); toast('Salvo (demo — não gravado)'); return true; }
+  const {error}=await sb.from('vendas_contatos').update(patch).eq('id',id);
+  if(error){ toast('Erro: '+error.message); return false; }
+  const c=vbyId(id); if(c)Object.assign(c,patch); return true;
+}
+async function vNovoContato(row){
+  if(V_DEMO){ row.id='d'+Date.now(); row.lp_email=row.lp_email||ME_EMAIL; VC.push(row); toast('Criado (demo — não gravado)'); return row; }
+  row.lp_email=row.lp_email||ME_EMAIL;
+  const {data,error}=await sb.from('vendas_contatos').insert(row).select().single();
+  if(error){ toast('Erro: '+error.message); return null; }
+  VC.push(data); return data;
+}
+async function vSaveAtraso(id,patch){
+  if(V_DEMO){ const a=VATR.find(x=>String(x.id)===String(id)); if(a)Object.assign(a,patch); toast('Salvo (demo — não gravado)'); return true; }
+  const {error}=await sb.from('vendas_atrasos').update(patch).eq('id',id);
+  if(error){ toast('Erro: '+error.message); return false; }
+  const a=VATR.find(x=>String(x.id)===String(id)); if(a)Object.assign(a,patch); return true;
+}
+async function vNovoAtraso(row){
+  if(V_DEMO){ row.id='a'+Date.now(); row.lp_email=ME_EMAIL; VATR.push(row); toast('Criado (demo — não gravado)'); return row; }
+  row.lp_email=ME_EMAIL;
+  const {data,error}=await sb.from('vendas_atrasos').insert(row).select().single();
+  if(error){ toast('Erro: '+error.message); return null; }
+  VATR.push(data); return data;
+}
+
+// ---- gate (banco não migrado) ----
+function vGateHTML(){
+  return `<div class="card" style="max-width:640px;margin:30px auto;text-align:center;padding:34px">
+    <div style="font-size:40px">💼</div>
+    <h3 style="margin:10px 0 6px">Módulo Vendas · Clientes</h3>
+    <p class="muted" style="margin:0 0 6px">O banco ainda não tem as tabelas deste módulo.<br/>Quando você der o veredito, rodamos a <b>migration_v2_0_vendas.sql</b> no Supabase (aditiva, não mexe na captação).</p>
+    <p class="muted" style="margin:0 0 16px">Enquanto isso dá pra explorar tudo com dados de exemplo:</p>
+    <button class="btn primary" id="v-demo-btn">🧪 Explorar em modo demonstração</button>
+  </div>`;
+}
+function vGateWire(){ const b=$('#v-demo-btn'); if(b)b.onclick=vDemoSeed; }
+function vDemoBanner(){ return V_DEMO?`<div style="background:#fef3c7;border:1px solid #f59e0b;color:#92400e;border-radius:10px;padding:8px 14px;margin:0 0 14px;font-size:13px"><b>🧪 Modo demonstração</b> — dados de exemplo, nada é gravado. Pra valer de verdade: rodar a migration_v2_0_vendas.sql.</div>`:''; }
+
+// ---- Dia de Vendas ----
+function vhojeHTML(){
+  if(V_DB===false) return vGateHTML();
+  if(V_DB===null) return `<div class="muted" style="padding:30px">Carregando módulo de vendas…</div>`;
+  const base=vbase();
+  const ligar=base.filter(c=>c.ligar_em&&c.ligar_em.slice(0,10)<=todayStr()&&c.etapa!=='Cliente');
+  const evHoje=[]; base.forEach(c=>(c.eventos||[]).forEach(e=>{ if((e.data||'').slice(0,10)===todayStr()&&e.status!=='Concluído')evHoje.push({c,e}); }));
+  const taFila=base.filter(c=>c.etapa==='TA');
+  const atr=vatrBase(); const atrTot=atr.reduce((s,a)=>s+(+a.premio||0),0);
+  const cpp=VSET.proxCPP?Math.ceil((new Date(VSET.proxCPP+'T00:00:00')-new Date(todayStr()+'T00:00:00'))/864e5):null;
+  const kpis=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <div class="ringcard" style="flex:1;min-width:200px">${ring(taFila.length,Math.max(taFila.length,10),'#8b5cf6')}<div><div class="rl">Fila de TA</div><div class="rb">contatos pra ligar</div></div></div>
+    <div class="ringcard" style="flex:1;min-width:200px">${ring(ligar.length,Math.max(ligar.length,5),'#f59e0b')}<div><div class="rl">Callbacks de hoje</div><div class="rb">"ligar em" vencendo</div></div></div>
+    <div class="ringcard" style="flex:1;min-width:200px">${ring(atr.length,Math.max(atr.length,5),'#ef4444')}<div><div class="rl">Atrasos ativos</div><div class="rb">${vBRL(atrTot)} em prêmios</div></div></div>
+    ${cpp!==null?`<div class="ringcard" style="flex:1;min-width:200px">${ring(Math.max(cpp,0),90,'#0d9488')}<div><div class="rl">Dias até o CPP</div><div class="rb">${fmtDate(VSET.proxCPP)}</div></div></div>`:''}
+  </div>`;
+  const bloco=(t,items,html)=>`<div class="card" style="margin-bottom:14px"><h3 style="margin:0 0 10px">${t} <span class="count">${items.length}</span></h3>${items.length?html:'<div class="qempty">— nada por aqui —</div>'}</div>`;
+  const rowC=c=>`<div class="lrow" data-vopen="${c.id}" style="cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px solid var(--linha,#eef1f6)">
+      <div class="avatar" style="width:34px;height:34px;background:${avaColor(String(c.id))}">${initials(c.nome)}</div>
+      <div style="flex:1"><b>${esc(c.nome)}</b> <span class="muted">· ${esc(c.profissao||'')}</span><div class="muted" style="font-size:12px">${esc(c.telefone||'')}</div></div>
+      ${vEtapaBadge(c)}</div>`;
+  return vDemoBanner()+kpis
+   + bloco('📞 Ligar hoje (callbacks)',ligar,ligar.map(rowC).join(''))
+   + bloco('📅 Agenda de hoje',evHoje,evHoje.map(({c,e})=>`<div class="lrow" data-vopen="${c.id}" style="cursor:pointer;display:flex;gap:10px;align-items:center;padding:8px 6px;border-bottom:1px solid #eef1f6"><b>${esc(e.hora||'')}</b><div style="flex:1">${esc(e.tipo)} — <b>${esc(c.nome)}</b> <span class="muted">(${esc(e.formato||'')})</span></div>${vEtapaBadge(c)}</div>`).join(''))
+   + bloco('🎯 Fila de TA',taFila.slice(0,8),taFila.slice(0,8).map(rowC).join('')+(taFila.length?`<div style="margin-top:10px"><button class="btn primary" id="v-ir-ta">▶ Abrir Sessão de TA</button></div>`:''));
+}
+function vhojeWire(){ vGateWire(); vOpenWire(); const b=$('#v-ir-ta'); if(b)b.onclick=()=>{VIEW='vta';render();}; }
+
+// ---- Clientes (kanban/tabela) ----
+function vToggleHTML(){
+  return `<div class="filters" style="margin:-4px 0 14px;display:flex;gap:10px;align-items:center"><div class="seg">
+    <button class="${V_MODE==='kanban'?'on':''}" data-vmode="kanban">▦ Kanban</button>
+    <button class="${V_MODE==='tabela'?'on':''}" data-vmode="tabela">☰ Tabela</button></div>
+    <button class="btn primary" id="v-novo" style="margin-left:auto">＋ Novo contato</button></div>`;
+}
+function vCard(c){
+  const d=vDias(c);
+  return `<div class="kcard" data-vopen="${c.id}">
+    <div style="display:flex;gap:9px;align-items:center">${avatarHTML({id:String(c.id),nome:c.nome},34)}
+      <div style="flex:1;min-width:0"><b>${esc(c.nome)}</b><div class="muted" style="font-size:11.5px">${esc(c.profissao||'')}${c.idade?' · '+c.idade+'a':''}</div></div></div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:7px;font-size:11.5px">
+      ${vStars(c.estrelas)}<span style="margin-left:auto;color:${vDiasCls(d)};font-weight:700">⏱ ${d}d</span></div>
+    ${(c.planos&&c.planos.length)?`<div class="muted" style="font-size:11px;margin-top:4px">📋 ${c.planos.length} plano(s)</div>`:''}
+    ${vIsMaster()&&c.lp_email&&c.lp_email!==ME_EMAIL?`<div class="muted" style="font-size:10.5px;margin-top:3px">👤 ${esc((c.lp_email||'').split('@')[0])}</div>`:''}
+  </div>`;
+}
+function vclientesHTML(){
+  if(V_DB===false) return vGateHTML();
+  if(V_DB===null) return `<div class="muted" style="padding:30px">Carregando…</div>`;
+  const base=vbase();
+  if(V_MODE==='tabela'){
+    const rows=base.map(c=>`<tr data-vopen="${c.id}" style="cursor:pointer">
+      <td><b>${esc(c.nome)}</b></td><td>${esc(c.profissao||'')}</td><td>${esc(c.telefone||'')}</td>
+      <td>${vEtapaBadge(c)}</td><td>${vStars(c.estrelas)}</td>
+      <td style="color:${vDiasCls(vDias(c))};font-weight:700">${vDias(c)}d</td>
+      <td>${esc(c.ta_status||'—')}</td><td class="muted">${esc(c.origem||'')}</td></tr>`).join('');
+    return vDemoBanner()+vToggleHTML()+`<div class="card" style="overflow:auto"><table class="tbl"><thead><tr><th>Nome</th><th>Profissão</th><th>Telefone</th><th>Etapa</th><th>Potencial</th><th>Na etapa</th><th>TA</th><th>Origem</th></tr></thead><tbody>${rows||'<tr><td colspan="8" class="qempty">Nenhum contato ainda</td></tr>'}</tbody></table></div>`;
+  }
+  const cols=V_ETAPAS.map(e=>{
+    const items=base.filter(c=>c.etapa===e);
+    return `<div class="col"><h3 style="color:${V_ETAPA_COLOR[e]}">${e} <span class="count">${items.length}</span></h3>
+      <div class="cards">${items.map(vCard).join('')||'<div class="qempty">—</div>'}</div></div>`;
+  }).join('');
+  return vDemoBanner()+vToggleHTML()+`<div class="funil">${cols}</div>`;
+}
+function vclientesWire(){
+  vGateWire(); vOpenWire();
+  document.querySelectorAll('[data-vmode]').forEach(b=>b.onclick=()=>{V_MODE=b.dataset.vmode;render();});
+  const n=$('#v-novo'); if(n)n.onclick=vNovoModal;
+}
+function vOpenWire(){ document.querySelectorAll('[data-vopen]').forEach(el=>el.onclick=()=>vDrawer(el.dataset.vopen)); }
+
+// ---- Sessão TA (fila guiada, padrão Sekos) ----
+function vtaHTML(){
+  if(V_DB===false) return vGateHTML();
+  if(V_DB===null) return `<div class="muted" style="padding:30px">Carregando…</div>`;
+  const fila=vbase().filter(c=>c.etapa==='TA');
+  if(!fila.length) return vDemoBanner()+`<div class="card" style="text-align:center;padding:36px"><div style="font-size:34px">🎉</div><h3>Fila de TA vazia</h3><p class="muted">Mova contatos pra etapa TA na aba Clientes pra montar a fila.</p></div>`;
+  if(V_TA_POS>=fila.length)V_TA_POS=0;
+  const c=fila[V_TA_POS];
+  return vDemoBanner()+`<div class="card" style="max-width:660px;margin:0 auto;padding:24px">
+    <div class="muted" style="font-size:12px;margin-bottom:8px">Sessão de TA · contato <b>${V_TA_POS+1}</b> de <b>${fila.length}</b></div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">${avatarHTML({id:String(c.id),nome:c.nome},52)}
+      <div><h2 style="margin:0">${esc(c.nome)}</h2><div class="muted">${esc(c.profissao||'')}${c.idade?' · '+c.idade+' anos':''} · ${esc(c.origem||'')}</div></div>
+      <a class="btn" style="margin-left:auto" href="tel:${esc((c.telefone||'').replace(/\D/g,''))}">📞 ${esc(c.telefone||'sem tel')}</a></div>
+    <div class="muted" style="font-size:12.5px;margin-bottom:10px">Tentativas: <b>${c.ta_tentativas||0}</b> · Último resultado: <b>${esc(c.ta_status||'—')}</b></div>
+    ${c.notas?`<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;font-size:13px;margin-bottom:12px">${esc(c.notas)}</div>`:''}
+    <div class="field"><label>Resultado da ligação</label><div style="display:flex;gap:8px;flex-wrap:wrap">${V_TA_STATUS.slice(1).map(s=>`<button class="btn ${c._taSel===s?'primary':''}" data-vtares="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
+    <div class="field"><label>Nota da ligação (carimba a data)</label><textarea id="vta-nota" rows="2" placeholder="ex.: pediu retorno na sexta de manhã"></textarea></div>
+    <div class="field"><label>Ligar novamente em</label><input type="date" id="vta-ligarem" value="${esc(c.ligar_em||'')}"></div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn" id="vta-prev" ${V_TA_POS===0?'disabled':''}>← Anterior</button>
+      <button class="btn primary" id="vta-save" style="flex:1">💾 Salvar e avançar →</button>
+      <button class="btn" id="vta-skip">Pular</button></div>
+    <div id="vta-oi" style="margin-top:10px;display:${c._taSel==='Sucesso'?'':'none'}"><button class="btn" id="vta-mkoi" style="width:100%;background:#dcfce7;border-color:#16a34a;color:#14532d">✓ Sucesso! Marcar OI/FF e mover etapa</button></div>
+  </div>`;
+}
+function vtaWire(){
+  vGateWire();
+  const fila=vbase().filter(c=>c.etapa==='TA'); if(!fila.length)return;
+  const c=fila[Math.min(V_TA_POS,fila.length-1)];
+  document.querySelectorAll('[data-vtares]').forEach(b=>b.onclick=()=>{ c._taSel=b.dataset.vtares; render(); });
+  const save=async(avanca)=>{
+    const sel=c._taSel; const nota=($('#vta-nota')||{}).value||''; const lig=($('#vta-ligarem')||{}).value||null;
+    const patch={};
+    if(sel){ patch.ta_status=sel; patch.ta_tentativas=(c.ta_tentativas||0)+1; }
+    if(nota) patch.notas=((c.notas?c.notas+'\n':'')+`[TA ${fmtDate(todayStr())}] ${nota}`);
+    if(lig!==null) patch.ligar_em=lig||null;
+    if(Object.keys(patch).length){ if(!await vSaveContato(c.id,patch))return; }
+    delete c._taSel; if(avanca)V_TA_POS++; render();
+  };
+  const sv=$('#vta-save'); if(sv)sv.onclick=()=>save(true);
+  const sk=$('#vta-skip'); if(sk)sk.onclick=()=>{delete c._taSel;V_TA_POS++;render();};
+  const pv=$('#vta-prev'); if(pv)pv.onclick=()=>{delete c._taSel;V_TA_POS=Math.max(0,V_TA_POS-1);render();};
+  const oi=$('#vta-mkoi'); if(oi)oi.onclick=async()=>{ const nota=($('#vta-nota')||{}).value||'';
+    const patch={ta_status:'Sucesso',ta_tentativas:(c.ta_tentativas||0)+1,etapa:'OI/FF',etapa_desde:todayStr()};
+    if(nota)patch.notas=((c.notas?c.notas+'\n':'')+`[TA ${fmtDate(todayStr())}] ${nota}`);
+    if(await vSaveContato(c.id,patch)){ delete c._taSel; toast('→ OI/FF 🎯'); render(); } };
+}
+
+// ---- Atrasos & Cobrança ----
+function vatrasosHTML(){
+  if(V_DB===false) return vGateHTML();
+  if(V_DB===null) return `<div class="muted" style="padding:30px">Carregando…</div>`;
+  const atr=vatrBase().filter(a=>a.status!=='Boleto pago'&&a.status!=='Não tratar');
+  const done=vatrBase().filter(a=>a.status==='Boleto pago'||a.status==='Não tratar');
+  const tot=atr.reduce((s,a)=>s+(+a.premio||0),0);
+  const row=a=>{ const d=vAtrDias(a);
+    return `<tr><td><b>${esc(a.segurado)}</b><div class="muted" style="font-size:11px">${esc(a.resp_pagto&&a.resp_pagto!==a.segurado?('resp: '+a.resp_pagto):'')}</div></td>
+    <td>${esc(a.apolice||'')}</td><td>${vBRL(a.premio)}</td>
+    <td><span style="color:${d>40?'#ef4444':(d>20?'#f59e0b':'#16a34a')};font-weight:800">${d}d</span><div class="muted" style="font-size:11px">${fmtDate(a.vencido_em||'')}</div></td>
+    <td>${esc(a.forma_pagto||'')}</td>
+    <td><select data-vatrst="${a.id}" style="max-width:170px">${V_TRATATIVAS.map(t=>`<option ${a.status===t?'selected':''}>${t}</option>`).join('')}</select></td>
+    <td class="muted" style="font-size:12px">${esc(a.responsavel||'')}<div style="font-size:11px">${a.ultima?('últ. '+fmtDate(a.ultima)):''}</div></td>
+    <td style="white-space:nowrap"><button class="btn" data-vwa="${a.id}" title="WhatsApp com template">💬</button></td></tr>`; };
+  return vDemoBanner()+`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+    <div class="ringcard" style="flex:1;min-width:200px">${ring(atr.length,Math.max(atr.length,5),'#ef4444')}<div><div class="rl">Atrasos abertos</div><div class="rb">tratativas em curso</div></div></div>
+    <div class="ringcard" style="flex:1;min-width:220px"><div style="font-size:22px;font-weight:800;color:#ef4444">${vBRL(tot)}</div><div><div class="rl">Prêmios em risco</div><div class="rb">soma dos abertos</div></div></div>
+    <div style="flex:0;display:flex;align-items:center"><button class="btn primary" id="vatr-novo">＋ Novo atraso</button></div></div>
+  <div class="card" style="overflow:auto"><table class="tbl"><thead><tr><th>Segurado</th><th>Apólice</th><th>Prêmio</th><th>Atraso</th><th>Forma</th><th>Tratativa</th><th>Resp.</th><th></th></tr></thead><tbody>${atr.map(row).join('')||'<tr><td colspan="8" class="qempty">Nenhum atraso aberto 🎉</td></tr>'}</tbody></table></div>
+  ${done.length?`<div class="card" style="margin-top:12px"><h3 style="margin:0 0 8px">Resolvidos / não tratar <span class="count">${done.length}</span></h3><div class="muted" style="font-size:12.5px">${done.map(a=>esc(a.segurado)+' ('+esc(a.status)+')').join(' · ')}</div></div>`:''}`;
+}
+function vatrasosWire(){
+  vGateWire();
+  document.querySelectorAll('[data-vatrst]').forEach(s=>s.onchange=async()=>{ await vSaveAtraso(s.dataset.vatrst,{status:s.value,ultima:todayStr()}); render(); });
+  document.querySelectorAll('[data-vwa]').forEach(b=>b.onclick=()=>vWaModal(b.dataset.vwa));
+  const n=$('#vatr-novo'); if(n)n.onclick=vAtrNovoModal;
+}
+function vTplFill(tpl,a){
+  const map={respPagto:firstName(a.resp_pagto||a.segurado),segurado:a.segurado,apolice:a.apolice,premio:vBRL(a.premio),vencidoEm:fmtDate(a.vencido_em||''),diasAtraso:String(vAtrDias(a)),formaPagto:a.forma_pagto||''};
+  return tpl.replace(/\{\{(\w+)\}\}/g,(_,k)=>map[k]!=null?map[k]:'');
+}
+function vWaModal(id){
+  const a=VATR.find(x=>String(x.id)===String(id)); if(!a)return;
+  const ov=document.createElement('div'); ov.className='overlay';
+  const tpls=vTemplates();
+  ov.innerHTML=`<div class="drawer" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="dh"><h2 style="margin:0">💬 Mensagem — ${esc(a.segurado)}</h2><span class="x" id="vwa-x">×</span></div>
+    <div class="field"><label>Template</label><select id="vwa-tpl">${tpls.map((t,i)=>`<option value="${i}">${esc(t.nome)}</option>`).join('')}</select></div>
+    <div class="field"><label>Prévia (editável)</label><textarea id="vwa-txt" rows="9">${esc(vTplFill(tpls[0].corpo,a))}</textarea></div>
+    <div style="display:flex;gap:10px"><button class="btn" id="vwa-copy">📋 Copiar</button>
+    <button class="btn primary" id="vwa-send" style="flex:1">📲 Abrir WhatsApp (registra tratativa)</button></div></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  $('#vwa-x').onclick=()=>ov.remove();
+  $('#vwa-tpl').onchange=e=>{ $('#vwa-txt').value=vTplFill(tpls[+e.target.value].corpo,a); };
+  $('#vwa-copy').onclick=()=>{ navigator.clipboard.writeText($('#vwa-txt').value).then(()=>toast('Copiado')); };
+  $('#vwa-send').onclick=async()=>{ const txt=$('#vwa-txt').value;
+    const cel=(a.celular||'').replace(/\D/g,'');
+    await vSaveAtraso(a.id,{status:'Mensagem enviada',ultima:todayStr()});
+    window.open('https://wa.me/'+cel+'?text='+encodeURIComponent(txt),'_blank');
+    ov.remove(); render(); };
+}
+function vAtrNovoModal(){
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="drawer" onclick="event.stopPropagation()" style="max-width:520px">
+    <div class="dh"><h2 style="margin:0">＋ Novo atraso</h2><span class="x" id="vatrn-x">×</span></div>
+    <div class="field"><label>Segurado *</label><input id="vatrn-seg"></div>
+    <div class="row2"><div class="field"><label>Resp. pagamento</label><input id="vatrn-resp"></div><div class="field"><label>Apólice</label><input id="vatrn-apo"></div></div>
+    <div class="row2"><div class="field"><label>Prêmio (R$)</label><input id="vatrn-pre" type="number" step="0.01"></div><div class="field"><label>Vencido em</label><input id="vatrn-ven" type="date"></div></div>
+    <div class="row2"><div class="field"><label>Forma pagto</label><select id="vatrn-fp"><option>Boleto</option><option>Cartão</option><option>Débito</option></select></div><div class="field"><label>Celular (WhatsApp)</label><input id="vatrn-cel" placeholder="55819…"></div></div>
+    <button class="btn primary" id="vatrn-save" style="width:100%;margin-top:8px">Salvar</button></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  $('#vatrn-x').onclick=()=>ov.remove();
+  $('#vatrn-save').onclick=async()=>{ const seg=$('#vatrn-seg').value.trim(); if(!seg){toast('Falta o segurado');return;}
+    const r=await vNovoAtraso({segurado:seg,resp_pagto:$('#vatrn-resp').value.trim()||seg,apolice:$('#vatrn-apo').value.trim(),premio:+($('#vatrn-pre').value||0),vencido_em:$('#vatrn-ven').value||null,forma_pagto:$('#vatrn-fp').value,celular:$('#vatrn-cel').value.replace(/\D/g,''),status:'Pendente',responsavel:firstName(MY_NAME),ultima:null});
+    if(r){ ov.remove(); render(); } };
+}
+
+// ---- Drawer do contato ----
+function vDrawer(id){
+  const c=vbyId(id); if(!c)return;
+  const ic=c.infoclient||{}; const planos=c.planos||[]; const recs=c.recs||[]; const evs=c.eventos||[];
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="drawer" onclick="event.stopPropagation()">
+    <div class="dh">${avatarHTML({id:String(c.id),nome:c.nome},48)}<div><h2>${esc(c.nome)}</h2><div class="muted">${esc(c.profissao||'')}${c.idade?' · '+c.idade+' anos':''}</div></div><span class="x" id="vd-x">×</span></div>
+    <div style="margin:4px 0 8px">${vEtapaBadge(c)} <span class="muted" style="font-size:12px">há ${vDias(c)}d na etapa</span> · ${vStars(c.estrelas,c.id)}</div>
+    <div class="field"><label>Nome</label><input id="vd-nome" value="${esc(c.nome||'')}"></div>
+    <div class="row2"><div class="field"><label>Telefone</label><input id="vd-tel" value="${esc(c.telefone||'')}"></div><div class="field"><label>E-mail</label><input id="vd-email" value="${esc(c.email||'')}"></div></div>
+    <div class="row2"><div class="field"><label>Profissão</label><input id="vd-prof" value="${esc(c.profissao||'')}"></div><div class="field"><label>Idade</label><input id="vd-idade" type="number" value="${c.idade||''}"></div></div>
+    <div class="row2">
+      <div class="field"><label>Etapa</label><select id="vd-etapa">${V_ETAPAS.map(e=>`<option ${c.etapa===e?'selected':''}>${e}</option>`).join('')}</select></div>
+      <div class="field"><label>Status TA</label><select id="vd-ta">${V_TA_STATUS.map(s=>`<option ${c.ta_status===s?'selected':''}>${s}</option>`).join('')}</select></div></div>
+    <div class="row2"><div class="field"><label>Origem</label><input id="vd-origem" value="${esc(c.origem||'')}"></div><div class="field"><label>Ligar em</label><input id="vd-ligarem" type="date" value="${esc((c.ligar_em||'').slice(0,10))}"></div></div>
+    ${vIsMaster()?`<div class="field"><label>LP dono (e-mail)</label><input id="vd-lp" value="${esc(c.lp_email||'')}"></div>`:''}
+    <div class="field"><label>InfoClient (coleta)</label><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">
+      ${['pessoais','familiar','financeiro','saude'].map(k=>`<label style="display:flex;gap:5px;align-items:center"><input type="checkbox" data-vic="${k}" ${ic[k]?'checked':''}/> ${k==='saude'?'Saúde':k[0].toUpperCase()+k.slice(1)}</label>`).join('')}</div></div>
+    <div class="field"><label>Notas</label><textarea id="vd-notas" rows="3">${esc(c.notas||'')}</textarea></div>
+    <div class="field"><label>📋 Planos / variantes (${planos.length})</label>
+      ${planos.map((p,i)=>`<div style="border:1px solid #e2e8f0;border-radius:9px;padding:8px;margin-bottom:6px;font-size:12.5px"><b>${esc(p.nome)}</b> · ${vBRL(p.premio)} <select data-vpst="${i}" style="float:right;font-size:11.5px">${V_PLANO_STATUS.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select><div class="muted" style="font-size:11.5px;clear:both">${esc(p.base||'')} · ${esc(p.cobs||'')}</div></div>`).join('')}
+      <div style="display:flex;gap:6px"><input id="vd-pl-nome" placeholder="nome do plano" style="flex:2"><input id="vd-pl-premio" type="number" step="0.01" placeholder="prêmio" style="flex:1"><button class="btn" id="vd-pl-add">＋</button></div></div>
+    <div class="field"><label>🤝 Recomendações (${recs.length})</label>
+      ${recs.map(r=>`<div class="muted" style="font-size:12.5px">• ${esc(r.nome)} ${r.perfil?'('+esc(r.perfil)+')':''} ${r.tel?'· '+esc(r.tel):''}</div>`).join('')}
+      <div style="display:flex;gap:6px;margin-top:5px"><input id="vd-rec-nome" placeholder="nome" style="flex:2"><input id="vd-rec-perfil" placeholder="perfil (ex: médico, 30a)" style="flex:2"><input id="vd-rec-tel" placeholder="tel" style="flex:1"><button class="btn" id="vd-rec-add">＋</button></div></div>
+    <div class="field"><label>📅 Agenda (${evs.length})</label>
+      ${evs.map((e,i)=>`<div style="font-size:12.5px">• <b>${esc(e.tipo)}</b> ${fmtDate(e.data||'')} ${esc(e.hora||'')} (${esc(e.formato||'')}) — ${esc(e.status||'Pendente')} ${e.status!=='Concluído'?`<a href="#" data-vevok="${i}" style="font-size:11px">✓ concluir</a>`:''}</div>`).join('')}
+      <div style="display:flex;gap:6px;margin-top:5px"><select id="vd-ev-tipo" style="flex:1"><option>TA</option><option>OI/FF</option><option>P/C</option><option>C2</option><option>Revisita</option><option>Outro</option></select><input id="vd-ev-data" type="date" style="flex:1"><input id="vd-ev-hora" type="time" style="flex:1"><select id="vd-ev-fmt" style="flex:1"><option>Virtual</option><option>Presencial</option><option>WhatsApp</option><option>Ligação</option></select><button class="btn" id="vd-ev-add">＋</button></div></div>
+    <div style="display:flex;gap:10px;margin-top:12px"><button class="btn primary" id="vd-save" style="flex:1">💾 Salvar</button></div>
+  </div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  $('#vd-x').onclick=()=>ov.remove();
+  // estrelas clicáveis (no drawer)
+  ov.querySelectorAll('[data-vstar]').forEach(s=>s.onclick=async ev=>{ ev.stopPropagation(); await vSaveContato(c.id,{estrelas:+s.dataset.vstar}); ov.remove(); vDrawer(id); });
+  ov.querySelectorAll('[data-vpst]').forEach(s=>s.onchange=async()=>{ const pl=[...(c.planos||[])]; pl[+s.dataset.vpst].status=s.value; await vSaveContato(c.id,{planos:pl}); });
+  ov.querySelectorAll('[data-vevok]').forEach(a2=>a2.onclick=async ev=>{ ev.preventDefault(); const e2=[...(c.eventos||[])]; e2[+a2.dataset.vevok].status='Concluído'; await vSaveContato(c.id,{eventos:e2}); ov.remove(); vDrawer(id); });
+  $('#vd-pl-add').onclick=async()=>{ const n=$('#vd-pl-nome').value.trim(); if(!n)return; const pl=[...(c.planos||[]),{id:'p'+Date.now(),nome:n,base:'',capital:0,premio:+($('#vd-pl-premio').value||0),parceiro:'',status:'Criado',cobs:''}]; if(await vSaveContato(c.id,{planos:pl})){ ov.remove(); vDrawer(id);} };
+  $('#vd-rec-add').onclick=async()=>{ const n=$('#vd-rec-nome').value.trim(); if(!n)return; const rs=[...(c.recs||[]),{nome:n,perfil:$('#vd-rec-perfil').value.trim(),tel:$('#vd-rec-tel').value.trim()}]; if(await vSaveContato(c.id,{recs:rs})){ ov.remove(); vDrawer(id);} };
+  $('#vd-ev-add').onclick=async()=>{ const d=$('#vd-ev-data').value; if(!d){toast('Falta a data');return;} const e2=[...(c.eventos||[]),{tipo:$('#vd-ev-tipo').value,data:d,hora:$('#vd-ev-hora').value,formato:$('#vd-ev-fmt').value,status:'Pendente'}]; if(await vSaveContato(c.id,{eventos:e2})){ ov.remove(); vDrawer(id);} };
+  $('#vd-save').onclick=async()=>{
+    const etNova=$('#vd-etapa').value;
+    const patch={nome:$('#vd-nome').value.trim(),telefone:$('#vd-tel').value.trim(),email:$('#vd-email').value.trim(),profissao:$('#vd-prof').value.trim(),idade:+($('#vd-idade').value||0)||null,etapa:etNova,ta_status:$('#vd-ta').value,origem:$('#vd-origem').value.trim(),ligar_em:$('#vd-ligarem').value||null,notas:$('#vd-notas').value,infoclient:{pessoais:ov.querySelector('[data-vic=pessoais]').checked,familiar:ov.querySelector('[data-vic=familiar]').checked,financeiro:ov.querySelector('[data-vic=financeiro]').checked,saude:ov.querySelector('[data-vic=saude]').checked}};
+    if(etNova!==c.etapa) patch.etapa_desde=todayStr();
+    const lp=$('#vd-lp'); if(lp&&lp.value.trim()) patch.lp_email=lp.value.trim().toLowerCase();
+    if(await vSaveContato(c.id,patch)){ ov.remove(); render(); }
+  };
+}
+function vNovoModal(){
+  const ov=document.createElement('div'); ov.className='overlay';
+  ov.innerHTML=`<div class="drawer" onclick="event.stopPropagation()" style="max-width:480px">
+    <div class="dh"><h2 style="margin:0">＋ Novo contato (vendas)</h2><span class="x" id="vn-x">×</span></div>
+    <div class="field"><label>Nome *</label><input id="vn-nome"></div>
+    <div class="row2"><div class="field"><label>Telefone</label><input id="vn-tel"></div><div class="field"><label>Profissão</label><input id="vn-prof"></div></div>
+    <div class="row2"><div class="field"><label>Origem</label><input id="vn-origem" placeholder="Indicação, LinkedIn, Evento…"></div><div class="field"><label>Etapa</label><select id="vn-etapa">${V_ETAPAS.map(e=>`<option ${e==='Novo'?'selected':''}>${e}</option>`).join('')}</select></div></div>
+    <button class="btn primary" id="vn-save" style="width:100%;margin-top:8px">Criar</button></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  $('#vn-x').onclick=()=>ov.remove();
+  $('#vn-save').onclick=async()=>{ const n=$('#vn-nome').value.trim(); if(!n){toast('Falta o nome');return;}
+    const r=await vNovoContato({nome:n,telefone:$('#vn-tel').value.trim(),profissao:$('#vn-prof').value.trim(),origem:$('#vn-origem').value.trim(),etapa:$('#vn-etapa').value,etapa_desde:todayStr(),ta_status:'—',ta_tentativas:0,estrelas:0,notas:'',infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false},recs:[],eventos:[],planos:[]});
+    if(r){ ov.remove(); render(); } };
+}
+// ===== FIM MÓDULO VENDAS =====
+
 async function boot(session){
   if(session){
     session_nome=session.user.user_metadata?.nome||session.user.email||'';
@@ -2474,6 +2849,7 @@ async function boot(session){
     $('#who-foot').textContent=session_nome;
     $('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
     await loadLeads();
+    loadVendas(); // módulo Vendas (não bloqueia; gate cuida do caso sem migração)
     // realtime para os 2 usuários verem mudanças ao vivo (inscreve só 1x; boot pode rodar 2x)
     if(!window.__rtSub){ window.__rtSub=true; sb.channel('leads-rt').on('postgres_changes',{event:'*',schema:'public',table:'leads'},()=>loadLeads()).subscribe(); }
   }else{
