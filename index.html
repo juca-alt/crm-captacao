@@ -454,8 +454,8 @@ const STATUS_BY_ETAPA = {
   Qualificacao:['Aguardando Qualificacao','Qualificado'],
   Conexao:['A Enviar Convite','Convite Enviado','Convite Aceito (s/ telefone)','Convite Aceito (c/ telefone)','Convite Nao Aceito'],
   SitPlan:['Com Telefone','Priorizado'],
-  TA:['1a Abordagem','Em Tentativa','Nao Atendeu','TA Agendada','Retornar em outro momento'],
-  OT:['OT Agendada','Confirmacao de OT','OT Realizada','Delay OT','TA Reagendar OT','Nao Compareceu'],
+  TA:['1a Abordagem','Em Tentativa','Nao Atendeu','Follow up','TA Agendada','Retornar em outro momento','Delay OT'],
+  OT:['OT Agendada','Confirmacao de OT','OT Realizada','TA Reagendar OT','Nao Compareceu'],
   FIP:['FIP Agendado','Confirmacao de FIP','FIP Realizado'],
   Fechamento:['Onboarding','Convertido'],
   Dormente:['Dormente'],
@@ -629,7 +629,7 @@ function starBtn(l){return `<button class="star ${l.prioridade?'on':''}" data-st
 function flagsHTML(l){
   return (l.flags_qualidade||[]).map(f=>`<span class="flag ${f==='SEM_DDD'?'warn':''}">${esc(f)}</span>`).join('');
 }
-function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
+function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].split('#')[0].replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
 function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replace(/\D/g,'');if(d.startsWith('55')&&d.length>11)d=d.slice(2);if(d.length===11)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`,e164:`+55${d}`};if(d.length===10)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`,e164:`+55${d}`};return{telefone:raw,e164:null};}
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
 const MSG_TPL_DEFAULT=[{nome:'Conexão (padrão)',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}];
@@ -2349,10 +2349,14 @@ function wireVisao(){
 function agoraScore(l){
   let pts=0, motivo='';
   const hoje=todayStr(), amanha=addDays(1);
+  // Etapas avançadas/saída (OT/FIP/Fechamento/Dormente/Descartado) NÃO entram pelos sinais de
+  // topo de funil (telefone/inbox), que podem estar defasados (ex.: "respondeu" antigo que nunca
+  // foi limpo). Elas só aparecem por compromisso agendado ou follow-up explícito que o usuário marcou.
+  const adv = ['OT','FIP','Fechamento','Dormente','Descartado'].includes(l.etapa);
   if(l.agendamento){ const d=String(dtLocal(l.agendamento)).slice(0,10); if(d===hoje){pts=110;motivo='📅 compromisso HOJE — confirma';} else if(d===amanha){pts=80;motivo='📅 compromisso amanhã';} }
-  if(!pts&&l.status==='Convite Aceito (c/ telefone)'){pts=100;motivo=IS_VICTOR?'📱 telefone na mão — passa pro Juca':'📱 telefone na mão — liga agora';}
-  if(!pts&&l.inbox_hot){pts=90;motivo='🔥 conversa quente';}
-  if(!pts&&l.inbox_de_mim===false&&l.inbox_ultima_msg){pts=70;motivo='💬 respondeu — sua vez';}
+  if(!pts&&!adv&&l.status==='Convite Aceito (c/ telefone)'){pts=100;motivo=IS_VICTOR?'📱 telefone na mão — passa pro Juca':'📱 telefone na mão — liga agora';}
+  if(!pts&&!adv&&l.inbox_hot){pts=90;motivo='🔥 conversa quente';}
+  if(!pts&&!adv&&l.inbox_de_mim===false&&l.inbox_ultima_msg){pts=70;motivo='💬 respondeu — sua vez';}
   if(!pts&&isOverdue(l)){ const d=Math.floor((Date.now()-new Date(l.data_proxima_acao).getTime())/86400000); pts=60+Math.min(d,10); motivo='⏰ follow vencido há '+d+'d'; }
   if(!pts&&isDueToday(l)){pts=55;motivo='📌 follow de hoje';}
   if(pts){ if(l.prioridade)pts+=15; if(l.renda_estimada>=10000)pts+=10; }
