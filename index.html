@@ -537,6 +537,12 @@ let LEADS=[], VIEW='hoje', SEARCH='', F_ETAPA='', F_STATUS='', F_RESP='', F_MONE
 let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false;
 let F_EMPRESA=[], F_SEGMENTO='', F_PROFISSAO='', F_IDADE='', F_SEXO=''; // Funil: filtros combináveis; F_EMPRESA = lista (multiseleção)
 let CAP_MODE='kanban'; // Funil Captação: 'kanban' | 'lista'
+let SORT={col:'',dir:1}; // ordenação das listas estilo planilha: col vazio=ordem padrão; dir 1=asc, -1=desc
+let COLFILT={}; // filtro por coluna (estilo planilha): col -> array de valores permitidos (string); vazio/ausente = todos
+let LIST_BASE=[]; // dados da lista ANTES do filtro de coluna (p/ montar as opções do menu)
+const COL_GET={nome:l=>l.nome,empresa:l=>l.empresa,renda:l=>l.renda_estimada,status:l=>l.status,resp:l=>l.responsavel,follow:l=>l.data_proxima_acao,score:l=>l.score};
+function colVal(col,l){ const v=COL_GET[col]?COL_GET[col](l):''; return (v==null||v==='')?'(vazio)':String(v); }
+function applyColFilt(arr){ let r=arr; for(const col in COLFILT){ const s=COLFILT[col]; if(s&&s.length){ const S=new Set(s); r=r.filter(l=>S.has(colVal(col,l))); } } return r; }
 let QUAL_VIEW='cards', QF_RENDA='', QF_IDADE='', QF_SEXO=''; // aba Qualificar
 let DAY_SCOPE='me';   // Meu Dia: 'me' | 'all'
 let INBOX_FILTER='all';   // Inbox: all | resp | enviado | semtel | tel | aguardando
@@ -1523,7 +1529,7 @@ function wireFilters(){
   const fx=$('#f-sexo');  if(fx)fx.onchange=e=>{F_SEXO=e.target.value;render();};
   document.querySelectorAll('[data-sit]').forEach(b=>b.onclick=()=>{F_SITUACAO=b.dataset.sit;render();});
   const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
-  const fc=$('#f-clear'); if(fc)fc.onclick=()=>{F_EMPRESA=[];F_PROFISSAO='';F_SEGMENTO='';F_IDADE='';F_SEXO='';F_MONEY=false;F_ETAPA='';F_STATUS='';render();};
+  const fc=$('#f-clear'); if(fc)fc.onclick=()=>{F_EMPRESA=[];F_PROFISSAO='';F_SEGMENTO='';F_IDADE='';F_SEXO='';F_MONEY=false;F_ETAPA='';F_STATUS='';COLFILT={};render();};
 }
 function empresaOptions(){ return [...new Set(LEADS.map(l=>l.empresa).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
 function openEmpresaMenu(anchor){
@@ -1541,9 +1547,43 @@ function openEmpresaMenu(anchor){
   setTimeout(()=>document.addEventListener('click',function away(e){ if(!m.contains(e.target)&&e.target!==anchor){ closeMenus(); document.removeEventListener('click',away,true); } },true),0);
 }
 
+// menu de filtro por coluna (estilo planilha): checkboxes dos valores distintos da coluna
+function openColMenu(col,anchor){
+  closeMenus();
+  const vals=[...new Set(LIST_BASE.map(l=>colVal(col,l)))].sort((a,b)=>a.localeCompare(b,'pt',{numeric:true}));
+  const cur=(COLFILT[col]&&COLFILT[col].length)?new Set(COLFILT[col]):new Set(vals);
+  const m=document.createElement('div'); m.className='statusmenu';
+  m.style.cssText='position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:8px;width:250px';
+  m.innerHTML=`<input id="cf-q" placeholder="Buscar…" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;margin-bottom:6px"><div style="display:flex;gap:6px;margin-bottom:6px"><button class="btn ghost" id="cf-all" style="flex:1;font-size:12px;padding:4px 0">Todos</button><button class="btn ghost" id="cf-none" style="flex:1;font-size:12px;padding:4px 0">Nenhum</button></div><div id="cf-list" style="max-height:230px;overflow:auto">${vals.map(v=>`<label style="display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;cursor:pointer;font-size:13px"><input type="checkbox" class="cf-cb" value="${esc(v)}" ${cur.has(v)?'checked':''}> ${esc(v)}</label>`).join('')||'<div class="muted" style="font-size:12px;padding:6px">Sem valores.</div>'}</div><div style="margin-top:8px"><button class="btn primary" id="cf-ok" style="width:100%">Aplicar</button></div>`;
+  document.body.appendChild(m);
+  const r=anchor.getBoundingClientRect(); m.style.top=Math.min(r.bottom+4,window.innerHeight-340)+'px'; m.style.left=Math.min(r.left,window.innerWidth-262)+'px';
+  const q=m.querySelector('#cf-q'); q.oninput=()=>{const t=q.value.toLowerCase();m.querySelectorAll('#cf-list label').forEach(l=>l.style.display=l.textContent.toLowerCase().includes(t)?'':'none');};
+  m.querySelector('#cf-all').onclick=()=>m.querySelectorAll('.cf-cb').forEach(cb=>cb.checked=true);
+  m.querySelector('#cf-none').onclick=()=>m.querySelectorAll('.cf-cb').forEach(cb=>cb.checked=false);
+  m.querySelector('#cf-ok').onclick=()=>{ const ck=[...m.querySelectorAll('.cf-cb:checked')].map(cb=>cb.value); COLFILT[col]=(ck.length===vals.length)?[]:ck; closeMenus(); render(); };
+  setTimeout(()=>document.addEventListener('click',function away(e){ if(!m.contains(e.target)&&e.target!==anchor){ closeMenus(); document.removeEventListener('click',away,true); } },true),0);
+}
+
 // ===== LISTA (com multi-seleção) =====
+// ordena os dados da lista pela coluna ativa (vazios sempre no fim) — usabilidade de planilha
+function sortData(arr){
+  if(!SORT.col) return arr;
+  const get=l=>COL_GET[SORT.col]?COL_GET[SORT.col](l):'';
+  return [...arr].sort((a,b)=>{
+    let x=get(a),y=get(b);
+    const ex=(x==null||x===''),ey=(y==null||y==='');
+    if(ex&&ey)return 0; if(ex)return 1; if(ey)return -1;
+    if(SORT.col==='renda') return ((+x||0)-(+y||0))*SORT.dir;
+    return String(x).localeCompare(String(y),'pt',{numeric:true})*SORT.dir;
+  });
+}
+function thSort(col,label){
+  const on=SORT.col===col, ar=on?(SORT.dir>0?'▲':'▼'):'';
+  const fOn=COLFILT[col]&&COLFILT[col].length;
+  return `<th class="th-sort" style="white-space:nowrap;user-select:none"><span data-sort="${col}" style="cursor:pointer">${label}<span style="opacity:.6;font-size:10px"> ${ar}</span></span><span data-colf="${col}" title="Filtrar coluna" style="cursor:pointer;margin-left:5px;font-size:11px;opacity:${fOn?1:.45};color:${fOn?'#2563eb':'inherit'}">▾</span></th>`;
+}
 function listaHTML(data){
-  data=data||filtered();
+  const _base=data||filtered(); LIST_BASE=_base; data=sortData(applyColFilt(_base));
   const allSel=data.length&&data.every(l=>SEL.has(l.id));
   const rows=data.map(l=>`
     <tr class="row ${SEL.has(l.id)?'sel':''}" data-open="${l.id}">
@@ -1559,7 +1599,7 @@ function listaHTML(data){
   return `<div class="tablewrap"><table>
     <thead><tr>
       <th class="checkcol"><input type="checkbox" class="cbx" id="sel-all" ${allSel?'checked':''}></th>
-      <th>Lead</th><th>Empresa</th><th>Renda</th><th>Status</th><th>Resp.</th><th>Follow</th><th>Score</th></tr></thead>
+      ${thSort('nome','Lead')}${thSort('empresa','Empresa')}${thSort('renda','Renda')}${thSort('status','Status')}${thSort('resp','Resp.')}${thSort('follow','Follow')}${thSort('score','Score')}</tr></thead>
     <tbody>${rows||'<tr><td colspan="8" class="muted" style="padding:24px;text-align:center">Nenhum lead nessa visão.</td></tr>'}</tbody>
   </table></div>`;
 }
@@ -1569,6 +1609,10 @@ function wireLista(){
   document.querySelectorAll('[data-star]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const l=byId(b.dataset.star);if(l&&await updateLead(l.id,{prioridade:!l.prioridade}))render();});
   document.querySelectorAll('[data-sel]').forEach(cb=>cb.onclick=e=>{e.stopPropagation();const id=cb.dataset.sel;cb.checked?SEL.add(id):SEL.delete(id);render();});
   const sa=$('#sel-all'); if(sa)sa.onclick=e=>{e.stopPropagation();const data=filtered();if(e.target.checked)data.forEach(l=>SEL.add(l.id));else data.forEach(l=>SEL.delete(l.id));render();};
+  document.querySelectorAll('[data-sort]').forEach(th=>th.onclick=e=>{ e.stopPropagation(); const c=th.dataset.sort;
+    if(SORT.col===c){ if(SORT.dir>0){SORT.dir=-1;}else{SORT.col='';SORT.dir=1;} } else { SORT.col=c; SORT.dir=1; }
+    render(); });
+  document.querySelectorAll('[data-colf]').forEach(el=>el.onclick=e=>{ e.stopPropagation(); openColMenu(el.dataset.colf, el); });
 }
 function wireBulk(){
   let bar=$('#bulkbar'); if(bar)bar.remove();
@@ -1798,8 +1842,15 @@ function openNovo(mine,prefill){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()">
     <h2>${mine?'⛏ Garimpo — adição rápida':'Novo lead'}</h2>
-    <p class="hint">Cole a <b>URL do LinkedIn</b> ou o <b>JSON da extensão ⛏ Captar</b>. ${mine?'Após salvar, o campo limpa pra você emendar o próximo.':''}</p>
-    <div class="field"><label>URL ou JSON da extensão</label><textarea id="n-raw" rows="3" placeholder="https://www.linkedin.com/in/... ou {&quot;nome&quot;:...}"></textarea></div>
+    <style>.orig-btn{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:13px}.orig-btn.on{border-color:#2563eb;background:#eff6ff;color:#1e40af;font-weight:600}</style>
+    <div class="field"><label>Origem do lead</label><div id="n-origs" style="display:flex;flex-wrap:wrap;gap:6px">
+      <button type="button" class="orig-btn on" data-orig="linkedin">🔗 LinkedIn</button>
+      <button type="button" class="orig-btn" data-orig="lp">🤝 Rec. de LP</button>
+      <button type="button" class="orig-btn" data-orig="ot">🎯 Rec. de OT</button>
+      <button type="button" class="orig-btn" data-orig="direta">📞 Abordagem direta</button></div></div>
+    <div class="field" id="n-blk-url"><label>URL do LinkedIn ou JSON da extensão ⛏</label><textarea id="n-raw" rows="3" placeholder="https://www.linkedin.com/in/... ou {&quot;nome&quot;:...}"></textarea></div>
+    <div class="field" id="n-blk-rec" style="display:none"><label id="n-rec-lb">Recomendante</label><input id="n-rec" placeholder="quem indicou"></div>
+    <div id="n-blk-direta" style="display:none;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:8px 10px;border-radius:8px;font-size:13px;margin-bottom:10px">Origem: <b>abordagem direta sua</b>. Responsável entra como <b>Gustavo</b>.</div>
     <div class="row2">
       <div class="field"><label>Nome</label><input id="n-nome"></div>
       <div class="field"><label>Responsável</label><select id="n-resp"><option ${ME.includes('victor')?'selected':''}>Victor</option><option ${!ME.includes('victor')?'selected':''}>Gustavo</option></select></div>
@@ -1826,6 +1877,17 @@ function openNovo(mine,prefill){
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
   $('#n-close').onclick=()=>ov.remove();
+  let ORIG='linkedin';
+  function applyOrig(){
+    document.querySelectorAll('#n-origs .orig-btn').forEach(b=>b.classList.toggle('on',b.dataset.orig===ORIG));
+    $('#n-blk-url').style.display=ORIG==='linkedin'?'':'none';
+    $('#n-blk-rec').style.display=(ORIG==='lp'||ORIG==='ot')?'':'none';
+    $('#n-rec-lb').textContent=ORIG==='lp'?'Recomendante — qual Life Planner indicou?':'Recomendante — qual cliente/OT indicou?';
+    $('#n-blk-direta').style.display=ORIG==='direta'?'':'none';
+    if(ORIG==='direta') $('#n-resp').value='Gustavo';
+  }
+  document.querySelectorAll('#n-origs .orig-btn').forEach(b=>b.onclick=()=>{ORIG=b.dataset.orig;applyOrig();});
+  applyOrig();
   let foto=null, curScore='D', curSeguros=null, rendaTouched=false;
   function updateTriage(){
     const cargo=$('#n-cargo').value, empresa=$('#n-empresa').value;
@@ -1871,7 +1933,9 @@ function openNovo(mine,prefill){
       telefone:ph.telefone,telefone_e164:ph.e164,flags_qualidade:flags,
       renda_estimada:renda,renda_auto:(!rendaTouched&&renda!=null),score:curScore,
       observacoes:curSeguros?`[Triagem: possível seguros – ${curSeguros}]`:null,
-      status:'Aguardando Qualificacao',responsavel:$('#n-resp').value,origem:'LinkedIn'};
+      status:'Aguardando Qualificacao',responsavel:(ORIG==='direta'?'Gustavo':$('#n-resp').value),
+      origem:({linkedin:'LinkedIn',lp:'Rec LP',ot:'Rec OT',direta:'Abordagem Direta'})[ORIG],
+      recomendante:((ORIG==='lp'||ORIG==='ot')&&$('#n-rec')?($('#n-rec').value.trim()||null):null)};
     const {data,error}=await sb.from('leads').insert(rec).select().single();
     if(error){$('#n-dup').textContent='Erro: '+error.message;return;}
     LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
