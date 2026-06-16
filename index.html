@@ -639,9 +639,12 @@ function flagsHTML(l){
 function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].split('#')[0].replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
 function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replace(/\D/g,'');if(d.startsWith('55')&&d.length>11)d=d.slice(2);if(d.length===11)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`,e164:`+55${d}`};if(d.length===10)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`,e164:`+55${d}`};return{telefone:raw,e164:null};}
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
-const MSG_TPL_DEFAULT=[{nome:'Conexão (padrão)',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}];
+const MSG_TPL_DEFAULT=[
+  {nome:'Recomendação (WhatsApp)',texto:'Me chamo Gustavo Jucá. Não nos conhecemos ainda. Quem me passou seu telefone foi {{recomendante}}. Ela me recomendou seu nome a respeito de uma oportunidade profissional. Posso retornar para passar mais detalhes?'},
+  {nome:'Conexão LinkedIn',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}
+];
 function msgTemplates(){ return (MSG_TEMPLATES&&MSG_TEMPLATES.length)?MSG_TEMPLATES:MSG_TPL_DEFAULT; }
-function fillTpl(txt,l){ return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
+function fillTpl(txt,l){ return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*recomendante\s*\}\}/gi,l.recomendante||'').replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
 function copyTplText(txt,l){ navigator.clipboard.writeText(fillTpl(txt,l)).then(()=>toast('Mensagem copiada — '+firstName(l.nome)),()=>toast('Não consegui copiar')); }
 function copyMsg(l,anchor){
   const tpls=msgTemplates();
@@ -1024,7 +1027,7 @@ function wirePerfil(){
 function tplRowHTML(t){
   return `<div class="tpl-row" style="border:1px solid var(--line);border-radius:9px;padding:8px;margin-bottom:8px">
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input class="tpl-nome" value="${esc(t.nome||'')}" placeholder="Nome do modelo" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-weight:600"><button class="btn ghost tpl-del" title="Remover">🗑</button></div>
-    <textarea class="tpl-texto" rows="3" placeholder="Texto da mensagem… use {{primeiro_nome}}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px">${esc(t.texto||'')}</textarea>
+    <textarea class="tpl-texto" rows="3" placeholder="Texto da mensagem… use {{primeiro_nome}} e {{recomendante}}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px">${esc(t.texto||'')}</textarea>
   </div>`;
 }
 function configHTML(){
@@ -1045,7 +1048,7 @@ function configHTML(){
     </div>
     <div class="profcard" style="display:block;max-width:620px;margin-top:14px">
       <div style="font-weight:600;margin-bottom:4px">💬 Modelos de mensagem</div>
-      <p class="hint" style="margin-bottom:8px">Use <b>{{primeiro_nome}}</b> — troca pelo nome do lead na hora de copiar. O botão 📩 nos cards abre esses modelos pra você escolher e copiar.</p>
+      <p class="hint" style="margin-bottom:8px">Use <b>{{primeiro_nome}}</b> (nome do lead) e <b>{{recomendante}}</b> (quem indicou) — trocam na hora de copiar. O botão 📩 nos cards e na ficha do lead abre esses modelos pra você escolher e copiar.</p>
       <div id="tpl-list">${msgTemplates().map(t=>tplRowHTML(t)).join('')}</div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn ghost" id="tpl-add">＋ Novo modelo</button><button class="btn primary" id="tpl-save">Salvar modelos</button><span id="tpl-msg" style="font-size:13px"></span></div>
     </div>`;
@@ -1226,7 +1229,7 @@ function inboxDetailHTML(l){
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button class="btn primary" id="ibd-save" data-id="${l.id}">Salvar</button>
-      <button class="btn ghost" data-act="msg" data-id="${l.id}">📩 Copiar mensagem</button>
+      <button class="btn ghost" data-act="msg" data-id="${l.id}">📩 Modelos de mensagem</button>
       <button class="btn ghost" data-act="call" data-id="${l.id}">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
       ${l.status==='Convite Aceito (c/ telefone)'?`<button class="btn ghost" data-act="advance" data-to="${TA_PRIMEIRA}" data-id="${l.id}" style="border-color:#bbf7d0;color:#15803d;font-weight:700">🎯 Promover pra 1ª Abordagem</button>`:''}
       ${liBtn}
@@ -1782,7 +1785,7 @@ function openDrawer(id){
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn primary" id="d-save">Salvar</button>
-      <button class="btn ghost" id="d-msg">📩 Copiar mensagem</button>
+      <button class="btn ghost" id="d-msg">📩 Modelos de mensagem</button>
       <button class="btn ghost" id="d-call">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
     </div>
     ${(Array.isArray(l.inbox_thread)&&l.inbox_thread.length)?`<h3 style="margin:20px 0 8px;font-size:13px">💬 Conversa capturada</h3>${inboxThreadHTML(l)}`:''}
@@ -1814,7 +1817,7 @@ function openDrawer(id){
       observacoes:$('#d-obs').value||null};
     if(await updateLead(id,patch)){toast('Salvo');ov.remove();render();}
   };
-  $('#d-msg').onclick=()=>copyMsg(l);
+  $('#d-msg').onclick=(e)=>copyMsg(l,e.currentTarget);
   const _du=$('#d-url'),_duo=$('#d-url-open'); if(_du&&_duo)_du.oninput=()=>{const v=_du.value.trim();_duo.href=v||'#';_duo.style.display=v?'':'none';};
   $('#d-call').onclick=async()=>{
     const n=(l.tentativas_ligacao||0)+1;
