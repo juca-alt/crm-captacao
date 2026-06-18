@@ -593,7 +593,9 @@ function situacaoOf(l){
 
 // ===== HELPERS =====
 const $=s=>document.querySelector(s);
-const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// href seguro: só deixa passar protocolos navegáveis; bloqueia javascript:/data: etc. (evita XSS via href clicável)
+const safeHref=u=>{const s=(u==null?'':String(u)).trim();return /^(https?:|mailto:|tel:)/i.test(s)?esc(s):'#';};
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2400);}
 function initials(n){return (n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();}
 function avaColor(id){let h=0;for(const c of (id||''))h=(h*31+c.charCodeAt(0))%AVA_COLORS.length;return AVA_COLORS[h];}
@@ -610,10 +612,16 @@ function dueHTML(l){
   if(d===todayStr())return `<span class="due soon">⏰ hoje</span>`;
   return `<span class="due ok">📅 ${fmtDate(d)}</span>`;
 }
+// fallback do avatar quando a foto falha: monta o <div> via DOM (sem interpolar nome em handler inline → evita XSS)
+function avatarFail(img,s){
+  const d=document.createElement('div');
+  d.className='avatar'; d.style.cssText=`width:${s}px;height:${s}px;background:${img.dataset.col}`;
+  d.textContent=img.dataset.init; img.replaceWith(d);
+}
 function avatarHTML(l,size){
-  const s=size||36;
-  if(l.foto_url) return `<img class="avatar" style="width:${s}px;height:${s}px" src="${esc(l.foto_url)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'avatar',style:'width:${s}px;height:${s}px;background:${avaColor(l.id)}',textContent:'${initials(l.nome)}'}))"/>`;
-  return `<div class="avatar" style="width:${s}px;height:${s}px;background:${avaColor(l.id)}">${initials(l.nome)}</div>`;
+  const s=size||36; const init=initials(l.nome), col=avaColor(l.id);
+  if(l.foto_url) return `<img class="avatar" style="width:${s}px;height:${s}px" src="${esc(l.foto_url)}" data-init="${esc(init)}" data-col="${esc(col)}" onerror="avatarFail(this,${s})"/>`;
+  return `<div class="avatar" style="width:${s}px;height:${s}px;background:${esc(col)}">${esc(init)}</div>`;
 }
 function rendaHTML(l){
   if(l.renda_estimada==null) return `<span class="muted">—</span>`;
@@ -638,12 +646,12 @@ function starBtn(l){return `<button class="star ${l.prioridade?'on':''}" data-st
 function flagsHTML(l){
   return (l.flags_qualidade||[]).map(f=>`<span class="flag ${f==='SEM_DDD'?'warn':''}">${esc(f)}</span>`).join('');
 }
-function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
+function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].split('#')[0].replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
 function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replace(/\D/g,'');if(d.startsWith('55')&&d.length>11)d=d.slice(2);if(d.length===11)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`,e164:`+55${d}`};if(d.length===10)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`,e164:`+55${d}`};return{telefone:raw,e164:null};}
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
 const MSG_TPL_DEFAULT=[{nome:'Conexão (padrão)',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}];
 function msgTemplates(){ return (MSG_TEMPLATES&&MSG_TEMPLATES.length)?MSG_TEMPLATES:MSG_TPL_DEFAULT; }
-function fillTpl(txt,l){ return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
+function fillTpl(txt,l){ return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*recomendante\s*\}\}/gi,l.recomendante||'').replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
 function copyTplText(txt,l){ navigator.clipboard.writeText(fillTpl(txt,l)).then(()=>toast('Mensagem copiada — '+firstName(l.nome)),()=>toast('Não consegui copiar')); }
 function copyMsg(l,anchor){
   const tpls=msgTemplates();
@@ -1214,7 +1222,7 @@ function inboxThreadHTML(l){
 }
 function inboxDetailHTML(l){
   if(!l) return `<div class="ibx-detail"><div class="qempty" style="padding:40px;text-align:center">Selecione uma conversa à esquerda 👈</div></div>`;
-  const liBtn = l.linkedin_url?`<a class="btn ghost" href="${esc(l.linkedin_url)}" target="_blank" rel="noopener">↗ Abrir no LinkedIn</a>`:'';
+  const liBtn = l.linkedin_url?`<a class="btn ghost" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener">↗ Abrir no LinkedIn</a>`:'';
   return `<div class="ibx-detail">
     <button class="btn ghost ibx-back" id="ibx-back">← Voltar</button>
     <div class="dh" style="display:flex;align-items:center;gap:10px;margin-bottom:4px">${avatarHTML(l,48)}
@@ -1748,7 +1756,7 @@ function openDrawer(id){
       <div class="minichips" id="d-gcal-wrap">${l.agendamento?`<a class="minichip" href="${gcalLink(l)}" target="_blank" rel="noopener">📅 Adicionar ao Google Calendar</a>`:'<span class="muted" style="font-size:11px">defina data+hora e salve — aí libera o botão do Google Calendar</span>'}</div>
     </div>
     <label class="acompbox"><input type="checkbox" class="cbx" id="d-acomp" ${l.acompanhar_victor?'checked':''}> 👁 Victor acompanha esta OT (follow-up de delay/reagendar)</label>
-    <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${esc(l.linkedin_url||'#')}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
+    <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn primary" id="d-save">Salvar</button>
@@ -2364,10 +2372,11 @@ function wireVisao(){
 function agoraScore(l){
   let pts=0, motivo='';
   const hoje=todayStr(), amanha=addDays(1);
+  const adv = ['OT','FIP','Fechamento','Dormente','Descartado'].includes(l.etapa); // já avançado/encerrado: não sugerir 1ª ação
   if(l.agendamento){ const d=String(dtLocal(l.agendamento)).slice(0,10); if(d===hoje){pts=110;motivo='📅 compromisso HOJE — confirma';} else if(d===amanha){pts=80;motivo='📅 compromisso amanhã';} }
-  if(!pts&&l.status==='Convite Aceito (c/ telefone)'){pts=100;motivo=IS_VICTOR?'📱 telefone na mão — passa pro Juca':'📱 telefone na mão — liga agora';}
-  if(!pts&&l.inbox_hot){pts=90;motivo='🔥 conversa quente';}
-  if(!pts&&l.inbox_de_mim===false&&l.inbox_ultima_msg){pts=70;motivo='💬 respondeu — sua vez';}
+  if(!pts&&!adv&&l.status==='Convite Aceito (c/ telefone)'){pts=100;motivo=IS_VICTOR?'📱 telefone na mão — passa pro Juca':'📱 telefone na mão — liga agora';}
+  if(!pts&&!adv&&l.inbox_hot){pts=90;motivo='🔥 conversa quente';}
+  if(!pts&&!adv&&l.inbox_de_mim===false&&l.inbox_ultima_msg){pts=70;motivo='💬 respondeu — sua vez';}
   if(!pts&&isOverdue(l)){ const d=Math.floor((Date.now()-new Date(l.data_proxima_acao).getTime())/86400000); pts=60+Math.min(d,10); motivo='⏰ follow vencido há '+d+'d'; }
   if(!pts&&isDueToday(l)){pts=55;motivo='📌 follow de hoje';}
   if(pts){ if(l.prioridade)pts+=15; if(l.renda_estimada>=10000)pts+=10; }
