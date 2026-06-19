@@ -591,7 +591,9 @@ function situacaoOf(l){
 
 // ===== HELPERS =====
 const $=s=>document.querySelector(s);
-const esc=s=>(s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// href seguro: só deixa passar protocolos navegáveis; bloqueia javascript:/data: etc. (evita XSS via href clicável)
+const safeHref=u=>{const s=(u==null?'':String(u)).trim();return /^(https?:|mailto:|tel:)/i.test(s)?esc(s):'#';};
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2400);}
 function initials(n){return (n||'?').split(' ').filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase();}
 function avaColor(id){let h=0;for(const c of (id||''))h=(h*31+c.charCodeAt(0))%AVA_COLORS.length;return AVA_COLORS[h];}
@@ -608,10 +610,16 @@ function dueHTML(l){
   if(d===todayStr())return `<span class="due soon">⏰ hoje</span>`;
   return `<span class="due ok">📅 ${fmtDate(d)}</span>`;
 }
+// fallback do avatar quando a foto falha: monta o <div> via DOM (sem interpolar nome em handler inline → evita XSS)
+function avatarFail(img,s){
+  const d=document.createElement('div');
+  d.className='avatar'; d.style.cssText=`width:${s}px;height:${s}px;background:${img.dataset.col}`;
+  d.textContent=img.dataset.init; img.replaceWith(d);
+}
 function avatarHTML(l,size){
-  const s=size||36;
-  if(l.foto_url) return `<img class="avatar" style="width:${s}px;height:${s}px" src="${esc(l.foto_url)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'avatar',style:'width:${s}px;height:${s}px;background:${avaColor(l.id)}',textContent:'${initials(l.nome)}'}))"/>`;
-  return `<div class="avatar" style="width:${s}px;height:${s}px;background:${avaColor(l.id)}">${initials(l.nome)}</div>`;
+  const s=size||36; const init=initials(l.nome), col=avaColor(l.id);
+  if(l.foto_url) return `<img class="avatar" style="width:${s}px;height:${s}px" src="${esc(l.foto_url)}" data-init="${esc(init)}" data-col="${esc(col)}" onerror="avatarFail(this,${s})"/>`;
+  return `<div class="avatar" style="width:${s}px;height:${s}px;background:${esc(col)}">${esc(init)}</div>`;
 }
 function rendaHTML(l){
   if(l.renda_estimada==null) return `<span class="muted">—</span>`;
@@ -1209,7 +1217,7 @@ function inboxThreadHTML(l){
 }
 function inboxDetailHTML(l){
   if(!l) return `<div class="ibx-detail"><div class="qempty" style="padding:40px;text-align:center">Selecione uma conversa à esquerda 👈</div></div>`;
-  const liBtn = l.linkedin_url?`<a class="btn ghost" href="${esc(l.linkedin_url)}" target="_blank" rel="noopener">↗ Abrir no LinkedIn</a>`:'';
+  const liBtn = l.linkedin_url?`<a class="btn ghost" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener">↗ Abrir no LinkedIn</a>`:'';
   return `<div class="ibx-detail">
     <button class="btn ghost ibx-back" id="ibx-back">← Voltar</button>
     <div class="dh" style="display:flex;align-items:center;gap:10px;margin-bottom:4px">${avatarHTML(l,48)}
@@ -1727,7 +1735,7 @@ function wireStatusButtons(){
 }
 function openStatusMenu(anchor,id){
   closeMenus();
-  const l=byId(id);
+  const l=byId(id); if(!l) return; // lead pode ter sumido entre render e clique
   const m=document.createElement('div');
   m.className='statusmenu';
   m.style.cssText='position:fixed;z-index:70;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:6px;max-height:340px;overflow:auto;width:240px';
@@ -1781,7 +1789,7 @@ function openDrawer(id){
       <div class="minichips" id="d-gcal-wrap">${l.agendamento?`<a class="minichip" href="${gcalLink(l)}" target="_blank" rel="noopener">📅 Adicionar ao Google Calendar</a>`:'<span class="muted" style="font-size:11px">defina data+hora e salve — aí libera o botão do Google Calendar</span>'}</div>
     </div>
     <label class="acompbox"><input type="checkbox" class="cbx" id="d-acomp" ${l.acompanhar_victor?'checked':''}> 👁 Victor acompanha esta OT (follow-up de delay/reagendar)</label>
-    <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${esc(l.linkedin_url||'#')}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
+    <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
       <button class="btn primary" id="d-save">Salvar</button>
@@ -2013,7 +2021,7 @@ function openImport(){
     for(let i=0;i<toInsert.length;i+=200){
       const batch=toInsert.slice(i,i+200);
       const {data,error}=await sb.from('leads').insert(batch).select();
-      if(error){for(const row of batch){const r=await sb.from('leads').insert(row).select();r.error?fail++:ok++;}}
+      if(error){for(const row of batch){const r=await sb.from('leads').insert(row).select();if(!r.error)ok++;else if(r.error.code==='23505'){/* viola chave única = já existe; não duplica nem conta como falha */}else fail++;}}
       else ok+=(data||[]).length;
     }
     toast(`Importados ${ok} leads`+(fail?` · ${fail} falharam`:''));
@@ -2081,7 +2089,9 @@ function wireDup(){
   const all=$('#dup-all'); if(all)all.onchange=()=>{ cbs().forEach(c=>c.checked=all.checked); upd(); };
   const go=$('#dup-merge-sel'); if(go)go.onclick=async()=>{
     const sel=cbs().filter(c=>c.checked).map(c=>groups[+c.dataset.i]); if(!sel.length) return;
-    if(!confirm(`Unificar ${sel.length} grupo(s) no automático?\n\nEm cada um: mantém o lead mais avançado no funil, junta observações e campos preenchidos, e REMOVE os duplicados (não dá pra desfazer). Os casos delicados, prefira o "Revisar".`)) return;
+    const nomeGrupos=sel.filter(g=>g.kind==='Nome').length;
+    const aviso=nomeGrupos?`\n\n⚠ ${nomeGrupos} grupo(s) casam só por NOME — homônimos (pessoas diferentes com o mesmo nome) seriam fundidos e um deles REMOVIDO sem desfazer. Recomendo "Revisar" esses individualmente.`:'';
+    if(!confirm(`Unificar ${sel.length} grupo(s) no automático?${aviso}\n\nEm cada um: mantém o lead mais avançado no funil, junta observações e campos preenchidos, e REMOVE os duplicados (não dá pra desfazer). Os casos delicados, prefira o "Revisar".`)) return;
     go.disabled=true; let ok=0, fail=0;
     for(const g of sel){ const {keep,patch}=autoMergePlan(g); if(await applyMerge(g,keep,patch))ok++; else fail++; go.textContent=`Unificando… ${ok}/${sel.length}`; }
     toast(`${ok} grupo(s) unificado(s)`+(fail?`, ${fail} falhou`:'')); render();
@@ -2288,7 +2298,7 @@ async function ensureAppUser(){
   const base=REAL_VICTOR?DEFAULT_PERMS.assistente:DEFAULT_PERMS.admin;
   const row=Object.assign({email:ME_EMAIL,nome},base);
   const {error}=await sb.from('app_users').insert(row);
-  if(!error) APP_USERS.push(row); else APP_USERS.push(row); // tabela ausente: usa em memória
+  APP_USERS.push(row); // grava no banco; se a tabela estiver ausente, segue em memória de qualquer forma
 }
 let session_nome='';
 
@@ -2381,7 +2391,7 @@ function visaoHTML(){
   // ritmo 14 dias: minerados × convites
   const days=lastNDays(14);
   const vm={}, vc={};
-  vgBase().forEach(l=>{ if(l.criado_em){const d=String(l.criado_em).slice(0,10); if(vm[d]!==undefined||days.includes(d)) vm[d]=(vm[d]||0)+1;} if(l.convite_enviado_em){const d=String(l.convite_enviado_em).slice(0,10); if(days.includes(d)) vc[d]=(vc[d]||0)+1;} });
+  vgBase().forEach(l=>{ if(l.criado_em){const d=String(l.criado_em).slice(0,10); if(days.includes(d)) vm[d]=(vm[d]||0)+1;} if(l.convite_enviado_em){const d=String(l.convite_enviado_em).slice(0,10); if(days.includes(d)) vc[d]=(vc[d]||0)+1;} });
   const totM=days.reduce((s,d)=>s+(vm[d]||0),0), totC=days.reduce((s,d)=>s+(vc[d]||0),0);
   const ritmo=sparkBars(days,[{vals:vm,color:'#3730a3'},{vals:vc,color:'#0a66c2'}]);
   // placar do time (admin vê os 2)
@@ -2509,7 +2519,7 @@ $('#nav-dup').onclick=()=>{VIEW='dup';$('#sidebar').classList.remove('open');ren
 $('#nav-update').onclick=()=>{ if(confirm('Buscar a versão mais recente do app? A página recarrega (seus dados ficam salvos).')) location.replace(location.origin+location.pathname+'?v='+Date.now()); };
 const _ver=$('#ver'); if(_ver)_ver.textContent=APP_VERSION;
 const _verl=$('#ver-login'); if(_verl)_verl.textContent=APP_VERSION;
-$('#search').oninput=e=>{SEARCH=e.target.value;render();};
+{ let _sT; $('#search').oninput=e=>{ SEARCH=e.target.value; clearTimeout(_sT); _sT=setTimeout(render,180); }; }
 function setSidebar(open){ $('#sidebar').classList.toggle('open',open); const b=$('#sb-backdrop'); if(b)b.classList.toggle('on',open); }
 $('#menu-btn').onclick=()=>setSidebar(!$('#sidebar').classList.contains('open'));
 { const b=$('#sb-backdrop'); if(b)b.onclick=()=>setSidebar(false); }
@@ -2547,7 +2557,7 @@ async function boot(session){
     $('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
     await loadLeads();
     // realtime para os 2 usuários verem mudanças ao vivo (inscreve só 1x; boot pode rodar 2x)
-    if(!window.__rtSub){ window.__rtSub=true; sb.channel('leads-rt').on('postgres_changes',{event:'*',schema:'public',table:'leads'},()=>loadLeads()).subscribe(); }
+    if(!window.__rtSub){ window.__rtSub=true; let _rtT; const _rtReload=()=>{ clearTimeout(_rtT); _rtT=setTimeout(()=>loadLeads(),800); }; sb.channel('leads-rt').on('postgres_changes',{event:'*',schema:'public',table:'leads'},_rtReload).subscribe(); }
   }else{
     $('#auth').classList.remove('hidden');$('#app').classList.add('hidden');
   }
