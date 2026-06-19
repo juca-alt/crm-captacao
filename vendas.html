@@ -274,18 +274,20 @@ function seed(){
 }
 
 let S; // estado
-function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } }
+function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); }
 function salvar(){ localStorage.setItem(CHAVE, JSON.stringify(S)); }
 function resetDemo(){ if(confirm('Resetar todos os dados da demonstração?')){ localStorage.removeItem(CHAVE); carregar(); render(); toast('Demo resetada'); } }
 
 /* ═══════════════════ HELPERS ═══════════════════ */
 const $=s=>document.querySelector(s);
+// escape de saída: evita XSS armazenado (notas, recomendações etc. são re-renderizadas via innerHTML)
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function user(){ return S.users.find(u=>u.id===S.activeUser); }
 function isMaster(){ return user().papel.startsWith('Master'); }
 function meusContatos(){ return isMaster()? S.contatos : S.contatos.filter(c=>c.lp===S.activeUser); }
 function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(' ')[0] : id; }
-function iniciais(n){ return n.split(' ').map(p=>p[0]).slice(0,2).join('').toUpperCase(); }
-function brl(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
+function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function estrelasHtml(n){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="${i<=n?'':'off'}">★</span>`; return `<span class="estrelas">${h}</span>`; }
 function badgeEtapa(e){
   const m={'Novo':'b-cinza','TA':'b-azul','OI/FF':'b-amarelo','P/C':'b-roxo','C2':'b-azul','Revisita':'b-amarelo','Cliente':'b-verde'};
@@ -306,9 +308,9 @@ function renderTopo(){
   $('#avTop').textContent=iniciais(u.nome); $('#avTop').style.background=u.cor;
   $('#nomeTop').textContent=u.nome; $('#papelTop').textContent=u.papel;
   $('#listaPerfis').innerHTML = S.users.map(x=>`
-    <button class="perfil-item" onclick="trocarPerfil('${x.id}')">
-      <span class="avatar" style="background:${x.cor}">${iniciais(x.nome)}</span>
-      <span><span class="nm">${x.nome}</span><br><span class="pp">${x.papel}</span></span>
+    <button class="perfil-item" onclick="trocarPerfil('${esc(x.id)}')">
+      <span class="avatar" style="background:${esc(x.cor)}">${esc(iniciais(x.nome))}</span>
+      <span><span class="nm">${esc(x.nome)}</span><br><span class="pp">${esc(x.papel)}</span></span>
       ${x.id===S.activeUser?'<span class="check">✓</span>':''}
     </button>`).join('');
 }
@@ -354,7 +356,7 @@ function viewInicio(){
   const abordados=lista.filter(c=>c.taTentativas>0).length;
   const andamento=lista.length-novos-clientes;
   const ta=taStats(lista);
-  const eventos=lista.flatMap(c=>c.eventos.filter(e=>e.status==='Pendente').map(e=>({...e,contato:c.nome}))).sort((a,b)=>a.data.localeCompare(b.data));
+  const eventos=lista.flatMap(c=>c.eventos.filter(e=>e.status==='Pendente').map(e=>({...e,contato:c.nome}))).sort((a,b)=>(a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')));
 
   let porLP='';
   if(isMaster()){
@@ -362,8 +364,8 @@ function viewInicio(){
       ${S.users.map(u=>{
         const l=S.contatos.filter(c=>c.lp===u.id); const p=contagens(l);
         return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed var(--linha)">
-          <span class="avatar" style="background:${u.cor};width:26px;height:26px;font-size:10px">${iniciais(u.nome)}</span>
-          <b style="min-width:90px">${u.nome.split(' ')[0]}</b>
+          <span class="avatar" style="background:${esc(u.cor)};width:26px;height:26px;font-size:10px">${esc(iniciais(u.nome))}</span>
+          <b style="min-width:90px">${esc(u.nome.split(' ')[0])}</b>
           <span style="font-size:12px;color:var(--muted)">TA <b>${p['TA']}</b> · OI/FF <b>${p['OI/FF']}</b> · P/C <b>${p['P/C']}</b> · Clientes <b>${p['Cliente']}</b> · total ${l.length}</span>
         </div>`;
       }).join('')}
@@ -371,7 +373,7 @@ function viewInicio(){
   }
 
   $('#main').innerHTML=`
-    <h1 class="pg">Seja bem-vindo(a), ${user().nome}</h1>
+    <h1 class="pg">Seja bem-vindo(a), ${esc(user().nome)}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
     <div class="kpis">
       <div class="kpi"><div class="num">${novos}</div><div class="lbl">Novos</div></div>
@@ -398,7 +400,7 @@ function viewInicio(){
           <span class="badge b-verm">Declinado ${ta['Declinado']}</span>
         </div>
         <h3 style="font-size:13px;margin:16px 0 4px">Para acompanhar</h3>
-        ${eventos.length? eventos.map(e=>`<div class="evento"><span class="dt">${e.data.split('-').reverse().join('/')} ${e.hora}</span><span><b>${e.tipo}</b> · ${e.contato} <span class="badge b-amarelo">${e.status}</span></span></div>`).join('') : '<div class="vazio" style="padding:14px">Sem eventos pendentes.</div>'}
+        ${eventos.length? eventos.map(e=>`<div class="evento"><span class="dt">${esc(e.data.split('-').reverse().join('/'))} ${esc(e.hora)}</span><span><b>${esc(e.tipo)}</b> · ${esc(e.contato)} <span class="badge b-amarelo">${esc(e.status)}</span></span></div>`).join('') : '<div class="vazio" style="padding:14px">Sem eventos pendentes.</div>'}
       </div>
     </div>
     ${porLP}`;
@@ -416,29 +418,29 @@ function viewContatos(){
     <h1 class="pg">Contatos</h1>
     <div class="sub">Resultado (${lista.length}) — clique no contato pra abrir o perfil completo.</div>
     <div class="toolbar">
-      <input type="search" placeholder="Buscar por nome…" value="${FILTRO.busca}" oninput="FILTRO.busca=this.value;viewContatos()">
+      <input type="search" placeholder="Buscar por nome…" value="${esc(FILTRO.busca)}" oninput="FILTRO.busca=this.value;viewContatos()">
       <select onchange="FILTRO.etapa=this.value;viewContatos()">
         <option value="">Todas as etapas</option>
         ${ETAPAS.map(e=>`<option ${FILTRO.etapa===e?'selected':''}>${e}</option>`).join('')}
       </select>
       ${isMaster()? `<select onchange="FILTRO.lp=this.value;viewContatos()">
         <option value="">Todos os LPs</option>
-        ${S.users.map(u=>`<option value="${u.id}" ${FILTRO.lp===u.id?'selected':''}>${u.nome.split(' ')[0]}</option>`).join('')}
+        ${S.users.map(u=>`<option value="${esc(u.id)}" ${FILTRO.lp===u.id?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}
       </select>`:''}
     </div>
     <div class="card" style="padding:6px 10px">
       <table><thead><tr>
         <th>Nome</th><th>Classificação</th><th>Perfil</th><th>Etapa</th><th>TA</th><th>Origem</th>${isMaster()?'<th>LP</th>':''}
       </tr></thead><tbody>
-      ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${c.id}')">
-        <td><b>${c.nome}</b><br><span style="font-size:11.5px;color:var(--muted)">${c.telefone}</span></td>
+      ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
+        <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
         <td>${estrelasHtml(c.estrelas)}</td>
-        <td style="font-size:12px;color:var(--muted)">${c.sexo} · ${c.idade} anos<br>${c.profissao}</td>
+        <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)} anos<br>${esc(c.profissao)}</td>
         <td>${badgeEtapa(c.etapa)}</td>
-        <td style="font-size:12px">${c.taStatus}<br><span style="color:var(--muted)">${c.taTentativas} tent.</span></td>
-        <td style="font-size:12px">${c.origem}</td>
-        ${isMaster()? `<td><span class="badge b-cinza">${lpNome(c.lp)}</span></td>`:''}
-      </tr>`).join('') || '<tr><td colspan="7" class="vazio">Nenhum contato com esse filtro.</td></tr>'}
+        <td style="font-size:12px">${esc(c.taStatus)}<br><span style="color:var(--muted)">${esc(c.taTentativas)} tent.</span></td>
+        <td style="font-size:12px">${esc(c.origem)}</td>
+        ${isMaster()? `<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
+      </tr>`).join('') || `<tr><td colspan="${isMaster()?7:6}" class="vazio">Nenhum contato com esse filtro.</td></tr>`}
       </tbody></table>
     </div>`;
 }
@@ -458,8 +460,8 @@ function renderDrawer(){
   $('#drawer').innerHTML=`
     <div class="drawer-head">
       <button class="fechar" onclick="fecharDrawer()">✕</button>
-      <div class="nome">${c.nome}</div>
-      <div class="meta">${c.sexo} · ${c.idade} anos · ${c.profissao} · ${c.telefone} · Origem: ${c.origem}${isMaster()? ' · LP: '+lpNome(c.lp):''}</div>
+      <div class="nome">${esc(c.nome)}</div>
+      <div class="meta">${esc(c.sexo)} · ${esc(c.idade)} anos · ${esc(c.profissao)} · ${esc(c.telefone)} · Origem: ${esc(c.origem)}${isMaster()? ' · LP: '+esc(lpNome(c.lp)):''}</div>
       <div style="margin-top:7px">${estrelasHtml(c.estrelas)} ${badgeEtapa(c.etapa)}</div>
     </div>
     <div class="drawer-body">
@@ -496,7 +498,7 @@ function renderDrawer(){
 
       <div class="sec">
         <h3>Recomendações (${c.recs.length})</h3>
-        ${c.recs.map(r=>`<div class="check-row" style="justify-content:space-between"><span><b>${r.nome}</b> ${r.idade?('· '+r.idade+' anos'):''}<br><span style="font-size:11.5px;color:var(--muted)">${r.perfil||''} ${r.tel||''}</span></span></div>`).join('')}
+        ${c.recs.map(r=>`<div class="check-row" style="justify-content:space-between"><span><b>${esc(r.nome)}</b> ${r.idade?('· '+esc(r.idade)+' anos'):''}<br><span style="font-size:11.5px;color:var(--muted)">${esc(r.perfil||'')} ${esc(r.tel||'')}</span></span></div>`).join('')}
         <div class="linha-form" style="margin-top:10px">
           <input id="recNome" placeholder="Nome da recomendação*">
           <input id="recIdade" placeholder="Idade" style="max-width:80px">
@@ -511,27 +513,27 @@ function renderDrawer(){
         ${c.planos.length? `<div class="tab-variantes"><table>
           <thead><tr><th>Variante</th><th>Prêmio/mês</th><th>Status</th></tr></thead><tbody>
           ${c.planos.map(p=>`<tr>
-            <td><b>${p.nome}</b><br><span style="font-size:11px;color:var(--muted)">${p.base} · ${brl(p.capital)}</span></td>
+            <td><b>${esc(p.nome)}</b><br><span style="font-size:11px;color:var(--muted)">${esc(p.base)} · ${brl(p.capital)}</span></td>
             <td class="premio">${brl(p.premio)}</td>
-            <td><select class="status-sel" onchange="setPlanoStatus('${p.id}',this.value)">${PLANO_STATUS.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+            <td><select class="status-sel" onchange="setPlanoStatus('${esc(p.id)}',this.value)">${PLANO_STATUS.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
           </tr>`).join('')}
           </tbody></table></div>` : '<div class="vazio" style="padding:12px">Nenhuma simulação ainda. Na fase 2, o leque de variantes entra aqui direto.</div>'}
       </div>
 
       <div class="sec">
         <h3>Notas</h3>
-        <textarea class="notas" onblur="setNotas(this.value)">${c.notas||''}</textarea>
+        <textarea class="notas" onblur="setNotas(this.value)">${esc(c.notas||'')}</textarea>
         <div style="font-size:11px;color:var(--muted);margin-top:5px">Salva ao sair do campo — sem botão, sem modal.</div>
       </div>
 
     </div>`;
 }
-function mudarEtapa(e){ const c=ct(); if(c.etapa===e) return; const de=c.etapa; c.etapa=e; salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
-function setTA(v){ ct().taStatus=v; salvar(); toast('Status do TA atualizado',true); }
-function tent(d){ const c=ct(); c.taTentativas=Math.max(0,c.taTentativas+d); salvar(); renderDrawer(); }
-function toggleIC(b){ const c=ct(); c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
-function setNotas(v){ ct().notas=v; salvar(); toast('Nota salva',true); }
-function setPlanoStatus(pid,v){ const p=ct().planos.find(x=>x.id===pid); p.status=v; salvar(); toast(`Plano: ${v}`,true); }
+function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
+function setTA(v){ const c=ct(); if(!c) return; c.taStatus=v; salvar(); toast('Status do TA atualizado',true); }
+function tent(d){ const c=ct(); if(!c) return; c.taTentativas=Math.max(0,c.taTentativas+d); salvar(); renderDrawer(); }
+function toggleIC(b){ const c=ct(); if(!c) return; c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
+function setNotas(v){ const c=ct(); if(!c) return; c.notas=v; salvar(); toast('Nota salva',true); }
+function setPlanoStatus(pid,v){ const c=ct(); if(!c) return; const p=c.planos.find(x=>x.id===pid); if(!p) return; p.status=v; salvar(); toast(`Plano: ${v}`,true); }
 function addRec(){
   const nome=$('#recNome').value.trim(), idade=$('#recIdade').value.trim(), perfil=$('#recPerfil').value.trim();
   const erro=$('#recErro');
@@ -554,27 +556,27 @@ function viewPlanos(){
       const menor=Math.min(...c.planos.map(p=>p.premio));
       return `<div class="card plano-grupo">
         <div class="head-g">
-          <span class="nm">${c.nome}</span> ${badgeEtapa(c.etapa)}
-          ${c.planos[0].parceiro? `<span class="badge b-roxo">Parceiro: ${c.planos[0].parceiro}</span>`:''}
-          <span style="font-size:11.5px;color:var(--muted)">· ${c.planos.length} variantes · base ${c.planos[0].base}</span>
+          <span class="nm">${esc(c.nome)}</span> ${badgeEtapa(c.etapa)}
+          ${c.planos[0].parceiro? `<span class="badge b-roxo">Parceiro: ${esc(c.planos[0].parceiro)}</span>`:''}
+          <span style="font-size:11.5px;color:var(--muted)">· ${c.planos.length} variantes · base ${esc(c.planos[0].base)}</span>
         </div>
         <div class="tab-variantes"><table>
           <thead><tr><th>Variante</th><th>Capital base</th><th>Coberturas</th><th>Prêmio/mês</th><th>≈ por dia</th><th>Status</th></tr></thead>
           <tbody>
           ${c.planos.map(p=>`<tr>
-            <td><b>${p.nome}</b></td>
+            <td><b>${esc(p.nome)}</b></td>
             <td>${brl(p.capital)}</td>
-            <td class="cob-mini">${p.cobs}</td>
+            <td class="cob-mini">${esc(p.cobs)}</td>
             <td><span class="premio ${p.premio===menor?'melhor':''}" style="padding:3px 7px">${brl(p.premio)}</span></td>
             <td style="color:var(--muted)">${brl(p.premio/30)}</td>
-            <td><select class="status-sel" onchange="setPlanoStatusG('${c.id}','${p.id}',this.value)">${PLANO_STATUS.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+            <td><select class="status-sel" onchange="setPlanoStatusG('${esc(c.id)}','${esc(p.id)}',this.value)">${PLANO_STATUS.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
           </tr>`).join('')}
           </tbody></table></div>
         <div style="font-size:11px;color:var(--muted);margin-top:9px">Menor prêmio destacado em verde. Fase 2: anexar o PDF "Solução de Proteção Personalizada" de cada variante + comparador contra proposta concorrente (caso Azos/MAG).</div>
       </div>`;
     }).join('') : '<div class="card vazio">Nenhum plano na carteira deste perfil. (Troque pro perfil Master pra ver o caso Artur/CINQ.)</div>'}`;
 }
-function setPlanoStatusG(cid,pid,v){ const p=S.contatos.find(c=>c.id===cid).planos.find(x=>x.id===pid); p.status=v; salvar(); toast(`Plano: ${v}`,true); }
+function setPlanoStatusG(cid,pid,v){ const c=S.contatos.find(c=>c.id===cid); if(!c) return; const p=c.planos.find(x=>x.id===pid); if(!p) return; p.status=v; salvar(); toast(`Plano: ${v}`,true); }
 
 /* ═══════════════════ VIEW: SUBSTITUIÇÃO ═══════════════════ */
 function viewSubst(){
@@ -588,7 +590,7 @@ function viewSubst(){
         <b>uma única instância</b> — os dados moram no localStorage daquele arquivo, então este CRM <i>não duplica</i> o módulo;
         ele vira uma aba de verdade na fase 2 (Supabase), quando os dados saírem do navegador.
       </p>
-      <button class="btn btn-p" onclick="navigator.clipboard.writeText('controle-substituicao.html').then(()=>toast('Nome do arquivo copiado',true))">Copiar nome do arquivo</button>
+      <button class="btn btn-p" onclick="navigator.clipboard.writeText('controle-substituicao.html').then(()=>toast('Nome do arquivo copiado',true),()=>toast('Copie manualmente: controle-substituicao.html'))">Copiar nome do arquivo</button>
       <span style="font-size:12px;color:var(--muted);margin-left:10px">Abra pelo seu atalho/aba de sempre no Chrome.</span>
     </div>`;
 }
