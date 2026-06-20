@@ -370,16 +370,11 @@ tr.row.sel{background:#eff6ff}
 .motivo{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;margin-left:6px;background:#ffedd5;color:#9a3412}
 .bar-nums .ok{color:var(--green);font-weight:800}
 /* ===== Funil novo (rail + lista/kanban) — Bloco 1 ===== */
-.fnwrap{display:flex;gap:16px;align-items:flex-start}
-.fnrail{display:flex;flex-direction:column;gap:6px;width:210px;flex-shrink:0}
-.fnstage{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;text-align:left;width:100%;transition:background .12s,border-color .12s}
-.fnstage:hover{background:#f8fafc}
-.fnstage.on{border-color:var(--fc);box-shadow:inset 3px 0 0 var(--fc)}
-.fnstage .fndot{width:9px;height:9px;border-radius:50%;background:var(--fc);flex-shrink:0}
-.fnstage .fnlbl{font-weight:600;font-size:13.5px;flex:1}
-.fnstage .fnbadge{font-size:12px;font-weight:800;background:#eef2f7;color:#334155;border-radius:20px;padding:1px 9px;min-width:24px;text-align:center}
-.fnstage.on .fnbadge{background:var(--fc);color:#fff}
-.fnpanel{flex:1;min-width:0}
+.fnpanel{min-width:0}
+.etstage{display:flex;align-items:center;gap:8px}
+.etstage .etdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.etstage .navbadge{font-size:11px;font-weight:800;background:rgba(255,255,255,.14);color:#fff;border-radius:20px;padding:0 7px;min-width:20px;text-align:center}
+.etstage.active .navbadge{background:rgba(255,255,255,.30)}
 .fntoolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
 .fntitle{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px}
 .fntitle .fndot{width:10px;height:10px;border-radius:50%;background:var(--fc)}
@@ -390,7 +385,7 @@ tr.row.sel{background:#eff6ff}
 .fnpanel .kc-sub{font-size:11.5px;color:var(--muted);margin-top:4px}
 .fnpanel .kc-tel{font-size:11.5px;margin-top:3px}
 .fnpanel .kc-due{margin-top:5px}
-@media(max-width:760px){.fnwrap{flex-direction:column}.fnrail{width:100%;flex-direction:row;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.fnstage{min-width:140px}}
+@media(max-width:760px){.fntoolbar{gap:8px}}
 </style>
 </head>
 <body>
@@ -436,15 +431,16 @@ tr.row.sel{background:#eff6ff}
       <button class="nav-item step" data-view="inbox"><span class="stepn">3</span><span class="ic">🔗</span> Inbox LinkedIn</button>
     </div>
     <button class="nav-item" data-view="funilcap"><span class="ic">🎯</span> Funil Captação</button>
-    <button class="nav-item" data-view="funilrail"><span class="ic">🛤</span> Funil (novo)</button>
+    <button class="nav-sec" id="et-toggle" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px"><span class="ic" style="margin-right:0">📊</span>Visão Etapas <span id="et-caret" style="margin-left:auto">▾</span></button>
+    <div id="et-group"></div>
     <button class="nav-item" data-view="contatos"><span class="ic">📇</span> Contatos</button>
 
-    <button class="nav-sec vendas-nav" id="vd-toggle" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px"><span class="ic" style="margin-right:0">💼</span>Vendas · Clientes <span id="vd-caret" style="margin-left:auto">▾</span></button>
+    <button class="nav-sec vendas-nav" id="vd-toggle" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px"><span class="ic" style="margin-right:0">🛡️</span>CRM Life Planner <span id="vd-caret" style="margin-left:auto">▾</span></button>
     <div id="vd-group" class="vendas-nav">
       <button class="nav-item" data-view="vhoje"><span class="ic">☀</span> Dia de Vendas</button>
       <button class="nav-item" data-view="vclientes"><span class="ic">📇</span> Clientes</button>
       <button class="nav-item" data-view="vta"><span class="ic">📞</span> Sessão TA</button>
-      <button class="nav-item" data-view="vatrasos"><span class="ic">⏰</span> Atrasos & Cobrança</button>
+      <button class="nav-item" data-view="vatrasos"><span class="ic">⏰</span> Lista de Atraso</button>
     </div>
 
     <div class="nav-sec" id="sec-gestao">Gestão</div>
@@ -801,6 +797,7 @@ function render(){
   if(vIsView()&&IS_VICTOR) VIEW='hoje'; // módulo Vendas não é do assistente de captação
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===VIEW));
+  refreshEtapasNav(); // sub-itens do grupo "Visão Etapas" (com contagem) + estado ativo
   stopMiningTick(); // pausa o cronômetro ao sair da Mineração; religa abaixo se for o caso
   const banner=actBannerHTML();
   if(VIEW==='dup'){ $('#view-title').textContent='Duplicatas'; const nd=$('#nav-dup'); if(nd)nd.classList.add('active'); c.innerHTML=banner+dupHTML(); wireDup(); wireBanner(); return; }
@@ -815,7 +812,7 @@ function render(){
   if(VIEW==='vhoje'){ $('#view-title').textContent='Dia de Vendas'; c.innerHTML=banner+vhojeHTML(); vhojeWire(); wireBanner(); return; }
   if(VIEW==='vclientes'){ $('#view-title').textContent='Clientes · Vendas'; c.innerHTML=banner+vclientesHTML(); vclientesWire(); wireBanner(); return; }
   if(VIEW==='vta'){ $('#view-title').textContent='Sessão de TA'; c.innerHTML=banner+vtaHTML(); vtaWire(); wireBanner(); return; }
-  if(VIEW==='vatrasos'){ $('#view-title').textContent='Atrasos & Cobrança'; c.innerHTML=banner+vatrasosHTML(); vatrasosWire(); wireBanner(); return; }
+  if(VIEW==='vatrasos'){ $('#view-title').textContent='Lista de Atraso'; c.innerHTML=banner+vatrasosHTML(); vatrasosWire(); wireBanner(); return; }
   if(VIEW==='funilcap'){
     $('#view-title').textContent='Funil Captação';
     if(CAP_MODE==='lista'){
@@ -827,7 +824,7 @@ function render(){
   }
   if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML() + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHTML(); wireConfig(); wireBanner(); return; }
-  if(VIEW==='funilrail'){ $('#view-title').textContent='Funil'; c.innerHTML=banner+funilRailHTML(); wireFunilRail(); wireBanner(); return; }
+  if(VIEW==='etapas'){ $('#view-title').textContent='Etapa · '+FN_STAGE; c.innerHTML=banner+etapasViewHTML(); wireEtapasView(); wireBanner(); return; }
   // ===== PIPE LinkedIn (default) =====
   $('#view-title').textContent='Pipe LinkedIn';
   if(FUNIL_MODE==='lista'){
@@ -1741,13 +1738,7 @@ let FN_STAGE='SitPlan', FN_MODE='lista'; // estado do funil novo
 function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)); } // escopo/permissão, sem filtros de texto de outras telas
 function fnCounts(){ const c={}; FN_ETAPAS.forEach(e=>c[e]=0); fnBase().forEach(l=>{const s=fnStage(l); if(s&&c[s]!=null)c[s]++;}); return c; }
 function fnLeads(stage){ return fnBase().filter(l=>fnStage(l)===stage); }
-function fnRailHTML(){
-  const counts=fnCounts();
-  return `<div class="fnrail">`+FN_ETAPAS.map((e,i)=>`
-    <button class="fnstage ${e===FN_STAGE?'on':''}" data-fnstage="${esc(e)}" style="--fc:${FN_COLOR[e]}">
-      <span class="fndot"></span><span class="fnlbl">${esc(e)}</span><span class="fnbadge">${counts[e]}</span>
-    </button>`).join('')+`</div>`;
-}
+// o "rail" das etapas agora vive no menu lateral — ver refreshEtapasNav()
 // lista enxuta: Nome · cargo·empresa · telefone · status · próxima ação
 function fnListHTML(leads){
   if(!leads.length) return `<div class="fnempty">Nenhum lead em <b>${esc(FN_STAGE)}</b>.</div>`;
@@ -1782,25 +1773,28 @@ function fnKanbanHTML(leads){
   }).join('');
   return `<div class="funil">${board}</div>`;
 }
-function funilRailHTML(){
+// conteúdo da etapa selecionada — só os status daquela etapa, em Lista ou Kanban (mesma visão do funil captação)
+function etapasViewHTML(){
   const leads=fnLeads(FN_STAGE);
   const right=FN_MODE==='kanban'?fnKanbanHTML(leads):fnListHTML(leads);
-  return `<p class="hint" style="margin:-2px 0 12px;color:var(--muted)">Funil pós-LinkedIn — clique numa etapa à esquerda pra ver os leads. <b>Lista</b> ou <b>Kanban</b> (agrupa por status da etapa). Clique no lead pra abrir a ficha.</p>
-  <div class="fnwrap">
-    ${fnRailHTML()}
-    <div class="fnpanel">
-      <div class="fntoolbar">
-        <div class="fntitle"><span class="fndot" style="--fc:${FN_COLOR[FN_STAGE]}"></span> ${esc(FN_STAGE)} <span class="muted" style="font-weight:500">· ${leads.length} lead(s)</span></div>
-        <div class="seg"><button class="${FN_MODE==='lista'?'on':''}" data-fnmode="lista">☰ Lista</button><button class="${FN_MODE==='kanban'?'on':''}" data-fnmode="kanban">▦ Kanban</button></div>
-      </div>
-      ${right}
+  return `<div class="fnpanel">
+    <div class="fntoolbar">
+      <div class="fntitle"><span class="fndot" style="--fc:${FN_COLOR[FN_STAGE]}"></span> ${esc(FN_STAGE)} <span class="muted" style="font-weight:500">· ${leads.length} lead(s)</span></div>
+      <div class="seg"><button class="${FN_MODE==='lista'?'on':''}" data-fnmode="lista">☰ Lista</button><button class="${FN_MODE==='kanban'?'on':''}" data-fnmode="kanban">▦ Kanban</button></div>
     </div>
+    ${right}
   </div>`;
 }
-function wireFunilRail(){
-  document.querySelectorAll('[data-fnstage]').forEach(b=>b.onclick=()=>{FN_STAGE=b.dataset.fnstage;render();});
+function wireEtapasView(){
   document.querySelectorAll('[data-fnmode]').forEach(b=>b.onclick=()=>{FN_MODE=b.dataset.fnmode;render();});
-  document.querySelectorAll('.fnpanel [data-open]').forEach(r=>r.onclick=e=>{ if(e.target.closest('a'))return; openDrawer(r.dataset.open); });
+  document.querySelectorAll('#content [data-open]').forEach(r=>r.onclick=e=>{ if(e.target.closest('a'))return; openDrawer(r.dataset.open); });
+}
+// preenche o grupo "Visão Etapas" do menu lateral com as 8 etapas + contagem (chamado a cada render)
+function refreshEtapasNav(){
+  const g=$('#et-group'); if(!g)return;
+  const c=fnCounts();
+  g.innerHTML=FN_ETAPAS.map(e=>`<button class="nav-item sub etstage ${VIEW==='etapas'&&e===FN_STAGE?'active':''}" data-fnstage="${esc(e)}"><span class="etdot" style="background:${FN_COLOR[e]}"></span><span style="flex:1">${esc(e)}</span><span class="navbadge">${c[e]}</span></button>`).join('');
+  g.querySelectorAll('[data-fnstage]').forEach(b=>b.onclick=()=>{FN_STAGE=b.dataset.fnstage;VIEW='etapas';$('#sidebar').classList.remove('open');render();});
 }
 
 // status dropdown (inline)
@@ -2564,6 +2558,7 @@ document.addEventListener('keydown',e=>{
 document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;SEL.clear();$('#sidebar').classList.remove('open');render();});
 { const capT=$('#cap-toggle'); if(capT)capT.onclick=()=>{ const g=$('#cap-group'),c=$('#cap-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
 { const vdT=$('#vd-toggle'); if(vdT)vdT.onclick=()=>{ const g=$('#vd-group'),c=$('#vd-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
+{ const etT=$('#et-toggle'); if(etT)etT.onclick=()=>{ const g=$('#et-group'),c=$('#et-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
 $('#profile-chip').onclick=()=>{VIEW=isAdmin()?'perfil':'config';$('#sidebar').classList.remove('open');render();};
 $('#top-novo').onclick=()=>openNovo(false);
 $('#nav-dup').onclick=()=>{VIEW='dup';$('#sidebar').classList.remove('open');render();};
