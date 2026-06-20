@@ -568,6 +568,10 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 .fnpanel .kc-sub{font-size:11.5px;color:var(--muted);margin-top:4px}
 .fnpanel .kc-tel{font-size:11.5px;margin-top:3px}
 .fnpanel .kc-due{margin-top:5px}
+.cfgtabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.cfgtab{background:none;border:none;padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.cfgtab:hover{color:var(--txt)}
+.cfgtab.on{color:var(--primary);border-bottom-color:var(--primary)}
 </style>
 </head>
 <body>
@@ -618,11 +622,9 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 
     <div class="nav-sec" id="sec-gestao">Gestão</div>
     <button class="nav-item perm-relatorio" data-view="relatorio"><span class="ic">📊</span> Relatório</button>
-    <button class="nav-item admin-only" data-view="usuarios"><span class="ic">👥</span> Usuários</button>
     <button class="nav-item admin-only perm-duplicatas" id="nav-dup"><span class="ic">🔎</span> Duplicatas</button>
 
     <div class="nav-spacer"></div>
-    <button class="nav-item perfil-admin" data-view="perfil"><span class="ic">👤</span> Perfil</button>
     <button class="nav-item" data-view="config"><span class="ic">⚙</span> Configurações</button>
     <button class="nav-item" id="nav-update"><span class="ic">⟳</span> Atualizar versão</button>
     <div class="nav-foot">Versão <span id="ver"></span> · <span id="who-foot"></span><br/><a id="logout">Sair</a></div>
@@ -971,11 +973,11 @@ function render(){
   // views aposentadas → caem no Funil LinkedIn
   if(VIEW==='linkedin'||VIEW==='lista') VIEW='funil';
   // trava de acesso por permissão
-  if(VIEW==='usuarios'&&!uiAdmin()) VIEW='hoje';
+  if(VIEW==='usuarios'){ CONFIG_TAB=uiAdmin()?'usuarios':'conta'; VIEW='config'; } // Usuários agora é aba da Configurações
+  if(VIEW==='perfil'){ CONFIG_TAB=uiAdmin()?'perfil':'conta'; VIEW='config'; }      // Perfil agora é aba da Configurações
   if(VIEW==='dup'&&!(uiAdmin()&&can('pode_duplicatas'))) VIEW='hoje';
   if(VIEW==='relatorio'&&!can('pode_relatorio')) VIEW='hoje';
   if(VIEW==='mineracao'&&!can('pode_minerar')) VIEW='hoje';
-  if(VIEW==='perfil'&&!uiAdmin()) VIEW='config'; // Victor não tem Perfil; cai em Configurações
   if(VIEW==='hoje') VIEW='visao'; // Meu Dia foi incorporado à Visão Geral
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===VIEW));
@@ -1002,7 +1004,7 @@ function render(){
     wireFilters(); wireCapToggle(); wireFunil(); wireStatusButtons(); wireBanner(); return;
   }
   if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML() + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
-  if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHTML(); wireConfig(); wireBanner(); return; }
+  if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHubHTML(); wireConfigHub(); wireBanner(); return; }
   if(VIEW==='etapas'){ $('#view-title').textContent='Etapa · '+FN_STAGE; c.innerHTML=banner+etapasViewHTML(); wireEtapasView(); wireBanner(); return; }
   // ===== PIPE LinkedIn (default) =====
   $('#view-title').textContent='Pipe LinkedIn';
@@ -1239,6 +1241,26 @@ function tplRowHTML(t){
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px"><input class="tpl-nome" value="${esc(t.nome||'')}" placeholder="Nome do modelo" style="flex:1;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px;font-weight:600"><button class="btn ghost tpl-del" title="Remover">🗑</button></div>
     <textarea class="tpl-texto" rows="3" placeholder="Texto da mensagem… use {{primeiro_nome}} e {{recomendante}}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px">${esc(t.texto||'')}</textarea>
   </div>`;
+}
+// ===== Configurações vira hub com abas: Conta · Usuários · Perfil (Usuários/Perfil só admin) =====
+let CONFIG_TAB='conta';
+function configHubHTML(){
+  const adm=uiAdmin();
+  if(!adm && (CONFIG_TAB==='usuarios'||CONFIG_TAB==='perfil')) CONFIG_TAB='conta';
+  const tabs=[['conta','⚙ Conta']];
+  if(adm){ tabs.push(['usuarios','👥 Usuários']); tabs.push(['perfil','👤 Perfil']); }
+  const bar=`<div class="cfgtabs">${tabs.map(([k,l])=>`<button class="cfgtab ${CONFIG_TAB===k?'on':''}" data-cfgtab="${k}">${l}</button>`).join('')}</div>`;
+  let body;
+  if(CONFIG_TAB==='usuarios'&&adm) body=usuariosHTML();
+  else if(CONFIG_TAB==='perfil'&&adm) body=perfilHTML();
+  else body=configHTML();
+  return bar+`<div class="cfgbody">${body}</div>`;
+}
+function wireConfigHub(){
+  document.querySelectorAll('[data-cfgtab]').forEach(b=>b.onclick=()=>{ CONFIG_TAB=b.dataset.cfgtab; render(); });
+  if(CONFIG_TAB==='usuarios') wireUsuarios();
+  else if(CONFIG_TAB==='perfil') wirePerfil();
+  else wireConfig();
 }
 function configHTML(){
   return `<div class="profcard" style="display:block;max-width:620px">
