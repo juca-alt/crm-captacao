@@ -574,6 +574,16 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 .cfgtab.on{color:var(--primary);border-bottom-color:var(--primary)}
 .filters.periodo{align-items:center;gap:6px}
 .filters.periodo .per-lab{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
+.fce-row{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--card)}
+.fce-head{display:flex;align-items:center;gap:8px}
+.fce-head input[type=color]{width:34px;height:32px;border:1px solid var(--line);border-radius:8px;padding:2px;cursor:pointer;background:none}
+.fce-status{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:8px}
+.fce-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:3px 6px 3px 10px;font-size:12px}
+.fce-chip button{border:none;background:none;cursor:pointer;color:var(--muted);font-size:14px;line-height:1}
+.fce-chip button:hover{color:var(--red)}
+.fce-add{display:inline-flex;gap:4px;align-items:center}
+.fce-add input{padding:5px 9px;border:1px solid var(--line);border-radius:8px;font-size:12px}
+.btn-mini{padding:5px 9px;font-size:12px}
 </style>
 </head>
 <body>
@@ -917,6 +927,7 @@ async function loadSettings(){
       if(r.chave==='meta_minerados_dia') SETTINGS.meta_minerados_dia=+r.valor||SETTINGS.meta_minerados_dia;
       if(r.chave==='meta_convites_dia')  SETTINGS.meta_convites_dia =+r.valor||SETTINGS.meta_convites_dia;
       if(r.chave==='msg_templates'){ try{ const a=JSON.parse(r.valor||'[]'); if(Array.isArray(a)&&a.length) MSG_TEMPLATES=a; }catch(_){} }
+      if(r.chave==='funil_cfg'){ try{ const c=JSON.parse(r.valor||'{}'); if(c&&Array.isArray(c.etapas)&&c.etapas.length) FN_CFG=c; }catch(_){} }
     }
   }catch(e){/* tabela ainda não criada → usa defaults */}
 }
@@ -1270,19 +1281,75 @@ function configHubHTML(){
   const adm=uiAdmin();
   if(!adm && (CONFIG_TAB==='usuarios'||CONFIG_TAB==='perfil')) CONFIG_TAB='conta';
   const tabs=[['conta','⚙ Conta']];
-  if(adm){ tabs.push(['usuarios','👥 Usuários']); tabs.push(['perfil','👤 Perfil']); }
+  if(adm){ tabs.push(['funil','🛤 Funil']); tabs.push(['usuarios','👥 Usuários']); tabs.push(['perfil','👤 Perfil']); }
   const bar=`<div class="cfgtabs">${tabs.map(([k,l])=>`<button class="cfgtab ${CONFIG_TAB===k?'on':''}" data-cfgtab="${k}">${l}</button>`).join('')}</div>`;
   let body;
-  if(CONFIG_TAB==='usuarios'&&adm) body=usuariosHTML();
+  if(CONFIG_TAB==='funil'&&adm) body=funilCfgHTML();
+  else if(CONFIG_TAB==='usuarios'&&adm) body=usuariosHTML();
   else if(CONFIG_TAB==='perfil'&&adm) body=perfilHTML();
   else body=configHTML();
   return bar+`<div class="cfgbody">${body}</div>`;
 }
 function wireConfigHub(){
   document.querySelectorAll('[data-cfgtab]').forEach(b=>b.onclick=()=>{ CONFIG_TAB=b.dataset.cfgtab; render(); });
-  if(CONFIG_TAB==='usuarios') wireUsuarios();
+  if(CONFIG_TAB==='funil') wireFunilCfg();
+  else if(CONFIG_TAB==='usuarios') wireUsuarios();
   else if(CONFIG_TAB==='perfil') wirePerfil();
   else wireConfig();
+}
+// ===== Editor do Funil (etapas + status) — salva em app_settings 'funil_cfg' =====
+let FN_DRAFT=null;
+function fnEnsureDraft(){ if(!FN_DRAFT) FN_DRAFT=JSON.parse(JSON.stringify(FN_CFG)); }
+function funilCfgHTML(){
+  fnEnsureDraft();
+  const rows=FN_DRAFT.etapas.map((e,i)=>`
+    <div class="fce-row">
+      <div class="fce-head">
+        <input type="color" value="${esc(e.color||'#64748b')}" data-fcecolor="${i}" title="cor da etapa">
+        <input class="fsel" value="${esc(e.key)}" data-fcelabel="${i}" style="flex:1;font-weight:700;min-width:120px">
+        <button class="btn ghost btn-mini" data-fceup="${i}" ${i===0?'disabled':''} title="subir">↑</button>
+        <button class="btn ghost btn-mini" data-fcedown="${i}" ${i===FN_DRAFT.etapas.length-1?'disabled':''} title="descer">↓</button>
+        <button class="btn ghost btn-mini" data-fcedel="${i}" title="excluir etapa">🗑</button>
+      </div>
+      <div class="fce-status">
+        ${(e.status||[]).map((s,j)=>`<span class="fce-chip">${esc(s)} <button data-fcesdel="${i}.${j}" title="remover status">×</button></span>`).join('')||'<span class="muted" style="font-size:12px">sem status — nenhum lead cai aqui automaticamente</span>'}
+        <span class="fce-add"><input placeholder="+ status" data-fcesinput="${i}" style="width:140px"><button class="btn ghost btn-mini" data-fcesadd="${i}">add</button></span>
+      </div>
+    </div>`).join('');
+  return `<div class="profcard" style="display:block;max-width:780px">
+    <div style="font-weight:600;margin-bottom:4px">🛤 Etapas & Status do Funil (Visão Etapas)</div>
+    <p class="hint" style="margin-bottom:12px">Crie, edite, reordene ou exclua etapas e seus status. Um lead aparece na etapa cujo <b>status</b> ele tem. <b>Afeta só a Visão Etapas</b> — o funil de captação e o resto do app não mudam. Salva pra todos (Supabase), sem mexer no banco.</p>
+    ${rows}
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn ghost" id="fce-addstage">＋ Nova etapa</button>
+      <button class="btn primary" id="fce-save">Salvar funil</button>
+      <button class="btn ghost" id="fce-reset">Descartar mudanças</button>
+      <span id="fce-msg" style="font-size:13px"></span>
+    </div>
+  </div>`;
+}
+function wireFunilCfg(){
+  fnEnsureDraft();
+  document.querySelectorAll('[data-fcecolor]').forEach(el=>el.onchange=()=>{ FN_DRAFT.etapas[+el.dataset.fcecolor].color=el.value; });
+  document.querySelectorAll('[data-fcelabel]').forEach(el=>el.onchange=()=>{ const v=el.value.trim(); if(v){FN_DRAFT.etapas[+el.dataset.fcelabel].key=v; render();} });
+  document.querySelectorAll('[data-fceup]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.fceup,a=FN_DRAFT.etapas; if(i>0){[a[i-1],a[i]]=[a[i],a[i-1]];render();} });
+  document.querySelectorAll('[data-fcedown]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.fcedown,a=FN_DRAFT.etapas; if(i<a.length-1){[a[i+1],a[i]]=[a[i],a[i+1]];render();} });
+  document.querySelectorAll('[data-fcedel]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.fcedel; if(confirm(`Excluir a etapa "${FN_DRAFT.etapas[i].key}"? Os leads não somem — só deixam de aparecer nessa etapa da Visão Etapas.`)){FN_DRAFT.etapas.splice(i,1);render();} });
+  document.querySelectorAll('[data-fcesdel]').forEach(b=>b.onclick=()=>{ const [i,j]=b.dataset.fcesdel.split('.').map(Number); FN_DRAFT.etapas[i].status.splice(j,1); render(); });
+  document.querySelectorAll('[data-fcesadd]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.fcesadd, inp=document.querySelector(`[data-fcesinput="${i}"]`), v=(inp&&inp.value||'').trim(); if(v){ FN_DRAFT.etapas[i].status=FN_DRAFT.etapas[i].status||[]; if(!FN_DRAFT.etapas[i].status.includes(v)) FN_DRAFT.etapas[i].status.push(v); render(); } });
+  const add=$('#fce-addstage'); if(add)add.onclick=()=>{ FN_DRAFT.etapas.push({key:'Nova etapa',color:'#64748b',status:[]}); render(); };
+  const reset=$('#fce-reset'); if(reset)reset.onclick=()=>{ FN_DRAFT=JSON.parse(JSON.stringify(FN_CFG)); render(); };
+  const save=$('#fce-save'); if(save)save.onclick=async()=>{
+    const m=$('#fce-msg');
+    const keys=FN_DRAFT.etapas.map(e=>(e.key||'').trim());
+    if(keys.some(k=>!k)){ m.style.color='var(--red)'; m.textContent='Toda etapa precisa de um nome.'; return; }
+    if(new Set(keys).size!==keys.length){ m.style.color='var(--red)'; m.textContent='Nomes de etapa precisam ser únicos.'; return; }
+    FN_CFG=JSON.parse(JSON.stringify(FN_DRAFT));
+    if(!fnEtapas().includes(FN_STAGE)) FN_STAGE=fnEtapas()[0]||'';
+    m.style.color='var(--muted)'; m.textContent='Salvando…';
+    const ok=await saveSetting('funil_cfg',JSON.stringify(FN_CFG));
+    m.style.color=ok?'var(--green)':'var(--red)'; m.textContent=ok?'Salvo ✓ — vale pra todos os usuários':'Erro ao salvar';
+  };
 }
 function configHTML(){
   return `<div class="profcard" style="display:block;max-width:620px">
@@ -2121,22 +2188,26 @@ function capToggleHTML(){
 function wireCapToggle(){ document.querySelectorAll('[data-capmode]').forEach(b=>b.onclick=()=>{CAP_MODE=b.dataset.capmode;SEL.clear();render();}); }
 
 // ===== VISÃO ETAPAS — funil novo (8 etapas) como lente sobre os dados; não altera ETAPAS/STATUS globais =====
-const FN_ETAPAS = ['SitPlan','TA','OT','FIP 1','FIP 2','Pré-TS','TS1','TS2'];
-const FN_COLOR = {'SitPlan':'#a855f7','TA':'#8b5cf6','OT':'#16a34a','FIP 1':'#0d9488','FIP 2':'#0e7490','Pré-TS':'#0891b2','TS1':'#10b981','TS2':'#047857'};
-const FN_STATUS = {'SitPlan':STATUS_BY_ETAPA.SitPlan,'TA':STATUS_BY_ETAPA.TA,'OT':STATUS_BY_ETAPA.OT,'FIP 1':STATUS_BY_ETAPA.FIP,'FIP 2':[],'Pré-TS':['Onboarding'],'TS1':[],'TS2':['Convertido']};
-function fnStage(l){
-  switch(l.etapa){
-    case 'SitPlan': return 'SitPlan';
-    case 'TA': return 'TA';
-    case 'OT': return 'OT';
-    case 'FIP': return 'FIP 1';
-    case 'Fechamento': return l.status==='Convertido' ? 'TS2' : 'Pré-TS';
-    default: return null;
-  }
-}
+// config do funil novo — EDITÁVEL em Configurações → Funil (persiste em app_settings 'funil_cfg'; afeta só a Visão Etapas)
+const FN_CFG_DEFAULT = { etapas: [
+  {key:'SitPlan', color:'#a855f7', status:[...STATUS_BY_ETAPA.SitPlan]},
+  {key:'TA',      color:'#8b5cf6', status:[...STATUS_BY_ETAPA.TA]},
+  {key:'OT',      color:'#16a34a', status:[...STATUS_BY_ETAPA.OT]},
+  {key:'FIP 1',   color:'#0d9488', status:[...STATUS_BY_ETAPA.FIP]},
+  {key:'FIP 2',   color:'#0e7490', status:[]},
+  {key:'Pré-TS',  color:'#0891b2', status:['Onboarding']},
+  {key:'TS1',     color:'#10b981', status:[]},
+  {key:'TS2',     color:'#047857', status:['Convertido']}
+]};
+let FN_CFG = JSON.parse(JSON.stringify(FN_CFG_DEFAULT));
+function fnEtapas(){ return FN_CFG.etapas.map(e=>e.key); }
+function fnColor(k){ const e=FN_CFG.etapas.find(x=>x.key===k); return e?e.color:'#64748b'; }
+function fnStatusOf(k){ const e=FN_CFG.etapas.find(x=>x.key===k); return e?(e.status||[]):[]; }
+// lead aparece na etapa cujo STATUS ele tem → editar status no editor re-agrupa os leads na hora
+function fnStage(l){ const e=FN_CFG.etapas.find(x=>(x.status||[]).includes(l.status)); return e?e.key:null; }
 let FN_STAGE='SitPlan', FN_MODE='lista';
 function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)&&periodMatch(l.criado_em,F_PERIODO)); }
-function fnCounts(){ const c={}; FN_ETAPAS.forEach(e=>c[e]=0); fnBase().forEach(l=>{const s=fnStage(l); if(s&&c[s]!=null)c[s]++;}); return c; }
+function fnCounts(){ const c={}; fnEtapas().forEach(e=>c[e]=0); fnBase().forEach(l=>{const s=fnStage(l); if(s&&c[s]!=null)c[s]++;}); return c; }
 function fnLeads(stage){ return fnBase().filter(l=>fnStage(l)===stage); }
 function fnListHTML(leads){
   if(!leads.length) return `<div class="fnempty">Nenhum lead em <b>${esc(FN_STAGE)}</b>.</div>`;
@@ -2159,7 +2230,7 @@ function fnCard(l){
   </div>`;
 }
 function fnKanbanHTML(leads){
-  const native=FN_STATUS[FN_STAGE]||[];
+  const native=fnStatusOf(FN_STAGE);
   const present=[...new Set(leads.map(l=>l.status||'—'))];
   const cols=native.slice();
   present.forEach(s=>{ if(!cols.includes(s))cols.push(s); });
@@ -2176,7 +2247,7 @@ function etapasViewHTML(){
   const right=FN_MODE==='kanban'?fnKanbanHTML(leads):fnListHTML(leads);
   return periodoChipsHTML()+`<div class="fnpanel">
     <div class="fntoolbar">
-      <div class="fntitle"><span class="fndot" style="--fc:${FN_COLOR[FN_STAGE]}"></span> ${esc(FN_STAGE)} <span class="muted" style="font-weight:500">· ${leads.length} lead(s)</span></div>
+      <div class="fntitle"><span class="fndot" style="--fc:${fnColor(FN_STAGE)}"></span> ${esc(FN_STAGE)} <span class="muted" style="font-weight:500">· ${leads.length} lead(s)</span></div>
       <div class="seg"><button class="${FN_MODE==='lista'?'on':''}" data-fnmode="lista">☰ Lista</button><button class="${FN_MODE==='kanban'?'on':''}" data-fnmode="kanban">▦ Kanban</button></div>
     </div>
     ${right}
@@ -2190,7 +2261,7 @@ function wireEtapasView(){
 function refreshEtapasNav(){
   const g=$('#et-group'); if(!g)return;
   const c=fnCounts();
-  g.innerHTML=FN_ETAPAS.map(e=>`<button class="nav-item etstage ${VIEW==='etapas'&&e===FN_STAGE?'active':''}" data-fnstage="${esc(e)}"><span class="etdot" style="background:${FN_COLOR[e]}"></span><span style="flex:1">${esc(e)}</span><span class="navbadge">${c[e]}</span></button>`).join('');
+  g.innerHTML=fnEtapas().map(e=>`<button class="nav-item etstage ${VIEW==='etapas'&&e===FN_STAGE?'active':''}" data-fnstage="${esc(e)}"><span class="etdot" style="background:${fnColor(e)}"></span><span style="flex:1">${esc(e)}</span><span class="navbadge">${c[e]}</span></button>`).join('');
   g.querySelectorAll('[data-fnstage]').forEach(b=>b.onclick=()=>{FN_STAGE=b.dataset.fnstage;VIEW='etapas';$('#sidebar').classList.remove('open');render();});
 }
 
