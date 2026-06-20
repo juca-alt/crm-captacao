@@ -369,6 +369,28 @@ tr.row.sel{background:#eff6ff}
 .agora .qrow{background:#fff;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;padding:8px 10px}
 .motivo{display:inline-block;font-size:11px;font-weight:700;border-radius:99px;padding:2px 8px;margin-left:6px;background:#ffedd5;color:#9a3412}
 .bar-nums .ok{color:var(--green);font-weight:800}
+/* ===== Funil novo (rail + lista/kanban) — Bloco 1 ===== */
+.fnwrap{display:flex;gap:16px;align-items:flex-start}
+.fnrail{display:flex;flex-direction:column;gap:6px;width:210px;flex-shrink:0}
+.fnstage{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer;text-align:left;width:100%;transition:background .12s,border-color .12s}
+.fnstage:hover{background:#f8fafc}
+.fnstage.on{border-color:var(--fc);box-shadow:inset 3px 0 0 var(--fc)}
+.fnstage .fndot{width:9px;height:9px;border-radius:50%;background:var(--fc);flex-shrink:0}
+.fnstage .fnlbl{font-weight:600;font-size:13.5px;flex:1}
+.fnstage .fnbadge{font-size:12px;font-weight:800;background:#eef2f7;color:#334155;border-radius:20px;padding:1px 9px;min-width:24px;text-align:center}
+.fnstage.on .fnbadge{background:var(--fc);color:#fff}
+.fnpanel{flex:1;min-width:0}
+.fntoolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.fntitle{display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px}
+.fntitle .fndot{width:10px;height:10px;border-radius:50%;background:var(--fc)}
+.fnempty{padding:28px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:12px}
+.fnpanel .kcard{cursor:pointer}
+.fnpanel .kc-top{display:flex;align-items:center;gap:8px}
+.fnpanel .kc-name{font-weight:700;font-size:13px}
+.fnpanel .kc-sub{font-size:11.5px;color:var(--muted);margin-top:4px}
+.fnpanel .kc-tel{font-size:11.5px;margin-top:3px}
+.fnpanel .kc-due{margin-top:5px}
+@media(max-width:760px){.fnwrap{flex-direction:column}.fnrail{width:100%;flex-direction:row;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.fnstage{min-width:140px}}
 </style>
 </head>
 <body>
@@ -414,6 +436,7 @@ tr.row.sel{background:#eff6ff}
       <button class="nav-item step" data-view="inbox"><span class="stepn">3</span><span class="ic">🔗</span> Inbox LinkedIn</button>
     </div>
     <button class="nav-item" data-view="funilcap"><span class="ic">🎯</span> Funil Captação</button>
+    <button class="nav-item" data-view="funilrail"><span class="ic">🛤</span> Funil (novo)</button>
     <button class="nav-item" data-view="contatos"><span class="ic">📇</span> Contatos</button>
 
     <button class="nav-sec vendas-nav" id="vd-toggle" style="background:none;border:none;width:100%;text-align:left;cursor:pointer;display:flex;align-items:center;gap:6px"><span class="ic" style="margin-right:0">💼</span>Vendas · Clientes <span id="vd-caret" style="margin-left:auto">▾</span></button>
@@ -804,6 +827,7 @@ function render(){
   }
   if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML() + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHTML(); wireConfig(); wireBanner(); return; }
+  if(VIEW==='funilrail'){ $('#view-title').textContent='Funil'; c.innerHTML=banner+funilRailHTML(); wireFunilRail(); wireBanner(); return; }
   // ===== PIPE LinkedIn (default) =====
   $('#view-title').textContent='Pipe LinkedIn';
   if(FUNIL_MODE==='lista'){
@@ -1694,6 +1718,90 @@ function capToggleHTML(){
     <button class="${CAP_MODE==='lista'?'on':''}" data-capmode="lista">☰ Lista</button></div></div>`;
 }
 function wireCapToggle(){ document.querySelectorAll('[data-capmode]').forEach(b=>b.onclick=()=>{CAP_MODE=b.dataset.capmode;SEL.clear();render();}); }
+
+// ===== FUNIL NOVO — rail + lista/kanban (Bloco 1) =====
+// Modelo do funil novo (8 etapas) como LENTE sobre os dados atuais.
+// NÃO altera ETAPAS/STATUS_BY_ETAPA globais (drawer, filtros e pipe LinkedIn continuam intactos).
+const FN_ETAPAS = ['SitPlan','TA','OT','FIP 1','FIP 2','Pré-TS','TS1','TS2'];
+const FN_COLOR = {'SitPlan':'#a855f7','TA':'#8b5cf6','OT':'#16a34a','FIP 1':'#0d9488','FIP 2':'#0e7490','Pré-TS':'#0891b2','TS1':'#10b981','TS2':'#047857'};
+// sub-status por etapa do funil novo (derivado dos status reais atuais; etapas novas começam sem status nativo)
+const FN_STATUS = {'SitPlan':STATUS_BY_ETAPA.SitPlan,'TA':STATUS_BY_ETAPA.TA,'OT':STATUS_BY_ETAPA.OT,'FIP 1':STATUS_BY_ETAPA.FIP,'FIP 2':[],'Pré-TS':['Onboarding'],'TS1':[],'TS2':['Convertido']};
+// mapeia um lead (etapa/status atuais) → etapa do funil novo. Dados antigos: FIP→FIP 1; Fechamento→Pré-TS, exceto Convertido→TS2.
+function fnStage(l){
+  switch(l.etapa){
+    case 'SitPlan': return 'SitPlan';
+    case 'TA': return 'TA';
+    case 'OT': return 'OT';
+    case 'FIP': return 'FIP 1';
+    case 'Fechamento': return l.status==='Convertido' ? 'TS2' : 'Pré-TS';
+    default: return null; // LinkedIn/Dormente/Descartado ficam fora do funil novo
+  }
+}
+let FN_STAGE='SitPlan', FN_MODE='lista'; // estado do funil novo
+function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)); } // escopo/permissão, sem filtros de texto de outras telas
+function fnCounts(){ const c={}; FN_ETAPAS.forEach(e=>c[e]=0); fnBase().forEach(l=>{const s=fnStage(l); if(s&&c[s]!=null)c[s]++;}); return c; }
+function fnLeads(stage){ return fnBase().filter(l=>fnStage(l)===stage); }
+function fnRailHTML(){
+  const counts=fnCounts();
+  return `<div class="fnrail">`+FN_ETAPAS.map((e,i)=>`
+    <button class="fnstage ${e===FN_STAGE?'on':''}" data-fnstage="${esc(e)}" style="--fc:${FN_COLOR[e]}">
+      <span class="fndot"></span><span class="fnlbl">${esc(e)}</span><span class="fnbadge">${counts[e]}</span>
+    </button>`).join('')+`</div>`;
+}
+// lista enxuta: Nome · cargo·empresa · telefone · status · próxima ação
+function fnListHTML(leads){
+  if(!leads.length) return `<div class="fnempty">Nenhum lead em <b>${esc(FN_STAGE)}</b>.</div>`;
+  const rows=leads.map(l=>`<tr class="row" data-open="${l.id}">
+    <td><div class="lead-cell">${avatarHTML(l,32)}<div><div class="lead-name">${esc(l.nome)}</div><div class="lead-cargo">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div></div></div></td>
+    <td>${l.telefone?`<a href="${safeHref('tel:'+(l.telefone_e164||l.telefone))}" onclick="event.stopPropagation()">${esc(l.telefone)}</a>`:'<span class="muted">—</span>'}</td>
+    <td>${statusBadge(l)}</td>
+    <td>${dueHTML(l)||'<span class="muted">—</span>'}</td>
+  </tr>`).join('');
+  return `<div class="tablewrap"><table>
+    <thead><tr><th>Lead</th><th>Telefone</th><th>Status</th><th>Próxima ação</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function fnCard(l){
+  return `<div class="kcard" data-open="${l.id}">
+    <div class="kc-top">${avatarHTML(l,28)}<div class="kc-name">${esc(l.nome)}</div></div>
+    <div class="kc-sub">${esc(l.cargo||'—')}${l.empresa?' · '+esc(l.empresa):''}</div>
+    ${l.telefone?`<div class="kc-tel">📱 ${esc(l.telefone)}</div>`:''}
+    ${dueHTML(l)?`<div class="kc-due">${dueHTML(l)}</div>`:''}
+  </div>`;
+}
+function fnKanbanHTML(leads){
+  const native=FN_STATUS[FN_STAGE]||[];
+  const present=[...new Set(leads.map(l=>l.status||'—'))];
+  const cols=native.slice();
+  present.forEach(s=>{ if(!cols.includes(s))cols.push(s); });
+  if(!cols.length)cols.push('—');
+  const board=cols.map(s=>{
+    const items=leads.filter(l=>(l.status||'—')===s);
+    return `<div class="col"><h3>${esc(s)} <span class="count">${items.length}</span></h3>
+      <div class="cards">${items.map(fnCard).join('')||'<div class="qempty">—</div>'}</div></div>`;
+  }).join('');
+  return `<div class="funil">${board}</div>`;
+}
+function funilRailHTML(){
+  const leads=fnLeads(FN_STAGE);
+  const right=FN_MODE==='kanban'?fnKanbanHTML(leads):fnListHTML(leads);
+  return `<p class="hint" style="margin:-2px 0 12px;color:var(--muted)">Funil pós-LinkedIn — clique numa etapa à esquerda pra ver os leads. <b>Lista</b> ou <b>Kanban</b> (agrupa por status da etapa). Clique no lead pra abrir a ficha.</p>
+  <div class="fnwrap">
+    ${fnRailHTML()}
+    <div class="fnpanel">
+      <div class="fntoolbar">
+        <div class="fntitle"><span class="fndot" style="--fc:${FN_COLOR[FN_STAGE]}"></span> ${esc(FN_STAGE)} <span class="muted" style="font-weight:500">· ${leads.length} lead(s)</span></div>
+        <div class="seg"><button class="${FN_MODE==='lista'?'on':''}" data-fnmode="lista">☰ Lista</button><button class="${FN_MODE==='kanban'?'on':''}" data-fnmode="kanban">▦ Kanban</button></div>
+      </div>
+      ${right}
+    </div>
+  </div>`;
+}
+function wireFunilRail(){
+  document.querySelectorAll('[data-fnstage]').forEach(b=>b.onclick=()=>{FN_STAGE=b.dataset.fnstage;render();});
+  document.querySelectorAll('[data-fnmode]').forEach(b=>b.onclick=()=>{FN_MODE=b.dataset.fnmode;render();});
+  document.querySelectorAll('.fnpanel [data-open]').forEach(r=>r.onclick=e=>{ if(e.target.closest('a'))return; openDrawer(r.dataset.open); });
+}
 
 // status dropdown (inline)
 function wireStatusButtons(){
