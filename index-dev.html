@@ -572,6 +572,8 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 .cfgtab{background:none;border:none;padding:9px 14px;font-size:13.5px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
 .cfgtab:hover{color:var(--txt)}
 .cfgtab.on{color:var(--primary);border-bottom-color:var(--primary)}
+.filters.periodo{align-items:center;gap:6px}
+.filters.periodo .per-lab{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
 </style>
 </head>
 <body>
@@ -739,7 +741,26 @@ function triageLead({cargo,empresa}={}){
 
 // ===== STATE =====
 let LEADS=[], VIEW='visao', SEARCH='', F_ETAPA='', F_STATUS='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
-let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false;
+let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false, F_PERIODO=''; // F_PERIODO: ''=tudo | hoje | 7d | 30d | 90d (por criado_em)
+// true se a data (criado_em) cai no período escolhido — pra validar contagens por janela de tempo
+function periodMatch(dateStr,period){
+  if(!period) return true;
+  if(!dateStr) return false;
+  const d=new Date(String(dateStr).slice(0,10)+'T12:00:00');
+  if(isNaN(d)) return false;
+  const now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  if(period==='hoje') return d>=today;
+  const days={'7d':7,'30d':30,'90d':90}[period];
+  if(!days) return true;
+  const cutoff=new Date(today); cutoff.setDate(cutoff.getDate()-(days-1));
+  return d>=cutoff;
+}
+const PERIODO_OPTS=[['','Tudo'],['hoje','Hoje'],['7d','7 dias'],['30d','30 dias'],['90d','90 dias']];
+function periodoChipsHTML(){
+  return `<div class="filters periodo" style="margin:-2px 0 12px"><span class="per-lab">📅 Período (criação):</span>`+
+    PERIODO_OPTS.map(([k,l])=>`<button class="chip ${F_PERIODO===k?'on':''}" data-periodo="${k}">${l}</button>`).join('')+`</div>`;
+}
+function wirePeriodoChips(){ document.querySelectorAll('[data-periodo]').forEach(b=>b.onclick=()=>{F_PERIODO=b.dataset.periodo;render();}); }
 let F_EMPRESA=[], F_SEGMENTO='', F_PROFISSAO='', F_IDADE='', F_SEXO=''; // Funil: filtros combináveis; F_EMPRESA = lista (multiseleção)
 let CAP_MODE='kanban'; // Funil Captação: 'kanban' | 'lista'
 let SORT={col:'',dir:1}; // ordenação das listas estilo planilha: col vazio=ordem padrão; dir 1=asc, -1=desc
@@ -944,6 +965,7 @@ function filtered(){
   if(F_IDADE)r=r.filter(l=>idadeInRange(l.faixa_idade,F_IDADE));
   if(F_SEXO)r=r.filter(l=>(l.sexo||'')===F_SEXO);
   if(F_MONEY)r=r.filter(l=>l.renda_estimada>=10000);
+  if(F_PERIODO)r=r.filter(l=>periodMatch(l.criado_em,F_PERIODO));
   return r;
 }
 
@@ -987,7 +1009,7 @@ function render(){
   if(VIEW==='dup'){ $('#view-title').textContent='Duplicatas'; const nd=$('#nav-dup'); if(nd)nd.classList.add('active'); c.innerHTML=banner+dupHTML(); wireDup(); wireBanner(); return; }
   if(VIEW==='usuarios'){ $('#view-title').textContent='Usuários & Permissões'; c.innerHTML=banner+usuariosHTML(); wireUsuarios(); wireBanner(); return; }
   if(VIEW==='relatorio'){ $('#view-title').textContent='Relatório'; c.innerHTML=banner+relatorioHTML(); wireRelatorio(); wireBanner(); return; }
-  if(VIEW==='visao'){ $('#view-title').textContent='Visão Geral'; c.innerHTML=banner+visaoHTML()+hojeHTML(); wireActions(c); wireHojeTop(); wireStatusButtons(); wireBanner(); return; }
+  if(VIEW==='visao'){ $('#view-title').textContent='Visão Geral'; c.innerHTML=banner+periodoChipsHTML()+visaoHTML()+hojeHTML(); wireActions(c); wireHojeTop(); wireStatusButtons(); wirePeriodoChips(); wireBanner(); return; }
   if(VIEW==='perfil'){ $('#view-title').textContent='Perfil'; c.innerHTML=banner+perfilHTML(); wirePerfil(); wireBanner(); return; }
   if(VIEW==='mineracao'){ $('#view-title').textContent='Minerar'; c.innerHTML=banner+mineracaoHTML(); wireMineracao(); wireActions(c); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='qualificar'){ $('#view-title').textContent='Qualificar'; c.innerHTML=banner+qualificarHTML(); wireQualificar(); wireActions(c); wireStatusButtons(); wireBanner(); return; }
@@ -1759,6 +1781,7 @@ function filtersHTML(){
   const savedBar=`<div class="savedviews"><span class="sv-lab">Visões salvas</span>${savedChips}<button class="sv-save" id="sv-save">💾 Salvar visão atual</button></div>`;
   return `
   <div class="filters" style="margin-bottom:6px">${sitTabs}</div>
+  ${periodoChipsHTML()}
   <div class="summary">
     <div class="scard"><div class="n">${tot}</div><div class="l">leads na visão</div></div>
     <div class="scard"><div class="n" style="color:var(--green)">${money}</div><div class="l">renda ≥ 10k</div></div>
@@ -1795,6 +1818,7 @@ function wireFilters(){
   const svS=$('#sv-save'); if(svS)svS.onclick=svSavePrompt;
   document.querySelectorAll('[data-svapply]').forEach(b=>b.onclick=()=>{ const v=svLoad()[+b.dataset.svapply]; if(v)svApply(v.f); });
   document.querySelectorAll('[data-svdel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); svDelete(+b.dataset.svdel); });
+  wirePeriodoChips();
 }
 
 // ===== VISÕES SALVAS (filtros favoritos do usuário, em localStorage) =====
@@ -2111,7 +2135,7 @@ function fnStage(l){
   }
 }
 let FN_STAGE='SitPlan', FN_MODE='lista';
-function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)); }
+function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)&&periodMatch(l.criado_em,F_PERIODO)); }
 function fnCounts(){ const c={}; FN_ETAPAS.forEach(e=>c[e]=0); fnBase().forEach(l=>{const s=fnStage(l); if(s&&c[s]!=null)c[s]++;}); return c; }
 function fnLeads(stage){ return fnBase().filter(l=>fnStage(l)===stage); }
 function fnListHTML(leads){
@@ -2150,7 +2174,7 @@ function fnKanbanHTML(leads){
 function etapasViewHTML(){
   const leads=fnLeads(FN_STAGE);
   const right=FN_MODE==='kanban'?fnKanbanHTML(leads):fnListHTML(leads);
-  return `<div class="fnpanel">
+  return periodoChipsHTML()+`<div class="fnpanel">
     <div class="fntoolbar">
       <div class="fntitle"><span class="fndot" style="--fc:${FN_COLOR[FN_STAGE]}"></span> ${esc(FN_STAGE)} <span class="muted" style="font-weight:500">· ${leads.length} lead(s)</span></div>
       <div class="seg"><button class="${FN_MODE==='lista'?'on':''}" data-fnmode="lista">☰ Lista</button><button class="${FN_MODE==='kanban'?'on':''}" data-fnmode="kanban">▦ Kanban</button></div>
@@ -2159,6 +2183,7 @@ function etapasViewHTML(){
   </div>`;
 }
 function wireEtapasView(){
+  wirePeriodoChips();
   document.querySelectorAll('[data-fnmode]').forEach(b=>b.onclick=()=>{FN_MODE=b.dataset.fnmode;render();});
   document.querySelectorAll('#content [data-open]').forEach(r=>r.onclick=e=>{ if(e.target.closest('a'))return; openDrawer(r.dataset.open); });
 }
@@ -2828,7 +2853,7 @@ function gcalLink(l){
 }
 
 // ===== v1.25: VISÃO GERAL (radiografia da base — client-side, escopo baseLeads) =====
-function vgBase(){ return baseLeads(); }
+function vgBase(){ return baseLeads().filter(l=>periodMatch(l.criado_em,F_PERIODO)); }
 function vgAtivos(){ return vgBase().filter(l=>situacaoOf(l)==='Ativo'); }
 function lastNDays(n){ const out=[]; for(let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); out.push(ymd(d)); } return out; }
 function sparkBars(days,series){
