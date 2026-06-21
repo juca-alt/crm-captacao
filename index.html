@@ -164,6 +164,14 @@ tr.row.sel{background:#eff6ff}
 .tk-del{background:none;font-size:15px;opacity:.4;flex-shrink:0;cursor:pointer}
 .tk-del:hover{opacity:1}
 .tk-empty{color:#94a3b8;font-size:13.5px;padding:8px 2px}
+.tk-compose #tk-lead,.tk-compose #tk-text{flex:1;min-width:150px;height:42px;padding:0 14px;border:1px solid var(--line);border-radius:10px;font-size:14px}
+.tk-compose #tk-lead:focus,.tk-compose #tk-text:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.tk-compose #tk-tpl{height:42px;padding:0 8px;border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--txt);max-width:210px}
+.tk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tk-snooze{background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:8px;font-size:12px;font-weight:800;padding:6px 9px;cursor:pointer;flex-shrink:0}
+.tk-snooze:hover{background:#ffedd5}
+.tk-open{background:none;border:none;font-size:15px;opacity:.5;flex-shrink:0;cursor:pointer}
+.tk-open:hover{opacity:1}
 /* menu de status (inline) redesenhado */
 .stmenu{padding:0;width:250px;overflow:hidden}
 .stmenu-h{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt);font-weight:600}
@@ -834,7 +842,7 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.1 · mobile';
+const APP_VERSION = 'v2.2 · tarefas';
 
 // ===== FUNNEL CONFIG =====
 const ETAPAS = ['Qualificacao','Conexao','SitPlan','TA','OT','FIP','Fechamento','Dormente','Descartado'];
@@ -885,6 +893,9 @@ const TA_PRIMEIRA = '1a Abordagem'; // destino quando consegue o telefone (já �
 const GARIMPO_META = 10; // meta diária de garimpo (Victor) — legado/fallback
 let SETTINGS = { meta_minerados_dia:100, meta_convites_dia:40 }; // metas globais (app_settings); só admin edita
 let MSG_TEMPLATES=null; // modelos de mensagem (app_settings 'msg_templates'); null = usa o default
+const TASK_TPL_DEFAULT=['Ligar para o lead','Enviar mensagem de follow-up','Agendar reunião / abordagem','Confirmar presença','Enviar proposta / estudo','Retomar contato']; // tarefas pré-definidas (editáveis em Configurações)
+let TASK_TPL=null;   // app_settings 'tarefas_cfg' {items:[...]}; null = usa o default
+let TASK_TEXT={};    // lead_id -> última descrição de tarefa (cache de lead_events tipo 'tarefa'); a tarefa em si = follow-up (data_proxima_acao)
 let PERIOD = 'semana';     // Meu Dia: janela das réguas: 'dia'|'semana'|'mes'|'periodo'
 let PERIOD_RANGE = null;   // {ini,fim} quando PERIOD==='periodo'
 
@@ -1059,6 +1070,7 @@ const MSG_TPL_DEFAULT=[
   {nome:'Conexão LinkedIn',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}
 ];
 function msgTemplates(){ return (MSG_TEMPLATES&&MSG_TEMPLATES.length)?MSG_TEMPLATES:MSG_TPL_DEFAULT; }
+function taskTemplates(){ return (TASK_TPL&&TASK_TPL.length)?TASK_TPL:TASK_TPL_DEFAULT.slice(); }
 function fillTpl(txt,l){ return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*recomendante\s*\}\}/gi,l.recomendante||'').replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
 function copyTplText(txt,l){ navigator.clipboard.writeText(fillTpl(txt,l)).then(()=>toast('Mensagem copiada — '+firstName(l.nome)),()=>toast('Não consegui copiar')); }
 function copyMsg(l,anchor){
@@ -1100,6 +1112,7 @@ async function loadSettings(){
       if(r.chave==='meta_convites_dia')  SETTINGS.meta_convites_dia =+r.valor||SETTINGS.meta_convites_dia;
       if(r.chave==='msg_templates'){ try{ const a=JSON.parse(r.valor||'[]'); if(Array.isArray(a)&&a.length) MSG_TEMPLATES=a; }catch(_){} }
       if(r.chave==='funil_cfg'){ try{ const c=JSON.parse(r.valor||'{}'); if(c&&Array.isArray(c.etapas)&&c.etapas.length) FN_CFG=c; }catch(_){} }
+      if(r.chave==='tarefas_cfg'){ try{ const c=JSON.parse(r.valor||'{}'); if(c&&Array.isArray(c.items)&&c.items.length) TASK_TPL=c.items; }catch(_){} }
     }
   }catch(e){/* tabela ainda não criada → usa defaults */}
 }
@@ -1107,6 +1120,19 @@ async function saveSetting(chave,valor){
   const {error}=await sb.from('app_settings').upsert({chave,valor,atualizado_em:new Date().toISOString()},{onConflict:'chave'});
   if(error){toast('Erro ao salvar meta: '+error.message);return false;}
   return true;
+}
+// Tarefas: a tarefa de um lead = follow-up agendado (data_proxima_acao) + descrição.
+// A descrição persiste na timeline (lead_events tipo 'tarefa'); best-effort: se falhar, a data ainda grava (degrada pro comportamento antigo).
+async function loadTaskTexts(){
+  try{
+    const {data}=await sb.from('lead_events').select('lead_id,texto,criado_em').eq('tipo','tarefa').order('criado_em',{ascending:false});
+    const m={}; (data||[]).forEach(e=>{ if(e.lead_id!=null && !(e.lead_id in m)) m[e.lead_id]=e.texto; }); TASK_TEXT=m;
+  }catch(_){ /* lead_events indisponível → segue sem descrições */ }
+}
+async function setLeadTask(id,dateISO,texto){
+  const ok=await updateLead(id,{data_proxima_acao:dateISO});
+  if(ok && texto){ try{ await sb.from('lead_events').insert({lead_id:id,tipo:'tarefa',texto:texto,usuario:ME}); TASK_TEXT[id]=texto; }catch(_){} }
+  return ok;
 }
 async function updateLead(id,patch){
   const _cur=LEADS.find(l=>l.id===id);
@@ -1448,6 +1474,9 @@ function tplRowHTML(t){
     <textarea class="tpl-texto" rows="3" placeholder="Texto da mensagem… use {{primeiro_nome}} e {{recomendante}}" style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;font-size:13px">${esc(t.texto||'')}</textarea>
   </div>`;
 }
+function taskTplRowHTML(s){
+  return `<div class="ttpl-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input class="ttpl-txt" value="${esc(s||'')}" placeholder="Ex.: Ligar para o lead" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"><button class="btn ghost ttpl-del" title="Remover">🗑</button></div>`;
+}
 // ===== Configurações vira hub com abas: Conta · Usuários · Perfil (Usuários/Perfil só admin) =====
 let CONFIG_TAB='conta';
 function configHubHTML(){
@@ -1545,6 +1574,12 @@ function configHTML(){
       <p class="hint" style="margin-bottom:8px">Use <b>{{primeiro_nome}}</b> (nome do lead) e <b>{{recomendante}}</b> (quem indicou) — trocam na hora de copiar. O botão 📩 nos cards e na ficha do lead abre esses modelos pra você escolher e copiar.</p>
       <div id="tpl-list">${msgTemplates().map(t=>tplRowHTML(t)).join('')}</div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn ghost" id="tpl-add">＋ Novo modelo</button><button class="btn primary" id="tpl-save">Salvar modelos</button><span id="tpl-msg" style="font-size:13px"></span></div>
+    </div>
+    <div class="profcard" style="display:block;max-width:620px;margin-top:14px">
+      <div style="font-weight:600;margin-bottom:4px">✅ Tarefas pré-definidas</div>
+      <p class="hint" style="margin-bottom:8px">Atalhos que aparecem ao criar uma tarefa num lead (na tela <b>Tarefas</b>). Você sempre pode escrever uma tarefa livre — estas são só pra agilizar. Edite, adicione ou remova.</p>
+      <div id="ttpl-list">${taskTemplates().map(taskTplRowHTML).join('')}</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn ghost" id="ttpl-add">＋ Nova tarefa</button><button class="btn primary" id="ttpl-save">Salvar tarefas</button><span id="ttpl-msg" style="font-size:13px"></span></div>
     </div>`;
 }
 function wireConfig(){
@@ -1575,6 +1610,17 @@ function wireConfig(){
     MSG_TEMPLATES=arr; msg.style.color='var(--muted)'; msg.textContent='Salvando…'; tsave.disabled=true;
     const ok=await saveSetting('msg_templates',JSON.stringify(arr)); tsave.disabled=false;
     msg.style.color=ok?'var(--green)':'var(--red)'; msg.textContent=ok?'✓ Modelos salvos.':'Salvou nesta sessão (tabela app_settings indisponível).';
+  };
+  // ── tarefas pré-definidas ──
+  const ttDel=row=>{ const b=row.querySelector('.ttpl-del'); if(b)b.onclick=()=>row.remove(); };
+  document.querySelectorAll('#ttpl-list .ttpl-row').forEach(ttDel);
+  const ttadd=$('#ttpl-add'); if(ttadd)ttadd.onclick=()=>{ const list=$('#ttpl-list'); const tmp=document.createElement('div'); tmp.innerHTML=taskTplRowHTML(''); const row=tmp.firstElementChild; list.appendChild(row); ttDel(row); row.querySelector('.ttpl-txt').focus(); };
+  const ttsave=$('#ttpl-save'); if(ttsave)ttsave.onclick=async()=>{
+    const arr=[...document.querySelectorAll('#ttpl-list .ttpl-row')].map(r=>(r.querySelector('.ttpl-txt').value||'').trim()).filter(Boolean);
+    const msg=$('#ttpl-msg'); if(!arr.length){ msg.style.color='var(--red)'; msg.textContent='Deixe ao menos 1 tarefa.'; return; }
+    TASK_TPL=arr; msg.style.color='var(--muted)'; msg.textContent='Salvando…'; ttsave.disabled=true;
+    const ok=await saveSetting('tarefas_cfg',JSON.stringify({items:arr})); ttsave.disabled=false;
+    msg.style.color=ok?'var(--green)':'var(--red)'; msg.textContent=ok?'✓ Tarefas salvas.':'Salvou nesta sessão (app_settings indisponível).';
   };
 }
 
@@ -2232,32 +2278,50 @@ function openColPicker(anchor){
 // ===== MÓDULO TAREFAS (lista de tarefas pessoal, em localStorage) =====
 function tasksLoad(){ try{ return JSON.parse(localStorage.getItem('crm-tasks-v1')||'[]'); }catch(e){ return []; } }
 function tasksStore(a){ try{ localStorage.setItem('crm-tasks-v1',JSON.stringify(a)); }catch(e){} }
+// Tarefas = follow-ups por lead (data_proxima_acao) + descrição (TASK_TEXT via lead_events). Fonte única, sincroniza com o Victor.
 function tarefasHTML(){
-  const tasks=tasksLoad();
-  const open=tasks.filter(t=>!t.done), done=tasks.filter(t=>t.done);
   const today=todayStr();
-  const taskRow=t=>{
-    const overdue=t.due&&!t.done&&t.due<today, soon=t.due&&!t.done&&t.due===today;
-    const dueBadge=t.due?`<span class="tk-due ${overdue?'over':soon?'soon':''}">📅 ${fmtDate(t.due)}${overdue?' · vencida':soon?' · hoje':''}</span>`:'';
-    return `<div class="tk-row ${t.done?'done':''}"><button class="tk-check ${t.done?'on':''}" data-tk="${t.id}" title="Concluir">${t.done?'✓':''}</button><div class="tk-main"><div class="tk-text">${esc(t.text)}</div>${dueBadge}</div><button class="tk-del" data-tkdel="${t.id}" title="Excluir">🗑</button></div>`;
+  const leads=baseLeads().filter(l=>l.data_proxima_acao).slice()
+    .sort((a,b)=>(a.data_proxima_acao||'').slice(0,10).localeCompare((b.data_proxima_acao||'').slice(0,10)));
+  const nOver=leads.filter(l=>l.data_proxima_acao.slice(0,10)<today).length;
+  const tplOpts=taskTemplates().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
+  const leadOpts=baseLeads().slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''))
+    .map(l=>`<option value="${esc(l.nome)}"></option>`).join('');
+  const row=l=>{
+    const d=l.data_proxima_acao.slice(0,10), over=d<today, soon=d===today;
+    const txt=TASK_TEXT[l.id]||'Follow-up agendado';
+    const due=`<span class="tk-due ${over?'over':soon?'soon':''}">📅 ${fmtDate(d)}${over?' · vencida':soon?' · hoje':''}</span>`;
+    const sub=`${esc(l.nome)} · ${esc(ETAPA_LABEL[l.etapa]||l.etapa||'—')} · ${esc(l.status||'')}`;
+    return `<div class="tk-row"><button class="tk-check" data-tkdone="${l.id}" title="Concluir tarefa">✓</button><div class="tk-main"><div class="tk-text">${esc(txt)}</div><div class="tk-sub">${sub}</div>${due}</div><button class="tk-snooze" data-tksnooze="${l.id}" title="Adiar +2 dias">+2d</button><button class="tk-open" data-tkopen="${l.id}" title="Abrir lead">↗</button></div>`;
   };
   return `<div class="tk-wrap">
     <div class="tk-compose">
-      <input id="tk-input" placeholder="Nova tarefa… (ex.: Ligar pro Victor sobre as OTs)" autocomplete="off" />
-      <input id="tk-date" type="date" title="Prazo (opcional)" />
+      <input id="tk-lead" list="tk-leads" placeholder="Lead (digite o nome)…" autocomplete="off" />
+      <datalist id="tk-leads">${leadOpts}</datalist>
+      <select id="tk-tpl"><option value="">Tarefa pré-definida…</option>${tplOpts}<option value="__free">✏️ Escrever outra…</option></select>
+      <input id="tk-text" placeholder="ou escreva a tarefa…" autocomplete="off" style="display:none" />
+      <input id="tk-date" type="date" value="${today}" title="Prazo" />
       <button class="btn primary" id="tk-add">＋ Adicionar</button>
     </div>
-    <div class="tk-sec"><div class="tk-sec-h">A fazer <span class="badge">${open.length}</span></div>${open.length?open.map(taskRow).join(''):'<div class="tk-empty">Nada pendente. 🎉</div>'}</div>
-    ${done.length?`<div class="tk-sec"><div class="tk-sec-h">Concluídas <span class="badge">${done.length}</span><button class="tk-clear" id="tk-clear">limpar concluídas</button></div>${done.map(taskRow).join('')}</div>`:''}
+    <div class="tk-sec"><div class="tk-sec-h">A fazer <span class="badge">${leads.length}</span>${nOver?` · <span style="color:var(--red);font-weight:800">${nOver} vencida(s)</span>`:''}</div>${leads.length?leads.map(row).join(''):'<div class="tk-empty">Nada agendado. Crie uma tarefa pra um lead acima. ✓</div>'}</div>
   </div>`;
 }
 function wireTarefas(){
-  const add=()=>{ const i=$('#tk-input'), d=$('#tk-date'); const text=(i.value||'').trim(); if(!text)return; const a=tasksLoad(); a.unshift({id:'t'+Date.now(),text,due:d.value||'',done:false,createdAt:new Date().toISOString()}); tasksStore(a); render(); };
+  const tpl=$('#tk-tpl'), txt=$('#tk-text');
+  if(tpl)tpl.onchange=()=>{ if(tpl.value==='__free'){ txt.style.display=''; txt.focus(); } else { txt.style.display='none'; } };
+  const resolveLead=()=>{ const q=($('#tk-lead').value||'').trim().toLowerCase(); if(!q)return null;
+    return baseLeads().find(l=>(l.nome||'').toLowerCase()===q) || baseLeads().find(l=>(l.nome||'').toLowerCase().includes(q)); };
+  const add=async()=>{
+    const l=resolveLead(); if(!l){ toast('Escolha um lead pela lista'); return; }
+    const sel=tpl?tpl.value:''; const text=(sel&&sel!=='__free')?sel:((txt&&txt.value||'').trim());
+    const date=$('#tk-date').value||todayStr();
+    if(await setLeadTask(l.id,date,text)){ toast('Tarefa criada · '+firstName(l.nome)); render(); }
+  };
   const b=$('#tk-add'); if(b)b.onclick=add;
-  const inp=$('#tk-input'); if(inp)inp.onkeydown=e=>{ if(e.key==='Enter')add(); };
-  document.querySelectorAll('[data-tk]').forEach(c=>c.onclick=()=>{ const a=tasksLoad(); const t=a.find(x=>x.id===c.dataset.tk); if(t){ t.done=!t.done; t.doneAt=t.done?new Date().toISOString():null; } tasksStore(a); render(); });
-  document.querySelectorAll('[data-tkdel]').forEach(c=>c.onclick=()=>{ tasksStore(tasksLoad().filter(x=>x.id!==c.dataset.tkdel)); render(); });
-  const cl=$('#tk-clear'); if(cl)cl.onclick=()=>{ tasksStore(tasksLoad().filter(x=>!x.done)); render(); };
+  const li=$('#tk-lead'); if(li)li.onkeydown=e=>{ if(e.key==='Enter')add(); };
+  document.querySelectorAll('[data-tkdone]').forEach(c=>c.onclick=async()=>{ if(await updateLead(c.dataset.tkdone,{data_proxima_acao:null})){ toast('Tarefa concluída ✓'); render(); } });
+  document.querySelectorAll('[data-tksnooze]').forEach(c=>c.onclick=async()=>{ if(await updateLead(c.dataset.tksnooze,{data_proxima_acao:addDays(2)})){ toast('Adiada +2 dias'); render(); } });
+  document.querySelectorAll('[data-tkopen]').forEach(c=>c.onclick=()=>openDrawer(c.dataset.tkopen));
 }
 function wireBulk(){
   let bar=$('#bulkbar'); if(bar)bar.remove();
@@ -3304,7 +3368,7 @@ async function boot(session){
     REAL_VICTOR=ME.includes('victor');
     ACT_AS=null;
     miningLoad();
-    await loadAppUsers(); await ensureAppUser(); await loadSettings();
+    await loadAppUsers(); await ensureAppUser(); await loadSettings(); loadTaskTexts();
     syncProfile();
     if(REAL_VICTOR && VIEW==='hoje'){ /* assistente abre no Meu Dia */ }
     $('#who-foot').textContent=session_nome;
@@ -3655,16 +3719,25 @@ function mTarefas(){
     if(d<todayStr())return '<span style="display:inline-block;font-size:11.5px;font-weight:700;color:#DC2626;background:#FEE2E2;padding:2px 9px;border-radius:7px;margin-top:6px">📅 atrasado · '+fmtDate(d)+'</span>';
     if(d===todayStr())return '<span style="display:inline-block;font-size:11.5px;font-weight:700;color:#B45309;background:#FEF3C7;padding:2px 9px;border-radius:7px;margin-top:6px">📅 hoje</span>';
     return '<span style="display:inline-block;font-size:11.5px;font-weight:700;color:#059669;background:#E3F4EC;padding:2px 9px;border-radius:7px;margin-top:6px">📅 '+fmtDate(d)+'</span>'; }
-  var note='<div style="background:#EEF2FF;border-radius:14px;padding:13px 15px;margin-bottom:18px"><div style="font-size:13px;color:#3730A3;line-height:1.45"><strong>Tarefas = follow-ups agendados</strong> nos leads — fonte real, sincroniza com o Victor. Agende um follow-up no card do lead (Meu Dia / funil) e ele aparece aqui.</div></div>';
+  var leadOpts=baseLeads().slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(l){return '<option value="'+esc(l.nome)+'"></option>';}).join('');
+  var tplOpts=taskTemplates().map(function(s){return '<option value="'+esc(s)+'">'+esc(s)+'</option>';}).join('');
+  var iS='width:100%;height:44px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 13px;font-size:14.5px;background:#fff';
+  var compose='<div class="m-card" style="margin-bottom:18px"><div style="font-size:14px;font-weight:800;margin-bottom:10px">✅ Nova tarefa</div>'
+    +'<input id="m-tk-lead" list="m-tk-leads" placeholder="Lead (digite o nome)…" autocomplete="off" style="'+iS+';margin-bottom:8px"/><datalist id="m-tk-leads">'+leadOpts+'</datalist>'
+    +'<select id="m-tk-tpl" style="'+iS+';margin-bottom:8px"><option value="">Tarefa pré-definida…</option>'+tplOpts+'<option value="__free">✏️ Escrever outra…</option></select>'
+    +'<input id="m-tk-text" placeholder="ou escreva a tarefa…" autocomplete="off" style="'+iS+';margin-bottom:8px;display:none"/>'
+    +'<input id="m-tk-date" type="date" value="'+todayStr()+'" style="'+iS+';margin-bottom:10px"/>'
+    +'<button id="m-tk-add" style="width:100%;height:46px;border:none;border-radius:13px;background:#2F5BF6;color:#fff;font-size:15px;font-weight:800;cursor:pointer">＋ Adicionar tarefa</button></div>';
   var sec='<div class="m-section"><span class="h">A fazer</span><span class="cnt">'+leads.length+'</span></div>';
   var list=leads.length?'<div style="display:flex;flex-direction:column;gap:9px">'+leads.map(function(l){
-    var ctx=mEtapaLabel(l.etapa)+' · '+esc(l.status);
+    var ctx=esc(l.nome)+' · '+mEtapaLabel(l.etapa);
+    var txt=TASK_TEXT[l.id]||'Follow-up agendado';
     return '<div class="m-card" style="display:flex;align-items:flex-start;gap:12px">'
-      +'<button class="m-actbtn" data-act="prox" data-d="clear" data-id="'+l.id+'" title="Concluir follow-up" style="width:26px;height:26px;border:2px solid #CBD5E1;border-radius:50%;background:#fff;cursor:pointer;flex:none;margin-top:2px"></button>'
-      +'<div class="m-row-tap" data-mlead="'+l.id+'" style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:#0F172A;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(l.nome)+'</div><div style="font-size:12.5px;color:#94A3B8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ctx+'</div>'+badge(l)+'</div>'
+      +'<button class="m-actbtn" data-act="prox" data-d="clear" data-id="'+l.id+'" title="Concluir tarefa" style="width:26px;height:26px;border:2px solid #CBD5E1;border-radius:50%;background:#fff;cursor:pointer;flex:none;margin-top:2px"></button>'
+      +'<div class="m-row-tap" data-mlead="'+l.id+'" style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:#0F172A;line-height:1.3;word-break:break-word">'+esc(txt)+'</div><div style="font-size:12.5px;color:#94A3B8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ctx+'</div>'+badge(l)+'</div>'
       +'<button class="m-actbtn" data-act="prox" data-d="2" data-id="'+l.id+'" title="Adiar +2 dias" style="height:32px;padding:0 11px;border:none;border-radius:9px;background:#FEF3C7;color:#B45309;font-size:12.5px;font-weight:800;cursor:pointer;flex:none;margin-top:1px">+2d</button></div>';
-  }).join('')+'</div>':'<div class="m-empty">Nenhum follow-up agendado. Agende no card de um lead. ✓</div>';
-  return note+sec+list;
+  }).join('')+'</div>':'<div class="m-empty">Nenhuma tarefa agendada. Crie uma acima. ✓</div>';
+  return compose+sec+list;
 }
 function mFmtH(sec){var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return h>0?(h+'h '+m+'m'):(m+'m');}
 function mRelatorio(){ return '<div class="m-seg">'+[['7','7 dias'],['30','30 dias'],['0','Tudo']].map(function(x){return '<button class="'+((''+M_REP_RANGE)===x[0]?'on':'')+'" data-mrep="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div><div id="m-rep-body"><div class="m-empty">Carregando…</div></div>'; }
@@ -3732,11 +3805,17 @@ function mWireScreen(c,v){
   var stop=$('#mine-stop'); if(stop)stop.onclick=async function(){await stopMining();render();};
   c.querySelectorAll('[data-mrep]').forEach(function(b){b.onclick=function(){M_REP_RANGE=+b.getAttribute('data-mrep');c.querySelectorAll('[data-mrep]').forEach(function(x){x.classList.remove('on');});b.classList.add('on');mLoadReport();};});
   var back=c.querySelector('.m-back'); if(back)back.onclick=function(){VIEW='contatos';M_LEAD=null;render();};
-  var ti=$('#m-task-input'), ta=$('#m-task-add');
-  function addT(){ if(!ti)return; var v=ti.value.trim(); if(!v)return; mTasksLoad(); M_TASKS.unshift({id:'t'+Date.now(),text:v,done:false}); mTasksSave(); render(); }
-  if(ta)ta.onclick=addT; if(ti)ti.onkeydown=function(e){if(e.key==='Enter')addT();};
-  c.querySelectorAll('.m-task-tog').forEach(function(b){b.onclick=function(){mTasksLoad();var t=M_TASKS.find(function(x){return x.id===b.getAttribute('data-tid');});if(t){t.done=!t.done;mTasksSave();render();}};});
-  c.querySelectorAll('.m-task-del').forEach(function(b){b.onclick=function(){mTasksLoad();var id=b.getAttribute('data-tid');M_TASKS=M_TASKS.filter(function(x){return x.id!==id;});mTasksSave();render();};});
+  var mtl=$('#m-tk-lead'), mtt=$('#m-tk-tpl'), mtx=$('#m-tk-text'), mtd=$('#m-tk-date'), mta=$('#m-tk-add');
+  if(mtt)mtt.onchange=function(){ if(mtx)mtx.style.display=(mtt.value==='__free')?'':'none'; };
+  function mAddTask(){
+    if(!mtl)return; var q=(mtl.value||'').trim().toLowerCase(); if(!q){toast('Escolha um lead pela lista');return;}
+    var l=baseLeads().find(function(x){return (x.nome||'').toLowerCase()===q;})||baseLeads().find(function(x){return (x.nome||'').toLowerCase().indexOf(q)>=0;});
+    if(!l){toast('Lead não encontrado');return;}
+    var sel=mtt?mtt.value:''; var text=(sel&&sel!=='__free')?sel:((mtx&&mtx.value||'').trim());
+    var date=(mtd&&mtd.value)||todayStr();
+    setLeadTask(l.id,date,text).then(function(ok){ if(ok){toast('Tarefa criada ✓');render();} });
+  }
+  if(mta)mta.onclick=mAddTask;
   c.querySelectorAll('[data-mqseg]').forEach(function(b){b.onclick=function(){QUAL_VIEW=b.getAttribute('data-mqseg');render();};});
   var du=$('#m-dup-unify'); if(du)du.onclick=function(){toast('Unificação em lote: faça na visão desktop (admin) — ação sensível');};
   c.querySelectorAll('.m-dup-rev').forEach(function(b){b.onclick=function(){toast('Revisão campo-a-campo: visão desktop (admin)');};});
