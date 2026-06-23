@@ -598,6 +598,7 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 .filters.periodo .per-lab{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
 .filters.filters-sub{padding-left:14px;margin:2px 0 6px;border-left:2px dashed var(--line)}
 .filters.filters-sub .per-lab{font-size:11.5px;color:var(--muted);font-weight:700;margin-right:6px}
+.filters.filters-sub-2{padding-left:28px;margin:2px 0 6px;border-left:2px dotted var(--line)}
 /* Visão Geral: seções colapsáveis */
 .vg-sec{background:var(--card);border:1px solid var(--line);border-radius:14px;margin-bottom:14px;overflow:hidden}
 .vg-sec-h{display:flex;align-items:center;gap:10px;width:100%;padding:14px 18px;background:none;border:none;text-align:left;cursor:pointer;font-size:15px}
@@ -1008,7 +1009,7 @@ let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false, F_PERIODO=''; 
 // Linha 1 (situação): Set de 'Sem etapa'|'Dormente'|'Descartado'  ·  vazio = todos
 // Linha 2 (módulos): Set de 'linkedin'|'captacao' (ativos do módulo)
 // Linha 3/4 (etapas específicas): Set de chaves de etapa do funil
-let F_C_SIT_SET=new Set(), F_C_MOD_SET=new Set(), F_C_ETAPA_SET=new Set();
+let F_C_SIT_SET=new Set(), F_C_MOD_SET=new Set(), F_C_ETAPA_SET=new Set(), F_C_STATUS_SET=new Set();
 let F_C_PERIODO='', F_C_DATE_INI='', F_C_DATE_FIM=''; // periodo: ''|hoje|semana|mes|custom
 const LK_STAGES=['Qualificacao','Conexao'];
 // ===== Visão Geral · período próprio (mesma lógica do Contatos, isolado) + estado das seções =====
@@ -1087,7 +1088,8 @@ function filteredContatos(){
   r=r.filter(cFilterMatch);
   r=r.filter(l=>cPeriodMatch(l.criado_em));
   // dropdowns secundários (mantém os existentes)
-  if(F_STATUS) r=r.filter(l=>l.status===F_STATUS);
+  if(F_C_STATUS_SET.size) r=r.filter(l=>F_C_STATUS_SET.has(l.status));
+  else if(F_STATUS) r=r.filter(l=>l.status===F_STATUS); // compat: visões salvas antigas que tinham F_STATUS
   if(F_EMPRESA.length) r=r.filter(l=>F_EMPRESA.includes(l.empresa));
   if(F_PROFISSAO) r=r.filter(l=>(l.cargo||'').toLowerCase().includes(F_PROFISSAO.toLowerCase()));
   if(F_SEGMENTO) r=r.filter(l=>(l.segmento||'')===F_SEGMENTO);
@@ -2197,73 +2199,70 @@ function wireLinkedin(){
 }
 
 // ===== FILTROS (funil/lista) =====
-// ===== Contatos · barra de filtros redesenhada (4 linhas + período custom) =====
+// ===== Contatos · barra de filtros (ordem: Período · Situação+Módulos · Etapas · Status) =====
 function contatosFiltersHTML(){
   const scope=baseLeads();
-  const cnt=fn=>scope.filter(fn).length;
   const cntSit=s=>scope.filter(l=>situacaoOf(l)===s).length;
   const cntEt=e=>scope.filter(l=>l.etapa===e).length;
-  const semEt=cnt(l=>!ETAPAS.includes(l.etapa));
+  const cntSt=s=>scope.filter(l=>l.status===s).length;
+  const semEt=scope.filter(l=>!ETAPAS.includes(l.etapa)).length;
+  const cntMod=keys=>scope.filter(l=>keys.includes(l.etapa)&&situacaoOf(l)==='Ativo').length;
   const chip=(active,label,n,extra)=>`<button class="chip ${active?'on':''}" ${extra||''}><span>${label}</span> <span style="opacity:.7;margin-left:4px">${n}</span></button>`;
   const dot=(c)=>`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
-  // Linha 1 — Situação (multi)
-  const allEmpty = F_C_SIT_SET.size===0 && F_C_MOD_SET.size===0 && F_C_ETAPA_SET.size===0;
-  let h1 = `<button class="chip ${allEmpty?'on':''}" data-csit="__all">Todos <span style="opacity:.7;margin-left:4px">${scope.length}</span></button>`;
-  h1 += `<button class="chip ${F_C_SIT_SET.has('Sem etapa')?'on':''}" data-csit="Sem etapa" style="border-color:#f59e0b;color:#b45309">⚠ Sem etapa <span style="opacity:.7;margin-left:4px">${semEt}</span></button>`;
-  h1 += chip(F_C_SIT_SET.has('Dormente'), dot('#6b7280')+'Dormentes', cntSit('Dormente'), 'data-csit="Dormente"');
-  h1 += chip(F_C_SIT_SET.has('Descartado'), dot('#ef4444')+'Descartados', cntSit('Descartado'), 'data-csit="Descartado"');
-  // Linha 2 — Módulos (multi)
-  const cntMod=keys=>scope.filter(l=>keys.includes(l.etapa)&&situacaoOf(l)==='Ativo').length;
-  let h2 = chip(F_C_MOD_SET.has('linkedin'), '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--lk);color:#fff;border-radius:3px;font-size:10px;font-weight:800;margin-right:6px;vertical-align:middle">in</span>Leads LinkedIn', cntMod(LK_STAGES), 'data-cmod="linkedin"');
-  h2 += chip(F_C_MOD_SET.has('captacao'), '🎯 Funil Captação', cntMod(CAP_STAGES), 'data-cmod="captacao"');
-  // Linha 3 — Etapas LinkedIn (só aparece se módulo LinkedIn ativo)
-  let h3 = '';
-  if(F_C_MOD_SET.has('linkedin')){
-    h3 = '<div class="filters filters-sub"><span class="per-lab">↳ Etapas LinkedIn:</span>' + LK_STAGES.map(e=>chip(F_C_ETAPA_SET.has(e), dot(ETAPA_COLOR[e]||'#64748b')+(ETAPA_LABEL[e]||e), cntEt(e), 'data-cetapa="'+esc(e)+'"')).join('') + '</div>';
-  }
-  // Linha 4 — Etapas Captação (só aparece se módulo Captação ativo)
-  let h4 = '';
-  if(F_C_MOD_SET.has('captacao')){
-    h4 = '<div class="filters filters-sub"><span class="per-lab">↳ Etapas Captação:</span>' + CAP_STAGES.map(e=>chip(F_C_ETAPA_SET.has(e), dot(ETAPA_COLOR[e]||'#64748b')+(ETAPA_LABEL[e]||e), cntEt(e), 'data-cetapa="'+esc(e)+'"')).join('') + '</div>';
-  }
-  // Período (novo): Tudo · Hoje · Semana · Mês · range custom
-  const perChip=(k,l)=>`<button class="chip ${F_C_PERIODO===k?'on':''}" data-cper="${k}">${l}</button>`;
-  let per = '<div class="filters periodo" style="margin:10px 0 12px">';
-  per += perChip('','Tudo') + perChip('hoje','Hoje') + perChip('semana','Semana') + perChip('mes','Mês');
+  // ===== L1: Período — Intervalo · Tudo · Hoje · Semana · Mês =====
+  const perBtn=(k,l)=>`<button class="chip ${F_C_PERIODO===k?'on':''}" data-cper="${k}">${l}</button>`;
+  let per = '<div class="filters periodo" style="margin:0 0 8px">';
   per += `<button class="chip ${F_C_PERIODO==='custom'?'on':''}" data-cper="custom">📅 Intervalo</button>`;
+  per += perBtn('','Tudo') + perBtn('hoje','Hoje') + perBtn('semana','Semana') + perBtn('mes','Mês');
   if(F_C_PERIODO==='custom'){
     per += `<input type="date" class="fsel" id="c-date-ini" value="${esc(F_C_DATE_INI||'')}" style="height:30px;font-size:13px"> <span style="color:var(--muted);font-size:13px">→</span> <input type="date" class="fsel" id="c-date-fim" value="${esc(F_C_DATE_FIM||'')}" style="height:30px;font-size:13px">`;
   }
   per += '</div>';
-  return `
-  <div class="filters" style="margin-bottom:6px">${h1}</div>
+  // ===== L2: Situação + Módulos — Todos · LinkedIn · Captação · Dormentes · Descartados · Sem etapa =====
+  const allEmpty = F_C_SIT_SET.size===0 && F_C_MOD_SET.size===0 && F_C_ETAPA_SET.size===0 && F_C_STATUS_SET.size===0;
+  let h2 = `<button class="chip ${allEmpty?'on':''}" data-csit="__all">Todos <span style="opacity:.7;margin-left:4px">${scope.length}</span></button>`;
+  h2 += chip(F_C_MOD_SET.has('linkedin'), '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--lk);color:#fff;border-radius:3px;font-size:10px;font-weight:800;margin-right:6px;vertical-align:middle">in</span>Leads LinkedIn', cntMod(LK_STAGES), 'data-cmod="linkedin"');
+  h2 += chip(F_C_MOD_SET.has('captacao'), '🎯 Funil Captação', cntMod(CAP_STAGES), 'data-cmod="captacao"');
+  h2 += chip(F_C_SIT_SET.has('Dormente'), dot('#6b7280')+'Dormentes', cntSit('Dormente'), 'data-csit="Dormente"');
+  h2 += chip(F_C_SIT_SET.has('Descartado'), dot('#ef4444')+'Descartados', cntSit('Descartado'), 'data-csit="Descartado"');
+  h2 += `<button class="chip ${F_C_SIT_SET.has('Sem etapa')?'on':''}" data-csit="Sem etapa" style="border-color:#f59e0b;color:#b45309">⚠ Sem etapa <span style="opacity:.7;margin-left:4px">${semEt}</span></button>`;
+  // ===== L3: Etapas (expansíveis quando módulo está marcado) =====
+  let h3lk='', h3cap='';
+  if(F_C_MOD_SET.has('linkedin')){
+    h3lk = '<div class="filters filters-sub"><span class="per-lab">↳ Etapas LinkedIn:</span>' + LK_STAGES.map(e=>chip(F_C_ETAPA_SET.has(e), dot(ETAPA_COLOR[e]||'#64748b')+(ETAPA_LABEL[e]||e), cntEt(e), 'data-cetapa="'+esc(e)+'"')).join('') + '</div>';
+  }
+  if(F_C_MOD_SET.has('captacao')){
+    h3cap = '<div class="filters filters-sub"><span class="per-lab">↳ Etapas Captação:</span>' + CAP_STAGES.map(e=>chip(F_C_ETAPA_SET.has(e), dot(ETAPA_COLOR[e]||'#64748b')+(ETAPA_LABEL[e]||e), cntEt(e), 'data-cetapa="'+esc(e)+'"')).join('') + '</div>';
+  }
+  // ===== L4: Status (expansível quando há etapa selecionada — mesma lógica das etapas) =====
+  // Status agrupados por etapa: cada etapa específica marcada abre uma sub-linha com seus status.
+  let h4='';
+  if(F_C_ETAPA_SET.size){
+    const ordered=ETAPAS.filter(e=>F_C_ETAPA_SET.has(e));
+    h4 = ordered.map(e=>{
+      const sts=(STATUS_BY_ETAPA[e]||[]);
+      if(!sts.length) return '';
+      const chips=sts.map(s=>chip(F_C_STATUS_SET.has(s), esc(s), cntSt(s), 'data-cstatus="'+esc(s)+'"')).join('');
+      return '<div class="filters filters-sub filters-sub-2"><span class="per-lab">' + dot(ETAPA_COLOR[e]||'#64748b') + 'Status · ' + esc(ETAPA_LABEL[e]||e) + ':</span>' + chips + '</div>';
+    }).join('');
+  }
+  return `${per}
   <div class="filters" style="margin-bottom:6px">${h2}</div>
-  ${h3}${h4}
-  ${per}`;
+  ${h3lk}${h3cap}
+  ${h4}`;
 }
 // dropdowns secundários do Contatos (sem "Todas as etapas" — redundante c/ chips de etapa)
 function contatosBottomFiltersHTML(){
   const segmentos=[...new Set(LEADS.map(l=>l.segmento).filter(Boolean))].sort();
   const idadeOpts=[['','Idade: todas'],['_29','até 29'],['30_40','30–40'],['41_','41+']];
   const sexoOpts=[['','Sexo: todos'],['Masculino','Masculino'],['Feminino','Feminino'],['Outro','Outro']];
-  const hasFiltro = F_EMPRESA.length||F_PROFISSAO||F_SEGMENTO||F_IDADE||F_SEXO||F_MONEY||F_STATUS||F_C_SIT_SET.size||F_C_MOD_SET.size||F_C_ETAPA_SET.size||F_C_PERIODO;
+  const hasFiltro = F_EMPRESA.length||F_PROFISSAO||F_SEGMENTO||F_IDADE||F_SEXO||F_MONEY||F_STATUS||F_C_SIT_SET.size||F_C_MOD_SET.size||F_C_ETAPA_SET.size||F_C_STATUS_SET.size||F_C_PERIODO;
   const saved=svLoad();
   const savedChips = saved.length
     ? saved.map((v,i)=>`<span class="sv-chip"><button class="sv-apply" data-svapply="${i}">⭐ ${esc(v.name)}</button><button class="sv-del" data-svdel="${i}" title="Excluir visão">×</button></span>`).join('')
     : '<span class="sv-empty">nenhuma ainda — monte filtros e salve</span>';
   return `
   <div class="filters">
-    <select class="fsel" id="f-status"><option value="">Todo status</option>${(function(){
-      // Etapas específicas dominam (mais refinado). Senão, módulos. Senão, todos.
-      const ets=new Set();
-      if(F_C_ETAPA_SET.size){ F_C_ETAPA_SET.forEach(e=>ets.add(e)); }
-      else {
-        if(F_C_MOD_SET.has('linkedin')) LK_STAGES.forEach(e=>ets.add(e));
-        if(F_C_MOD_SET.has('captacao')) CAP_STAGES.forEach(e=>ets.add(e));
-      }
-      const list = ets.size ? [...ets].flatMap(e=>STATUS_BY_ETAPA[e]||[]) : ALL_STATUS;
-      const seen=new Set(); return list.filter(s=>!seen.has(s)&&seen.add(s)).map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('');
-    })()}</select>
     <button type="button" class="fsel" id="f-empresa" style="min-width:140px;text-align:left;cursor:pointer">${F_EMPRESA.length===0?'Empresa: todas':F_EMPRESA.length===1?('🏢 '+esc(F_EMPRESA[0])):('🏢 '+F_EMPRESA.length+' empresas')} ▾</button>
     <input class="fsel" id="f-profissao" placeholder="Profissão (cargo)…" value="${esc(F_PROFISSAO)}" style="min-width:150px">
     <select class="fsel" id="f-segmento"><option value="">Todo segmento</option>${segmentos.map(s=>`<option value="${esc(s)}" ${F_SEGMENTO===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
@@ -2278,37 +2277,50 @@ function wireContatosFilters(){
   // Linha 1 (Situação)
   document.querySelectorAll('[data-csit]').forEach(b=>b.onclick=()=>{
     const v=b.dataset.csit;
-    if(v==='__all'){ F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); }
+    if(v==='__all'){ F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); F_C_STATUS_SET.clear(); }
     else { if(F_C_SIT_SET.has(v))F_C_SIT_SET.delete(v); else F_C_SIT_SET.add(v); }
     render();
   });
-  // Helper: F_STATUS só faz sentido se estiver entre os status das etapas filtradas
+  // Helper: limpa status que não pertencem mais a nenhuma etapa marcada
   const trimStatus=()=>{
-    const ets=new Set();
-    if(F_C_ETAPA_SET.size){ F_C_ETAPA_SET.forEach(e=>ets.add(e)); }
+    if(!F_C_ETAPA_SET.size){ F_C_STATUS_SET.clear(); return; }
+    const valid=new Set([...F_C_ETAPA_SET].flatMap(e=>STATUS_BY_ETAPA[e]||[]));
+    [...F_C_STATUS_SET].forEach(s=>{ if(!valid.has(s)) F_C_STATUS_SET.delete(s); });
+    // legado (F_STATUS single)
+    const validAll=new Set();
+    if(F_C_ETAPA_SET.size){ F_C_ETAPA_SET.forEach(e=>(STATUS_BY_ETAPA[e]||[]).forEach(s=>validAll.add(s))); }
     else {
-      if(F_C_MOD_SET.has('linkedin')) LK_STAGES.forEach(e=>ets.add(e));
-      if(F_C_MOD_SET.has('captacao')) CAP_STAGES.forEach(e=>ets.add(e));
+      if(F_C_MOD_SET.has('linkedin')) LK_STAGES.forEach(e=>(STATUS_BY_ETAPA[e]||[]).forEach(s=>validAll.add(s)));
+      if(F_C_MOD_SET.has('captacao')) CAP_STAGES.forEach(e=>(STATUS_BY_ETAPA[e]||[]).forEach(s=>validAll.add(s)));
     }
-    if(!ets.size) return;
-    const valid=new Set([...ets].flatMap(e=>STATUS_BY_ETAPA[e]||[]));
+    if(!validAll.size) return;
     if(F_STATUS && !valid.has(F_STATUS)) F_STATUS='';
   };
-  // Linha 2 (Módulos) — desmarcar módulo também limpa as etapas dele
+  // Linha 2 (Módulos) — desmarcar módulo também limpa as etapas e status dele
   document.querySelectorAll('[data-cmod]').forEach(b=>b.onclick=()=>{
     const v=b.dataset.cmod;
     if(F_C_MOD_SET.has(v)){
       F_C_MOD_SET.delete(v);
       const keys=(v==='linkedin'?LK_STAGES:CAP_STAGES);
-      keys.forEach(k=>F_C_ETAPA_SET.delete(k));
+      keys.forEach(k=>{ F_C_ETAPA_SET.delete(k); (STATUS_BY_ETAPA[k]||[]).forEach(s=>F_C_STATUS_SET.delete(s)); });
     } else { F_C_MOD_SET.add(v); }
     trimStatus(); render();
   });
   // Linhas 3/4 (Etapas)
   document.querySelectorAll('[data-cetapa]').forEach(b=>b.onclick=()=>{
     const v=b.dataset.cetapa;
-    if(F_C_ETAPA_SET.has(v))F_C_ETAPA_SET.delete(v); else F_C_ETAPA_SET.add(v);
+    if(F_C_ETAPA_SET.has(v)){
+      F_C_ETAPA_SET.delete(v);
+      // ao desmarcar etapa, limpa os status dela
+      (STATUS_BY_ETAPA[v]||[]).forEach(s=>F_C_STATUS_SET.delete(s));
+    } else { F_C_ETAPA_SET.add(v); }
     trimStatus(); render();
+  });
+  // Status (chips multi-select)
+  document.querySelectorAll('[data-cstatus]').forEach(b=>b.onclick=()=>{
+    const v=b.dataset.cstatus;
+    if(F_C_STATUS_SET.has(v))F_C_STATUS_SET.delete(v); else F_C_STATUS_SET.add(v);
+    render();
   });
   // Período
   document.querySelectorAll('[data-cper]').forEach(b=>b.onclick=()=>{
@@ -2327,7 +2339,7 @@ function wireContatosFilters(){
   const fx=$('#f-sexo');  if(fx)fx.onchange=e=>{F_SEXO=e.target.value;render();};
   const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
   const fc=$('#f-clear-c'); if(fc)fc.onclick=()=>{
-    F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear();
+    F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); F_C_STATUS_SET.clear();
     F_C_PERIODO=''; F_C_DATE_INI=''; F_C_DATE_FIM='';
     F_EMPRESA=[]; F_PROFISSAO=''; F_SEGMENTO=''; F_IDADE=''; F_SEXO=''; F_MONEY=false; F_STATUS='';
     COLFILT={}; render();
@@ -2415,9 +2427,9 @@ function wireFilters(){
 function svLoad(){ try{ return JSON.parse(localStorage.getItem('crm-saved-views')||'[]'); }catch(e){ return []; } }
 function svStore(arr){ try{ localStorage.setItem('crm-saved-views',JSON.stringify(arr)); }catch(e){} }
 function svCapture(){ return {sit:F_SITUACAO,etapa:F_ETAPA,status:F_STATUS,empresa:F_EMPRESA.slice(),seg:F_SEGMENTO,prof:F_PROFISSAO,idade:F_IDADE,sexo:F_SEXO,money:F_MONEY,
-  cSit:[...F_C_SIT_SET],cMod:[...F_C_MOD_SET],cEt:[...F_C_ETAPA_SET],cPer:F_C_PERIODO,cIni:F_C_DATE_INI,cFim:F_C_DATE_FIM}; }
+  cSit:[...F_C_SIT_SET],cMod:[...F_C_MOD_SET],cEt:[...F_C_ETAPA_SET],cSt:[...F_C_STATUS_SET],cPer:F_C_PERIODO,cIni:F_C_DATE_INI,cFim:F_C_DATE_FIM}; }
 function svApply(f){ if(!f)return; F_SITUACAO=f.sit||'Ativo'; F_ETAPA=f.etapa||''; F_STATUS=f.status||''; F_EMPRESA=Array.isArray(f.empresa)?f.empresa.slice():[]; F_SEGMENTO=f.seg||''; F_PROFISSAO=f.prof||''; F_IDADE=f.idade||''; F_SEXO=f.sexo||''; F_MONEY=!!f.money;
-  F_C_SIT_SET=new Set(Array.isArray(f.cSit)?f.cSit:[]); F_C_MOD_SET=new Set(Array.isArray(f.cMod)?f.cMod:[]); F_C_ETAPA_SET=new Set(Array.isArray(f.cEt)?f.cEt:[]);
+  F_C_SIT_SET=new Set(Array.isArray(f.cSit)?f.cSit:[]); F_C_MOD_SET=new Set(Array.isArray(f.cMod)?f.cMod:[]); F_C_ETAPA_SET=new Set(Array.isArray(f.cEt)?f.cEt:[]); F_C_STATUS_SET=new Set(Array.isArray(f.cSt)?f.cSt:[]);
   F_C_PERIODO=f.cPer||''; F_C_DATE_INI=f.cIni||''; F_C_DATE_FIM=f.cFim||'';
   render(); }
 function svSavePrompt(){ const name=prompt('Nome da visão salva (ex.: "Renda alta · Recife")'); if(!name||!name.trim())return; const arr=svLoad(); arr.push({name:name.trim(),f:svCapture()}); svStore(arr); render(); if(typeof toast==='function')toast('Visão salva ✓'); }
