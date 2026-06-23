@@ -170,6 +170,20 @@ tr.row.sel{background:#eff6ff}
 .tk-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tk-snooze{background:#fff7ed;color:#9a3412;border:1px solid #fdba74;border-radius:8px;font-size:12px;font-weight:800;padding:6px 9px;cursor:pointer;flex-shrink:0}
 .tk-snooze:hover{background:#ffedd5}
+/* Tarefas · Kanban */
+.tk-kanban{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}
+.tk-kcol{flex:none;width:280px;background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px}
+.tk-kcol-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--txt);margin-bottom:10px}
+.tk-kcol-dot{width:10px;height:10px;border-radius:50%;flex:none}
+.tk-kcol-l{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tk-kcol-n{font-size:12px;font-weight:800;color:var(--muted);background:#fff;padding:1px 8px;border-radius:8px}
+.tk-kcol-b{display:flex;flex-direction:column;gap:8px}
+.tk-kcard{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;transition:box-shadow .12s,border-color .12s}
+.tk-kcard:hover{border-color:var(--primary);box-shadow:0 4px 12px rgba(15,23,42,.06)}
+.tk-kcard-t{font-size:13.5px;font-weight:700;color:var(--txt);line-height:1.25;margin-bottom:3px}
+.tk-kcard-s{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:6px}
+.tk-kcard-acts{display:flex;gap:6px;margin-top:8px}
+.tk-check.small,.tk-snooze.small{width:auto;height:26px;padding:0 8px;font-size:11px}
 .tk-open{background:none;border:none;font-size:15px;opacity:.5;flex-shrink:0;cursor:pointer}
 .tk-open:hover{opacity:1}
 /* menu de status (inline) redesenhado */
@@ -1603,7 +1617,7 @@ function tplRowHTML(t){
   </div>`;
 }
 function taskTplRowHTML(s){
-  return `<div class="ttpl-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px"><input class="ttpl-txt" value="${esc(s||'')}" placeholder="Ex.: Ligar para o lead" style="flex:1;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font-size:13px"><button class="btn ghost ttpl-del" title="Remover">🗑</button></div>`;
+  return `<div class="fce-row ttpl-row"><div class="fce-head"><span style="font-size:16px">✅</span><input class="ttpl-txt fsel" value="${esc(s||'')}" placeholder="Ex.: Ligar para o lead" style="flex:1;font-size:13.5px"><button class="btn ghost btn-mini ttpl-up" title="subir">↑</button><button class="btn ghost btn-mini ttpl-down" title="descer">↓</button><button class="btn ghost btn-mini ttpl-del" title="excluir">🗑</button></div></div>`;
 }
 // ===== Configurações vira hub com abas: Conta · Usuários · Perfil (Usuários/Perfil só admin) =====
 let CONFIG_TAB='conta';
@@ -1704,11 +1718,15 @@ function configHTML(){
       <div id="tpl-list">${msgTemplates().map(t=>tplRowHTML(t)).join('')}</div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn ghost" id="tpl-add">＋ Novo modelo</button><button class="btn primary" id="tpl-save">Salvar modelos</button><span id="tpl-msg" style="font-size:13px"></span></div>
     </div>
-    <div class="profcard" style="display:block;max-width:620px;margin-top:14px">
+    <div class="profcard" style="display:block;max-width:780px;margin-top:14px">
       <div style="font-weight:600;margin-bottom:4px">✅ Tarefas pré-definidas</div>
-      <p class="hint" style="margin-bottom:8px">Atalhos que aparecem ao criar uma tarefa num lead (na tela <b>Tarefas</b>). Você sempre pode escrever uma tarefa livre — estas são só pra agilizar. Edite, adicione ou remova.</p>
+      <p class="hint" style="margin-bottom:12px">Atalhos que aparecem no compositor da tela <b>Tarefas</b> e no app mobile. Crie, edite, reordene ou exclua. Você sempre pode escrever uma tarefa livre — estas são só pra agilizar. Salva pra todos (Supabase).</p>
       <div id="ttpl-list">${taskTemplates().map(taskTplRowHTML).join('')}</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><button class="btn ghost" id="ttpl-add">＋ Nova tarefa</button><button class="btn primary" id="ttpl-save">Salvar tarefas</button><span id="ttpl-msg" style="font-size:13px"></span></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn ghost" id="ttpl-add">＋ Nova tarefa</button>
+        <button class="btn primary" id="ttpl-save">Salvar tarefas</button>
+        <span id="ttpl-msg" style="font-size:13px"></span>
+      </div>
     </div>`;
 }
 function wireConfig(){
@@ -1741,9 +1759,13 @@ function wireConfig(){
     msg.style.color=ok?'var(--green)':'var(--red)'; msg.textContent=ok?'✓ Modelos salvos.':'Salvou nesta sessão (tabela app_settings indisponível).';
   };
   // ── tarefas pré-definidas ──
-  const ttDel=row=>{ const b=row.querySelector('.ttpl-del'); if(b)b.onclick=()=>row.remove(); };
-  document.querySelectorAll('#ttpl-list .ttpl-row').forEach(ttDel);
-  const ttadd=$('#ttpl-add'); if(ttadd)ttadd.onclick=()=>{ const list=$('#ttpl-list'); const tmp=document.createElement('div'); tmp.innerHTML=taskTplRowHTML(''); const row=tmp.firstElementChild; list.appendChild(row); ttDel(row); row.querySelector('.ttpl-txt').focus(); };
+  const ttWire=row=>{
+    const del=row.querySelector('.ttpl-del'); if(del)del.onclick=()=>row.remove();
+    const up=row.querySelector('.ttpl-up'); if(up)up.onclick=()=>{ const p=row.previousElementSibling; if(p&&p.classList.contains('ttpl-row'))row.parentNode.insertBefore(row,p); };
+    const dn=row.querySelector('.ttpl-down'); if(dn)dn.onclick=()=>{ const n=row.nextElementSibling; if(n&&n.classList.contains('ttpl-row'))row.parentNode.insertBefore(n,row); };
+  };
+  document.querySelectorAll('#ttpl-list .ttpl-row').forEach(ttWire);
+  const ttadd=$('#ttpl-add'); if(ttadd)ttadd.onclick=()=>{ const list=$('#ttpl-list'); const tmp=document.createElement('div'); tmp.innerHTML=taskTplRowHTML(''); const row=tmp.firstElementChild; list.appendChild(row); ttWire(row); row.querySelector('.ttpl-txt').focus(); };
   const ttsave=$('#ttpl-save'); if(ttsave)ttsave.onclick=async()=>{
     const arr=[...document.querySelectorAll('#ttpl-list .ttpl-row')].map(r=>(r.querySelector('.ttpl-txt').value||'').trim()).filter(Boolean);
     const msg=$('#ttpl-msg'); if(!arr.length){ msg.style.color='var(--red)'; msg.textContent='Deixe ao menos 1 tarefa.'; return; }
@@ -2206,7 +2228,7 @@ function contatosFiltersHTML(){
   }
   // Período (novo): Tudo · Hoje · Semana · Mês · range custom
   const perChip=(k,l)=>`<button class="chip ${F_C_PERIODO===k?'on':''}" data-cper="${k}">${l}</button>`;
-  let per = '<div class="filters periodo" style="margin:10px 0 12px"><span class="per-lab">📅 Período (criação):</span>';
+  let per = '<div class="filters periodo" style="margin:10px 0 12px">';
   per += perChip('','Tudo') + perChip('hoje','Hoje') + perChip('semana','Semana') + perChip('mes','Mês');
   per += `<button class="chip ${F_C_PERIODO==='custom'?'on':''}" data-cper="custom">📅 Intervalo</button>`;
   if(F_C_PERIODO==='custom'){
@@ -2231,7 +2253,17 @@ function contatosBottomFiltersHTML(){
     : '<span class="sv-empty">nenhuma ainda — monte filtros e salve</span>';
   return `
   <div class="filters">
-    <select class="fsel" id="f-status"><option value="">Todo status</option>${ALL_STATUS.map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <select class="fsel" id="f-status"><option value="">Todo status</option>${(function(){
+      // Etapas específicas dominam (mais refinado). Senão, módulos. Senão, todos.
+      const ets=new Set();
+      if(F_C_ETAPA_SET.size){ F_C_ETAPA_SET.forEach(e=>ets.add(e)); }
+      else {
+        if(F_C_MOD_SET.has('linkedin')) LK_STAGES.forEach(e=>ets.add(e));
+        if(F_C_MOD_SET.has('captacao')) CAP_STAGES.forEach(e=>ets.add(e));
+      }
+      const list = ets.size ? [...ets].flatMap(e=>STATUS_BY_ETAPA[e]||[]) : ALL_STATUS;
+      const seen=new Set(); return list.filter(s=>!seen.has(s)&&seen.add(s)).map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('');
+    })()}</select>
     <button type="button" class="fsel" id="f-empresa" style="min-width:140px;text-align:left;cursor:pointer">${F_EMPRESA.length===0?'Empresa: todas':F_EMPRESA.length===1?('🏢 '+esc(F_EMPRESA[0])):('🏢 '+F_EMPRESA.length+' empresas')} ▾</button>
     <input class="fsel" id="f-profissao" placeholder="Profissão (cargo)…" value="${esc(F_PROFISSAO)}" style="min-width:150px">
     <select class="fsel" id="f-segmento"><option value="">Todo segmento</option>${segmentos.map(s=>`<option value="${esc(s)}" ${F_SEGMENTO===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
@@ -2250,6 +2282,18 @@ function wireContatosFilters(){
     else { if(F_C_SIT_SET.has(v))F_C_SIT_SET.delete(v); else F_C_SIT_SET.add(v); }
     render();
   });
+  // Helper: F_STATUS só faz sentido se estiver entre os status das etapas filtradas
+  const trimStatus=()=>{
+    const ets=new Set();
+    if(F_C_ETAPA_SET.size){ F_C_ETAPA_SET.forEach(e=>ets.add(e)); }
+    else {
+      if(F_C_MOD_SET.has('linkedin')) LK_STAGES.forEach(e=>ets.add(e));
+      if(F_C_MOD_SET.has('captacao')) CAP_STAGES.forEach(e=>ets.add(e));
+    }
+    if(!ets.size) return;
+    const valid=new Set([...ets].flatMap(e=>STATUS_BY_ETAPA[e]||[]));
+    if(F_STATUS && !valid.has(F_STATUS)) F_STATUS='';
+  };
   // Linha 2 (Módulos) — desmarcar módulo também limpa as etapas dele
   document.querySelectorAll('[data-cmod]').forEach(b=>b.onclick=()=>{
     const v=b.dataset.cmod;
@@ -2258,13 +2302,13 @@ function wireContatosFilters(){
       const keys=(v==='linkedin'?LK_STAGES:CAP_STAGES);
       keys.forEach(k=>F_C_ETAPA_SET.delete(k));
     } else { F_C_MOD_SET.add(v); }
-    render();
+    trimStatus(); render();
   });
   // Linhas 3/4 (Etapas)
   document.querySelectorAll('[data-cetapa]').forEach(b=>b.onclick=()=>{
     const v=b.dataset.cetapa;
     if(F_C_ETAPA_SET.has(v))F_C_ETAPA_SET.delete(v); else F_C_ETAPA_SET.add(v);
-    render();
+    trimStatus(); render();
   });
   // Período
   document.querySelectorAll('[data-cper]').forEach(b=>b.onclick=()=>{
@@ -2543,6 +2587,7 @@ function openColPicker(anchor){
 function tasksLoad(){ try{ return JSON.parse(localStorage.getItem('crm-tasks-v1')||'[]'); }catch(e){ return []; } }
 function tasksStore(a){ try{ localStorage.setItem('crm-tasks-v1',JSON.stringify(a)); }catch(e){} }
 // Tarefas = follow-ups por lead (data_proxima_acao) + descrição (TASK_TEXT via lead_events). Fonte única, sincroniza com o Victor.
+let TK_MODE='lista'; // 'lista' | 'kanban'
 function tarefasHTML(){
   const today=todayStr();
   const leads=baseLeads().filter(l=>l.data_proxima_acao).slice()
@@ -2551,24 +2596,49 @@ function tarefasHTML(){
   const tplOpts=taskTemplates().map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('');
   const leadOpts=baseLeads().slice().sort((a,b)=>(a.nome||'').localeCompare(b.nome||''))
     .map(l=>`<option value="${esc(l.nome)}"></option>`).join('');
-  const row=l=>{
-    const d=l.data_proxima_acao.slice(0,10), over=d<today, soon=d===today;
-    const txt=TASK_TEXT[l.id]||'Follow-up agendado';
-    const due=`<span class="tk-due ${over?'over':soon?'soon':''}">📅 ${fmtDate(d)}${over?' · vencida':soon?' · hoje':''}</span>`;
-    const sub=`${esc(l.nome)} · ${esc(ETAPA_LABEL[l.etapa]||l.etapa||'—')} · ${esc(l.status||'')}`;
-    return `<div class="tk-row"><button class="tk-check" data-tkdone="${l.id}" title="Concluir tarefa">✓</button><div class="tk-main"><div class="tk-text">${esc(txt)}</div><div class="tk-sub">${sub}</div>${due}</div><button class="tk-snooze" data-tksnooze="${l.id}" title="Adiar +2 dias">+2d</button><button class="tk-open" data-tkopen="${l.id}" title="Abrir lead">↗</button></div>`;
-  };
-  return `<div class="tk-wrap">
-    <div class="tk-compose">
+  const compose=`<div class="tk-compose">
       <input id="tk-lead" list="tk-leads" placeholder="Lead (digite o nome)…" autocomplete="off" />
       <datalist id="tk-leads">${leadOpts}</datalist>
       <select id="tk-tpl"><option value="">Tarefa pré-definida…</option>${tplOpts}<option value="__free">✏️ Escrever outra…</option></select>
       <input id="tk-text" placeholder="ou escreva a tarefa…" autocomplete="off" style="display:none" />
       <input id="tk-date" type="date" value="${today}" title="Prazo" />
       <button class="btn primary" id="tk-add">＋ Adicionar</button>
-    </div>
-    <div class="tk-sec"><div class="tk-sec-h">A fazer <span class="badge">${leads.length}</span>${nOver?` · <span style="color:var(--red);font-weight:800">${nOver} vencida(s)</span>`:''}</div>${leads.length?leads.map(row).join(''):'<div class="tk-empty">Nada agendado. Crie uma tarefa pra um lead acima. ✓</div>'}</div>
-  </div>`;
+    </div>`;
+  const toggle=`<div class="filters" style="margin:6px 0 12px"><div class="seg">
+    <button class="${TK_MODE==='lista'?'on':''}" data-tkmode="lista">☰ Lista</button>
+    <button class="${TK_MODE==='kanban'?'on':''}" data-tkmode="kanban">▦ Kanban</button>
+  </div></div>`;
+  const head=`<div class="tk-sec-h" style="margin-top:0">A fazer <span class="badge">${leads.length}</span>${nOver?` · <span style="color:var(--red);font-weight:800">${nOver} vencida(s)</span>`:''}</div>`;
+  // ===== LISTA =====
+  const rowCard=l=>{
+    const d=l.data_proxima_acao.slice(0,10), over=d<today, soon=d===today;
+    const txt=TASK_TEXT[l.id]||'Follow-up agendado';
+    const due=`<span class="tk-due ${over?'over':soon?'soon':''}">📅 ${fmtDate(d)}${over?' · vencida':soon?' · hoje':''}</span>`;
+    const sub=`${esc(l.nome)} · ${esc(ETAPA_LABEL[l.etapa]||l.etapa||'—')} · ${esc(l.status||'')}`;
+    return `<div class="tk-row"><button class="tk-check" data-tkdone="${l.id}" title="Concluir tarefa">✓</button><div class="tk-main"><div class="tk-text">${esc(txt)}</div><div class="tk-sub">${sub}</div>${due}</div><button class="tk-snooze" data-tksnooze="${l.id}" title="Adiar +2 dias">+2d</button><button class="tk-open" data-tkopen="${l.id}" title="Abrir lead">↗</button></div>`;
+  };
+  if(TK_MODE==='lista'){
+    const body=leads.length?leads.map(rowCard).join(''):'<div class="tk-empty">Nada agendado. Crie uma tarefa pra um lead acima. ✓</div>';
+    return `<div class="tk-wrap">${compose}${toggle}<div class="tk-sec">${head}${body}</div></div>`;
+  }
+  // ===== KANBAN (agrupado por etapa do lead) =====
+  const cardK=l=>{
+    const d=l.data_proxima_acao.slice(0,10), over=d<today, soon=d===today;
+    const txt=TASK_TEXT[l.id]||'Follow-up agendado';
+    const due=`<span class="tk-due ${over?'over':soon?'soon':''}">📅 ${fmtDate(d)}${over?' · vencida':soon?' · hoje':''}</span>`;
+    return `<div class="tk-kcard" data-tkopen="${l.id}"><div class="tk-kcard-t">${esc(txt)}</div><div class="tk-kcard-s">${esc(l.nome)}</div>${due}<div class="tk-kcard-acts"><button class="tk-check small" data-tkdone="${l.id}" title="Concluir">✓</button><button class="tk-snooze small" data-tksnooze="${l.id}" title="+2 dias">+2d</button></div></div>`;
+  };
+  // colunas: todas as etapas que tenham >=1 tarefa, na ordem do funil (LK→CAP→Dormente→Descartado)
+  const order=ETAPAS.slice();
+  const byEt={}; leads.forEach(l=>{ const e=ETAPAS.includes(l.etapa)?l.etapa:'__none'; (byEt[e]=byEt[e]||[]).push(l); });
+  const semCount=(byEt.__none||[]).length;
+  const cols=order.filter(e=>byEt[e]&&byEt[e].length).map(e=>{
+    const color=ETAPA_COLOR[e]||'#64748b';
+    return `<div class="tk-kcol"><div class="tk-kcol-h"><span class="tk-kcol-dot" style="background:${color}"></span><span class="tk-kcol-l">${esc(ETAPA_LABEL[e]||e)}</span><span class="tk-kcol-n">${byEt[e].length}</span></div><div class="tk-kcol-b">${byEt[e].map(cardK).join('')}</div></div>`;
+  }).join('');
+  const colSem=semCount?`<div class="tk-kcol"><div class="tk-kcol-h"><span class="tk-kcol-dot" style="background:#f59e0b"></span><span class="tk-kcol-l">⚠ Sem etapa</span><span class="tk-kcol-n">${semCount}</span></div><div class="tk-kcol-b">${byEt.__none.map(cardK).join('')}</div></div>`:'';
+  const board=leads.length?`<div class="tk-kanban">${cols}${colSem}</div>`:'<div class="tk-empty">Nada agendado. Crie uma tarefa pra um lead acima. ✓</div>';
+  return `<div class="tk-wrap">${compose}${toggle}${head}${board}</div>`;
 }
 function wireTarefas(){
   const tpl=$('#tk-tpl'), txt=$('#tk-text');
@@ -2583,9 +2653,10 @@ function wireTarefas(){
   };
   const b=$('#tk-add'); if(b)b.onclick=add;
   const li=$('#tk-lead'); if(li)li.onkeydown=e=>{ if(e.key==='Enter')add(); };
-  document.querySelectorAll('[data-tkdone]').forEach(c=>c.onclick=async()=>{ if(await updateLead(c.dataset.tkdone,{data_proxima_acao:null})){ toast('Tarefa concluída ✓'); render(); } });
-  document.querySelectorAll('[data-tksnooze]').forEach(c=>c.onclick=async()=>{ if(await updateLead(c.dataset.tksnooze,{data_proxima_acao:addDays(2)})){ toast('Adiada +2 dias'); render(); } });
-  document.querySelectorAll('[data-tkopen]').forEach(c=>c.onclick=()=>openDrawer(c.dataset.tkopen));
+  document.querySelectorAll('[data-tkdone]').forEach(c=>c.onclick=async e=>{ e.stopPropagation(); if(await updateLead(c.dataset.tkdone,{data_proxima_acao:null})){ toast('Tarefa concluída ✓'); render(); } });
+  document.querySelectorAll('[data-tksnooze]').forEach(c=>c.onclick=async e=>{ e.stopPropagation(); if(await updateLead(c.dataset.tksnooze,{data_proxima_acao:addDays(2)})){ toast('Adiada +2 dias'); render(); } });
+  document.querySelectorAll('[data-tkopen]').forEach(c=>c.onclick=e=>{ if(e.target.closest('button'))return; openDrawer(c.dataset.tkopen); });
+  document.querySelectorAll('[data-tkmode]').forEach(b=>b.onclick=()=>{TK_MODE=b.dataset.tkmode;render();});
 }
 function wireBulk(){
   let bar=$('#bulkbar'); if(bar)bar.remove();
@@ -3467,18 +3538,6 @@ function sparkBars(days,series){
 }
 function visaoHTML(){
   const B=vgBase(), A=vgAtivos();
-  const conv=B.filter(l=>situacaoOf(l)==='Convertido').length;
-  const icp=A.filter(l=>l.renda_estimada>=10000).length;
-  const tel=A.filter(l=>l.telefone).length;
-  const alvo=A.filter(l=>l.faixa_idade>=30&&l.faixa_idade<=40).length;
-  const pct=(a,b)=>b?Math.round(a/b*100):0;
-  const kpis=`<div class="vg-kpis">
-    <div class="vg-kpi"><div class="n">${A.length}</div><div class="l">leads ativos</div><div class="s">${B.length} no total</div></div>
-    <div class="vg-kpi"><div class="n" style="color:var(--green)">${icp} <small style="font-size:13px">(${pct(icp,A.length)}%)</small></div><div class="l">💰 renda ≥ R$10k</div><div class="s">a régua que importa</div></div>
-    <div class="vg-kpi"><div class="n" style="color:var(--violet)">${alvo} <small style="font-size:13px">(${pct(alvo,A.length)}%)</small></div><div class="l">🎯 30-40 anos</div><div class="s">perfil-alvo de LP</div></div>
-    <div class="vg-kpi"><div class="n" style="color:var(--lk)">${tel} <small style="font-size:13px">(${pct(tel,A.length)}%)</small></div><div class="l">📱 com telefone</div><div class="s">prontos pra T.A.</div></div>
-    <div class="vg-kpi"><div class="n" style="color:var(--emerald)">${conv}</div><div class="l">🏆 convertidos</div><div class="s">Life Planners</div></div>
-  </div>`;
   // Período (mesma UX do Contatos)
   const perChip=(k,l)=>`<button class="chip ${F_VG_PERIODO===k?'on':''}" data-vgper="${k}">${l}</button>`;
   let per='<div class="filters periodo" style="margin:10px 0 14px"><span class="per-lab">📅 Período (criação):</span>';
@@ -3523,7 +3582,7 @@ function visaoHTML(){
       <div class="vg-metas-wrap">${metasInline}</div>
     </div>
   </section>`;
-  return kpis+per+capSection+lkSection;
+  return per+capSection+lkSection;
 }
 function wireVisao(){
   wireActions($('#content'));
