@@ -595,7 +595,7 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 /* =====================================================================
    MOBILE-FIRST LAYER (redesenho · index-next staging)
    Ativo só quando body.is-mobile. Desktop fica 100% intacto.
-   Tokens: handoff "Pipe Captação Outliers" (alta fidelidade).
+   Tokens: handoff "Pipe X Captação Outliers" (alta fidelidade).
    ===================================================================== */
 :root{
   --m-primary:#2F5BF6; --m-primary-d:#2348C9; --m-tint:#EEF2FF;
@@ -784,7 +784,7 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
         <div class="m-dw-logo">📊</div>
         <button class="m-dw-x" id="m-dw-close">✕</button>
       </div>
-      <div class="m-dw-title">Pipe Captação · Outliers</div>
+      <div class="m-dw-title">Pipe X Captação · Outliers</div>
       <div class="m-dw-sub" id="m-dw-sub">Carregando…</div>
     </div>
     <div class="m-dw-body" id="m-dw-body"></div>
@@ -804,7 +804,7 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
         <div class="m-bar-left">
           <button class="m-burger" id="m-burger"><span></span><span></span><span></span></button>
           <div style="min-width:0">
-            <div class="m-bar-kick">Pipe Captação · Outliers</div>
+            <div class="m-bar-kick">Pipe X Captação · Outliers</div>
             <div class="m-bar-title" id="m-title">Dashboard</div>
           </div>
         </div>
@@ -1202,7 +1202,7 @@ function filtered(){
   let r=baseLeads();
   if(F_SITUACAO!=='Todos')r=r.filter(l=>situacaoOf(l)===F_SITUACAO);
   if(SEARCH)r=r.filter(searchMatch);
-  if(F_ETAPA)r=r.filter(l=>l.etapa===F_ETAPA);
+  if(F_ETAPA==='__none')r=r.filter(l=>!ETAPAS.includes(l.etapa)); else if(F_ETAPA)r=r.filter(l=>l.etapa===F_ETAPA);
   if(F_STATUS)r=r.filter(l=>l.status===F_STATUS);
   if(F_EMPRESA.length)r=r.filter(l=>F_EMPRESA.includes(l.empresa));
   if(F_PROFISSAO)r=r.filter(l=>(l.cargo||'').toLowerCase().includes(F_PROFISSAO.toLowerCase()));
@@ -1271,7 +1271,7 @@ function render(){
     c.innerHTML = banner + filtersHTML() + capToggleHTML() + funilCapHTML();
     wireFilters(); wireCapToggle(); wireFunil(); wireStatusButtons(); wireBanner(); return;
   }
-  if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML() + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
+  if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML(true) + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHubHTML(); wireConfigHub(); wireBanner(); return; }
   if(VIEW==='etapas'){ $('#view-title').textContent='Etapa · '+FN_STAGE; c.innerHTML=banner+etapasViewHTML(); wireEtapasView(); wireBanner(); return; }
   // ===== PIPE LinkedIn (default) =====
@@ -2083,7 +2083,18 @@ function wireLinkedin(){
 }
 
 // ===== FILTROS (funil/lista) =====
-function filtersHTML(){
+// linha de chips por ETAPA (com contagem) — clareza da base + "Sem etapa" pra achar leads órfãos
+function etapaChipsHTML(){
+  const scope=baseLeads(); // respeita a visão (Victor vê só a dele)
+  const cnt=e=>scope.filter(l=>l.etapa===e).length;
+  const semEtapa=scope.filter(l=>!ETAPAS.includes(l.etapa)).length;
+  const chip=(val,lbl,n,color)=>`<button class="chip ${F_ETAPA===val?'on':''}" data-etchip="${esc(val)}">${color?`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${color};margin-right:5px;vertical-align:middle"></span>`:''}${lbl} <span style="opacity:.65">${n}</span></button>`;
+  let h=chip('','Todos',scope.length,'');
+  h+=`<button class="chip ${F_ETAPA==='__none'?'on':''}" data-etchip="__none" style="border-color:#f59e0b;color:#b45309">⚠ Sem etapa <span style="opacity:.7">${semEtapa}</span></button>`;
+  h+=ETAPAS.map(e=>chip(e, ETAPA_LABEL[e]||e, cnt(e), ETAPA_COLOR[e])).join('');
+  return `<div class="filters" style="margin-bottom:6px">${h}</div>`;
+}
+function filtersHTML(etapaChips){
   const data=filtered();
   const tot=data.length, money=data.filter(l=>l.renda_estimada>=10000).length;
   const scope=baseLeads(); // contagens dos chips respeitam a visão (Victor vê só a base dele; admin vê tudo)
@@ -2104,6 +2115,7 @@ function filtersHTML(){
   const savedBar=`<div class="savedviews"><span class="sv-lab">Visões salvas</span>${savedChips}<button class="sv-save" id="sv-save">💾 Salvar visão atual</button></div>`;
   return `
   <div class="filters" style="margin-bottom:6px">${sitTabs}</div>
+  ${etapaChips?etapaChipsHTML():''}
   ${periodoChipsHTML()}
   <div class="summary">
     <div class="scard"><div class="n">${tot}</div><div class="l">leads na visão</div></div>
@@ -2111,7 +2123,7 @@ function filtersHTML(){
   </div>
   <div class="filters">
     <select class="fsel" id="f-etapa"><option value="">Todas as etapas</option>${ETAPAS.map(e=>`<option value="${e}" ${F_ETAPA===e?'selected':''}>${ETAPA_LABEL[e]}</option>`).join('')}</select>
-    <select class="fsel" id="f-status"><option value="">Todo status</option>${(F_ETAPA?STATUS_BY_ETAPA[F_ETAPA]:ALL_STATUS).map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <select class="fsel" id="f-status"><option value="">Todo status</option>${((F_ETAPA&&STATUS_BY_ETAPA[F_ETAPA])?STATUS_BY_ETAPA[F_ETAPA]:ALL_STATUS).map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
     <button type="button" class="fsel" id="f-empresa" style="min-width:140px;text-align:left;cursor:pointer">${F_EMPRESA.length===0?'Empresa: todas':F_EMPRESA.length===1?('🏢 '+esc(F_EMPRESA[0])):('🏢 '+F_EMPRESA.length+' empresas')} ▾</button>
     <input class="fsel" id="f-profissao" placeholder="Profissão (cargo)…" value="${esc(F_PROFISSAO)}" style="min-width:150px">
     <select class="fsel" id="f-segmento"><option value="">Todo segmento</option>${segmentos.map(s=>`<option value="${esc(s)}" ${F_SEGMENTO===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
@@ -2136,6 +2148,7 @@ function wireFilters(){
   const fi=$('#f-idade'); if(fi)fi.onchange=e=>{F_IDADE=e.target.value;render();};
   const fx=$('#f-sexo');  if(fx)fx.onchange=e=>{F_SEXO=e.target.value;render();};
   document.querySelectorAll('[data-sit]').forEach(b=>b.onclick=()=>{F_SITUACAO=b.dataset.sit;render();});
+  document.querySelectorAll('[data-etchip]').forEach(b=>b.onclick=()=>{F_ETAPA=b.dataset.etchip;F_STATUS='';render();});
   const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
   const fc=$('#f-clear'); if(fc)fc.onclick=()=>{F_EMPRESA=[];F_PROFISSAO='';F_SEGMENTO='';F_IDADE='';F_SEXO='';F_MONEY=false;F_ETAPA='';F_STATUS='';COLFILT={};render();};
   const svS=$('#sv-save'); if(svS)svS.onclick=svSavePrompt;
@@ -3489,7 +3502,7 @@ function mDrawerBody(){
   var B=baseLeads();
   var ativos=B.filter(function(l){return situacaoOf(l)==='Ativo';}).length;
   var conv=B.filter(function(l){return situacaoOf(l)==='Convertido';}).length;
-  var sub=$('#m-dw-sub'); if(sub)sub.textContent=ativos.toLocaleString('pt-BR')+' leads ativos · '+conv+' convertidos';
+  var sub=$('#m-dw-sub'); if(sub)sub.textContent=ativos.toLocaleString('pt-BR')+' leads ativos';
   var nm=$('#m-dw-name'), rl=$('#m-dw-role'), av=$('#m-dw-av');
   if(nm)nm.textContent=IS_VICTOR?'Victor':'Juca';
   if(rl)rl.textContent=isAdmin()?(ACT_AS==='Victor'?'Admin · vendo como Victor':'Admin · Master Franqueado'):'Assistente de captação';
@@ -3826,7 +3839,7 @@ function mConfig(){
       ? '<div style="background:#fff;border-radius:18px;padding:18px;box-shadow:0 2px 8px rgba(15,23,42,.05)"><div style="font-size:15px;font-weight:800;margin-bottom:6px">🎯 Metas por dia</div><div style="font-size:12.5px;color:#94A3B8;line-height:1.45;margin-bottom:14px">Base das barras do Dashboard e da meta de garimpo.</div><div style="display:flex;gap:10px"><div style="flex:1"><div style="font-size:12px;color:#94A3B8;margin-bottom:4px">Minerados</div><input id="m-meta-min" type="number" value="'+SETTINGS.meta_minerados_dia+'" style="width:100%;height:46px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 14px;font-size:15px"/></div><div style="flex:1"><div style="font-size:12px;color:#94A3B8;margin-bottom:4px">Convites</div><input id="m-meta-conv" type="number" value="'+SETTINGS.meta_convites_dia+'" style="width:100%;height:46px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 14px;font-size:15px"/></div></div><button id="m-meta-save" style="width:100%;height:44px;border:none;border-radius:12px;background:#2F5BF6;color:#fff;font-size:14.5px;font-weight:700;cursor:pointer;margin-top:14px">Salvar metas</button></div>'
       : '<div style="background:#fff;border-radius:18px;padding:18px;box-shadow:0 2px 8px rgba(15,23,42,.05)"><div style="font-size:15px;font-weight:800;margin-bottom:8px">🎯 Metas por dia</div><div style="font-size:14px;color:#475569">Minerados <strong>'+SETTINGS.meta_minerados_dia+'</strong> · Convites <strong>'+SETTINGS.meta_convites_dia+'</strong></div><div style="font-size:12px;color:#94A3B8;margin-top:6px">Definidas pelo admin.</div></div>';
   } else {
-    body='<div style="background:#fff;border-radius:18px;padding:18px;box-shadow:0 2px 8px rgba(15,23,42,.05);margin-bottom:14px"><div style="font-size:15px;font-weight:800;margin-bottom:14px">✉️ Acesso</div><div style="font-size:13px;color:#94A3B8;margin-bottom:4px">E-mail</div><div style="height:46px;border:1.5px solid #E2E8F0;border-radius:12px;display:flex;align-items:center;padding:0 14px;font-size:15px;color:#334155;margin-bottom:14px;overflow:hidden">'+esc(ME||'—')+'</div><button id="m-pass" style="width:100%;height:44px;border:none;border-radius:12px;background:#F1F5F9;color:#475569;font-size:14.5px;font-weight:700;cursor:pointer;margin-bottom:10px">Trocar senha</button><button id="m-logout" style="width:100%;height:44px;border:none;border-radius:12px;background:#FEF2F2;color:#DC2626;font-size:14.5px;font-weight:700;cursor:pointer">Sair</button></div><div style="text-align:center;font-size:12.5px;color:#CBD5E1;margin-top:6px">Pipe Captação Outliers · '+esc(APP_VERSION)+'</div>';
+    body='<div style="background:#fff;border-radius:18px;padding:18px;box-shadow:0 2px 8px rgba(15,23,42,.05);margin-bottom:14px"><div style="font-size:15px;font-weight:800;margin-bottom:14px">✉️ Acesso</div><div style="font-size:13px;color:#94A3B8;margin-bottom:4px">E-mail</div><div style="height:46px;border:1.5px solid #E2E8F0;border-radius:12px;display:flex;align-items:center;padding:0 14px;font-size:15px;color:#334155;margin-bottom:14px;overflow:hidden">'+esc(ME||'—')+'</div><button id="m-pass" style="width:100%;height:44px;border:none;border-radius:12px;background:#F1F5F9;color:#475569;font-size:14.5px;font-weight:700;cursor:pointer;margin-bottom:10px">Trocar senha</button><button id="m-logout" style="width:100%;height:44px;border:none;border-radius:12px;background:#FEF2F2;color:#DC2626;font-size:14.5px;font-weight:700;cursor:pointer">Sair</button></div><div style="text-align:center;font-size:12.5px;color:#CBD5E1;margin-top:6px">Pipe X Captação Outliers · '+esc(APP_VERSION)+'</div>';
   }
   return prof+tabsH+body;
 }
