@@ -582,6 +582,8 @@ body.tw-side-light .nav-foot a{color:var(--muted)}
 .cfgtab.on{color:var(--primary);border-bottom-color:var(--primary)}
 .filters.periodo{align-items:center;gap:6px}
 .filters.periodo .per-lab{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
+.filters.filters-sub{padding-left:14px;margin:2px 0 6px;border-left:2px dashed var(--line)}
+.filters.filters-sub .per-lab{font-size:11.5px;color:var(--muted);font-weight:700;margin-right:6px}
 .fce-row{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--card)}
 .fce-head{display:flex;align-items:center;gap:8px}
 .fce-head input[type=color]{width:34px;height:32px;border:1px solid var(--line);border-radius:8px;padding:2px;cursor:pointer;background:none}
@@ -971,6 +973,13 @@ function triageLead({cargo,empresa}={}){
 // ===== STATE =====
 let LEADS=[], VIEW='visao', SEARCH='', F_ETAPA='', F_STATUS='', F_RESP='', F_MONEY=false, ME='', MY_NAME='Gustavo';
 let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false, F_PERIODO=''; // F_PERIODO: ''=tudo | hoje | 7d | 30d | 90d (por criado_em)
+// ===== Contatos · filtros multi-select isolados (não afetam outras views) =====
+// Linha 1 (situação): Set de 'Sem etapa'|'Dormente'|'Descartado'  ·  vazio = todos
+// Linha 2 (módulos): Set de 'linkedin'|'captacao' (ativos do módulo)
+// Linha 3/4 (etapas específicas): Set de chaves de etapa do funil
+let F_C_SIT_SET=new Set(), F_C_MOD_SET=new Set(), F_C_ETAPA_SET=new Set();
+let F_C_PERIODO='', F_C_DATE_INI='', F_C_DATE_FIM=''; // periodo: ''|hoje|semana|mes|custom
+const LK_STAGES=['Qualificacao','Conexao'];
 // true se a data (criado_em) cai no período escolhido — pra validar contagens por janela de tempo
 function periodMatch(dateStr,period){
   if(!period) return true;
@@ -990,6 +999,51 @@ function periodoChipsHTML(){
     PERIODO_OPTS.map(([k,l])=>`<button class="chip ${F_PERIODO===k?'on':''}" data-periodo="${k}">${l}</button>`).join('')+`</div>`;
 }
 function wirePeriodoChips(){ document.querySelectorAll('[data-periodo]').forEach(b=>b.onclick=()=>{F_PERIODO=b.dataset.periodo;render();}); }
+// ===== Contatos · helpers (multi-select OR + período com semana/mês vigente + range custom) =====
+function cYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function cPeriodRange(){
+  const now=new Date();
+  if(F_C_PERIODO==='hoje'){const t=cYmd(now);return{ini:t,fim:t};}
+  if(F_C_PERIODO==='semana'){const dow=(now.getDay()+6)%7;const mon=new Date(now);mon.setDate(now.getDate()-dow);const sun=new Date(mon);sun.setDate(mon.getDate()+6);return{ini:cYmd(mon),fim:cYmd(sun)};}
+  if(F_C_PERIODO==='mes'){const i=new Date(now.getFullYear(),now.getMonth(),1),f=new Date(now.getFullYear(),now.getMonth()+1,0);return{ini:cYmd(i),fim:cYmd(f)};}
+  if(F_C_PERIODO==='custom') return {ini:F_C_DATE_INI||'',fim:F_C_DATE_FIM||''};
+  return null;
+}
+function cPeriodMatch(dateStr){
+  const r=cPeriodRange(); if(!r) return true; if(!dateStr) return false;
+  const d=String(dateStr).slice(0,10);
+  if(r.ini && d<r.ini) return false;
+  if(r.fim && d>r.fim) return false;
+  return true;
+}
+// Multi-select OR (vazio em TUDO = sem filtro de seção, mostra tudo)
+function cFilterMatch(l){
+  const empty = F_C_SIT_SET.size===0 && F_C_MOD_SET.size===0 && F_C_ETAPA_SET.size===0;
+  if(empty) return true;
+  const sit=situacaoOf(l), et=l.etapa;
+  if(F_C_SIT_SET.has('Sem etapa') && !ETAPAS.includes(et)) return true;
+  if(F_C_SIT_SET.has('Dormente') && sit==='Dormente') return true;
+  if(F_C_SIT_SET.has('Descartado') && sit==='Descartado') return true;
+  if(F_C_MOD_SET.has('linkedin') && LK_STAGES.includes(et) && sit==='Ativo') return true;
+  if(F_C_MOD_SET.has('captacao') && CAP_STAGES.includes(et) && sit==='Ativo') return true;
+  if(F_C_ETAPA_SET.has(et)) return true;
+  return false;
+}
+function filteredContatos(){
+  let r=baseLeads();
+  if(SEARCH) r=r.filter(searchMatch);
+  r=r.filter(cFilterMatch);
+  r=r.filter(l=>cPeriodMatch(l.criado_em));
+  // dropdowns secundários (mantém os existentes)
+  if(F_STATUS) r=r.filter(l=>l.status===F_STATUS);
+  if(F_EMPRESA.length) r=r.filter(l=>F_EMPRESA.includes(l.empresa));
+  if(F_PROFISSAO) r=r.filter(l=>(l.cargo||'').toLowerCase().includes(F_PROFISSAO.toLowerCase()));
+  if(F_SEGMENTO) r=r.filter(l=>(l.segmento||'')===F_SEGMENTO);
+  if(F_IDADE) r=r.filter(l=>idadeInRange(l.faixa_idade,F_IDADE));
+  if(F_SEXO) r=r.filter(l=>(l.sexo||'')===F_SEXO);
+  if(F_MONEY) r=r.filter(l=>l.renda_estimada>=10000);
+  return r;
+}
 let F_EMPRESA=[], F_SEGMENTO='', F_PROFISSAO='', F_IDADE='', F_SEXO=''; // Funil: filtros combináveis; F_EMPRESA = lista (multiseleção)
 let CAP_MODE='kanban'; // Funil Captação: 'kanban' | 'lista'
 let SORT={col:'',dir:1}; // ordenação das listas estilo planilha: col vazio=ordem padrão; dir 1=asc, -1=desc
@@ -1271,7 +1325,7 @@ function render(){
     c.innerHTML = banner + filtersHTML() + capToggleHTML() + funilCapHTML();
     wireFilters(); wireCapToggle(); wireFunil(); wireStatusButtons(); wireBanner(); return;
   }
-  if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + filtersHTML(true) + listaHTML(filtered()); wireFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
+  if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + contatosFiltersHTML() + contatosBottomFiltersHTML() + listaHTML(filteredContatos()); wireContatosFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHubHTML(); wireConfigHub(); wireBanner(); return; }
   if(VIEW==='etapas'){ $('#view-title').textContent='Etapa · '+FN_STAGE; c.innerHTML=banner+etapasViewHTML(); wireEtapasView(); wireBanner(); return; }
   // ===== PIPE LinkedIn (default) =====
@@ -2083,7 +2137,125 @@ function wireLinkedin(){
 }
 
 // ===== FILTROS (funil/lista) =====
-// linha de chips por ETAPA (com contagem) — clareza da base + "Sem etapa" pra achar leads órfãos
+// ===== Contatos · barra de filtros redesenhada (4 linhas + período custom) =====
+function contatosFiltersHTML(){
+  const scope=baseLeads();
+  const cnt=fn=>scope.filter(fn).length;
+  const cntSit=s=>scope.filter(l=>situacaoOf(l)===s).length;
+  const cntEt=e=>scope.filter(l=>l.etapa===e).length;
+  const semEt=cnt(l=>!ETAPAS.includes(l.etapa));
+  const chip=(active,label,n,extra)=>`<button class="chip ${active?'on':''}" ${extra||''}><span>${label}</span> <span style="opacity:.7;margin-left:4px">${n}</span></button>`;
+  const dot=(c)=>`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;
+  // Linha 1 — Situação (multi)
+  const allEmpty = F_C_SIT_SET.size===0 && F_C_MOD_SET.size===0 && F_C_ETAPA_SET.size===0;
+  let h1 = `<button class="chip ${allEmpty?'on':''}" data-csit="__all">Todos <span style="opacity:.7;margin-left:4px">${scope.length}</span></button>`;
+  h1 += `<button class="chip ${F_C_SIT_SET.has('Sem etapa')?'on':''}" data-csit="Sem etapa" style="border-color:#f59e0b;color:#b45309">⚠ Sem etapa <span style="opacity:.7;margin-left:4px">${semEt}</span></button>`;
+  h1 += chip(F_C_SIT_SET.has('Dormente'), dot('#6b7280')+'Dormentes', cntSit('Dormente'), 'data-csit="Dormente"');
+  h1 += chip(F_C_SIT_SET.has('Descartado'), dot('#ef4444')+'Descartados', cntSit('Descartado'), 'data-csit="Descartado"');
+  // Linha 2 — Módulos (multi)
+  const cntMod=keys=>scope.filter(l=>keys.includes(l.etapa)&&situacaoOf(l)==='Ativo').length;
+  let h2 = chip(F_C_MOD_SET.has('linkedin'), '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--lk);color:#fff;border-radius:3px;font-size:10px;font-weight:800;margin-right:6px;vertical-align:middle">in</span>Leads LinkedIn', cntMod(LK_STAGES), 'data-cmod="linkedin"');
+  h2 += chip(F_C_MOD_SET.has('captacao'), '🎯 Funil Captação', cntMod(CAP_STAGES), 'data-cmod="captacao"');
+  // Linha 3 — Etapas LinkedIn (só aparece se módulo LinkedIn ativo)
+  let h3 = '';
+  if(F_C_MOD_SET.has('linkedin')){
+    h3 = '<div class="filters filters-sub"><span class="per-lab">↳ Etapas LinkedIn:</span>' + LK_STAGES.map(e=>chip(F_C_ETAPA_SET.has(e), dot(ETAPA_COLOR[e]||'#64748b')+(ETAPA_LABEL[e]||e), cntEt(e), 'data-cetapa="'+esc(e)+'"')).join('') + '</div>';
+  }
+  // Linha 4 — Etapas Captação (só aparece se módulo Captação ativo)
+  let h4 = '';
+  if(F_C_MOD_SET.has('captacao')){
+    h4 = '<div class="filters filters-sub"><span class="per-lab">↳ Etapas Captação:</span>' + CAP_STAGES.map(e=>chip(F_C_ETAPA_SET.has(e), dot(ETAPA_COLOR[e]||'#64748b')+(ETAPA_LABEL[e]||e), cntEt(e), 'data-cetapa="'+esc(e)+'"')).join('') + '</div>';
+  }
+  // Período (novo): Tudo · Hoje · Semana · Mês · range custom
+  const perChip=(k,l)=>`<button class="chip ${F_C_PERIODO===k?'on':''}" data-cper="${k}">${l}</button>`;
+  let per = '<div class="filters periodo" style="margin:10px 0 12px"><span class="per-lab">📅 Período (criação):</span>';
+  per += perChip('','Tudo') + perChip('hoje','Hoje') + perChip('semana','Semana') + perChip('mes','Mês');
+  per += `<button class="chip ${F_C_PERIODO==='custom'?'on':''}" data-cper="custom">📅 Intervalo</button>`;
+  if(F_C_PERIODO==='custom'){
+    per += `<input type="date" class="fsel" id="c-date-ini" value="${esc(F_C_DATE_INI||'')}" style="height:30px;font-size:13px"> <span style="color:var(--muted);font-size:13px">→</span> <input type="date" class="fsel" id="c-date-fim" value="${esc(F_C_DATE_FIM||'')}" style="height:30px;font-size:13px">`;
+  }
+  per += '</div>';
+  return `
+  <div class="filters" style="margin-bottom:6px">${h1}</div>
+  <div class="filters" style="margin-bottom:6px">${h2}</div>
+  ${h3}${h4}
+  ${per}`;
+}
+// dropdowns secundários do Contatos (sem "Todas as etapas" — redundante c/ chips de etapa)
+function contatosBottomFiltersHTML(){
+  const segmentos=[...new Set(LEADS.map(l=>l.segmento).filter(Boolean))].sort();
+  const idadeOpts=[['','Idade: todas'],['_29','até 29'],['30_40','30–40'],['41_','41+']];
+  const sexoOpts=[['','Sexo: todos'],['Masculino','Masculino'],['Feminino','Feminino'],['Outro','Outro']];
+  const hasFiltro = F_EMPRESA.length||F_PROFISSAO||F_SEGMENTO||F_IDADE||F_SEXO||F_MONEY||F_STATUS||F_C_SIT_SET.size||F_C_MOD_SET.size||F_C_ETAPA_SET.size||F_C_PERIODO;
+  const saved=svLoad();
+  const savedChips = saved.length
+    ? saved.map((v,i)=>`<span class="sv-chip"><button class="sv-apply" data-svapply="${i}">⭐ ${esc(v.name)}</button><button class="sv-del" data-svdel="${i}" title="Excluir visão">×</button></span>`).join('')
+    : '<span class="sv-empty">nenhuma ainda — monte filtros e salve</span>';
+  return `
+  <div class="filters">
+    <select class="fsel" id="f-status"><option value="">Todo status</option>${ALL_STATUS.map(s=>`<option value="${esc(s)}" ${F_STATUS===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <button type="button" class="fsel" id="f-empresa" style="min-width:140px;text-align:left;cursor:pointer">${F_EMPRESA.length===0?'Empresa: todas':F_EMPRESA.length===1?('🏢 '+esc(F_EMPRESA[0])):('🏢 '+F_EMPRESA.length+' empresas')} ▾</button>
+    <input class="fsel" id="f-profissao" placeholder="Profissão (cargo)…" value="${esc(F_PROFISSAO)}" style="min-width:150px">
+    <select class="fsel" id="f-segmento"><option value="">Todo segmento</option>${segmentos.map(s=>`<option value="${esc(s)}" ${F_SEGMENTO===s?'selected':''}>${esc(s)}</option>`).join('')}</select>
+    <select class="fsel" id="f-idade">${idadeOpts.map(o=>`<option value="${o[0]}" ${F_IDADE===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
+    <select class="fsel" id="f-sexo">${sexoOpts.map(o=>`<option value="${o[0]}" ${F_SEXO===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>
+    <button class="chip money ${F_MONEY?'on':''}" id="f-money">💰 Renda ≥ 10k</button>
+    ${hasFiltro?`<button class="chip" id="f-clear-c">✕ Limpar filtros</button>`:''}
+  </div>
+  <div class="savedviews"><span class="sv-lab">Visões salvas</span>${savedChips}<button class="sv-save" id="sv-save">💾 Salvar visão atual</button></div>`;
+}
+function wireContatosFilters(){
+  // Linha 1 (Situação)
+  document.querySelectorAll('[data-csit]').forEach(b=>b.onclick=()=>{
+    const v=b.dataset.csit;
+    if(v==='__all'){ F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); }
+    else { if(F_C_SIT_SET.has(v))F_C_SIT_SET.delete(v); else F_C_SIT_SET.add(v); }
+    render();
+  });
+  // Linha 2 (Módulos) — desmarcar módulo também limpa as etapas dele
+  document.querySelectorAll('[data-cmod]').forEach(b=>b.onclick=()=>{
+    const v=b.dataset.cmod;
+    if(F_C_MOD_SET.has(v)){
+      F_C_MOD_SET.delete(v);
+      const keys=(v==='linkedin'?LK_STAGES:CAP_STAGES);
+      keys.forEach(k=>F_C_ETAPA_SET.delete(k));
+    } else { F_C_MOD_SET.add(v); }
+    render();
+  });
+  // Linhas 3/4 (Etapas)
+  document.querySelectorAll('[data-cetapa]').forEach(b=>b.onclick=()=>{
+    const v=b.dataset.cetapa;
+    if(F_C_ETAPA_SET.has(v))F_C_ETAPA_SET.delete(v); else F_C_ETAPA_SET.add(v);
+    render();
+  });
+  // Período
+  document.querySelectorAll('[data-cper]').forEach(b=>b.onclick=()=>{
+    F_C_PERIODO=b.dataset.cper;
+    if(F_C_PERIODO!=='custom'){ F_C_DATE_INI=''; F_C_DATE_FIM=''; }
+    render();
+  });
+  const di=$('#c-date-ini'); if(di)di.onchange=()=>{F_C_DATE_INI=di.value;render();};
+  const df=$('#c-date-fim'); if(df)df.onchange=()=>{F_C_DATE_FIM=df.value;render();};
+  // Dropdowns secundários
+  const fs=$('#f-status'); if(fs)fs.onchange=e=>{F_STATUS=e.target.value;render();};
+  const fEmp=$('#f-empresa'); if(fEmp)fEmp.onclick=e=>{e.stopPropagation();openEmpresaMenu(fEmp);};
+  wireTextFilter('f-profissao', v=>F_PROFISSAO=v);
+  const fseg=$('#f-segmento'); if(fseg)fseg.onchange=e=>{F_SEGMENTO=e.target.value;render();};
+  const fi=$('#f-idade'); if(fi)fi.onchange=e=>{F_IDADE=e.target.value;render();};
+  const fx=$('#f-sexo');  if(fx)fx.onchange=e=>{F_SEXO=e.target.value;render();};
+  const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
+  const fc=$('#f-clear-c'); if(fc)fc.onclick=()=>{
+    F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear();
+    F_C_PERIODO=''; F_C_DATE_INI=''; F_C_DATE_FIM='';
+    F_EMPRESA=[]; F_PROFISSAO=''; F_SEGMENTO=''; F_IDADE=''; F_SEXO=''; F_MONEY=false; F_STATUS='';
+    COLFILT={}; render();
+  };
+  // Visões salvas
+  const svS=$('#sv-save'); if(svS)svS.onclick=svSavePrompt;
+  document.querySelectorAll('[data-svapply]').forEach(b=>b.onclick=()=>{ const v=svLoad()[+b.dataset.svapply]; if(v)svApply(v.f); });
+  document.querySelectorAll('[data-svdel]').forEach(b=>b.onclick=e=>{ e.stopPropagation(); svDelete(+b.dataset.svdel); });
+}
+// linha de chips por ETAPA (com contagem) — clareza da base + "Sem etapa" pra achar leads órfãos (legado)
 function etapaChipsHTML(){
   const scope=baseLeads(); // respeita a visão (Victor vê só a dele)
   const cnt=e=>scope.filter(l=>l.etapa===e).length;
