@@ -743,6 +743,20 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
 .m-chip.on{border-color:var(--m-primary);background:var(--m-tint);color:var(--m-primary)}
 .m-chip.on.money{border-color:var(--m-green);background:var(--m-green-tint);color:var(--m-green)}
 .m-kanban{display:flex;gap:14px;overflow-x:auto;margin:0 -18px;padding:0 18px 8px}
+/* Visão Geral mobile — seções colapsáveis + cards de etapa */
+.m-vgsec{background:#fff;border-radius:18px;box-shadow:0 2px 10px rgba(15,23,42,.05);margin-bottom:14px;overflow:hidden}
+.m-vgsec-h{display:flex;align-items:center;gap:10px;width:100%;border:none;background:none;padding:16px 16px;cursor:pointer;text-align:left}
+.m-vgsec-i{font-size:18px;display:flex;align-items:center}
+.m-vgsec-t{font-size:17px;font-weight:850;letter-spacing:-.3px;color:#0F172A}
+.m-vgsec-c{font-size:12.5px;font-weight:800;color:#64748B;background:#F1F5F9;padding:3px 10px;border-radius:8px}
+.m-vgsec-chev{margin-left:auto;font-size:13px;color:#94A3B8}
+.m-vgsec-b{padding:4px 16px 16px}
+.m-vggrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.m-vgstage{display:flex;align-items:center;gap:9px;padding:14px 13px;background:#F8FAFC;border:1px solid #EDF1F7;border-radius:13px;cursor:pointer;text-align:left}
+.m-vgstage:active{background:#EEF2FF;border-color:#2F5BF6}
+.m-vgstage-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.m-vgstage-l{flex:1;min-width:0;font-size:14px;font-weight:700;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.m-vgstage-n{font-size:19px;font-weight:850;color:#0F172A;letter-spacing:-.5px}
 .m-col{flex:none;width:270px}
 .m-empty{text-align:center;color:var(--m-mut2);font-size:14px;padding:34px 16px;background:#fff;border-radius:16px}
 .m-pill{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:7px;white-space:nowrap}
@@ -886,7 +900,7 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.4 · visão geral + filtros';
+const APP_VERSION = 'v2.4.1 · mobile alinhado';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1012,6 +1026,21 @@ let F_SITUACAO='Ativo', F_ORIGEM='', F_RECOM='', IS_VICTOR=false, F_PERIODO=''; 
 let F_C_SIT_SET=new Set(), F_C_MOD_SET=new Set(), F_C_ETAPA_SET=new Set(), F_C_STATUS_SET=new Set();
 let F_C_PERIODO='', F_C_DATE_INI='', F_C_DATE_FIM=''; // periodo: ''|hoje|semana|mes|custom
 const LK_STAGES=['Qualificacao','Conexao'];
+// Toggles dos filtros do Contatos — globais, usados por desktop (wireContatosFilters) E mobile (mContatos)
+function cTrimStatus(){
+  if(F_C_ETAPA_SET.size){ const valid=new Set([...F_C_ETAPA_SET].flatMap(e=>STATUS_BY_ETAPA[e]||[])); [...F_C_STATUS_SET].forEach(s=>{ if(!valid.has(s)) F_C_STATUS_SET.delete(s); }); }
+  else { F_C_STATUS_SET.clear(); }
+  const ets=new Set();
+  if(F_C_ETAPA_SET.size) F_C_ETAPA_SET.forEach(e=>ets.add(e));
+  else { if(F_C_MOD_SET.has('linkedin'))LK_STAGES.forEach(e=>ets.add(e)); if(F_C_MOD_SET.has('captacao'))CAP_STAGES.forEach(e=>ets.add(e)); }
+  if(ets.size){ const v=new Set([...ets].flatMap(e=>STATUS_BY_ETAPA[e]||[])); if(F_STATUS && !v.has(F_STATUS)) F_STATUS=''; }
+}
+function cToggleSit(v){ if(v==='__all'){ F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); F_C_STATUS_SET.clear(); } else { F_C_SIT_SET.has(v)?F_C_SIT_SET.delete(v):F_C_SIT_SET.add(v); } render(); }
+function cToggleMod(v){ if(F_C_MOD_SET.has(v)){ F_C_MOD_SET.delete(v); (v==='linkedin'?LK_STAGES:CAP_STAGES).forEach(k=>{ F_C_ETAPA_SET.delete(k); (STATUS_BY_ETAPA[k]||[]).forEach(s=>F_C_STATUS_SET.delete(s)); }); } else { F_C_MOD_SET.add(v); } cTrimStatus(); render(); }
+function cToggleEtapa(v){ if(F_C_ETAPA_SET.has(v)){ F_C_ETAPA_SET.delete(v); (STATUS_BY_ETAPA[v]||[]).forEach(s=>F_C_STATUS_SET.delete(s)); } else { F_C_ETAPA_SET.add(v); } cTrimStatus(); render(); }
+function cToggleStatus(v){ F_C_STATUS_SET.has(v)?F_C_STATUS_SET.delete(v):F_C_STATUS_SET.add(v); render(); }
+function cSetPeriod(v){ F_C_PERIODO=v; if(v!=='custom'){ F_C_DATE_INI=''; F_C_DATE_FIM=''; } render(); }
+function cClearAll(){ F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); F_C_STATUS_SET.clear(); F_C_PERIODO=''; F_C_DATE_INI=''; F_C_DATE_FIM=''; F_EMPRESA=[]; F_PROFISSAO=''; F_SEGMENTO=''; F_IDADE=''; F_SEXO=''; F_MONEY=false; F_STATUS=''; if(typeof COLFILT!=='undefined')COLFILT={}; render(); }
 // ===== Visão Geral · período próprio (mesma lógica do Contatos, isolado) + estado das seções =====
 let F_VG_PERIODO='', F_VG_DATE_INI='', F_VG_DATE_FIM='';
 let VG_OPEN_CAP=true, VG_OPEN_LK=true;
@@ -2274,60 +2303,11 @@ function contatosBottomFiltersHTML(){
   <div class="savedviews"><span class="sv-lab">Visões salvas</span>${savedChips}<button class="sv-save" id="sv-save">💾 Salvar visão atual</button></div>`;
 }
 function wireContatosFilters(){
-  // Linha 1 (Situação)
-  document.querySelectorAll('[data-csit]').forEach(b=>b.onclick=()=>{
-    const v=b.dataset.csit;
-    if(v==='__all'){ F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); F_C_STATUS_SET.clear(); }
-    else { if(F_C_SIT_SET.has(v))F_C_SIT_SET.delete(v); else F_C_SIT_SET.add(v); }
-    render();
-  });
-  // Helper: limpa status que não pertencem mais a nenhuma etapa marcada
-  const trimStatus=()=>{
-    if(!F_C_ETAPA_SET.size){ F_C_STATUS_SET.clear(); return; }
-    const valid=new Set([...F_C_ETAPA_SET].flatMap(e=>STATUS_BY_ETAPA[e]||[]));
-    [...F_C_STATUS_SET].forEach(s=>{ if(!valid.has(s)) F_C_STATUS_SET.delete(s); });
-    // legado (F_STATUS single)
-    const validAll=new Set();
-    if(F_C_ETAPA_SET.size){ F_C_ETAPA_SET.forEach(e=>(STATUS_BY_ETAPA[e]||[]).forEach(s=>validAll.add(s))); }
-    else {
-      if(F_C_MOD_SET.has('linkedin')) LK_STAGES.forEach(e=>(STATUS_BY_ETAPA[e]||[]).forEach(s=>validAll.add(s)));
-      if(F_C_MOD_SET.has('captacao')) CAP_STAGES.forEach(e=>(STATUS_BY_ETAPA[e]||[]).forEach(s=>validAll.add(s)));
-    }
-    if(!validAll.size) return;
-    if(F_STATUS && !valid.has(F_STATUS)) F_STATUS='';
-  };
-  // Linha 2 (Módulos) — desmarcar módulo também limpa as etapas e status dele
-  document.querySelectorAll('[data-cmod]').forEach(b=>b.onclick=()=>{
-    const v=b.dataset.cmod;
-    if(F_C_MOD_SET.has(v)){
-      F_C_MOD_SET.delete(v);
-      const keys=(v==='linkedin'?LK_STAGES:CAP_STAGES);
-      keys.forEach(k=>{ F_C_ETAPA_SET.delete(k); (STATUS_BY_ETAPA[k]||[]).forEach(s=>F_C_STATUS_SET.delete(s)); });
-    } else { F_C_MOD_SET.add(v); }
-    trimStatus(); render();
-  });
-  // Linhas 3/4 (Etapas)
-  document.querySelectorAll('[data-cetapa]').forEach(b=>b.onclick=()=>{
-    const v=b.dataset.cetapa;
-    if(F_C_ETAPA_SET.has(v)){
-      F_C_ETAPA_SET.delete(v);
-      // ao desmarcar etapa, limpa os status dela
-      (STATUS_BY_ETAPA[v]||[]).forEach(s=>F_C_STATUS_SET.delete(s));
-    } else { F_C_ETAPA_SET.add(v); }
-    trimStatus(); render();
-  });
-  // Status (chips multi-select)
-  document.querySelectorAll('[data-cstatus]').forEach(b=>b.onclick=()=>{
-    const v=b.dataset.cstatus;
-    if(F_C_STATUS_SET.has(v))F_C_STATUS_SET.delete(v); else F_C_STATUS_SET.add(v);
-    render();
-  });
-  // Período
-  document.querySelectorAll('[data-cper]').forEach(b=>b.onclick=()=>{
-    F_C_PERIODO=b.dataset.cper;
-    if(F_C_PERIODO!=='custom'){ F_C_DATE_INI=''; F_C_DATE_FIM=''; }
-    render();
-  });
+  document.querySelectorAll('[data-csit]').forEach(b=>b.onclick=()=>cToggleSit(b.dataset.csit));
+  document.querySelectorAll('[data-cmod]').forEach(b=>b.onclick=()=>cToggleMod(b.dataset.cmod));
+  document.querySelectorAll('[data-cetapa]').forEach(b=>b.onclick=()=>cToggleEtapa(b.dataset.cetapa));
+  document.querySelectorAll('[data-cstatus]').forEach(b=>b.onclick=()=>cToggleStatus(b.dataset.cstatus));
+  document.querySelectorAll('[data-cper]').forEach(b=>b.onclick=()=>cSetPeriod(b.dataset.cper));
   const di=$('#c-date-ini'); if(di)di.onchange=()=>{F_C_DATE_INI=di.value;render();};
   const df=$('#c-date-fim'); if(df)df.onchange=()=>{F_C_DATE_FIM=df.value;render();};
   // Dropdowns secundários
@@ -2338,12 +2318,7 @@ function wireContatosFilters(){
   const fi=$('#f-idade'); if(fi)fi.onchange=e=>{F_IDADE=e.target.value;render();};
   const fx=$('#f-sexo');  if(fx)fx.onchange=e=>{F_SEXO=e.target.value;render();};
   const fm=$('#f-money'); if(fm)fm.onclick=()=>{F_MONEY=!F_MONEY;render();};
-  const fc=$('#f-clear-c'); if(fc)fc.onclick=()=>{
-    F_C_SIT_SET.clear(); F_C_MOD_SET.clear(); F_C_ETAPA_SET.clear(); F_C_STATUS_SET.clear();
-    F_C_PERIODO=''; F_C_DATE_INI=''; F_C_DATE_FIM='';
-    F_EMPRESA=[]; F_PROFISSAO=''; F_SEGMENTO=''; F_IDADE=''; F_SEXO=''; F_MONEY=false; F_STATUS='';
-    COLFILT={}; render();
-  };
+  const fc=$('#f-clear-c'); if(fc)fc.onclick=()=>cClearAll();
   // Visões salvas
   const svS=$('#sv-save'); if(svS)svS.onclick=svSavePrompt;
   document.querySelectorAll('[data-svapply]').forEach(b=>b.onclick=()=>{ const v=svLoad()[+b.dataset.svapply]; if(v)svApply(v.f); });
@@ -3954,22 +3929,21 @@ function mPeriodFilter(arr){
   return arr.filter(function(l){return l.criado_em&&l.criado_em>=lim;});
 }
 function mVisao(){
-  var B=mPeriodFilter(baseLeads());
-  var ativos=B.filter(function(l){return situacaoOf(l)==='Ativo';});
-  var total=B.length;
-  var rica=ativos.filter(function(l){return l.renda_estimada!=null&&l.renda_estimada>=10000;}).length;
-  var id40=ativos.filter(function(l){return idadeInRange(l.faixa_idade,'30_40');}).length;
-  var tel=ativos.filter(function(l){return l.telefone;}).length;
-  var conv=B.filter(function(l){return situacaoOf(l)==='Convertido';}).length;
-  var pctAtv=total>0?Math.round(ativos.length/total*100):0;
-  var pc=function(n){return ativos.length>0?Math.round(n/ativos.length*100)+'%':'';};
-  var periods=[['tudo','Tudo'],['hoje','Hoje'],['7','7 dias'],['30','30 dias'],['90','90 dias']];
-  var perChips='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:18px">🗓️</span><span style="font-size:13.5px;font-weight:600;color:#64748B">Período de criação</span></div><div class="m-chips">'+periods.map(function(p){var on=M_PERIOD===p[0];return '<button class="m-chip'+(on?' on':'')+'" data-mperiod="'+p[0]+'">'+p[1]+'</button>';}).join('')+'</div>';
-  var hero='<div style="background:#fff;border-radius:20px;padding:20px;margin-bottom:14px;box-shadow:0 2px 10px rgba(15,23,42,.05)"><div style="display:flex;align-items:flex-start;justify-content:space-between"><div><div style="font-size:13px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Leads ativos</div><div style="font-size:46px;font-weight:850;letter-spacing:-1.5px;line-height:1">'+ativos.length.toLocaleString('pt-BR')+'</div><div style="font-size:14px;color:#64748B;margin-top:6px">de <strong style="color:#334155">'+total.toLocaleString('pt-BR')+'</strong> no total</div></div><div style="width:52px;height:52px;border-radius:15px;background:#EEF2FF;display:flex;align-items:center;justify-content:center;font-size:24px">👥</div></div><div style="height:8px;border-radius:99px;background:#EDF1F7;margin-top:16px;overflow:hidden"><div style="width:'+pctAtv+'%;height:100%;background:#2F5BF6;border-radius:99px"></div></div></div>';
-  function stat(icon,tint,color,value,label,sub,badge){
-    var b=badge?'<span style="font-size:12.5px;font-weight:800;color:'+color+';background:'+tint+';padding:3px 9px;border-radius:8px">'+badge+'</span>':'';
-    return '<div style="background:#fff;border-radius:18px;padding:16px;box-shadow:0 2px 10px rgba(15,23,42,.05);min-height:150px;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div style="width:38px;height:38px;border-radius:11px;background:'+tint+';display:flex;align-items:center;justify-content:center;font-size:18px">'+icon+'</div>'+b+'</div><div style="font-size:32px;font-weight:850;letter-spacing:-1px;line-height:1;color:'+color+'">'+value+'</div><div style="font-size:13.5px;font-weight:700;color:#334155;margin-top:8px;line-height:1.25">'+label+'</div><div style="font-size:12px;color:#94A3B8;margin-top:auto;padding-top:4px">'+sub+'</div></div>';}
-  var grid='<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">'+stat('💰','#E7F6EC','#16A34A',rica,'Renda ≥ R$10k','dos ativos',pc(rica))+stat('🎯','#EEF2FF','#2F5BF6',id40,'30–40 anos','faixa-alvo',pc(id40))+stat('📱','#E0F2FE','#0369A1',tel,'Com telefone','contatáveis',pc(tel))+stat('🏆','#E3F4EC','#059669',conv,'Convertidos','Life Planners','')+'</div>';
+  var B=vgBase();  // respeita F_VG_PERIODO (mesmo período do desktop)
+  var A=B.filter(function(l){return situacaoOf(l)==='Ativo';});
+  // Período (F_VG_PERIODO — mesma lógica do desktop)
+  var periods=[['','Tudo'],['hoje','Hoje'],['semana','Semana'],['mes','Mês'],['custom','📅 Intervalo']];
+  var perChips='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-size:17px">🗓️</span><span style="font-size:13.5px;font-weight:600;color:#64748B">Período de criação</span></div><div class="m-chips">'+periods.map(function(p){return '<button class="m-chip'+(F_VG_PERIODO===p[0]?' on':'')+'" data-vgper="'+p[0]+'">'+p[1]+'</button>';}).join('')+'</div>';
+  var dateRow=F_VG_PERIODO==='custom'?'<div style="display:flex;gap:8px;margin-bottom:14px"><input type="date" id="vg-ini" value="'+esc(F_VG_DATE_INI||'')+'" style="flex:1;height:42px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 12px;font-size:14px"><input type="date" id="vg-fim" value="'+esc(F_VG_DATE_FIM||'')+'" style="flex:1;height:42px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 12px;font-size:14px"></div>':'';
+  function stageCard(e){
+    var n=A.filter(function(l){return l.etapa===e;}).length;
+    return '<button class="m-vgstage" data-vgstage="'+esc(e)+'"><span class="m-vgstage-dot" style="background:'+(ETAPA_COLOR[e]||'#64748b')+'"></span><span class="m-vgstage-l">'+mEtapaLabel(e)+'</span><span class="m-vgstage-n">'+n+'</span></button>';
+  }
+  function section(key,icon,title,n,open,body){
+    return '<section class="m-vgsec"><button class="m-vgsec-h" data-vgsec="'+key+'"><span class="m-vgsec-i">'+icon+'</span><span class="m-vgsec-t">'+title+'</span><span class="m-vgsec-c">'+n+' ativos</span><span class="m-vgsec-chev">'+(open?'▾':'▸')+'</span></button>'+(open?'<div class="m-vgsec-b">'+body+'</div>':'')+'</section>';
+  }
+  var capN=A.filter(function(l){return CAP_STAGES.indexOf(l.etapa)>=0;}).length;
+  var capSec=section('cap','🎯','Captação',capN,VG_OPEN_CAP,'<div class="m-vggrid">'+CAP_STAGES.map(stageCard).join('')+'</div>');
   var r=periodRange();
   var goalM=SETTINGS.meta_minerados_dia*r.mult, goalC=SETTINGS.meta_convites_dia*r.mult;
   var curM=meuDiaScope().filter(function(l){return inRange(l.criado_em,r);}).length;
@@ -3978,13 +3952,16 @@ function mVisao(){
   var metaTabs=[['dia','Dia'],['semana','Semana'],['mes','Mês'],['periodo','Período']];
   var metaTabsH='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;background:#F1F5F9;padding:4px;border-radius:13px;margin-bottom:20px">'+metaTabs.map(function(t){var on=PERIOD===t[0];return '<button data-mmetatab="'+t[0]+'" style="height:38px;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;background:'+(on?'#fff':'transparent')+';color:'+(on?'#0F172A':'#64748B')+';box-shadow:'+(on?'0 1px 3px rgba(15,23,42,.12)':'none')+'">'+t[1]+'</button>';}).join('')+'</div>';
   var metas='<div style="background:#fff;border-radius:20px;padding:20px;box-shadow:0 2px 10px rgba(15,23,42,.05)"><div style="display:flex;align-items:center;gap:9px;margin-bottom:14px"><span style="font-size:20px">🎯</span><span style="font-size:18px;font-weight:800;letter-spacing:-.3px">Metas</span></div>'+metaTabsH+bar('⛏','Minerados',curM,goalM,'#3730A3')+bar('🔗','Convites',curC,goalC,'#0A66C2')+'<div style="display:flex;align-items:center;gap:8px;background:#F8FAFC;border-radius:12px;padding:12px 14px;margin-top:4px"><span style="font-size:15px">📌</span><span style="font-size:13px;color:#64748B;line-height:1.4">Meta diária: <strong style="color:#334155">'+SETTINGS.meta_minerados_dia+' minerados</strong> · <strong style="color:#334155">'+SETTINGS.meta_convites_dia+' convites</strong> · janela '+r.label+'</span></div></div>';
-  var visaoTog='<div style="display:flex;align-items:center;justify-content:space-between;margin:22px 2px 12px"><span style="font-size:18px;font-weight:800;letter-spacing:-.3px">Visão</span><div style="display:flex;gap:5px;background:#fff;padding:4px;border-radius:12px;box-shadow:0 2px 8px rgba(15,23,42,.06)">'+[['me','Meus'],['all','Todos']].map(function(x){var on=DAY_SCOPE===x[0];return '<button data-mvisao="'+x[0]+'" style="height:34px;padding:0 18px;border:none;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer;background:'+(on?'#EEF2FF':'transparent')+';color:'+(on?'#2F5BF6':'#64748B')+'">'+x[1]+'</button>';}).join('')+'</div></div>';
+  var scopeTog='<div style="display:flex;align-items:center;justify-content:space-between;margin:0 2px 12px"><span style="font-size:13.5px;font-weight:700;color:#64748B">Metas de quem</span><div style="display:flex;gap:5px;background:#F1F5F9;padding:4px;border-radius:11px">'+[['me','Meus'],['all','Todos']].map(function(x){var on=DAY_SCOPE===x[0];return '<button data-mvisao="'+x[0]+'" style="height:32px;padding:0 16px;border:none;border-radius:8px;font-size:13.5px;font-weight:700;cursor:pointer;background:'+(on?'#fff':'transparent')+';color:'+(on?'#2F5BF6':'#64748B')+';box-shadow:'+(on?'0 1px 3px rgba(15,23,42,.1)':'none')+'">'+x[1]+'</button>';}).join('')+'</div></div>';
+  var lkN=A.filter(function(l){return LK_STAGES.indexOf(l.etapa)>=0;}).length;
+  var lkBadge='<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;background:#0A66C2;color:#fff;border-radius:5px;font-size:12px;font-weight:800">in</span>';
+  var lkSec=section('lk',lkBadge,'LinkedIn',lkN,VG_OPEN_LK,'<div class="m-vggrid">'+LK_STAGES.map(stageCard).join('')+'</div><div style="margin-top:14px">'+scopeTog+metas+'</div>');
   var seen={}, acoes=[];
   dayQueues().forEach(function(q){ q.leads.forEach(function(l){ if(!seen[l.id]){ seen[l.id]=1; acoes.push({l:l,tag:q.hint||q.label}); } }); });
   acoes=acoes.slice(0,5);
   var agoraRows=acoes.length?acoes.map(function(a){var l=a.l;var phone=l.telefone?'<a href="tel:'+esc(normPhone(l.telefone).e164||l.telefone)+'" style="height:38px;padding:0 13px;border-radius:11px;background:#EEF2FF;color:#2F5BF6;font-size:15px;font-weight:800;display:flex;align-items:center;flex:none;text-decoration:none">☎</a>':'<button class="m-actbtn" data-act="msg" data-id="'+l.id+'" style="height:38px;padding:0 13px;border:none;border-radius:11px;background:#EEF2FF;color:#2F5BF6;font-size:13px;font-weight:800;flex:none">📩</button>';return '<div class="m-row-tap" data-mlead="'+l.id+'" style="display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:14px;background:#F8FAFC">'+mAvatar(l,44)+'<div style="flex:1;min-width:0"><div style="font-size:15.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(l.nome)+'</div><div style="font-size:12.5px;color:#94A3B8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(a.tag)+'</div></div>'+phone+'</div>';}).join(''):'<div style="text-align:center;color:#94A3B8;font-size:14px;padding:18px">Tudo em dia por aqui ✓</div>';
   var agora='<div style="background:#fff;border-radius:20px;padding:18px 16px;box-shadow:0 2px 10px rgba(15,23,42,.05);border:1.5px solid #FCE9CF;margin-top:8px"><div style="display:flex;align-items:baseline;gap:9px;margin-bottom:4px;padding:0 2px"><span style="font-size:18px">⚡</span><span style="font-size:18px;font-weight:850;letter-spacing:-.3px">Agora</span><span style="font-size:13px;color:#94A3B8;font-weight:600">o que mais move o ponteiro</span></div><div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">'+agoraRows+'</div></div>';
-  return perChips+hero+grid+metas+visaoTog+agora;
+  return perChips+dateRow+capSec+lkSec+agora;
 }
 function mFunilcap(){
   var base=capBase();
@@ -4086,13 +4063,47 @@ function mInbox(){
   return sync+kpis+'<div style="display:flex;flex-direction:column;gap:10px">'+list+'</div>';
 }
 function mContatos(){
-  var chips=[['','Todos']].concat(ETAPAS.filter(function(e){return e!=='Dormente';}).map(function(e){return [e,mEtapaLabel(e)];}));
-  var chipsH='<div class="m-chips">'+chips.map(function(c){var on=F_ETAPA===c[0];return '<button class="m-chip'+(on?' on':'')+'" data-mcetapa="'+c[0]+'">'+c[1]+'</button>';}).join('')+'<button class="m-chip money'+(F_MONEY?' on':'')+'" data-mcmoney="1">💰 ≥ R$10k</button></div>';
-  var arr=filtered();
-  var total=baseLeads().length;
-  var cnt='<div style="font-size:13px;color:#94A3B8;font-weight:600;margin:0 2px 12px">'+arr.length+' de '+total+' contatos</div>';
+  var scope=baseLeads();
+  var allEmpty = !F_C_SIT_SET.size && !F_C_MOD_SET.size && !F_C_ETAPA_SET.size;
+  var cntSit=function(s){return scope.filter(function(l){return situacaoOf(l)===s;}).length;};
+  var cntEt=function(e){return scope.filter(function(l){return l.etapa===e;}).length;};
+  var cntMod=function(keys){return scope.filter(function(l){return keys.indexOf(l.etapa)>=0&&situacaoOf(l)==='Ativo';}).length;};
+  var cntSt=function(s){return scope.filter(function(l){return l.status===s;}).length;};
+  var semEt=scope.filter(function(l){return ETAPAS.indexOf(l.etapa)<0;}).length;
+  var dot=function(c){return '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:'+c+';margin-right:5px;vertical-align:middle"></span>';};
+  var chip=function(on,label,n,attr,extraStyle){return '<button class="m-chip'+(on?' on':'')+'" '+attr+(extraStyle?' style="'+extraStyle+'"':'')+'>'+label+(n!=null?' <span style="opacity:.6;font-weight:800">'+n+'</span>':'')+'</button>';};
+  // L1 — período
+  var per='<div class="m-chips">'+[['','Tudo'],['hoje','Hoje'],['semana','Semana'],['mes','Mês'],['custom','📅 Intervalo']].map(function(p){return '<button class="m-chip'+(F_C_PERIODO===p[0]?' on':'')+'" data-cper="'+p[0]+'">'+p[1]+'</button>';}).join('')+'</div>';
+  var dateRow=F_C_PERIODO==='custom'?'<div style="display:flex;gap:8px;margin:0 0 12px"><input type="date" id="mc-ini" value="'+esc(F_C_DATE_INI||'')+'" style="flex:1;height:42px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 12px;font-size:14px"><input type="date" id="mc-fim" value="'+esc(F_C_DATE_FIM||'')+'" style="flex:1;height:42px;border:1.5px solid #E2E8F0;border-radius:12px;padding:0 12px;font-size:14px"></div>':'';
+  // L2 — situação
+  var l1='<div class="m-chips">'+
+    '<button class="m-chip'+(allEmpty?' on':'')+'" data-csit="__all">Todos <span style="opacity:.6;font-weight:800">'+scope.length+'</span></button>'+
+    '<button class="m-chip'+(F_C_SIT_SET.has('Sem etapa')?' on':'')+'" data-csit="Sem etapa" style="border-color:#F59E0B;color:#B45309">⚠ Sem etapa <span style="opacity:.7;font-weight:800">'+semEt+'</span></button>'+
+    chip(F_C_SIT_SET.has('Dormente'),dot('#6b7280')+'Dormentes',cntSit('Dormente'),'data-csit="Dormente"')+
+    chip(F_C_SIT_SET.has('Descartado'),dot('#ef4444')+'Descartados',cntSit('Descartado'),'data-csit="Descartado"')+
+  '</div>';
+  // L3 — módulos
+  var inBadge='<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:#0A66C2;color:#fff;border-radius:3px;font-size:10px;font-weight:800;margin-right:5px;vertical-align:middle">in</span>';
+  var l2='<div class="m-chips">'+
+    chip(F_C_MOD_SET.has('linkedin'),inBadge+'Leads LinkedIn',cntMod(LK_STAGES),'data-cmod="linkedin"')+
+    chip(F_C_MOD_SET.has('captacao'),'🎯 Funil Captação',cntMod(CAP_STAGES),'data-cmod="captacao"')+
+  '</div>';
+  // L4 — etapas (conforme módulo)
+  var l3='';
+  if(F_C_MOD_SET.has('linkedin')) l3+='<div class="m-chips">'+LK_STAGES.map(function(e){return chip(F_C_ETAPA_SET.has(e),dot(ETAPA_COLOR[e]||'#64748b')+mEtapaLabel(e),cntEt(e),'data-cetapa="'+esc(e)+'"');}).join('')+'</div>';
+  if(F_C_MOD_SET.has('captacao')) l3+='<div class="m-chips">'+CAP_STAGES.map(function(e){return chip(F_C_ETAPA_SET.has(e),dot(ETAPA_COLOR[e]||'#64748b')+mEtapaLabel(e),cntEt(e),'data-cetapa="'+esc(e)+'"');}).join('')+'</div>';
+  // L5 — status (das etapas selecionadas)
+  var l4='';
+  var ets=[];
+  if(F_C_ETAPA_SET.size) ets=[].concat([...F_C_ETAPA_SET]);
+  else { if(F_C_MOD_SET.has('linkedin'))ets=ets.concat(LK_STAGES); if(F_C_MOD_SET.has('captacao'))ets=ets.concat(CAP_STAGES); }
+  if(ets.length){ var seen={}, sts=[]; ets.forEach(function(e){(STATUS_BY_ETAPA[e]||[]).forEach(function(s){if(!seen[s]){seen[s]=1;sts.push(s);}});});
+    if(sts.length) l4='<div class="m-chips" style="margin-top:-6px">'+sts.map(function(s){return chip(F_C_STATUS_SET.has(s),esc(s),cntSt(s),'data-cstatus="'+esc(s)+'"');}).join('')+'</div>';
+  }
+  var arr=filteredContatos();
+  var cnt='<div style="font-size:13px;color:#94A3B8;font-weight:600;margin:2px 2px 12px">'+arr.length+' de '+scope.length+' contatos</div>';
   var list=arr.length?'<div style="display:flex;flex-direction:column;gap:10px">'+arr.slice(0,400).map(function(l){return mListCard(l,ETAPA_COLOR[l.etapa],mEtapaLabel(l.etapa));}).join('')+'</div>':'<div class="m-empty">Nenhum contato com esse filtro.</div>';
-  return chipsH+cnt+list;
+  return per+dateRow+l1+l2+l3+l4+cnt+list;
 }
 function mLeadDetail(){
   var l=byId(M_LEAD); if(!l)return '<div class="m-empty">Contato não encontrado.</div>';
@@ -4125,16 +4136,28 @@ function mTarefas(){
     +'<input id="m-tk-text" placeholder="ou escreva a tarefa…" autocomplete="off" style="'+iS+';margin-bottom:8px;display:none"/>'
     +'<input id="m-tk-date" type="date" value="'+todayStr()+'" style="'+iS+';margin-bottom:10px"/>'
     +'<button id="m-tk-add" style="width:100%;height:46px;border:none;border-radius:13px;background:#2F5BF6;color:#fff;font-size:15px;font-weight:800;cursor:pointer">＋ Adicionar tarefa</button></div>';
-  var sec='<div class="m-section"><span class="h">A fazer</span><span class="cnt">'+leads.length+'</span></div>';
-  var list=leads.length?'<div style="display:flex;flex-direction:column;gap:9px">'+leads.map(function(l){
+  var toggle='<div class="m-seg">'+[['lista','☰ Lista'],['kanban','▦ Kanban']].map(function(x){return '<button class="'+(TK_MODE===x[0]?'on':'')+'" data-tkmode="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>';
+  // card compacto (usado em lista e kanban)
+  function taskRow(l){
     var ctx=esc(l.nome)+' · '+mEtapaLabel(l.etapa);
     var txt=TASK_TEXT[l.id]||'Follow-up agendado';
     return '<div class="m-card" style="display:flex;align-items:flex-start;gap:12px">'
       +'<button class="m-actbtn" data-act="prox" data-d="clear" data-id="'+l.id+'" title="Concluir tarefa" style="width:26px;height:26px;border:2px solid #CBD5E1;border-radius:50%;background:#fff;cursor:pointer;flex:none;margin-top:2px"></button>'
       +'<div class="m-row-tap" data-mlead="'+l.id+'" style="flex:1;min-width:0"><div style="font-size:15px;font-weight:700;color:#0F172A;line-height:1.3;word-break:break-word">'+esc(txt)+'</div><div style="font-size:12.5px;color:#94A3B8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+ctx+'</div>'+badge(l)+'</div>'
       +'<button class="m-actbtn" data-act="prox" data-d="2" data-id="'+l.id+'" title="Adiar +2 dias" style="height:32px;padding:0 11px;border:none;border-radius:9px;background:#FEF3C7;color:#B45309;font-size:12.5px;font-weight:800;cursor:pointer;flex:none;margin-top:1px">+2d</button></div>';
-  }).join('')+'</div>':'<div class="m-empty">Nenhuma tarefa agendada. Crie uma acima. ✓</div>';
-  return compose+sec+list;
+  }
+  if(!leads.length) return compose+toggle+'<div class="m-empty">Nenhuma tarefa agendada. Crie uma acima. ✓</div>';
+  if(TK_MODE==='kanban'){
+    var byE={}; leads.forEach(function(l){ var e=ETAPAS.indexOf(l.etapa)>=0?l.etapa:'__none'; (byE[e]=byE[e]||[]).push(l); });
+    var cols=ETAPAS.filter(function(e){return byE[e]&&byE[e].length;}).map(function(e){
+      return '<div class="m-col"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px"><span style="width:9px;height:9px;border-radius:50%;background:'+(ETAPA_COLOR[e]||'#64748b')+'"></span><span style="font-size:15px;font-weight:800;letter-spacing:-.2px">'+mEtapaLabel(e)+'</span><span style="font-size:12.5px;font-weight:800;color:#64748B;background:#E9EDF3;padding:2px 9px;border-radius:8px">'+byE[e].length+'</span></div><div style="display:flex;flex-direction:column;gap:9px">'+byE[e].map(taskRow).join('')+'</div></div>';
+    }).join('');
+    if(byE.__none&&byE.__none.length) cols+='<div class="m-col"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:0 2px"><span style="width:9px;height:9px;border-radius:50%;background:#f59e0b"></span><span style="font-size:15px;font-weight:800">⚠ Sem etapa</span><span style="font-size:12.5px;font-weight:800;color:#64748B;background:#E9EDF3;padding:2px 9px;border-radius:8px">'+byE.__none.length+'</span></div><div style="display:flex;flex-direction:column;gap:9px">'+byE.__none.map(taskRow).join('')+'</div></div>';
+    return compose+toggle+'<div class="m-kanban">'+cols+'</div>';
+  }
+  var sec='<div class="m-section"><span class="h">A fazer</span><span class="cnt">'+leads.length+'</span></div>';
+  var list='<div style="display:flex;flex-direction:column;gap:9px">'+leads.map(taskRow).join('')+'</div>';
+  return compose+toggle+sec+list;
 }
 function mFmtH(sec){var h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60);return h>0?(h+'h '+m+'m'):(m+'m');}
 function mRelatorio(){ return '<div class="m-seg">'+[['7','7 dias'],['30','30 dias'],['0','Tudo']].map(function(x){return '<button class="'+((''+M_REP_RANGE)===x[0]?'on':'')+'" data-mrep="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div><div id="m-rep-body"><div class="m-empty">Carregando…</div></div>'; }
@@ -4196,8 +4219,22 @@ function mWireScreen(c,v){
   c.querySelectorAll('[data-mseg-cap]').forEach(function(b){b.onclick=function(){CAP_MODE=b.getAttribute('data-mseg-cap');render();};});
   c.querySelectorAll('[data-metapa]').forEach(function(b){b.onclick=function(){M_ETAPA_SEL=b.getAttribute('data-metapa');render();};});
   c.querySelectorAll('[data-metmode]').forEach(function(b){b.onclick=function(){M_ETAPA_MODE=b.getAttribute('data-metmode');render();};});
-  c.querySelectorAll('[data-mcetapa]').forEach(function(b){b.onclick=function(){F_ETAPA=b.getAttribute('data-mcetapa');render();};});
-  c.querySelectorAll('[data-mcmoney]').forEach(function(b){b.onclick=function(){F_MONEY=!F_MONEY;render();};});
+  // Contatos mobile — filtros multi-select (mesmos helpers globais do desktop)
+  c.querySelectorAll('[data-csit]').forEach(function(b){b.onclick=function(){cToggleSit(b.getAttribute('data-csit'));};});
+  c.querySelectorAll('[data-cmod]').forEach(function(b){b.onclick=function(){cToggleMod(b.getAttribute('data-cmod'));};});
+  c.querySelectorAll('[data-cetapa]').forEach(function(b){b.onclick=function(){cToggleEtapa(b.getAttribute('data-cetapa'));};});
+  c.querySelectorAll('[data-cstatus]').forEach(function(b){b.onclick=function(){cToggleStatus(b.getAttribute('data-cstatus'));};});
+  c.querySelectorAll('[data-cper]').forEach(function(b){b.onclick=function(){cSetPeriod(b.getAttribute('data-cper'));};});
+  var mci=$('#mc-ini'); if(mci)mci.onchange=function(){F_C_DATE_INI=mci.value;render();};
+  var mcf=$('#mc-fim'); if(mcf)mcf.onchange=function(){F_C_DATE_FIM=mcf.value;render();};
+  // Tarefas mobile — toggle Lista/Kanban
+  c.querySelectorAll('[data-tkmode]').forEach(function(b){b.onclick=function(){TK_MODE=b.getAttribute('data-tkmode');render();};});
+  // Visão Geral mobile — período próprio + seções colapsáveis + cards de etapa
+  c.querySelectorAll('[data-vgper]').forEach(function(b){b.onclick=function(){F_VG_PERIODO=b.getAttribute('data-vgper'); if(F_VG_PERIODO!=='custom'){F_VG_DATE_INI='';F_VG_DATE_FIM='';} render();};});
+  var vgi=$('#vg-ini'); if(vgi)vgi.onchange=function(){F_VG_DATE_INI=vgi.value;render();};
+  var vgf=$('#vg-fim'); if(vgf)vgf.onchange=function(){F_VG_DATE_FIM=vgf.value;render();};
+  c.querySelectorAll('[data-vgsec]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-vgsec'); if(k==='cap')VG_OPEN_CAP=!VG_OPEN_CAP; else if(k==='lk')VG_OPEN_LK=!VG_OPEN_LK; saveVGState(); render();};});
+  c.querySelectorAll('[data-vgstage]').forEach(function(b){b.onclick=function(){var e=b.getAttribute('data-vgstage'); F_C_SIT_SET.clear();F_C_MOD_SET.clear();F_C_ETAPA_SET.clear();F_C_STATUS_SET.clear(); if(LK_STAGES.indexOf(e)>=0)F_C_MOD_SET.add('linkedin'); else if(CAP_STAGES.indexOf(e)>=0)F_C_MOD_SET.add('captacao'); F_C_ETAPA_SET.add(e); mGo('contatos');};});
   c.querySelectorAll('[data-mmine]').forEach(function(b){b.onclick=function(){startMining(+b.getAttribute('data-mmine'));};});
   var stop=$('#mine-stop'); if(stop)stop.onclick=async function(){await stopMining();render();};
   c.querySelectorAll('[data-mrep]').forEach(function(b){b.onclick=function(){M_REP_RANGE=+b.getAttribute('data-mrep');c.querySelectorAll('[data-mrep]').forEach(function(x){x.classList.remove('on');});b.classList.add('on');mLoadReport();};});
