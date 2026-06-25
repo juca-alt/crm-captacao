@@ -3088,13 +3088,13 @@ function openCapturaIA(){
       @keyframes cia-rot{to{transform:rotate(360deg)}}
     </style>
     <h2>✨ Captura inteligente</h2>
-    <p class="hint">Cole um <b>print</b>, tire <b>foto de um papel/cartão</b> ou cole um <b>bloco de texto</b>. A IA lê e preenche os campos do lead — você confere antes de salvar.</p>
+    <p class="hint">Cole um <b>print</b>, tire <b>foto de um papel/cartão</b>, suba um <b>PDF</b> ou cole um <b>bloco de texto</b>. A IA lê e preenche os campos do lead — você confere antes de salvar.</p>
     <div id="cia-drop">
       <div style="font-size:26px">📸</div>
-      <div style="font-size:13px;font-weight:600;margin-top:4px">Toque p/ foto ou imagem · ou cole com Ctrl+V</div>
+      <div style="font-size:13px;font-weight:600;margin-top:4px">Toque p/ foto, imagem ou PDF · ou cole com Ctrl+V</div>
       <img id="cia-prev" alt="prévia"/>
     </div>
-    <input type="file" id="cia-file" accept="image/*" style="display:none"/>
+    <input type="file" id="cia-file" accept="image/*,application/pdf" style="display:none"/>
     <div class="cia-or">e / ou</div>
     <div class="field"><label>Texto solto (WhatsApp, anotação, e-mail…)</label><textarea id="cia-text" rows="4" placeholder="cole aqui qualquer texto com os dados do lead"></textarea></div>
     <div id="cia-msg" class="auth-err"></div>
@@ -3106,11 +3106,19 @@ function openCapturaIA(){
   </div>`;
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
-  let imgB64=null, imgType=null;
+  let imgB64=null, imgType=null, pdfB64=null;
   const drop=$('#cia-drop'), prev=$('#cia-prev'), fileEl=$('#cia-file');
-  // Reduz a imagem (máx. 1600px, JPEG) antes de enviar: mais rápido, mais barato e evita o limite de tamanho.
+  // Imagem: reduz p/ máx. 1600px JPEG (rápido/barato, evita limite). PDF: manda cru (Gemini lê nativo).
   function setImg(file){
-    if(!file||!file.type||!file.type.startsWith('image/')){ $('#cia-msg').textContent='Isso não é uma imagem.'; return; }
+    if(!file||!file.type){ $('#cia-msg').textContent='Arquivo inválido.'; return; }
+    if(file.type==='application/pdf'){
+      const fr=new FileReader();
+      fr.onload=()=>{ pdfB64=String(fr.result).split(',')[1]; imgB64=null; imgType=null; prev.style.display='none'; $('#cia-msg').textContent='📄 PDF carregado: '+(file.name||'documento.pdf'); };
+      fr.readAsDataURL(file);
+      return;
+    }
+    if(!file.type.startsWith('image/')){ $('#cia-msg').textContent='Use uma imagem ou um PDF.'; return; }
+    pdfB64=null;
     const fr=new FileReader();
     fr.onload=()=>{
       const img=new Image();
@@ -3137,10 +3145,10 @@ function openCapturaIA(){
   $('#cia-close').onclick=()=>ov.remove();
   $('#cia-go').onclick=async()=>{
     const texto=$('#cia-text').value.trim();
-    if(!imgB64 && !texto){ $('#cia-msg').textContent='Cole uma imagem ou um texto primeiro.'; return; }
+    if(!imgB64 && !pdfB64 && !texto){ $('#cia-msg').textContent='Cole uma imagem, um PDF ou um texto primeiro.'; return; }
     $('#cia-go').disabled=true; $('#cia-spin').style.display='flex'; $('#cia-msg').textContent='';
     try{
-      const { data, error }=await sb.functions.invoke('capturar-lead',{ body:{ imagem_base64:imgB64, media_type:imgType, texto } });
+      const { data, error }=await sb.functions.invoke('capturar-lead',{ body:{ imagem_base64:imgB64, media_type:imgType, pdf_base64:pdfB64, texto } });
       if(error) throw error;
       if(!data||!data.ok||!data.dados) throw new Error((data&&data.erro)||'Resposta inválida da IA');
       const dd=data.dados||{};

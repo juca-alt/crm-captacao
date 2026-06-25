@@ -1,34 +1,34 @@
 // ============================================================================
-//  Edge Function: capturar-lead  (Supabase / Deno)
-//  Captura inteligente de leads: recebe uma IMAGEM (print, foto de papel/cartão)
-//  e/ou um TEXTO solto, manda pro Claude com visão + saída estruturada (JSON)
-//  e devolve UM OU VÁRIOS leads prontos pra revisão no CRM.
+//  Edge Function: capturar-lead  (Supabase / Deno)  -- motor: GOOGLE GEMINI
+//  Captura inteligente de leads: recebe IMAGEM (print/foto de papel/cartao),
+//  PDF e/ou TEXTO solto, manda pro Gemini com visao + JSON, e devolve
+//  UM OU VARIOS leads prontos pra revisao no CRM.
 //
-//  SEGURANÇA (camadas):
-//   1. A chave da Anthropic vive AQUI, no servidor (secret). Nunca no navegador.
-//   2. verify_jwt = ON (padrão do Supabase): só usuário LOGADO (Gustavo/Victor)
-//      consegue chamar — visitante anônimo é barrado antes de rodar esta função.
-//   3. CORS travado nos domínios do app (não em "*").
-//   4. Limites de tamanho no corpo (anti-abuso / anti-estouro de custo).
-//   Obs.: a proteção dos DADOS (tabela leads) é via RLS no banco — ver checklist.
+//  SEGURANCA (camadas):
+//   1. A chave do Gemini vive AQUI, no servidor (secret GEMINI_API_KEY). Nunca no navegador.
+//   2. verify_jwt = ON (padrao do Supabase): so usuario LOGADO consegue chamar.
+//   3. CORS travado nos dominios do app (nao em "*").
+//   4. Limites de tamanho no corpo (anti-abuso / anti-estouro).
+//   Obs.: a protecao dos DADOS (tabela leads) e via RLS no banco.
 //
-//  Deploy:   supabase functions deploy capturar-lead
-//  Secret:   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+//  Deploy: cole no editor de Edge Functions do Supabase (funcao "capturar-lead").
+//  Secret: GEMINI_API_KEY = sua key do Google AI Studio (https://aistudio.google.com/apikey)
+//          -- o free tier nao exige cartao.
 // ============================================================================
 
-// Modelo: bom em foto/print + custo baixo. Pra trocar é só esta linha:
-//   "claude-haiku-4-5"  -> mais barato/rápido (ótimo p/ prints limpos)
-//   "claude-opus-4-8"   -> máxima precisão (manuscrito difícil, papel amassado)
-const MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 4096; // pode vir uma lista grande de leads
+// Modelo: free tier (sem cartao), com visao + PDF. Pra trocar e so esta linha:
+//   "gemini-2.5-flash-lite" -> mais barato/rapido    |   "gemini-3.5-flash" -> mais novo/capaz
+const MODEL = "gemini-2.5-flash";
+const MAX_OUTPUT_TOKENS = 4096; // pode vir uma lista grande de leads
 
-// Origens autorizadas a chamar do navegador (defesa extra além do verify_jwt).
+// Origens autorizadas a chamar do navegador (defesa extra alem do verify_jwt).
 const ALLOWED_ORIGINS = new Set([
   "https://juca-alt.github.io",
   "http://localhost:8758",
   "http://127.0.0.1:8758",
 ]);
-const MAX_IMG_B64 = 7_500_000; // ~5,5 MB de imagem real (frontend já reduz p/ 1600px)
+const MAX_IMG_B64 = 7_500_000; // imagem ~5,5 MB (frontend ja reduz p/ 1600px)
+const MAX_PDF_B64 = 14_000_000; // PDF ~10 MB inline
 const MAX_TEXT = 20_000;
 
 function corsHeaders(req: Request): Record<string, string> {
@@ -48,145 +48,114 @@ const json = (req: Request, body: unknown, status = 200) =>
     headers: { ...corsHeaders(req), "content-type": "application/json" },
   });
 
-// Os campos de UM lead. Espelha as colunas do CRM.
-const LEAD_PROPS = {
-  nome: { type: "string", description: "Nome completo da pessoa" },
-  cargo: { type: "string", description: "Cargo, profissão ou headline" },
-  empresa: { type: "string", description: "Empresa onde trabalha" },
-  telefone: { type: "string", description: "Só os dígitos, com DDD se houver (ex.: 81999998888)" },
-  email: { type: "string" },
-  cidade: { type: "string" },
-  bairro: { type: "string", description: "Bairro e/ou CEP" },
-  linkedin_url: { type: "string" },
-  renda_estimada: { type: "number", description: "Renda mensal em reais, só se estiver mencionada" },
-  origem: {
-    type: "string",
-    enum: ["LinkedIn", "Rec LP", "Rec OT", "Abordagem Direta"],
-    description: "De onde veio o lead, só se der pra inferir com clareza",
-  },
-  recomendante: { type: "string", description: "Quem indicou, se for uma recomendação" },
-  observacoes: {
-    type: "string",
-    description: "Contexto útil em uma frase: interesse, como se conheceram, melhor horário, etc.",
-  },
-};
-
-// Saída: SEMPRE uma lista de leads (1 ou vários) + meta.
-const SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    leads: {
-      type: "array",
-      description: "Um item por pessoa. Pode ter 1 ou vários. Vazio se não houver ninguém identificável.",
-      items: { type: "object", additionalProperties: false, properties: LEAD_PROPS, required: [] },
-    },
-    confianca: { type: "string", enum: ["alta", "media", "baixa"] },
-    campos_faltando: {
-      type: "array",
-      items: { type: "string" },
-      description: "Campos importantes que ficaram faltando no geral",
-    },
-  },
-  required: ["leads", "confianca", "campos_faltando"],
-};
-
+// Sem responseSchema (formato de tipo e ambiguo entre versoes): descrevo o JSON
+// no prompt e forco JSON com responseMimeType. Mais robusto sem poder testar.
 const SYSTEM = [
-  "Você é um assistente de CRM que extrai dados de LEADS (potenciais clientes de",
+  "Voce e um assistente de CRM que extrai dados de LEADS (potenciais clientes de",
   "planejamento financeiro / seguro de vida, no Brasil) a partir de prints de tela,",
-  "fotos de papel ou cartão de visita, ou blocos de texto soltos.",
+  "fotos de papel ou cartao de visita, PDFs, ou blocos de texto soltos.",
   "Regras:",
-  "- O conteúdo pode ter UM ou VÁRIOS leads (uma lista de indicações, vários cartões,",
-  "  um print de grupo de WhatsApp, uma planilha). Extraia TODOS — cada pessoa vira",
-  "  um item em 'leads'. Se houver só uma pessoa, devolva 'leads' com um único item.",
-  "  Se não houver ninguém identificável, devolva 'leads' vazio.",
-  "- Extraia SÓ o que estiver explícito ou claramente inferível. Não invente nada.",
-  "- Telefone: devolva apenas os dígitos (com DDD se houver).",
-  "- Coloque contexto útil (interesse, como se conheceram, melhor horário) em 'observacoes'.",
-  "- Se um campo não aparecer, deixe-o de fora. Cite no 'campos_faltando' o que faltou no geral.",
-  "- 'confianca' reflete o quão legível/completo estava o conteúdo (alta/media/baixa).",
-].join(" ");
+  "- O conteudo pode ter UM ou VARIOS leads (lista de indicacoes, varios cartoes,",
+  "  print de grupo de WhatsApp, planilha, PDF). Extraia TODOS - cada pessoa vira um item.",
+  "- Extraia SO o que estiver explicito ou claramente inferivel. Nao invente nada.",
+  "- Telefone: devolva apenas os digitos (com DDD se houver).",
+  "- Contexto util (interesse, como se conheceram, melhor horario) vai em observacoes.",
+  "- Se nao houver ninguem identificavel, devolva leads vazio.",
+  "",
+  "Responda SOMENTE com um JSON valido neste formato, sem nenhum texto fora dele:",
+  '{"leads":[{"nome":"","cargo":"","empresa":"","telefone":"","email":"","cidade":"","bairro":"","linkedin_url":"","renda_estimada":0,"origem":"LinkedIn","recomendante":"","observacoes":""}],"confianca":"alta","campos_faltando":[]}',
+  "Em cada lead inclua SO os campos encontrados (omita as chaves dos demais).",
+  "origem deve ser exatamente um de: LinkedIn, Rec LP, Rec OT, Abordagem Direta (apenas se inferir com clareza).",
+  "confianca: alta, media ou baixa (o quao legivel/completo estava o conteudo).",
+  "campos_faltando: lista de campos importantes que faltaram no geral.",
+].join("\n");
+
+// Parser tolerante: tenta JSON puro; senao, recorta do primeiro { ao ultimo }.
+function extractJson(txt: string): unknown {
+  if (!txt) return null;
+  try {
+    return JSON.parse(txt);
+  } catch { /* tenta recorte */ }
+  const a = txt.indexOf("{");
+  const b = txt.lastIndexOf("}");
+  if (a >= 0 && b > a) {
+    try {
+      return JSON.parse(txt.slice(a, b + 1));
+    } catch { /* desiste */ }
+  }
+  return null;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, erro: "Use POST" }, 405);
 
-  const KEY = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!KEY) return json(req, { ok: false, erro: "ANTHROPIC_API_KEY não configurada no Supabase" }, 500);
+  const KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!KEY) return json(req, { ok: false, erro: "GEMINI_API_KEY nao configurada no Supabase" }, 500);
 
-  let payload: { imagem_base64?: string; media_type?: string; texto?: string };
+  let payload: { imagem_base64?: string; media_type?: string; texto?: string; pdf_base64?: string };
   try {
     payload = await req.json();
   } catch {
-    return json(req, { ok: false, erro: "Corpo da requisição não é JSON válido" }, 400);
+    return json(req, { ok: false, erro: "Corpo da requisicao nao e JSON valido" }, 400);
   }
 
   const imagem = typeof payload?.imagem_base64 === "string" ? payload.imagem_base64 : "";
+  const pdf = typeof payload?.pdf_base64 === "string" ? payload.pdf_base64 : "";
   let texto = (typeof payload?.texto === "string" ? payload.texto : "").trim();
-  if (!imagem && !texto) {
-    return json(req, { ok: false, erro: "Envie uma imagem (imagem_base64) ou um texto" }, 400);
+  if (!imagem && !pdf && !texto) {
+    return json(req, { ok: false, erro: "Envie uma imagem, um PDF ou um texto" }, 400);
   }
-  if (imagem.length > MAX_IMG_B64) {
-    return json(req, { ok: false, erro: "Imagem muito grande. Tente uma foto menor." }, 413);
-  }
+  if (imagem.length > MAX_IMG_B64) return json(req, { ok: false, erro: "Imagem muito grande. Tente uma foto menor." }, 413);
+  if (pdf.length > MAX_PDF_B64) return json(req, { ok: false, erro: "PDF muito grande (max ~10 MB)." }, 413);
   if (texto.length > MAX_TEXT) texto = texto.slice(0, MAX_TEXT);
 
-  // Só aceita media_type de imagem conhecido (não confia cegamente no cliente).
   const mt = payload?.media_type || "image/jpeg";
-  const mediaType = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(mt) ? mt : "image/jpeg";
+  const mediaType = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mt) ? mt : "image/jpeg";
 
-  // Monta o conteúdo: imagem (visão) + texto + instrução final.
-  const content: unknown[] = [];
-  if (imagem) {
-    content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: imagem } });
-  }
-  if (texto) content.push({ type: "text", text: "Texto fornecido:\n" + texto });
-  content.push({
-    type: "text",
-    text: "Extraia TODOS os leads do conteúdo acima (um item por pessoa) e responda no formato pedido.",
-  });
+  // Monta as parts: imagem (visao) + PDF + texto + instrucao final.
+  const parts: unknown[] = [];
+  if (imagem) parts.push({ inline_data: { mime_type: mediaType, data: imagem } });
+  if (pdf) parts.push({ inline_data: { mime_type: "application/pdf", data: pdf } });
+  if (texto) parts.push({ text: "Texto fornecido:\n" + texto });
+  parts.push({ text: "Extraia TODOS os leads do conteudo acima (um item por pessoa) e responda SOMENTE com o JSON pedido." });
 
   let resp: Response;
   try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
+    resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: { "content-type": "application/json", "x-goog-api-key": KEY },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        thinking: { type: "disabled" }, // extração simples: mais rápido e barato
-        system: SYSTEM,
-        messages: [{ role: "user", content }],
-        output_config: { format: { type: "json_schema", schema: SCHEMA } },
+        systemInstruction: { parts: [{ text: SYSTEM }] },
+        contents: [{ role: "user", parts }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS },
       }),
     });
   } catch (e) {
-    console.error("anthropic fetch falhou:", e);
+    console.error("gemini fetch falhou:", e);
     return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo." }, 502);
   }
 
   const data = await resp.json().catch(() => null);
   if (!resp.ok) {
-    // Loga o detalhe no servidor, devolve mensagem enxuta pro cliente (não vaza interno).
-    console.error("anthropic erro:", resp.status, data?.error);
-    const code = resp.status === 429 ? "Limite de uso atingido. Tente em instantes." : "A IA não conseguiu processar agora.";
+    console.error("gemini erro:", resp.status, JSON.stringify(data?.error || data));
+    const code = resp.status === 429 ? "Limite de uso atingido. Tente em instantes." : "A IA nao conseguiu processar agora.";
     return json(req, { ok: false, erro: code }, 502);
   }
-  if (data?.stop_reason === "refusal") {
-    return json(req, { ok: false, erro: "A IA recusou a extração desse conteúdo." });
+
+  // Bloqueio de seguranca / sem candidato
+  const blocked = data?.promptFeedback?.blockReason;
+  const cand = data?.candidates?.[0];
+  if (blocked || !cand) {
+    console.error("gemini sem candidato:", JSON.stringify(data?.promptFeedback || data).slice(0, 400));
+    return json(req, { ok: false, erro: "A IA nao retornou resultado pra esse conteudo." });
   }
 
-  // Com output_config.format, o 1º bloco de texto é um JSON válido garantido.
-  const txt = (data?.content || []).find((b: { type: string }) => b.type === "text")?.text;
-  let dados: unknown;
-  try {
-    dados = JSON.parse(txt);
-  } catch {
-    return json(req, { ok: false, erro: "A IA não devolveu um JSON válido." });
+  const txt = (cand?.content?.parts || []).map((p: { text?: string }) => p?.text || "").join("").trim();
+  const dados = extractJson(txt);
+  if (!dados) {
+    console.error("gemini json invalido. finishReason:", cand?.finishReason, "| txt:", (txt || "").slice(0, 300));
+    return json(req, { ok: false, erro: "A IA nao devolveu um JSON valido." });
   }
 
   return json(req, { ok: true, dados, modelo: MODEL });
