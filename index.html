@@ -877,6 +877,7 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
       <div class="search"><input id="search" placeholder="Filtrar esta tela… (⌘K busca a base toda)"/></div>
       <button class="btn ghost" id="top-sync" title="Sincronizar dados — atualiza sem recarregar a página (não desloga)">🔄</button>
       <button class="btn primary" id="top-novo">＋ Novo lead</button>
+      <button class="btn" id="top-ia" title="Captura inteligente — print, foto ou texto" style="flex-shrink:0;padding:9px 11px;border:1.5px solid var(--primary);color:var(--primary);background:#eff6ff;font-weight:700">✨ IA</button>
     </div>
     <div class="content" id="content"></div>
   </div>
@@ -2947,7 +2948,8 @@ function openNovo(mine,prefill){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()">
     <h2>${mine?'⛏ Garimpo — adição rápida':'Novo lead'}</h2>
-    <style>.orig-btn{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:13px}.orig-btn.on{border-color:#2563eb;background:#eff6ff;color:#1e40af;font-weight:600}</style>
+    <style>.orig-btn{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:13px}.orig-btn.on{border-color:#2563eb;background:#eff6ff;color:#1e40af;font-weight:600}.ia-filled{border-color:var(--primary)!important;background:#eff6ff}</style>
+    ${(prefill&&prefill.__ia)?'':'<button type="button" id="n-ia" class="btn" style="width:100%;margin-bottom:12px;border:1.5px solid var(--primary);color:var(--primary);background:#eff6ff;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px">✨ Preencher com IA — print, foto ou texto</button>'}
     <div class="field"><label>Origem do lead</label><div id="n-origs" style="display:flex;flex-wrap:wrap;gap:6px">
       <button type="button" class="orig-btn on" data-orig="linkedin">🔗 LinkedIn</button>
       <button type="button" class="orig-btn" data-orig="lp">🤝 Rec. de LP</button>
@@ -2969,6 +2971,8 @@ function openNovo(mine,prefill){
       <div class="field"><label>Cidade</label><input id="n-cidade"></div>
     </div>
     <div class="field"><label>Bairro / CEP</label><input id="n-bairro" placeholder="ex.: Boa Viagem · 51020-000"></div>
+    <div class="field"><label>E-mail</label><input id="n-email" type="email" placeholder="nome@email.com"></div>
+    <div class="field"><label>Observações</label><textarea id="n-obs" rows="2" placeholder="contexto, interesse, melhor horário…"></textarea></div>
     <div class="row2">
       <div class="field"><label>Renda estimada (R$)</label><input id="n-renda" type="number" placeholder="auto pela triagem"></div>
       <div class="field"><label>Triagem (sugestão)</label><div id="n-triage" style="padding:8px 10px;border:1px dashed var(--line);border-radius:9px;min-height:38px;font-size:13px;color:var(--muted)">preencha cargo/empresa…</div></div>
@@ -2982,6 +2986,7 @@ function openNovo(mine,prefill){
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
   $('#n-close').onclick=()=>ov.remove();
+  { const iaBtn=$('#n-ia'); if(iaBtn) iaBtn.onclick=()=>{ ov.remove(); openCapturaIA(); }; }
   let ORIG='linkedin';
   function applyOrig(){
     document.querySelectorAll('#n-origs .orig-btn').forEach(b=>b.classList.toggle('on',b.dataset.orig===ORIG));
@@ -3037,19 +3042,236 @@ function openNovo(mine,prefill){
       cidade:$('#n-cidade').value||null,bairro:$('#n-bairro').value||null,linkedin_url:url||null,linkedin_url_norm:norm,foto_url:foto,
       telefone:ph.telefone,telefone_e164:ph.e164,flags_qualidade:flags,
       renda_estimada:renda,renda_auto:(!rendaTouched&&renda!=null),score:curScore,
-      observacoes:curSeguros?`[Triagem: possível seguros – ${curSeguros}]`:null,
+      observacoes:[(($('#n-obs')&&$('#n-obs').value.trim())||null),curSeguros?`[Triagem: possível seguros – ${curSeguros}]`:null].filter(Boolean).join(' · ')||null,
       status:'Aguardando Qualificacao',responsavel:(ORIG==='direta'?'Gustavo':$('#n-resp').value),
       origem:({linkedin:'LinkedIn',lp:'Rec LP',ot:'Rec OT',direta:'Abordagem Direta'})[ORIG],
+      email:($('#n-email')&&$('#n-email').value.trim())||null,
       recomendante:((ORIG==='lp'||ORIG==='ot')&&$('#n-rec')?($('#n-rec').value.trim()||null):null)};
     const {data,error}=await sb.from('leads').insert(rec).select().single();
     if(error){$('#n-dup').textContent='Erro: '+error.message;return;}
     LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
-    if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda'].forEach(i=>{const el=$('#'+i);el.value='';delete el.dataset.url;});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
+    if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda','n-bairro','n-obs','n-email'].forEach(i=>{const el=$('#'+i);if(el){el.value='';delete el.dataset.url;}});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
     else{ov.remove();render();}
   };
-  if(prefill&&prefill.nome){$('#n-nome').value=prefill.nome;}
+  if(prefill){
+    const sv=(id,v)=>{ if(v==null||v==='')return; const el=$('#'+id); if(!el)return; el.value=v; el.classList.add('ia-filled'); el.addEventListener('input',()=>el.classList.remove('ia-filled'),{once:true}); };
+    sv('n-nome',prefill.nome); sv('n-cargo',prefill.cargo); sv('n-empresa',prefill.empresa);
+    sv('n-tel',prefill.telefone); sv('n-cidade',prefill.cidade); sv('n-bairro',prefill.bairro);
+    if(prefill.renda_estimada){ sv('n-renda',prefill.renda_estimada); rendaTouched=true; }
+    if(prefill.linkedin_url){ const r=$('#n-raw'); if(r){ r.value=prefill.linkedin_url; r.dataset.url=prefill.linkedin_url; } }
+    sv('n-email',prefill.email);
+    if(prefill.observacoes) sv('n-obs',prefill.observacoes);
+    const om={'LinkedIn':'linkedin','Rec LP':'lp','Rec OT':'ot','Abordagem Direta':'direta'};
+    if(prefill.origem&&om[prefill.origem]){ ORIG=om[prefill.origem]; applyOrig(); }
+    if(prefill.recomendante&&$('#n-rec')){ $('#n-rec').value=prefill.recomendante; }
+    if(prefill.__ia){
+      const f=Array.isArray(prefill.campos_faltando)?prefill.campos_faltando:[];
+      toast('✨ Dados extraídos — confira e salve'+(f.length?' (faltou: '+f.join(', ')+')':''));
+    }
+  }
   updateTriage();
-  setTimeout(()=>$('#n-raw').focus(),50);
+  setTimeout(()=>$((prefill&&prefill.__ia)?'#n-nome':'#n-raw').focus(),50);
+}
+
+// ===== CAPTURA INTELIGENTE COM IA (print / foto / texto -> campos do lead) =====
+function openCapturaIA(){
+  const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()">
+    <style>
+      #cia-drop{border:2px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s;background:#f8fafc}
+      #cia-drop:hover,#cia-drop.drag{border-color:var(--primary);background:#eff6ff;color:var(--primary)}
+      #cia-prev{max-height:170px;max-width:100%;border-radius:10px;margin-top:10px;display:none}
+      .cia-or{display:flex;align-items:center;gap:10px;color:#94a3b8;font-size:12px;margin:12px 0}
+      .cia-or:before,.cia-or:after{content:'';flex:1;height:1px;background:var(--line)}
+      #cia-spin{display:none;align-items:center;gap:8px;color:var(--primary);font-size:13px;font-weight:600;margin-top:10px}
+      #cia-spin .dot{width:14px;height:14px;border:2px solid #bfdbfe;border-top-color:var(--primary);border-radius:50%;animation:cia-rot .7s linear infinite;flex:none}
+      @keyframes cia-rot{to{transform:rotate(360deg)}}
+    </style>
+    <h2>✨ Captura inteligente</h2>
+    <p class="hint">Cole um <b>print</b>, tire <b>foto de um papel/cartão</b> ou cole um <b>bloco de texto</b>. A IA lê e preenche os campos do lead — você confere antes de salvar.</p>
+    <div id="cia-drop">
+      <div style="font-size:26px">📸</div>
+      <div style="font-size:13px;font-weight:600;margin-top:4px">Toque p/ foto ou imagem · ou cole com Ctrl+V</div>
+      <img id="cia-prev" alt="prévia"/>
+    </div>
+    <input type="file" id="cia-file" accept="image/*" style="display:none"/>
+    <div class="cia-or">e / ou</div>
+    <div class="field"><label>Texto solto (WhatsApp, anotação, e-mail…)</label><textarea id="cia-text" rows="4" placeholder="cole aqui qualquer texto com os dados do lead"></textarea></div>
+    <div id="cia-msg" class="auth-err"></div>
+    <div id="cia-spin"><span class="dot"></span> Lendo e extraindo os dados…</div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn primary" id="cia-go">✨ Extrair com IA</button>
+      <button class="btn ghost" id="cia-close">Fechar</button>
+    </div>
+  </div>`;
+  ov.onclick=()=>ov.remove();
+  document.body.appendChild(ov);
+  let imgB64=null, imgType=null;
+  const drop=$('#cia-drop'), prev=$('#cia-prev'), fileEl=$('#cia-file');
+  // Reduz a imagem (máx. 1600px, JPEG) antes de enviar: mais rápido, mais barato e evita o limite de tamanho.
+  function setImg(file){
+    if(!file||!file.type||!file.type.startsWith('image/')){ $('#cia-msg').textContent='Isso não é uma imagem.'; return; }
+    const fr=new FileReader();
+    fr.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=1600; let w=img.width,h=img.height;
+        if(w>max||h>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        const d=c.toDataURL('image/jpeg',0.85);
+        imgType='image/jpeg'; imgB64=d.split(',')[1];
+        prev.src=d; prev.style.display='block'; $('#cia-msg').textContent='';
+      };
+      img.onerror=()=>{ imgType=file.type; imgB64=String(fr.result).split(',')[1]; prev.src=fr.result; prev.style.display='block'; };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  }
+  drop.onclick=()=>fileEl.click();
+  fileEl.onchange=()=>{ if(fileEl.files&&fileEl.files[0]) setImg(fileEl.files[0]); };
+  drop.ondragover=e=>{ e.preventDefault(); drop.classList.add('drag'); };
+  drop.ondragleave=()=>drop.classList.remove('drag');
+  drop.ondrop=e=>{ e.preventDefault(); drop.classList.remove('drag'); if(e.dataTransfer.files&&e.dataTransfer.files[0]) setImg(e.dataTransfer.files[0]); };
+  ov.addEventListener('paste',e=>{ const items=[...((e.clipboardData&&e.clipboardData.items)||[])]; const it=items.find(i=>i.type&&i.type.startsWith('image/')); if(it){ setImg(it.getAsFile()); e.preventDefault(); } });
+  $('#cia-close').onclick=()=>ov.remove();
+  $('#cia-go').onclick=async()=>{
+    const texto=$('#cia-text').value.trim();
+    if(!imgB64 && !texto){ $('#cia-msg').textContent='Cole uma imagem ou um texto primeiro.'; return; }
+    $('#cia-go').disabled=true; $('#cia-spin').style.display='flex'; $('#cia-msg').textContent='';
+    try{
+      const { data, error }=await sb.functions.invoke('capturar-lead',{ body:{ imagem_base64:imgB64, media_type:imgType, texto } });
+      if(error) throw error;
+      if(!data||!data.ok||!data.dados) throw new Error((data&&data.erro)||'Resposta inválida da IA');
+      const dd=data.dados||{};
+      const leads=Array.isArray(dd.leads)?dd.leads.filter(x=>x&&(x.nome||x.telefone||x.email)):[];
+      if(!leads.length){ $('#cia-spin').style.display='none'; $('#cia-go').disabled=false; $('#cia-msg').textContent='Não identifiquei nenhum lead nesse conteúdo. Tente um print/texto mais nítido.'; return; }
+      ov.remove();
+      if(leads.length===1){ openNovo(false,Object.assign({},leads[0],{__ia:true,campos_faltando:dd.campos_faltando})); }
+      else { openCapturaMulti(leads,dd); }
+    }catch(err){
+      $('#cia-spin').style.display='none'; $('#cia-go').disabled=false;
+      const m=(err&&err.message)||String(err);
+      $('#cia-msg').textContent = /not found|404|Failed to send|non-2xx|FunctionsFetchError/i.test(m)
+        ? 'A função "capturar-lead" ainda não foi publicada no Supabase (veja o checklist de deploy).'
+        : ('Não consegui extrair: '+m);
+    }
+  };
+  setTimeout(()=>$('#cia-text').focus(),60);
+}
+
+// Monta o registro do Supabase a partir de um lead extraído pela IA (+ origem/resp. compartilhados).
+function recFromCaptura(d, shared){
+  shared=shared||{};
+  const nome=(d.nome||'').trim();
+  const ph=normPhone(d.telefone||'');
+  const url=d.linkedin_url||''; const norm=url?normUrl(url):null;
+  const t=triageLead({cargo:d.cargo,empresa:d.empresa})||{};
+  let renda=(d.renda_estimada!=null&&d.renda_estimada!=='')?Number(d.renda_estimada):(t.renda!=null?t.renda:null);
+  let pts=0; if(renda>=20000)pts+=2; else if(renda>=10000)pts+=1; if(d.cargo)pts+=0.5; if(d.empresa)pts+=0.5;
+  let score=pts>=2.5?'A':pts>=1.5?'B':pts>=0.5?'C':'D'; if(t.seguros)score='D';
+  const omk={'LinkedIn':'linkedin','Rec LP':'lp','Rec OT':'ot','Abordagem Direta':'direta'};
+  const origemKey=shared.origemKey||omk[d.origem]||'linkedin';
+  const origLabel=({linkedin:'LinkedIn',lp:'Rec LP',ot:'Rec OT',direta:'Abordagem Direta'})[origemKey];
+  const flags=[]; if(ph.telefone&&!ph.e164)flags.push('SEM_DDD'); if(t.seguros)flags.push('SEGUROS?');
+  const obs=[d.observacoes||null,t.seguros?`[Triagem: possível seguros – ${t.seguros}]`:null].filter(Boolean).join(' · ')||null;
+  return {nome,primeiro_nome:firstName(nome),cargo:d.cargo||null,empresa:d.empresa||null,
+    cidade:d.cidade||null,bairro:d.bairro||null,email:d.email||null,
+    telefone:ph.telefone,telefone_e164:ph.e164,linkedin_url:url||null,linkedin_url_norm:norm,
+    renda_estimada:renda,renda_auto:(d.renda_estimada==null||d.renda_estimada===''),score,flags_qualidade:flags,observacoes:obs,
+    status:'Aguardando Qualificacao',responsavel:shared.responsavel||'Gustavo',
+    origem:origLabel,recomendante:(origemKey==='lp'||origemKey==='ot')?(shared.recomendante||d.recomendante||null):null};
+}
+
+// Revisão de VÁRIOS leads: lista enxuta, origem/resp. valem pra todos, salva em lote (pula duplicados).
+function openCapturaMulti(leads, meta){
+  meta=meta||{};
+  const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
+  const omk={'LinkedIn':'linkedin','Rec LP':'lp','Rec OT':'ot','Abordagem Direta':'direta'};
+  let ORIG=omk[(leads.find(l=>l.origem)||{}).origem]||'linkedin';
+  const rows=leads.map((l,i)=>`<div class="cm-row" data-i="${i}">
+      <input type="checkbox" class="cm-chk" checked>
+      <div style="flex:1;min-width:0">
+        <input class="cm-nome" value="${esc(l.nome||'')}" placeholder="nome"/>
+        <div class="cm-sub">${esc([l.cargo,l.empresa].filter(Boolean).join(' · ')||'—')}</div>
+        <input class="cm-tel" value="${esc(l.telefone||'')}" placeholder="telefone"/>
+      </div>
+    </div>`).join('');
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:560px">
+    <style>
+      .cm-list{max-height:44vh;overflow:auto;margin:4px 0 2px;border:1px solid var(--line);border-radius:12px}
+      .cm-row{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid #f1f5f9}
+      .cm-row:last-child{border-bottom:none}
+      .cm-chk{width:20px;height:20px;margin-top:7px;flex:none;accent-color:var(--primary)}
+      .cm-nome{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-weight:600;font-size:14px}
+      .cm-tel{width:100%;border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:12.5px;margin-top:5px}
+      .cm-sub{font-size:12px;color:var(--muted);margin:3px 0}
+      .cm-row.off{opacity:.42}
+      #cm-origs .orig-btn{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;font-size:12.5px}
+      #cm-origs .orig-btn.on{border-color:#2563eb;background:#eff6ff;color:#1e40af;font-weight:600}
+    </style>
+    <h2>✨ ${leads.length} leads detectados</h2>
+    <p class="hint">A IA achou ${leads.length} pessoas. Desmarque quem não quer, ajuste nome/telefone, defina a origem (vale pra todos) e salve de uma vez. Duplicados são pulados.</p>
+    <div class="field"><label>Origem — vale pra todos</label><div id="cm-origs" style="display:flex;flex-wrap:wrap;gap:6px">
+      <button type="button" class="orig-btn" data-orig="linkedin">🔗 LinkedIn</button>
+      <button type="button" class="orig-btn" data-orig="lp">🤝 Rec. de LP</button>
+      <button type="button" class="orig-btn" data-orig="ot">🎯 Rec. de OT</button>
+      <button type="button" class="orig-btn" data-orig="direta">📞 Abordagem direta</button></div></div>
+    <div class="row2">
+      <div class="field" id="cm-blk-rec" style="display:none"><label id="cm-rec-lb">Recomendante</label><input id="cm-rec" placeholder="quem indicou"></div>
+      <div class="field"><label>Responsável</label><select id="cm-resp"><option ${ME.includes('victor')?'selected':''}>Victor</option><option ${!ME.includes('victor')?'selected':''}>Gustavo</option></select></div>
+    </div>
+    <div class="cm-list">${rows}</div>
+    <div id="cm-msg" class="auth-err"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn primary" id="cm-save">✓ Salvar selecionados</button>
+      <button class="btn ghost" id="cm-close">Fechar</button>
+    </div>
+  </div>`;
+  ov.onclick=()=>ov.remove();
+  document.body.appendChild(ov);
+  $('#cm-close').onclick=()=>ov.remove();
+  function applyOrig(){
+    document.querySelectorAll('#cm-origs .orig-btn').forEach(b=>b.classList.toggle('on',b.dataset.orig===ORIG));
+    const isRec=(ORIG==='lp'||ORIG==='ot');
+    $('#cm-blk-rec').style.display=isRec?'':'none';
+    $('#cm-rec-lb').textContent=ORIG==='lp'?'Recomendante (Life Planner)':'Recomendante (cliente/OT)';
+    if(ORIG==='direta')$('#cm-resp').value='Gustavo';
+  }
+  document.querySelectorAll('#cm-origs .orig-btn').forEach(b=>b.onclick=()=>{ORIG=b.dataset.orig;applyOrig();});
+  applyOrig();
+  const recGuess=(leads.find(l=>l.recomendante)||{}).recomendante; if(recGuess&&$('#cm-rec'))$('#cm-rec').value=recGuess;
+  function updateCount(){ const n=[...document.querySelectorAll('.cm-chk')].filter(c=>c.checked).length; const b=$('#cm-save'); b.textContent='✓ Salvar '+n+' selecionado'+(n===1?'':'s'); b.disabled=n===0; }
+  ov.addEventListener('change',e=>{ if(e.target.classList.contains('cm-chk')){ e.target.closest('.cm-row').classList.toggle('off',!e.target.checked); updateCount(); } });
+  updateCount();
+  $('#cm-save').onclick=async()=>{
+    const shared={origemKey:ORIG,responsavel:$('#cm-resp').value,recomendante:($('#cm-rec')&&$('#cm-rec').value.trim())||null};
+    const existsUrl=new Set(LEADS.map(l=>l.linkedin_url_norm).filter(Boolean));
+    const existsTel=new Set(LEADS.map(l=>l.telefone_e164).filter(Boolean));
+    const seen=new Set(); const toInsert=[]; let dup=0;
+    document.querySelectorAll('.cm-row').forEach(row=>{
+      const chk=row.querySelector('.cm-chk'); if(!chk.checked)return;
+      const i=+row.dataset.i;
+      const d=Object.assign({},leads[i],{nome:row.querySelector('.cm-nome').value.trim(),telefone:row.querySelector('.cm-tel').value.trim()});
+      if(!d.nome)return;
+      const rec=recFromCaptura(d,shared);
+      const kU=rec.linkedin_url_norm, kT=rec.telefone_e164;
+      if((kU&&(existsUrl.has(kU)||seen.has(kU)))||(kT&&(existsTel.has(kT)||seen.has(kT)))){dup++;return;}
+      if(kU)seen.add(kU); if(kT)seen.add(kT);
+      toInsert.push(rec);
+    });
+    if(!toInsert.length){ $('#cm-msg').textContent='Nada novo pra salvar'+(dup?' ('+dup+' já existiam)':'')+'.'; return; }
+    $('#cm-save').disabled=true; $('#cm-save').textContent='Salvando…';
+    let ok=0,fail=0;
+    for(let i=0;i<toInsert.length;i+=200){
+      const batch=toInsert.slice(i,i+200);
+      const {data,error}=await sb.from('leads').insert(batch).select();
+      if(error){ for(const row of batch){ const r=await sb.from('leads').insert(row).select(); if(!r.error){ok++; if(r.data&&r.data[0])LEADS.push(r.data[0]);} else if(r.error.code==='23505'){dup++;} else fail++; } }
+      else { ok+=(data||[]).length; (data||[]).forEach(x=>LEADS.push(x)); }
+    }
+    toast('✨ '+ok+' lead'+(ok===1?'':'s')+' salvo'+(ok===1?'':'s')+(dup?' · '+dup+' duplicado'+(dup===1?'':'s'):'')+(fail?' · '+fail+' falhou':''));
+    ov.remove(); render();
+  };
 }
 
 // ===== IMPORTAR BASE (CSV) =====
@@ -3691,6 +3913,7 @@ document.querySelectorAll('.nav-item[data-view]').forEach(b=>b.onclick=()=>{VIEW
 { const etT=$('#et-toggle'); if(etT)etT.onclick=()=>{ const g=$('#et-group'),c=$('#et-caret'); const open=g.style.display!=='none'; g.style.display=open?'none':''; if(c)c.textContent=open?'▸':'▾'; }; }
 $('#profile-chip').onclick=()=>{VIEW=isAdmin()?'perfil':'config';$('#sidebar').classList.remove('open');render();};
 $('#top-novo').onclick=()=>openNovo(false);
+{ const t=$('#top-ia'); if(t) t.onclick=()=>openCapturaIA(); }
 $('#top-sync').onclick=async()=>{ const b=$('#top-sync'); if(b._busy)return; b._busy=true; b.textContent='⏳'; try{ await loadLeads(); render(); toast('Sincronizado ✓'); }catch(_){ toast('Erro ao sincronizar'); } b.textContent='🔄'; b._busy=false; };
 $('#nav-dup').onclick=()=>{VIEW='dup';$('#sidebar').classList.remove('open');render();};
 $('#nav-update').onclick=()=>{ if(confirm('Buscar a versão mais recente do app? A página recarrega (seus dados ficam salvos).')) location.replace(location.origin+location.pathname+'?v='+Date.now()); };
