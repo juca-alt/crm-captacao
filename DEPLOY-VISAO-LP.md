@@ -12,16 +12,14 @@ No Supabase → projeto `kbiinfpjfmuidyzsfegp` → **SQL Editor** → cole o con
 - Cria `lp_relatorio_itens` (não toca em `vendas_atrasos`).
 - RLS ligado em modo *authenticated-full* (igual ao CRM LP v1.0). A trava por-LP fica comentada no arquivo pra ligar depois.
 
-## 2. IA — publicar a Edge Function  · ~5 min · **VOCÊ** (Terminal)
-A chave da Anthropic é a **mesma** da captura de leads — se você já publicou a `capturar-lead`, o secret já existe; senão, rode a 1ª linha.
+## 2. IA — publicar a Edge Function  · ~3 min · **VOCÊ** (Terminal)
+Usa o **mesmo motor e a mesma key** da captura de leads (**Gemini, free tier**). O secret `GEMINI_API_KEY` **já existe** no projeto (a `capturar-lead` usa ele) — então **não precisa de secret novo**, é só publicar:
 ```bash
 cd ~/Documents/crm-captacao
-# (só se ainda não existir) chave da Anthropic no servidor:
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
-# publicar a função:
+git pull                                      # pega a versão Gemini desta função
 supabase functions deploy importar-relatorio-lp
 ```
-> A função sobe com `verify_jwt = ON` (padrão) — só usuário logado chama. CORS travado em `juca-alt.github.io` + localhost.
+> A função sobe com `verify_jwt = ON` (padrão) — só usuário logado chama. CORS travado em `juca-alt.github.io` + localhost. Leitura **gratuita** (free tier do Gemini, sem cartão).
 
 ## 3. App — apontar pro Supabase (quando quiser sair do localStorage)  · **COMIGO**
 O `vendas.html` já tem o cliente Supabase e a chamada da função. Hoje ele **guarda no localStorage** (preview). Pra gravar no banco (sync entre você e os LPs), é trocar a camada `LPDB` (3 funções: `lpCarregar`/`lpSalvar`/`lpIngest`) pra ler/gravar em `lp_relatorio_itens`. Me avisa quando o passo 1 e 2 estiverem prontos que eu faço a virada e a gente valida logado.
@@ -35,9 +33,9 @@ O `vendas.html` já tem o cliente Supabase e a chamada da função. Hoje ele **g
 ---
 
 ## Custo & ajuste
-Cada leitura de PDF usa ~**R$ 0,05–0,20** (modelo Sonnet). Pra mudar, 1 linha em
+Leitura de PDF é **gratuita** (Gemini free tier, sem cartão — mesma conta da captura de leads). Pra trocar o modelo, 1 linha em
 `supabase/functions/importar-relatorio-lp/index.ts` (`const MODEL`):
-`claude-haiku-4-5` (mais barato) · `claude-opus-4-8` (máxima precisão em PDF ruim).
+`gemini-2.5-flash-lite` (mais rápido) · `gemini-3.5-flash` (mais capaz).
 
 ## O que ainda vem do Cowork (regras §4 do brief — hoje estão como stub configurável)
 - **§4.1** tabela `motivo_classe → ação` (regex em `MOTIVO_REGRAS` + textos em `LP_ACOES`).

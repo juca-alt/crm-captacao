@@ -1,37 +1,35 @@
 // ============================================================================
-//  Edge Function: importar-relatorio-lp  (Supabase / Deno)
-//  Lê o RELATÓRIO SEMANAL da Prudential (PDF) de um ou vários Life Planners e
-//  devolve, estruturado, as 5 seções do relatório (Atrasos, Pendências de
-//  Emissão, Apólices Emitidas/Status T, Aniversariantes, Aniversários de
-//  Apólice) — cada uma com o LP dono e suas linhas já mapeadas em campos.
+//  Edge Function: importar-relatorio-lp  (Supabase / Deno)  -- motor: GOOGLE GEMINI
+//  Le o RELATORIO SEMANAL da Prudential (PDF) de um ou varios Life Planners e
+//  devolve, estruturado, as 5 secoes (Atrasos, Pendencias de Emissao, Apolices
+//  Emitidas/Status T, Aniversariantes, Aniversarios de Apolice) -- cada uma com
+//  o LP dono e suas linhas mapeadas em campos. E o "parser" do nucleo P0.
 //
-//  É o "parser" do núcleo P0: PDF -> JSON normalizado. A mecânica de upsert
-//  (preservar status por chave, snapshot por LP) fica no app (vendas.html).
+//  Usa o MESMO motor e a MESMA key da capturar-lead (Gemini, free tier) -> nao
+//  precisa de secret novo: o GEMINI_API_KEY ja existe no projeto.
 //
-//  SEGURANÇA (mesmas camadas da capturar-lead):
-//   1. A chave da Anthropic vive AQUI, no servidor (secret). Nunca no navegador.
-//   2. verify_jwt = ON: só usuário LOGADO chama (visitante anônimo barrado).
-//   3. CORS travado nos domínios do app.
-//   4. Limite de tamanho no corpo (anti-abuso / anti-estouro de custo).
+//  SEGURANCA (mesmas camadas da capturar-lead):
+//   1. A chave do Gemini vive AQUI, no servidor (secret). Nunca no navegador.
+//   2. verify_jwt = ON: so usuario LOGADO chama.
+//   3. CORS travado nos dominios do app.
+//   4. Limites de tamanho no corpo.
 //
-//  Deploy:   supabase functions deploy importar-relatorio-lp
-//  Secret:   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...   (já existe se
-//            a capturar-lead foi publicada — o secret é compartilhado)
+//  Deploy: supabase functions deploy importar-relatorio-lp
+//  Secret: GEMINI_API_KEY (ja configurado p/ a capturar-lead)
 // ============================================================================
 
-// Relatório com tabelas densas: Sonnet equilibra precisão/custo. Pra trocar:
-//   "claude-haiku-4-5"  -> mais barato/rápido (relatórios limpos e bem tabulados)
-//   "claude-opus-4-8"   -> máxima precisão (PDF escaneado/ruidoso, muitas páginas)
-const MODEL = "claude-sonnet-4-6";
-const MAX_TOKENS = 8192; // o relatório pode ter dezenas de linhas por seção
+// Modelo free tier (sem cartao), com PDF/visao. Pra trocar e so esta linha:
+//   "gemini-2.5-flash-lite" -> mais barato/rapido   |   "gemini-3.5-flash" -> mais novo/capaz
+const MODEL = "gemini-2.5-flash";
+const MAX_OUTPUT_TOKENS = 8192; // o relatorio pode ter dezenas de linhas por secao
 
 const ALLOWED_ORIGINS = new Set([
   "https://juca-alt.github.io",
   "http://localhost:8758",
   "http://127.0.0.1:8758",
 ]);
-const MAX_PDF_B64 = 26_000_000; // ~19 MB de PDF real (limite Anthropic é 32 MB)
-const MAX_TEXT = 200_000;       // fallback: texto colado de um relatório
+const MAX_PDF_B64 = 14_000_000; // PDF ~10 MB inline
+const MAX_TEXT = 60_000;        // fallback: texto colado do relatorio
 
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
@@ -50,158 +48,142 @@ const json = (req: Request, body: unknown, status = 200) =>
     headers: { ...corsHeaders(req), "content-type": "application/json" },
   });
 
-// União de TODOS os campos possíveis de uma linha (todos opcionais). O modelo
-// preenche só os que existem para o tipo da seção — ver §Schemas do brief.
-// Chaves de upsert: apolice (BackOffice) · cliente (Aniversário/Datas).
-const LINHA_PROPS = {
-  // — Atrasos —
-  dias_atraso: { type: "number", description: "Dias em atraso (só ATRASOS). Número inteiro." },
-  pagador: { type: "string", description: "Nome do pagador" },
-  segurado: { type: "string", description: "Nome do segurado" },
-  forma_pag: { type: "string", description: "Forma de pagamento (Cartão, Boleto, Débito, etc.)" },
-  premio: { type: "number", description: "Prêmio em reais, só os números (ex.: 312.50)" },
-  motivo: { type: "string", description: "Motivo do atraso / RETORNO COBRANÇA, texto literal do PDF" },
-  // — Pendências —
-  proposta: { type: "string", description: "Número da proposta" },
-  assinatura_ccb: { type: "string", description: "Status/data da assinatura da CCB" },
-  pendencia: { type: "string", description: "O que está pendente, texto literal" },
-  // — comuns Pendências / Status T / Datas —
-  apolice: { type: "string", description: "Número da apólice (chave de upsert no BackOffice)" },
-  cliente: { type: "string", description: "Nome do cliente (chave de upsert em Aniversário/Datas)" },
-  // — Status T (apólices emitidas) —
-  mes: { type: "string", description: "Mês de referência" },
-  data_emissao: { type: "string", description: "Data de emissão, formato YYYY-MM-DD" },
-  data_30dias: { type: "string", description: "Data dos 30 dias, formato YYYY-MM-DD" },
-  data_2o_premio: { type: "string", description: "Data do 2º prêmio, formato YYYY-MM-DD" },
-  // — Aniversariantes / Datas importantes —
-  data_nasc: { type: "string", description: "Data de nascimento. YYYY-MM-DD se houver ano, senão MM-DD" },
-  telefone: { type: "string", description: "Telefone, só os dígitos com DDD" },
-};
-
-const SECAO_TIPOS = ["ATRASOS", "PENDENCIAS", "STATUS_T", "ANIVERSARIO", "DATAS_IMPORTANTES"];
-
-const SCHEMA = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    secoes: {
-      type: "array",
-      description: "Uma entrada por seção encontrada no relatório (por LP e por tipo).",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          tipo: { type: "string", enum: SECAO_TIPOS, description: "Tipo da seção pelo título" },
-          lp: { type: "string", description: "Nome do Life Planner dono da seção (do cabeçalho)" },
-          linhas: {
-            type: "array",
-            description: "Uma linha por registro. Vazio se a seção só tiver cabeçalho.",
-            items: { type: "object", additionalProperties: false, properties: LINHA_PROPS, required: [] },
-          },
-        },
-        required: ["tipo", "lp", "linhas"],
-      },
-    },
-    confianca: { type: "string", enum: ["alta", "media", "baixa"] },
-    avisos: { type: "array", items: { type: "string" }, description: "Problemas de leitura (página borrada, coluna ambígua, etc.)" },
-  },
-  required: ["secoes", "confianca", "avisos"],
-};
-
+// Sem responseSchema (ambiguo entre versoes do Gemini): descrevo o JSON no prompt
+// e forco JSON com responseMimeType. Mesma estrategia da capturar-lead.
 const SYSTEM = [
-  "Você extrai dados do RELATÓRIO SEMANAL da Prudential, organizado por Life Planner (LP).",
-  "O relatório tem seções; cada seção pertence a UM LP e é de UM dos 5 tipos abaixo,",
-  "identificado pelo TÍTULO da seção (padrão '{TIPO} — {NOME DO LP}', ex.: 'ATRASOS — DANIEL CRUZ'):",
+  "Voce extrai dados do RELATORIO SEMANAL da Prudential, organizado por Life Planner (LP).",
+  "O relatorio tem secoes; cada secao pertence a UM LP e e de UM dos 5 tipos abaixo,",
+  "identificado pelo TITULO da secao (padrao '{TIPO} - {NOME DO LP}', ex.: 'ATRASOS - DANIEL CRUZ'):",
   "- 'ATRASOS' (lista de atraso) -> tipo ATRASOS",
-  "- 'PENDÊNCIAS DE EMISSÃO' -> tipo PENDENCIAS",
-  "- 'APÓLICES EMITIDAS' (status T) -> tipo STATUS_T",
-  "- 'ANIVERSARIANTES DO MÊS' -> tipo ANIVERSARIO",
-  "- 'ANIVERSÁRIOS DE APÓLICE' (datas importantes) -> tipo DATAS_IMPORTANTES",
+  "- 'PENDENCIAS DE EMISSAO' -> tipo PENDENCIAS",
+  "- 'APOLICES EMITIDAS' (status T) -> tipo STATUS_T",
+  "- 'ANIVERSARIANTES DO MES' -> tipo ANIVERSARIO",
+  "- 'ANIVERSARIOS DE APOLICE' (datas importantes) -> tipo DATAS_IMPORTANTES",
   "Regras:",
-  "- Extraia TODAS as seções de TODOS os LPs do arquivo. Um mesmo arquivo pode ter vários LPs.",
-  "- Para cada seção, extraia TODAS as linhas e mapeie cada coluna no campo certo da linha.",
-  "- 'lp' é o nome do LP do cabeçalho da seção (sem o tipo). Mantenha o nome como está escrito.",
-  "- Células multi-linha: junte as quebras num valor só (ex.: um nome que quebrou em 2 linhas).",
-  "- Pule linhas totalmente vazias. Se a seção só tiver o cabeçalho, devolva 'linhas' vazio (mas devolva a seção).",
-  "- Datas: devolva no formato YYYY-MM-DD. Em aniversário sem ano, use MM-DD.",
-  "- Valores (prêmio) e dias: devolva só os números, sem 'R$', sem '%'.",
-  "- Não invente. Se um campo não existe na linha, deixe de fora. Anote em 'avisos' o que ficou ambíguo.",
-  "- 'confianca' reflete a legibilidade/integridade do PDF (alta/media/baixa).",
-].join(" ");
+  "- Extraia TODAS as secoes de TODOS os LPs do arquivo. Um mesmo arquivo pode ter varios LPs.",
+  "- Para cada secao, extraia TODAS as linhas e mapeie cada coluna no campo certo.",
+  "- 'lp' e o nome do LP do cabecalho da secao (sem o tipo). Mantenha como esta escrito.",
+  "- Celulas multi-linha: junte as quebras num valor so (ex.: um nome que quebrou em 2 linhas).",
+  "- Pule linhas totalmente vazias. Se a secao so tiver cabecalho, devolva 'linhas' vazio (mas devolva a secao).",
+  "- Datas: devolva no formato YYYY-MM-DD. Em aniversario sem ano, use MM-DD.",
+  "- Valores (premio) e dias: devolva so os numeros, sem 'R$' nem '%'.",
+  "- Nao invente. Se um campo nao existe na linha, omita a chave. Anote em 'avisos' o que ficou ambiguo.",
+  "",
+  "Campos por tipo (inclua so os que existirem na linha):",
+  "- ATRASOS: dias_atraso(num), apolice, pagador, segurado, telefone, forma_pag, premio(num), motivo",
+  "- PENDENCIAS: proposta, apolice, cliente, assinatura_ccb, pendencia",
+  "- STATUS_T: mes, proposta, apolice, segurado, pagador, data_emissao, data_30dias, data_2o_premio",
+  "- ANIVERSARIO: cliente, data_nasc, telefone",
+  "- DATAS_IMPORTANTES: mes, apolice, data_emissao, cliente, telefone",
+  "",
+  "Responda SOMENTE com um JSON valido neste formato, sem nenhum texto fora dele:",
+  '{"secoes":[{"tipo":"ATRASOS","lp":"NOME DO LP","linhas":[{"dias_atraso":0,"apolice":"","segurado":"","pagador":"","telefone":"","forma_pag":"","premio":0,"motivo":""}]}],"confianca":"alta","avisos":[]}',
+  "tipo deve ser exatamente um de: ATRASOS, PENDENCIAS, STATUS_T, ANIVERSARIO, DATAS_IMPORTANTES.",
+  "confianca: alta, media ou baixa (o quao legivel/integro estava o PDF).",
+].join("\n");
+
+// Parser tolerante: tenta JSON puro; senao, recorta do primeiro { ao ultimo }.
+function extractJson(txt: string): unknown {
+  if (!txt) return null;
+  try {
+    return JSON.parse(txt);
+  } catch { /* tenta recorte */ }
+  const a = txt.indexOf("{");
+  const b = txt.lastIndexOf("}");
+  if (a >= 0 && b > a) {
+    try {
+      return JSON.parse(txt.slice(a, b + 1));
+    } catch { /* desiste */ }
+  }
+  return null;
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, erro: "Use POST" }, 405);
 
-  const KEY = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!KEY) return json(req, { ok: false, erro: "ANTHROPIC_API_KEY não configurada no Supabase" }, 500);
+  // Aceita variacoes comuns do nome do secret (mesma key da capturar-lead).
+  const KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("Gemini API Key") ||
+    Deno.env.get("GEMINI_KEY") || Deno.env.get("GOOGLE_API_KEY") ||
+    Deno.env.get("GOOGLE_GEMINI_API_KEY") || Deno.env.get("GEMINI");
+  if (!KEY) return json(req, { ok: false, erro: "Nenhuma key do Gemini encontrada nos secrets (esperado: GEMINI_API_KEY)" }, 500);
 
-  let payload: { pdf_base64?: string; texto?: string };
+  let payload: { pdf_base64?: string; texto?: string; imagem_base64?: string; media_type?: string };
   try {
     payload = await req.json();
   } catch {
-    return json(req, { ok: false, erro: "Corpo da requisição não é JSON válido" }, 400);
+    return json(req, { ok: false, erro: "Corpo da requisicao nao e JSON valido" }, 400);
   }
 
   const pdf = typeof payload?.pdf_base64 === "string" ? payload.pdf_base64 : "";
+  const imagem = typeof payload?.imagem_base64 === "string" ? payload.imagem_base64 : "";
   let texto = (typeof payload?.texto === "string" ? payload.texto : "").trim();
-  if (!pdf && !texto) {
-    return json(req, { ok: false, erro: "Envie um PDF (pdf_base64) ou um texto" }, 400);
+  if (!pdf && !imagem && !texto) {
+    return json(req, { ok: false, erro: "Envie um PDF (pdf_base64), uma imagem ou um texto" }, 400);
   }
   if (pdf.length > MAX_PDF_B64) {
-    return json(req, { ok: false, erro: "PDF muito grande. Tente um arquivo menor ou divida o relatório." }, 413);
+    return json(req, { ok: false, erro: "PDF muito grande (max ~10 MB). Divida o relatorio." }, 413);
   }
   if (texto.length > MAX_TEXT) texto = texto.slice(0, MAX_TEXT);
 
-  const content: unknown[] = [];
-  if (pdf) {
-    content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf } });
-  }
-  if (texto) content.push({ type: "text", text: "Texto do relatório:\n" + texto });
-  content.push({
-    type: "text",
-    text: "Extraia TODAS as seções de TODOS os LPs do relatório acima e responda no formato pedido.",
+  const mt = payload?.media_type || "image/jpeg";
+  const mediaType = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mt) ? mt : "image/jpeg";
+
+  // Monta as parts: PDF + imagem (opcional) + texto + instrucao final.
+  const parts: unknown[] = [];
+  if (pdf) parts.push({ inline_data: { mime_type: "application/pdf", data: pdf } });
+  if (imagem) parts.push({ inline_data: { mime_type: mediaType, data: imagem } });
+  if (texto) parts.push({ text: "Texto do relatorio:\n" + texto });
+  parts.push({ text: "Extraia TODAS as secoes de TODOS os LPs do relatorio acima e responda SOMENTE com o JSON pedido." });
+
+  const GURL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+  const geminiBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS },
   });
 
-  let resp: Response;
-  try {
-    resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: MAX_TOKENS,
-        thinking: { type: "disabled" },
-        system: SYSTEM,
-        messages: [{ role: "user", content }],
-        output_config: { format: { type: "json_schema", schema: SCHEMA } },
-      }),
-    });
-  } catch (e) {
-    console.error("anthropic fetch falhou:", e);
-    return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo." }, 502);
+  // Tenta ate 3x: o free tier do Gemini as vezes responde 503 "high demand" (transiente).
+  let resp: Response | null = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      resp = await fetch(GURL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": KEY },
+        body: geminiBody,
+      });
+    } catch (e) {
+      console.error("gemini fetch falhou:", e);
+      if (i === 2) return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo." }, 502);
+      await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+      continue;
+    }
+    if (resp.ok || (resp.status !== 503 && resp.status !== 429 && resp.status !== 500)) break;
+    if (i < 2) await new Promise((r) => setTimeout(r, 700 * (i + 1)));
   }
+  if (!resp) return json(req, { ok: false, erro: "Falha ao chamar a IA. Tente de novo." }, 502);
 
   const data = await resp.json().catch(() => null);
   if (!resp.ok) {
-    console.error("anthropic erro:", resp.status, data?.error);
-    const code = resp.status === 429 ? "Limite de uso atingido. Tente em instantes." : "A IA não conseguiu processar agora.";
+    console.error("gemini erro:", resp.status, JSON.stringify(data?.error || data));
+    const code = (resp.status === 429 || resp.status === 503)
+      ? "A IA esta com alta demanda agora. Tente de novo em instantes."
+      : "A IA nao conseguiu processar agora.";
     return json(req, { ok: false, erro: code }, 502);
   }
-  if (data?.stop_reason === "refusal") {
-    return json(req, { ok: false, erro: "A IA recusou a leitura desse arquivo." });
+
+  const blocked = data?.promptFeedback?.blockReason;
+  const cand = data?.candidates?.[0];
+  if (blocked || !cand) {
+    console.error("gemini sem candidato:", JSON.stringify(data?.promptFeedback || data).slice(0, 400));
+    return json(req, { ok: false, erro: "A IA nao retornou resultado pra esse arquivo." });
   }
 
-  const txt = (data?.content || []).find((b: { type: string }) => b.type === "text")?.text;
-  let dados: unknown;
-  try {
-    dados = JSON.parse(txt);
-  } catch {
-    return json(req, { ok: false, erro: "A IA não devolveu um JSON válido." });
+  const txt = (cand?.content?.parts || []).map((p: { text?: string }) => p?.text || "").join("").trim();
+  const dados = extractJson(txt);
+  if (!dados) {
+    console.error("gemini json invalido. finishReason:", cand?.finishReason, "| txt:", (txt || "").slice(0, 300));
+    return json(req, { ok: false, erro: "A IA nao devolveu um JSON valido." });
   }
 
   return json(req, { ok: true, dados, modelo: MODEL });
