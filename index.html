@@ -3159,10 +3159,15 @@ function openCapturaIA(){
       else { openCapturaMulti(leads,dd); }
     }catch(err){
       $('#cia-spin').style.display='none'; $('#cia-go').disabled=false;
-      const m=(err&&err.message)||String(err);
-      $('#cia-msg').textContent = /not found|404|Failed to send|non-2xx|FunctionsFetchError/i.test(m)
-        ? 'A função "capturar-lead" ainda não foi publicada no Supabase (veja o checklist de deploy).'
-        : ('Não consegui extrair: '+m);
+      let m=(err&&err.message)||String(err); let real='';
+      // supabase poe a Response em err.context — lê o erro REAL que a função devolveu
+      try{ if(err&&err.context&&typeof err.context.json==='function'){ const b=await err.context.json(); if(b&&b.erro) real=b.erro; } }catch(_){}
+      let msg;
+      if(/GEMINI_API_KEY|ANTHROPIC_API_KEY|nao configurada|não configurada/i.test(real)) msg='⚙️ Falta configurar a chave da IA no Supabase (secret GEMINI_API_KEY). Veja o checklist.';
+      else if(real) msg='Não consegui extrair: '+real;
+      else if(/Failed to send|FunctionsFetchError|Failed to fetch|404|not found/i.test(m)) msg='Não consegui falar com a função (verifique a conexão/publicação).';
+      else msg='Não consegui extrair: '+m;
+      $('#cia-msg').textContent=msg;
     }
   };
   setTimeout(()=>$('#cia-text').focus(),60);
