@@ -65,7 +65,8 @@ const SYSTEM = [
   "Responda SOMENTE com um JSON valido neste formato, sem nenhum texto fora dele:",
   '{"leads":[{"nome":"","cargo":"","empresa":"","telefone":"","email":"","cidade":"","bairro":"","linkedin_url":"","renda_estimada":0,"origem":"LinkedIn","recomendante":"","observacoes":""}],"confianca":"alta","campos_faltando":[]}',
   "Em cada lead inclua SO os campos encontrados (omita as chaves dos demais).",
-  "origem deve ser exatamente um de: LinkedIn, Rec LP, Rec OT, Abordagem Direta (apenas se inferir com clareza).",
+  "origem deve ser exatamente um de: LinkedIn, Rec LP, Rec OT, Rec Cliente, Rec Familiar, Instagram, Facebook, Abordagem Direta (apenas se inferir com clareza).",
+  "Dicas de origem: 'Rec LP' = indicado por um Life Planner; 'Rec OT' = indicado por cliente/OT; 'Rec Cliente' = indicado por um cliente; 'Rec Familiar' = indicado por familiar; 'Instagram'/'Facebook' = veio dessas redes. Em qualquer 'Rec ...' preencha 'recomendante' com quem indicou.",
   "confianca: alta, media ou baixa (o quao legivel/completo estava o conteudo).",
   "campos_faltando: lista de campos importantes que faltaram no geral.",
 ].join("\n");
@@ -123,26 +124,38 @@ Deno.serve(async (req: Request) => {
   if (texto) parts.push({ text: "Texto fornecido:\n" + texto });
   parts.push({ text: "Extraia TODOS os leads do conteudo acima (um item por pessoa) e responda SOMENTE com o JSON pedido." });
 
-  let resp: Response;
-  try {
-    resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-goog-api-key": KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM }] },
-        contents: [{ role: "user", parts }],
-        generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS },
-      }),
-    });
-  } catch (e) {
-    console.error("gemini fetch falhou:", e);
-    return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo." }, 502);
+  const GURL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+  const geminiBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM }] },
+    contents: [{ role: "user", parts }],
+    generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS },
+  });
+  // Tenta ate 3x: o free tier do Gemini as vezes responde 503 "high demand" (transiente).
+  let resp: Response | null = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      resp = await fetch(GURL, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-goog-api-key": KEY },
+        body: geminiBody,
+      });
+    } catch (e) {
+      console.error("gemini fetch falhou:", e);
+      if (i === 2) return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo." }, 502);
+      await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+      continue;
+    }
+    if (resp.ok || (resp.status !== 503 && resp.status !== 429 && resp.status !== 500)) break;
+    if (i < 2) await new Promise((r) => setTimeout(r, 700 * (i + 1)));
   }
+  if (!resp) return json(req, { ok: false, erro: "Falha ao chamar a IA. Tente de novo." }, 502);
 
   const data = await resp.json().catch(() => null);
   if (!resp.ok) {
     console.error("gemini erro:", resp.status, JSON.stringify(data?.error || data));
-    const code = resp.status === 429 ? "Limite de uso atingido. Tente em instantes." : "A IA nao conseguiu processar agora.";
+    const code = (resp.status === 429 || resp.status === 503)
+      ? "A IA esta com alta demanda agora. Tente de novo em instantes."
+      : "A IA nao conseguiu processar agora.";
     return json(req, { ok: false, erro: code }, 502);
   }
 
