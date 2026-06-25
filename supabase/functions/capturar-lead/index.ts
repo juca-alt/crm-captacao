@@ -90,8 +90,11 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, erro: "Use POST" }, 405);
 
-  const KEY = Deno.env.get("GEMINI_API_KEY");
-  if (!KEY) return json(req, { ok: false, erro: "GEMINI_API_KEY nao configurada no Supabase" }, 500);
+  // Aceita variacoes comuns do nome do secret (caso tenha sido salvo levemente diferente).
+  const KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("Gemini API Key") ||
+    Deno.env.get("GEMINI_KEY") || Deno.env.get("GOOGLE_API_KEY") ||
+    Deno.env.get("GOOGLE_GEMINI_API_KEY") || Deno.env.get("GEMINI");
+  if (!KEY) return json(req, { ok: false, erro: "Nenhuma key do Gemini encontrada nos secrets (esperado: GEMINI_API_KEY)" }, 500);
 
   let payload: { imagem_base64?: string; media_type?: string; texto?: string; pdf_base64?: string };
   try {
