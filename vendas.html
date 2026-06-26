@@ -758,14 +758,15 @@ function lpSetStatus(ent,key,val){
    scripts) vêm do Cowork (brief §4). Abaixo ficam stubs sensatos e CONFIGURÁVEIS;
    trocar os valores quando o Cowork fechar §4.1/§4.2/§4.3. A mecânica é definitiva. */
 
-// §4.1 — classifica RETORNO COBRANÇA em 6 classes (provisório; ajustar regex c/ Cowork)
+// §4.1 — classifica RETORNO COBRANÇA em 6 classes. Regex calibrada nos motivos REAIS do
+// relatório da Prudential (OUTLIERS, jun/2026). ORDEM importa (1º match vence).
 const MOTIVO_REGRAS=[
-  ['cartao_expirado',       /expirad|vencid|validade|cart[aã]o.*(venc|expir)/i],
-  ['suspeita_fraude',       /fraude|suspeit|seguran[çc]a|bloqueio/i],
-  ['limite_insuficiente',   /limite|insuficiente|saldo|sem fundo/i],
-  ['convenio_inativo',      /conv[êe]nio|inativ|consignad/i],
-  ['debito_nao_autorizado', /n[ãa]o autoriz|recusad|negad|autoriza[çc][ãa]o/i],
-  ['boleto_aberto',         /boleto|em aberto|aguardando pag/i],
+  ['cartao_expirado',       /cart[ãa]o.*(expirad|bloquead)|expirad|bloquead/i],   // "DADOS DO CARTÃO EXPIRADOS/BLOQUEADOS", "CARTÃO EXPIRADO/BLOQUEADO"
+  ['limite_insuficiente',   /limite insuficiente|limite/i],                       // "LIMITE INSUFICIENTE - LIBERE LIMITE..."
+  ['suspeita_fraude',       /fraude/i],                                           // "SUSPEITA DE FRAUDE...", "Suspeita de fraude pelo banco"
+  ['convenio_inativo',      /conv[êe]nio|recadastr|reativar/i],                   // "Débito não efetuado - Reativar/Recadastrar Convênio"
+  ['debito_nao_autorizado', /n[ãa]o autoriz|d[ée]bito n[ãa]o efetuad|recusad/i],  // "Débito Não Autorizado", "Transação não autorizada"
+  ['boleto_aberto',         /boleto|em aberto|aguardando/i],
 ];
 function lpMotivoClasse(rec){
   const m=(rec&&rec.motivo)||''; for(const[c,re]of MOTIVO_REGRAS){ if(re.test(m)) return c; }
@@ -958,8 +959,16 @@ function lpEnsurePdfjs(){ if(window.pdfjsLib) return Promise.resolve(); if(LP_PD
     s.onerror=()=>rej(new Error('pdfjs load fail')); document.head.appendChild(s); });
   return LP_PDFJS; }
 async function lpPdfText(arrbuf){ await lpEnsurePdfjs(); const pdf=await window.pdfjsLib.getDocument({data:arrbuf}).promise;
-  let txt=''; for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const tc=await pg.getTextContent(); txt+=tc.items.map(i=>i.str).join(' ')+'\n'; }
-  return txt.trim(); }
+  // Reconstrói LINHA por linha pela coordenada Y (preserva as tabelas; o join cru juntava
+  // a página inteira numa linha só e a IA se perdia nas colunas).
+  let out=''; for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const tc=await pg.getTextContent();
+    const its=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5]}));
+    its.sort((a,b)=>(Math.abs(a.y-b.y)>3?(b.y-a.y):(a.x-b.x)));
+    let ly=null,line=''; const ls=[];
+    for(const it of its){ if(ly===null||Math.abs(it.y-ly)<=3){ line+=(line?' ':'')+it.s; } else { ls.push(line.trim()); line=it.s; } ly=it.y; }
+    if(line) ls.push(line.trim());
+    out+=ls.join('\n')+'\n'; }
+  return out.trim(); }
 
 function openLpImport(){
   const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center';
