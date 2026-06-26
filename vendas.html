@@ -949,6 +949,18 @@ function viewLpDatas(){
 }
 
 /* ════ IMPORT: modal de upload do PDF → Edge Function → lpIngest ════ */
+/* pdf.js sob demanda: extrai o texto do PDF no navegador. Mandar TEXTO (e não a
+   imagem da página) evita estourar o limite de tokens do Gemini free tier. */
+let LP_PDFJS=null;
+function lpEnsurePdfjs(){ if(window.pdfjsLib) return Promise.resolve(); if(LP_PDFJS) return LP_PDFJS;
+  LP_PDFJS=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){} res(); };
+    s.onerror=()=>rej(new Error('pdfjs load fail')); document.head.appendChild(s); });
+  return LP_PDFJS; }
+async function lpPdfText(arrbuf){ await lpEnsurePdfjs(); const pdf=await window.pdfjsLib.getDocument({data:arrbuf}).promise;
+  let txt=''; for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const tc=await pg.getTextContent(); txt+=tc.items.map(i=>i.str).join(' ')+'\n'; }
+  return txt.trim(); }
+
 function openLpImport(){
   const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center';
   ov.innerHTML=`<div class="lp-modal-card" onclick="event.stopPropagation()">
@@ -969,9 +981,9 @@ function openLpImport(){
   </div>`;
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
-  let pdfB64='';
+  let pdfBuf=null;
   const setFile=(file)=>{ if(!file) return; if(file.type&&file.type!=='application/pdf'){ $('#lp-msg').textContent='Envie um arquivo PDF.'; return; }
-    $('#lp-file-nome').textContent=file.name; const fr=new FileReader(); fr.onload=()=>{ pdfB64=String(fr.result).split(',')[1]||''; }; fr.readAsDataURL(file); };
+    $('#lp-file-nome').textContent=file.name; const fr=new FileReader(); fr.onload=()=>{ pdfBuf=fr.result; }; fr.readAsArrayBuffer(file); };
   const drop=ov.querySelector('#lp-drop'), fileEl=ov.querySelector('#lp-file');
   drop.onclick=()=>fileEl.click();
   fileEl.onchange=()=>{ if(fileEl.files&&fileEl.files[0]) setFile(fileEl.files[0]); };
@@ -980,13 +992,25 @@ function openLpImport(){
   drop.ondrop=e=>{ e.preventDefault(); drop.classList.remove('drag'); if(e.dataTransfer.files&&e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); };
   ov.querySelector('#lp-cancel').onclick=()=>ov.remove();
   ov.querySelector('#lp-go').onclick=async()=>{
-    const texto=($('#lp-text').value||'').trim();
-    if(!pdfB64 && !texto){ $('#lp-msg').textContent='Escolha um PDF ou cole o texto do relatório.'; return; }
+    let texto=($('#lp-text').value||'').trim();
+    let pdf_base64='';
+    if(!pdfBuf && !texto){ $('#lp-msg').textContent='Escolha um PDF ou cole o texto do relatório.'; return; }
     if(!sb){ $('#lp-msg').textContent='Sem conexão com o Supabase aqui (preview offline). Use "Carregar exemplo" pra testar a tela.'; return; }
     $('#lp-go').disabled=true; $('#lp-spin').style.display='flex'; $('#lp-msg').textContent='';
     try{
-      const { data, error }=await sb.functions.invoke('importar-relatorio-lp',{ body:{ pdf_base64:pdfB64, texto } });
-      if(error) throw error;
+      if(pdfBuf && !texto){
+        // 1ª via: extrai o texto do PDF aqui no navegador (rápido, de graça, não estoura a IA com imagem).
+        let extr=''; try{ extr=await lpPdfText(pdfBuf.slice(0)); }catch(e){ extr=''; }
+        if(extr && extr.replace(/\s/g,'').length>=80){ texto=extr; }
+        else { // PDF escaneado (sem camada de texto) → manda a imagem como fallback.
+          const b=new Uint8Array(pdfBuf); let s=''; const CH=0x8000; for(let i=0;i<b.length;i+=CH){ s+=String.fromCharCode.apply(null,b.subarray(i,i+CH)); } pdf_base64=btoa(s);
+        }
+      }
+      const { data, error }=await sb.functions.invoke('importar-relatorio-lp',{ body:{ pdf_base64, texto } });
+      if(error){ // lê o erro REAL da função em vez de mascarar tudo como "não publicada"
+        let real=''; try{ const b=error.context?await error.context.clone().json():null; real=(b&&b.erro)||''; }catch(e){}
+        throw new Error(real||(error&&error.message)||String(error));
+      }
       if(!data||!data.ok||!data.dados) throw new Error((data&&data.erro)||'Resposta inválida da IA');
       const parsed=data.dados; parsed.__modelo=data.modelo;
       const total=(parsed.secoes||[]).reduce((s,x)=>s+((x.linhas||[]).length),0);
@@ -997,9 +1021,9 @@ function openLpImport(){
     }catch(err){
       $('#lp-spin').style.display='none'; $('#lp-go').disabled=false;
       const m=(err&&err.message)||String(err);
-      $('#lp-msg').textContent=/not found|404|Failed to send|non-2xx|FunctionsFetchError/i.test(m)
-        ? 'A função "importar-relatorio-lp" ainda não foi publicada (veja DEPLOY-VISAO-LP.html). Use "Carregar exemplo" enquanto isso.'
-        : (/JWT|auth|401|403/i.test(m) ? 'Faça login no CRM (index.html) primeiro — a leitura exige sessão.' : ('Não consegui ler: '+m));
+      $('#lp-msg').textContent=/Failed to (fetch|send)|FunctionsFetchError|NetworkError|not found|\b404\b/i.test(m)
+        ? 'Não consegui falar com a função (rede/origem) — veja DEPLOY-VISAO-LP.html.'
+        : (/JWT|auth|\b401\b|\b403\b|not logged/i.test(m) ? 'Faça login no CRM (index.html) primeiro — a leitura exige sessão.' : ('Não consegui ler: '+m));
     }
   };
 }
