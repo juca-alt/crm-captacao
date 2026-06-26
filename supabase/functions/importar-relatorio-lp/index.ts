@@ -29,7 +29,7 @@ const ALLOWED_ORIGINS = new Set([
   "http://127.0.0.1:8758",
 ]);
 const MAX_PDF_B64 = 14_000_000; // PDF ~10 MB inline
-const MAX_TEXT = 60_000;        // fallback: texto colado do relatorio
+const MAX_TEXT = 250_000;       // texto extraido do PDF (pdf.js no cliente) pode ser grande c/ varios LPs
 
 function corsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") || "";
