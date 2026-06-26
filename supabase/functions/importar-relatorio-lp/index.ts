@@ -20,7 +20,7 @@
 
 // Modelo free tier (sem cartao), com PDF/visao. Pra trocar e so esta linha:
 //   "gemini-2.5-flash-lite" -> mais barato/rapido   |   "gemini-3.5-flash" -> mais novo/capaz
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-2.5-flash-lite";
 const MAX_OUTPUT_TOKENS = 8192; // o relatorio pode ter dezenas de linhas por secao
 
 const ALLOWED_ORIGINS = new Set([
