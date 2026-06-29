@@ -186,6 +186,8 @@ tr.row.sel{background:#eff6ff}
 .tk-check.small,.tk-snooze.small{width:auto;height:26px;padding:0 8px;font-size:11px}
 .tk-open{background:none;border:none;font-size:15px;opacity:.5;flex-shrink:0;cursor:pointer}
 .tk-open:hover{opacity:1}
+/* todos os menus flutuantes (largura fixa em px) nunca estouram a tela em celular pequeno (iPhone SE 320px) */
+.statusmenu{max-width:calc(100vw - 16px)}
 /* menu de status (inline) redesenhado */
 /* FIX: faltava position/background/borda/sombra — o menu nascia static/transparente e ia pro fim do body (invisível). Agora flutua como os outros menus. */
 .stmenu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:0;width:250px;overflow:hidden}
@@ -2710,8 +2712,8 @@ function wireBulk(){
   $('#bk-clr').onclick=()=>{SEL.clear();render();};
   $('#bk-del').onclick=async()=>{
     if(!confirm(`Excluir ${SEL.size} lead(s) permanentemente?`))return;
-    let ok=0;for(const id of [...SEL]){const r=await sb.from('leads').delete().eq('id',id);if(!r.error){ok++;const i=LEADS.findIndex(x=>x.id===id);if(i>=0)LEADS.splice(i,1);}}
-    SEL.clear();toast(ok+' excluído(s)');render();
+    let ok=0,fail=0;for(const id of [...SEL]){const r=await sb.from('leads').delete().eq('id',id);if(!r.error){ok++;const i=LEADS.findIndex(x=>x.id===id);if(i>=0)LEADS.splice(i,1);}else fail++;}
+    SEL.clear();toast(fail?`${ok} excluído(s) · ${fail} falharam (ainda na base)`:ok+' excluído(s)');render();
   };
   $('#bk-status').onclick=e=>{e.stopPropagation();openBulkStatus(e.target);};
 }
@@ -3109,7 +3111,7 @@ function openNovo(mine,prefill){
       email:($('#n-email')&&$('#n-email').value.trim())||null,
       recomendante:(['lp','ot','reccli','recfam'].includes(ORIG)&&$('#n-rec')?($('#n-rec').value.trim()||null):null)};
     const {data,error}=await sb.from('leads').insert(rec).select().single();
-    if(error){$('#n-dup').textContent='Erro: '+error.message;return;}
+    if(error){$('#n-dup').textContent=(error.code==='23505')?'⚠ Já existe um lead com esse LinkedIn/telefone.':'Erro: '+error.message;return;}
     LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
     if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda','n-bairro','n-obs','n-email'].forEach(i=>{const el=$('#'+i);if(el){el.value='';delete el.dataset.url;}});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
     else{ov.remove();render();}
