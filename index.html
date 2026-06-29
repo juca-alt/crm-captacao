@@ -187,7 +187,8 @@ tr.row.sel{background:#eff6ff}
 .tk-open{background:none;border:none;font-size:15px;opacity:.5;flex-shrink:0;cursor:pointer}
 .tk-open:hover{opacity:1}
 /* menu de status (inline) redesenhado */
-.stmenu{padding:0;width:250px;overflow:hidden}
+/* FIX: faltava position/background/borda/sombra — o menu nascia static/transparente e ia pro fim do body (invisível). Agora flutua como os outros menus. */
+.stmenu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:0;width:250px;overflow:hidden}
 .stmenu-h{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt);font-weight:600}
 .stmenu-h .stmenu-sub{font-size:11px;color:var(--muted);margin-top:2px;font-weight:600}
 .stmenu-body{padding:6px;max-height:260px;overflow:auto}
@@ -376,6 +377,8 @@ tr.row.sel{background:#eff6ff}
 .tl-item:before{content:"";position:absolute;left:-21px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--primary)}
 .tl-when{font-size:11px;color:var(--muted)}
 .x{margin-left:auto;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+/* rodapé de ações do drawer — fica grudado no fundo (mesmo padrão do .modal-actions) p/ "Salvar" nunca sair da tela no mobile */
+.drawer-actions{position:sticky;bottom:0;background:#fff;margin:14px -22px -22px;padding:12px 22px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);box-shadow:0 -3px 8px rgba(15,23,42,.06);z-index:3}
 
 /* modal */
 .modal{background:#fff;border-radius:14px;width:480px;max-width:94vw;padding:24px;margin:auto;max-height:90vh;overflow-y:auto}
@@ -435,6 +438,8 @@ tr.row.sel{background:#eff6ff}
   .tablewrap{overflow-x:auto}
   .statgrid .stat{min-width:46%}
   .daytop .hello,.daytop .ringcard{min-width:100%}
+  /* campos lado-a-lado empilham no mobile (senão ficam espremidos no drawer ~352px) */
+  .row2{flex-direction:column;gap:0}
 }
 .menu-btn{display:none}
 
@@ -1259,6 +1264,7 @@ function copyMsg(l,anchor){
   document.body.appendChild(m);
   if(anchor&&anchor.getBoundingClientRect){ const r=anchor.getBoundingClientRect(); m.style.top=Math.min(r.bottom+4,window.innerHeight-380)+'px'; m.style.left=Math.min(r.left,window.innerWidth-306)+'px'; }
   else { m.style.top='90px'; m.style.left=Math.max(8,(window.innerWidth-290)/2)+'px'; }
+  clampMenu(m);
   m.querySelectorAll('.smi').forEach(it=>it.onclick=()=>{ const t=tpls[+it.dataset.i]; closeMenus(); copyTplText(t.texto,l); });
   setTimeout(()=>document.addEventListener('click',function away(e){ if(!m.contains(e.target)){ closeMenus(); document.removeEventListener('click',away,true); } },true),0);
 }
@@ -2031,7 +2037,7 @@ function openThreadPaste(l){
     <h2>📜 Colar conversa de ${esc(firstName(l.nome))}</h2>
     <p class="hint">No LinkedIn → abra a conversa → clique <b>📜 Captar conversa</b> (extensão). Volte e cole aqui (Cmd/Ctrl+V) o que foi copiado.</p>
     <div class="field"><textarea id="thp-raw" rows="4" placeholder='cole aqui o histórico copiado'></textarea></div>
-    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+    <div class="modal-actions" style="align-items:center">
       <button class="btn primary" id="thp-go">Sincronizar</button>
       <button class="btn ghost" id="thp-close">Fechar</button>
       <span id="thp-msg" class="muted" style="font-size:12px"></span>
@@ -2053,7 +2059,7 @@ function openInboxPaste(){
     <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
     <div id="ibp-sum"></div>
     <div id="ibp-table" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
-    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+    <div class="modal-actions" style="align-items:center">
       <button class="btn primary" id="ibp-go" disabled>Aprovar e sincronizar</button>
       <button class="btn ghost" id="ibp-close">Fechar</button>
       <span id="ibp-msg" class="muted" style="font-size:12px"></span>
@@ -2870,6 +2876,7 @@ function openStatusMenu(anchor,id){
   const r=anchor.getBoundingClientRect();
   m.style.top=Math.min(r.bottom+6,window.innerHeight-360)+'px';
   m.style.left=Math.min(r.left,window.innerWidth-264)+'px';
+  clampMenu(m);
   const mo=m.querySelector('#st-more'); if(mo)mo.onclick=ev=>{ev.stopPropagation();const o=m.querySelector('#st-others');const open=o.style.display!=='none';o.style.display=open?'none':'';mo.textContent=open?'Mover para outra etapa ▾':'Mover para outra etapa ▴';};
   m.querySelectorAll('.smi').forEach(it=>it.onclick=async ev=>{ev.stopPropagation();
     const ns=it.dataset.s; closeMenus();
@@ -2878,6 +2885,23 @@ function openStatusMenu(anchor,id){
   setTimeout(()=>document.addEventListener('click',closeMenus,{once:true}),0);
 }
 function closeMenus(){document.querySelectorAll('.statusmenu').forEach(m=>m.remove());}
+// reposiciona um menu position:fixed p/ caber na viewport (clampa topo E base; no mobile desconta a tab bar de ~84px) — evita menu cortado/fora da tela
+function clampMenu(m){
+  if(!m||!m.getBoundingClientRect)return;
+  const pad=8, botInset=(window.IS_MOBILE?84:pad);
+  const r=m.getBoundingClientRect();
+  let top=r.top, left=r.left;
+  if(r.bottom>window.innerHeight-botInset) top=window.innerHeight-botInset-r.height;
+  if(top<pad) top=pad;
+  if(r.right>window.innerWidth-pad) left=window.innerWidth-pad-r.width;
+  if(left<pad) left=pad;
+  m.style.top=top+'px'; m.style.left=left+'px';
+}
+// menus flutuantes fecham ao rolar/redimensionar (eram position:fixed e ficavam "fantasmas" descolados do âncora ao rolar — péssimo no mobile)
+window.addEventListener('scroll',(e)=>{ const m=document.querySelector('.statusmenu'); if(m && !(e.target instanceof Node && m.contains(e.target))) closeMenus(); },true);
+window.addEventListener('resize',()=>{ if(document.querySelector('.statusmenu'))closeMenus(); });
+// scroll-lock genérico: trava o scroll do fundo enquanto qualquer .overlay estiver aberto (senão o scroll "vaza" pra trás no mobile)
+new MutationObserver(()=>{ document.body.style.overflow=document.querySelector('.overlay')?'hidden':''; }).observe(document.body,{childList:true});
 
 // ===== DRAWER =====
 function openDrawer(id){
@@ -2916,11 +2940,6 @@ function openDrawer(id){
     <label class="acompbox"><input type="checkbox" class="cbx" id="d-acomp" ${l.acompanhar_victor?'checked':''}> 👁 Victor acompanha esta OT (follow-up de delay/reagendar)</label>
     <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      <button class="btn primary" id="d-save">Salvar</button>
-      <button class="btn ghost" id="d-msg">📩 Modelos de mensagem</button>
-      <button class="btn ghost" id="d-call">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
-    </div>
     ${(Array.isArray(l.inbox_thread)&&l.inbox_thread.length)?`<h3 style="margin:20px 0 8px;font-size:13px">💬 Conversa capturada</h3>${inboxThreadHTML(l)}`:''}
     <h3 style="margin:20px 0 8px;font-size:13px">Histórico & notas</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start">
@@ -2928,6 +2947,11 @@ function openDrawer(id){
       <button class="btn ghost" id="d-note-add">＋ Nota</button>
     </div>
     <div class="timeline" id="d-tl"><div class="muted">carregando...</div></div>
+    <div class="drawer-actions">
+      <button class="btn primary" id="d-save">Salvar</button>
+      <button class="btn ghost" id="d-msg">📩 Modelos de mensagem</button>
+      <button class="btn ghost" id="d-call">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
+    </div>
   </div>`;
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
@@ -3399,7 +3423,7 @@ function openImport(){
 // ===== DUPLICATAS + UNIFICAR =====
 const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
 function dupGroups(){
-  const norm=s=>(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const byKey={};
   const add=(k,l,kind)=>{ if(!k) return; const id=kind+'::'+k; (byKey[id]=byKey[id]||{kind,leads:[]}).leads.push(l); };
   for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(norm(l.nome),l,'Nome'); }
@@ -3956,6 +3980,10 @@ function openCmdk(){
 function closeCmdk(){ const bd=$('#cmdk-bd'); if(bd)bd.remove(); }
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); if($('#app').classList.contains('hidden'))return; $('#cmdk-bd')?closeCmdk():openCmdk(); }
+  else if(e.key==='Escape'){ // ESC fecha o que estiver por cima: menu flutuante → overlay/modal/drawer mais recente
+    if(document.querySelector('.statusmenu')){ closeMenus(); return; }
+    const ovs=document.querySelectorAll('.overlay'); if(ovs.length){ ovs[ovs.length-1].remove(); }
+  }
 });
 
 // ===== NAV =====
