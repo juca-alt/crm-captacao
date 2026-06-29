@@ -186,8 +186,11 @@ tr.row.sel{background:#eff6ff}
 .tk-check.small,.tk-snooze.small{width:auto;height:26px;padding:0 8px;font-size:11px}
 .tk-open{background:none;border:none;font-size:15px;opacity:.5;flex-shrink:0;cursor:pointer}
 .tk-open:hover{opacity:1}
+/* todos os menus flutuantes (largura fixa em px) nunca estouram a tela em celular pequeno (iPhone SE 320px) */
+.statusmenu{max-width:calc(100vw - 16px)}
 /* menu de status (inline) redesenhado */
-.stmenu{padding:0;width:250px;overflow:hidden}
+/* FIX: faltava position/background/borda/sombra — o menu nascia static/transparente e ia pro fim do body (invisível). Agora flutua como os outros menus. */
+.stmenu{position:fixed;z-index:80;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:0;width:250px;overflow:hidden}
 .stmenu-h{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt);font-weight:600}
 .stmenu-h .stmenu-sub{font-size:11px;color:var(--muted);margin-top:2px;font-weight:600}
 .stmenu-body{padding:6px;max-height:260px;overflow:auto}
@@ -376,6 +379,8 @@ tr.row.sel{background:#eff6ff}
 .tl-item:before{content:"";position:absolute;left:-21px;top:3px;width:9px;height:9px;border-radius:50%;background:var(--primary)}
 .tl-when{font-size:11px;color:var(--muted)}
 .x{margin-left:auto;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+/* rodapé de ações do drawer — fica grudado no fundo (mesmo padrão do .modal-actions) p/ "Salvar" nunca sair da tela no mobile */
+.drawer-actions{position:sticky;bottom:0;background:#fff;margin:14px -22px -22px;padding:12px 22px;display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);box-shadow:0 -3px 8px rgba(15,23,42,.06);z-index:3}
 
 /* modal */
 .modal{background:#fff;border-radius:14px;width:480px;max-width:94vw;padding:24px;margin:auto;max-height:90vh;overflow-y:auto}
@@ -435,6 +440,8 @@ tr.row.sel{background:#eff6ff}
   .tablewrap{overflow-x:auto}
   .statgrid .stat{min-width:46%}
   .daytop .hello,.daytop .ringcard{min-width:100%}
+  /* campos lado-a-lado empilham no mobile (senão ficam espremidos no drawer ~352px) */
+  .row2{flex-direction:column;gap:0}
 }
 .menu-btn{display:none}
 
@@ -903,7 +910,7 @@ body.is-mobile #m-fab:active{background:var(--m-primary-d)}
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.4.1 · mobile alinhado';
+const APP_VERSION = 'v2.4.2 · estabiliza';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1259,6 +1266,7 @@ function copyMsg(l,anchor){
   document.body.appendChild(m);
   if(anchor&&anchor.getBoundingClientRect){ const r=anchor.getBoundingClientRect(); m.style.top=Math.min(r.bottom+4,window.innerHeight-380)+'px'; m.style.left=Math.min(r.left,window.innerWidth-306)+'px'; }
   else { m.style.top='90px'; m.style.left=Math.max(8,(window.innerWidth-290)/2)+'px'; }
+  clampMenu(m);
   m.querySelectorAll('.smi').forEach(it=>it.onclick=()=>{ const t=tpls[+it.dataset.i]; closeMenus(); copyTplText(t.texto,l); });
   setTimeout(()=>document.addEventListener('click',function away(e){ if(!m.contains(e.target)){ closeMenus(); document.removeEventListener('click',away,true); } },true),0);
 }
@@ -1271,13 +1279,15 @@ function searchMatch(l){
 async function loadLeads(){
   // v1.25: pagina de 1000 em 1000 (limite padrão do Supabase) — a base passou de 1000 leads no import de 10/06
   let all=[], from=0; const PAGE=1000;
-  while(true){
-    const {data,error}=await sb.from('leads').select('*').order('codigo',{ascending:true}).order('id',{ascending:true}).range(from,from+PAGE-1);
-    if(error){toast('Erro ao carregar: '+error.message);return;}
-    all=all.concat(data||[]);
-    if(!data||data.length<PAGE)break;
-    from+=PAGE;
-  }
+  try{
+    while(true){
+      const {data,error}=await sb.from('leads').select('*').order('codigo',{ascending:true}).order('id',{ascending:true}).range(from,from+PAGE-1);
+      if(error){toast('Erro ao carregar: '+error.message);return;}
+      all=all.concat(data||[]);
+      if(!data||data.length<PAGE)break;
+      from+=PAGE;
+    }
+  }catch(e){ toast('Erro ao carregar leads: '+(e.message||e)); return; } // rede caiu/sessão expirou → não trava a UI
   LEADS=all;reetiquetaLeads();render();
 }
 async function loadSettings(){
@@ -2031,7 +2041,7 @@ function openThreadPaste(l){
     <h2>📜 Colar conversa de ${esc(firstName(l.nome))}</h2>
     <p class="hint">No LinkedIn → abra a conversa → clique <b>📜 Captar conversa</b> (extensão). Volte e cole aqui (Cmd/Ctrl+V) o que foi copiado.</p>
     <div class="field"><textarea id="thp-raw" rows="4" placeholder='cole aqui o histórico copiado'></textarea></div>
-    <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+    <div class="modal-actions" style="align-items:center">
       <button class="btn primary" id="thp-go">Sincronizar</button>
       <button class="btn ghost" id="thp-close">Fechar</button>
       <span id="thp-msg" class="muted" style="font-size:12px"></span>
@@ -2053,7 +2063,7 @@ function openInboxPaste(){
     <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
     <div id="ibp-sum"></div>
     <div id="ibp-table" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
-    <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+    <div class="modal-actions" style="align-items:center">
       <button class="btn primary" id="ibp-go" disabled>Aprovar e sincronizar</button>
       <button class="btn ghost" id="ibp-close">Fechar</button>
       <span id="ibp-msg" class="muted" style="font-size:12px"></span>
@@ -2702,8 +2712,8 @@ function wireBulk(){
   $('#bk-clr').onclick=()=>{SEL.clear();render();};
   $('#bk-del').onclick=async()=>{
     if(!confirm(`Excluir ${SEL.size} lead(s) permanentemente?`))return;
-    let ok=0;for(const id of [...SEL]){const r=await sb.from('leads').delete().eq('id',id);if(!r.error){ok++;const i=LEADS.findIndex(x=>x.id===id);if(i>=0)LEADS.splice(i,1);}}
-    SEL.clear();toast(ok+' excluído(s)');render();
+    let ok=0,fail=0;for(const id of [...SEL]){const r=await sb.from('leads').delete().eq('id',id);if(!r.error){ok++;const i=LEADS.findIndex(x=>x.id===id);if(i>=0)LEADS.splice(i,1);}else fail++;}
+    SEL.clear();toast(fail?`${ok} excluído(s) · ${fail} falharam (ainda na base)`:ok+' excluído(s)');render();
   };
   $('#bk-status').onclick=e=>{e.stopPropagation();openBulkStatus(e.target);};
 }
@@ -2870,6 +2880,7 @@ function openStatusMenu(anchor,id){
   const r=anchor.getBoundingClientRect();
   m.style.top=Math.min(r.bottom+6,window.innerHeight-360)+'px';
   m.style.left=Math.min(r.left,window.innerWidth-264)+'px';
+  clampMenu(m);
   const mo=m.querySelector('#st-more'); if(mo)mo.onclick=ev=>{ev.stopPropagation();const o=m.querySelector('#st-others');const open=o.style.display!=='none';o.style.display=open?'none':'';mo.textContent=open?'Mover para outra etapa ▾':'Mover para outra etapa ▴';};
   m.querySelectorAll('.smi').forEach(it=>it.onclick=async ev=>{ev.stopPropagation();
     const ns=it.dataset.s; closeMenus();
@@ -2878,6 +2889,23 @@ function openStatusMenu(anchor,id){
   setTimeout(()=>document.addEventListener('click',closeMenus,{once:true}),0);
 }
 function closeMenus(){document.querySelectorAll('.statusmenu').forEach(m=>m.remove());}
+// reposiciona um menu position:fixed p/ caber na viewport (clampa topo E base; no mobile desconta a tab bar de ~84px) — evita menu cortado/fora da tela
+function clampMenu(m){
+  if(!m||!m.getBoundingClientRect)return;
+  const pad=8, botInset=(window.IS_MOBILE?84:pad);
+  const r=m.getBoundingClientRect();
+  let top=r.top, left=r.left;
+  if(r.bottom>window.innerHeight-botInset) top=window.innerHeight-botInset-r.height;
+  if(top<pad) top=pad;
+  if(r.right>window.innerWidth-pad) left=window.innerWidth-pad-r.width;
+  if(left<pad) left=pad;
+  m.style.top=top+'px'; m.style.left=left+'px';
+}
+// menus flutuantes fecham ao rolar/redimensionar (eram position:fixed e ficavam "fantasmas" descolados do âncora ao rolar — péssimo no mobile)
+window.addEventListener('scroll',(e)=>{ const m=document.querySelector('.statusmenu'); if(m && !(e.target instanceof Node && m.contains(e.target))) closeMenus(); },true);
+window.addEventListener('resize',()=>{ if(document.querySelector('.statusmenu'))closeMenus(); });
+// scroll-lock genérico: trava o scroll do fundo enquanto qualquer .overlay estiver aberto (senão o scroll "vaza" pra trás no mobile)
+new MutationObserver(()=>{ document.body.style.overflow=document.querySelector('.overlay')?'hidden':''; }).observe(document.body,{childList:true});
 
 // ===== DRAWER =====
 function openDrawer(id){
@@ -2916,11 +2944,6 @@ function openDrawer(id){
     <label class="acompbox"><input type="checkbox" class="cbx" id="d-acomp" ${l.acompanhar_victor?'checked':''}> 👁 Victor acompanha esta OT (follow-up de delay/reagendar)</label>
     <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-      <button class="btn primary" id="d-save">Salvar</button>
-      <button class="btn ghost" id="d-msg">📩 Modelos de mensagem</button>
-      <button class="btn ghost" id="d-call">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
-    </div>
     ${(Array.isArray(l.inbox_thread)&&l.inbox_thread.length)?`<h3 style="margin:20px 0 8px;font-size:13px">💬 Conversa capturada</h3>${inboxThreadHTML(l)}`:''}
     <h3 style="margin:20px 0 8px;font-size:13px">Histórico & notas</h3>
     <div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start">
@@ -2928,6 +2951,11 @@ function openDrawer(id){
       <button class="btn ghost" id="d-note-add">＋ Nota</button>
     </div>
     <div class="timeline" id="d-tl"><div class="muted">carregando...</div></div>
+    <div class="drawer-actions">
+      <button class="btn primary" id="d-save">Salvar</button>
+      <button class="btn ghost" id="d-msg">📩 Modelos de mensagem</button>
+      <button class="btn ghost" id="d-call">📞 +1 ligação (${l.tentativas_ligacao||0})</button>
+    </div>
   </div>`;
   ov.onclick=()=>ov.remove();
   document.body.appendChild(ov);
@@ -3083,7 +3111,7 @@ function openNovo(mine,prefill){
       email:($('#n-email')&&$('#n-email').value.trim())||null,
       recomendante:(['lp','ot','reccli','recfam'].includes(ORIG)&&$('#n-rec')?($('#n-rec').value.trim()||null):null)};
     const {data,error}=await sb.from('leads').insert(rec).select().single();
-    if(error){$('#n-dup').textContent='Erro: '+error.message;return;}
+    if(error){$('#n-dup').textContent=(error.code==='23505')?'⚠ Já existe um lead com esse LinkedIn/telefone.':'Erro: '+error.message;return;}
     LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
     if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda','n-bairro','n-obs','n-email'].forEach(i=>{const el=$('#'+i);if(el){el.value='';delete el.dataset.url;}});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
     else{ov.remove();render();}
@@ -3399,7 +3427,7 @@ function openImport(){
 // ===== DUPLICATAS + UNIFICAR =====
 const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
 function dupGroups(){
-  const norm=s=>(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const byKey={};
   const add=(k,l,kind)=>{ if(!k) return; const id=kind+'::'+k; (byKey[id]=byKey[id]||{kind,leads:[]}).leads.push(l); };
   for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(norm(l.nome),l,'Nome'); }
@@ -3749,7 +3777,8 @@ async function loadReport(days){
   const body=$('#rep-body'); if(!body)return; body.innerHTML='<div class="qempty" style="padding:30px">Carregando…</div>';
   let q=sb.from('mining_sessions').select('*').order('inicio',{ascending:false});
   if(days){ q=q.gte('inicio',new Date(Date.now()-days*86400000).toISOString()); }
-  const {data,error}=await q;
+  let data,error;
+  try{ ({data,error}=await q); }catch(e){ body.innerHTML=`<div class="tablewrap" style="padding:24px"><b>Não consegui carregar o relatório.</b><div class="muted" style="margin-top:6px">${esc(e.message||'falha de conexão')} — tente de novo.</div></div>`; return; }
   if(error){ body.innerHTML=`<div class="tablewrap" style="padding:24px"><b>Relatório indisponível.</b><div class="muted" style="margin-top:6px">Rode <code>migration_v1_18.sql</code> no Supabase pra criar a tabela de sessões de mineração.</div></div>`; return; }
   const ss=data||[];
   const byUser={};
@@ -3956,6 +3985,10 @@ function openCmdk(){
 function closeCmdk(){ const bd=$('#cmdk-bd'); if(bd)bd.remove(); }
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); if($('#app').classList.contains('hidden'))return; $('#cmdk-bd')?closeCmdk():openCmdk(); }
+  else if(e.key==='Escape'){ // ESC fecha o que estiver por cima: menu flutuante → overlay/modal/drawer mais recente
+    if(document.querySelector('.statusmenu')){ closeMenus(); return; }
+    const ovs=document.querySelectorAll('.overlay'); if(ovs.length){ ovs[ovs.length-1].remove(); }
+  }
 });
 
 // ===== NAV =====
@@ -3994,23 +4027,33 @@ $('#su-btn').onclick=async()=>{
   await sb.auth.signInWithPassword({email:$('#su-email').value.trim(),password:$('#su-pass').value});
 };
 
+// guard contra o boot duplo: getSession().then(boot) E onAuthStateChange(SIGNED_IN→boot) disparam ambos no load → loadLeads/loadSettings rodavam 2x em paralelo
+let __booting=false, __bootedUid=null;
 async function boot(session){
   if(session){
-    session_nome=session.user.user_metadata?.nome||session.user.email||'';
-    ME=(session.user.user_metadata?.nome||session.user.email||'').toLowerCase();
-    ME_EMAIL=(session.user.email||'').toLowerCase();
-    REAL_VICTOR=ME.includes('victor');
-    ACT_AS=null;
-    miningLoad();
-    await loadAppUsers(); await ensureAppUser(); await loadSettings(); loadTaskTexts();
-    syncProfile();
-    if(REAL_VICTOR && VIEW==='hoje'){ /* assistente abre no Meu Dia */ }
-    $('#who-foot').textContent=session_nome;
-    $('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
-    await loadLeads();
-    // realtime para os 2 usuários verem mudanças ao vivo (inscreve só 1x; boot pode rodar 2x)
-    if(!window.__rtSub){ window.__rtSub=true; let _rtT; const _rtReload=()=>{ clearTimeout(_rtT); _rtT=setTimeout(()=>loadLeads(),800); }; sb.channel('leads-rt').on('postgres_changes',{event:'*',schema:'public',table:'leads'},_rtReload).subscribe(); }
+    const uid=session.user.id;
+    if(__booting) return;                 // já tem um boot em andamento — ignora o 2º gatilho
+    if(__bootedUid===uid){ $('#auth').classList.add('hidden');$('#app').classList.remove('hidden'); return; } // já bootou p/ este usuário
+    __booting=true;
+    try{
+      session_nome=session.user.user_metadata?.nome||session.user.email||'';
+      ME=(session.user.user_metadata?.nome||session.user.email||'').toLowerCase();
+      ME_EMAIL=(session.user.email||'').toLowerCase();
+      REAL_VICTOR=ME.includes('victor');
+      ACT_AS=null;
+      miningLoad();
+      await loadAppUsers(); await ensureAppUser(); await loadSettings(); loadTaskTexts();
+      syncProfile();
+      if(REAL_VICTOR && VIEW==='hoje'){ /* assistente abre no Meu Dia */ }
+      $('#who-foot').textContent=session_nome;
+      $('#auth').classList.add('hidden');$('#app').classList.remove('hidden');
+      await loadLeads();
+      __bootedUid=uid;
+      // realtime para os 2 usuários verem mudanças ao vivo (inscreve só 1x; boot pode rodar 2x)
+      if(!window.__rtSub){ window.__rtSub=true; let _rtT; const _rtReload=()=>{ clearTimeout(_rtT); _rtT=setTimeout(()=>loadLeads(),800); }; sb.channel('leads-rt').on('postgres_changes',{event:'*',schema:'public',table:'leads'},_rtReload).subscribe(); }
+    } finally { __booting=false; }
   }else{
+    __bootedUid=null;
     $('#auth').classList.remove('hidden');$('#app').classList.add('hidden');
   }
 }
@@ -4441,7 +4484,8 @@ async function mLoadReport(){
   var days=+M_REP_RANGE;
   var qy=sb.from('mining_sessions').select('*').order('inicio',{ascending:false});
   if(days)qy=qy.gte('inicio',new Date(Date.now()-days*86400000).toISOString());
-  var res=await qy;
+  var res;
+  try{ res=await qy; }catch(e){ body.innerHTML='<div class="m-empty">Não consegui carregar o relatório ('+esc(e.message||'falha de conexão')+'). Tente de novo.</div>'; return; }
   if(res.error){ body.innerHTML='<div class="m-empty">Relatório indisponível. Rode <code>migration_v1_18.sql</code> no Supabase.</div>'; return; }
   var ss=res.data||[];
   var totCaps=ss.reduce(function(x,s){return x+(s.capturas||0);},0), totSeg=ss.reduce(function(x,s){return x+(s.duracao_seg||0);},0);
