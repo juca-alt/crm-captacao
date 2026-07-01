@@ -261,8 +261,14 @@
       <div class="nav-grp-wrap" id="nn-etapas"></div>
     </div>
     <div class="sep"></div>
+    <button class="nav-grp modulo nav-grp-btn" id="cart-toggle" onclick="toggleGrp('cart')"><span class="ic" style="font-size:13px">👥</span><span class="lbl">Carteira de Clientes</span><span class="caret" id="cart-caret">▾</span></button>
+    <div class="nav-grp-wrap" id="cart-group">
+      <button class="nav-btn sub" data-view="cart-visao" onclick="irPara('cart-visao')"><span class="ic">📊</span><span class="lbl">Visão da Carteira</span></button>
+      <button class="nav-btn sub" data-view="cart-clientes" onclick="irPara('cart-clientes')"><span class="ic">🗂️</span><span class="lbl">Clientes</span><span class="cnt" id="cnt-cart"></span></button>
+    </div>
+    <div class="sep"></div>
 
-    <button class="nav-btn" data-view="contatos" onclick="irPara('contatos')"><span class="ic">👥</span><span class="lbl">Contatos</span></button>
+    <button class="nav-btn" data-view="contatos" onclick="irPara('contatos')"><span class="ic">👤</span><span class="lbl">Contatos</span></button>
     <button class="nav-btn" data-view="planos" onclick="irPara('planos')"><span class="ic">📋</span><span class="lbl">Planos &amp; Simulações</span></button>
     <button class="nav-btn" data-view="subst" onclick="irPara('subst')"><span class="ic">🔁</span><span class="lbl">Substituição</span></button>
 
@@ -497,7 +503,7 @@ function viewInicio(){
 /* Espelha o padrão da Captação: módulo (colapsável) → submódulo Funil → lista de Etapas.
    Sidebar colapsável + lista de etapas com contagem + Kanban arrastável. */
 function toggleGrp(key){
-  const map={'nn':['nn-group','nn-toggle'],'nn-et':['nn-etapas','nn-et-toggle']};
+  const map={'nn':['nn-group','nn-toggle'],'nn-et':['nn-etapas','nn-et-toggle'],'cart':['cart-group','cart-toggle']};
   const m=map[key]; if(!m) return; const g=document.getElementById(m[0]);
   const fechado=g.classList.toggle('fechado');
   document.getElementById(m[1]).classList.toggle('fechado',fechado);
@@ -1413,9 +1419,144 @@ function lpCarregarExemplo(fecharModal){
 
 /* ═══════════════════ RENDER ═══════════════════ */
 function lpCounts(){ Object.keys(LP_ENT).forEach(e=>{ const el=$('#cnt-'+e); if(el){ const n=lpAtivos(e).length; el.textContent=n||''; } }); }
+/* ═══════════════════ MÓDULO CARTEIRA DE CLIENTES ═══════════════════
+   Base do módulo: 2 relatórios da Prudential (tabelas HTML exportadas como .xls, Latin-1):
+   (1) carteira de clientes — 1 linha/cliente, coberturas agregadas; (2) apólices ativas — 1 linha/
+   apólice, ligada ao cliente pelo SEGURADO (join por nome normalizado, validado 100% nos dados reais).
+   Lê LOCALMENTE (DOMParser, sem IA). localStorage agora; shape pronto pro Supabase (fase 2:
+   carteira_clientes/carteira_apolices, mesma trilha do LP). É a base de várias evoluções futuras. */
+const CART_CHAVE='crmlp_carteira_v1';
+let CART={clientes:[],apolices:[],importadoEm:null};
+let CART_Q='';
+function cartCarregar(){ try{ const raw=localStorage.getItem(CART_CHAVE); if(raw){ const o=JSON.parse(raw);
+  CART.clientes=Array.isArray(o.clientes)?o.clientes:[]; CART.apolices=Array.isArray(o.apolices)?o.apolices:[]; CART.importadoEm=o.importadoEm||null; } }catch(e){ console.warn('CART load falhou',e); } }
+function cartSalvar(){ try{ localStorage.setItem(CART_CHAVE,JSON.stringify(CART)); }catch(e){ console.warn('CART save falhou',e); } }
+
+/* dinheiro BR: "1.121,84"→1121.84 ; "35372"→353.72 (o export às vezes tira o separador decimal) ; "000"→0 */
+function cartMoney(s){ s=String(s==null?'':s).trim(); if(!s||s==='-') return 0;
+  if(s.indexOf(',')>=0) return parseFloat(s.replace(/\./g,'').replace(',','.'))||0;
+  if(/^\d+$/.test(s)) return parseInt(s,10)/100; return parseFloat(s.replace(',','.'))||0; }
+function cartInt(s){ const n=parseInt(String(s==null?'':s).replace(/\D/g,''),10); return isNaN(n)?null:n; }
+function cartISO(s){ const m=String(s||'').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m?m[3]+'-'+m[2]+'-'+m[1]:null; }
+function cartTxt(s){ s=String(s==null?'':s).replace(/\s+/g,' ').trim(); return (s&&s!=='-')?s:null; }
+function cartFmt(n){ return (n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function cartFmtK(n){ n=n||0; if(n>=1e6) return (n/1e6).toLocaleString('pt-BR',{maximumFractionDigits:2})+' mi'; if(n>=1e3) return (n/1e3).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mil'; return cartFmt(n); }
+
+/* tabela HTML (.xls Prudential) → array de objetos {header:valor} */
+function cartParseTabela(htmlText){
+  const doc=new DOMParser().parseFromString(htmlText,'text/html');
+  const trs=[...doc.querySelectorAll('table tr')]; if(!trs.length) return [];
+  const head=[...trs[0].children].map(td=>cartTxt(td.textContent)||'');
+  const out=[]; for(let i=1;i<trs.length;i++){ const tds=[...trs[i].children]; if(!tds.length) continue;
+    const o={}; tds.forEach((td,ci)=>{ o[head[ci]||('c'+ci)]=td.textContent.replace(/\s+/g,' ').trim(); }); out.push(o); }
+  return out; }
+function cartCol(o){ for(let i=1;i<arguments.length;i++){ const n=arguments[i]; for(const k in o){ if(normKey(k)===normKey(n)) return o[k]; } } return ''; }
+
+function cartClienteDe(o){ const nome=cartTxt(cartCol(o,'Cliente')); if(!nome) return null;
+  return { nome, ref:normKey(nome), nascimento:cartISO(cartCol(o,'Data de Nascimento')), idade:cartInt(cartCol(o,'Idade')),
+    celular:cartTxt(cartCol(o,'Celular')), telefone:cartTxt(cartCol(o,'Telefone')), telComercial:cartTxt(cartCol(o,'Tel.Comercial')),
+    email:cartTxt(cartCol(o,'E-mail')),
+    cob:{ cs:cartMoney(cartCol(o,'CS')), morteAcid:cartMoney(cartCol(o,'CS Morte Acidental')), pd:cartMoney(cartCol(o,'CS PD')),
+      ddr:cartMoney(cartCol(o,'CS DDR')), hc:cartMoney(cartCol(o,'Vr. HC')), funeral:cartMoney(cartCol(o,'Vr. Assistência Funeral')),
+      pa:cartMoney(cartCol(o,'PA')), pm:cartMoney(cartCol(o,'PM')), renda:cartMoney(cartCol(o,'Vr. Renda')) },
+    produtos:cartTxt(cartCol(o,'Produtos')), familias:cartTxt(cartCol(o,'Famílias Prod.')), motivos:cartTxt(cartCol(o,'Motivos Seguro')),
+    numApolices:cartTxt(cartCol(o,'Núm. Apólices')), csCanc:cartMoney(cartCol(o,'CS Canc.')), _raw:o }; }
+function cartApoliceDe(o){ const seg=cartTxt(cartCol(o,'Segurado')); if(!seg) return null;
+  return { proposta:cartTxt(cartCol(o,'Proposta')), apolice:cartTxt(cartCol(o,'Apólice')), segurado:seg, ref:normKey(seg),
+    respPagto:cartTxt(cartCol(o,'Resp. Pagto.','Resp. Pagto')), celular:cartTxt(cartCol(o,'Celular')), telefone:cartTxt(cartCol(o,'Telefone')),
+    email:cartTxt(cartCol(o,'E-mail')), status:cartTxt(cartCol(o,'Status Apólice'))||'Ativa', premio:cartMoney(cartCol(o,'Prêmio')),
+    periodicidade:cartTxt(cartCol(o,'Periodicidade Pagto.')), forma:cartTxt(cartCol(o,'Forma Pagto.')) }; }
+
+function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartParseTabela(a.clientesHTML).map(cartClienteDe).filter(Boolean);
+  if(a.apolicesHTML!=null) CART.apolices=cartParseTabela(a.apolicesHTML).map(cartApoliceDe).filter(Boolean);
+  CART.importadoEm=nowISO(); cartSalvar(); }
+function cartApolicesDoCliente(ref){ return CART.apolices.filter(a=>a.ref===ref); }
+function cartResumo(){ const C=CART.clientes,A=CART.apolices;
+  return { clientes:C.length, apolices:A.length, pmMes:C.reduce((s,c)=>s+(c.cob.pm||0),0), csTot:C.reduce((s,c)=>s+(c.cob.cs||0),0),
+    multi:C.filter(c=>cartApolicesDoCliente(c.ref).length>1).length,
+    segNeqPag:A.filter(a=>a.respPagto&&normKey(a.segurado)!==normKey(a.respPagto)).length }; }
+
+function cartVazio(){ return `<div style="padding:28px;text-align:center;border:1px dashed var(--linha);border-radius:12px;color:var(--muted);margin-top:12px">
+  <div style="font-size:34px">👥</div><p>Nenhuma carteira importada ainda.</p>
+  <button class="btn btn-p" onclick="openCarteiraImport()">📄 Importar carteira</button></div>`; }
+
+function viewCartVisao(){ const r=cartResumo();
+  const card=(t,v,s)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:14px 16px">
+    <div style="font-size:12px;color:var(--muted)">${t}</div><div style="font-size:22px;font-weight:800;margin-top:4px">${v}</div>${s?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div>`:''}</div>`;
+  $('#main').innerHTML=`<h1 class="pg">Visão da Carteira</h1>
+    <div class="sub">Panorama da carteira ativa${CART.importadoEm?' · importado em '+CART.importadoEm:''}.</div>
+    ${CART.clientes.length?`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
+      ${card('Clientes',r.clientes,'na carteira')}
+      ${card('Apólices ativas',r.apolices,r.multi+' cliente(s) c/ +1 apólice')}
+      ${card('Prêmio mensal','R$ '+cartFmtK(r.pmMes),'soma PM da carteira')}
+      ${card('Capital segurado','R$ '+cartFmtK(r.csTot),'exposição total')}
+      ${card('Segurado ≠ Pagador',r.segNeqPag,'apólices pagas por terceiro')}</div>
+    <div style="margin-top:16px"><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
+
+function viewCartClientes(){ const q=normKey(CART_Q);
+  const lista=CART.clientes.filter(c=>!q||c.ref.indexOf(q)>=0||(c.email&&normKey(c.email).indexOf(q)>=0)).sort((a,b)=>a.nome.localeCompare(b.nome));
+  const linhas=lista.map(c=>{ const n=cartApolicesDoCliente(c.ref).length;
+    return `<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
+      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}</td>
+      <td style="padding:8px 10px;text-align:center">${c.idade!=null?c.idade:'—'}</td>
+      <td style="padding:8px 10px">${esc(c.celular||c.telefone||'—')}</td>
+      <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
+      <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.pm)}</td>
+      <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.cs)}</td></tr>`; }).join('');
+  $('#main').innerHTML=`<h1 class="pg">Clientes</h1>
+    <div class="sub">${CART.clientes.length} cliente(s) na carteira${CART.importadoEm?' · importado em '+CART.importadoEm:''}. Clique num cliente pra ver apólices e coberturas.</div>
+    ${CART.clientes.length?`<input id="cart-q" placeholder="Buscar por nome ou e-mail…" value="${esc(CART_Q)}" oninput="CART_Q=this.value;viewCartClientes()" style="width:100%;max-width:420px;margin:6px 0 12px;padding:9px 12px;border:1px solid var(--linha);border-radius:9px">
+    <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left">
+      <th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px;text-align:center">Idade</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:center">Apólices</th><th style="padding:9px 10px;text-align:right">Prêmio/mês</th><th style="padding:9px 10px;text-align:right">Capital Segurado</th></tr></thead>
+    <tbody>${linhas||`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">Nenhum cliente encontrado.</td></tr>`}</tbody></table></div>`:cartVazio()}`;
+  const el=$('#cart-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
+
+function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) return; const aps=cartApolicesDoCliente(ref);
+  const linha=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0"><span style="color:var(--muted)">${l}</span><span style="font-weight:600;text-align:right">${v}</span></div>`:'';
+  const cob=c.cob;
+  const apsHTML=aps.length?aps.map(a=>`<div style="border:1px solid var(--linha);border-radius:10px;padding:10px;margin-top:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b>Apólice ${esc(a.apolice||a.proposta||'—')}</b><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--verde-claro,#e6f6ec);color:var(--verde,#1a7f42)">${esc(a.status)}</span></div>
+    ${a.respPagto&&normKey(a.respPagto)!==ref?`<div style="font-size:12px;color:#a06a00;margin-top:4px">💳 pago por ${esc(a.respPagto)}</div>`:''}
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">Prêmio R$ ${cartFmt(a.premio)} · ${esc(a.periodicidade||'—')} · ${esc(a.forma||'—')}${a.proposta?' · prop. '+esc(a.proposta):''}</div></div>`).join(''):'<div style="color:var(--muted);margin-top:8px">Sem apólices ativas ligadas.</div>';
+  $('#drawer').innerHTML=`<div style="padding:18px">
+    <div style="display:flex;justify-content:space-between;align-items:start"><h2 style="margin:0">${esc(c.nome)}</h2><button onclick="fecharDrawer()" style="border:none;background:none;font-size:22px;cursor:pointer;line-height:1">×</button></div>
+    <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}</div>
+    <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
+    <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
+    <div style="font-size:13px">${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
+    ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
+    <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Apólices (${aps.length})</h3>${apsHTML}</div>`;
+  $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
+
+function openCarteiraImport(){
+  const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.cssText='display:flex;align-items:center;justify-content:center;z-index:60';
+  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;padding:22px;max-width:440px;width:92%">
+    <h2 style="margin:0 0 4px">👥 Importar carteira</h2>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Suba os 2 relatórios da Prudential (.xls). Lido localmente, sem IA. Substitui o snapshot atual.</div>
+    <label style="display:block;font-weight:700;font-size:13px;margin-bottom:4px">1) Carteira de clientes</label>
+    <input type="file" id="cart-f1" accept=".xls,.htm,.html" style="width:100%;margin-bottom:12px">
+    <label style="display:block;font-weight:700;font-size:13px;margin-bottom:4px">2) Apólices ativas</label>
+    <input type="file" id="cart-f2" accept=".xls,.htm,.html" style="width:100%;margin-bottom:8px">
+    <div id="cart-imsg" style="font-size:12px;min-height:18px;color:var(--muted)"></div>
+    <div style="display:flex;gap:10px;margin-top:12px"><button class="btn btn-p" id="cart-imgo">Importar</button>
+      <button class="btn btn-ghost" onclick="this.closest('.overlay').remove()" style="margin-left:auto">Fechar</button></div></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  const rd=(inp)=>new Promise((res)=>{ const f=inp&&inp.files&&inp.files[0]; if(!f){res(null);return;} const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsText(f,'ISO-8859-1'); });
+  ov.querySelector('#cart-imgo').onclick=async()=>{ const msg=ov.querySelector('#cart-imsg');
+    const h1=await rd(ov.querySelector('#cart-f1')), h2=await rd(ov.querySelector('#cart-f2'));
+    if(!h1&&!h2){ msg.textContent='Escolha ao menos um arquivo.'; return; }
+    try{ cartIngest({clientesHTML:h1,apolicesHTML:h2}); ov.remove();
+      toast(`Carteira importada — ${CART.clientes.length} cliente(s), ${CART.apolices.length} apólice(s)`,true);
+      if(!/^cart-/.test(VIEW)) irPara('cart-clientes'); else render();
+    }catch(e){ console.error(e); msg.textContent='Falha ao ler os arquivos. Confira se são os .xls da Prudential.'; } }; }
+
 function render(){
   renderTopo(); lpCounts(); renderNnEtapas();
+  { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||''; }
   if(VIEW==='inicio') viewInicio();
+  else if(VIEW==='cart-visao') viewCartVisao();
+  else if(VIEW==='cart-clientes') viewCartClientes();
   else if(VIEW==='nn-funil') viewNnFunil();
   else if(VIEW==='contatos') viewContatos();
   else if(VIEW==='planos') viewPlanos();
@@ -1428,7 +1569,7 @@ function render(){
   else viewPrincipios();
   if(CONTATO) renderDrawer();
 }
-carregar(); render(); lpCarregar().then(render);   // render base já; LP (remoto/local) popula e re-renderiza
+carregar(); cartCarregar(); render(); lpCarregar().then(render);   // render base já; LP (remoto/local) popula e re-renderiza
 </script>
 </body>
 </html>
