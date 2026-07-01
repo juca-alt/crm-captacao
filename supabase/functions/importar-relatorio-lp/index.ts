@@ -21,7 +21,12 @@
 // Modelo free tier (sem cartao), com PDF/visao. Pra trocar e so esta linha:
 //   "gemini-2.5-flash-lite" -> mais barato/rapido   |   "gemini-3.5-flash" -> mais novo/capaz
 const MODEL = "gemini-2.5-flash-lite";
-const MAX_OUTPUT_TOKENS = 8192; // o relatorio pode ter dezenas de linhas por secao
+// Um relatorio real (3 LPs, ~147 linhas) gera ~6.6k-9.9k tokens de JSON de SAIDA e
+// estourava o antigo teto de 8192 -> Gemini cortava em finishReason:MAX_TOKENS -> JSON
+// nao fechava -> "JSON invalido". 32768 da ~3-4x de folga (o flash-lite aceita ate 64k
+// de saida) e cobre relatorios com mais LPs. Se um dia estourar isso tambem, a checagem
+// de finishReason abaixo devolve erro claro (dai o caminho e chunk por LP/secao).
+const MAX_OUTPUT_TOKENS = 32768;
 
 const ALLOWED_ORIGINS = new Set([
   "https://juca-alt.github.io",
@@ -191,6 +196,12 @@ Deno.serve(async (req: Request) => {
   const txt = (cand?.content?.parts || []).map((p: { text?: string }) => p?.text || "").join("").trim();
   const dados = extractJson(txt);
   if (!dados) {
+    // finishReason MAX_TOKENS = a SAIDA estourou o teto e o JSON veio cortado (nao fecha).
+    // Falha alto e claro em vez de mascarar como "JSON invalido" generico, e diz o caminho.
+    if (cand?.finishReason === "MAX_TOKENS") {
+      console.error("gemini cortou por MAX_TOKENS (subir MAX_OUTPUT_TOKENS ou dividir o relatorio). tam txt:", (txt || "").length);
+      return json(req, { ok: false, erro: "O relatorio e grande demais pra ler de uma vez. Divida em menos LPs por arquivo e tente de novo." });
+    }
     console.error("gemini json invalido. finishReason:", cand?.finishReason, "| txt:", (txt || "").slice(0, 300));
     return json(req, { ok: false, erro: "A IA nao devolveu um JSON valido." });
   }
