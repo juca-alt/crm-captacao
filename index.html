@@ -936,7 +936,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.5.2 · fix unificar duplicata';
+const APP_VERSION = 'v2.5.3 · recomendações navegáveis';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1470,7 +1470,7 @@ function renderInner(){
     c.innerHTML = banner + filtersHTML() + capToggleHTML() + funilCapHTML();
     wireFilters(); wireCapToggle(); wireFunil(); wireStatusButtons(); wireBanner(); return;
   }
-  if(VIEW==='recomendacoes'){ $('#view-title').textContent='Recomendações'; c.innerHTML=banner+recomendacoesHTML(); wireActions(c); wireBanner(); return; }
+  if(VIEW==='recomendacoes'){ $('#view-title').textContent='Recomendações'; c.innerHTML=banner+recomendacoesHTML(); wireActions(c); wireRecom(); wireBanner(); return; }
   if(VIEW==='contatos'){ $('#view-title').textContent='Contatos'; c.innerHTML = banner + contatosFiltersHTML() + contatosBottomFiltersHTML() + listaHTML(filteredContatos()); wireContatosFilters(); wireLista(); wireBulk(); wireStatusButtons(); wireBanner(); return; }
   if(VIEW==='config'){ $('#view-title').textContent='Configurações'; c.innerHTML=banner+configHubHTML(); wireConfigHub(); wireBanner(); return; }
   if(VIEW==='etapas'){ $('#view-title').textContent='Etapa · '+FN_STAGE; c.innerHTML=banner+etapasViewHTML(); wireEtapasView(); wireBanner(); return; }
@@ -2619,12 +2619,27 @@ function thCellSheet(c){
     `<span class="col-resizer" data-resize="${c.key}" title="Arraste para redimensionar"></span>`+
   `</th>`;
 }
-// Módulo Recomendações: lista os leads de origem "Rec ..." agrupados por quem indicou.
-// Versão simples (vamos evoluir depois) — clique abre o lead via wireActions([data-open]).
+// Módulo Recomendações: leads de origem "Rec ..." em sub-abas (Rec LP / Rec OT / Cliente / Familiar),
+// com filtro por recomendante, agrupados por quem indicou. Clique abre o lead via wireActions([data-open]).
 const REC_ORIGENS=['Rec LP','Rec OT','Rec Cliente','Rec Familiar'];
+let REC_TAB='all';   // sub-aba ativa: 'all' | 'Rec LP' | 'Rec OT' | 'Rec Cliente' | 'Rec Familiar'
+let REC_RECOM='';    // filtro por recomendante (nome exato)
 function recomendacoesHTML(){
-  const leads=baseLeads().filter(l=>REC_ORIGENS.includes(l.origem));
-  if(!leads.length) return '<div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px;text-align:center;color:var(--muted);max-width:680px">Nenhuma recomendação ainda. Quando você capturar um lead com origem de <b>recomendação</b> (LP, OT, Cliente ou Familiar), ele aparece aqui — agrupado por quem indicou.</div>';
+  const all=baseLeads().filter(l=>REC_ORIGENS.includes(l.origem));
+  const cnt=o=>all.filter(l=>l.origem===o).length;
+  const TABS=[['all','Todas',all.length],['Rec LP','Rec LP',cnt('Rec LP')],['Rec OT','Rec OT',cnt('Rec OT')],['Rec Cliente','Rec Cliente',cnt('Rec Cliente')],['Rec Familiar','Rec Familiar',cnt('Rec Familiar')]];
+  const chips=`<div class="filters" style="margin-bottom:10px">`+TABS.map(([k,lb,n])=>`<button class="chip ${REC_TAB===k?'on':''}" data-rectab="${esc(k)}">${lb} <b style="opacity:.7">${n}</b></button>`).join('')+`</div>`;
+  let leads = REC_TAB==='all'?all.slice():all.filter(l=>l.origem===REC_TAB);
+  const recomSet=[...new Set(leads.map(l=>(l.recomendante||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if(REC_RECOM && !recomSet.includes(REC_RECOM)) REC_RECOM=''; // recomendante saiu do escopo da aba → limpa
+  const recSel=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">`+
+    `<span class="muted" style="font-size:12.5px">Filtrar por recomendante:</span>`+
+    `<select id="rec-recom" class="fsel" style="max-width:280px;height:34px"><option value="">Todos (${recomSet.length})</option>${recomSet.map(r=>`<option ${REC_RECOM===r?'selected':''}>${esc(r)}</option>`).join('')}</select>`+
+    (REC_RECOM?`<button class="chip" id="rec-clear">limpar</button>`:'')+
+  `</div>`;
+  if(REC_RECOM) leads=leads.filter(l=>(l.recomendante||'').trim()===REC_RECOM);
+  const head=`<div style="max-width:860px">${chips}${recSel}</div>`;
+  if(!leads.length) return head+`<div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px;text-align:center;color:var(--muted);max-width:860px">Nenhuma recomendação ${REC_TAB==='all'?'':'de <b>'+esc(REC_TAB)+'</b> '}aqui${REC_RECOM?' com esse recomendante':''}. As de <b>Rec LP</b> vêm dos Life Planners (ex.: Daniel); as de <b>Rec OT</b>, das OTs.</div>`;
   const groups={}; leads.forEach(l=>{ const k=(l.recomendante||'').trim()||'— sem recomendante registrado'; (groups[k]=groups[k]||[]).push(l); });
   const names=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
   const row=l=>`<div class="qrow" data-open="${l.id}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;cursor:pointer;background:#f8fafc">`+
@@ -2636,8 +2651,8 @@ function recomendacoesHTML(){
       `<span style="font-size:11px;font-weight:700;color:#64748b;white-space:nowrap">${esc(l.origem||'')}</span>`+
       `<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:${ETAPA_COLOR[l.etapa]||'#94a3b8'};color:#fff;white-space:nowrap">${esc(l.status||'—')}</span>`+
     `</div>`;
-  return `<div style="display:flex;flex-direction:column;gap:14px;max-width:860px">`+
-    `<div class="muted" style="font-size:13px">${leads.length} lead${leads.length>1?'s':''} de recomendação · ${names.length} recomendante${names.length>1?'s':''}. <i>(módulo simples — vamos evoluir depois)</i></div>`+
+  return head+`<div style="display:flex;flex-direction:column;gap:14px;max-width:860px">`+
+    `<div class="muted" style="font-size:13px">${leads.length} lead${leads.length>1?'s':''} · ${names.length} recomendante${names.length>1?'s':''}${REC_TAB==='all'?'':' · '+esc(REC_TAB)}</div>`+
     names.map(n=>`<div style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px">`+
       `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">`+
         `<span style="font-weight:800;font-size:15px">🙌 ${esc(n)}</span>`+
@@ -2646,6 +2661,11 @@ function recomendacoesHTML(){
       `<div style="display:flex;flex-direction:column;gap:6px">${groups[n].map(row).join('')}</div>`+
     `</div>`).join('')+
   `</div>`;
+}
+function wireRecom(){
+  document.querySelectorAll('[data-rectab]').forEach(b=>b.onclick=()=>{ REC_TAB=b.dataset.rectab; REC_RECOM=''; render(); });
+  const s=$('#rec-recom'); if(s)s.onchange=()=>{ REC_RECOM=s.value; render(); };
+  const c=$('#rec-clear'); if(c)c.onclick=()=>{ REC_RECOM=''; render(); };
 }
 function listaHTML(data){
   const _base=data||filtered(); LIST_BASE=_base; data=sortData(applyColFilt(_base));
