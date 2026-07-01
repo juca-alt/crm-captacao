@@ -812,11 +812,48 @@ const STATUS_FOLLOWUP=['pendente','em_contato','resolvido'];
 const STATUS_CONTATO =['pendente','contatado','feito'];
 const STATUS_LABEL={pendente:'Pendente',em_contato:'Em contato',resolvido:'Resolvido',contatado:'Contatado',feito:'Feito'};
 
-/* ---- Store local (in-memory + localStorage). Costura p/ Supabase: trocar lpCarregar/lpSalvar/lpIngest. ---- */
-const LP_CHAVE='crmlp_relatorio_v1';
+/* ---- Store: Supabase (fonte da verdade → sync entre LPs) + fallback localStorage (preview/deslogado). ----
+   Tabela lp_relatorio_itens (migration supabase/migrations/lp_relatorio.sql): 1 linha por
+   (entidade, lp, chave); `dados` jsonb = campos parseados; `status`/`resolvido` = estado do app.
+   RLS = authenticated-full → só logado grava (anônimo cai no localStorage). O merge-snapshot que
+   preserva status por chave continua em lpIngest (client); aqui é só onde o resultado é guardado. */
+const LP_CHAVE='crmlp_relatorio_v1';     // cache local / preview offline
+const LP_TABLE='lp_relatorio_itens';
 let LP={atrasos:[],pendencias:[],statust:[],aniversario:[],datas:[],importadoEm:null,avisos:[],modelo:''};
-function lpCarregar(){ try{ const raw=localStorage.getItem(LP_CHAVE); if(raw){ const o=JSON.parse(raw); Object.keys(LP_ENT).forEach(e=>{ if(Array.isArray(o[e])) LP[e]=o[e]; }); LP.importadoEm=o.importadoEm||null; LP.avisos=o.avisos||[]; LP.modelo=o.modelo||''; } }catch(e){ console.warn('LP load falhou',e); } }
-function lpSalvar(){ try{ localStorage.setItem(LP_CHAVE,JSON.stringify(LP)); }catch(e){ console.warn('LP save falhou',e); } }
+let LP_REMOTE=false;                      // true quando há sessão Supabase → lê/grava no banco
+let LP_TOUCHED=new Set();                 // "ent\tlp" tocados pelo último ingest (só esses são persistidos)
+
+async function lpRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
+
+// rec (modelo do app) <-> row (linha da tabela). Meta fica fora do jsonb `dados`.
+const LP_META=new Set(['lp','_key','_resolvido','_visto','_entrou','status_followup','status_contato']);
+function lpRecToRow(ent,rec){ const dados={}; Object.keys(rec).forEach(k=>{ if(!LP_META.has(k)) dados[k]=rec[k]; });
+  return { entidade:ent, lp:rec.lp, chave:rec._key, dados, status:rec[LP_ENT[ent].status]||'pendente',
+           resolvido:!!rec._resolvido, entrou:rec._entrou||nowISO(), visto:rec._visto||nowISO() }; }
+function lpRowToRec(row){ const cfg=LP_ENT[row.entidade]||{status:'status_followup'};
+  return Object.assign({}, row.dados||{}, { lp:row.lp, _key:row.chave, _resolvido:!!row.resolvido,
+    _visto:row.visto, _entrou:row.entrou, [cfg.status]:row.status||'pendente' }); }
+
+async function lpCarregar(){
+  LP_REMOTE=await lpRemoteOn();
+  if(LP_REMOTE){ try{
+    const {data,error}=await sb.from(LP_TABLE).select('*'); if(error) throw error;
+    Object.keys(LP_ENT).forEach(e=>{ LP[e]=[]; });
+    (data||[]).forEach(row=>{ if(LP[row.entidade]) LP[row.entidade].push(lpRowToRec(row)); });
+    LP.importadoEm=(data||[]).reduce((m,r)=> (r.atualizado>m? r.atualizado:m), '')||null;
+    return;
+  }catch(e){ console.warn('LP load remoto falhou → fallback local',e); LP_REMOTE=false; } }
+  try{ const raw=localStorage.getItem(LP_CHAVE); if(raw){ const o=JSON.parse(raw); Object.keys(LP_ENT).forEach(e=>{ if(Array.isArray(o[e])) LP[e]=o[e]; }); LP.importadoEm=o.importadoEm||null; LP.avisos=o.avisos||[]; LP.modelo=o.modelo||''; } }catch(e){ console.warn('LP load local falhou',e); }
+}
+function lpSalvarLocal(){ try{ localStorage.setItem(LP_CHAVE,JSON.stringify(LP)); }catch(e){ console.warn('LP save local falhou',e); } }
+// upsert no banco SÓ dos grupos (entidade,lp) tocados pelo ingest → não sobrescreve dados de outro LP.
+async function lpPersistRemoto(){
+  if(!LP_REMOTE||!sb||!LP_TOUCHED.size) return;
+  const rows=[]; Object.keys(LP_ENT).forEach(ent=>{ LP[ent].forEach(rec=>{ if(rec._key && LP_TOUCHED.has(ent+'\t'+rec.lp)) rows.push(lpRecToRow(ent,rec)); }); });
+  if(!rows.length) return;
+  const {error}=await sb.from(LP_TABLE).upsert(rows,{onConflict:'entidade,lp,chave'});
+  if(error){ console.error('LP upsert remoto falhou',error); throw error; }
+}
 function nowISO(){ return new Date().toISOString().slice(0,10); }
 function normKey(s){ return (s==null?'':String(s)).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' '); }
 function recKey(rec,keys){ for(const k of keys){ const v=normKey(rec[k]); if(v) return v; } return ''; }
@@ -866,11 +903,16 @@ function lpIngest(parsed){
   LP.importadoEm=new Date().toISOString();
   LP.avisos=(parsed&&parsed.avisos)||[];
   LP.modelo=(parsed&&parsed.__modelo)||LP.modelo;
-  lpSalvar();
+  // registra os grupos (entidade,lp) presentes neste arquivo → só eles vão pro banco (não toca outro LP)
+  LP_TOUCHED=new Set();
+  Object.keys(lpsPorEnt).forEach(ent=>{ lpsPorEnt[ent].forEach(lp=>LP_TOUCHED.add(ent+'\t'+lp)); });
+  lpSalvarLocal();
 }
 function lpSetStatus(ent,key,val){
   const cfg=LP_ENT[ent]; const r=LP[ent].find(x=>x._key===key);
-  if(!r) return; r[cfg.status]=val; lpSalvar();
+  if(!r) return; r[cfg.status]=val; lpSalvarLocal();
+  if(LP_REMOTE&&sb){ sb.from(LP_TABLE).update({status:val,atualizado:new Date().toISOString()})
+      .match({entidade:ent,lp:r.lp,chave:key}).then(({error})=>{ if(error){ console.error('LP status update falhou',error); toast('Não consegui salvar o status no servidor',false); } }); }
 }
 
 /* ════ CAMPOS DERIVADOS (P1) — a inteligência ════
@@ -1145,7 +1187,9 @@ function openLpImport(){
       const total=(parsed.secoes||[]).reduce((s,x)=>s+((x.linhas||[]).length),0);
       if(!(parsed.secoes||[]).length){ $('#lp-spin').style.display='none'; $('#lp-go').disabled=false; $('#lp-msg').textContent='Não identifiquei seções nesse arquivo. Confira se é o relatório semanal.'; return; }
       lpIngest(parsed); ov.remove();
-      toast(`Relatório importado — ${total} registro(s) em ${(parsed.secoes||[]).length} quadro(s)`,true);
+      let sinc='';
+      if(LP_REMOTE){ try{ await lpPersistRemoto(); sinc=' · sincronizado'; }catch(e){ sinc=' · só local (falha no servidor)'; console.error(e); } }
+      toast(`Relatório importado — ${total} registro(s) em ${(parsed.secoes||[]).length} quadro(s)${sinc}`,true);
       render();
     }catch(err){
       $('#lp-spin').style.display='none'; $('#lp-go').disabled=false;
@@ -1196,7 +1240,7 @@ function lpExemplo(){
   ],confianca:'alta',avisos:['Dados de exemplo — não vieram de um PDF real.'],__modelo:'exemplo'};
 }
 function lpCarregarExemplo(fecharModal){
-  lpIngest(lpExemplo());
+  lpIngest(lpExemplo()); LP_TOUCHED=new Set();   // dado de exemplo: só local, NUNCA vai pro banco compartilhado
   if(fecharModal){ const ov=document.querySelector('.overlay.aberto'); if(ov&&ov.querySelector('.lp-modal-card')) ov.remove(); }
   toast('Dados de exemplo carregados',true);
   if(!String(VIEW).startsWith('lp-')) irPara('lp-atrasos'); else render();
@@ -1219,7 +1263,7 @@ function render(){
   else viewPrincipios();
   if(CONTATO) renderDrawer();
 }
-carregar(); lpCarregar(); render();
+carregar(); render(); lpCarregar().then(render);   // render base já; LP (remoto/local) popula e re-renderiza
 </script>
 </body>
 </html>
