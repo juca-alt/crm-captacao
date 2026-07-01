@@ -112,6 +112,37 @@ function extractJson(txt: string): unknown {
   return null;
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Equal jitter: metade fixa + metade aleatoria, com teto. Evita thundering herd e cobre janelas maiores.
+function backoffMs(attempt: number): number {
+  const base = 800, cap = 8000;
+  const ceil = Math.min(cap, base * Math.pow(2, attempt));
+  return Math.round(ceil / 2 + Math.random() * (ceil / 2));
+}
+// Classifica o erro do Gemini pelo corpo: RPD (diario) NAO adianta retentar; RPM/TPM/503 sim.
+// Le RetryInfo.retryDelay (segundos) e QuotaFailure.violations[].quotaId (contendo PerDay/PerMinute).
+function classifyGemini(status: number, body: any): { classe: string; retryDelayMs: number | null } {
+  const details = body?.error?.details || [];
+  let retryDelayMs: number | null = null, isDaily = false;
+  for (const d of details) {
+    const t = String(d?.["@type"] || "");
+    if (t.includes("RetryInfo") && d?.retryDelay) {
+      const m = String(d.retryDelay).match(/([\d.]+)s/);
+      if (m) retryDelayMs = Math.round(parseFloat(m[1]) * 1000);
+    }
+    if (t.includes("QuotaFailure")) {
+      for (const v of (d?.violations || [])) {
+        const q = String(v?.quotaId || "") + " " + String(v?.quotaMetric || "");
+        if (/PerDay/i.test(q)) isDaily = true;
+      }
+    }
+  }
+  if (status === 429 && isDaily) return { classe: "cota_diaria", retryDelayMs };
+  if (status === 429) return { classe: "cota_minuto", retryDelayMs };
+  if (status === 503 || status === 500) return { classe: "sobrecarga", retryDelayMs };
+  return { classe: "outro", retryDelayMs };
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, erro: "Use POST" }, 405);
@@ -157,34 +188,55 @@ Deno.serve(async (req: Request) => {
     generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS },
   });
 
-  // Tenta ate 3x: o free tier do Gemini as vezes responde 503 "high demand" (transiente).
+  // Retry resiliente: backoff exponencial + jitter, honra Retry-After/RetryInfo, timeout por tentativa.
+  // NAO retenta 429-diario (RPD): so reseta a meia-noite PT -> abortar cedo com mensagem certa.
+  const MAX_ATTEMPTS = 4;
   let resp: Response | null = null;
-  for (let i = 0; i < 3; i++) {
+  let lastBody: any = null, lastClasse = "";
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 30_000); // 30s por tentativa
     try {
       resp = await fetch(GURL, {
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": KEY },
         body: geminiBody,
+        signal: ctrl.signal,
       });
     } catch (e) {
+      clearTimeout(to);
       console.error("gemini fetch falhou:", e);
-      if (i === 2) return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo." }, 502);
-      await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+      if (i === MAX_ATTEMPTS - 1) return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo.", motivo: "rede" }, 502);
+      await sleep(backoffMs(i));
       continue;
     }
-    if (resp.ok || (resp.status !== 503 && resp.status !== 429 && resp.status !== 500)) break;
-    if (i < 2) await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+    clearTimeout(to);
+    if (resp.ok) break;
+    // erro HTTP: le o corpo p/ classificar (RPD vs RPM vs 503) e pegar RetryInfo
+    lastBody = await resp.clone().json().catch(() => null);
+    const cls = classifyGemini(resp.status, lastBody);
+    lastClasse = cls.classe;
+    // cota diaria -> nao adianta retentar; erros nao-transientes (400/403/404) -> tambem para
+    if (cls.classe === "cota_diaria") break;
+    if (resp.status !== 429 && resp.status !== 503 && resp.status !== 500) break;
+    if (i === MAX_ATTEMPTS - 1) break;
+    const ra = Number(resp.headers.get("retry-after")) * 1000 || 0;
+    const wait = Math.min(20_000, Math.max(backoffMs(i), cls.retryDelayMs || 0, ra));
+    await sleep(wait);
   }
-  if (!resp) return json(req, { ok: false, erro: "Falha ao chamar a IA. Tente de novo." }, 502);
+  if (!resp) return json(req, { ok: false, erro: "Falha ao chamar a IA. Tente de novo.", motivo: "rede" }, 502);
+
+  if (!resp.ok) {
+    const body = lastBody || await resp.json().catch(() => null);
+    console.error("gemini erro:", resp.status, lastClasse, JSON.stringify(body?.error || body).slice(0, 300));
+    if (lastClasse === "cota_diaria")
+      return json(req, { ok: false, erro: "Cota diaria da IA (free tier) esgotada — so reseta amanha (meia-noite no Pacifico). Cole o texto do relatorio pra ler SEM IA agora.", motivo: "cota_diaria" }, 429);
+    if (lastClasse === "sobrecarga" || resp.status === 503 || resp.status === 500 || resp.status === 429)
+      return json(req, { ok: false, erro: "A IA esta congestionada agora. Tente de novo em ~1 min, ou cole o texto pra ler SEM IA.", motivo: "sobrecarga" }, 503);
+    return json(req, { ok: false, erro: "A IA nao conseguiu processar agora.", motivo: "outro" }, 502);
+  }
 
   const data = await resp.json().catch(() => null);
-  if (!resp.ok) {
-    console.error("gemini erro:", resp.status, JSON.stringify(data?.error || data));
-    const code = (resp.status === 429 || resp.status === 503)
-      ? "A IA esta com alta demanda agora. Tente de novo em instantes."
-      : "A IA nao conseguiu processar agora.";
-    return json(req, { ok: false, erro: code }, 502);
-  }
 
   const blocked = data?.promptFeedback?.blockReason;
   const cand = data?.candidates?.[0];
