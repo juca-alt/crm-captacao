@@ -260,6 +260,15 @@ tr.row.sel{background:#eff6ff}
 .col .count{background:var(--bg);color:var(--muted);border-radius:10px;padding:1px 8px;font-size:11px}
 .col .cards{padding:10px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px}
 .col.drop{outline:2px dashed var(--primary);outline-offset:-4px}
+/* recolher COLUNA/etapa no kanban — botão discreto no header; recolhida vira faixa estreita com rótulo vertical (foca nas etapas em uso, cabe tudo numa tela) */
+.col h3.colh{justify-content:flex-start;gap:6px}
+.col-fold{border:none;background:transparent;color:#94a3b8;font-size:13px;line-height:1;cursor:pointer;padding:2px 5px;border-radius:6px;flex:none;opacity:.6;transition:opacity .12s,background .12s}
+.col-fold:hover{opacity:1;background:#eef2f7;color:var(--primary)}
+.colh-lb{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.col.col-collapsed{width:46px;min-width:46px;flex:0 0 46px;cursor:pointer}
+.col.col-collapsed .cards{display:none}
+.col.col-collapsed h3{flex-direction:column;justify-content:flex-start;gap:10px;padding:10px 4px;border-bottom:none;height:100%;text-transform:none}
+.col.col-collapsed .colh-lb{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;letter-spacing:.04em;text-transform:uppercase}
 .kcard{position:relative;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.05);transition:box-shadow .14s,border-color .14s,transform .14s}
 .kcard:hover{border-color:#cbd5e1;box-shadow:0 8px 20px rgba(15,23,42,.10);transform:translateY(-1px)}
 .kcard.dragging{opacity:.4}
@@ -927,7 +936,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.5.0 · visão unificada';
+const APP_VERSION = 'v2.5.1 · etapas recolhíveis';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1168,6 +1177,7 @@ let INBOX_FILTER='all';   // Inbox: all | resp | enviado | semtel | tel | aguard
 let INBOX_SEL=null;       // Inbox 2-col: id da conversa selecionada (coluna direita)
 let INBOX_ARCHIVED=new Set(); // Inbox: ids arquivados (área "Arquivadas", espelha o LinkedIn) — persistido em app_settings 'inbox_arquivados'
 let KCOLLAPSED=(()=>{try{return new Set(JSON.parse(localStorage.getItem('kfold')||'[]'));}catch(_){return new Set();}})(); // cards do kanban recolhidos (preferência por aparelho)
+let COLCOLLAPSED=(()=>{try{return new Set(JSON.parse(localStorage.getItem('kcolfold')||'[]'));}catch(_){return new Set();}})(); // COLUNAS/etapas recolhidas no kanban (foca nas etapas em uso; preferência por aparelho)
 let INBOX_MOBILE_OPEN=false; // mobile: true quando o detalhe está aberto sobre a lista
 let LK_MINE=false;    // LinkedIn: só os meus?
 let SEL=new Set();    // multi-seleção da Lista
@@ -1628,7 +1638,7 @@ function wireActions(scope){
     if(e.target.closest('[data-act],[data-status-btn],[data-star],[data-kfold]'))return;openDrawer(r.dataset.open);});
   scope.querySelectorAll('[data-star]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const l=byId(b.dataset.star);if(l&&await updateLead(l.id,{prioridade:!l.prioridade}))render();});
   scope.querySelectorAll('[data-act]').forEach(b=>b.onclick=async e=>{e.stopPropagation();await doAct(b);});
-  wireKfold(scope);
+  wireKfold(scope); wireColFold();
 }
 // recolher/expandir card do kanban — alterna a classe direto no DOM (sem re-render → mantém a rolagem) e lembra a preferência
 function wireKfold(scope){
@@ -1639,6 +1649,30 @@ function wireKfold(scope){
     const card=b.closest('.kcard'); if(card)card.classList.toggle('collapsed',on);
     b.textContent=on?'▸':'▾';
     try{localStorage.setItem('kfold',JSON.stringify([...KCOLLAPSED]));}catch(_){}
+  });
+}
+// cabeçalho de coluna do kanban com botão de recolher a ETAPA inteira (faixa estreita → foca nas etapas em uso)
+function colHead(key,label,count){
+  const on=COLCOLLAPSED.has(key);
+  return `<h3 class="colh"><button class="col-fold" data-colfold="${esc(key)}" title="Recolher / expandir esta etapa">${on?'⟩':'⟨'}</button><span class="colh-lb">${label} <span class="count">${count}</span></span></h3>`;
+}
+function wireColFold(){
+  document.querySelectorAll('[data-colfold]').forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const k=b.dataset.colfold, on=!COLCOLLAPSED.has(k);
+    if(on)COLCOLLAPSED.add(k); else COLCOLLAPSED.delete(k);
+    const col=b.closest('.col'); if(col)col.classList.toggle('col-collapsed',on);
+    b.textContent=on?'⟩':'⟨';
+    try{localStorage.setItem('kcolfold',JSON.stringify([...COLCOLLAPSED]));}catch(_){}
+  });
+  // clicar na coluna quando ela está recolhida (fora do botão/card) expande de novo — anexa em todas e checa o estado no clique (não depende de re-render)
+  document.querySelectorAll('.col').forEach(col=>col.onclick=e=>{
+    if(!col.classList.contains('col-collapsed'))return;
+    if(e.target.closest('[data-colfold],.kcard'))return;
+    const k=col.dataset.etapa||col.dataset.status; if(k==null)return;
+    COLCOLLAPSED.delete(k); col.classList.remove('col-collapsed');
+    const b=col.querySelector('[data-colfold]'); if(b)b.textContent='⟨';
+    try{localStorage.setItem('kcolfold',JSON.stringify([...COLCOLLAPSED]));}catch(_){}
   });
 }
 async function doAct(b){
@@ -2254,8 +2288,8 @@ function lkBoardHTML(){
   const cols=LK_FLOW.map(col=>{
     const items=B.filter(l=>l.status===col.s).sort((a,b)=>(b.prioridade?1:0)-(a.prioridade?1:0));
     const next=nextStatus(col.s);
-    return `<div class="col lkcol" data-status="${esc(col.s)}">
-      <h3>${esc(col.l)} <span class="count">${items.length}</span></h3>
+    return `<div class="col lkcol${COLCOLLAPSED.has(col.s)?' col-collapsed':''}" data-status="${esc(col.s)}">
+      ${colHead(col.s,esc(col.l),items.length)}
       <div class="cards">${items.map(l=>lkcard(l,next)).join('')||'<div class="qempty">—</div>'}</div>
     </div>`;
   }).join('');
@@ -2800,8 +2834,8 @@ function funilHTML(){
   const data=filtered();
   const cols=ETAPAS.filter(e=>e!=='Descartado'||data.some(l=>l.etapa==='Descartado')).map(e=>{
     const items=data.filter(l=>l.etapa===e);
-    return `<div class="col" data-etapa="${e}">
-      <h3>${ETAPA_LABEL[e]} <span class="count">${items.length}</span></h3>
+    return `<div class="col${COLCOLLAPSED.has(e)?' col-collapsed':''}" data-etapa="${e}">
+      ${colHead(e,ETAPA_LABEL[e],items.length)}
       <div class="cards">${items.map(kcard).join('')}</div>
     </div>`;
   }).join('');
@@ -2817,7 +2851,7 @@ function wireFunil(){
     c.ondragend=()=>{dragId=null;c.classList.remove('dragging');};
     c.onclick=e=>{if(e.target.closest('[data-status-btn],[data-star],[data-kfold]'))return;openDrawer(c.dataset.id);};
   });
-  wireKfold();
+  wireKfold(); wireColFold();
   document.querySelectorAll('[data-star]').forEach(b=>b.onclick=async e=>{e.stopPropagation();const l=byId(b.dataset.star);if(l&&await updateLead(l.id,{prioridade:!l.prioridade}))render();});
   document.querySelectorAll('.funil .col').forEach(col=>{
     col.ondragover=e=>{e.preventDefault();col.classList.add('drop');};
@@ -2837,8 +2871,8 @@ function funilCapHTML(){
   const data=capBase();
   const cols=CAP_STAGES.map(e=>{
     const items=data.filter(l=>l.etapa===e);
-    return `<div class="col" data-etapa="${e}">
-      <h3>${ETAPA_LABEL[e]} <span class="count">${items.length}</span></h3>
+    return `<div class="col${COLCOLLAPSED.has(e)?' col-collapsed':''}" data-etapa="${e}">
+      ${colHead(e,ETAPA_LABEL[e],items.length)}
       <div class="cards">${items.map(kcard).join('')||'<div class="qempty">—</div>'}</div>
     </div>`;
   }).join('');
