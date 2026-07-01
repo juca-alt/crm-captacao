@@ -1140,11 +1140,20 @@ function lpEnsurePdfjs(){ if(window.pdfjsLib) return Promise.resolve(); if(LP_PD
 async function lpPdfText(arrbuf){ await lpEnsurePdfjs(); const pdf=await window.pdfjsLib.getDocument({data:arrbuf}).promise;
   // Reconstrói LINHA por linha pela coordenada Y (preserva as tabelas; o join cru juntava
   // a página inteira numa linha só e a IA se perdia nas colunas).
+  // Frente 2: PRESERVA a fronteira de COLUNA. Quando o buraco horizontal entre dois itens é
+  // grande (> LP_COLGAP pt), insere \x1f (Unit Separator) no lugar do espaço; o parser usa esse
+  // marcador pra separar segurado≠pagador SEM IA. Espaços de palavra no template Prudential são
+  // ~1-2pt; gaps de coluna ≥7pt (fronteira segurado↔pagador chega a 25-42pt) → 4pt separa com
+  // folga de ~3,5x. Achatar \x1f→espaço reproduz o texto antigo byte-a-byte (zero regressão).
+  const LP_COLGAP=4;
   let out=''; for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const tc=await pg.getTextContent();
-    const its=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5]}));
+    const its=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width||0}));
     its.sort((a,b)=>(Math.abs(a.y-b.y)>3?(b.y-a.y):(a.x-b.x)));
-    let ly=null,line=''; const ls=[];
-    for(const it of its){ if(ly===null||Math.abs(it.y-ly)<=3){ line+=(line?' ':'')+it.s; } else { ls.push(line.trim()); line=it.s; } ly=it.y; }
+    let ly=null,lx=null,line=''; const ls=[];
+    for(const it of its){
+      if(ly===null||Math.abs(it.y-ly)<=3){ if(line){ const gap=it.x-lx; line+=(gap>LP_COLGAP?'\x1f':' ')+it.s; } else { line=it.s; } }
+      else { ls.push(line.trim()); line=it.s; }
+      ly=it.y; lx=it.x+it.w; }
     if(line) ls.push(line.trim());
     out+=ls.join('\n')+'\n'; }
   return out.trim(); }
@@ -1177,8 +1186,15 @@ function lpParseTexto(texto){
   function splitNomes(tokens){var n=tokens.length; if(n===0)return ['','',true];
     if(n%2===0){var meio=n/2,ok=true; for(var i=0;i<meio;i++){if(norm(tokens[i])!==norm(tokens[meio+i])){ok=false;break;}} if(ok){var nome=tokens.slice(0,meio).join(' ');return [nome,nome,true];}}
     var full=tokens.join(' '); return [full,full,false];}
+  // Frente 2: separa marcador de coluna (\x1f) do texto plano. `flatten` devolve a linha só com
+  // espaços (compat total com o parser antigo) + as posições de char onde havia fronteira de
+  // coluna. `colAt` acha a 1ª fronteira estritamente dentro de [a,b) (ou -1). Sem marcador (texto
+  // colado) → cols vazio → cai no comportamento antigo (splitNomes / _revisar).
+  function flatten(s){var lf='',cols=[]; for(var i=0;i<s.length;i++){ if(s.charCodeAt(i)===31){ cols.push(lf.length); lf+=' '; } else lf+=s[i]; } return {lf:lf,cols:cols};}
+  function colAt(cols,a,b){ if(cols) for(var i=0;i<cols.length;i++){ if(cols[i]>a&&cols[i]<b) return cols[i]; } return -1; }
   var raw=texto.replace(/\r\n?/g,'\n').split('\n');
-  var linhas=raw.map(function(l){return l.replace(/[ \t]+/g,' ').trim();});
+  var linhas=[],colsArr=[];
+  for(var ri=0;ri<raw.length;ri++){ var fl=flatten(raw[ri].replace(/[ \t]+/g,' ').trim()); linhas.push(fl.lf); colsArr.push(fl.cols); }
   var RE_TITULO=/^(?:(\d{2}\/\d{2}\/\d{4})\s+)?(PEND[ÊE]NCIAS DE EMISS[ÃA]O|AP[ÓO]LICES EMITIDAS|ATRASOS|ANIVERSARIANTES DO M[ÊE]S|ANIVERS[ÁA]RIOS DE AP[ÓO]LICE)\s*-\s*(.+)$/i;
   var MAPA={'PENDENCIAS DE EMISSAO':'PENDENCIAS','APOLICES EMITIDAS':'STATUS_T','ATRASOS':'ATRASOS','ANIVERSARIANTES DO MES':'ANIVERSARIO','ANIVERSARIOS DE APOLICE':'DATAS_IMPORTANTES'};
   var titulos=[];
@@ -1199,31 +1215,40 @@ function lpParseTexto(texto){
       } else { cliente=tok.slice(start).join(' ').trim(); av.push('proposta '+proposta+': sem data de CCB — revisar cliente/pendência'); }
       out.push({proposta:proposta,apolice:apolice,cliente:cliente,assinatura_ccb:assinatura_ccb,pendencia:pendencia});
     } return out;}
-  function parseStatusT(corpo,av){var out=[];
-    for(var k=0;k<corpo.length;k++){var l=corpo[k]; if(isLixo(l)||isHeader(l,'STATUS_T'))continue;
-      var tok=l.split(' '); if(!RE_PROP.test(tok[0])){lost(l,av);continue;}
-      var proposta=tok[0], apolice=RE_APOL.test(tok[1]||'')?tok[1]:null, start=apolice?2:1;
+  function parseStatusT(corpo,av,colsArr){var out=[];
+    for(var k=0;k<corpo.length;k++){var l=corpo[k],cols=colsArr&&colsArr[k]; if(isLixo(l)||isHeader(l,'STATUS_T'))continue;
+      var tok=[],off=[],rre=/\S+/g,mm; while(mm=rre.exec(l)){tok.push(mm[0]);off.push(mm.index);}
+      // No caminho PDF o rótulo do MÊS (col. 1) vem colado no início da 1ª linha do grupo
+      // ("MAIO 000672247E ..."); no texto colado ele vem em linha própria (vira lixo). Absorve.
+      var base=(MESES.indexOf(norm(tok[0]))!==-1||/^\d{2}\/\d{4}$/.test(tok[0]||''))?1:0, mes=base?tok[0]:null;
+      if(!RE_PROP.test(tok[base])){lost(l,av);continue;}
+      var proposta=tok[base], apolice=RE_APOL.test(tok[base+1]||'')?tok[base+1]:null, start=apolice?base+2:base+1;
       if(!apolice)av.push('proposta '+proposta+': apólice ilegível');
       var sIdx=-1; for(var j=start;j<tok.length;j++){if(STATUS_KW.indexOf(norm(tok[j]))!==-1){sIdx=j;break;}}
       var segurado,pagador,revisar=false,datas=[];
-      if(sIdx!==-1){var nt=tok.slice(start,sIdx),sp=splitNomes(nt);segurado=sp[0];pagador=sp[1];
-        if(!sp[2]&&nt.length){revisar=true;av.push('apólice '+(apolice||proposta)+': segurado≠pagador não separável do texto colado — revisar');}
+      if(sIdx!==-1){var c=colAt(cols,off[start],off[sIdx]);   // coluna: SEGURADO | RESP. PELO PAGAMENTO
+        if(c!==-1){segurado=l.slice(off[start],c).trim();pagador=l.slice(c,off[sIdx]).trim();}
+        else{var nt=tok.slice(start,sIdx),sp=splitNomes(nt);segurado=sp[0];pagador=sp[1];
+          if(!sp[2]&&nt.length){revisar=true;av.push('apólice '+(apolice||proposta)+': segurado≠pagador não separável do texto colado — revisar');}}
         datas=(tok.slice(sIdx+1).join(' ').match(RE_DATA_G))||[];
       } else {av.push('proposta '+proposta+': status não reconhecido — parse por datas');
-        datas=l.match(RE_DATA_G)||[]; var fp=datas.length?l.indexOf(datas[0]):l.length;
-        var nt2=l.slice(0,fp).trim().split(' ').slice(start).filter(Boolean),sp2=splitNomes(nt2);segurado=sp2[0];pagador=sp2[1]; if(!sp2[2]&&nt2.length)revisar=true;}
-      var reg={mes:null,proposta:proposta,apolice:apolice,segurado:segurado,pagador:pagador,data_emissao:datas[0]?isoDate(datas[0]):null,data_30dias:datas[1]?isoDate(datas[1]):null,data_2o_premio:datas[2]?isoDate(datas[2]):null};
+        datas=l.match(RE_DATA_G)||[]; var fp=datas.length?l.indexOf(datas[0]):l.length, a2=off[start]||0, c2=colAt(cols,a2,fp);
+        if(c2!==-1){segurado=l.slice(a2,c2).trim();pagador=l.slice(c2,fp).trim();}
+        else{var nt2=l.slice(0,fp).trim().split(' ').slice(start).filter(Boolean),sp2=splitNomes(nt2);segurado=sp2[0];pagador=sp2[1]; if(!sp2[2]&&nt2.length)revisar=true;}}
+      var reg={mes:mes,proposta:proposta,apolice:apolice,segurado:segurado,pagador:pagador,data_emissao:datas[0]?isoDate(datas[0]):null,data_30dias:datas[1]?isoDate(datas[1]):null,data_2o_premio:datas[2]?isoDate(datas[2]):null};
       if(revisar)reg._revisar=true; out.push(reg);
     } return out;}
-  function parseAtrasos(corpo,av){var out=[];
-    for(var k=0;k<corpo.length;k++){var l=corpo[k]; if(isLixo(l)||isHeader(l,'ATRASOS'))continue;
+  function parseAtrasos(corpo,av,colsArr){var out=[];
+    for(var k=0;k<corpo.length;k++){var l=corpo[k],cols=colsArr&&colsArr[k]; if(isLixo(l)||isHeader(l,'ATRASOS'))continue;
       var tok=l.split(' '); if(!/^\d{1,3}$/.test(tok[0])||!RE_APOL.test(tok[1]||'')){lost(l,av);continue;}
       var dias=parseInt(tok[0],10),apolice=tok[1],tm=l.match(RE_TEL);
       if(!tm){av.push('apólice '+apolice+': telefone ausente — linha incompleta');lost(l,av);continue;}
       var tpos=l.indexOf(tm[0]),telefone=tm[0];
       var apoPos=l.indexOf(apolice)+apolice.length, nomesStr=l.slice(apoPos,tpos).trim(), nt=nomesStr?nomesStr.split(' '):[];
-      var sp=splitNomes(nt),pagador=sp[0],segurado=sp[1],revisar=false;
-      if(!sp[2]&&nt.length){revisar=true;av.push('apólice '+apolice+': pagador≠segurado não separável do texto colado — revisar');}
+      var pagador,segurado,revisar=false,c=colAt(cols,apoPos,tpos);   // coluna: RESP. PELO PAGAMENTO | SEGURADO
+      if(c!==-1){pagador=l.slice(apoPos,c).trim();segurado=l.slice(c,tpos).trim();}
+      else{var sp=splitNomes(nt);pagador=sp[0];segurado=sp[1];
+        if(!sp[2]&&nt.length){revisar=true;av.push('apólice '+apolice+': pagador≠segurado não separável do texto colado — revisar');}}
       var resto=l.slice(tpos+telefone.length).trim(),premio=null,pm=resto.match(RE_PREMIO_FIM);
       if(pm){premio=toNum(pm[0]);resto=resto.slice(0,resto.length-pm[0].length).trim();}
       var rt=resto?resto.split(' '):[],pIdx=-1;
@@ -1258,10 +1283,19 @@ function lpParseTexto(texto){
       else if(apolice){var ap=l.indexOf(apolice)+apolice.length,end2=telM?l.lastIndexOf(telM[0]):l.length;cliente=l.slice(ap,end2).trim()||null;}
       if(apolice||data_emissao||telefone) out.push({mes:mes,apolice:apolice,data_emissao:data_emissao,cliente:cliente,telefone:telefone}); else lost(l,av);
     } return out;}
-  var prevEnd=0;
-  for(var s=0;s<titulos.length;s++){var T=titulos[s],corpo=linhas.slice(prevEnd,T.idx);prevEnd=T.idx+1;var av=[],arr;
-    switch(T.tipo){case 'PENDENCIAS':arr=parsePend(corpo,av);break;case 'STATUS_T':arr=parseStatusT(corpo,av);break;
-      case 'ATRASOS':arr=parseAtrasos(corpo,av);break;case 'ANIVERSARIO':arr=parseAniv(corpo,av);break;
+  // O parser nasceu pro TEXTO COLADO, onde o título vem ABAIXO da tabela (corpo = linhas ANTES do
+  // título). Já o lpPdfText reconstrói em ordem natural de leitura (título ACIMA da tabela). Detecta
+  // o layout: se há mais conteúdo DEPOIS do último título do que ANTES do primeiro, o título
+  // encabeça a tabela (caminho PDF) → corpo = linhas DEPOIS do título; senão mantém o modelo colado.
+  function nEmpty(a,b){var n=0;for(var q=a;q<b;q++)if(linhas[q]&&linhas[q].trim())n++;return n;}
+  var first=titulos[0].idx,last=titulos[titulos.length-1].idx;
+  var tituloAcima = nEmpty(last+1,linhas.length) > nEmpty(0,first);
+  for(var s=0;s<titulos.length;s++){var T=titulos[s],ini,fim;
+    if(tituloAcima){ ini=T.idx+1; fim=(s+1<titulos.length)?titulos[s+1].idx:linhas.length; }
+    else { ini=(s===0)?0:titulos[s-1].idx+1; fim=T.idx; }
+    var corpo=linhas.slice(ini,fim),corpoCols=colsArr.slice(ini,fim);var av=[],arr;
+    switch(T.tipo){case 'PENDENCIAS':arr=parsePend(corpo,av);break;case 'STATUS_T':arr=parseStatusT(corpo,av,corpoCols);break;
+      case 'ATRASOS':arr=parseAtrasos(corpo,av,corpoCols);break;case 'ANIVERSARIO':arr=parseAniv(corpo,av);break;
       case 'DATAS_IMPORTANTES':arr=parseDatas(corpo,av);av.push('DATAS_IMPORTANTES: layout não observado — validar');break;default:arr=[];}
     secoes.push({tipo:T.tipo,lp:T.lp,linhas:arr});
     av.forEach(function(a){avisos.push('['+T.tipo+' · '+T.lp+'] '+a);});
