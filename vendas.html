@@ -265,6 +265,7 @@
     <div class="nav-grp-wrap" id="cart-group">
       <button class="nav-btn sub" data-view="cart-visao" onclick="irPara('cart-visao')"><span class="ic">📊</span><span class="lbl">Visão da Carteira</span></button>
       <button class="nav-btn sub" data-view="cart-clientes" onclick="irPara('cart-clientes')"><span class="ic">🗂️</span><span class="lbl">Clientes</span><span class="cnt" id="cnt-cart"></span></button>
+      <button class="nav-btn sub" data-view="cart-oportunidades" onclick="irPara('cart-oportunidades')"><span class="ic">💡</span><span class="lbl">Oportunidades</span><span class="cnt" id="cnt-cart-op"></span></button>
     </div>
     <div class="sep"></div>
 
@@ -1476,6 +1477,30 @@ function cartResumo(){ const C=CART.clientes,A=CART.apolices;
     multi:C.filter(c=>cartApolicesDoCliente(c.ref).length>1).length,
     segNeqPag:A.filter(a=>a.respPagto&&normKey(a.segurado)!==normKey(a.respPagto)).length }; }
 
+/* ---- contato: WhatsApp (wa.me) / e-mail (mailto) a partir dos dados da carteira ---- */
+function cartTel(c){ return c.celular||c.telefone||c.telComercial||null; }
+function cartWaUrl(tel,msg){ let d=String(tel||'').replace(/\D/g,''); if(d.length<10) return null;
+  if(d.length<=11) d='55'+d; // nacional sem DDI → prefixa Brasil
+  return 'https://wa.me/'+d+(msg?'?text='+encodeURIComponent(msg):''); }
+function cartBtnsContato(c,msg){ const out=[]; const wa=cartWaUrl(cartTel(c),msg||'');
+  if(wa) out.push(`<a class="btn btn-p btn-mini" href="${wa}" target="_blank" rel="noopener" onclick="event.stopPropagation()">💬 WhatsApp</a>`);
+  if(c.email) out.push(`<a class="btn btn-s btn-mini" href="mailto:${esc(c.email)}" onclick="event.stopPropagation()">✉️ E-mail</a>`);
+  return out.join(' '); }
+
+/* ---- radar: cruza o cliente com o relatório semanal (LPDB) por nome normalizado (ref).
+   Só itens NÃO resolvidos. Se nenhum relatório foi importado, tudo volta vazio (honesto). ---- */
+function cartRadar(ref){ const hit=(r,ks)=>ks.some(k=>r[k]&&normKey(r[k])===ref);
+  return { atrasos:lpAtivos('atrasos').filter(r=>hit(r,['segurado','pagador'])),
+    statust:lpAtivos('statust').filter(r=>hit(r,['segurado','pagador'])),
+    pendencias:lpAtivos('pendencias').filter(r=>hit(r,['cliente'])),
+    aniversario:lpAtivos('aniversario').filter(r=>hit(r,['cliente'])),
+    datas:lpAtivos('datas').filter(r=>hit(r,['cliente'])) }; }
+function cartRadarTemAcao(rad){ return rad.atrasos.length+rad.statust.length+rad.pendencias.length; }
+
+/* ---- gaps de cobertura: o que o cliente NÃO tem (valor zerado na carteira) ---- */
+const CART_COBS=[['renda','Renda'],['hc','HC'],['funeral','Funeral'],['pd','PD'],['ddr','DDR'],['morteAcid','Morte Acidental']];
+function cartGaps(c){ return CART_COBS.filter(([k])=>!(c.cob[k]>0)); }
+
 function cartVazio(){ return `<div style="padding:28px;text-align:center;border:1px dashed var(--linha);border-radius:12px;color:var(--muted);margin-top:12px">
   <div style="font-size:34px">👥</div><p>Nenhuma carteira importada ainda.</p>
   <button class="btn btn-p" onclick="openCarteiraImport()">📄 Importar carteira</button></div>`; }
@@ -1491,13 +1516,15 @@ function viewCartVisao(){ const r=cartResumo();
       ${card('Prêmio mensal','R$ '+cartFmtK(r.pmMes),'soma PM da carteira')}
       ${card('Capital segurado','R$ '+cartFmtK(r.csTot),'exposição total')}
       ${card('Segurado ≠ Pagador',r.segNeqPag,'apólices pagas por terceiro')}</div>
-    <div style="margin-top:16px"><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-p" onclick="irPara('cart-oportunidades')">💡 Ver oportunidades</button><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
 
 function viewCartClientes(){ const q=normKey(CART_Q);
   const lista=CART.clientes.filter(c=>!q||c.ref.indexOf(q)>=0||(c.email&&normKey(c.email).indexOf(q)>=0)).sort((a,b)=>a.nome.localeCompare(b.nome));
   const linhas=lista.map(c=>{ const n=cartApolicesDoCliente(c.ref).length;
+    const rd=cartRadar(c.ref), dN=lpDiasAte(c.nascimento);
+    const flags=(rd.atrasos.length?'<span title="em atraso no relatório">⏰</span>':'')+(rd.statust.length?'<span title="no Status T">⏳</span>':'')+(rd.pendencias.length?'<span title="pendência de emissão">📋</span>':'')+(dN!=null&&dN<=JANELA_DIAS?'<span title="aniversário próximo">🎂</span>':'');
     return `<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
-      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}</td>
+      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}${flags?' <span style="font-size:12px">'+flags+'</span>':''}</td>
       <td style="padding:8px 10px;text-align:center">${c.idade!=null?c.idade:'—'}</td>
       <td style="padding:8px 10px">${esc(c.celular||c.telefone||'—')}</td>
       <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
@@ -1512,19 +1539,81 @@ function viewCartClientes(){ const q=normKey(CART_Q);
     <tbody>${linhas||`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">Nenhum cliente encontrado.</td></tr>`}</tbody></table></div>`:cartVazio()}`;
   const el=$('#cart-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
 
+/* ---- Oportunidades: aniversários da carteira (nascimento REAL do .xls), gaps de
+   cobertura e radar da semana — tudo derivado, nada digitado. ---- */
+let CART_GAP='';
+function cartNiverProx(dias){ return CART.clientes.map(c=>({c,d:lpDiasAte(c.nascimento)})).filter(x=>x.d!=null&&x.d<=dias).sort((a,b)=>a.d-b.d); }
+function cartRadarLista(){ return CART.clientes.map(c=>({c,rad:cartRadar(c.ref)})).filter(x=>cartRadarTemAcao(x.rad)); }
+function viewCartOportunidades(){
+  if(!CART.clientes.length){ $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1><div class="sub">Ganchos de contato e venda extraídos da carteira.</div>`+cartVazio(); return; }
+  const nivers=cartNiverProx(30), radar=cartRadarLista();
+  const card=(t,v,s)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:14px 16px">
+    <div style="font-size:12px;color:var(--muted)">${t}</div><div style="font-size:22px;font-weight:800;margin-top:4px">${v}</div>${s?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div>`:''}</div>`;
+  const comGap=CART.clientes.filter(c=>cartGaps(c).length).length;
+  const mono=CART.clientes.filter(c=>cartApolicesDoCliente(c.ref).length===1).length;
+  const rowCliente=(c,extra,acoes)=>`<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
+    <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}</td>${extra}
+    <td style="padding:8px 10px">${esc(cartTel(c)||'—')}</td>
+    <td style="padding:8px 10px;text-align:right;white-space:nowrap">${acoes}</td></tr>`;
+  const niverHTML=nivers.length?nivers.map(({c,d})=>rowCliente(c,
+      `<td style="padding:8px 10px"><span class="dias-tag ${diasTagCls(d)}">${d===0?'hoje!':d===1?'amanhã':'em '+d+'d'}</span> · ${dataBR(c.nascimento)}${c.idade!=null?` <span style="color:var(--muted);font-size:11.5px">(faz ${c.idade+1})</span>`:''}</td>`,
+      cartBtnsContato(c,'Feliz aniversário, '+c.nome.split(' ')[0].charAt(0)+c.nome.split(' ')[0].slice(1).toLowerCase()+'! 🎉'))).join('')
+    :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">Nenhum aniversário nos próximos 30 dias.</td></tr>`;
+  const radarHTML=radar.length?radar.map(({c,rad})=>{ const badges=[];
+      rad.atrasos.forEach(r=>badges.push(`<span class="fx fx-critico">⏰ atraso${r.dias_atraso!=null?' '+r.dias_atraso+'d':''}</span>`));
+      rad.statust.forEach(r=>{ const f=lpFaixa(r); badges.push(`<span class="fx fx-${f.faixa}">⏳ ${FAIXA_LABEL[f.faixa]}${f.dias!=null?' '+(f.dias<0?Math.abs(f.dias)+'d atrás':'em '+f.dias+'d'):''}</span>`); });
+      rad.pendencias.forEach(()=>badges.push(`<span class="fx fx-alerta">📋 pendência</span>`));
+      return rowCliente(c,`<td style="padding:8px 10px">${badges.join(' ')}</td>`,cartBtnsContato(c)); }).join('')
+    :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">${LP.importadoEm?'Nenhum cliente da carteira com ação pendente no relatório.':'Nenhum relatório semanal importado ainda — suba o PDF nos módulos BackOffice.'}</td></tr>`;
+  const chips=CART_COBS.map(([k,l])=>{ const n=CART.clientes.filter(c=>!(c.cob[k]>0)).length;
+    return `<button class="btn ${CART_GAP===k?'btn-p':'btn-s'} btn-mini" onclick="CART_GAP=CART_GAP==='${k}'?'':'${k}';render()">${l} · ${n}</button>`; }).join(' ');
+  const gapLbl=(CART_COBS.find(([k])=>k===CART_GAP)||[])[1];
+  const gapLista=CART_GAP?CART.clientes.filter(c=>!(c.cob[CART_GAP]>0)).sort((a,b)=>(b.cob.cs||0)-(a.cob.cs||0)):[];
+  const gapHTML=CART_GAP?`<div style="overflow:auto;border:1px solid var(--linha);border-radius:12px;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente sem ${gapLbl}</th><th style="padding:9px 10px">CS · PM atuais</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead>
+    <tbody>${gapLista.map(c=>rowCliente(c,`<td style="padding:8px 10px">R$ ${cartFmtK(c.cob.cs)} · R$ ${cartFmt(c.cob.pm)}/mês</td>`,cartBtnsContato(c))).join('')||`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">Todo mundo tem ${gapLbl}. 🎉</td></tr>`}</tbody></table></div>`:'';
+  const tbl=(titulo,head2,corpo)=>`<h3 style="margin:18px 0 8px">${titulo}</h3>
+    <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px">${head2}</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead><tbody>${corpo}</tbody></table></div>`;
+  $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1>
+    <div class="sub">Ganchos de contato e venda extraídos da carteira — nada aqui foi digitado à mão.</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
+      ${card('Aniversários 30d',nivers.length,'da carteira, data real')}
+      ${card('No radar da semana',radar.length,'atraso · Status T · pendência')}
+      ${card('Com gap de cobertura',comGap,'ao menos 1 proteção zerada')}
+      ${card('Uma apólice só',mono,'candidatos a 2ª apólice')}</div>
+    ${tbl('🎂 Aniversários — próximos 30 dias','Quando',niverHTML)}
+    ${tbl('📡 Radar do relatório semanal','Situação',radarHTML)}
+    <h3 style="margin:18px 0 8px">💡 Gaps de cobertura <span style="font-weight:400;font-size:12px;color:var(--muted)">— clique num gap pra ver quem está sem (maiores CS primeiro)</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div>${gapHTML}`; }
+
 function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) return; const aps=cartApolicesDoCliente(ref);
   const linha=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0"><span style="color:var(--muted)">${l}</span><span style="font-weight:600;text-align:right">${v}</span></div>`:'';
   const cob=c.cob;
+  const dNiver=lpDiasAte(c.nascimento);
+  const rad=cartRadar(ref); const radItens=[];
+  rad.atrasos.forEach(r=>radItens.push({cls:'fx-critico',t:'⏰ Atraso'+(r.dias_atraso!=null?' '+r.dias_atraso+'d':''),s:'apólice '+(r.apolice||'—'),v:'lp-atrasos'}));
+  rad.statust.forEach(r=>{ const f=lpFaixa(r); radItens.push({cls:'fx-'+f.faixa,t:'⏳ Status T · '+FAIXA_LABEL[f.faixa]+(f.dias!=null?(f.dias<0?' ('+Math.abs(f.dias)+'d atrás)':' (em '+f.dias+'d)'):''),s:'apólice '+(r.apolice||r.proposta||'—'),v:'lp-statust'}); });
+  rad.pendencias.forEach(r=>radItens.push({cls:'fx-alerta',t:'📋 Pendência de emissão',s:r.pendencia||('proposta '+(r.proposta||'—')),v:'lp-pendencias'}));
+  rad.datas.forEach(r=>{ const d=lpDiasAte(r.data_emissao?String(r.data_emissao).slice(5):null); if(d!=null&&d<=JANELA_DIAS) radItens.push({cls:'fx-atencao',t:'📅 Aniversário de apólice em '+d+'d',s:'apólice '+(r.apolice||'—'),v:'lp-datas'}); });
+  const radHTML=radItens.length?`<h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">📡 No relatório da semana</h3>
+    ${radItens.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:6px">
+      <div><span class="fx ${i.cls}">${i.t}</span><div style="font-size:11.5px;color:var(--muted);margin-top:3px">${esc(i.s)}</div></div>
+      <button class="btn btn-s btn-mini" onclick="fecharDrawer();irPara('${i.v}')">abrir</button></div>`).join('')}`:'';
+  const gaps=cartGaps(c);
   const apsHTML=aps.length?aps.map(a=>`<div style="border:1px solid var(--linha);border-radius:10px;padding:10px;margin-top:8px">
     <div style="display:flex;justify-content:space-between;align-items:center"><b>Apólice ${esc(a.apolice||a.proposta||'—')}</b><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--verde-claro,#e6f6ec);color:var(--verde,#1a7f42)">${esc(a.status)}</span></div>
     ${a.respPagto&&normKey(a.respPagto)!==ref?`<div style="font-size:12px;color:#a06a00;margin-top:4px">💳 pago por ${esc(a.respPagto)}</div>`:''}
     <div style="font-size:12px;color:var(--muted);margin-top:4px">Prêmio R$ ${cartFmt(a.premio)} · ${esc(a.periodicidade||'—')} · ${esc(a.forma||'—')}${a.proposta?' · prop. '+esc(a.proposta):''}</div></div>`).join(''):'<div style="color:var(--muted);margin-top:8px">Sem apólices ativas ligadas.</div>';
   $('#drawer').innerHTML=`<div style="padding:18px">
     <div style="display:flex;justify-content:space-between;align-items:start"><h2 style="margin:0">${esc(c.nome)}</h2><button onclick="fecharDrawer()" style="border:none;background:none;font-size:22px;cursor:pointer;line-height:1">×</button></div>
-    <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}</div>
+    <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}${dNiver!=null&&dNiver<=30?` · <span class="dias-tag ${diasTagCls(dNiver)}">🎂 ${dNiver===0?'hoje!':'em '+dNiver+'d'}</span>`:''}</div>
     <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}</div>
+    ${radHTML}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
     <div style="font-size:13px">${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
+    ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`:''}
     ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Apólices (${aps.length})</h3>${apsHTML}</div>`;
   $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
@@ -1553,10 +1642,12 @@ function openCarteiraImport(){
 
 function render(){
   renderTopo(); lpCounts(); renderNnEtapas();
-  { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||''; }
+  { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
+    const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
   if(VIEW==='inicio') viewInicio();
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
+  else if(VIEW==='cart-oportunidades') viewCartOportunidades();
   else if(VIEW==='nn-funil') viewNnFunil();
   else if(VIEW==='contatos') viewContatos();
   else if(VIEW==='planos') viewPlanos();
