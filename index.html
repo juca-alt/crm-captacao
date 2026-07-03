@@ -2258,7 +2258,7 @@ function openInboxPaste(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:940px;max-width:96vw">
     <h2>🔄 Sincronizar do LinkedIn</h2>
-    <p class="hint">Colo sozinho o que a extensão copiou (<b>não é link</b> — é o que o botão 🔄 Sincronizar tudo copiou: lista + fotos + históricos). Reviso cada conversa: o que <b>cria novo</b> e o que <b>atualiza</b> um lead existente, com status e telefone sugeridos. Os <b>históricos</b> entram automático casando pelo nome. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
+    <p class="hint">Colo sozinho o que a extensão copiou (<b>não é link</b> — é o que o botão 🔄 Sincronizar tudo copiou: lista + fotos + históricos). Reviso cada conversa: o que <b>cria novo</b> e o que <b>atualiza</b> um lead existente — casando por <b>LinkedIn, telefone e nome</b> — com status e telefone sugeridos. Nomes só <i>parecidos</i> criam novo e ficam marcados pra resolver em <b>Duplicatas</b>. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
     <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
     <div id="ibp-sum"></div>
     <div id="ibp-table" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
@@ -2276,10 +2276,15 @@ function openInboxPaste(){
   const statusOptsG=sel=>ETAPAS.map(e=>`<optgroup label="${esc(ETAPA_LABEL[e]||e)}">`+STATUS_BY_ETAPA[e].map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('')+`</optgroup>`).join('');
   let rows=[]; let PARSED_THREADS=null;
   function build(conv){
+    const idx=leadIndexes();
     rows=conv.map(c=>{
-      const l=byName.get(normName(c.nome))||null;
+      const rawUrl=c.url||c.linkedin_url||c.perfil||c.link||''; // leitura defensiva do payload da extensão
       const responded=c.de_mim===false;
       const newPhone=extractPhone(c.ultima_msg);
+      // identidade: chave forte (LinkedIn/telefone) ou nome exato = mesmo lead; só nome parecido = sugestão
+      const m=findLeadMatch({nome:c.nome,linkedin_url:rawUrl,telefone:newPhone},idx);
+      const l=(m&&m.confident?m.lead:null)||byName.get(normName(c.nome))||null;
+      const sug=(!l&&m&&!m.confident)?m.lead:null;
       const phone=newPhone||(l&&l.telefone)||'';
       let status;
       if(l){ if(responded&&newPhone) status='1a Abordagem';
@@ -2288,7 +2293,7 @@ function openInboxPaste(){
       else { if(newPhone) status='Convite Aceito (c/ telefone)';
         else if(responded) status='Convite Aceito (s/ telefone)';
         else status='Aguardando Qualificacao'; }
-      return {c,l,action:l?'atualizar':'criar',status,phone,resp:(l&&l.responsavel)||MY_NAME,include:true};
+      return {c,l,sug,url:rawUrl,action:l?'atualizar':'criar',status,phone,resp:(l&&l.responsavel)||MY_NAME,include:true};
     });
     renderTable();
   }
@@ -2304,7 +2309,7 @@ function openInboxPaste(){
     const head=`<tr><th style="width:26px"></th><th>Lead</th><th>Conversa</th><th>Ação</th><th>Status</th><th>Telefone</th><th>Resp.</th></tr>`;
     const body=rows.map((r,i)=>`<tr style="${r.include?'':'opacity:.4'}">
       <td><input type="checkbox" class="cbx" data-chk="${i}" ${r.include?'checked':''}></td>
-      <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}</td>
+      <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}${r.sug&&!r.l?` <span class="flag warn" title="Nome parecido com lead existente — resolva depois em Duplicatas">≈ ${esc(r.sug.nome)}</span>`:''}</td>
       <td style="max-width:230px"><div class="lead-cargo" style="white-space:normal">${r.c.de_mim===false?'<b style="color:#16a34a">respondeu:</b> ':''}"${esc((r.c.ultima_msg||'').slice(0,80))}"</div></td>
       <td><span class="due ${r.action==='criar'?'soon':'ok'}">${r.action}</span></td>
       <td><select class="fsel" data-st="${i}" style="max-width:175px">${statusOptsG(r.status)}</select></td>
@@ -2339,30 +2344,43 @@ function openInboxPaste(){
   $('#ibp-go').onclick=async()=>{
     const sel=rows.filter(r=>r.include); if(!sel.length)return;
     $('#ibp-go').disabled=true; $('#ibp-msg').textContent='Sincronizando…';
-    const now=new Date().toISOString(); let criados=0,atualizados=0,erros=0;
+    const now=new Date().toISOString(); let criados=0,atualizados=0,erros=0,sugCriados=0;
+    const batchByName=new Map(); // guarda intra-lote: mesma pessoa 2× no mesmo paste → 2ª atualiza
     for(const r of sel){
       const ph=r.phone?normPhone(r.phone):{telefone:null,e164:null};
       const inbox={inbox_ultima_msg:(r.c.ultima_msg||'').slice(0,300),inbox_de_mim:!!r.c.de_mim,inbox_quando:r.c.quando||null,inbox_nao_lida:!!r.c.nao_lida,inbox_hot:!!r.c.hot,inbox_sync:now};
-      if(r.action==='criar'){
-        const rec=Object.assign({nome:r.c.nome,primeiro_nome:firstName(r.c.nome),status:r.status,responsavel:r.resp,origem:'LinkedIn'},inbox);
-        if(ph.telefone){rec.telefone=ph.telefone;rec.telefone_e164=ph.e164;}
-        if(r.c.foto)rec.foto_url=r.c.foto;                       // foto da lista do LinkedIn
-        const {data,error}=await sb.from('leads').insert(rec).select().single();
-        if(error){erros++;} else {LEADS.push(data);criados++;}
-      }else{
+      const updRec=(l)=>{ // atualizar lead existente (match forte, intra-lote ou corrida)
         const patch=Object.assign({status:r.status},inbox);
         if(ph.telefone){patch.telefone=ph.telefone;patch.telefone_e164=ph.e164;}
-        if(r.c.foto && !(r.l&&r.l.foto_url))patch.foto_url=r.c.foto;  // sync em massa: SÓ preenche quem está sem foto (não sobrescreve)
-        if(await updateLead(r.l.id,patch))atualizados++; else erros++;
+        if(r.url && !l.linkedin_url){patch.linkedin_url=r.url;}
+        if(r.c.foto && !l.foto_url)patch.foto_url=r.c.foto;  // sync em massa: SÓ preenche quem está sem foto (não sobrescreve)
+        return updateLead(l.id,patch);
+      };
+      const nk=fuzzyNameKey(r.c.nome);
+      const batchHit=(r.action==='criar'&&nk)?batchByName.get(nk):null;
+      if(r.action==='criar'&&!batchHit){
+        const rec=Object.assign({nome:r.c.nome,status:r.status,responsavel:r.resp,origem:'LinkedIn'},inbox);
+        if(ph.telefone){rec.telefone=ph.telefone;rec.telefone_e164=ph.e164;}
+        if(r.url){rec.linkedin_url=r.url;} // fecha a brecha: criado com a chave de dedupe
+        if(r.c.foto)rec.foto_url=r.c.foto;                       // foto da lista do LinkedIn
+        const res=await insertLead(rec);
+        if(res.status==='created'){ criados++; if(r.sug)sugCriados++; if(nk)batchByName.set(nk,res.lead); }
+        else if(res.status==='duplicate'&&res.existing){ if(await updRec(res.existing))atualizados++; else erros++; }
+        else erros++;
+      }else{
+        const alvo=batchHit||r.l;
+        if(await updRec(alvo))atualizados++; else erros++;
       }
     }
     // históricos completos (payload tipo:sync) — casa por nome e grava o thread
     let hist=0;
     if(Array.isArray(PARSED_THREADS)&&PARSED_THREADS.length){
-      const map=new Map(); LEADS.forEach(l=>{const k=normName(l.nome); if(!map.has(k))map.set(k,l);});
+      // exato (normName) primeiro; fuzzy só onde não colide — superset do comportamento antigo
+      const map=new Map(), mapF=new Map();
+      LEADS.forEach(l=>{const k=normName(l.nome); if(!map.has(k))map.set(k,l); const f=fuzzyNameKey(l.nome); if(f&&!mapF.has(f))mapF.set(f,l);});
       for(const t of PARSED_THREADS){
         if(!t||!Array.isArray(t.mensagens)||!t.mensagens.length)continue;
-        const l=map.get(normName(t.contato||'')); if(!l)continue;
+        const l=map.get(normName(t.contato||''))||mapF.get(fuzzyNameKey(t.contato||'')); if(!l)continue;
         const msgs=t.mensagens.map(m=>({de_mim:!!m.de_mim,texto:String(m.texto||'').slice(0,4000),quando:String(m.quando||'').slice(0,40)})).filter(m=>m.texto);
         if(!msgs.length)continue;
         const last=msgs[msgs.length-1];
@@ -2371,7 +2389,10 @@ function openInboxPaste(){
       }
     }
     toast(`Sincronizado · ${criados} criados, ${atualizados} atualizados${hist?', '+hist+' históricos':''}${erros?', '+erros+' erro(s)':''}`);
-    ov.remove(); render();
+    ov.remove();
+    // criações com nome parecido de lead existente → resolve na tela Duplicatas (decisão fica lá)
+    if(sugCriados&&uiAdmin()&&can('pode_duplicatas')&&confirm(`${sugCriados} lead(s) criado(s) têm nome parecido com leads existentes.\nAbrir a tela Duplicatas pra revisar/unificar agora?`)){ VIEW='dup'; }
+    render();
   };
   setTimeout(()=>$('#ibp-raw').focus(),50);
   if(navigator.clipboard&&navigator.clipboard.readText){
