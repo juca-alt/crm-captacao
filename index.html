@@ -1277,6 +1277,48 @@ function flagsHTML(l){
 function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].split('#')[0].replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
 function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replace(/\D/g,'');if(d.startsWith('55')&&d.length>11)d=d.slice(2);if(d.length===11)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`,e164:`+55${d}`};if(d.length===10)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`,e164:`+55${d}`};return{telefone:raw,e164:null};}
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
+// ===== IDENTIDADE / DEDUPE (v2.6) =====
+function normEmail(e){ e=(e||'').trim().toLowerCase(); return /@/.test(e)?e:null; }
+// Chave de nome p/ SUGESTÃO apenas — nunca bloqueia (homônimos existem). Mais agressiva
+// que normName: corta sufixos ("| MBA", ", CFP"), emojis, pontuação e honoríficos iniciais.
+function fuzzyNameKey(s){
+  let n=normName(s);
+  n=n.split(/[|·,(]/)[0];
+  n=n.replace(/\p{Extended_Pictographic}/gu,'')
+     .replace(/[^a-z0-9 ]/g,' ')
+     .replace(/^(dr|dra|prof|eng|adv|sr|sra)\s+/,'')
+     .replace(/\s+/g,' ').trim();
+  return n;
+}
+// "primeiro + último" nome — casa variações de nome do meio (Ana Souza ≈ Ana Maria Souza)
+function firstLastKey(s){ const p=fuzzyNameKey(s).split(' ').filter(Boolean); return p.length>=2?(p[0]+' '+p[p.length-1]):null; }
+// Índices sobre o array canônico LEADS (reconstruir por lote; barato p/ alguns milhares)
+function leadIndexes(){
+  const idx={url:new Map(),tel:new Map(),email:new Map(),name:new Map(),fl:new Map()};
+  for(const l of LEADS){
+    if(l.linkedin_url_norm&&!idx.url.has(l.linkedin_url_norm))idx.url.set(l.linkedin_url_norm,l);
+    if(l.telefone_e164&&!idx.tel.has(l.telefone_e164))idx.tel.set(l.telefone_e164,l);
+    const em=normEmail(l.email); if(em&&!idx.email.has(em))idx.email.set(em,l);
+    const nk=fuzzyNameKey(l.nome); if(nk&&!idx.name.has(nk))idx.name.set(nk,l);
+    const fk=firstLastKey(l.nome); if(fk&&!idx.fl.has(fk))idx.fl.set(fk,l);
+  }
+  return idx;
+}
+// Resolução de identidade: linkedin_url_norm → telefone_e164 → email → nome.
+// Chave forte = {confident:true} (é o mesmo lead). Nome = {confident:false} (sugestão).
+function findLeadMatch(c,idx){
+  idx=idx||leadIndexes();
+  const u=c.linkedin_url_norm||normUrl(c.linkedin_url||'');
+  if(u&&idx.url.has(u))   return {lead:idx.url.get(u),  key:'linkedin', confident:true};
+  const t=c.telefone_e164||normPhone(c.telefone||'').e164;
+  if(t&&idx.tel.has(t))   return {lead:idx.tel.get(t),  key:'telefone', confident:true};
+  const e=normEmail(c.email);
+  if(e&&idx.email.has(e)) return {lead:idx.email.get(e),key:'email',    confident:true};
+  const nk=fuzzyNameKey(c.nome||''), fk=firstLastKey(c.nome||'');
+  const byN=(nk&&idx.name.get(nk))||(fk&&idx.fl.get(fk))||null;
+  return byN?{lead:byN,key:'nome',confident:false}:null;
+}
+const DUP_KEY_LABEL={linkedin:'LinkedIn',telefone:'telefone',email:'e-mail',nome:'nome'};
 const MSG_TPL_DEFAULT=[
   {nome:'Recomendação (WhatsApp)',texto:'Me chamo Gustavo Jucá. Não nos conhecemos ainda. Quem me passou seu telefone foi {{recomendante}}. Ela me recomendou seu nome a respeito de uma oportunidade profissional. Posso retornar para passar mais detalhes?'},
   {nome:'Conexão LinkedIn',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}
@@ -1368,6 +1410,62 @@ async function updateLead(id,patch){
   const i=LEADS.findIndex(l=>l.id===id);
   if(i>=0){Object.assign(LEADS[i],patch); if(patch.status) LEADS[i].etapa=STATUS_ETAPA[patch.status];}
   return true;
+}
+// Espelho do updateLead p/ CRIAÇÃO — todo caminho que cria lead passa aqui.
+// opts: { dedupe:true (default) | false,  idx: leadIndexes() pré-montado (lotes) }
+// retorna: {status:'created',lead} | {status:'duplicate',key,existing} | {status:'error',message,code}
+async function insertLead(rec,opts){
+  opts=opts||{};
+  // 1) campos derivados — mesma régua do updateLead
+  if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
+  if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
+  if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
+  if(rec.email) rec.email=rec.email.trim()||null;
+  // 2) dedupe ANTES do insert (só chaves fortes bloqueiam; nome nunca)
+  if(opts.dedupe!==false){
+    const m=findLeadMatch(rec,opts.idx);
+    if(m&&m.confident) return {status:'duplicate',key:m.key,existing:m.lead};
+  }
+  // 3) insert + tradução amigável do 23505 (índices UNIQUE do banco = último backstop)
+  const {data,error}=await sb.from('leads').insert(rec).select().single();
+  if(error){
+    if(error.code==='23505'){
+      const d=(error.details||error.message||'');
+      const key=/linkedin/i.test(d)?'linkedin':/telefone|e164/i.test(d)?'telefone':/email/i.test(d)?'email':'linkedin';
+      const existing=key==='linkedin'?LEADS.find(l=>l.linkedin_url_norm===rec.linkedin_url_norm)
+                    :key==='telefone'?LEADS.find(l=>l.telefone_e164===rec.telefone_e164)
+                    :LEADS.find(l=>normEmail(l.email)&&normEmail(l.email)===normEmail(rec.email));
+      return {status:'duplicate',key,existing:existing||null};
+    }
+    return {status:'error',message:error.message||'falha ao criar lead',code:error.code};
+  }
+  LEADS.push(data);
+  return {status:'created',lead:data};
+}
+// Lote (captura múltipla / import CSV): dedupe prévio + guarda intra-lote, insere em
+// chunks de 200 com fallback linha a linha. retorna {created:[leads],dup,fail}
+async function insertLeadsBatch(recs){
+  const idx=leadIndexes(); const seen=new Set(); const toInsert=[]; let dup=0,fail=0; const created=[];
+  for(const rec of recs){
+    if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
+    if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
+    if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
+    if(rec.email) rec.email=rec.email.trim()||null;
+    const keys=[rec.linkedin_url_norm,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
+    const m=findLeadMatch(rec,idx);
+    if((m&&m.confident) || keys.some(k=>seen.has(k))){ dup++; continue; }
+    keys.forEach(k=>seen.add(k)); toInsert.push(rec);
+  }
+  for(let i=0;i<toInsert.length;i+=200){
+    const batch=toInsert.slice(i,i+200);
+    const {data,error}=await sb.from('leads').insert(batch).select();
+    if(!error){ (data||[]).forEach(x=>{LEADS.push(x);created.push(x);}); continue; }
+    for(const row of batch){ // lote colidiu (corrida/23505) → linha a linha via choke point
+      const r=await insertLead(row,{dedupe:false});
+      if(r.status==='created')created.push(r.lead); else if(r.status==='duplicate')dup++; else fail++;
+    }
+  }
+  return {created,dup,fail};
 }
 
 // ===== FILTERING (funil/lista) =====
