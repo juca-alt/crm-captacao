@@ -1402,7 +1402,9 @@ async function updateLead(id,patch){
   if(patch.status==='Convite Enviado' && _cur && !_cur.convite_enviado_em && !('convite_enviado_em' in patch)) patch.convite_enviado_em=new Date().toISOString();
   const {error}=await sb.from('leads').update(patch).eq('id',id);
   if(error){
-    if(/acompanhar_victor|prioridade|column|schema cache/i.test(error.message))
+    if(error.code==='23505')
+      toast('Esse LinkedIn/telefone/e-mail já pertence a outro lead — verifique em Duplicatas.');
+    else if(/acompanhar_victor|prioridade|column|schema cache/i.test(error.message))
       toast('Recurso novo: rode migration_v1_5.sql no Supabase pra liberar.');
     else toast('Erro: '+(error.message||'falha ao salvar (sem detalhe)'));
     return false;
@@ -3670,10 +3672,10 @@ function openImport(){
 // ===== DUPLICATAS + UNIFICAR =====
 const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
 function dupGroups(){
-  const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const byKey={};
   const add=(k,l,kind)=>{ if(!k) return; const id=kind+'::'+k; (byKey[id]=byKey[id]||{kind,leads:[]}).leads.push(l); };
-  for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(norm(l.nome),l,'Nome'); }
+  // nome usa fuzzyNameKey/firstLastKey: pega "🔥 Dr. João Silva" vs "João Silva" (ex.: criados pelo sync do inbox)
+  for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(normEmail(l.email),l,'E-mail'); add(fuzzyNameKey(l.nome),l,'Nome'); add(firstLastKey(l.nome),l,'Nome'); }
   const groups=[]; const seen=new Set();
   for(const k in byKey){
     const uniq=[...new Map(byKey[k].leads.map(l=>[l.id,l])).values()];
@@ -3729,7 +3731,7 @@ async function applyMerge(g,keep,patch){
 function dupHTML(){
   const groups=dupGroups();
   if(!groups.length) return '<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone e nome.</div></div>';
-  return `<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone ou nome). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
+  return `<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone, e-mail ou nome aproximado). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
   <div class="filters" style="margin-bottom:10px;gap:12px;align-items:center">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="dup-all"> Selecionar todos</label>
     <span class="muted" id="dup-count" style="font-size:13px">0 selecionados</span>
@@ -4754,7 +4756,7 @@ async function mLoadReport(){
 }
 function mDup(){
   var groups=[]; try{ groups=dupGroups()||[]; }catch(e){ groups=[]; }
-  var warn='<div style="display:flex;align-items:flex-start;gap:10px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:14px;padding:14px 16px;margin-bottom:18px"><span style="font-size:18px">🔎</span><div style="font-size:13px;color:#9A3412;line-height:1.45"><strong>'+groups.length+' possíveis duplicatas</strong> (mesmo LinkedIn, telefone ou nome). Unifique em lote ou revise campo a campo.</div></div>';
+  var warn='<div style="display:flex;align-items:flex-start;gap:10px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:14px;padding:14px 16px;margin-bottom:18px"><span style="font-size:18px">🔎</span><div style="font-size:13px;color:#9A3412;line-height:1.45"><strong>'+groups.length+' possíveis duplicatas</strong> (mesmo LinkedIn, telefone, e-mail ou nome aproximado). Unifique em lote ou revise campo a campo.</div></div>';
   if(!groups.length) return warn+'<div class="m-empty">Nenhuma duplicata detectada ✓</div>';
   var unify='<button id="m-dup-unify" style="width:100%;height:46px;border:none;border-radius:13px;background:#2F5BF6;color:#fff;font-size:14.5px;font-weight:800;cursor:pointer;margin-bottom:18px">⚡ Unificar selecionados (auto)</button>';
   var list='<div style="display:flex;flex-direction:column;gap:11px">'+groups.slice(0,80).map(function(g){
