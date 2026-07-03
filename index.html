@@ -3560,29 +3560,20 @@ function openCapturaMulti(leads, meta){
   updateCount();
   $('#cm-save').onclick=async()=>{
     const shared={origemKey:ORIG,responsavel:$('#cm-resp').value,recomendante:($('#cm-rec')&&$('#cm-rec').value.trim())||null};
-    const existsUrl=new Set(LEADS.map(l=>l.linkedin_url_norm).filter(Boolean));
-    const existsTel=new Set(LEADS.map(l=>l.telefone_e164).filter(Boolean));
-    const seen=new Set(); const toInsert=[]; let dup=0;
+    const recs=[];
     document.querySelectorAll('.cm-row').forEach(row=>{
       const chk=row.querySelector('.cm-chk'); if(!chk.checked)return;
       const i=+row.dataset.i;
       const d=Object.assign({},leads[i],{nome:row.querySelector('.cm-nome').value.trim(),telefone:row.querySelector('.cm-tel').value.trim()});
       if(!d.nome)return;
-      const rec=recFromCaptura(d,shared);
-      const kU=rec.linkedin_url_norm, kT=rec.telefone_e164;
-      if((kU&&(existsUrl.has(kU)||seen.has(kU)))||(kT&&(existsTel.has(kT)||seen.has(kT)))){dup++;return;}
-      if(kU)seen.add(kU); if(kT)seen.add(kT);
-      toInsert.push(rec);
+      recs.push(recFromCaptura(d,shared));
     });
-    if(!toInsert.length){ $('#cm-msg').textContent='Nada novo pra salvar'+(dup?' ('+dup+' já existiam)':'')+'.'; return; }
+    if(!recs.length){ $('#cm-msg').textContent='Nada pra salvar.'; return; }
     $('#cm-save').disabled=true; $('#cm-save').textContent='Salvando…';
-    let ok=0,fail=0;
-    for(let i=0;i<toInsert.length;i+=200){
-      const batch=toInsert.slice(i,i+200);
-      const {data,error}=await sb.from('leads').insert(batch).select();
-      if(error){ for(const row of batch){ const r=await sb.from('leads').insert(row).select(); if(!r.error){ok++; if(r.data&&r.data[0])LEADS.push(r.data[0]);} else if(r.error.code==='23505'){dup++;} else fail++; } }
-      else { ok+=(data||[]).length; (data||[]).forEach(x=>LEADS.push(x)); }
-    }
+    // dedupe (LinkedIn/telefone/e-mail + intra-lote) centralizado no insertLeadsBatch
+    const {created,dup,fail}=await insertLeadsBatch(recs);
+    const ok=created.length;
+    if(!ok&&dup&&!fail){ $('#cm-msg').textContent='Nada novo pra salvar ('+dup+' já existiam).'; $('#cm-save').disabled=false; updateCount(); return; }
     toast('✨ '+ok+' lead'+(ok===1?'':'s')+' salvo'+(ok===1?'':'s')+(dup?' · '+dup+' duplicado'+(dup===1?'':'s'):'')+(fail?' · '+fail+' falhou':''));
     ov.remove(); render();
   };
@@ -3593,7 +3584,7 @@ function openImport(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:560px">
     <h2>⬆ Atualizar base de dados</h2>
-    <p class="hint">Importe leads de um <b>CSV</b>. Eu confiro <b>duplicatas</b> (pelo LinkedIn) e <b>erros</b> e mostro a prévia — só grava no seu clique. Colunas aceitas: nome, cargo, empresa, sexo, idade, renda, telefone, email, linkedin, status, observacoes. Só <b>nome</b> é obrigatório.</p>
+    <p class="hint">Importe leads de um <b>CSV</b>. Eu confiro <b>duplicatas</b> (pelo LinkedIn, telefone e e-mail) e <b>erros</b> e mostro a prévia — só grava no seu clique. Colunas aceitas: nome, cargo, empresa, sexo, idade, renda, telefone, email, linkedin, status, observacoes. Só <b>nome</b> é obrigatório.</p>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
       <input type="file" id="imp-file" accept=".csv,text/csv"/>
       <a id="imp-tpl" class="muted" style="cursor:pointer;text-decoration:underline;font-size:12px">baixar modelo CSV</a>
@@ -3617,15 +3608,18 @@ function openImport(){
     const f=e.target.files[0];if(!f)return;
     Papa.parse(f,{header:true,skipEmptyLines:true,complete:res=>{
       const rows=res.data;toInsert=[];let dup=0,err=0;const seen=new Set();
-      const existing=new Set(LEADS.map(l=>l.linkedin_url_norm).filter(Boolean));
+      const idx=leadIndexes(); // prévia usa as MESMAS chaves do insertLeadsBatch (url/tel/e-mail)
       for(const r of rows){
         const nome=pick(r,['nome','name']).trim();
         if(!nome){err++;continue;}
         const url=pick(r,['linkedin','linkedin_url','url']).trim();
         const norm=normUrl(url);
-        if(norm&&(existing.has(norm)||seen.has(norm))){dup++;continue;}
-        if(norm)seen.add(norm);
         const ph=normPhone(pick(r,['telefone','phone','tel']));
+        const em=normEmail(pick(r,['email','e-mail']));
+        const keys=[norm,ph.e164,em].filter(Boolean);
+        const m=findLeadMatch({linkedin_url_norm:norm,telefone_e164:ph.e164,email:em},idx);
+        if((m&&m.confident)||keys.some(k=>seen.has(k))){dup++;continue;}
+        keys.forEach(k=>seen.add(k));
         let status=pick(r,['status']).trim();if(!ALL_STATUS.includes(status))status='Aguardando Qualificacao';
         const renda=pick(r,['renda','renda_estimada']).replace(/[^\d]/g,'');
         const idade=pick(r,['idade','faixa_idade']).replace(/[^\d]/g,'');
@@ -3646,14 +3640,8 @@ function openImport(){
   };
   $('#imp-go').onclick=async()=>{
     $('#imp-go').disabled=true;$('#imp-go').textContent='Importando...';
-    let ok=0,fail=0;
-    for(let i=0;i<toInsert.length;i+=200){
-      const batch=toInsert.slice(i,i+200);
-      const {data,error}=await sb.from('leads').insert(batch).select();
-      if(error){for(const row of batch){const r=await sb.from('leads').insert(row).select();if(!r.error)ok++;else if(r.error.code==='23505'){/* viola chave única = já existe; não duplica nem conta como falha */}else fail++;}}
-      else ok+=(data||[]).length;
-    }
-    toast(`Importados ${ok} leads`+(fail?` · ${fail} falharam`:''));
+    const {created,dup,fail}=await insertLeadsBatch(toInsert);
+    toast(`Importados ${created.length} leads`+(dup?` · ${dup} duplicados pulados`:'')+(fail?` · ${fail} falharam`:''));
     await loadLeads();ov.remove();
   };
 }
