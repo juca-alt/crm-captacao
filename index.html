@@ -3319,10 +3319,17 @@ function openNovo(mine,prefill){
   };
   $('#n-cargo').oninput=updateTriage; $('#n-empresa').oninput=updateTriage;
   $('#n-renda').oninput=()=>{rendaTouched=true; updateTriage();};
+  let nameConfirmKey=null; // two-click: 1º clique avisa nome parecido, 2º confirma
   $('#n-save').onclick=async()=>{
     const nome=$('#n-nome').value.trim(); if(!nome){toast('Informe o nome');return;}
     const url=$('#n-raw').dataset.url||'';const norm=normUrl(url);
-    if(norm&&LEADS.some(l=>l.linkedin_url_norm===norm)){$('#n-dup').textContent='⚠ Já existe um lead com esse LinkedIn.';return;}
+    const m=findLeadMatch({nome,linkedin_url:url,telefone:$('#n-tel').value,email:($('#n-email')&&$('#n-email').value)||''});
+    if(m&&m.confident){$('#n-dup').textContent=`⚠ Já existe: ${m.lead.nome} — mesmo ${DUP_KEY_LABEL[m.key]}${m.lead.codigo?' ('+m.lead.codigo+')':''}.`;return;}
+    if(m&&!m.confident&&nameConfirmKey!==fuzzyNameKey(nome)){
+      nameConfirmKey=fuzzyNameKey(nome);
+      $('#n-dup').textContent=`⚠ Nome parecido com lead existente: ${m.lead.nome}${m.lead.codigo?' ('+m.lead.codigo+')':''}. Clique Salvar de novo para criar mesmo assim.`;
+      return;
+    }
     const ph=normPhone($('#n-tel').value);
     const flags=ph.telefone&&!ph.e164&&$('#n-tel').value?['SEM_DDD']:[];
     if(curSeguros) flags.push('SEGUROS?');
@@ -3336,9 +3343,10 @@ function openNovo(mine,prefill){
       origem:({linkedin:'LinkedIn',lp:'Rec LP',ot:'Rec OT',direta:'Abordagem Direta',reccli:'Rec Cliente',recfam:'Rec Familiar',instagram:'Instagram',facebook:'Facebook'})[ORIG],
       email:($('#n-email')&&$('#n-email').value.trim())||null,
       recomendante:(['lp','ot','reccli','recfam'].includes(ORIG)&&$('#n-rec')?($('#n-rec').value.trim()||null):null)};
-    const {data,error}=await sb.from('leads').insert(rec).select().single();
-    if(error){$('#n-dup').textContent=(error.code==='23505')?'⚠ Já existe um lead com esse LinkedIn/telefone.':'Erro: '+error.message;return;}
-    LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
+    const r=await insertLead(rec,{dedupe:false}); // dedupe já feito acima (com two-click de nome)
+    if(r.status==='duplicate'){$('#n-dup').textContent=`⚠ Já existe: ${r.existing?r.existing.nome:'outro lead'} — mesmo ${DUP_KEY_LABEL[r.key]}.`;return;}
+    if(r.status==='error'){$('#n-dup').textContent='Erro: '+r.message;return;}
+    toast('Lead adicionado: '+firstName(nome));nameConfirmKey=null;
     if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda','n-bairro','n-obs','n-email'].forEach(i=>{const el=$('#'+i);if(el){el.value='';delete el.dataset.url;}});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
     else{ov.remove();render();}
   };
