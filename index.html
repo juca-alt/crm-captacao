@@ -936,7 +936,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.5.3 · recomendações navegáveis';
+const APP_VERSION = 'v2.6 · controle de ID + dedupe';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1277,6 +1277,48 @@ function flagsHTML(l){
 function normUrl(u){if(!u)return null;u=u.trim().toLowerCase().split('?')[0].split('#')[0].replace(/^https?:\/\//,'').replace(/^www\./,'').replace(/\/overlay.*$/,'').replace(/\/details.*$/,'');if(!u.endsWith('/'))u+='/';return u;}
 function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replace(/\D/g,'');if(d.startsWith('55')&&d.length>11)d=d.slice(2);if(d.length===11)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`,e164:`+55${d}`};if(d.length===10)return{telefone:`(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`,e164:`+55${d}`};return{telefone:raw,e164:null};}
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
+// ===== IDENTIDADE / DEDUPE (v2.6) =====
+function normEmail(e){ e=(e||'').trim().toLowerCase(); return /@/.test(e)?e:null; }
+// Chave de nome p/ SUGESTÃO apenas — nunca bloqueia (homônimos existem). Mais agressiva
+// que normName: corta sufixos ("| MBA", ", CFP"), emojis, pontuação e honoríficos iniciais.
+function fuzzyNameKey(s){
+  let n=normName(s);
+  n=n.split(/[|·,(]/)[0];
+  n=n.replace(/\p{Extended_Pictographic}/gu,'')
+     .replace(/[^a-z0-9 ]/g,' ')
+     .replace(/^(dr|dra|prof|eng|adv|sr|sra)\s+/,'')
+     .replace(/\s+/g,' ').trim();
+  return n;
+}
+// "primeiro + último" nome — casa variações de nome do meio (Ana Souza ≈ Ana Maria Souza)
+function firstLastKey(s){ const p=fuzzyNameKey(s).split(' ').filter(Boolean); return p.length>=2?(p[0]+' '+p[p.length-1]):null; }
+// Índices sobre o array canônico LEADS (reconstruir por lote; barato p/ alguns milhares)
+function leadIndexes(){
+  const idx={url:new Map(),tel:new Map(),email:new Map(),name:new Map(),fl:new Map()};
+  for(const l of LEADS){
+    if(l.linkedin_url_norm&&!idx.url.has(l.linkedin_url_norm))idx.url.set(l.linkedin_url_norm,l);
+    if(l.telefone_e164&&!idx.tel.has(l.telefone_e164))idx.tel.set(l.telefone_e164,l);
+    const em=normEmail(l.email); if(em&&!idx.email.has(em))idx.email.set(em,l);
+    const nk=fuzzyNameKey(l.nome); if(nk&&!idx.name.has(nk))idx.name.set(nk,l);
+    const fk=firstLastKey(l.nome); if(fk&&!idx.fl.has(fk))idx.fl.set(fk,l);
+  }
+  return idx;
+}
+// Resolução de identidade: linkedin_url_norm → telefone_e164 → email → nome.
+// Chave forte = {confident:true} (é o mesmo lead). Nome = {confident:false} (sugestão).
+function findLeadMatch(c,idx){
+  idx=idx||leadIndexes();
+  const u=c.linkedin_url_norm||normUrl(c.linkedin_url||'');
+  if(u&&idx.url.has(u))   return {lead:idx.url.get(u),  key:'linkedin', confident:true};
+  const t=c.telefone_e164||normPhone(c.telefone||'').e164;
+  if(t&&idx.tel.has(t))   return {lead:idx.tel.get(t),  key:'telefone', confident:true};
+  const e=normEmail(c.email);
+  if(e&&idx.email.has(e)) return {lead:idx.email.get(e),key:'email',    confident:true};
+  const nk=fuzzyNameKey(c.nome||''), fk=firstLastKey(c.nome||'');
+  const byN=(nk&&idx.name.get(nk))||(fk&&idx.fl.get(fk))||null;
+  return byN?{lead:byN,key:'nome',confident:false}:null;
+}
+const DUP_KEY_LABEL={linkedin:'LinkedIn',telefone:'telefone',email:'e-mail',nome:'nome'};
 const MSG_TPL_DEFAULT=[
   {nome:'Recomendação (WhatsApp)',texto:'Me chamo Gustavo Jucá. Não nos conhecemos ainda. Quem me passou seu telefone foi {{recomendante}}. Ela me recomendou seu nome a respeito de uma oportunidade profissional. Posso retornar para passar mais detalhes?'},
   {nome:'Conexão LinkedIn',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}
@@ -1301,7 +1343,7 @@ function copyMsg(l,anchor){
 }
 function searchMatch(l){
   if(!SEARCH)return true;const q=SEARCH.toLowerCase();
-  return [l.nome,l.empresa,l.cargo,l.recomendante].some(x=>(x||'').toLowerCase().includes(q));
+  return [l.nome,l.empresa,l.cargo,l.recomendante,l.codigo].some(x=>(x||'').toLowerCase().includes(q));
 }
 
 // ===== DATA =====
@@ -1360,7 +1402,9 @@ async function updateLead(id,patch){
   if(patch.status==='Convite Enviado' && _cur && !_cur.convite_enviado_em && !('convite_enviado_em' in patch)) patch.convite_enviado_em=new Date().toISOString();
   const {error}=await sb.from('leads').update(patch).eq('id',id);
   if(error){
-    if(/acompanhar_victor|prioridade|column|schema cache/i.test(error.message))
+    if(error.code==='23505')
+      toast('Esse LinkedIn/telefone/e-mail já pertence a outro lead — verifique em Duplicatas.');
+    else if(/acompanhar_victor|prioridade|column|schema cache/i.test(error.message))
       toast('Recurso novo: rode migration_v1_5.sql no Supabase pra liberar.');
     else toast('Erro: '+(error.message||'falha ao salvar (sem detalhe)'));
     return false;
@@ -1368,6 +1412,62 @@ async function updateLead(id,patch){
   const i=LEADS.findIndex(l=>l.id===id);
   if(i>=0){Object.assign(LEADS[i],patch); if(patch.status) LEADS[i].etapa=STATUS_ETAPA[patch.status];}
   return true;
+}
+// Espelho do updateLead p/ CRIAÇÃO — todo caminho que cria lead passa aqui.
+// opts: { dedupe:true (default) | false,  idx: leadIndexes() pré-montado (lotes) }
+// retorna: {status:'created',lead} | {status:'duplicate',key,existing} | {status:'error',message,code}
+async function insertLead(rec,opts){
+  opts=opts||{};
+  // 1) campos derivados — mesma régua do updateLead
+  if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
+  if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
+  if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
+  if(rec.email) rec.email=rec.email.trim()||null;
+  // 2) dedupe ANTES do insert (só chaves fortes bloqueiam; nome nunca)
+  if(opts.dedupe!==false){
+    const m=findLeadMatch(rec,opts.idx);
+    if(m&&m.confident) return {status:'duplicate',key:m.key,existing:m.lead};
+  }
+  // 3) insert + tradução amigável do 23505 (índices UNIQUE do banco = último backstop)
+  const {data,error}=await sb.from('leads').insert(rec).select().single();
+  if(error){
+    if(error.code==='23505'){
+      const d=(error.details||error.message||'');
+      const key=/linkedin/i.test(d)?'linkedin':/telefone|e164/i.test(d)?'telefone':/email/i.test(d)?'email':'linkedin';
+      const existing=key==='linkedin'?LEADS.find(l=>l.linkedin_url_norm===rec.linkedin_url_norm)
+                    :key==='telefone'?LEADS.find(l=>l.telefone_e164===rec.telefone_e164)
+                    :LEADS.find(l=>normEmail(l.email)&&normEmail(l.email)===normEmail(rec.email));
+      return {status:'duplicate',key,existing:existing||null};
+    }
+    return {status:'error',message:error.message||'falha ao criar lead',code:error.code};
+  }
+  LEADS.push(data);
+  return {status:'created',lead:data};
+}
+// Lote (captura múltipla / import CSV): dedupe prévio + guarda intra-lote, insere em
+// chunks de 200 com fallback linha a linha. retorna {created:[leads],dup,fail}
+async function insertLeadsBatch(recs){
+  const idx=leadIndexes(); const seen=new Set(); const toInsert=[]; let dup=0,fail=0; const created=[];
+  for(const rec of recs){
+    if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
+    if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
+    if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
+    if(rec.email) rec.email=rec.email.trim()||null;
+    const keys=[rec.linkedin_url_norm,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
+    const m=findLeadMatch(rec,idx);
+    if((m&&m.confident) || keys.some(k=>seen.has(k))){ dup++; continue; }
+    keys.forEach(k=>seen.add(k)); toInsert.push(rec);
+  }
+  for(let i=0;i<toInsert.length;i+=200){
+    const batch=toInsert.slice(i,i+200);
+    const {data,error}=await sb.from('leads').insert(batch).select();
+    if(!error){ (data||[]).forEach(x=>{LEADS.push(x);created.push(x);}); continue; }
+    for(const row of batch){ // lote colidiu (corrida/23505) → linha a linha via choke point
+      const r=await insertLead(row,{dedupe:false});
+      if(r.status==='created')created.push(r.lead); else if(r.status==='duplicate')dup++; else fail++;
+    }
+  }
+  return {created,dup,fail};
 }
 
 // ===== FILTERING (funil/lista) =====
@@ -2160,7 +2260,7 @@ function openInboxPaste(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:940px;max-width:96vw">
     <h2>🔄 Sincronizar do LinkedIn</h2>
-    <p class="hint">Colo sozinho o que a extensão copiou (<b>não é link</b> — é o que o botão 🔄 Sincronizar tudo copiou: lista + fotos + históricos). Reviso cada conversa: o que <b>cria novo</b> e o que <b>atualiza</b> um lead existente, com status e telefone sugeridos. Os <b>históricos</b> entram automático casando pelo nome. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
+    <p class="hint">Colo sozinho o que a extensão copiou (<b>não é link</b> — é o que o botão 🔄 Sincronizar tudo copiou: lista + fotos + históricos). Reviso cada conversa: o que <b>cria novo</b> e o que <b>atualiza</b> um lead existente — casando por <b>LinkedIn, telefone e nome</b> — com status e telefone sugeridos. Nomes só <i>parecidos</i> criam novo e ficam marcados pra resolver em <b>Duplicatas</b>. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
     <div class="field"><label>Conversas copiadas (cola aqui se não vier sozinho)</label><textarea id="ibp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
     <div id="ibp-sum"></div>
     <div id="ibp-table" style="max-height:46vh;overflow:auto;margin-top:8px"></div>
@@ -2178,10 +2278,15 @@ function openInboxPaste(){
   const statusOptsG=sel=>ETAPAS.map(e=>`<optgroup label="${esc(ETAPA_LABEL[e]||e)}">`+STATUS_BY_ETAPA[e].map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('')+`</optgroup>`).join('');
   let rows=[]; let PARSED_THREADS=null;
   function build(conv){
+    const idx=leadIndexes();
     rows=conv.map(c=>{
-      const l=byName.get(normName(c.nome))||null;
+      const rawUrl=c.url||c.linkedin_url||c.perfil||c.link||''; // leitura defensiva do payload da extensão
       const responded=c.de_mim===false;
       const newPhone=extractPhone(c.ultima_msg);
+      // identidade: chave forte (LinkedIn/telefone) ou nome exato = mesmo lead; só nome parecido = sugestão
+      const m=findLeadMatch({nome:c.nome,linkedin_url:rawUrl,telefone:newPhone},idx);
+      const l=(m&&m.confident?m.lead:null)||byName.get(normName(c.nome))||null;
+      const sug=(!l&&m&&!m.confident)?m.lead:null;
       const phone=newPhone||(l&&l.telefone)||'';
       let status;
       if(l){ if(responded&&newPhone) status='1a Abordagem';
@@ -2190,7 +2295,7 @@ function openInboxPaste(){
       else { if(newPhone) status='Convite Aceito (c/ telefone)';
         else if(responded) status='Convite Aceito (s/ telefone)';
         else status='Aguardando Qualificacao'; }
-      return {c,l,action:l?'atualizar':'criar',status,phone,resp:(l&&l.responsavel)||MY_NAME,include:true};
+      return {c,l,sug,url:rawUrl,action:l?'atualizar':'criar',status,phone,resp:(l&&l.responsavel)||MY_NAME,include:true};
     });
     renderTable();
   }
@@ -2206,7 +2311,7 @@ function openInboxPaste(){
     const head=`<tr><th style="width:26px"></th><th>Lead</th><th>Conversa</th><th>Ação</th><th>Status</th><th>Telefone</th><th>Resp.</th></tr>`;
     const body=rows.map((r,i)=>`<tr style="${r.include?'':'opacity:.4'}">
       <td><input type="checkbox" class="cbx" data-chk="${i}" ${r.include?'checked':''}></td>
-      <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}</td>
+      <td><div class="lead-name">${r.c.hot?'🔥 ':''}${esc(r.c.nome)}</div>${r.l?'':'<span class="flag warn">novo</span>'}${r.sug&&!r.l?` <span class="flag warn" title="Nome parecido com lead existente — resolva depois em Duplicatas">≈ ${esc(r.sug.nome)}</span>`:''}</td>
       <td style="max-width:230px"><div class="lead-cargo" style="white-space:normal">${r.c.de_mim===false?'<b style="color:#16a34a">respondeu:</b> ':''}"${esc((r.c.ultima_msg||'').slice(0,80))}"</div></td>
       <td><span class="due ${r.action==='criar'?'soon':'ok'}">${r.action}</span></td>
       <td><select class="fsel" data-st="${i}" style="max-width:175px">${statusOptsG(r.status)}</select></td>
@@ -2241,30 +2346,43 @@ function openInboxPaste(){
   $('#ibp-go').onclick=async()=>{
     const sel=rows.filter(r=>r.include); if(!sel.length)return;
     $('#ibp-go').disabled=true; $('#ibp-msg').textContent='Sincronizando…';
-    const now=new Date().toISOString(); let criados=0,atualizados=0,erros=0;
+    const now=new Date().toISOString(); let criados=0,atualizados=0,erros=0,sugCriados=0;
+    const batchByName=new Map(); // guarda intra-lote: mesma pessoa 2× no mesmo paste → 2ª atualiza
     for(const r of sel){
       const ph=r.phone?normPhone(r.phone):{telefone:null,e164:null};
       const inbox={inbox_ultima_msg:(r.c.ultima_msg||'').slice(0,300),inbox_de_mim:!!r.c.de_mim,inbox_quando:r.c.quando||null,inbox_nao_lida:!!r.c.nao_lida,inbox_hot:!!r.c.hot,inbox_sync:now};
-      if(r.action==='criar'){
-        const rec=Object.assign({nome:r.c.nome,primeiro_nome:firstName(r.c.nome),status:r.status,responsavel:r.resp,origem:'LinkedIn'},inbox);
-        if(ph.telefone){rec.telefone=ph.telefone;rec.telefone_e164=ph.e164;}
-        if(r.c.foto)rec.foto_url=r.c.foto;                       // foto da lista do LinkedIn
-        const {data,error}=await sb.from('leads').insert(rec).select().single();
-        if(error){erros++;} else {LEADS.push(data);criados++;}
-      }else{
+      const updRec=(l)=>{ // atualizar lead existente (match forte, intra-lote ou corrida)
         const patch=Object.assign({status:r.status},inbox);
         if(ph.telefone){patch.telefone=ph.telefone;patch.telefone_e164=ph.e164;}
-        if(r.c.foto && !(r.l&&r.l.foto_url))patch.foto_url=r.c.foto;  // sync em massa: SÓ preenche quem está sem foto (não sobrescreve)
-        if(await updateLead(r.l.id,patch))atualizados++; else erros++;
+        if(r.url && !l.linkedin_url){patch.linkedin_url=r.url;}
+        if(r.c.foto && !l.foto_url)patch.foto_url=r.c.foto;  // sync em massa: SÓ preenche quem está sem foto (não sobrescreve)
+        return updateLead(l.id,patch);
+      };
+      const nk=fuzzyNameKey(r.c.nome);
+      const batchHit=(r.action==='criar'&&nk)?batchByName.get(nk):null;
+      if(r.action==='criar'&&!batchHit){
+        const rec=Object.assign({nome:r.c.nome,status:r.status,responsavel:r.resp,origem:'LinkedIn'},inbox);
+        if(ph.telefone){rec.telefone=ph.telefone;rec.telefone_e164=ph.e164;}
+        if(r.url){rec.linkedin_url=r.url;} // fecha a brecha: criado com a chave de dedupe
+        if(r.c.foto)rec.foto_url=r.c.foto;                       // foto da lista do LinkedIn
+        const res=await insertLead(rec);
+        if(res.status==='created'){ criados++; if(r.sug)sugCriados++; if(nk)batchByName.set(nk,res.lead); }
+        else if(res.status==='duplicate'&&res.existing){ if(await updRec(res.existing))atualizados++; else erros++; }
+        else erros++;
+      }else{
+        const alvo=batchHit||r.l;
+        if(await updRec(alvo))atualizados++; else erros++;
       }
     }
     // históricos completos (payload tipo:sync) — casa por nome e grava o thread
     let hist=0;
     if(Array.isArray(PARSED_THREADS)&&PARSED_THREADS.length){
-      const map=new Map(); LEADS.forEach(l=>{const k=normName(l.nome); if(!map.has(k))map.set(k,l);});
+      // exato (normName) primeiro; fuzzy só onde não colide — superset do comportamento antigo
+      const map=new Map(), mapF=new Map();
+      LEADS.forEach(l=>{const k=normName(l.nome); if(!map.has(k))map.set(k,l); const f=fuzzyNameKey(l.nome); if(f&&!mapF.has(f))mapF.set(f,l);});
       for(const t of PARSED_THREADS){
         if(!t||!Array.isArray(t.mensagens)||!t.mensagens.length)continue;
-        const l=map.get(normName(t.contato||'')); if(!l)continue;
+        const l=map.get(normName(t.contato||''))||mapF.get(fuzzyNameKey(t.contato||'')); if(!l)continue;
         const msgs=t.mensagens.map(m=>({de_mim:!!m.de_mim,texto:String(m.texto||'').slice(0,4000),quando:String(m.quando||'').slice(0,40)})).filter(m=>m.texto);
         if(!msgs.length)continue;
         const last=msgs[msgs.length-1];
@@ -2273,7 +2391,10 @@ function openInboxPaste(){
       }
     }
     toast(`Sincronizado · ${criados} criados, ${atualizados} atualizados${hist?', '+hist+' históricos':''}${erros?', '+erros+' erro(s)':''}`);
-    ov.remove(); render();
+    ov.remove();
+    // criações com nome parecido de lead existente → resolve na tela Duplicatas (decisão fica lá)
+    if(sugCriados&&uiAdmin()&&can('pode_duplicatas')&&confirm(`${sugCriados} lead(s) criado(s) têm nome parecido com leads existentes.\nAbrir a tela Duplicatas pra revisar/unificar agora?`)){ VIEW='dup'; }
+    render();
   };
   setTimeout(()=>$('#ibp-raw').focus(),50);
   if(navigator.clipboard&&navigator.clipboard.readText){
@@ -3042,7 +3163,7 @@ function openDrawer(id){
   const l=byId(id); if(!l)return;
   const ov=document.createElement('div');ov.className='overlay';
   ov.innerHTML=`<div class="drawer" onclick="event.stopPropagation()">
-    <div class="dh">${avatarHTML(l,48)}<div><h2>${esc(l.nome)}</h2><div class="muted">${esc(l.cargo||'')} ${l.empresa?'· '+esc(l.empresa):''}</div></div>
+    <div class="dh">${avatarHTML(l,48)}<div><h2>${esc(l.nome)}</h2><div class="muted"><span title="Código do lead" style="font-weight:700;color:var(--primary)">${esc(l.codigo||'#'+l.id)}</span> · ${esc(l.cargo||'')} ${l.empresa?'· '+esc(l.empresa):''}</div></div>
       <button class="star ${l.prioridade?'on':''}" id="d-star" style="font-size:22px;margin-left:auto" title="Prioridade">${l.prioridade?'★':'☆'}</button>
       <span class="x" id="dx">×</span></div>
     <div style="margin:6px 0 4px">${statusBadge(l)} ${flagsHTML(l)} ${dueHTML(l)}</div>
@@ -3221,10 +3342,17 @@ function openNovo(mine,prefill){
   };
   $('#n-cargo').oninput=updateTriage; $('#n-empresa').oninput=updateTriage;
   $('#n-renda').oninput=()=>{rendaTouched=true; updateTriage();};
+  let nameConfirmKey=null; // two-click: 1º clique avisa nome parecido, 2º confirma
   $('#n-save').onclick=async()=>{
     const nome=$('#n-nome').value.trim(); if(!nome){toast('Informe o nome');return;}
     const url=$('#n-raw').dataset.url||'';const norm=normUrl(url);
-    if(norm&&LEADS.some(l=>l.linkedin_url_norm===norm)){$('#n-dup').textContent='⚠ Já existe um lead com esse LinkedIn.';return;}
+    const m=findLeadMatch({nome,linkedin_url:url,telefone:$('#n-tel').value,email:($('#n-email')&&$('#n-email').value)||''});
+    if(m&&m.confident){$('#n-dup').textContent=`⚠ Já existe: ${m.lead.nome} — mesmo ${DUP_KEY_LABEL[m.key]}${m.lead.codigo?' ('+m.lead.codigo+')':''}.`;return;}
+    if(m&&!m.confident&&nameConfirmKey!==fuzzyNameKey(nome)){
+      nameConfirmKey=fuzzyNameKey(nome);
+      $('#n-dup').textContent=`⚠ Nome parecido com lead existente: ${m.lead.nome}${m.lead.codigo?' ('+m.lead.codigo+')':''}. Clique Salvar de novo para criar mesmo assim.`;
+      return;
+    }
     const ph=normPhone($('#n-tel').value);
     const flags=ph.telefone&&!ph.e164&&$('#n-tel').value?['SEM_DDD']:[];
     if(curSeguros) flags.push('SEGUROS?');
@@ -3238,9 +3366,10 @@ function openNovo(mine,prefill){
       origem:({linkedin:'LinkedIn',lp:'Rec LP',ot:'Rec OT',direta:'Abordagem Direta',reccli:'Rec Cliente',recfam:'Rec Familiar',instagram:'Instagram',facebook:'Facebook'})[ORIG],
       email:($('#n-email')&&$('#n-email').value.trim())||null,
       recomendante:(['lp','ot','reccli','recfam'].includes(ORIG)&&$('#n-rec')?($('#n-rec').value.trim()||null):null)};
-    const {data,error}=await sb.from('leads').insert(rec).select().single();
-    if(error){$('#n-dup').textContent=(error.code==='23505')?'⚠ Já existe um lead com esse LinkedIn/telefone.':'Erro: '+error.message;return;}
-    LEADS.push(data);toast('Lead adicionado: '+firstName(nome));
+    const r=await insertLead(rec,{dedupe:false}); // dedupe já feito acima (com two-click de nome)
+    if(r.status==='duplicate'){$('#n-dup').textContent=`⚠ Já existe: ${r.existing?r.existing.nome:'outro lead'} — mesmo ${DUP_KEY_LABEL[r.key]}.`;return;}
+    if(r.status==='error'){$('#n-dup').textContent='Erro: '+r.message;return;}
+    toast('Lead adicionado: '+firstName(nome));nameConfirmKey=null;
     if(mine){['n-raw','n-nome','n-cargo','n-empresa','n-tel','n-cidade','n-renda','n-bairro','n-obs','n-email'].forEach(i=>{const el=$('#'+i);if(el){el.value='';delete el.dataset.url;}});foto=null;rendaTouched=false;curSeguros=null;curScore='D';$('#n-triage').innerHTML='preencha cargo/empresa…';$('#n-dup').textContent='';$('#n-raw').focus();render();}
     else{ov.remove();render();}
   };
@@ -3454,29 +3583,20 @@ function openCapturaMulti(leads, meta){
   updateCount();
   $('#cm-save').onclick=async()=>{
     const shared={origemKey:ORIG,responsavel:$('#cm-resp').value,recomendante:($('#cm-rec')&&$('#cm-rec').value.trim())||null};
-    const existsUrl=new Set(LEADS.map(l=>l.linkedin_url_norm).filter(Boolean));
-    const existsTel=new Set(LEADS.map(l=>l.telefone_e164).filter(Boolean));
-    const seen=new Set(); const toInsert=[]; let dup=0;
+    const recs=[];
     document.querySelectorAll('.cm-row').forEach(row=>{
       const chk=row.querySelector('.cm-chk'); if(!chk.checked)return;
       const i=+row.dataset.i;
       const d=Object.assign({},leads[i],{nome:row.querySelector('.cm-nome').value.trim(),telefone:row.querySelector('.cm-tel').value.trim()});
       if(!d.nome)return;
-      const rec=recFromCaptura(d,shared);
-      const kU=rec.linkedin_url_norm, kT=rec.telefone_e164;
-      if((kU&&(existsUrl.has(kU)||seen.has(kU)))||(kT&&(existsTel.has(kT)||seen.has(kT)))){dup++;return;}
-      if(kU)seen.add(kU); if(kT)seen.add(kT);
-      toInsert.push(rec);
+      recs.push(recFromCaptura(d,shared));
     });
-    if(!toInsert.length){ $('#cm-msg').textContent='Nada novo pra salvar'+(dup?' ('+dup+' já existiam)':'')+'.'; return; }
+    if(!recs.length){ $('#cm-msg').textContent='Nada pra salvar.'; return; }
     $('#cm-save').disabled=true; $('#cm-save').textContent='Salvando…';
-    let ok=0,fail=0;
-    for(let i=0;i<toInsert.length;i+=200){
-      const batch=toInsert.slice(i,i+200);
-      const {data,error}=await sb.from('leads').insert(batch).select();
-      if(error){ for(const row of batch){ const r=await sb.from('leads').insert(row).select(); if(!r.error){ok++; if(r.data&&r.data[0])LEADS.push(r.data[0]);} else if(r.error.code==='23505'){dup++;} else fail++; } }
-      else { ok+=(data||[]).length; (data||[]).forEach(x=>LEADS.push(x)); }
-    }
+    // dedupe (LinkedIn/telefone/e-mail + intra-lote) centralizado no insertLeadsBatch
+    const {created,dup,fail}=await insertLeadsBatch(recs);
+    const ok=created.length;
+    if(!ok&&dup&&!fail){ $('#cm-msg').textContent='Nada novo pra salvar ('+dup+' já existiam).'; $('#cm-save').disabled=false; updateCount(); return; }
     toast('✨ '+ok+' lead'+(ok===1?'':'s')+' salvo'+(ok===1?'':'s')+(dup?' · '+dup+' duplicado'+(dup===1?'':'s'):'')+(fail?' · '+fail+' falhou':''));
     ov.remove(); render();
   };
@@ -3487,7 +3607,7 @@ function openImport(){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:560px">
     <h2>⬆ Atualizar base de dados</h2>
-    <p class="hint">Importe leads de um <b>CSV</b>. Eu confiro <b>duplicatas</b> (pelo LinkedIn) e <b>erros</b> e mostro a prévia — só grava no seu clique. Colunas aceitas: nome, cargo, empresa, sexo, idade, renda, telefone, email, linkedin, status, observacoes. Só <b>nome</b> é obrigatório.</p>
+    <p class="hint">Importe leads de um <b>CSV</b>. Eu confiro <b>duplicatas</b> (pelo LinkedIn, telefone e e-mail) e <b>erros</b> e mostro a prévia — só grava no seu clique. Colunas aceitas: nome, cargo, empresa, sexo, idade, renda, telefone, email, linkedin, status, observacoes. Só <b>nome</b> é obrigatório.</p>
     <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">
       <input type="file" id="imp-file" accept=".csv,text/csv"/>
       <a id="imp-tpl" class="muted" style="cursor:pointer;text-decoration:underline;font-size:12px">baixar modelo CSV</a>
@@ -3511,15 +3631,18 @@ function openImport(){
     const f=e.target.files[0];if(!f)return;
     Papa.parse(f,{header:true,skipEmptyLines:true,complete:res=>{
       const rows=res.data;toInsert=[];let dup=0,err=0;const seen=new Set();
-      const existing=new Set(LEADS.map(l=>l.linkedin_url_norm).filter(Boolean));
+      const idx=leadIndexes(); // prévia usa as MESMAS chaves do insertLeadsBatch (url/tel/e-mail)
       for(const r of rows){
         const nome=pick(r,['nome','name']).trim();
         if(!nome){err++;continue;}
         const url=pick(r,['linkedin','linkedin_url','url']).trim();
         const norm=normUrl(url);
-        if(norm&&(existing.has(norm)||seen.has(norm))){dup++;continue;}
-        if(norm)seen.add(norm);
         const ph=normPhone(pick(r,['telefone','phone','tel']));
+        const em=normEmail(pick(r,['email','e-mail']));
+        const keys=[norm,ph.e164,em].filter(Boolean);
+        const m=findLeadMatch({linkedin_url_norm:norm,telefone_e164:ph.e164,email:em},idx);
+        if((m&&m.confident)||keys.some(k=>seen.has(k))){dup++;continue;}
+        keys.forEach(k=>seen.add(k));
         let status=pick(r,['status']).trim();if(!ALL_STATUS.includes(status))status='Aguardando Qualificacao';
         const renda=pick(r,['renda','renda_estimada']).replace(/[^\d]/g,'');
         const idade=pick(r,['idade','faixa_idade']).replace(/[^\d]/g,'');
@@ -3540,14 +3663,8 @@ function openImport(){
   };
   $('#imp-go').onclick=async()=>{
     $('#imp-go').disabled=true;$('#imp-go').textContent='Importando...';
-    let ok=0,fail=0;
-    for(let i=0;i<toInsert.length;i+=200){
-      const batch=toInsert.slice(i,i+200);
-      const {data,error}=await sb.from('leads').insert(batch).select();
-      if(error){for(const row of batch){const r=await sb.from('leads').insert(row).select();if(!r.error)ok++;else if(r.error.code==='23505'){/* viola chave única = já existe; não duplica nem conta como falha */}else fail++;}}
-      else ok+=(data||[]).length;
-    }
-    toast(`Importados ${ok} leads`+(fail?` · ${fail} falharam`:''));
+    const {created,dup,fail}=await insertLeadsBatch(toInsert);
+    toast(`Importados ${created.length} leads`+(dup?` · ${dup} duplicados pulados`:'')+(fail?` · ${fail} falharam`:''));
     await loadLeads();ov.remove();
   };
 }
@@ -3555,10 +3672,10 @@ function openImport(){
 // ===== DUPLICATAS + UNIFICAR =====
 const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
 function dupGroups(){
-  const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
   const byKey={};
   const add=(k,l,kind)=>{ if(!k) return; const id=kind+'::'+k; (byKey[id]=byKey[id]||{kind,leads:[]}).leads.push(l); };
-  for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(norm(l.nome),l,'Nome'); }
+  // nome usa fuzzyNameKey/firstLastKey: pega "🔥 Dr. João Silva" vs "João Silva" (ex.: criados pelo sync do inbox)
+  for(const l of LEADS){ add(l.linkedin_url_norm,l,'LinkedIn'); add(l.telefone_e164,l,'Telefone'); add(normEmail(l.email),l,'E-mail'); add(fuzzyNameKey(l.nome),l,'Nome'); add(firstLastKey(l.nome),l,'Nome'); }
   const groups=[]; const seen=new Set();
   for(const k in byKey){
     const uniq=[...new Map(byKey[k].leads.map(l=>[l.id,l])).values()];
@@ -3613,8 +3730,8 @@ async function applyMerge(g,keep,patch){
 }
 function dupHTML(){
   const groups=dupGroups();
-  if(!groups.length) return '<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone e nome.</div></div>';
-  return `<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone ou nome). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
+  if(!groups.length) return '<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone, e-mail e nome.</div></div>';
+  return `<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone, e-mail ou nome aproximado). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
   <div class="filters" style="margin-bottom:10px;gap:12px;align-items:center">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="dup-all"> Selecionar todos</label>
     <span class="muted" id="dup-count" style="font-size:13px">0 selecionados</span>
@@ -3664,7 +3781,7 @@ function openMerge(g){
   const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
   const cell=(l,f)=>{const v=l[f]; return (v==null||String(v).trim()==='')?'<span class="muted">—</span>':esc(String(v));};
   function draw(){
-    const head=g.leads.map(l=>`<th style="text-align:left;padding:8px"><label style="cursor:pointer;font-weight:700"><input type="radio" name="keep" ${keep===l.id?'checked':''} data-keep="${l.id}"/> Manter este</label><div class="muted" style="font-weight:400">${esc(l.codigo||'novo')}</div></th>`).join('');
+    const head=g.leads.map(l=>`<th style="text-align:left;padding:8px"><label style="cursor:pointer;font-weight:700"><input type="radio" name="keep" ${keep===l.id?'checked':''} data-keep="${l.id}"/> Manter este</label><div class="muted" style="font-weight:400">${esc(l.codigo||'#'+l.id)}</div></th>`).join('');
     const rows=MERGE_FIELDS.map(([f,lbl])=>`<tr><td style="padding:6px 8px;font-weight:600;color:var(--muted);white-space:nowrap">${lbl}</td>${g.leads.map(l=>`<td data-pick="${f}|${l.id}" style="padding:6px 8px;cursor:pointer;border-radius:6px;${chosen[f]===l.id?'background:#eff6ff;outline:2px solid var(--primary)':''}">${cell(l,f)}</td>`).join('')}</tr>`).join('');
     return `<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th></th>${head}</tr></thead><tbody>${rows}</tbody></table>`;
   }
@@ -4639,7 +4756,7 @@ async function mLoadReport(){
 }
 function mDup(){
   var groups=[]; try{ groups=dupGroups()||[]; }catch(e){ groups=[]; }
-  var warn='<div style="display:flex;align-items:flex-start;gap:10px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:14px;padding:14px 16px;margin-bottom:18px"><span style="font-size:18px">🔎</span><div style="font-size:13px;color:#9A3412;line-height:1.45"><strong>'+groups.length+' possíveis duplicatas</strong> (mesmo LinkedIn, telefone ou nome). Unifique em lote ou revise campo a campo.</div></div>';
+  var warn='<div style="display:flex;align-items:flex-start;gap:10px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:14px;padding:14px 16px;margin-bottom:18px"><span style="font-size:18px">🔎</span><div style="font-size:13px;color:#9A3412;line-height:1.45"><strong>'+groups.length+' possíveis duplicatas</strong> (mesmo LinkedIn, telefone, e-mail ou nome aproximado). Unifique em lote ou revise campo a campo.</div></div>';
   if(!groups.length) return warn+'<div class="m-empty">Nenhuma duplicata detectada ✓</div>';
   var unify='<button id="m-dup-unify" style="width:100%;height:46px;border:none;border-radius:13px;background:#2F5BF6;color:#fff;font-size:14.5px;font-weight:800;cursor:pointer;margin-bottom:18px">⚡ Unificar selecionados (auto)</button>';
   var list='<div style="display:flex;flex-direction:column;gap:11px">'+groups.slice(0,80).map(function(g){
