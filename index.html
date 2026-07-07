@@ -936,7 +936,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.6 · controle de ID + dedupe';
+const APP_VERSION = 'v2.6.1 · código PI no app';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1413,6 +1413,11 @@ async function updateLead(id,patch){
   if(i>=0){Object.assign(LEADS[i],patch); if(patch.status) LEADS[i].etapa=STATUS_ETAPA[patch.status];}
   return true;
 }
+// ===== CÓDIGO PI##### (gerado no app; funciona SEM a migration do banco e é
+// compatível com ela — a trigger só preenche quando vem vazio e usa o mesmo max) =====
+function codigoNum(c){ const n=parseInt(String(c||'').replace(/\D/g,''),10); return isNaN(n)?0:n; }
+function maxCodigoNum(){ return LEADS.reduce((m,l)=>Math.max(m,codigoNum(l.codigo)),0); }
+function fmtCodigo(n){ return 'PI'+String(n).padStart(5,'0'); }
 // Espelho do updateLead p/ CRIAÇÃO — todo caminho que cria lead passa aqui.
 // opts: { dedupe:true (default) | false,  idx: leadIndexes() pré-montado (lotes) }
 // retorna: {status:'created',lead} | {status:'duplicate',key,existing} | {status:'error',message,code}
@@ -1423,6 +1428,7 @@ async function insertLead(rec,opts){
   if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
   if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
   if(rec.email) rec.email=rec.email.trim()||null;
+  if(!rec.codigo) rec.codigo=fmtCodigo(maxCodigoNum()+1); // sequência PI (o banco reescreve se a trigger existir)
   // 2) dedupe ANTES do insert (só chaves fortes bloqueiam; nome nunca)
   if(opts.dedupe!==false){
     const m=findLeadMatch(rec,opts.idx);
@@ -1448,6 +1454,7 @@ async function insertLead(rec,opts){
 // chunks de 200 com fallback linha a linha. retorna {created:[leads],dup,fail}
 async function insertLeadsBatch(recs){
   const idx=leadIndexes(); const seen=new Set(); const toInsert=[]; let dup=0,fail=0; const created=[];
+  let seq=maxCodigoNum(); // contador de código incremental p/ o lote (recs ainda não estão em LEADS)
   for(const rec of recs){
     if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
     if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
@@ -1456,7 +1463,9 @@ async function insertLeadsBatch(recs){
     const keys=[rec.linkedin_url_norm,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
     const m=findLeadMatch(rec,idx);
     if((m&&m.confident) || keys.some(k=>seen.has(k))){ dup++; continue; }
-    keys.forEach(k=>seen.add(k)); toInsert.push(rec);
+    keys.forEach(k=>seen.add(k));
+    if(!rec.codigo) rec.codigo=fmtCodigo(++seq);
+    toInsert.push(rec);
   }
   for(let i=0;i<toInsert.length;i+=200){
     const batch=toInsert.slice(i,i+200);
@@ -3728,10 +3737,35 @@ async function applyMerge(g,keep,patch){
   }
   return {ok:failed.length===0, kept:true, removed, failed, errMsg:lastErr};
 }
+// Backfill único: preenche código PI nos leads antigos sem código, na ordem de criação (id).
+// Não toca em quem já tem código. Usa updateLead (grava no banco via a sessão logada).
+async function backfillCodigos(btn){
+  const pend=LEADS.filter(l=>!l.codigo).sort((a,b)=>a.id-b.id);
+  if(!pend.length){ toast('Todos os leads já têm código PI'); return; }
+  if(!confirm(`Gerar código PI para ${pend.length} lead(s) sem código?\nÉ uma vez, na ordem de criação, e não altera os que já têm código.`)) return;
+  if(btn){ btn.disabled=true; }
+  let seq=maxCodigoNum(); let ok=0,fail=0;
+  for(let i=0;i<pend.length;i+=25){
+    const chunk=pend.slice(i,i+25);
+    const res=await Promise.all(chunk.map(l=>{ const codigo=fmtCodigo(++seq); return updateLead(l.id,{codigo}); }));
+    ok+=res.filter(Boolean).length; fail+=res.filter(r=>!r).length;
+    if(btn) btn.textContent=`Gerando… ${ok+fail}/${pend.length}`;
+  }
+  toast(`${ok} código(s) PI gerado(s)`+(fail?` · ${fail} falhou`:''));
+  render();
+}
+function backfillBarHTML(){
+  const n=LEADS.filter(l=>!l.codigo).length;
+  if(!n) return '';
+  return `<div class="tablewrap" style="padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="min-width:0"><span class="flag warn">códigos</span> <b>${n}</b> lead(s) ainda sem código PI — gero a sequência PI##### neles (uma vez, ordem de criação).</span>
+    <button class="btn primary" id="dup-backfill" style="flex-shrink:0">Gerar códigos PI</button></div>`;
+}
 function dupHTML(){
   const groups=dupGroups();
-  if(!groups.length) return '<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone, e-mail e nome.</div></div>';
-  return `<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone, e-mail ou nome aproximado). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
+  const bf=backfillBarHTML();
+  if(!groups.length) return bf+'<div class="tablewrap" style="padding:24px"><b>Nenhuma duplicata encontrada 🎉</b><div class="muted" style="margin-top:6px">A base está limpa por LinkedIn, telefone, e-mail e nome.</div></div>';
+  return bf+`<p class="hint" style="margin-bottom:10px"><b>${groups.length}</b> possíveis duplicatas (mesmo LinkedIn, telefone, e-mail ou nome aproximado). Marque vários e use <b>⚡ Unificar selecionados</b> pra resolver em lote (mantém o mais avançado no funil, junta as observações e os campos, remove os outros), ou <b>Revisar</b> pra escolher campo a campo.</p>
   <div class="filters" style="margin-bottom:10px;gap:12px;align-items:center">
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="dup-all"> Selecionar todos</label>
     <span class="muted" id="dup-count" style="font-size:13px">0 selecionados</span>
@@ -3745,6 +3779,7 @@ function dupHTML(){
 }
 function wireDup(){
   const groups=dupGroups();
+  const bf=$('#dup-backfill'); if(bf) bf.onclick=()=>backfillCodigos(bf);
   document.querySelectorAll('[data-merge]').forEach(b=>b.onclick=()=>openMerge(groups[+b.dataset.merge]));
   const cbs=()=>[...document.querySelectorAll('.dup-cb')];
   const upd=()=>{ const n=cbs().filter(c=>c.checked).length; const cnt=$('#dup-count'); if(cnt)cnt.textContent=n+' selecionado'+(n===1?'':'s'); const b=$('#dup-merge-sel'); if(b)b.disabled=!n; };
