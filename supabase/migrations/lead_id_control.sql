@@ -1,11 +1,15 @@
 -- ============================================================================
 --  Controle de ID por lead — código sequencial visível (PI#####) + backstops
---  de deduplicação. Complementa os índices UNIQUE já existentes em
---  linkedin_url_norm e telefone_e164 (CRM LP v1.0).
+--  de deduplicação.
 --
---  O app (index.html v2.6) já deduplica na criação por LinkedIn/telefone/
---  e-mail via insertLead/insertLeadsBatch; este script dá o código visível
---  por lead e deixa pronta (comentada) a trava de e-mail no banco.
+--  Auditoria 2026-07-07 (pg_indexes em prod): UNIQUE existe em linkedin_url_norm
+--  (idx_leads_url), codigo (leads_codigo_key) e id (pkey). NÃO existe em
+--  telefone_e164 — havia 6 telefones duplicados na base (passo 2b, comentado).
+--
+--  O app (index.html v2.6.2) deduplica na criação por LinkedIn/telefone/e-mail
+--  via insertLead/insertLeadsBatch e manda codigo VAZIO: a trigger daqui numera
+--  de forma atômica (fim da colisão de PI entre dois aparelhos — que hoje viraria
+--  erro no UNIQUE leads_codigo_key). Sem a trigger o app preenche pós-insert.
 --
 --  Rodar no SQL editor do Supabase (projeto kbiinfpjfmuidyzsfegp), role postgres.
 --  Idempotente: pode rodar mais de uma vez sem efeito colateral.
@@ -56,10 +60,15 @@ update public.leads l
 
 -- ── 2) Trava de e-mail no banco (OPCIONAL — ligar depois de limpar a base) ───
 -- O app já barra e-mail duplicado na criação; este índice é o backstop.
--- Só descomente quando o relatório de e-mails duplicados (passo 0) vier vazio,
--- senão o CREATE INDEX falha.
+-- Diagnóstico 2026-07-07: base veio LIMPA (0 e-mails repetidos) → pode descomentar.
 -- create unique index if not exists leads_email_norm_uq
 --   on public.leads (lower(trim(email))) where email is not null and email <> '';
+
+-- ── 2b) Trava de telefone no banco (OPCIONAL — hoje NÃO existe!) ─────────────
+-- Diagnóstico 2026-07-07: 6 telefones repetidos na base impedem este índice.
+-- Unifique os pares na tela "Duplicatas" primeiro; aí descomente e rode.
+-- create unique index if not exists leads_tel_e164_uq
+--   on public.leads (telefone_e164) where telefone_e164 is not null and telefone_e164 <> '';
 
 -- ── 3) Verificação (só leitura) ───────────────────────────────────────────────
 -- códigos gerados:
