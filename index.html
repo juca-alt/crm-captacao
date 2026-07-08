@@ -936,7 +936,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.6.1 · código PI no app';
+const APP_VERSION = 'v2.6.2 · código PI pelo banco';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1413,8 +1413,10 @@ async function updateLead(id,patch){
   if(i>=0){Object.assign(LEADS[i],patch); if(patch.status) LEADS[i].etapa=STATUS_ETAPA[patch.status];}
   return true;
 }
-// ===== CÓDIGO PI##### (gerado no app; funciona SEM a migration do banco e é
-// compatível com ela — a trigger só preenche quando vem vazio e usa o mesmo max) =====
+// ===== CÓDIGO PI##### — fonte preferida é o BANCO (trigger trg_leads_codigo +
+// sequência atômica, sem colisão entre aparelhos; codigo tem UNIQUE leads_codigo_key).
+// O app manda codigo vazio no insert; se a trigger ainda não existir, o fallback
+// pós-insert preenche no cliente (mesmo comportamento antigo). =====
 function codigoNum(c){ const n=parseInt(String(c||'').replace(/\D/g,''),10); return isNaN(n)?0:n; }
 function maxCodigoNum(){ return LEADS.reduce((m,l)=>Math.max(m,codigoNum(l.codigo)),0); }
 function fmtCodigo(n){ return 'PI'+String(n).padStart(5,'0'); }
@@ -1428,7 +1430,7 @@ async function insertLead(rec,opts){
   if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
   if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
   if(rec.email) rec.email=rec.email.trim()||null;
-  if(!rec.codigo) rec.codigo=fmtCodigo(maxCodigoNum()+1); // sequência PI (o banco reescreve se a trigger existir)
+  // codigo fica por conta da trigger do banco (atômica); fallback pós-insert cobre banco sem trigger
   // 2) dedupe ANTES do insert (só chaves fortes bloqueiam; nome nunca)
   if(opts.dedupe!==false){
     const m=findLeadMatch(rec,opts.idx);
@@ -1439,6 +1441,8 @@ async function insertLead(rec,opts){
   if(error){
     if(error.code==='23505'){
       const d=(error.details||error.message||'');
+      if(/codigo/i.test(d)&&!/linkedin|telefone|e164|email/i.test(d)) // app antigo em cache colidiu no PI — não é lead duplicado
+        return {status:'error',message:'colisão de código PI (versão antiga em outro aparelho) — recarregue a página e tente de novo',code:error.code};
       const key=/linkedin/i.test(d)?'linkedin':/telefone|e164/i.test(d)?'telefone':/email/i.test(d)?'email':'linkedin';
       const existing=key==='linkedin'?LEADS.find(l=>l.linkedin_url_norm===rec.linkedin_url_norm)
                     :key==='telefone'?LEADS.find(l=>l.telefone_e164===rec.telefone_e164)
@@ -1448,13 +1452,16 @@ async function insertLead(rec,opts){
     return {status:'error',message:error.message||'falha ao criar lead',code:error.code};
   }
   LEADS.push(data);
+  if(!data.codigo){ // banco sem a trigger → numera no cliente (updateLead espelha em LEADS)
+    const c=fmtCodigo(maxCodigoNum()+1);
+    if(await updateLead(data.id,{codigo:c})) data.codigo=c;
+  }
   return {status:'created',lead:data};
 }
 // Lote (captura múltipla / import CSV): dedupe prévio + guarda intra-lote, insere em
 // chunks de 200 com fallback linha a linha. retorna {created:[leads],dup,fail}
 async function insertLeadsBatch(recs){
   const idx=leadIndexes(); const seen=new Set(); const toInsert=[]; let dup=0,fail=0; const created=[];
-  let seq=maxCodigoNum(); // contador de código incremental p/ o lote (recs ainda não estão em LEADS)
   for(const rec of recs){
     if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
     if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
@@ -1463,8 +1470,7 @@ async function insertLeadsBatch(recs){
     const keys=[rec.linkedin_url_norm,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
     const m=findLeadMatch(rec,idx);
     if((m&&m.confident) || keys.some(k=>seen.has(k))){ dup++; continue; }
-    keys.forEach(k=>seen.add(k));
-    if(!rec.codigo) rec.codigo=fmtCodigo(++seq);
+    keys.forEach(k=>seen.add(k)); // codigo: trigger do banco numera; fallback pós-lote cobre banco sem trigger
     toInsert.push(rec);
   }
   for(let i=0;i<toInsert.length;i+=200){
@@ -1476,6 +1482,8 @@ async function insertLeadsBatch(recs){
       if(r.status==='created')created.push(r.lead); else if(r.status==='duplicate')dup++; else fail++;
     }
   }
+  const semCodigo=created.filter(l=>!l.codigo);
+  if(semCodigo.length){ let seq=maxCodigoNum(); for(const l of semCodigo){ const c=fmtCodigo(++seq); if(await updateLead(l.id,{codigo:c})) l.codigo=c; } }
   return {created,dup,fail};
 }
 
