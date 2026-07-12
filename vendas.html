@@ -1754,14 +1754,44 @@ function lpCounts(){ Object.keys(LP_ENT).forEach(e=>{ const el=$('#cnt-'+e); if(
    Base do módulo: 2 relatórios da Prudential (tabelas HTML exportadas como .xls, Latin-1):
    (1) carteira de clientes — 1 linha/cliente, coberturas agregadas; (2) apólices ativas — 1 linha/
    apólice, ligada ao cliente pelo SEGURADO (join por nome normalizado, validado 100% nos dados reais).
-   Lê LOCALMENTE (DOMParser, sem IA). localStorage agora; shape pronto pro Supabase (fase 2:
-   carteira_clientes/carteira_apolices, mesma trilha do LP). É a base de várias evoluções futuras. */
+   Lê LOCALMENTE (DOMParser, sem IA). É a base de várias evoluções futuras.
+   FASE 2 (Supabase): tabelas carteira_clientes/carteira_apolices (migration supabase/migrations/
+   carteira.sql) — 1 linha por cliente/apólice, `dados` jsonb = shape do CART intacto. `dono` =
+   e-mail do LP logado (DEFAULT no banco) + RLS por dono: cada LP vê/grava SÓ a própria carteira.
+   Import = SNAPSHOT SUBSTITUTIVO (delete das linhas do dono + insert): cliente que saiu da
+   carteira deve sumir — diferente do LPDB, que preserva histórico. localStorage = cache/fallback
+   (preview/deslogado), molde do LP_REMOTE. */
 const CART_CHAVE='crmlp_carteira_v1';
+const CART_TCLI='carteira_clientes', CART_TAPO='carteira_apolices';
 let CART={clientes:[],apolices:[],importadoEm:null};
+let CART_REMOTE=false;                    // true quando há sessão Supabase → lê/grava no banco
 let CART_Q='';
-function cartCarregar(){ try{ const raw=localStorage.getItem(CART_CHAVE); if(raw){ const o=JSON.parse(raw);
-  CART.clientes=Array.isArray(o.clientes)?o.clientes:[]; CART.apolices=Array.isArray(o.apolices)?o.apolices:[]; CART.importadoEm=o.importadoEm||null; } }catch(e){ console.warn('CART load falhou',e); } }
+async function cartRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
+async function cartCarregar(){
+  CART_REMOTE=await cartRemoteOn();
+  if(CART_REMOTE){ try{
+    const [rc,ra]=await Promise.all([sb.from(CART_TCLI).select('*'),sb.from(CART_TAPO).select('*')]);
+    if(rc.error) throw rc.error; if(ra.error) throw ra.error;
+    CART.clientes=(rc.data||[]).map(r=>r.dados).filter(Boolean);
+    CART.apolices=(ra.data||[]).map(r=>r.dados).filter(Boolean);
+    const max=[...(rc.data||[]),...(ra.data||[])].reduce((m,r)=>((r.atualizado||'')>m?r.atualizado:m),'');
+    CART.importadoEm=max?max.slice(0,10):null;
+    cartSalvar();                         // espelha no cache local
+    return;
+  }catch(e){ console.warn('CART load remoto falhou → fallback local',e); CART_REMOTE=false; } }
+  try{ const raw=localStorage.getItem(CART_CHAVE); if(raw){ const o=JSON.parse(raw);
+    CART.clientes=Array.isArray(o.clientes)?o.clientes:[]; CART.apolices=Array.isArray(o.apolices)?o.apolices:[]; CART.importadoEm=o.importadoEm||null; } }catch(e){ console.warn('CART load falhou',e); } }
 function cartSalvar(){ try{ localStorage.setItem(CART_CHAVE,JSON.stringify(CART)); }catch(e){ console.warn('CART save falhou',e); } }
+// snapshot substitutivo no banco: delete (RLS limita ao dono) + insert. `dono` sai do DEFAULT do banco.
+async function cartPersistRemoto(){
+  if(!CART_REMOTE||!sb) return;
+  const cli=CART.clientes.map(c=>({ref:c.ref,dados:c}));
+  const apo=CART.apolices.map((a,i)=>({chave:(a.apolice||a.proposta||a.ref||'x')+'|'+i,dados:a}));
+  let r=await sb.from(CART_TCLI).delete().gte('atualizado','1970-01-01'); if(r.error) throw r.error;
+  r=await sb.from(CART_TAPO).delete().gte('atualizado','1970-01-01'); if(r.error) throw r.error;
+  if(cli.length){ r=await sb.from(CART_TCLI).insert(cli); if(r.error) throw r.error; }
+  if(apo.length){ r=await sb.from(CART_TAPO).insert(apo); if(r.error) throw r.error; }
+}
 
 /* dinheiro BR: "1.121,84"→1121.84 ; "35372"→353.72 (o export às vezes tira o separador decimal) ; "000"→0 */
 function cartMoney(s){ s=String(s==null?'':s).trim(); if(!s||s==='-') return 0;
@@ -1798,9 +1828,13 @@ function cartApoliceDe(o){ const seg=cartTxt(cartCol(o,'Segurado')); if(!seg) re
     email:cartTxt(cartCol(o,'E-mail')), status:cartTxt(cartCol(o,'Status Apólice'))||'Ativa', premio:cartMoney(cartCol(o,'Prêmio')),
     periodicidade:cartTxt(cartCol(o,'Periodicidade Pagto.')), forma:cartTxt(cartCol(o,'Forma Pagto.')) }; }
 
-function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartParseTabela(a.clientesHTML).map(cartClienteDe).filter(Boolean);
+// devolve {sync:'remoto'|'local'|'falhou'} — o caller avisa quando o banco não recebeu o snapshot.
+async function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartParseTabela(a.clientesHTML).map(cartClienteDe).filter(Boolean);
   if(a.apolicesHTML!=null) CART.apolices=cartParseTabela(a.apolicesHTML).map(cartApoliceDe).filter(Boolean);
-  CART.importadoEm=nowISO(); cartSalvar(); }
+  CART.importadoEm=nowISO(); cartSalvar();
+  if(!CART_REMOTE) return {sync:'local'};
+  try{ await cartPersistRemoto(); return {sync:'remoto'}; }
+  catch(e){ console.error('CART sync remoto falhou',e); return {sync:'falhou'}; } }
 function cartApolicesDoCliente(ref){ return CART.apolices.filter(a=>a.ref===ref); }
 function cartResumo(){ const C=CART.clientes,A=CART.apolices;
   return { clientes:C.length, apolices:A.length, pmMes:C.reduce((s,c)=>s+(c.cob.pm||0),0), csTot:C.reduce((s,c)=>s+(c.cob.cs||0),0),
@@ -1965,8 +1999,9 @@ function openCarteiraImport(){
   ov.querySelector('#cart-imgo').onclick=async()=>{ const msg=ov.querySelector('#cart-imsg');
     const h1=await rd(ov.querySelector('#cart-f1')), h2=await rd(ov.querySelector('#cart-f2'));
     if(!h1&&!h2){ msg.textContent='Escolha ao menos um arquivo.'; return; }
-    try{ cartIngest({clientesHTML:h1,apolicesHTML:h2}); ov.remove();
-      toast(`Carteira importada — ${CART.clientes.length} cliente(s), ${CART.apolices.length} apólice(s)`,true);
+    try{ msg.textContent='Importando…'; const st=await cartIngest({clientesHTML:h1,apolicesHTML:h2}); ov.remove();
+      const suf=st.sync==='remoto'?' · ☁️ salvo na nuvem':st.sync==='falhou'?' · ⚠️ ficou SÓ neste aparelho (sync falhou)':'';
+      toast(`Carteira importada — ${CART.clientes.length} cliente(s), ${CART.apolices.length} apólice(s)${suf}`,st.sync!=='falhou');
       if(!/^cart-/.test(VIEW)) irPara('cart-clientes'); else render();
     }catch(e){ console.error(e); msg.textContent='Falha ao ler os arquivos. Confira se são os .xls da Prudential.'; } }; }
 
@@ -1993,9 +2028,9 @@ function render(){
   else viewPrincipios();
   if(CONTATO) renderDrawer();
 }
-carregar(); cartCarregar();
+carregar();
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
-render(); lpCarregar().then(render);   // render base já; LP (remoto/local) popula e re-renderiza
+render(); Promise.all([lpCarregar(),cartCarregar()]).then(render);   // render base já; LP e Carteira (remoto/local) populam e re-renderizam
 </script>
 </body>
 </html>
