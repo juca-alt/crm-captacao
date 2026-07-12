@@ -443,6 +443,7 @@ tr.row.sel{background:#eff6ff}
   .ibx2.show-detail .ibx-back{display:inline-block}
 }
 @media(max-width:760px){
+  input,select,textarea{font-size:16px} /* <16px o iOS dá zoom automático ao focar (deslocava modais) */
   .sidebar{position:fixed;left:-260px;width:240px;z-index:50;transition:left .2s;box-shadow:2px 0 16px rgba(0,0,0,.3)}
   .sidebar.open{left:0}
   .menu-btn{display:inline-flex!important;align-items:center;justify-content:center}
@@ -936,7 +937,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.6.2 · código PI pelo banco';
+const APP_VERSION = 'v2.6.3 · QA geral (24 fixes)';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -985,7 +986,7 @@ function reetiquetaLeads(){ if(typeof LEADS==='undefined'||!LEADS)return; LEADS.
 // B-03: seletor dependente Etapa × Status (2 caixas). Salva pelo STATUS (a etapa é derivada no banco).
 function etapaStatusHTML(idp,status){
   const et=STATUS_ETAPA[status]||ETAPAS[0];
-  return `<div class="es-pair" style="display:flex;flex-direction:column;gap:6px"><select id="${idp}-et" class="fsel es-et" style="width:100%">${ETAPAS.map(e=>`<option value="${e}" ${e===et?'selected':''}>${ETAPA_LABEL[e]}</option>`).join('')}</select>`+
+  return `<div class="es-pair" style="display:flex;flex-direction:column;gap:6px"><select id="${idp}-et" class="fsel es-et" style="width:100%">${ETAPAS.map(e=>`<option value="${esc(e)}" ${e===et?'selected':''}>${esc(ETAPA_LABEL[e])}</option>`).join('')}</select>`+
     `<select id="${idp}-st" class="fsel es-st" style="width:100%">${STATUS_BY_ETAPA[et].map(s=>`<option ${s===status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>`;
 }
 function wireEtapaStatus(idp){
@@ -1004,7 +1005,8 @@ const LK_FLOW=[
   {s:'A Enviar Convite',        l:'Convite a enviar'},
   {s:'Convite Enviado',         l:'Convite enviado'},
   {s:'Convite Aceito (s/ telefone)', l:'Aceito · pedir telefone'},
-  {s:'Convite Aceito (c/ telefone)', l:'Telefone recebido'}
+  {s:'Convite Aceito (c/ telefone)', l:'Telefone recebido'},
+  {s:'Convite Nao Aceito',           l:'Não aceito'} // sem esta coluna o lead nesse status ficava INVISÍVEL no board (só aparecia em Contatos)
 ];
 // Processo LinkedIn em 2 etapas (o raciocínio do Gustavo):
 const LK_MINING_STATUS = ['Aguardando Qualificacao','Qualificado'];   // Etapa 1 — Mineração (achar gente boa)
@@ -1154,7 +1156,7 @@ function filteredContatos(){
   r=r.filter(l=>cPeriodMatch(l.criado_em));
   // dropdowns secundários (mantém os existentes)
   if(F_C_STATUS_SET.size) r=r.filter(l=>F_C_STATUS_SET.has(l.status));
-  else if(F_STATUS) r=r.filter(l=>l.status===F_STATUS); // compat: visões salvas antigas que tinham F_STATUS
+  // (removido o "compat F_STATUS": o dropdown de status dos Funis vazava pro Contatos como filtro invisível — lista encolhia sem nenhum chip indicando)
   if(F_EMPRESA.length) r=r.filter(l=>F_EMPRESA.includes(l.empresa));
   if(F_PROFISSAO) r=r.filter(l=>(l.cargo||'').toLowerCase().includes(F_PROFISSAO.toLowerCase()));
   if(F_SEGMENTO) r=r.filter(l=>(l.segmento||'')===F_SEGMENTO);
@@ -1176,6 +1178,7 @@ let DAY_SCOPE='all';  // visão unificada — todos veem tudo (não filtra mais 
 let INBOX_FILTER='all';   // Inbox: all | resp | enviado | semtel | tel | aguardando
 let INBOX_SEL=null;       // Inbox 2-col: id da conversa selecionada (coluna direita)
 let INBOX_ARCHIVED=new Set(); // Inbox: ids arquivados (área "Arquivadas", espelha o LinkedIn) — persistido em app_settings 'inbox_arquivados'
+let INBOX_ARCH_OK=false; // só permite SALVAR a lista de arquivados depois de um load bem-sucedido (senão um save com Set vazio apagaria a lista do servidor)
 let KCOLLAPSED=(()=>{try{return new Set(JSON.parse(localStorage.getItem('kfold')||'[]'));}catch(_){return new Set();}})(); // cards do kanban recolhidos (preferência por aparelho)
 let COLCOLLAPSED=(()=>{try{return new Set(JSON.parse(localStorage.getItem('kcolfold')||'[]'));}catch(_){return new Set();}})(); // COLUNAS/etapas recolhidas no kanban (foca nas etapas em uso; preferência por aparelho)
 let INBOX_MOBILE_OPEN=false; // mobile: true quando o detalhe está aberto sobre a lista
@@ -1343,7 +1346,7 @@ function copyMsg(l,anchor){
 }
 function searchMatch(l){
   if(!SEARCH)return true;const q=SEARCH.toLowerCase();
-  return [l.nome,l.empresa,l.cargo,l.recomendante,l.codigo].some(x=>(x||'').toLowerCase().includes(q));
+  return [l.nome,l.empresa,l.cargo,l.recomendante,l.codigo,l.telefone,l.telefone_e164,l.email,l.segmento,l.bairro].some(x=>(x||'').toLowerCase().includes(q)); // mesmos campos da busca ⌘K (antes telefone só achava no ⌘K)
 }
 
 // ===== DATA =====
@@ -1353,17 +1356,18 @@ async function loadLeads(){
   try{
     while(true){
       const {data,error}=await sb.from('leads').select('*').order('codigo',{ascending:true}).order('id',{ascending:true}).range(from,from+PAGE-1);
-      if(error){toast('Erro ao carregar: '+error.message);return;}
+      if(error){toast('Erro ao carregar: '+error.message); if(all.length){LEADS=all;reetiquetaLeads();} render(); return;} // mantém o que já baixou e SEMPRE renderiza (senão a tela fica em branco)
       all=all.concat(data||[]);
       if(!data||data.length<PAGE)break;
       from+=PAGE;
     }
-  }catch(e){ toast('Erro ao carregar leads: '+(e.message||e)); return; } // rede caiu/sessão expirou → não trava a UI
+  }catch(e){ toast('Erro ao carregar leads: '+(e.message||e)); if(all.length){LEADS=all;reetiquetaLeads();} render(); return; } // rede caiu/sessão expirou → não trava a UI nem deixa tela em branco
   LEADS=all;reetiquetaLeads();render();
 }
 async function loadSettings(){
   try{
-    const {data}=await sb.from('app_settings').select('*');
+    const {data,error}=await sb.from('app_settings').select('*');
+    if(!error) INBOX_ARCH_OK=true; // load ok (mesmo sem a chave ainda) → pode salvar arquivados sem risco de sobrescrever com lista vazia
     if(data) for(const r of data){
       if(r.chave==='meta_minerados_dia') SETTINGS.meta_minerados_dia=+r.valor||SETTINGS.meta_minerados_dia;
       if(r.chave==='meta_convites_dia')  SETTINGS.meta_convites_dia =+r.valor||SETTINGS.meta_convites_dia;
@@ -1376,7 +1380,7 @@ async function loadSettings(){
 }
 async function saveSetting(chave,valor){
   const {error}=await sb.from('app_settings').upsert({chave,valor,atualizado_em:new Date().toISOString()},{onConflict:'chave'});
-  if(error){toast('Erro ao salvar meta: '+(error.message||'sem detalhe'));return false;}
+  if(error){toast('Erro ao salvar configuração: '+(error.message||'sem detalhe'));return false;}
   return true;
 }
 // Tarefas: a tarefa de um lead = follow-up agendado (data_proxima_acao) + descrição.
@@ -1392,25 +1396,36 @@ async function setLeadTask(id,dateISO,texto){
   if(ok && texto){ try{ await sb.from('lead_events').insert({lead_id:id,tipo:'tarefa',texto:texto,usuario:ME}); TASK_TEXT[id]=texto; }catch(_){} }
   return ok;
 }
-async function updateLead(id,patch){
+async function updateLead(id,patch,opts){
+  opts=opts||{};
   const _cur=LEADS.find(l=>l.id===id);
+  const _before=_cur?Object.assign({},_cur):{}; // snapshot pro log (antes do Object.assign abaixo)
   // choke point de consistência: recalcula campos derivados da fonte em QUALQUER tela que salve
   if('nome' in patch && patch.nome) patch.primeiro_nome=firstName(patch.nome);
   if('linkedin_url' in patch && !('linkedin_url_norm' in patch)) patch.linkedin_url_norm=normUrl(patch.linkedin_url||'');
   if('telefone' in patch && !('telefone_e164' in patch)){ const _ph=normPhone(patch.telefone||''); patch.telefone=_ph.telefone; patch.telefone_e164=_ph.e164; }
   // régua de convites: carimba a data na 1ª vez que o lead vira "Convite Enviado"
   if(patch.status==='Convite Enviado' && _cur && !_cur.convite_enviado_em && !('convite_enviado_em' in patch)) patch.convite_enviado_em=new Date().toISOString();
+  // carimbo do "Xd parado": mudou o status → marca QUANDO mudou (daysStuck lê data_status_atual)
+  if('status' in patch && _cur && patch.status!==_cur.status && !('data_status_atual' in patch)) patch.data_status_atual=new Date().toISOString();
+  patch.atualizado_em=new Date().toISOString();
   const {error}=await sb.from('leads').update(patch).eq('id',id);
   if(error){
-    if(error.code==='23505')
-      toast('Esse LinkedIn/telefone/e-mail já pertence a outro lead — verifique em Duplicatas.');
+    if(error.code==='23505'){
+      const _d=(error.details||error.message||'');
+      if(/codigo/i.test(_d)&&!/linkedin|telefone|e164|email/i.test(_d))
+        toast('Colisão de código PI — recarregue a página (Cmd+Shift+R) e tente de novo.');
+      else toast('Esse LinkedIn/telefone/e-mail já pertence a outro lead — verifique em Duplicatas.');
+    }
     else if(/acompanhar_victor|prioridade|column|schema cache/i.test(error.message))
       toast('Recurso novo: rode migration_v1_5.sql no Supabase pra liberar.');
     else toast('Erro: '+(error.message||'falha ao salvar (sem detalhe)'));
     return false;
   }
   const i=LEADS.findIndex(l=>l.id===id);
-  if(i>=0){Object.assign(LEADS[i],patch); if(patch.status) LEADS[i].etapa=STATUS_ETAPA[patch.status];}
+  if(i>=0){Object.assign(LEADS[i],patch); if(patch.status){const _e=STATUS_ETAPA[patch.status]; if(_e)LEADS[i].etapa=_e;}}
+  // log de atividade centralizado: TODO caminho que salva (drawer, stmenu, drag, advance, bulk, tarefas) registra aqui
+  if(opts.log!==false) logEdit(id,_before,patch);
   return true;
 }
 // ===== CÓDIGO PI##### — fonte preferida é o BANCO (trigger trg_leads_codigo +
@@ -1430,6 +1445,7 @@ async function insertLead(rec,opts){
   if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
   if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
   if(rec.email) rec.email=rec.email.trim()||null;
+  if(rec.status==='Convite Enviado' && !rec.convite_enviado_em) rec.convite_enviado_em=new Date().toISOString(); // lead já criado como convite enviado conta na meta
   // codigo fica por conta da trigger do banco (atômica); fallback pós-insert cobre banco sem trigger
   // 2) dedupe ANTES do insert (só chaves fortes bloqueiam; nome nunca)
   if(opts.dedupe!==false){
@@ -1451,10 +1467,11 @@ async function insertLead(rec,opts){
     }
     return {status:'error',message:error.message||'falha ao criar lead',code:error.code};
   }
+  if(!data.etapa && STATUS_ETAPA[data.status]) data.etapa=STATUS_ETAPA[data.status]; // deriva a etapa na hora (antes só no reload → lead novo caía em "sem etapa")
   LEADS.push(data);
   if(!data.codigo){ // banco sem a trigger → numera no cliente (updateLead espelha em LEADS)
     const c=fmtCodigo(maxCodigoNum()+1);
-    if(await updateLead(data.id,{codigo:c})) data.codigo=c;
+    if(await updateLead(data.id,{codigo:c},{log:false})) data.codigo=c;
   }
   return {status:'created',lead:data};
 }
@@ -1467,6 +1484,7 @@ async function insertLeadsBatch(recs){
     if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
     if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
     if(rec.email) rec.email=rec.email.trim()||null;
+    if(rec.status==='Convite Enviado' && !rec.convite_enviado_em) rec.convite_enviado_em=new Date().toISOString();
     const keys=[rec.linkedin_url_norm,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
     const m=findLeadMatch(rec,idx);
     if((m&&m.confident) || keys.some(k=>seen.has(k))){ dup++; continue; }
@@ -1476,14 +1494,14 @@ async function insertLeadsBatch(recs){
   for(let i=0;i<toInsert.length;i+=200){
     const batch=toInsert.slice(i,i+200);
     const {data,error}=await sb.from('leads').insert(batch).select();
-    if(!error){ (data||[]).forEach(x=>{LEADS.push(x);created.push(x);}); continue; }
+    if(!error){ (data||[]).forEach(x=>{ if(!x.etapa&&STATUS_ETAPA[x.status])x.etapa=STATUS_ETAPA[x.status]; LEADS.push(x);created.push(x);}); continue; }
     for(const row of batch){ // lote colidiu (corrida/23505) → linha a linha via choke point
       const r=await insertLead(row,{dedupe:false});
       if(r.status==='created')created.push(r.lead); else if(r.status==='duplicate')dup++; else fail++;
     }
   }
   const semCodigo=created.filter(l=>!l.codigo);
-  if(semCodigo.length){ let seq=maxCodigoNum(); for(const l of semCodigo){ const c=fmtCodigo(++seq); if(await updateLead(l.id,{codigo:c})) l.codigo=c; } }
+  if(semCodigo.length){ let seq=maxCodigoNum(); for(const l of semCodigo){ const c=fmtCodigo(++seq); if(await updateLead(l.id,{codigo:c},{log:false})) l.codigo=c; } }
   return {created,dup,fail};
 }
 
@@ -1534,7 +1552,7 @@ function applyPerms(){
 let _renderedView=null;
 function _snapScroll(){
   const s={win:window.scrollY||window.pageYOffset||0};
-  ['.funil','.lkboard','.tk-kanban','#content'].forEach(sel=>{const e=document.querySelector(sel); if(e)s[sel]={l:e.scrollLeft,t:e.scrollTop};});
+  ['.funil','.lkboard','.tk-kanban','.m-kanban','.ibx-list','#content'].forEach(sel=>{const e=document.querySelector(sel); if(e)s[sel]={l:e.scrollLeft,t:e.scrollTop};});
   return s;
 }
 function _restoreScroll(s){
@@ -1771,7 +1789,7 @@ function wireKfold(scope){
 // cabeçalho de coluna do kanban com botão de recolher a ETAPA inteira (faixa estreita → foca nas etapas em uso)
 function colHead(key,label,count){
   const on=COLCOLLAPSED.has(key);
-  return `<h3 class="colh"><button class="col-fold" data-colfold="${esc(key)}" title="Recolher / expandir esta etapa">${on?'⟩':'⟨'}</button><span class="colh-lb">${label} <span class="count">${count}</span></span></h3>`;
+  return `<h3 class="colh"><button class="col-fold" data-colfold="${esc(key)}" title="Recolher / expandir esta etapa">${on?'⟩':'⟨'}</button><span class="colh-lb">${esc(label)} <span class="count">${count}</span></span></h3>`;
 }
 function wireColFold(){
   document.querySelectorAll('[data-colfold]').forEach(b=>b.onclick=e=>{
@@ -1797,7 +1815,7 @@ async function doAct(b){
   const act=b.dataset.act;
   if(act==='advance'){ if(await updateLead(id,{status:b.dataset.to})){toast(`${firstName(l.nome)} → ${b.dataset.to}`);render();} }
   else if(act==='msg'){ copyMsg(l); }
-  else if(act==='call'){ const n=(l.tentativas_ligacao||0)+1; if(await updateLead(id,{tentativas_ligacao:n})){await sb.from('lead_events').insert({lead_id:id,tipo:'ligacao',texto:'Tentativa #'+n,usuario:ME});toast('Ligação registrada · '+firstName(l.nome));} }
+  else if(act==='call'){ const n=(l.tentativas_ligacao||0)+1; if(await updateLead(id,{tentativas_ligacao:n})){await sb.from('lead_events').insert({lead_id:id,tipo:'ligacao',texto:'Tentativa #'+n,usuario:ME});toast('Ligação registrada · '+firstName(l.nome));render();} } // sem o render o contador de tentativas ficava defasado na tela
   else if(act==='prox'){ const v=b.dataset.d==='clear'?null:(b.dataset.d==='0'?todayStr():addDays(+b.dataset.d)); if(await updateLead(id,{data_proxima_acao:v})){toast(v?('Próxima ação: '+fmtDate(v)):'Follow concluído');render();} }
   else if(act==='acomp'){ const nv=!l.acompanhar_victor; if(await updateLead(id,{acompanhar_victor:nv})){toast(nv?'Victor vai acompanhar':'Removido do Victor');render();} }
 }
@@ -2220,7 +2238,8 @@ function wireInbox(){
     const l=byId(ar.dataset.id); if(!l)return;
     const toArch = ar.dataset.arch==='1';
     if(toArch) INBOX_ARCHIVED.add(l.id); else INBOX_ARCHIVED.delete(l.id);
-    saveSetting('inbox_arquivados',JSON.stringify([...INBOX_ARCHIVED])); // persiste (sincroniza entre aparelhos); não trava a UI
+    if(INBOX_ARCH_OK) saveSetting('inbox_arquivados',JSON.stringify([...INBOX_ARCHIVED])); // persiste (sincroniza entre aparelhos); não trava a UI
+    else toast('⚠ Sem conexão com as configurações — o arquivar vale só neste aparelho até recarregar.');
     toast(toArch?`Conversa de ${firstName(l.nome)} arquivada`:`${firstName(l.nome)} de volta ao inbox`);
     INBOX_SEL=null; INBOX_MOBILE_OPEN=false; render();
   };
@@ -2234,9 +2253,11 @@ function wireInbox(){
     const l=byId(sv.dataset.id); if(!l)return;
     const before=Object.assign({},l);
     const ph=normPhone($('#ibd-tel').value);
+    const _st=etapaStatusValue('ibd');
     const patch={nome:$('#ibd-nome').value||l.nome,telefone:ph.telefone,telefone_e164:ph.e164,
-      status:etapaStatusValue('ibd')};
-    if(await updateLead(l.id,patch)){logEdit(l.id,before,patch);toast('Salvo · '+firstName(patch.nome));render();}
+      status:_st||null};
+    if(!_st){const _etSel=$('#ibd-et'); if(_etSel)patch.etapa=_etSel.value;} // etapa sem status (ex.: FIP 2/TS1): grava a etapa direto — antes salvava status:'' e o lead sumia do funil
+    if(await updateLead(l.id,patch)){toast('Salvo · '+firstName(patch.nome));render();}
   };
 }
 
@@ -2414,7 +2435,7 @@ function openInboxPaste(){
     render();
   };
   setTimeout(()=>$('#ibp-raw').focus(),50);
-  if(navigator.clipboard&&navigator.clipboard.readText){
+  if(!IS_MOBILE&&navigator.clipboard&&navigator.clipboard.readText){ // no iOS a leitura automática dispara o prompt "Colar" toda vez que o modal abre
     navigator.clipboard.readText().then(txt=>{ if(txt&&/"tipo"\s*:\s*"(inbox|sync)"|"conversas"/.test(txt)){ const ta=$('#ibp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); } }).catch(()=>{});
   }
 }
@@ -3017,8 +3038,9 @@ function wireFunil(){
     col.ondrop=async e=>{e.preventDefault();col.classList.remove('drop');
       const et=col.dataset.etapa, l=byId(dragId);
       if(!l||l.etapa===et)return;
-      const ns=STATUS_BY_ETAPA[et][0];
-      if(await updateLead(l.id,{status:ns})){toast(`${firstName(l.nome)} → ${ns}`);render();}
+      const ns=(STATUS_BY_ETAPA[et]||[])[0];
+      const patch=ns?{status:ns}:{etapa:et,status:null}; // etapa sem status (FIP 2/TS1): move gravando a etapa direto — antes o drop falhava mudo (status undefined)
+      if(await updateLead(l.id,patch)){toast(`${firstName(l.nome)} → ${ns||ETAPA_LABEL[et]||et}`);render();}
     };
   });
 }
@@ -3047,10 +3069,12 @@ function wireCapToggle(){ document.querySelectorAll('[data-capmode]').forEach(b=
 function fnEtapas(){ return FN_CFG.etapas.map(e=>e.key); }
 function fnColor(k){ const e=FN_CFG.etapas.find(x=>x.key===k); return e?e.color:'#64748b'; }
 function fnStatusOf(k){ const e=FN_CFG.etapas.find(x=>x.key===k); return e?(e.status||[]):[]; }
-// lead aparece na etapa cujo STATUS ele tem → editar status no editor re-agrupa os leads na hora
-function fnStage(l){ const e=FN_CFG.etapas.find(x=>(x.status||[]).includes(l.status)); return e?e.key:null; }
+// lead aparece na etapa cujo STATUS ele tem → editar status no editor re-agrupa os leads na hora.
+// Fallback: etapa sem status (FIP 2/TS1) usa l.etapa direto — antes esses leads não contavam em lugar nenhum da sidebar.
+function fnStage(l){ const e=FN_CFG.etapas.find(x=>(x.status||[]).includes(l.status)); if(e)return e.key; return CAP_STAGES.includes(l.etapa)?l.etapa:null; }
 let FN_STAGE='SitPlan', FN_MODE='lista';
-function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)&&periodMatch(l.criado_em,F_PERIODO)); }
+// só Ativos: alinha a contagem da sidebar com o kanban (F_SITUACAO default 'Ativo') e com o card da Visão Geral — os 3 diziam números diferentes
+function fnBase(){ return baseLeads().filter(l=>CAP_STAGES.includes(l.etapa)&&situacaoOf(l)==='Ativo'&&periodMatch(l.criado_em,F_PERIODO)); }
 function fnCounts(){ const c={}; fnEtapas().forEach(e=>c[e]=0); fnBase().forEach(l=>{const s=fnStage(l); if(s&&c[s]!=null)c[s]++;}); return c; }
 function fnLeads(stage){ return fnBase().filter(l=>fnStage(l)===stage); }
 function fnListHTML(leads){
@@ -3127,8 +3151,9 @@ function openStatusMenu(anchor,id){
   const curEtapa=STATUS_ETAPA[l.status]||l.etapa;
   const itemHTML=(s,e)=>`<div class="smi${s===l.status?' on':''}" data-s="${esc(s)}"><span class="smi-dot" style="background:${ETAPA_COLOR[e]}"></span><span class="smi-t">${esc(s)}</span>${s===l.status?'<span class="smi-ck">✓</span>':''}</div>`;
   const curList=(STATUS_BY_ETAPA[curEtapa]||[]).map(s=>itemHTML(s,curEtapa)).join('');
-  const others=ETAPAS.filter(e=>e!==curEtapa).map(e=>`<div class="smi-grp">${ETAPA_LABEL[e]}</div>`+STATUS_BY_ETAPA[e].map(s=>itemHTML(s,e)).join('')).join('');
-  m.innerHTML=`<div class="stmenu-h"><b>Status</b> · ${esc(firstName(l.nome))}<div class="stmenu-sub">Etapa atual: ${ETAPA_LABEL[curEtapa]||'—'}</div></div>`+
+  // etapa sem status (FIP 2/TS1) ganha item clicável direto — antes aparecia só o título do grupo, sem como mover
+  const others=ETAPAS.filter(e=>e!==curEtapa).map(e=>`<div class="smi-grp">${esc(ETAPA_LABEL[e])}</div>`+((STATUS_BY_ETAPA[e]&&STATUS_BY_ETAPA[e].length)?STATUS_BY_ETAPA[e].map(s=>itemHTML(s,e)).join(''):`<div class="smi" data-et="${esc(e)}"><span class="smi-dot" style="background:${ETAPA_COLOR[e]}"></span><span class="smi-t">Mover para ${esc(ETAPA_LABEL[e])}</span></div>`)).join('');
+  m.innerHTML=`<div class="stmenu-h"><b>Status</b> · ${esc(firstName(l.nome))}<div class="stmenu-sub">Etapa atual: ${esc(ETAPA_LABEL[curEtapa]||'—')}</div></div>`+
     `<div class="stmenu-body">${curList||'<div class="smi-empty">Sem status nesta etapa.</div>'}</div>`+
     `<button class="stmenu-more" id="st-more">Mover para outra etapa ▾</button>`+
     `<div class="stmenu-others" id="st-others" style="display:none">${others}</div>`;
@@ -3139,9 +3164,11 @@ function openStatusMenu(anchor,id){
   clampMenu(m);
   const mo=m.querySelector('#st-more'); if(mo)mo.onclick=ev=>{ev.stopPropagation();const o=m.querySelector('#st-others');const open=o.style.display!=='none';o.style.display=open?'none':'';mo.textContent=open?'Mover para outra etapa ▾':'Mover para outra etapa ▴';};
   m.querySelectorAll('.smi').forEach(it=>it.onclick=async ev=>{ev.stopPropagation();
-    const ns=it.dataset.s; closeMenus();
+    const ns=it.dataset.s, ne=it.dataset.et; closeMenus();
+    if(ne){ if(l.etapa!==ne&&await updateLead(id,{etapa:ne,status:null})){toast(`${firstName(l.nome)} → ${ETAPA_LABEL[ne]||ne}`);render();} return; }
     if(ns!==l.status&&await updateLead(id,{status:ns})){toast(`${firstName(l.nome)} → ${ns}`);render();}
   });
+  m.addEventListener('click',ev=>ev.stopPropagation()); // clique no header/padding do menu não fecha (o once abaixo segue armado pra cliques FORA)
   setTimeout(()=>document.addEventListener('click',closeMenus,{once:true}),0);
 }
 function closeMenus(){document.querySelectorAll('.statusmenu').forEach(m=>m.remove());}
@@ -3173,7 +3200,8 @@ function logEdit(id,before,patch){
   const stChg = patch.status!=null && String(before.status||'')!==String(patch.status);
   const row={lead_id:id,tipo:stChg?'status':'edicao',texto:'✏️ Editou: '+changed.join(', '),usuario:ME};
   if(stChg) row.para_status=patch.status;
-  try{ sb.from('lead_events').insert(row); }catch(_){}  // fire-and-forget: nunca trava o salvar
+  // fire-and-forget de verdade: o builder do supabase-js é lazy — sem .then() a requisição NUNCA dispara (bug: log ficou mudo desde a v2.5.0)
+  try{ sb.from('lead_events').insert(row).then(()=>{},()=>{}); }catch(_){}
 }
 // ===== DRAWER =====
 function openDrawer(id){
@@ -3237,15 +3265,16 @@ function openDrawer(id){
       renda_estimada:$('#d-renda').value?Number($('#d-renda').value):null,renda_auto:false,
       faixa_idade:$('#d-idade').value?Number($('#d-idade').value):null,
       telefone:ph.telefone,telefone_e164:ph.e164,sexo:$('#d-sexo').value||null,
-      status:etapaStatusValue('d'),
+      status:etapaStatusValue('d')||null,
       data_proxima_acao:proxVal||null,acompanhar_victor:$('#d-acomp').checked,
       agendamento:$('#d-agenda').value?new Date($('#d-agenda').value).toISOString():null,
       linkedin_url:$('#d-url').value||null,linkedin_url_norm:normUrl($('#d-url').value),
       observacoes:$('#d-obs').value||null};
-    if(await updateLead(id,patch)){logEdit(id,before,patch);toast('Salvo');ov.remove();render();}
+    if(!patch.status){const _etSel=$('#d-et'); if(_etSel)patch.etapa=_etSel.value;} // etapa sem status (FIP 2/TS1): grava a etapa direto — antes salvava status:'' e o lead sumia do funil
+    if(await updateLead(id,patch)){toast('Salvo');ov.remove();render();}
   };
   $('#d-msg').onclick=(e)=>copyMsg(l,e.currentTarget);
-  const _du=$('#d-url'),_duo=$('#d-url-open'); if(_du&&_duo)_du.oninput=()=>{const v=_du.value.trim();_duo.href=v||'#';_duo.style.display=v?'':'none';};
+  const _du=$('#d-url'),_duo=$('#d-url-open'); if(_du&&_duo)_du.oninput=()=>{const v=_du.value.trim();_duo.href=safeHref(v);_duo.style.display=v?'':'none';};
   $('#d-call').onclick=async()=>{
     const n=(l.tentativas_ligacao||0)+1;
     if(await updateLead(id,{tentativas_ligacao:n})){await sb.from('lead_events').insert({lead_id:id,tipo:'ligacao',texto:'Tentativa de ligação #'+n,usuario:ME});toast('Ligação registrada');loadTimeline(id);}
@@ -3261,8 +3290,9 @@ function openDrawer(id){
   loadTimeline(id);
 }
 async function loadTimeline(id){
-  const {data}=await sb.from('lead_events').select('*').eq('lead_id',id).order('criado_em',{ascending:false});
+  const {data,error}=await sb.from('lead_events').select('*').eq('lead_id',id).order('criado_em',{ascending:false});
   const el=$('#d-tl'); if(!el)return;
+  if(error){el.innerHTML='<div class="muted">Não deu pra carregar o histórico agora — tente de novo.</div>';return;}
   if(!data||!data.length){el.innerHTML='<div class="muted">Sem eventos ainda.</div>';return;}
   const ic={status:'🔄',ligacao:'📞',nota:'📝',mensagem:'💬',agenda:'📅',criado:'✨',edicao:'✏️'};
   el.innerHTML=data.map(ev=>`<div class="tl-item"><div>${ic[ev.tipo]||'•'} ${esc(ev.texto||ev.tipo)}${ev.para_status?` <b>→ ${esc(ev.para_status)}</b>`:''}</div><div class="tl-when">${new Date(ev.criado_em).toLocaleString('pt-BR')} · ${esc(ev.usuario||'')}</div></div>`).join('');
@@ -3630,7 +3660,7 @@ function openImport(){
       <a id="imp-tpl" class="muted" style="cursor:pointer;text-decoration:underline;font-size:12px">baixar modelo CSV</a>
     </div>
     <div id="imp-prev"></div>
-    <div style="display:flex;gap:8px;margin-top:12px">
+    <div class="modal-actions">
       <button class="btn primary" id="imp-go" disabled>Importar novos</button>
       <button class="btn ghost" id="imp-close">Fechar</button>
     </div>
@@ -3661,7 +3691,9 @@ function openImport(){
         if((m&&m.confident)||keys.some(k=>seen.has(k))){dup++;continue;}
         keys.forEach(k=>seen.add(k));
         let status=pick(r,['status']).trim();if(!ALL_STATUS.includes(status))status='Aguardando Qualificacao';
-        const renda=pick(r,['renda','renda_estimada']).replace(/[^\d]/g,'');
+        // renda: respeita decimal ("12000.50" / "1.200,50" viravam 1200050 — lead ganhava score A indevido)
+        let renda=pick(r,['renda','renda_estimada']).replace(/[^\d.,]/g,'');
+        if(/[.,]\d{1,2}$/.test(renda)) renda=renda.replace(/[.,]\d{1,2}$/,'').replace(/[^\d]/g,''); else renda=renda.replace(/[^\d]/g,'');
         const idade=pick(r,['idade','faixa_idade']).replace(/[^\d]/g,'');
         toInsert.push({nome,primeiro_nome:firstName(nome),cargo:pick(r,['cargo','headline'])||null,empresa:pick(r,['empresa','company'])||null,
           sexo:pick(r,['sexo'])||null,faixa_idade:idade?Number(idade):null,renda_estimada:renda?Number(renda):null,
@@ -3718,14 +3750,15 @@ function autoMergePlan(g){
   return {keep:keepLead.id, patch};
 }
 async function applyMerge(g,keep,patch){
-  // O índice UNIQUE do LinkedIn (linkedin_url_norm) colide se gravarmos a URL no mantido
-  // ENQUANTO o duplicado (mesma URL) ainda existe → dava "falha ao atualizar registro mantido" (23505).
-  // Ordem correta: atualiza o mantido SEM a URL → remove os duplicados → só então grava a URL.
-  const urlKeys=['linkedin_url','linkedin_url_norm'];
+  // Os índices UNIQUE (linkedin_url_norm, email_norm e — quando ligar a trava 2b — telefone_e164)
+  // colidem se gravarmos o valor no mantido ENQUANTO o duplicado (mesmo valor) ainda existe →
+  // dava "falha ao atualizar registro mantido" (23505) JUSTAMENTE nos grupos que a tela existe pra resolver.
+  // Ordem correta: atualiza o mantido SEM os campos únicos → remove os duplicados → só então grava esses campos.
+  const urlKeys=['linkedin_url','linkedin_url_norm','email','telefone','telefone_e164'];
   const urlPatch={}; urlKeys.forEach(k=>{ if(k in patch) urlPatch[k]=patch[k]; });
   if('linkedin_url' in urlPatch) urlPatch.linkedin_url_norm=normUrl(urlPatch.linkedin_url); // mantém o norm coerente com a URL escolhida
   const patchNoUrl={...patch}; urlKeys.forEach(k=>delete patchNoUrl[k]);
-  // 1) atualiza o mantido com TODOS os campos, menos a URL
+  // 1) atualiza o mantido com TODOS os campos, menos os que têm índice único
   if(Object.keys(patchNoUrl).length && !await updateLead(keep,patchNoUrl))
     return {ok:false, kept:false, removed:0, failed:[], errMsg:'falha ao atualizar registro mantido'};
   // 2) deleta os outros — coleta erros em vez de engolir silenciosamente
@@ -3738,11 +3771,13 @@ async function applyMerge(g,keep,patch){
       const i=LEADS.findIndex(x=>x.id===l.id); if(i>=0) LEADS.splice(i,1); removed++;
     }catch(e){ failed.push({id:l.id, nome:l.nome, msg:e.message||String(e)}); lastErr=e.message||String(e); }
   }
-  // 3) agora que os duplicados sumiram, grava a URL no mantido (sem colisão do índice UNIQUE)
+  // 3) agora que os duplicados sumiram, grava os campos únicos no mantido (sem colisão dos índices UNIQUE)
   if(Object.keys(urlPatch).length && !await updateLead(keep,urlPatch) && !failed.length){
-    failed.push({id:keep, nome:'(registro mantido)', msg:'não consegui gravar o LinkedIn'});
-    lastErr='falha ao gravar o LinkedIn no registro mantido';
+    failed.push({id:keep, nome:'(registro mantido)', msg:'não consegui gravar LinkedIn/e-mail/telefone'});
+    lastErr='falha ao gravar LinkedIn/e-mail/telefone no registro mantido';
   }
+  // higiene: ids removidos não podem sobrar em seleções/arquivados
+  g.leads.forEach(l=>{ if(l.id!==keep){ SEL.delete(l.id); INBOX_ARCHIVED.delete(l.id); } });
   return {ok:failed.length===0, kept:true, removed, failed, errMsg:lastErr};
 }
 // Backfill único: preenche código PI nos leads antigos sem código, na ordem de criação (id).
@@ -3832,7 +3867,7 @@ function openMerge(g){
     <h2>Unificar duplicata</h2>
     <p class="hint">Escolha <b>qual registro manter</b> (radio) e <b>clique no valor</b> que vale em cada linha. Os outros registros serão <b>removidos</b>.</p>
     <div id="mg-body" style="overflow:auto;max-height:60vh">${draw()}</div>
-    <div style="display:flex;gap:8px;margin-top:14px">
+    <div class="modal-actions">
       <button class="btn primary" id="mg-go">Unificar e remover os outros</button>
       <button class="btn ghost" id="mg-close">Cancelar</button>
     </div>
@@ -4239,7 +4274,7 @@ let CMDK_SEL=0, CMDK_RES=[];
 function cmdkMatches(q){
   if(!q) return [];
   const n=_norm(q);
-  const hit=l=>[l.nome,l.empresa,l.cargo,l.telefone,l.segmento,l.bairro].some(x=>_norm(x||'').includes(n));
+  const hit=l=>[l.nome,l.empresa,l.cargo,l.telefone,l.segmento,l.bairro,l.codigo,l.recomendante,l.email].some(x=>_norm(x||'').includes(n)); // + codigo/recomendante/email (a topbar já achava; o ⌘K não)
   return baseLeads().filter(hit).sort((a,b)=>{
     const an=_norm(a.nome||'').startsWith(n)?0:1, bn=_norm(b.nome||'').startsWith(n)?0:1;
     return an-bn||(b.prioridade?1:0)-(a.prioridade?1:0);
@@ -4384,7 +4419,8 @@ function mOpenMenu(){ document.body.classList.add('m-menu'); }
 function mCloseMenu(){ document.body.classList.remove('m-menu'); }
 function mGo(v){ M_LEAD=null; VIEW=v; mCloseMenu(); var c=$('#content'); if(c)c.scrollTop=0; render(); }
 function mGoEtapa(e){ M_ETAPA_SEL=e; VIEW='etapaView'; mCloseMenu(); render(); }
-function mOpenLead(id){ M_LEAD=id; VIEW='leadDetail'; var c=$('#content'); if(c)c.scrollTop=0; render(); }
+var M_BACK='contatos'; // de onde o detalhe do lead foi aberto — o "‹ Voltar" devolve pra lá (antes caía sempre em Contatos)
+function mOpenLead(id){ if(VIEW!=='leadDetail')M_BACK=VIEW; M_LEAD=id; VIEW='leadDetail'; var c=$('#content'); if(c)c.scrollTop=0; render(); }
 function mToggleFunil(){ M_MENU_FUNIL=!M_MENU_FUNIL; mDrawerBody(); }
 function mToggleEtapas(){ M_MENU_ETAPAS=!M_MENU_ETAPAS; mDrawerBody(); }
 function mToggleLk(){ M_MENU_LK=!M_MENU_LK; mDrawerBody(); }
@@ -4457,6 +4493,8 @@ function mDrawerBody(){
   h+=item('tarefas','✅','Tarefas');
   // 3. Contatos
   h+=item('contatos','📇','Contatos');
+  // 3b. Recomendações (existia só no desktop)
+  h+=item('recomendacoes','🙌','Recomendações');
   // 4. Leads LinkedIn (módulo)
   var lkActive=(VIEW==='funil'||VIEW==='mineracao'||VIEW==='qualificar'||VIEW==='inbox');
   h+='<button class="m-nav grp'+(M_MENU_LK?' open':'')+'" onclick="mToggleLk()"><span class="m-lkbadge">in</span><span class="t grp-t'+(lkActive?' act':'')+'">Leads LinkedIn</span><span class="chev">▾</span></button>';
@@ -4504,14 +4542,14 @@ function wireMobileChrome(){
   var fab=$('#m-fab'); if(fab)fab.onclick=function(){ openNovo(false); };
   var lead=$('#m-lead'); if(lead)lead.onclick=function(){ openNovo(false); };
   var sync=$('#m-sync'); if(sync)sync.onclick=async function(){ sync.textContent='⏳'; try{ await loadLeads(); toast('Sincronizado ✓'); }catch(_){ toast('Erro ao sincronizar'); } sync.textContent='⟳'; };
-  var s=$('#m-search'); if(s)s.oninput=function(){ SEARCH=s.value.trim(); render(); s.focus(); };
+  var s=$('#m-search'); if(s)s.oninput=function(){ SEARCH=s.value.trim(); clearTimeout(s._t); s._t=setTimeout(function(){ render(); s.focus(); },180); }; // debounce igual ao desktop (sem ele, cada tecla re-renderizava a view inteira)
 }
 
 /* ================= RENDER ROUTER MOBILE ================= */
 function renderMobile(){
   var c=$('#content'); if(!c)return;
   var v=(VIEW==='hoje')?'visao':VIEW;
-  var titles={visao:'Visão Geral',funilcap:'Funil Captação',etapaView:'Etapas · '+mEtapaLabel(M_ETAPA_SEL),funil:'Funil LinkedIn',mineracao:'Minerar',qualificar:'Qualificar',inbox:'Inbox LinkedIn',contatos:'Contatos',leadDetail:'Lead',tarefas:'Tarefas',relatorio:'Relatório',dup:'Duplicatas',usuarios:'Configurações',perfil:'Configurações',config:'Configurações'};
+  var titles={visao:'Visão Geral',funilcap:'Funil Captação',etapaView:'Etapas · '+mEtapaLabel(M_ETAPA_SEL),funil:'Funil LinkedIn',mineracao:'Minerar',qualificar:'Qualificar',inbox:'Inbox LinkedIn',contatos:'Contatos',leadDetail:'Lead',tarefas:'Tarefas',relatorio:'Relatório',dup:'Duplicatas',recomendacoes:'Recomendações',usuarios:'Configurações',perfil:'Configurações',config:'Configurações'};
   var t=$('#m-title'); if(t)t.textContent=titles[v]||'Dashboard';
   // tabs ativas
   document.querySelectorAll('#m-tabbar .m-tab').forEach(function(tb){ tb.classList.toggle('on', tb.dataset.mtab===v); });
@@ -4530,9 +4568,11 @@ function renderMobile(){
   else if(v==='tarefas') html=mTarefas();
   else if(v==='relatorio') html=mRelatorio();
   else if(v==='dup') html=mDup();
+  else if(v==='recomendacoes') html=recomendacoesHTML(); // reusa a tela desktop (antes caía em Configurações com título "Dashboard")
   else html=mConfig();
   c.innerHTML=html;
   wireActions(c); wireStatusButtons();
+  if(v==='recomendacoes'&&typeof wireRecom==='function') wireRecom();
   c.querySelectorAll('[data-mlead]').forEach(function(el){ el.addEventListener('click',function(e){ if(e.target.closest('[data-act],[data-status-btn],[data-star],a,button'))return; mOpenLead(el.dataset.mlead); }); });
   if(typeof mWireScreen==='function') mWireScreen(c,v);
   if(v==='mineracao'&&MINING){ startMiningTick&&startMiningTick(); }
@@ -4722,6 +4762,7 @@ function mContatos(){
   var arr=filteredContatos();
   var cnt='<div style="font-size:13px;color:#94A3B8;font-weight:600;margin:2px 2px 12px">'+arr.length+' de '+scope.length+' contatos</div>';
   var list=arr.length?'<div style="display:flex;flex-direction:column;gap:10px">'+arr.slice(0,400).map(function(l){return mListCard(l,ETAPA_COLOR[l.etapa],mEtapaLabel(l.etapa));}).join('')+'</div>':'<div class="m-empty">Nenhum contato com esse filtro.</div>';
+  if(arr.length>400) list+='<div style="text-align:center;font-size:12.5px;color:#94A3B8;padding:12px">Mostrando 400 de '+arr.length+' — refine a busca ou os filtros pra ver o resto.</div>'; // antes cortava em silêncio
   return per+dateRow+l1+l2+l3+l4+cnt+list;
 }
 function mLeadDetail(){
@@ -4733,8 +4774,10 @@ function mLeadDetail(){
   var faixa='<div class="m-row-tap" data-status-btn="'+l.id+'" style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(15,23,42,.05)"><span style="width:10px;height:10px;border-radius:50%;background:'+color+'"></span><span style="font-size:14px;font-weight:800;color:'+color+'">'+mEtapaLabel(l.etapa)+'</span><span style="font-size:13.5px;color:#94A3B8">· '+esc(l.status)+'</span></div>';
   var dados=[['Cargo',l.cargo],['Empresa',l.empresa],['Renda estimada',l.renda_estimada!=null?('R$ '+Number(l.renda_estimada).toLocaleString('pt-BR')):''],['Idade',l.faixa_idade?l.faixa_idade+' anos':''],['Telefone',l.telefone],['Sexo',l.sexo],['Cidade',l.cidade],['Formação',l.formacao],['Recomendante',l.recomendante]].filter(function(d){return d[1];});
   var dadosH='<div style="background:#fff;border-radius:18px;padding:6px 18px;box-shadow:0 2px 8px rgba(15,23,42,.05);margin-bottom:14px">'+dados.map(function(d){return '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #F1F5F9"><span style="font-size:14px;color:#94A3B8">'+esc(d[0])+'</span><span style="font-size:14.5px;font-weight:700;color:#334155;text-align:right">'+esc(d[1])+'</span></div>';}).join('')+'</div>';
-  var lk=l.linkedin_url?'<a href="'+esc(l.linkedin_url)+'" target="_blank" style="display:block;text-align:center;background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,.05);color:#0A66C2;font-weight:800;text-decoration:none">in Abrir LinkedIn</a>':'';
-  return back+head+faixa+dadosH+lk;
+  var lk=l.linkedin_url?'<a href="'+safeHref(l.linkedin_url)+'" target="_blank" style="display:block;text-align:center;background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,.05);color:#0A66C2;font-weight:800;text-decoration:none">in Abrir LinkedIn</a>':'';
+  // conversa do LinkedIn (inbox) — no desktop aparece no painel do Inbox; no mobile não aparecia em lugar NENHUM
+  var thread=(l.inbox_ultima_msg||l.inbox_thread)&&typeof inboxThreadHTML==='function'?'<div style="background:#fff;border-radius:18px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.05);margin-bottom:14px">'+inboxThreadHTML(l)+'</div>':'';
+  return back+head+faixa+dadosH+thread+lk;
 }
 function mTasksLoad(){ if(M_TASKS)return M_TASKS; try{ M_TASKS=JSON.parse(localStorage.getItem(M_TASK_KEY)||'[]'); }catch(e){ M_TASKS=[]; } if(!Array.isArray(M_TASKS))M_TASKS=[]; return M_TASKS; }
 function mTasksSave(){ try{ localStorage.setItem(M_TASK_KEY,JSON.stringify(M_TASKS||[])); }catch(e){} }
@@ -4858,7 +4901,7 @@ function mWireScreen(c,v){
   c.querySelectorAll('[data-mmine]').forEach(function(b){b.onclick=function(){startMining(+b.getAttribute('data-mmine'));};});
   var stop=$('#mine-stop'); if(stop)stop.onclick=async function(){await stopMining();render();};
   c.querySelectorAll('[data-mrep]').forEach(function(b){b.onclick=function(){M_REP_RANGE=+b.getAttribute('data-mrep');c.querySelectorAll('[data-mrep]').forEach(function(x){x.classList.remove('on');});b.classList.add('on');mLoadReport();};});
-  var back=c.querySelector('.m-back'); if(back)back.onclick=function(){VIEW='contatos';M_LEAD=null;render();};
+  var back=c.querySelector('.m-back'); if(back)back.onclick=function(){VIEW=M_BACK||'contatos';M_LEAD=null;render();};
   var mtl=$('#m-tk-lead'), mtt=$('#m-tk-tpl'), mtx=$('#m-tk-text'), mtd=$('#m-tk-date'), mta=$('#m-tk-add');
   if(mtt)mtt.onchange=function(){ if(mtx)mtx.style.display=(mtt.value==='__free')?'':'none'; };
   function mAddTask(){
