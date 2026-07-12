@@ -1141,22 +1141,57 @@ async function lpPdfText(arrbuf){ await lpEnsurePdfjs(); const pdf=await window.
   // Reconstrói LINHA por linha pela coordenada Y (preserva as tabelas; o join cru juntava
   // a página inteira numa linha só e a IA se perdia nas colunas).
   // Frente 2: PRESERVA a fronteira de COLUNA. Quando o buraco horizontal entre dois itens é
-  // grande (> LP_COLGAP pt), insere \x1f (Unit Separator) no lugar do espaço; o parser usa esse
-  // marcador pra separar segurado≠pagador SEM IA. Espaços de palavra no template Prudential são
-  // ~1-2pt; gaps de coluna ≥7pt (fronteira segurado↔pagador chega a 25-42pt) → 4pt separa com
-  // folga de ~3,5x. Achatar \x1f→espaço reproduz o texto antigo byte-a-byte (zero regressão).
+  // grande (> LP_COLGAP pt), separa em CÉLULA (coluna); na serialização vira \x1f (Unit Separator)
+  // e o parser usa esse marcador pra separar segurado≠pagador SEM IA. Espaços de palavra no
+  // template Prudential são ~1-2pt; gaps de coluna ≥7pt (fronteira segurado↔pagador chega a
+  // 25-42pt) → 4pt separa com folga de ~3,5x. Achatar \x1f→espaço reproduz o texto antigo
+  // byte-a-byte (zero regressão) — e o caminho "colar texto" nem passa por aqui.
   const LP_COLGAP=4;
-  let out=''; for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const tc=await pg.getTextContent();
+  let out='';
+  for(let p=1;p<=pdf.numPages;p++){ const pg=await pdf.getPage(p); const tc=await pg.getTextContent();
     const its=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width||0}));
     its.sort((a,b)=>(Math.abs(a.y-b.y)>3?(b.y-a.y):(a.x-b.x)));
-    let ly=null,lx=null,line=''; const ls=[];
+    // 1) agrupa por Y em LINHAS de CÉLULAS {t, x=borda esq, xr=borda dir}
+    const lines=[]; let cur=null,ly=null,lx=null;
     for(const it of its){
-      if(ly===null||Math.abs(it.y-ly)<=3){ if(line){ const gap=it.x-lx; line+=(gap>LP_COLGAP?'\x1f':' ')+it.s; } else { line=it.s; } }
-      else { ls.push(line.trim()); line=it.s; }
+      if(ly===null||Math.abs(it.y-ly)>3){ cur={cells:[{t:it.s,x:it.x,xr:it.x+it.w}]}; lines.push(cur); }
+      else { const gap=it.x-lx; if(gap>LP_COLGAP){ cur.cells.push({t:it.s,x:it.x,xr:it.x+it.w}); } else { const c=cur.cells[cur.cells.length-1]; c.t+=' '+it.s; c.xr=it.x+it.w; } }
       ly=it.y; lx=it.x+it.w; }
-    if(line) ls.push(line.trim());
-    out+=ls.join('\n')+'\n'; }
-  return out.trim(); }
+    lpMergeWrap(lines);   // 2) junta nome quebrado em 2 linhas físicas na linha-âncora
+    // 3) serializa: células → \x1f entre colunas
+    for(const L of lines){ if(L) out+=L.cells.map(c=>c.t.trim()).join('\x1f').trim()+'\n'; }
+  }
+  return out.trim();
+  // Frente 2b: nomes longos que a Prudential quebra em 2 LINHAS FÍSICAS (ex.: "DAVI MAGALHAES
+  // CARNEIRO DE" / "ALBUQUERQUE") viravam uma linha órfã que o parser perdia + truncava o nome do
+  // registro pai. Junta a linha-fragmento na âncora POR ALINHAMENTO DE X: cada célula do fragmento
+  // é anexada à célula da âncora da MESMA coluna (borda esquerda mais próxima), mas SÓ se essa
+  // célula for name-like (tem letra, sem dígito) — assim cabeçalho quebrado ("EMISSÃO"/"PRÊMIO"
+  // sob colunas de data) nunca contamina uma linha de dados. Fragmento acima da âncora → prefixa.
+  function lpMergeWrap(lines){
+    const nameLike=s=>/[A-Za-zÀ-ÿ]/.test(s)&&!/\d/.test(s);
+    // âncora = linha de dado real (não um fragmento de nome quebrado): começa com dígito (dias/
+    // proposta/apólice/data) OU tem ≥4 células. Um fragmento de nome tem no máx. 2 células (topo de
+    // pagador+segurado) e nenhum dígito. (Nada de checar nome de MÊS aqui: "MAR"/"MAIO" casariam
+    // com nomes como MARCUS/MAILSON — e linhas com mês já têm ≥4 células.)
+    const anchored=L=>{ if(!L||!L.cells.length) return true; return L.cells.length>=4 || /\d/.test(L.cells[0].t); };
+    // TÍTULO de seção ("ATRASOS - FULANO") também é 1 célula sem dígito — jamais fundir, senão a
+    // seção inteira some do parse. Idem cabeçalho: só uma linha de DADOS (1ª célula começa com
+    // dígito) pode receber merge; cabeçalhos ("PROPOSTA APOLICE …") começam com letra.
+    const isTitulo=L=>L.cells.some(c=>/(PEND[ÊE]NCIAS DE EMISS|AP[ÓO]LICES EMITIDAS|^ATRASOS\b|\bATRASOS -|ANIVERSARIANTES|ANIVERS[ÁA]RIOS DE AP)/i.test(c.t));
+    for(let i=0;i<lines.length;i++){ const F=lines[i]; if(!F||anchored(F)||isTitulo(F)) continue;   // só linhas SEM âncora (seriam perdidas)
+      for(const d of [1,-1]){ const A=lines[i+d]; if(!A||!anchored(A)||!/^\d/.test(A.cells[0].t)) continue;
+        if(!(A.cells[0].x < F.cells[0].x - LP_COLGAP)) continue;   // âncora tem de ter conteúdo à ESQUERDA do fragmento
+        const plan=[]; let ok=true;
+        for(const fc of F.cells){ let best=null,bestD=Infinity;
+          for(const ac of A.cells){ const ov=Math.min(fc.xr,ac.xr)-Math.max(fc.x,ac.x); if(ov>0){ const dd=Math.abs(ac.x-fc.x); if(dd<bestD){bestD=dd;best=ac;} } }
+          if(!best||!nameLike(best.t)||plan.indexOf(best)!==-1){ ok=false; break; } plan.push(best); }
+        if(!ok) continue;
+        for(let k=0;k<F.cells.length;k++){ const ac=plan[k],ft=F.cells[k].t.trim(); ac.t = d===1 ? (ft+' '+ac.t.trim()) : (ac.t.trim()+' '+ft); }
+        lines[i]=null; break; }
+    }
+  }
+}
 
 /* ════ PARSER DETERMINÍSTICO (sem IA) — lê o texto do relatório Prudential local ════
    Torna o caminho "colar texto"/PDF-com-texto independente do Gemini (sem 429/503).
