@@ -113,6 +113,8 @@ o projeto do CRM está** e se essa org contém só projetos do CRM.
 - Convidar: org → **Settings → Team → Invite** (papel Administrator). O convite expira em ~24h.
 - Se o projeto do CRM dividir a org com projetos de outra natureza, **isole primeiro** (crie uma org
   dedicada e transfira o projeto em *Project Settings → General → Transfer project*) antes de convidar.
+- ✅ **Status 15/07/2026:** isolamento FEITO — o projeto do CRM (`kbiinfpjfmuidyzsfegp`) está sozinho
+  na org dedicada **crm-captacao** (plano Free). Financeiro e demais apps pessoais ficaram em outra org.
 
 ### Segredos
 - `GEMINI_API_KEY` (secret da função Supabase) → compartilhar por **Google Drive**, nunca WhatsApp.
@@ -128,8 +130,8 @@ o projeto do CRM está** e se essa org contém só projetos do CRM.
 
 ## 10. Pendências a confirmar (preencher)
 
-- [ ] **Supabase:** plano é **Free ou Pro**? Quantos projetos existem e em qual organização está o CRM?
+- [x] **Supabase:** plano **Free**. O CRM está sozinho na org dedicada **crm-captacao** (isolado em 15/07/2026).
 - [ ] **Domínio:** há domínio próprio comprado (ex.: `segurocomjuca.com`)? Em qual registrador?
-- [ ] **Extensão Chrome** ("Garimpo LinkedIn"): o código-fonte está em algum repositório ou só local?
+- [x] **Extensão Chrome** ("Garimpo LinkedIn"): código-fonte **só local** (fora do Git), confirmado em 15/07/2026.
 - [ ] **Credenciais Prudential** (relatório semanal): onde ficam e como acessar.
 - [ ] **Dados reais:** confirmar volume atual de candidatos em `leads` e etapas do funil mais usadas.
