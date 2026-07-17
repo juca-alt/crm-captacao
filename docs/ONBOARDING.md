@@ -135,3 +135,23 @@ o projeto do CRM está** e se essa org contém só projetos do CRM.
 - [x] **Extensão Chrome** ("Garimpo LinkedIn"): código-fonte **só local** (fora do Git), confirmado em 15/07/2026.
 - [ ] **Credenciais Prudential** (relatório semanal): onde ficam e como acessar.
 - [ ] **Dados reais:** confirmar volume atual de candidatos em `leads` e etapas do funil mais usadas.
+
+## 11. Transição 360 (16/07/2026) — backlog vivo & onde está cada material
+
+### PRs abertos (features prontas aguardando merge — ordem sugerida)
+1. **#16 Daniel v1** (inclui #12): SitPlan & TA datado, funil 12 etapas, ANCE, metas — vendas.html v0.3.
+2. **#17 Frente 2 LP**: PDF separa segurado≠pagador + nome longo em 2 linhas (independente).
+3. **#18 Carteira→Supabase** (empilhado no #16): sync entre aparelhos, RLS por dono. ⚠️ exige rodar
+   a migration `carteira.sql` — já está COLADA no SQL Editor do projeto, falta clicar **Run**.
+4. **#19 QA Captação v2.6.3**: 24 correções desktop+mobile.
+
+### Pendências operacionais (Captação, herdadas do ESTADO)
+- Validar logado: lead novo por cada origem (manual/inbox/captura/import) sai com PI do banco, sequencial, sem duplicar.
+- Unificar 6 telefones duplicados na tela Duplicatas → depois ligar a trava 2b de telefone (comentada em `supabase/migrations/lead_id_control.sql`).
+
+### Materiais FORA deste repo (pasta privada no Google Drive, compartilhada com o novo dev)
+Motivo: este repo é público e esses arquivos citam nomes reais de candidatos e estudos internos.
+- **ESTADO_DO_PROJETO.md** — histórico vivo de todas as sessões da Captação (fonte de verdade; ver Contrato de Sincronia no `CLAUDE.md`). + ESTADO_CAPTACAO e ESTADO_VISAO_LP.
+- **Estudo Global-CRM completo** — APRENDIZADOS.md (TOP 10 + roadmap de 3 ondas = backlog de funcionalidades), PLANO_DE_ESTUDO.md, espelho funcional `espelho-globalcrm.html` (10 módulos replicados) e anotações módulo-a-módulo.
+- **Extensão Chrome "Garimpo LinkedIn"** — código-fonte completo + CONTRATO_APP_EXTENSAO.md. Status: stand-by; decisão tomada = publicar como *unlisted* na Chrome Web Store (US$5 taxa única) p/ auto-update; suspeita de seletores do LinkedIn desatualizados no sync.
+- **app_crm/vendas.html (port v0.2 Supabase)** — port do Vendas pra Supabase nunca promovido ao repo (as tabelas `vendas_*` já existem no banco).
