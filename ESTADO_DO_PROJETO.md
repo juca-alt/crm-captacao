@@ -23,7 +23,7 @@
 - `vendas.html` no main já é **ISLAND · v0.3 · Visão LP** com chave `crmlp_v02_state` (CLAUDE.md ainda fala em v0.1/`crmlp_v01_state` e num `vendas-dev.html` que não existe no repo).
 - `ESTADO_DO_PROJETO.md` não existia no repo (recriado agora).
 
-**Próximo passo:** Gustavo validar a v0.3.1 no iPhone (via preview da branch) → se aprovado, merge no main publica no GitHub Pages.
+**Publicação:** Gustavo aprovou pelos screenshots da verificação (19/07) e mandou publicar direto — merge no main feito na mesma sessão, v0.3.1 no ar via GitHub Pages. Validação final de uso real: no iPhone dele, em produção.
 
 ---
 
