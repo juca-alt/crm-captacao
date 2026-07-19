@@ -230,12 +230,23 @@
   .lp-spin i{width:16px;height:16px;border:2.5px solid var(--azul-claro);border-top-color:var(--azul-2);border-radius:50%;display:inline-block;animation:spin .7s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .lp-msg{font-size:12.5px;color:var(--verm);margin-top:10px;min-height:16px}
+  /* ── Daniel v1: SitPlan, ANCE, Metas, banner ── */
+  .b-quente{background:var(--verm-bg);color:var(--verm)}
+  .nncol.enc .nncol-head{color:var(--verm)}
+  .nncol-enc-head{cursor:pointer;min-width:150px;max-width:170px;background:#faf6f6;border:1px dashed #e3cccc}
+  .nncol-enc-head:hover{background:#f5eaea}
+  .sp-sug{background:var(--azul-claro);border:1px solid var(--azul-borda);border-radius:10px;padding:10px 14px;font-size:13px;margin:10px 0 4px}
+  .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff}
+  .meta-in{font-size:11px;color:var(--muted);margin-top:4px;text-align:center}
+  .meta-in input{width:64px;border:1px solid var(--linha);border-radius:8px;padding:3px 6px;font-size:12px;text-align:center}
+  .banner-homolog{background:var(--amarelo-bg);border-bottom:1px solid #e8d9b0;color:#7a5b07;font-size:12.5px;padding:7px 18px;display:flex;gap:10px;align-items:center}
+  .banner-homolog button{margin-left:auto;border:1px solid #e0cf9f;background:#fff;border-radius:8px;padding:3px 10px;cursor:pointer;font-size:12px;color:#7a5b07}
 </style>
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.2 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
+  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.3 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
   <div class="spacer"></div>
   <button class="perfil-chip" id="btnPerfil" onclick="togglePerfilMenu(event)">
     <span class="avatar" id="avTop">G</span>
@@ -249,9 +260,16 @@
   </div>
 </header>
 
+<div class="banner-homolog" id="bannerHomolog" style="display:none">
+  🧪 <b>Versão em homologação</b> — confira os números com os relatórios oficiais e avise o Gustavo se algo divergir.
+  <button onclick="localStorage.setItem('crmlp_homolog_off','1');document.getElementById('bannerHomolog').style.display='none'">Entendi</button>
+</div>
+
 <div class="shell">
   <nav class="sidebar">
     <button class="nav-btn ativo" data-view="inicio" onclick="irPara('inicio')"><span class="ic">🏠</span><span class="lbl">Início</span></button>
+    <button class="nav-btn" data-view="sitplan" onclick="irPara('sitplan')"><span class="ic">📞</span><span class="lbl">SitPlan &amp; TA</span><span class="cnt" id="cnt-sitplan"></span></button>
+    <button class="nav-btn" data-view="metas" onclick="irPara('metas')"><span class="ic">🎯</span><span class="lbl">Metas</span></button>
 
     <div class="sep"></div>
     <button class="nav-grp modulo nav-grp-btn" id="nn-toggle" onclick="toggleGrp('nn')"><span class="ic" style="font-size:13px">🎯</span><span class="lbl">Novos Negócios</span><span class="caret" id="nn-caret">▾</span></button>
@@ -265,6 +283,7 @@
     <div class="nav-grp-wrap" id="cart-group">
       <button class="nav-btn sub" data-view="cart-visao" onclick="irPara('cart-visao')"><span class="ic">📊</span><span class="lbl">Visão da Carteira</span></button>
       <button class="nav-btn sub" data-view="cart-clientes" onclick="irPara('cart-clientes')"><span class="ic">🗂️</span><span class="lbl">Clientes</span><span class="cnt" id="cnt-cart"></span></button>
+      <button class="nav-btn sub" data-view="cart-oportunidades" onclick="irPara('cart-oportunidades')"><span class="ic">💡</span><span class="lbl">Oportunidades</span><span class="cnt" id="cnt-cart-op"></span></button>
     </div>
     <div class="sep"></div>
 
@@ -291,8 +310,9 @@
 </div>
 
 <div class="rodape">
-  <span>CRM Life Planner v0.1 — preview construído sobre o conhecimento de campo do LP Business (10/06/2026).</span>
-  <button onclick="resetDemo()">Resetar dados de demonstração</button>
+  <span>CRM Life Planner v0.3 — Visão LP · Island.</span>
+  <button onclick="resetDemo()">Recarregar demonstração</button>
+  <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
 </div>
 
 <div class="overlay" id="overlay" onclick="fecharDrawer()"></div>
@@ -302,9 +322,42 @@
 <script>
 /* ═══════════════════ DADOS ═══════════════════ */
 const CHAVE='crmlp_v02_state';
-/* Processo Novos Negócios (LP) — fonte única das etapas do funil. */
-const ETAPAS=['SitPlan','TA','OI/FF','P/C','C2','N','EMISSÃO','DELIVERY'];
+/* Processo Novos Negócios (LP) — fonte única das etapas do funil.
+   12 etapas = processo completo Prudential (decisão Gustavo 10/07/2026):
+   fluxo P/C → C2 → N (N = entrada da PROPOSTA/análise de saúde; depois vira apólice);
+   FA = Formulário de Avaliação (rota paralela ao N p/ risco de saúde — não impacta indicador);
+   encerramentos (Não / cancelamentos) ficam RECOLHIDOS no kanban pra não poluir. */
+const ETAPAS=['SitPlan','TA','OI/FF','P/C','C2','N','FA','EMISSÃO','DELIVERY','Não','Prop. Cancelada','Apól. Cancelada'];
+const ETAPAS_ENCERR=['Não','Prop. Cancelada','Apól. Cancelada'];
+const ETAPAS_FLUXO=ETAPAS.filter(e=>!ETAPAS_ENCERR.includes(e));
 const TA_STATUS=['—','Não respondeu','Retornar contato','Sucesso','Declinado'];
+
+/* Resultado de contato (SitPlan/TA) — 1 dropdown, 3 efeitos: loga a tentativa,
+   alimenta os KPIs da sessão e (nos "Agendou X"/"Sem interesse") move a etapa sozinho. */
+const RESULTADOS=[
+  {k:'whatsapp',        l:'WhatsApp'},
+  {k:'lig_atendida',    l:'Ligação atendida',     lig:1, atend:1},
+  {k:'lig_nao_atendida',l:'Ligação não atendida', lig:1, ta:'Não respondeu'},
+  {k:'caixa_postal',    l:'Caixa postal',         lig:1, ta:'Não respondeu'},
+  {k:'ocupado',         l:'Ocupado',              lig:1, ta:'Não respondeu'},
+  {k:'pediu_retornar',  l:'Pediu para retornar',  lig:1, atend:1, ta:'Retornar contato'},
+  {k:'agendou_oi',      l:'Agendou OI/FF',        lig:1, atend:1, agenda:1, etapa:'OI/FF', ta:'Sucesso'},
+  {k:'agendou_pc',      l:'Agendou P/C',          lig:1, atend:1, agenda:1, etapa:'P/C',   ta:'Sucesso'},
+  {k:'agendou_c2',      l:'Agendou C2',           lig:1, atend:1, agenda:1, etapa:'C2',    ta:'Sucesso'},
+  {k:'sem_interesse',   l:'Sem interesse',        lig:1, atend:1, etapa:'Não', ta:'Declinado'},
+];
+const RES_BY_K=Object.fromEntries(RESULTADOS.map(r=>[r.k,r]));
+
+/* ANCE — qualificação do método (definição do Gustavo 10/07/2026):
+   A=Acessível · N=Necessidade · C=Capacidade financeira · E=Elegibilidade (saúde)
+   + "Avisado pelo recomendante" (5º critério). Estrelas = critérios marcados; 4+ = Quente. */
+const ANCE_DEFS=[
+  ['a','A — Acessível','consigo chegar nessa pessoa'],
+  ['n','N — Necessidade','tem necessidade real de proteção'],
+  ['c','C — Capacidade financeira','consegue pagar o plano'],
+  ['e','E — Elegibilidade (saúde)','tem saúde pra passar na análise'],
+  ['avisado','Avisado pelo recomendante','o recomendante avisou que eu ligaria'],
+];
 const PLANO_STATUS=['Criado','Enviado ao parceiro','Apresentado','Ativado','Declinado'];
 
 function seed(){
@@ -341,10 +394,10 @@ function seed(){
        notas:'', infoclient:{pessoais:true,familiar:false,financeiro:false,saude:false},
        recs:[], eventos:[{tipo:'OI/FF',data:'2026-06-14',hora:'10:00',status:'Pendente',formato:'Virtual'}], planos:[]},
       {id:'c4', lp:'gustavo', nome:'Paulo Sérgio Lima', sexo:'M', idade:38, profissao:'Gerente comercial', telefone:'(81) 9 9999-0004',
-       estrelas:3, etapa:'TA', origem:'Indicação', criadoEm:'2026-06-05', taStatus:'Retornar contato', taTentativas:2,
+       estrelas:3, etapa:'TA', origem:'Indicação', criadoEm:'2026-06-05', taStatus:'Retornar contato', taTentativas:2, sitplan:hojeISO(),
        notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[]},
       {id:'c5', lp:'gustavo', nome:'Fernanda Brito', sexo:'F', idade:31, profissao:'Advogada', telefone:'(81) 9 9999-0005',
-       estrelas:0, etapa:'SitPlan', origem:'Evento', criadoEm:'2026-06-09', taStatus:'—', taTentativas:0,
+       estrelas:0, etapa:'SitPlan', origem:'Evento', criadoEm:'2026-06-09', taStatus:'—', taTentativas:0, sitplan:hojeISO(),
        notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[]},
 
       {id:'c6', lp:'daniel', nome:'Canada Pacheco', sexo:'M', idade:47, profissao:'—', telefone:'(81) 9 9999-9876',
@@ -354,7 +407,7 @@ function seed(){
        recs:[{nome:'Referral Médico',tel:'',idade:29,perfil:'Médico · casado · filhos'},{nome:'Referral Empresário',tel:'',idade:34,perfil:'Empresário · casado'}],
        eventos:[{tipo:'OI/FF',data:'2026-06-13',hora:'11:45',status:'Pendente',formato:'Virtual'}], planos:[]},
       {id:'c7', lp:'daniel', nome:'Joana Medeiros', sexo:'F', idade:33, profissao:'Arquiteta', telefone:'(81) 9 9999-0007',
-       estrelas:4, etapa:'TA', origem:'Indicação', criadoEm:'2026-06-01', taStatus:'Não respondeu', taTentativas:3,
+       estrelas:4, etapa:'TA', origem:'Indicação', criadoEm:'2026-06-01', taStatus:'Não respondeu', taTentativas:3, sitplan:hojeISO(),
        notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[]},
       {id:'c8', lp:'daniel', nome:'Eduardo Vasconcelos', sexo:'M', idade:45, profissao:'Diretor de operações', telefone:'(81) 9 9999-0008',
        estrelas:5, etapa:'EMISSÃO', origem:'Recomendação', criadoEm:'2026-05-12', taStatus:'Sucesso', taTentativas:1,
@@ -369,7 +422,8 @@ function seed(){
 let S; // estado
 function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); }
 function salvar(){ localStorage.setItem(CHAVE, JSON.stringify(S)); }
-function resetDemo(){ if(confirm('Resetar todos os dados da demonstração?')){ localStorage.removeItem(CHAVE); carregar(); render(); toast('Demo resetada'); } }
+function resetDemo(){ if(confirm('Recarregar os dados de DEMONSTRAÇÃO? (substitui os contatos atuais)')){ localStorage.removeItem(CHAVE); carregar(); render(); toast('Demo recarregada'); } }
+function zerarContatos(){ if(confirm('Apagar TODOS os contatos e começar do zero pra uso real? (metas e perfis ficam)')){ S.contatos=[]; salvar(); render(); toast('Base zerada — bom trabalho! Crie o primeiro contato em ➕ Novo contato',true); } }
 
 /* ═══════════════════ HELPERS ═══════════════════ */
 const $=s=>document.querySelector(s);
@@ -382,8 +436,22 @@ function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(
 function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function estrelasHtml(n){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="${i<=n?'':'off'}">★</span>`; return `<span class="estrelas">${h}</span>`; }
+/* ── ANCE: estrelas derivadas dos critérios (fallback: estrelas manuais antigas) ── */
+function anceScore(c){ if(!c||!c.ance) return null; return ANCE_DEFS.filter(d=>c.ance[d[0]]).length; }
+function estrelasDe(c){ const s=anceScore(c); return s==null? (c.estrelas||0) : s; }
+function isQuente(c){ return estrelasDe(c)>=4; }
+function quenteChip(c){ return isQuente(c)? ' <span class="badge b-quente">🔥 Quente</span>' : ''; }
+/* ── datas / telefone / interações ── */
+function hojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function isoAddDias(iso,n){ const p=iso.split('-').map(Number); const dt=new Date(p[0],p[1]-1,p[2]+n); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+function proxDiaSemana(dow){ for(let i=1;i<=7;i++){ const cand=isoAddDias(hojeISO(),i); const p=cand.split('-').map(Number); if(new Date(p[0],p[1]-1,p[2]).getDay()===dow) return cand; } return hojeISO(); }
+function dataBR(iso){ return iso? String(iso).split('-').reverse().join('/') : '—'; }
+function diaSemanaBR(iso){ const p=String(iso).split('-').map(Number); return ['domingo','segunda','terça','quarta','quinta','sexta','sábado'][new Date(p[0],p[1]-1,p[2]).getDay()]||''; }
+function waHref(tel){ const d=String(tel||'').replace(/\D/g,''); return d? 'https://wa.me/'+(d.length<=11?'55':'')+d : ''; }
+function uid(){ return 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function interacoesDe(c){ if(!Array.isArray(c.interacoes)) c.interacoes=[]; return c.interacoes; }
 function badgeEtapa(e){
-  const m={'SitPlan':'b-cinza','TA':'b-azul','OI/FF':'b-amarelo','P/C':'b-roxo','C2':'b-azul','N':'b-amarelo','EMISSÃO':'b-roxo','DELIVERY':'b-verde'};
+  const m={'SitPlan':'b-cinza','TA':'b-azul','OI/FF':'b-amarelo','P/C':'b-roxo','C2':'b-azul','N':'b-amarelo','FA':'b-azul','EMISSÃO':'b-roxo','DELIVERY':'b-verde','Não':'b-verm','Prop. Cancelada':'b-verm','Apól. Cancelada':'b-verm'};
   return `<span class="badge ${m[e]||'b-cinza'}">${e}</span>`;
 }
 function toast(msg,ok){ const t=document.createElement('div'); t.className='toast'+(ok?' ok':''); t.textContent=msg; $('#toasts').appendChild(t); setTimeout(()=>t.remove(),2600); }
@@ -415,12 +483,12 @@ function irPara(v){ VIEW=v; NN_FOCUS=''; document.querySelectorAll('.nav-btn').f
 /* ═══════════════════ VIEW: INÍCIO ═══════════════════ */
 function contagens(lista){
   const por={}; ETAPAS.forEach(e=>por[e]=0);
-  lista.forEach(c=>por[c.etapa]++);
+  lista.forEach(c=>{ if(por[c.etapa]==null) por[c.etapa]=0; por[c.etapa]++; });
   return por;
 }
 function funilHtml(lista){
   const por=contagens(lista);
-  const ordem=ETAPAS;
+  const ordem=ETAPAS_FLUXO; // funil = fluxo vivo; encerramentos ficam no resumo abaixo
   const max=Math.max(...ordem.map(e=>por[e]),1);
   let h='<div class="funil">';
   ordem.forEach((e,i)=>{
@@ -478,7 +546,7 @@ function viewInicio(){
       <div class="card">
         <h3 style="font-size:13px">Funil de vendas</h3>
         ${funilHtml(lista)}
-        <div style="font-size:11px;color:var(--muted);margin-top:8px">Processo Novos Negócios: SitPlan → TA → OI/FF → P/C → C2 → N → Emissão → Delivery.</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">Processo: SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · Encerrados: Não ${contagens(lista)['Não']||0} · Prop. canc. ${contagens(lista)['Prop. Cancelada']||0} · Apól. canc. ${contagens(lista)['Apól. Cancelada']||0}</div>
       </div>
       <div class="card">
         <h3 style="font-size:13px;margin-bottom:8px">Telephone Approach</h3>
@@ -508,20 +576,20 @@ function toggleGrp(key){
   const fechado=g.classList.toggle('fechado');
   document.getElementById(m[1]).classList.toggle('fechado',fechado);
 }
-function etapaVar(e){ return {'SitPlan':'#5b6770','TA':'var(--azul)','OI/FF':'var(--amarelo)','P/C':'var(--roxo)','C2':'var(--azul)','N':'var(--amarelo)','EMISSÃO':'var(--roxo)','DELIVERY':'var(--verde)'}[e]||'#5b6770'; }
+function etapaVar(e){ return {'SitPlan':'#5b6770','TA':'var(--azul)','OI/FF':'var(--amarelo)','P/C':'var(--roxo)','C2':'var(--azul)','N':'var(--amarelo)','FA':'var(--azul)','EMISSÃO':'var(--roxo)','DELIVERY':'var(--verde)','Não':'var(--verm)','Prop. Cancelada':'var(--verm)','Apól. Cancelada':'var(--verm)'}[e]||'#5b6770'; }
 function renderNnEtapas(){
   const el=document.getElementById('nn-etapas'); if(!el) return;
   const por=contagens(meusContatos());
   el.innerHTML=ETAPAS.map(e=>`<button class="nav-btn sub" onclick="nnGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
 }
-let NN_MODE='kanban', NN_FOCUS='';
+let NN_MODE='kanban', NN_FOCUS='', NN_ENC=false; // NN_ENC = grupo Encerramentos aberto no kanban
 function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='nn-funil')); render(); }
 function nnCard(c){
   return `<div class="nncard" draggable="true" data-id="${esc(c.id)}" onclick="abrirContato('${esc(c.id)}')">
     <div class="nc-nome">${esc(c.nome)}</div>
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
-    <div class="nc-foot">${estrelasHtml(c.estrelas)}<span style="color:var(--muted)">${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
+    <div class="nc-foot">${estrelasHtml(estrelasDe(c))}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
 }
 function nnLista(lista){
@@ -533,7 +601,7 @@ function nnLista(lista){
       <td>${badgeEtapa(c.etapa)}</td>
       <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)}a<br>${esc(c.profissao)}</td>
       <td style="font-size:12px">${esc(c.taStatus)}</td>
-      <td>${estrelasHtml(c.estrelas)}</td>
+      <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)}</td>
       ${isMaster()?`<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
     </tr>`).join('')||`<tr><td colspan="${isMaster()?6:5}" class="vazio">Sem contatos no funil.</td></tr>`}
     </tbody></table></div>`;
@@ -543,20 +611,34 @@ function viewNnFunil(){
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>
     <span style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa.</span>
+    <span style="flex:1"></span>
+    <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
   let body;
+  const colDe=e=>{
+    const cs=lista.filter(c=>c.etapa===e);
+    return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
+      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
+      ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
+    </div>`;
+  };
   if(NN_MODE==='lista'){ body=nnLista(lista); }
   else {
-    body='<div class="nnboard">'+ETAPAS.map(e=>{
-      const cs=lista.filter(c=>c.etapa===e);
-      return `<div class="nncol${NN_FOCUS===e?' foco':''}" data-etapa="${esc(e)}">
-        <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
-        ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
-      </div>`;
-    }).join('')+'</div>';
+    const nEnc=lista.filter(c=>ETAPAS_ENCERR.includes(c.etapa)).length;
+    const focoEnc=ETAPAS_ENCERR.includes(NN_FOCUS);
+    const abrirEnc=NN_ENC||focoEnc;
+    const encBloco = abrirEnc
+      ? `<div class="nncol nncol-enc-head" onclick="NN_ENC=false;viewNnFunil()" title="Recolher encerramentos">
+           <div class="nncol-head" style="color:var(--verm)">⏴ recolher</div><div class="nncol-vazia">encerramentos</div>
+         </div>`+ETAPAS_ENCERR.map(colDe).join('')
+      : `<div class="nncol nncol-enc-head" onclick="NN_ENC=true;viewNnFunil()" title="Mostrar Não / Prop. Cancelada / Apól. Cancelada">
+           <div class="nncol-head" style="color:var(--verm)">⛔ Encerramentos <span class="qt">${nEnc}</span></div>
+           <div class="nncol-vazia">clique pra abrir</div>
+         </div>`;
+    body='<div class="nnboard">'+ETAPAS_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Novos Negócios</h1>
-    <div class="sub">Processo Novos Negócios (LP) — SitPlan → TA → OI/FF → P/C → C2 → N → Emissão → Delivery.</div>
+    <div class="sub">Processo completo (12 etapas): SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · encerramentos recolhíveis no fim.</div>
     ${toolbar}${body}`;
   if(NN_MODE==='kanban'){
     wireNnBoard();
@@ -569,18 +651,34 @@ function wireNnBoard(){
     card.addEventListener('dragstart',e=>{ dragId=card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
     card.addEventListener('dragend',()=>{ dragId=null; card.classList.remove('dragging'); });
   });
-  document.querySelectorAll('.nnboard .nncol').forEach(col=>{
+  document.querySelectorAll('.nnboard .nncol[data-etapa]').forEach(col=>{
     col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); });
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
-    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId) nnMoveEtapa(dragId,col.dataset.etapa); });
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) nnMoveEtapa(dragId,col.dataset.etapa); });
   });
 }
 function nnMoveEtapa(id,etapa){
   const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
-  const de=c.etapa; c.etapa=etapa; salvar();
+  const de=c.etapa; c.etapa=etapa;
+  logEtapa(c,de,etapa); salvar();
   toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
   NN_FOCUS=''; render();
 }
+/* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
+function logEtapa(c,de,para){ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
+function registrarResultado(id,k,dia){
+  const c=S.contatos.find(x=>x.id===id); const r=RES_BY_K[k]; if(!c||!r) return;
+  const it={id:uid(),k,l:r.l,dia:dia||hojeISO(),ts:new Date().toISOString(),por:S.activeUser};
+  interacoesDe(c).push(it);
+  if(r.lig) c.taTentativas=(c.taTentativas||0)+1;
+  if(r.ta) c.taStatus=r.ta;
+  let extra='';
+  if(r.etapa && c.etapa!==r.etapa){ const de=c.etapa; c.etapa=r.etapa; it.de=de; it.para=r.etapa; extra=` · etapa ${de} → ${r.etapa}`; }
+  salvar();
+  toast(`${c.nome.split(' ')[0]}: ${r.l}${extra}`,true);
+  render();
+}
+function ultimoResultado(c,dia){ const its=interacoesDe(c).filter(i=>i.dia===dia&&RES_BY_K[i.k]); return its.length? its[its.length-1] : null; }
 
 /* ═══════════════════ VIEW: CONTATOS ═══════════════════ */
 let FILTRO={busca:'',etapa:'',lp:''};
@@ -603,6 +701,7 @@ function viewContatos(){
         <option value="">Todos os LPs</option>
         ${S.users.map(u=>`<option value="${esc(u.id)}" ${FILTRO.lp===u.id?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}
       </select>`:''}
+      <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
     </div>
     <div class="card" style="padding:6px 10px">
       <table><thead><tr>
@@ -610,7 +709,7 @@ function viewContatos(){
       </tr></thead><tbody>
       ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
         <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
-        <td>${estrelasHtml(c.estrelas)}</td>
+        <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)}</td>
         <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)} anos<br>${esc(c.profissao)}</td>
         <td>${badgeEtapa(c.etapa)}</td>
         <td style="font-size:12px">${esc(c.taStatus)}<br><span style="color:var(--muted)">${esc(c.taTentativas)} tent.</span></td>
@@ -638,7 +737,9 @@ function renderDrawer(){
       <button class="fechar" onclick="fecharDrawer()">✕</button>
       <div class="nome">${esc(c.nome)}</div>
       <div class="meta">${esc(c.sexo)} · ${esc(c.idade)} anos · ${esc(c.profissao)} · ${esc(c.telefone)} · Origem: ${esc(c.origem)}${isMaster()? ' · LP: '+esc(lpNome(c.lp)):''}</div>
-      <div style="margin-top:7px">${estrelasHtml(c.estrelas)} ${badgeEtapa(c.etapa)}</div>
+      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${badgeEtapa(c.etapa)}${quenteChip(c)}
+        ${waHref(c.telefone)? `<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
+      </div>
     </div>
     <div class="drawer-body">
 
@@ -655,13 +756,38 @@ function renderDrawer(){
       </div>
 
       <div class="sec">
-        <h3>Telephone Approach</h3>
+        <h3>Registrar contato</h3>
         <div class="linha-form" style="align-items:center">
-          <select onchange="setTA(this.value)">${TA_STATUS.map(s=>`<option ${c.taStatus===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select id="drwRes">
+            <option value="">O que aconteceu?</option>
+            ${RESULTADOS.map(r=>`<option value="${r.k}">${r.l}</option>`).join('')}
+          </select>
+          <button class="btn btn-p btn-mini" onclick="drwRegistrar()">Registrar</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">1 registro, 3 efeitos: entra na jornada, conta nos KPIs do SitPlan e "Agendou…" já move a etapa sozinho.</div>
+        <div class="linha-form" style="align-items:center;margin-top:8px">
           <span class="contador">
-            <button onclick="tent(-1)">−</button><span class="v">${c.taTentativas}</span><button onclick="tent(1)">+</button>
-            <span style="font-size:12px;color:var(--muted)">tentativas</span>
+            <button onclick="tent(-1)">−</button><span class="v">${c.taTentativas||0}</span><button onclick="tent(1)">+</button>
+            <span style="font-size:12px;color:var(--muted)">tentativas (conta sozinho; ajuste fino aqui)</span>
           </span>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h3>Qualificação ANCE <span style="font-weight:800;color:${isQuente(c)?'var(--verm)':'var(--azul)'}">${anceScore(c)==null? '(marque os critérios)' : estrelasDe(c)+'★'+(isQuente(c)?' · 🔥 Quente':'')}</span></h3>
+        ${ANCE_DEFS.map(d=>`<label class="check-row" title="${esc(d[2])}"><input type="checkbox" ${c.ance&&c.ance[d[0]]?'checked':''} onchange="toggleAnce('${d[0]}')"> ${esc(d[1])} <span style="font-size:11px;color:var(--muted)">— ${esc(d[2])}</span></label>`).join('')}
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Cada critério = 1 estrela. 4+ = 🔥 Quente (prioridade na discagem).</div>
+      </div>
+
+      <div class="sec">
+        <h3>SitPlan / lista de discagem</h3>
+        <div style="font-size:12.5px;margin-bottom:8px">${c.sitplan? `Na lista de <b>${dataBR(c.sitplan)}</b> (${diaSemanaBR(c.sitplan)})` : 'Fora da lista de discagem.'}</div>
+        <div class="linha-form" style="align-items:center;flex-wrap:wrap;gap:6px">
+          <button class="btn btn-s btn-mini" onclick="setSitplan(hojeISO())">Hoje</button>
+          <button class="btn btn-s btn-mini" onclick="setSitplan(proxDiaSemana(2))">Próx. terça</button>
+          <button class="btn btn-s btn-mini" onclick="setSitplan(proxDiaSemana(5))">Próx. sexta</button>
+          <input type="date" value="${esc(c.sitplan||'')}" onchange="setSitplan(this.value)" style="max-width:150px">
+          ${c.sitplan? '<button class="btn btn-s btn-mini" onclick="setSitplan(null)">Tirar da lista</button>':''}
         </div>
       </div>
 
@@ -697,6 +823,15 @@ function renderDrawer(){
       </div>
 
       <div class="sec">
+        <h3>Jornada (${interacoesDe(c).length})</h3>
+        ${interacoesDe(c).length? interacoesDe(c).slice(-8).reverse().map(i=>`
+          <div class="evento"><span class="dt">${esc(dataBR(i.dia))}${i.ts?(' '+esc(new Date(i.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))):''}</span>
+          <span>${i.k==='etapa'?'🔀':'📞'} <b>${esc(i.l)}</b>${i.por&&isMaster()? ' <span style="color:var(--muted);font-size:11px">· '+esc(lpNome(i.por))+'</span>':''}</span></div>`).join('')
+          + (interacoesDe(c).length>8? `<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando os 8 últimos de ${interacoesDe(c).length}.</div>`:'')
+        : '<div class="vazio" style="padding:12px">Nenhum contato registrado ainda — o primeiro "Registrar contato" começa a jornada.</div>'}
+      </div>
+
+      <div class="sec">
         <h3>Notas</h3>
         <textarea class="notas" onblur="setNotas(this.value)">${esc(c.notas||'')}</textarea>
         <div style="font-size:11px;color:var(--muted);margin-top:5px">Salva ao sair do campo — sem botão, sem modal.</div>
@@ -704,9 +839,12 @@ function renderDrawer(){
 
     </div>`;
 }
-function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
+function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
 function setTA(v){ const c=ct(); if(!c) return; c.taStatus=v; salvar(); toast('Status do TA atualizado',true); }
-function tent(d){ const c=ct(); if(!c) return; c.taTentativas=Math.max(0,c.taTentativas+d); salvar(); renderDrawer(); }
+function tent(d){ const c=ct(); if(!c) return; c.taTentativas=Math.max(0,(c.taTentativas||0)+d); salvar(); renderDrawer(); }
+function drwRegistrar(){ const sel=$('#drwRes'); const k=sel&&sel.value; if(!k){ toast('Escolha o resultado do contato'); return; } const id=CONTATO; registrarResultado(id,k); if(CONTATO) renderDrawer(); }
+function toggleAnce(k){ const c=ct(); if(!c) return; if(!c.ance) c.ance={a:false,n:false,c:false,e:false,avisado:false}; c.ance[k]=!c.ance[k]; salvar(); renderDrawer(); }
+function setSitplan(iso){ const c=ct(); if(!c) return; c.sitplan=iso||null; salvar(); renderDrawer(); toast(iso? `Na lista de ${dataBR(iso)}` : 'Removido da lista de discagem',true); }
 function toggleIC(b){ const c=ct(); if(!c) return; c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
 function setNotas(v){ const c=ct(); if(!c) return; c.notas=v; salvar(); toast('Nota salva',true); }
 function setPlanoStatus(pid,v){ const c=ct(); if(!c) return; const p=c.planos.find(x=>x.id===pid); if(!p) return; p.status=v; salvar(); toast(`Plano: ${v}`,true); }
@@ -720,6 +858,199 @@ function addRec(){
   }
   ct().recs.push({nome,tel:'',idade:idade?+idade:null,perfil});
   salvar(); renderDrawer(); toast('Recomendação adicionada',true);
+}
+
+/* ═══════════════════ MÓDULO: SITPLAN & TA (sessão de discagem datada) ═══════════════════ */
+/* Default = HOJE (TA diário na unidade); terça/sexta são atalhos, nunca amarras. */
+let SP_DATA=null, SP_TAB='todos';
+function spData(){ if(!SP_DATA) SP_DATA=hojeISO(); return SP_DATA; }
+function spSet(d){ SP_DATA=d||hojeISO(); SP_TAB='todos'; render(); }
+function spTab(t){ SP_TAB=t; render(); }
+function spKpis(D){
+  const meus=meusContatos();
+  const naLista=meus.filter(c=>c.sitplan===D)
+    .sort((a,b)=> (estrelasDe(b)-estrelasDe(a)) || a.nome.localeCompare(b.nome)); // Quentes primeiro
+  let feitas=0,atend=0,agend=0;
+  meus.forEach(c=>interacoesDe(c).forEach(i=>{ if(i.dia!==D) return; const r=RES_BY_K[i.k]; if(!r) return; if(r.lig)feitas++; if(r.atend)atend++; if(r.agenda)agend++; }));
+  const semRes=naLista.filter(c=>!ultimoResultado(c,D));
+  return {naLista,feitas,atend,agend,semRes,
+    pctFeitas:naLista.length?Math.round(feitas/naLista.length*100):0,
+    pctAtend:feitas?Math.round(atend/feitas*100):0,
+    convFeitas:feitas?Math.round(agend/feitas*100):0,
+    convAtend:atend?Math.round(agend/atend*100):0};
+}
+function spSugestao(k){ // coaching contextual por KPI (aprendizado Global-CRM)
+  if(!k.naLista.length) return 'Lista vazia — puxe contatos pela caixa "Adicionar à lista" ou crie um novo contato. Uma lista boa tem 10–15 nomes.';
+  if(!k.feitas) return `${k.naLista.length} na lista — começa pela primeira ligação: os 🔥 Quentes estão no topo. 🎯`;
+  if(!k.semRes.length) return k.agend? `Lista do dia esgotada com ${k.agend} agendamento(s) na mão. Excelente trabalho. ✅` : 'Lista do dia esgotada. Reagende os "pediu para retornar" e feche a sessão. ✅';
+  if(k.atend&&!k.agend) return `Conversão baixa (${k.atend} atendida(s), 0 agendamentos) — vale revisar o script de abertura antes de seguir.`;
+  if(k.feitas&&!k.atend) return 'Ninguém atendeu ainda — varia o horário ou manda um WhatsApp antes da 2ª tentativa.';
+  return `${k.semRes.length} ainda sem resultado — segue a discagem.`;
+}
+function spAdd(id){ if(!id) return; const c=S.contatos.find(x=>x.id===id); if(!c) return; c.sitplan=spData(); salvar(); toast(`${c.nome.split(' ')[0]} na lista de ${dataBR(spData())}`,true); render(); }
+function spReag(id,iso){ const c=S.contatos.find(x=>x.id===id); if(!c) return; c.sitplan=iso; salvar(); toast(`${c.nome.split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
+function viewSitplan(){
+  const D=spData(); const k=spKpis(D); const hoje=hojeISO();
+  const comRes=k.naLista.filter(c=>ultimoResultado(c,D));
+  const listaTab= SP_TAB==='sem'? k.semRes : SP_TAB==='com'? comRes : k.naLista;
+  const foraDaLista=meusContatos().filter(c=>c.sitplan!==D && !ETAPAS_ENCERR.includes(c.etapa))
+    .sort((a,b)=>{ const pa=['SitPlan','TA'].includes(a.etapa)?0:1, pb=['SitPlan','TA'].includes(b.etapa)?0:1; return pa-pb || a.nome.localeCompare(b.nome); });
+  const kpi=(lbl,num,sub,destaque)=>`<div class="kpi" style="min-width:118px${destaque?';border:1.5px solid var(--azul-borda);background:var(--azul-claro)':''}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${sub?`<div style="font-size:10.5px;color:var(--muted)">${sub}</div>`:''}</div>`;
+  $('#main').innerHTML=`
+    <h1 class="pg">SitPlan &amp; TA</h1>
+    <div class="sub">Sessão de discagem por data — navegue entre datas pra revisitar quem não foi alcançado e reagendar.</div>
+    <div class="toolbar" style="align-items:center;flex-wrap:wrap">
+      <button class="btn btn-s btn-mini" onclick="spSet(isoAddDias(spData(),-1))" title="dia anterior">‹</button>
+      <input type="date" value="${esc(D)}" onchange="spSet(this.value)" style="max-width:160px">
+      <button class="btn btn-s btn-mini" onclick="spSet(isoAddDias(spData(),1))" title="dia seguinte">›</button>
+      <span style="font-size:12.5px;font-weight:700;color:var(--cinza)">${esc(diaSemanaBR(D))}${D===hoje?' · HOJE':''}</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-mini ${D===hoje?'':''}" onclick="spSet(hojeISO())">Hoje</button>
+      <button class="btn btn-s btn-mini" onclick="spSet(proxDiaSemana(2))">Próx. terça</button>
+      <button class="btn btn-s btn-mini" onclick="spSet(proxDiaSemana(5))">Próx. sexta</button>
+      <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
+    </div>
+    <div class="kpis" style="margin-top:6px">
+      ${kpi('Na lista',k.naLista.length,'',true)}
+      ${kpi('Ligações feitas',k.feitas,k.naLista.length?`${k.pctFeitas}% da lista`:'')}
+      ${kpi('Atendidas',k.atend,k.feitas?`${k.pctAtend}% das feitas`:'')}
+      ${kpi('Agendamentos',k.agend,k.atend?`${k.convAtend}% das atendidas`:'')}
+      ${kpi('Conversão',(k.convFeitas)+'%','das ligações feitas')}
+    </div>
+    <div class="sp-sug">💡 <b>Sugestão pra ${D===hoje?'hoje':dataBR(D)}:</b> ${esc(spSugestao(k))}</div>
+    <div class="toolbar" style="align-items:center">
+      <div class="seg">
+        <button class="${SP_TAB==='todos'?'on':''}" onclick="spTab('todos')">Todos (${k.naLista.length})</button>
+        <button class="${SP_TAB==='sem'?'on':''}" onclick="spTab('sem')">Sem resultado (${k.semRes.length})</button>
+        <button class="${SP_TAB==='com'?'on':''}" onclick="spTab('com')">Com resultado (${comRes.length})</button>
+      </div>
+      <span style="flex:1"></span>
+      <select onchange="spAdd(this.value);this.value=''" style="max-width:230px">
+        <option value="">➕ Adicionar à lista deste dia…</option>
+        ${foraDaLista.map(c=>`<option value="${esc(c.id)}">${esc(c.nome)} · ${esc(c.etapa)}${c.sitplan?(' (lista '+dataBR(c.sitplan)+')'):''}</option>`).join('')}
+      </select>
+    </div>
+    <div class="card" style="padding:6px 10px"><table><thead><tr>
+      <th>Contato</th><th>Etapa</th><th>ANCE</th><th>Resultado</th><th>Reagendar</th>
+    </tr></thead><tbody>
+    ${listaTab.map(c=>{ const ur=ultimoResultado(c,D);
+      return `<tr>
+        <td><b class="clicavel" onclick="abrirContato('${esc(c.id)}')" style="cursor:pointer">${esc(c.nome)}</b>${isQuente(c)?' 🔥':''}<br>
+          <span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone||'—')}${esc(c.origem?(' · '+c.origem):'')}</span>
+          ${waHref(c.telefone)?` <a href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener" title="Abrir WhatsApp" style="text-decoration:none">💬</a>`:''}</td>
+        <td>${badgeEtapa(c.etapa)}</td>
+        <td>${estrelasHtml(estrelasDe(c))}</td>
+        <td><select class="res-sel" onchange="if(this.value)registrarResultado('${esc(c.id)}',this.value,'${esc(D)}')">
+          <option value="">${ur? '✓ '+esc(ur.l) : 'Status da ligação…'}</option>
+          ${RESULTADOS.map(r=>`<option value="${r.k}">${r.l}</option>`).join('')}
+        </select></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-s btn-mini" title="Reagendar pra próxima terça" onclick="spReag('${esc(c.id)}',proxDiaSemana(2))">⏭ ter</button>
+          <button class="btn btn-s btn-mini" title="Reagendar pra próxima sexta" onclick="spReag('${esc(c.id)}',proxDiaSemana(5))">⏭ sex</button>
+        </td>
+      </tr>`; }).join('') || `<tr><td colspan="5" class="vazio">${SP_TAB==='sem'?'Ninguém sem resultado — lista esgotada. ✅':'Lista vazia — adicione contatos pela caixa acima ou crie um novo.'}</td></tr>`}
+    </tbody></table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">O resultado registra a tentativa, alimenta os KPIs acima e ("Agendou…"/"Sem interesse") move a etapa sozinho. Lead novo entra na lista de HOJE automaticamente.</div>`;
+}
+
+/* ═══════════════════ MÓDULO: METAS (realizado automático) ═══════════════════ */
+let MT_PER='sem';
+function mtNoPeriodo(iso){ if(!iso) return false; iso=String(iso).slice(0,10); const hoje=hojeISO();
+  if(MT_PER==='mes') return iso.slice(0,7)===hoje.slice(0,7);
+  const p=hoje.split('-').map(Number); const dow=(new Date(p[0],p[1]-1,p[2]).getDay()+6)%7;
+  const ini=isoAddDias(hoje,-dow); return iso>=ini && iso<=isoAddDias(ini,6);
+}
+function mtRealizado(){
+  const meus=meusContatos(); let rec=0,lig=0,oi=0,n=0;
+  meus.forEach(c=>{
+    if(mtNoPeriodo(c.criadoEm)) rec++;
+    interacoesDe(c).forEach(i=>{ if(!mtNoPeriodo(i.dia)) return;
+      const r=RES_BY_K[i.k]; if(r&&r.lig) lig++;
+      if(i.k==='agendou_oi') oi++;
+      if(i.k==='etapa'&&i.para==='N') n++;
+    });
+  });
+  return {rec,lig,oi,n};
+}
+function mtMetas(){ if(!S.metas) S.metas={}; const u=S.activeUser; if(!S.metas[u]) S.metas[u]={sem:{},mes:{}}; if(!S.metas[u][MT_PER]) S.metas[u][MT_PER]={}; return S.metas[u][MT_PER]; }
+function setMeta(k,v){ mtMetas()[k]=Math.max(0,parseInt(v||'0',10)||0); salvar(); render(); }
+function anelHtml(key,lbl,real,cor){
+  const meta=mtMetas()[key]||0; const pct=meta>0?Math.min(1,real/meta):0; const C=2*Math.PI*30;
+  const cheio=meta>0&&real>=meta;
+  return `<div class="kpi" style="min-width:150px;padding:14px">
+    <svg width="76" height="76" viewBox="0 0 76 76" style="display:block;margin:0 auto">
+      <circle cx="38" cy="38" r="30" fill="none" stroke="var(--linha)" stroke-width="7"/>
+      <circle cx="38" cy="38" r="30" fill="none" stroke="${cor}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(C*pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 38 38)"/>
+      <text x="38" y="43" text-anchor="middle" font-size="16" font-weight="800" fill="var(--ink)">${real}</text>
+    </svg>
+    <div class="lbl" style="margin-top:6px">${lbl}${cheio?' ✅':''}</div>
+    <div class="meta-in">meta: <input type="number" min="0" value="${meta||''}" placeholder="—" onchange="setMeta('${key}',this.value)"> ${meta>0?Math.round(pct*100)+'%':''}</div>
+  </div>`;
+}
+function viewMetas(){
+  const r=mtRealizado();
+  $('#main').innerHTML=`
+    <h1 class="pg">Metas</h1>
+    <div class="sub">Realizado conta SOZINHO da atividade registrada (contatos novos, resultados de ligação, etapa N) — meta é o único número que você digita.</div>
+    <div class="toolbar"><div class="seg">
+      <button class="${MT_PER==='sem'?'on':''}" onclick="MT_PER='sem';render()">Semana</button>
+      <button class="${MT_PER==='mes'?'on':''}" onclick="MT_PER='mes';render()">Mês</button>
+    </div><span style="font-size:12px;color:var(--muted)">${MT_PER==='sem'?'segunda a domingo desta semana':'mês corrente'} · metas salvas por perfil</span></div>
+    <div class="kpis" style="gap:14px;flex-wrap:wrap">
+      ${anelHtml('rec','Recomendações novas',r.rec,'var(--azul)')}
+      ${anelHtml('lig','Ligações feitas',r.lig,'var(--roxo)')}
+      ${anelHtml('oi','OI/FF agendados',r.oi,'var(--amarelo)')}
+      ${anelHtml('n','N — propostas',r.n,'var(--verde)')}
+    </div>
+    <div class="card" style="margin-top:14px;font-size:12.5px;color:var(--muted)">
+      A cadeia do método: <b>recomendações</b> viram <b>ligações</b>, ligações viram <b>OI/FF</b>, OI/FFs viram <b>propostas (N)</b>.
+      Se um anel trava, o gargalo tá na etapa anterior.
+    </div>`;
+}
+
+/* ═══════════════════ NOVO CONTATO ═══════════════════ */
+function openNovoContato(){
+  const antigo=document.getElementById('ncModal'); if(antigo) antigo.remove();
+  const lps=isMaster()? `<label style="font-size:12px">LP dono
+      <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
+  document.body.insertAdjacentHTML('beforeend',`
+  <div id="ncModal" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
+      <h3 style="margin-bottom:12px">➕ Novo contato</h3>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <input id="ncNome" placeholder="Nome completo*">
+        <input id="ncTel" placeholder="Telefone (com DDD)">
+        <div style="display:flex;gap:8px">
+          <input id="ncIdade" type="number" placeholder="Idade" style="max-width:90px">
+          <input id="ncProf" placeholder="Profissão" style="flex:1">
+        </div>
+        <input id="ncOrigem" placeholder="Origem / recomendante (quem indicou?)">
+        ${lps}
+        <label class="check-row" style="margin:0"><input type="checkbox" id="ncSitplan" checked> Entrar na lista de discagem de HOJE</label>
+        <div class="msg-erro" id="ncErro" style="display:none;color:var(--verm);font-size:12px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+          <button class="btn btn-s" onclick="document.getElementById('ncModal').remove()">Cancelar</button>
+          <button class="btn btn-p" onclick="salvarNovoContato()">Salvar contato</button>
+        </div>
+      </div>
+    </div>
+  </div>`);
+  setTimeout(()=>{ const i=document.getElementById('ncNome'); if(i) i.focus(); },50);
+}
+function salvarNovoContato(){
+  const v=id=>{ const el=document.getElementById(id); return el? el.value.trim() : ''; };
+  const nome=v('ncNome');
+  if(!nome){ const e=document.getElementById('ncErro'); e.textContent='Falta o nome do contato.'; e.style.display='block'; document.getElementById('ncNome').focus(); return; }
+  const lpSel=document.getElementById('ncLp');
+  const c={ id:uid(), lp: lpSel? lpSel.value : S.activeUser, nome, sexo:'—', idade:+v('ncIdade')||null,
+    profissao:v('ncProf')||'—', telefone:v('ncTel'), estrelas:0, ance:null, etapa:'SitPlan',
+    origem:v('ncOrigem')||'—', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
+    infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
+    sitplan: document.getElementById('ncSitplan').checked? hojeISO() : null };
+  S.contatos.push(c); salvar();
+  document.getElementById('ncModal').remove();
+  toast(`${nome.split(' ')[0]} criado${c.sitplan?' — já na lista de hoje':''}`,true);
+  render(); abrirContato(c.id);
 }
 
 /* ═══════════════════ VIEW: PLANOS ═══════════════════ */
@@ -1476,6 +1807,30 @@ function cartResumo(){ const C=CART.clientes,A=CART.apolices;
     multi:C.filter(c=>cartApolicesDoCliente(c.ref).length>1).length,
     segNeqPag:A.filter(a=>a.respPagto&&normKey(a.segurado)!==normKey(a.respPagto)).length }; }
 
+/* ---- contato: WhatsApp (wa.me) / e-mail (mailto) a partir dos dados da carteira ---- */
+function cartTel(c){ return c.celular||c.telefone||c.telComercial||null; }
+function cartWaUrl(tel,msg){ let d=String(tel||'').replace(/\D/g,''); if(d.length<10) return null;
+  if(d.length<=11) d='55'+d; // nacional sem DDI → prefixa Brasil
+  return 'https://wa.me/'+d+(msg?'?text='+encodeURIComponent(msg):''); }
+function cartBtnsContato(c,msg){ const out=[]; const wa=cartWaUrl(cartTel(c),msg||'');
+  if(wa) out.push(`<a class="btn btn-p btn-mini" href="${wa}" target="_blank" rel="noopener" onclick="event.stopPropagation()">💬 WhatsApp</a>`);
+  if(c.email) out.push(`<a class="btn btn-s btn-mini" href="mailto:${esc(c.email)}" onclick="event.stopPropagation()">✉️ E-mail</a>`);
+  return out.join(' '); }
+
+/* ---- radar: cruza o cliente com o relatório semanal (LPDB) por nome normalizado (ref).
+   Só itens NÃO resolvidos. Se nenhum relatório foi importado, tudo volta vazio (honesto). ---- */
+function cartRadar(ref){ const hit=(r,ks)=>ks.some(k=>r[k]&&normKey(r[k])===ref);
+  return { atrasos:lpAtivos('atrasos').filter(r=>hit(r,['segurado','pagador'])),
+    statust:lpAtivos('statust').filter(r=>hit(r,['segurado','pagador'])),
+    pendencias:lpAtivos('pendencias').filter(r=>hit(r,['cliente'])),
+    aniversario:lpAtivos('aniversario').filter(r=>hit(r,['cliente'])),
+    datas:lpAtivos('datas').filter(r=>hit(r,['cliente'])) }; }
+function cartRadarTemAcao(rad){ return rad.atrasos.length+rad.statust.length+rad.pendencias.length; }
+
+/* ---- gaps de cobertura: o que o cliente NÃO tem (valor zerado na carteira) ---- */
+const CART_COBS=[['renda','Renda'],['hc','HC'],['funeral','Funeral'],['pd','PD'],['ddr','DDR'],['morteAcid','Morte Acidental']];
+function cartGaps(c){ return CART_COBS.filter(([k])=>!(c.cob[k]>0)); }
+
 function cartVazio(){ return `<div style="padding:28px;text-align:center;border:1px dashed var(--linha);border-radius:12px;color:var(--muted);margin-top:12px">
   <div style="font-size:34px">👥</div><p>Nenhuma carteira importada ainda.</p>
   <button class="btn btn-p" onclick="openCarteiraImport()">📄 Importar carteira</button></div>`; }
@@ -1491,13 +1846,15 @@ function viewCartVisao(){ const r=cartResumo();
       ${card('Prêmio mensal','R$ '+cartFmtK(r.pmMes),'soma PM da carteira')}
       ${card('Capital segurado','R$ '+cartFmtK(r.csTot),'exposição total')}
       ${card('Segurado ≠ Pagador',r.segNeqPag,'apólices pagas por terceiro')}</div>
-    <div style="margin-top:16px"><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-p" onclick="irPara('cart-oportunidades')">💡 Ver oportunidades</button><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
 
 function viewCartClientes(){ const q=normKey(CART_Q);
   const lista=CART.clientes.filter(c=>!q||c.ref.indexOf(q)>=0||(c.email&&normKey(c.email).indexOf(q)>=0)).sort((a,b)=>a.nome.localeCompare(b.nome));
   const linhas=lista.map(c=>{ const n=cartApolicesDoCliente(c.ref).length;
+    const rd=cartRadar(c.ref), dN=lpDiasAte(c.nascimento);
+    const flags=(rd.atrasos.length?'<span title="em atraso no relatório">⏰</span>':'')+(rd.statust.length?'<span title="no Status T">⏳</span>':'')+(rd.pendencias.length?'<span title="pendência de emissão">📋</span>':'')+(dN!=null&&dN<=JANELA_DIAS?'<span title="aniversário próximo">🎂</span>':'');
     return `<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
-      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}</td>
+      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}${flags?' <span style="font-size:12px">'+flags+'</span>':''}</td>
       <td style="padding:8px 10px;text-align:center">${c.idade!=null?c.idade:'—'}</td>
       <td style="padding:8px 10px">${esc(c.celular||c.telefone||'—')}</td>
       <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
@@ -1512,19 +1869,81 @@ function viewCartClientes(){ const q=normKey(CART_Q);
     <tbody>${linhas||`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">Nenhum cliente encontrado.</td></tr>`}</tbody></table></div>`:cartVazio()}`;
   const el=$('#cart-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
 
+/* ---- Oportunidades: aniversários da carteira (nascimento REAL do .xls), gaps de
+   cobertura e radar da semana — tudo derivado, nada digitado. ---- */
+let CART_GAP='';
+function cartNiverProx(dias){ return CART.clientes.map(c=>({c,d:lpDiasAte(c.nascimento)})).filter(x=>x.d!=null&&x.d<=dias).sort((a,b)=>a.d-b.d); }
+function cartRadarLista(){ return CART.clientes.map(c=>({c,rad:cartRadar(c.ref)})).filter(x=>cartRadarTemAcao(x.rad)); }
+function viewCartOportunidades(){
+  if(!CART.clientes.length){ $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1><div class="sub">Ganchos de contato e venda extraídos da carteira.</div>`+cartVazio(); return; }
+  const nivers=cartNiverProx(30), radar=cartRadarLista();
+  const card=(t,v,s)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:14px 16px">
+    <div style="font-size:12px;color:var(--muted)">${t}</div><div style="font-size:22px;font-weight:800;margin-top:4px">${v}</div>${s?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div>`:''}</div>`;
+  const comGap=CART.clientes.filter(c=>cartGaps(c).length).length;
+  const mono=CART.clientes.filter(c=>cartApolicesDoCliente(c.ref).length===1).length;
+  const rowCliente=(c,extra,acoes)=>`<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
+    <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}</td>${extra}
+    <td style="padding:8px 10px">${esc(cartTel(c)||'—')}</td>
+    <td style="padding:8px 10px;text-align:right;white-space:nowrap">${acoes}</td></tr>`;
+  const niverHTML=nivers.length?nivers.map(({c,d})=>rowCliente(c,
+      `<td style="padding:8px 10px"><span class="dias-tag ${diasTagCls(d)}">${d===0?'hoje!':d===1?'amanhã':'em '+d+'d'}</span> · ${dataBR(c.nascimento)}${c.idade!=null?` <span style="color:var(--muted);font-size:11.5px">(faz ${c.idade+1})</span>`:''}</td>`,
+      cartBtnsContato(c,'Feliz aniversário, '+c.nome.split(' ')[0].charAt(0)+c.nome.split(' ')[0].slice(1).toLowerCase()+'! 🎉'))).join('')
+    :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">Nenhum aniversário nos próximos 30 dias.</td></tr>`;
+  const radarHTML=radar.length?radar.map(({c,rad})=>{ const badges=[];
+      rad.atrasos.forEach(r=>badges.push(`<span class="fx fx-critico">⏰ atraso${r.dias_atraso!=null?' '+r.dias_atraso+'d':''}</span>`));
+      rad.statust.forEach(r=>{ const f=lpFaixa(r); badges.push(`<span class="fx fx-${f.faixa}">⏳ ${FAIXA_LABEL[f.faixa]}${f.dias!=null?' '+(f.dias<0?Math.abs(f.dias)+'d atrás':'em '+f.dias+'d'):''}</span>`); });
+      rad.pendencias.forEach(()=>badges.push(`<span class="fx fx-alerta">📋 pendência</span>`));
+      return rowCliente(c,`<td style="padding:8px 10px">${badges.join(' ')}</td>`,cartBtnsContato(c)); }).join('')
+    :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">${LP.importadoEm?'Nenhum cliente da carteira com ação pendente no relatório.':'Nenhum relatório semanal importado ainda — suba o PDF nos módulos BackOffice.'}</td></tr>`;
+  const chips=CART_COBS.map(([k,l])=>{ const n=CART.clientes.filter(c=>!(c.cob[k]>0)).length;
+    return `<button class="btn ${CART_GAP===k?'btn-p':'btn-s'} btn-mini" onclick="CART_GAP=CART_GAP==='${k}'?'':'${k}';render()">${l} · ${n}</button>`; }).join(' ');
+  const gapLbl=(CART_COBS.find(([k])=>k===CART_GAP)||[])[1];
+  const gapLista=CART_GAP?CART.clientes.filter(c=>!(c.cob[CART_GAP]>0)).sort((a,b)=>(b.cob.cs||0)-(a.cob.cs||0)):[];
+  const gapHTML=CART_GAP?`<div style="overflow:auto;border:1px solid var(--linha);border-radius:12px;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente sem ${gapLbl}</th><th style="padding:9px 10px">CS · PM atuais</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead>
+    <tbody>${gapLista.map(c=>rowCliente(c,`<td style="padding:8px 10px">R$ ${cartFmtK(c.cob.cs)} · R$ ${cartFmt(c.cob.pm)}/mês</td>`,cartBtnsContato(c))).join('')||`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">Todo mundo tem ${gapLbl}. 🎉</td></tr>`}</tbody></table></div>`:'';
+  const tbl=(titulo,head2,corpo)=>`<h3 style="margin:18px 0 8px">${titulo}</h3>
+    <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px">${head2}</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead><tbody>${corpo}</tbody></table></div>`;
+  $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1>
+    <div class="sub">Ganchos de contato e venda extraídos da carteira — nada aqui foi digitado à mão.</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
+      ${card('Aniversários 30d',nivers.length,'da carteira, data real')}
+      ${card('No radar da semana',radar.length,'atraso · Status T · pendência')}
+      ${card('Com gap de cobertura',comGap,'ao menos 1 proteção zerada')}
+      ${card('Uma apólice só',mono,'candidatos a 2ª apólice')}</div>
+    ${tbl('🎂 Aniversários — próximos 30 dias','Quando',niverHTML)}
+    ${tbl('📡 Radar do relatório semanal','Situação',radarHTML)}
+    <h3 style="margin:18px 0 8px">💡 Gaps de cobertura <span style="font-weight:400;font-size:12px;color:var(--muted)">— clique num gap pra ver quem está sem (maiores CS primeiro)</span></h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div>${gapHTML}`; }
+
 function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) return; const aps=cartApolicesDoCliente(ref);
   const linha=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0"><span style="color:var(--muted)">${l}</span><span style="font-weight:600;text-align:right">${v}</span></div>`:'';
   const cob=c.cob;
+  const dNiver=lpDiasAte(c.nascimento);
+  const rad=cartRadar(ref); const radItens=[];
+  rad.atrasos.forEach(r=>radItens.push({cls:'fx-critico',t:'⏰ Atraso'+(r.dias_atraso!=null?' '+r.dias_atraso+'d':''),s:'apólice '+(r.apolice||'—'),v:'lp-atrasos'}));
+  rad.statust.forEach(r=>{ const f=lpFaixa(r); radItens.push({cls:'fx-'+f.faixa,t:'⏳ Status T · '+FAIXA_LABEL[f.faixa]+(f.dias!=null?(f.dias<0?' ('+Math.abs(f.dias)+'d atrás)':' (em '+f.dias+'d)'):''),s:'apólice '+(r.apolice||r.proposta||'—'),v:'lp-statust'}); });
+  rad.pendencias.forEach(r=>radItens.push({cls:'fx-alerta',t:'📋 Pendência de emissão',s:r.pendencia||('proposta '+(r.proposta||'—')),v:'lp-pendencias'}));
+  rad.datas.forEach(r=>{ const d=lpDiasAte(r.data_emissao?String(r.data_emissao).slice(5):null); if(d!=null&&d<=JANELA_DIAS) radItens.push({cls:'fx-atencao',t:'📅 Aniversário de apólice em '+d+'d',s:'apólice '+(r.apolice||'—'),v:'lp-datas'}); });
+  const radHTML=radItens.length?`<h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">📡 No relatório da semana</h3>
+    ${radItens.map(i=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:6px">
+      <div><span class="fx ${i.cls}">${i.t}</span><div style="font-size:11.5px;color:var(--muted);margin-top:3px">${esc(i.s)}</div></div>
+      <button class="btn btn-s btn-mini" onclick="fecharDrawer();irPara('${i.v}')">abrir</button></div>`).join('')}`:'';
+  const gaps=cartGaps(c);
   const apsHTML=aps.length?aps.map(a=>`<div style="border:1px solid var(--linha);border-radius:10px;padding:10px;margin-top:8px">
     <div style="display:flex;justify-content:space-between;align-items:center"><b>Apólice ${esc(a.apolice||a.proposta||'—')}</b><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--verde-claro,#e6f6ec);color:var(--verde,#1a7f42)">${esc(a.status)}</span></div>
     ${a.respPagto&&normKey(a.respPagto)!==ref?`<div style="font-size:12px;color:#a06a00;margin-top:4px">💳 pago por ${esc(a.respPagto)}</div>`:''}
     <div style="font-size:12px;color:var(--muted);margin-top:4px">Prêmio R$ ${cartFmt(a.premio)} · ${esc(a.periodicidade||'—')} · ${esc(a.forma||'—')}${a.proposta?' · prop. '+esc(a.proposta):''}</div></div>`).join(''):'<div style="color:var(--muted);margin-top:8px">Sem apólices ativas ligadas.</div>';
   $('#drawer').innerHTML=`<div style="padding:18px">
     <div style="display:flex;justify-content:space-between;align-items:start"><h2 style="margin:0">${esc(c.nome)}</h2><button onclick="fecharDrawer()" style="border:none;background:none;font-size:22px;cursor:pointer;line-height:1">×</button></div>
-    <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}</div>
+    <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}${dNiver!=null&&dNiver<=30?` · <span class="dias-tag ${diasTagCls(dNiver)}">🎂 ${dNiver===0?'hoje!':'em '+dNiver+'d'}</span>`:''}</div>
     <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}</div>
+    ${radHTML}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
     <div style="font-size:13px">${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
+    ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`:''}
     ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Apólices (${aps.length})</h3>${apsHTML}</div>`;
   $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
@@ -1553,10 +1972,15 @@ function openCarteiraImport(){
 
 function render(){
   renderTopo(); lpCounts(); renderNnEtapas();
-  { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||''; }
+  { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
+    const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
+  { const cs=$('#cnt-sitplan'); if(cs){ const hoje=hojeISO(); cs.textContent=meusContatos().filter(c=>c.sitplan===hoje&&!ultimoResultado(c,hoje)).length||''; } }
   if(VIEW==='inicio') viewInicio();
+  else if(VIEW==='sitplan') viewSitplan();
+  else if(VIEW==='metas') viewMetas();
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
+  else if(VIEW==='cart-oportunidades') viewCartOportunidades();
   else if(VIEW==='nn-funil') viewNnFunil();
   else if(VIEW==='contatos') viewContatos();
   else if(VIEW==='planos') viewPlanos();
@@ -1569,7 +1993,9 @@ function render(){
   else viewPrincipios();
   if(CONTATO) renderDrawer();
 }
-carregar(); cartCarregar(); render(); lpCarregar().then(render);   // render base já; LP (remoto/local) popula e re-renderiza
+carregar(); cartCarregar();
+if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
+render(); lpCarregar().then(render);   // render base já; LP (remoto/local) popula e re-renderiza
 </script>
 </body>
 </html>
