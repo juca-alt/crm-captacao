@@ -937,7 +937,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible,.chip:focus-visibl
 const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
 const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
 const sb = window.supabase.createClient(SB_URL, SB_KEY);
-const APP_VERSION = 'v2.6.3 · QA geral (24 fixes)';
+const APP_VERSION = 'v2.7.0 · Instagram → CRM';
 
 // ===== FUNNEL CONFIG =====
 // ===== FUNIL — FONTE ÚNICA (editável em Configurações → Funil; TUDO deriva daqui) =====
@@ -1282,6 +1282,17 @@ function normPhone(raw){if(!raw)return{telefone:null,e164:null};let d=raw.replac
 function firstName(n){return (n||'').trim().split(' ')[0]||'';}
 // ===== IDENTIDADE / DEDUPE (v2.6) =====
 function normEmail(e){ e=(e||'').trim().toLowerCase(); return /@/.test(e)?e:null; }
+// Handle do Instagram — chave forte do canal (o @ e unico e estavel, igual a URL e no LinkedIn).
+// Aceita "@joao", "joao", "instagram.com/joao/" ou URL completa; devolve minusculo sem @ nem barra.
+// Mesma regua do CHECK da coluna instagram_handle no banco (migration instagram_handle.sql).
+function normIgHandle(h){
+  if(!h)return null;
+  let n=String(h).trim().toLowerCase().split('?')[0].split('#')[0];
+  n=n.replace(/^https?:\/\//,'').replace(/^www\./,'');
+  if(n.startsWith('instagram.com/'))n=n.slice(14);
+  n=n.replace(/^@/,'').replace(/\/+$/,'');
+  return /^[a-z0-9._]{1,30}$/.test(n)?n:null;
+}
 // Chave de nome p/ SUGESTÃO apenas — nunca bloqueia (homônimos existem). Mais agressiva
 // que normName: corta sufixos ("| MBA", ", CFP"), emojis, pontuação e honoríficos iniciais.
 function fuzzyNameKey(s){
@@ -1297,9 +1308,10 @@ function fuzzyNameKey(s){
 function firstLastKey(s){ const p=fuzzyNameKey(s).split(' ').filter(Boolean); return p.length>=2?(p[0]+' '+p[p.length-1]):null; }
 // Índices sobre o array canônico LEADS (reconstruir por lote; barato p/ alguns milhares)
 function leadIndexes(){
-  const idx={url:new Map(),tel:new Map(),email:new Map(),name:new Map(),fl:new Map()};
+  const idx={url:new Map(),ig:new Map(),tel:new Map(),email:new Map(),name:new Map(),fl:new Map()};
   for(const l of LEADS){
     if(l.linkedin_url_norm&&!idx.url.has(l.linkedin_url_norm))idx.url.set(l.linkedin_url_norm,l);
+    const ig=normIgHandle(l.instagram_handle); if(ig&&!idx.ig.has(ig))idx.ig.set(ig,l);
     if(l.telefone_e164&&!idx.tel.has(l.telefone_e164))idx.tel.set(l.telefone_e164,l);
     const em=normEmail(l.email); if(em&&!idx.email.has(em))idx.email.set(em,l);
     const nk=fuzzyNameKey(l.nome); if(nk&&!idx.name.has(nk))idx.name.set(nk,l);
@@ -1307,12 +1319,14 @@ function leadIndexes(){
   }
   return idx;
 }
-// Resolução de identidade: linkedin_url_norm → telefone_e164 → email → nome.
+// Resolução de identidade: linkedin_url_norm → instagram_handle → telefone_e164 → email → nome.
 // Chave forte = {confident:true} (é o mesmo lead). Nome = {confident:false} (sugestão).
 function findLeadMatch(c,idx){
   idx=idx||leadIndexes();
   const u=c.linkedin_url_norm||normUrl(c.linkedin_url||'');
   if(u&&idx.url.has(u))   return {lead:idx.url.get(u),  key:'linkedin', confident:true};
+  const ig=normIgHandle(c.instagram_handle||c.username||'');
+  if(ig&&idx.ig.has(ig))  return {lead:idx.ig.get(ig),  key:'instagram',confident:true};
   const t=c.telefone_e164||normPhone(c.telefone||'').e164;
   if(t&&idx.tel.has(t))   return {lead:idx.tel.get(t),  key:'telefone', confident:true};
   const e=normEmail(c.email);
@@ -1321,7 +1335,7 @@ function findLeadMatch(c,idx){
   const byN=(nk&&idx.name.get(nk))||(fk&&idx.fl.get(fk))||null;
   return byN?{lead:byN,key:'nome',confident:false}:null;
 }
-const DUP_KEY_LABEL={linkedin:'LinkedIn',telefone:'telefone',email:'e-mail',nome:'nome'};
+const DUP_KEY_LABEL={linkedin:'LinkedIn',instagram:'Instagram',telefone:'telefone',email:'e-mail',nome:'nome'};
 const MSG_TPL_DEFAULT=[
   {nome:'Recomendação (WhatsApp)',texto:'Me chamo Gustavo Jucá. Não nos conhecemos ainda. Quem me passou seu telefone foi {{recomendante}}. Ela me recomendou seu nome a respeito de uma oportunidade profissional. Posso retornar para passar mais detalhes?'},
   {nome:'Conexão LinkedIn',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}
@@ -1443,6 +1457,7 @@ async function insertLead(rec,opts){
   // 1) campos derivados — mesma régua do updateLead
   if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
   if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
+  if('instagram_handle' in rec) rec.instagram_handle=normIgHandle(rec.instagram_handle);
   if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
   if(rec.email) rec.email=rec.email.trim()||null;
   if(rec.status==='Convite Enviado' && !rec.convite_enviado_em) rec.convite_enviado_em=new Date().toISOString(); // lead já criado como convite enviado conta na meta
@@ -1457,10 +1472,11 @@ async function insertLead(rec,opts){
   if(error){
     if(error.code==='23505'){
       const d=(error.details||error.message||'');
-      if(/codigo/i.test(d)&&!/linkedin|telefone|e164|email/i.test(d)) // app antigo em cache colidiu no PI — não é lead duplicado
+      if(/codigo/i.test(d)&&!/linkedin|instagram|telefone|e164|email/i.test(d)) // app antigo em cache colidiu no PI — não é lead duplicado
         return {status:'error',message:'colisão de código PI (versão antiga em outro aparelho) — recarregue a página e tente de novo',code:error.code};
-      const key=/linkedin/i.test(d)?'linkedin':/telefone|e164/i.test(d)?'telefone':/email/i.test(d)?'email':'linkedin';
+      const key=/instagram/i.test(d)?'instagram':/linkedin/i.test(d)?'linkedin':/telefone|e164/i.test(d)?'telefone':/email/i.test(d)?'email':'linkedin';
       const existing=key==='linkedin'?LEADS.find(l=>l.linkedin_url_norm===rec.linkedin_url_norm)
+                    :key==='instagram'?LEADS.find(l=>normIgHandle(l.instagram_handle)&&normIgHandle(l.instagram_handle)===normIgHandle(rec.instagram_handle))
                     :key==='telefone'?LEADS.find(l=>l.telefone_e164===rec.telefone_e164)
                     :LEADS.find(l=>normEmail(l.email)&&normEmail(l.email)===normEmail(rec.email));
       return {status:'duplicate',key,existing:existing||null};
@@ -1482,6 +1498,7 @@ async function insertLeadsBatch(recs){
   for(const rec of recs){
     if(rec.nome) rec.primeiro_nome=firstName(rec.nome);
     if(rec.linkedin_url && rec.linkedin_url_norm==null) rec.linkedin_url_norm=normUrl(rec.linkedin_url);
+    if('instagram_handle' in rec) rec.instagram_handle=normIgHandle(rec.instagram_handle);
     if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
     if(rec.email) rec.email=rec.email.trim()||null;
     if(rec.status==='Convite Enviado' && !rec.convite_enviado_em) rec.convite_enviado_em=new Date().toISOString();
@@ -2131,6 +2148,7 @@ function inboxHTML(){
 
   const cap=`<div class="ibx-head">
     <button class="btn primary" id="ibx-paste">🔄 Sincronizar do LinkedIn</button>
+    <button class="btn" id="ibx-paste-ig" style="background:#c13584;color:#fff;border-color:#c13584">◎ Sincronizar do Instagram</button>
     <div class="ibx-sync-hint">Puxa conversas, fotos e históricos da sua extensão.${lastSync?` Última sincronização: <b>${new Date(lastSync).toLocaleString('pt-BR')}</b>.`:''}</div>
     <details class="ibx-how-wrap"><summary class="ibx-how">como funciona?</summary><div class="ibx-steps"><b>1.</b> No LinkedIn → <b>Mensagens</b>, clique em <b>Sincronizar tudo</b> (extensão). &nbsp;<b>2.</b> Volte aqui e clique em <b>Sincronizar do LinkedIn</b> — ele cola sozinho.</div></details>
   </div>`;
@@ -2229,6 +2247,7 @@ function inboxDetailHTML(l){
 function wireInbox(){
   document.querySelectorAll('[data-ibxf]').forEach(b=>b.onclick=()=>{INBOX_FILTER=b.dataset.ibxf;render();});
   const p=$('#ibx-paste'); if(p)p.onclick=openInboxPaste;
+  const pig=$('#ibx-paste-ig'); if(pig)pig.onclick=openInstaPaste;
   // 2 colunas: selecionar conversa (esquerda) → preenche o detalhe (direita)
   document.querySelectorAll('[data-ibxsel]').forEach(r=>r.onclick=()=>{INBOX_SEL=r.dataset.ibxsel;INBOX_MOBILE_OPEN=true;render();});
   const bk=$('#ibx-back'); if(bk)bk.onclick=()=>{INBOX_MOBILE_OPEN=false;render();};
@@ -2437,6 +2456,163 @@ function openInboxPaste(){
   setTimeout(()=>$('#ibp-raw').focus(),50);
   if(!IS_MOBILE&&navigator.clipboard&&navigator.clipboard.readText){ // no iOS a leitura automática dispara o prompt "Colar" toda vez que o modal abre
     navigator.clipboard.readText().then(txt=>{ if(txt&&/"tipo"\s*:\s*"(inbox|sync)"|"conversas"/.test(txt)){ const ta=$('#ibp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); } }).catch(()=>{});
+  }
+}
+
+// ===== INGESTÃO DO INSTAGRAM (cola o JSON da extensão Prospector Instagram) =====
+// Espelha openInboxPaste, mas o canal é o Instagram: identidade por @ (instagram_handle),
+// origem 'Instagram' e "indicado por" (o @ do LP fonte) vai pro campo recomendante.
+// Payload da extensão: { tipo:"instagram", fonte_lp:"@x", leads:[{username,full_name,genero,
+//   bio,category,city,is_business,is_verified,is_private,avatar,followers}] }
+function openInstaPaste(){
+  const IG_SEXO={M:'Masculino',F:'Feminino'};
+  const ov=document.createElement('div');ov.className='overlay';ov.style.justifyContent='center';ov.style.alignItems='center';
+  ov.innerHTML=`<div class="modal" onclick="event.stopPropagation()" style="width:960px;max-width:96vw">
+    <h2>◎ Sincronizar do Instagram</h2>
+    <p class="hint">Colo sozinho o que a extensão <b>Prospector Instagram</b> copiou (marque os perfis lá e clique <b>📋 Enviar pro CRM</b>). Reviso cada perfil: o que <b>cria novo</b> e o que <b>atualiza</b> um lead — casando por <b>@ do Instagram, telefone e nome</b>. Perfis de <b>empresa</b> vêm desmarcados (às vezes a empresa é o caminho pro dono). Nomes só <i>parecidos</i> criam novo e ficam marcados pra resolver em <b>Duplicatas</b>. <b>Edite o que precisar</b> e só então aprove — nada grava antes disso.</p>
+    <div class="field"><label>Perfis copiados (cola aqui se não vier sozinho)</label><textarea id="igp-raw" rows="2" placeholder='cole aqui (Cmd/Ctrl+V)'></textarea></div>
+    <div id="igp-fonte"></div>
+    <div id="igp-sum"></div>
+    <div id="igp-table" style="max-height:48vh;overflow:auto;margin-top:8px"></div>
+    <div class="modal-actions" style="align-items:center">
+      <button class="btn primary" id="igp-go" disabled>Aprovar e sincronizar</button>
+      <button class="btn ghost" id="igp-close">Fechar</button>
+      <span id="igp-msg" class="muted" style="font-size:12px"></span>
+    </div>
+  </div>`;
+  ov.onclick=()=>ov.remove();document.body.appendChild(ov);
+  $('#igp-close').onclick=()=>ov.remove();
+  const statusOptsG=sel=>ETAPAS.map(e=>`<optgroup label="${esc(ETAPA_LABEL[e]||e)}">`+STATUS_BY_ETAPA[e].map(s=>`<option ${s===sel?'selected':''}>${esc(s)}</option>`).join('')+`</optgroup>`).join('');
+  let rows=[]; let FONTE='';
+  function build(leads){
+    const idx=leadIndexes();
+    rows=leads.map(c=>{
+      const handle=normIgHandle(c.instagram_handle||c.username||'');
+      const m=findLeadMatch({nome:c.full_name||c.username,instagram_handle:handle},idx);
+      const l=(m&&m.confident)?m.lead:null;
+      const sug=(!l&&m&&!m.confident)?m.lead:null;
+      const isBiz=!!c.is_business;
+      return {c,l,sug,handle,action:l?'atualizar':'criar',
+        status:l?l.status:'Aguardando Qualificacao',
+        resp:(l&&l.responsavel)||MY_NAME,
+        include:!isBiz, isBiz};
+    });
+    renderTable();
+  }
+  function renderTable(){
+    const inc=rows.filter(r=>r.include);
+    const novos=inc.filter(r=>r.action==='criar').length, upd=inc.filter(r=>r.action==='atualizar').length;
+    const par=rows.filter(r=>r.sug&&!r.l).length;
+    $('#igp-fonte').innerHTML=FONTE?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fdf2f8;border:1px solid #fbcfe8;border-radius:9px;padding:9px 12px;margin:2px 0 8px">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#c13584">Indicado por</span>
+      <span style="font-size:14px;font-weight:640;color:#831843">@${esc(FONTE)}</span>
+      <span style="font-size:12px;color:#9d5480">— vai pro campo <b>recomendante</b> de todos os leads desta leva</span>
+    </div>`:'';
+    $('#igp-sum').innerHTML=`<div class="summary">
+      <div class="scard"><div class="n">${rows.length}</div><div class="l">perfis</div></div>
+      <div class="scard"><div class="n" style="color:var(--green)">${novos}</div><div class="l">criar novo</div></div>
+      <div class="scard"><div class="n" style="color:var(--primary)">${upd}</div><div class="l">atualizar</div></div>
+      <div class="scard"><div class="n" style="color:var(--amber)">${par}</div><div class="l">≈ parecidos</div></div>
+    </div>`;
+    const head=`<tr><th style="width:26px"></th><th>Perfil</th><th>Bio / profissão</th><th>Cidade</th><th>Ação</th><th>Status</th><th>Resp.</th></tr>`;
+    const body=rows.map((r,i)=>{
+      const c=r.c;
+      const g=(c.genero==='M'||c.genero==='F')?`<span class="flag" style="background:${c.genero==='M'?'#dbeafe':'#fce7f3'};color:${c.genero==='M'?'#1d4ed8':'#be185d'}">${c.genero}</span> `:'';
+      const bio=esc((c.bio||c.category||'').slice(0,90));
+      return `<tr style="${r.include?'':'opacity:.45'}">
+      <td><input type="checkbox" class="cbx" data-chk="${i}" ${r.include?'checked':''}></td>
+      <td><div class="lead-name">${g}${esc(c.full_name||c.username)}${c.is_verified?' ✔':''}</div>
+        <div class="lead-cargo">@${esc(c.instagram_handle||c.username||'')}${r.isBiz?' · <b style="color:#a16207">empresa</b>':''}</div>
+        ${r.l?'':'<span class="flag warn">novo</span>'}${r.sug&&!r.l?` <span class="flag warn" title="Nome parecido — resolva em Duplicatas">≈ ${esc(r.sug.nome)}</span>`:''}</td>
+      <td style="max-width:240px"><div class="lead-cargo" style="white-space:normal">${bio}</div></td>
+      <td class="muted" style="white-space:nowrap;font-size:12px">${esc(c.city||'')}</td>
+      <td><span class="due ${r.action==='criar'?'soon':'ok'}">${r.action}</span></td>
+      <td><select class="fsel" data-st="${i}" style="max-width:170px">${statusOptsG(r.status)}</select></td>
+      <td><select class="fsel" data-rp="${i}"><option ${r.resp==='Gustavo'?'selected':''}>Gustavo</option><option ${r.resp==='Victor'?'selected':''}>Victor</option></select></td>
+    </tr>`;}).join('');
+    const bulk=`<div class="filters" style="margin:4px 0 8px;gap:8px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:8px 10px">
+      <button class="chip" data-ball="1">✓ Marcar todos</button>
+      <button class="chip" data-bnone="1">Desmarcar todos</button>
+      <button class="chip" data-bnobiz="1">Desmarcar empresas</button>
+      <span class="muted" style="font-size:12px">aplicar aos <b>${inc.length}</b> marcados →</span>
+      <select class="fsel" data-bresp><option value="">Responsável…</option><option>Gustavo</option><option>Victor</option></select>
+      <select class="fsel" data-bstatus style="max-width:210px"><option value="">Status (define a etapa)…</option>${statusOptsG('')}</select>
+    </div>`;
+    $('#igp-table').innerHTML=bulk+`<div class="tablewrap"><table>${head}${body}</table></div>`;
+    const on=(sel,fn)=>{const el=$('#igp-table '+sel); if(el)el.onclick=fn;};
+    on('[data-ball]',()=>{rows.forEach(r=>r.include=true);renderTable();});
+    on('[data-bnone]',()=>{rows.forEach(r=>r.include=false);renderTable();});
+    on('[data-bnobiz]',()=>{rows.forEach(r=>{if(r.isBiz)r.include=false;});renderTable();});
+    const bR=$('#igp-table [data-bresp]'); if(bR)bR.onchange=()=>{ if(bR.value){rows.forEach(r=>{if(r.include)r.resp=bR.value;});renderTable();} };
+    const bS=$('#igp-table [data-bstatus]'); if(bS)bS.onchange=()=>{ if(bS.value){rows.forEach(r=>{if(r.include)r.status=bS.value;});renderTable();} };
+    $('#igp-table').querySelectorAll('[data-chk]').forEach(b=>b.onchange=()=>{rows[+b.dataset.chk].include=b.checked;renderTable();});
+    $('#igp-table').querySelectorAll('[data-st]').forEach(x=>x.onchange=()=>{rows[+x.dataset.st].status=x.value;});
+    $('#igp-table').querySelectorAll('[data-rp]').forEach(x=>x.onchange=()=>{rows[+x.dataset.rp].resp=x.value;});
+    $('#igp-go').disabled=inc.length===0;
+    $('#igp-go').textContent=`Aprovar e sincronizar (${inc.length})`;
+  }
+  function parse(txt){
+    let j=null; try{j=JSON.parse((txt||'').trim());}catch(_){ return null; }
+    if(Array.isArray(j)) return {fonte:'',leads:j};
+    if(j&&Array.isArray(j.leads)) return {fonte:normIgHandle(j.fonte_lp||j.fonte||'')||'',leads:j.leads};
+    return null;
+  }
+  $('#igp-raw').oninput=e=>{
+    const r=parse(e.target.value);
+    const leads=r&&r.leads?r.leads.filter(c=>c&&(c.username||c.full_name||c.instagram_handle)):null;
+    if(!leads||!leads.length){ $('#igp-sum').innerHTML='<p class="hint" style="color:var(--red)">Nada reconhecido — na extensão Prospector, marque os perfis e clique 📋 Enviar pro CRM, depois cole aqui.</p>'; $('#igp-table').innerHTML=''; $('#igp-fonte').innerHTML=''; $('#igp-go').disabled=true; return; }
+    FONTE=r.fonte||''; build(leads);
+  };
+  $('#igp-go').onclick=async()=>{
+    const sel=rows.filter(r=>r.include); if(!sel.length)return;
+    $('#igp-go').disabled=true; $('#igp-msg').textContent='Sincronizando…';
+    let criados=0,atualizados=0,erros=0,sugCriados=0;
+    const batchByHandle=new Map();
+    for(const r of sel){
+      const c=r.c;
+      const sexo=IG_SEXO[c.genero]||null;
+      const cargo=c.category||null;
+      const obs=(c.bio||'').trim()||null;
+      const foto=c.avatar||c.foto||c.profile_pic_url||null;
+      const updRec=(l)=>{ // atualiza existente: só preenche o que está vazio (não sobrescreve edição humana)
+        const patch={};
+        if(!l.instagram_handle&&r.handle)patch.instagram_handle=r.handle;
+        if(!l.sexo&&sexo)patch.sexo=sexo;
+        if(!l.cargo&&cargo)patch.cargo=cargo;
+        if(!l.cidade&&c.city)patch.cidade=c.city;
+        if(!l.foto_url&&foto)patch.foto_url=foto;
+        if(!l.recomendante&&FONTE)patch.recomendante='@'+FONTE;
+        if(!l.observacoes&&obs)patch.observacoes=obs;
+        if(r.status&&r.status!==l.status)patch.status=r.status;
+        return Object.keys(patch).length?updateLead(l.id,patch):Promise.resolve(true);
+      };
+      const bh=(r.action==='criar'&&r.handle)?batchByHandle.get(r.handle):null;
+      if(r.action==='criar'&&!bh){
+        const rec={nome:c.full_name||('@'+(c.username||'')),status:r.status,responsavel:r.resp,origem:'Instagram',
+          instagram_handle:r.handle};
+        if(sexo)rec.sexo=sexo;
+        if(cargo)rec.cargo=cargo;
+        if(c.city)rec.cidade=c.city;
+        if(foto)rec.foto_url=foto;
+        if(obs)rec.observacoes=obs;
+        if(FONTE)rec.recomendante='@'+FONTE;
+        const res=await insertLead(rec);
+        if(res.status==='created'){ criados++; if(r.sug)sugCriados++; if(r.handle)batchByHandle.set(r.handle,res.lead); }
+        else if(res.status==='duplicate'&&res.existing){ if(await updRec(res.existing))atualizados++; else erros++; }
+        else erros++;
+      }else{
+        const alvo=bh||r.l;
+        if(alvo&&await updRec(alvo))atualizados++; else erros++;
+      }
+    }
+    toast(`Sincronizado do Instagram · ${criados} criados, ${atualizados} atualizados${erros?', '+erros+' erro(s)':''}`);
+    ov.remove();
+    if(sugCriados&&uiAdmin()&&can('pode_duplicatas')&&confirm(`${sugCriados} lead(s) criado(s) têm nome parecido com leads existentes.\nAbrir a tela Duplicatas pra revisar/unificar agora?`)){ VIEW='dup'; }
+    render();
+  };
+  setTimeout(()=>$('#igp-raw').focus(),50);
+  if(!IS_MOBILE&&navigator.clipboard&&navigator.clipboard.readText){
+    navigator.clipboard.readText().then(txt=>{ if(txt&&/"tipo"\s*:\s*"instagram"|"leads"\s*:/.test(txt)){ const ta=$('#igp-raw'); ta.value=txt; ta.dispatchEvent(new Event('input')); } }).catch(()=>{});
   }
 }
 
