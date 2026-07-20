@@ -1360,7 +1360,7 @@ function copyMsg(l,anchor){
 }
 function searchMatch(l){
   if(!SEARCH)return true;const q=SEARCH.toLowerCase();
-  return [l.nome,l.empresa,l.cargo,l.recomendante,l.codigo,l.telefone,l.telefone_e164,l.email,l.segmento,l.bairro].some(x=>(x||'').toLowerCase().includes(q)); // mesmos campos da busca ⌘K (antes telefone só achava no ⌘K)
+  return [l.nome,l.empresa,l.cargo,l.recomendante,l.codigo,l.telefone,l.telefone_e164,l.email,l.segmento,l.bairro,l.instagram_handle].some(x=>(x||'').toLowerCase().includes(q)); // mesmos campos da busca ⌘K (antes telefone só achava no ⌘K)
 }
 
 // ===== DATA =====
@@ -1502,7 +1502,7 @@ async function insertLeadsBatch(recs){
     if('telefone' in rec && !('telefone_e164' in rec)){ const p=normPhone(rec.telefone||''); rec.telefone=p.telefone; rec.telefone_e164=p.e164; }
     if(rec.email) rec.email=rec.email.trim()||null;
     if(rec.status==='Convite Enviado' && !rec.convite_enviado_em) rec.convite_enviado_em=new Date().toISOString();
-    const keys=[rec.linkedin_url_norm,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
+    const keys=[rec.linkedin_url_norm,rec.instagram_handle,rec.telefone_e164,normEmail(rec.email)].filter(Boolean);
     const m=findLeadMatch(rec,idx);
     if((m&&m.confident) || keys.some(k=>seen.has(k))){ dup++; continue; }
     keys.forEach(k=>seen.add(k)); // codigo: trigger do banco numera; fallback pós-lote cobre banco sem trigger
@@ -3367,7 +3367,7 @@ window.addEventListener('resize',()=>{ if(document.querySelector('.statusmenu'))
 new MutationObserver(()=>{ document.body.style.overflow=document.querySelector('.overlay')?'hidden':''; }).observe(document.body,{childList:true});
 
 // ===== LOG DE ATIVIDADE POR LEAD (visão unificada: registra quem mexeu em quê, no lugar de "responsável") =====
-const EDIT_LABELS={nome:'Nome',cargo:'Cargo',empresa:'Empresa',segmento:'Segmento',bairro:'Bairro',renda_estimada:'Renda',faixa_idade:'Idade',telefone:'Telefone',sexo:'Sexo',status:'Status',data_proxima_acao:'Follow-up',agendamento:'Agendamento',linkedin_url:'LinkedIn',observacoes:'Observações',prioridade:'Prioridade',acompanhar_victor:'Acomp. Victor'};
+const EDIT_LABELS={nome:'Nome',cargo:'Cargo',empresa:'Empresa',segmento:'Segmento',bairro:'Bairro',renda_estimada:'Renda',faixa_idade:'Idade',telefone:'Telefone',sexo:'Sexo',status:'Status',data_proxima_acao:'Follow-up',agendamento:'Agendamento',linkedin_url:'LinkedIn',instagram_handle:'Instagram',observacoes:'Observações',prioridade:'Prioridade',acompanhar_victor:'Acomp. Victor'};
 function logEdit(id,before,patch){
   before=before||{};
   const changed=[];
@@ -3412,6 +3412,7 @@ function openDrawer(id){
     </div>
     <label class="acompbox"><input type="checkbox" class="cbx" id="d-acomp" ${l.acompanhar_victor?'checked':''}> 👁 Victor acompanha esta OT (follow-up de delay/reagendar)</label>
     <div class="field"><label>LinkedIn</label><div style="display:flex;gap:8px;align-items:center"><input id="d-url" value="${esc(l.linkedin_url||'')}" style="flex:1"><a class="btn ghost" id="d-url-open" href="${safeHref(l.linkedin_url)}" target="_blank" rel="noopener" ${l.linkedin_url?'':'style="display:none"'}>↗ Abrir</a></div></div>
+    <div class="field"><label>Instagram (@)</label><div style="display:flex;gap:8px;align-items:center"><input id="d-ig" value="${esc(l.instagram_handle||'')}" placeholder="ex: souzacruzdaniel" style="flex:1"><a class="btn ghost" id="d-ig-open" href="https://instagram.com/${esc(l.instagram_handle||'')}" target="_blank" rel="noopener" ${l.instagram_handle?'':'style="display:none"'}>↗ Abrir</a></div></div>
     <div class="field"><label>Observações</label><textarea id="d-obs" rows="2">${esc(l.observacoes||'')}</textarea></div>
     ${(Array.isArray(l.inbox_thread)&&l.inbox_thread.length)?`<h3 style="margin:20px 0 8px;font-size:13px">💬 Conversa capturada</h3>${inboxThreadHTML(l)}`:''}
     <h3 style="margin:20px 0 8px;font-size:13px">Histórico & notas</h3>
@@ -3445,12 +3446,14 @@ function openDrawer(id){
       data_proxima_acao:proxVal||null,acompanhar_victor:$('#d-acomp').checked,
       agendamento:$('#d-agenda').value?new Date($('#d-agenda').value).toISOString():null,
       linkedin_url:$('#d-url').value||null,linkedin_url_norm:normUrl($('#d-url').value),
+      instagram_handle:normIgHandle($('#d-ig').value),
       observacoes:$('#d-obs').value||null};
     if(!patch.status){const _etSel=$('#d-et'); if(_etSel)patch.etapa=_etSel.value;} // etapa sem status (FIP 2/TS1): grava a etapa direto — antes salvava status:'' e o lead sumia do funil
     if(await updateLead(id,patch)){toast('Salvo');ov.remove();render();}
   };
   $('#d-msg').onclick=(e)=>copyMsg(l,e.currentTarget);
   const _du=$('#d-url'),_duo=$('#d-url-open'); if(_du&&_duo)_du.oninput=()=>{const v=_du.value.trim();_duo.href=safeHref(v);_duo.style.display=v?'':'none';};
+  const _dig=$('#d-ig'),_digo=$('#d-ig-open'); if(_dig&&_digo)_dig.oninput=()=>{const v=normIgHandle(_dig.value)||'';_digo.href='https://instagram.com/'+v;_digo.style.display=v?'':'none';};
   $('#d-call').onclick=async()=>{
     const n=(l.tentativas_ligacao||0)+1;
     if(await updateLead(id,{tentativas_ligacao:n})){await sb.from('lead_events').insert({lead_id:id,tipo:'ligacao',texto:'Tentativa de ligação #'+n,usuario:ME});toast('Ligação registrada');loadTimeline(id);}
@@ -3895,7 +3898,7 @@ function openImport(){
 }
 
 // ===== DUPLICATAS + UNIFICAR =====
-const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
+const MERGE_FIELDS=[['nome','Nome'],['cargo','Cargo'],['empresa','Empresa'],['telefone','Telefone'],['email','E-mail'],['linkedin_url','LinkedIn'],['instagram_handle','Instagram'],['faixa_idade','Idade'],['renda_estimada','Renda'],['sexo','Sexo'],['cidade','Cidade'],['status','Status'],['responsavel','Resp.'],['origem','Origem'],['recomendante','Recomendante'],['score','Score'],['observacoes','Observações']];
 function dupGroups(){
   const byKey={};
   const add=(k,l,kind)=>{ if(!k) return; const id=kind+'::'+k; (byKey[id]=byKey[id]||{kind,leads:[]}).leads.push(l); };
@@ -3930,7 +3933,7 @@ async function applyMerge(g,keep,patch){
   // colidem se gravarmos o valor no mantido ENQUANTO o duplicado (mesmo valor) ainda existe →
   // dava "falha ao atualizar registro mantido" (23505) JUSTAMENTE nos grupos que a tela existe pra resolver.
   // Ordem correta: atualiza o mantido SEM os campos únicos → remove os duplicados → só então grava esses campos.
-  const urlKeys=['linkedin_url','linkedin_url_norm','email','telefone','telefone_e164'];
+  const urlKeys=['linkedin_url','linkedin_url_norm','instagram_handle','email','telefone','telefone_e164'];
   const urlPatch={}; urlKeys.forEach(k=>{ if(k in patch) urlPatch[k]=patch[k]; });
   if('linkedin_url' in urlPatch) urlPatch.linkedin_url_norm=normUrl(urlPatch.linkedin_url); // mantém o norm coerente com a URL escolhida
   const patchNoUrl={...patch}; urlKeys.forEach(k=>delete patchNoUrl[k]);
@@ -4450,7 +4453,7 @@ let CMDK_SEL=0, CMDK_RES=[];
 function cmdkMatches(q){
   if(!q) return [];
   const n=_norm(q);
-  const hit=l=>[l.nome,l.empresa,l.cargo,l.telefone,l.segmento,l.bairro,l.codigo,l.recomendante,l.email].some(x=>_norm(x||'').includes(n)); // + codigo/recomendante/email (a topbar já achava; o ⌘K não)
+  const hit=l=>[l.nome,l.empresa,l.cargo,l.telefone,l.segmento,l.bairro,l.codigo,l.recomendante,l.email,l.instagram_handle].some(x=>_norm(x||'').includes(n)); // + codigo/recomendante/email (a topbar já achava; o ⌘K não)
   return baseLeads().filter(hit).sort((a,b)=>{
     const an=_norm(a.nome||'').startsWith(n)?0:1, bn=_norm(b.nome||'').startsWith(n)?0:1;
     return an-bn||(b.prioridade?1:0)-(a.prioridade?1:0);
@@ -4948,12 +4951,13 @@ function mLeadDetail(){
   var tel=l.telefone?(normPhone(l.telefone).e164||l.telefone):'';
   var head='<div style="background:#fff;border-radius:20px;padding:20px;box-shadow:0 2px 10px rgba(15,23,42,.05);margin-bottom:14px"><div style="display:flex;align-items:center;gap:14px">'+mAvatar(l,60)+'<div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:850;letter-spacing:-.4px;line-height:1.15">'+esc(l.nome)+'</div><div style="font-size:13.5px;color:#94A3B8;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+mSub(l)+'</div></div><button class="m-actbtn" data-star="'+l.id+'" style="width:42px;height:42px;border-radius:12px;background:#F1F5F9;font-size:20px;color:#F59E0B">'+(l.prioridade?'★':'☆')+'</button></div><div style="display:flex;gap:8px;margin-top:16px">'+(tel?'<a href="tel:'+esc(tel)+'" style="flex:1;height:46px;border-radius:13px;background:#2F5BF6;color:#fff;font-size:14.5px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none">📞 Ligar</a>':'')+'<button class="m-actbtn" data-act="msg" data-id="'+l.id+'" style="flex:1;height:46px;border-radius:13px;background:#EEF2FF;color:#2F5BF6;font-size:14.5px;font-weight:800">📩 Mensagem</button></div></div>';
   var faixa='<div class="m-row-tap" data-status-btn="'+l.id+'" style="display:flex;align-items:center;gap:8px;background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(15,23,42,.05)"><span style="width:10px;height:10px;border-radius:50%;background:'+color+'"></span><span style="font-size:14px;font-weight:800;color:'+color+'">'+mEtapaLabel(l.etapa)+'</span><span style="font-size:13.5px;color:#94A3B8">· '+esc(l.status)+'</span></div>';
-  var dados=[['Cargo',l.cargo],['Empresa',l.empresa],['Renda estimada',l.renda_estimada!=null?('R$ '+Number(l.renda_estimada).toLocaleString('pt-BR')):''],['Idade',l.faixa_idade?l.faixa_idade+' anos':''],['Telefone',l.telefone],['Sexo',l.sexo],['Cidade',l.cidade],['Formação',l.formacao],['Recomendante',l.recomendante]].filter(function(d){return d[1];});
+  var dados=[['Cargo',l.cargo],['Empresa',l.empresa],['Renda estimada',l.renda_estimada!=null?('R$ '+Number(l.renda_estimada).toLocaleString('pt-BR')):''],['Idade',l.faixa_idade?l.faixa_idade+' anos':''],['Telefone',l.telefone],['Sexo',l.sexo],['Cidade',l.cidade],['Formação',l.formacao],['Instagram',l.instagram_handle?'@'+l.instagram_handle:''],['Recomendante',l.recomendante]].filter(function(d){return d[1];});
   var dadosH='<div style="background:#fff;border-radius:18px;padding:6px 18px;box-shadow:0 2px 8px rgba(15,23,42,.05);margin-bottom:14px">'+dados.map(function(d){return '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid #F1F5F9"><span style="font-size:14px;color:#94A3B8">'+esc(d[0])+'</span><span style="font-size:14.5px;font-weight:700;color:#334155;text-align:right">'+esc(d[1])+'</span></div>';}).join('')+'</div>';
   var lk=l.linkedin_url?'<a href="'+safeHref(l.linkedin_url)+'" target="_blank" style="display:block;text-align:center;background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,.05);color:#0A66C2;font-weight:800;text-decoration:none">in Abrir LinkedIn</a>':'';
   // conversa do LinkedIn (inbox) — no desktop aparece no painel do Inbox; no mobile não aparecia em lugar NENHUM
   var thread=(l.inbox_ultima_msg||l.inbox_thread)&&typeof inboxThreadHTML==='function'?'<div style="background:#fff;border-radius:18px;padding:14px 16px;box-shadow:0 2px 8px rgba(15,23,42,.05);margin-bottom:14px">'+inboxThreadHTML(l)+'</div>':'';
-  return back+head+faixa+dadosH+thread+lk;
+  var ig=l.instagram_handle?'<a href="https://instagram.com/'+esc(l.instagram_handle)+'" target="_blank" style="display:block;text-align:center;background:#fff;border-radius:14px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,.05);color:#C13584;font-weight:800;text-decoration:none;margin-top:10px">◎ Abrir Instagram</a>':'';
+  return back+head+faixa+dadosH+thread+lk+ig;
 }
 function mTasksLoad(){ if(M_TASKS)return M_TASKS; try{ M_TASKS=JSON.parse(localStorage.getItem(M_TASK_KEY)||'[]'); }catch(e){ M_TASKS=[]; } if(!Array.isArray(M_TASKS))M_TASKS=[]; return M_TASKS; }
 function mTasksSave(){ try{ localStorage.setItem(M_TASK_KEY,JSON.stringify(M_TASKS||[])); }catch(e){} }

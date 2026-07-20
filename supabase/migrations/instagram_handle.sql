@@ -37,7 +37,9 @@ alter table public.leads
   add constraint chk_leads_instagram_handle_norm
   check (
     instagram_handle is null
-    or instagram_handle = lower(instagram_handle)
-    and instagram_handle !~ '[@/\s]'
-    and length(instagram_handle) between 1 and 30
+    or (
+      instagram_handle = lower(instagram_handle)
+      and instagram_handle !~ '[@/\s]'
+      and length(instagram_handle) between 1 and 30
+    )
   );
