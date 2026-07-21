@@ -187,7 +187,7 @@ function renderLead(sugestoes){
     const r=await send('task.set',{id:l.id,dateISO:d,texto:tx,before:l});
     BUSY=false;
     if(!handleAuthFail(r)) return;
-    if(r.ok&&r.data.status==='updated'){ LEAD=r.data.lead; toast('✓ Follow-up agendado'); renderLead(); }
+    if(r.ok&&r.data.status==='updated'){ LEAD=r.data.lead; renderLead(); toast('✓ Follow-up agendado'); }
     else { $('#wa-task-save').disabled=false; toast('Erro: '+((r.data&&r.data.message)||r.error||'falha ao agendar')); }
   };
 }
@@ -198,7 +198,7 @@ async function saveLead(patch){
   const r=await send('leads.update',{id:LEAD.id,patch,before:LEAD});
   BUSY=false; if(btn) btn.disabled=false;
   if(!handleAuthFail(r)) return;
-  if(r.ok&&r.data.status==='updated'){ LEAD=r.data.lead; toast('✓ Salvo no CRM'); renderLead(); }
+  if(r.ok&&r.data.status==='updated'){ LEAD=r.data.lead; renderLead(); toast('✓ Salvo no CRM'); }
   else toast('Erro: '+((r.data&&r.data.message)||r.error||'falha ao salvar'));
 }
 
@@ -252,11 +252,11 @@ function renderCreate(sugestoes){
     const r=await send('leads.create',{rec});
     BUSY=false;
     if(!handleAuthFail(r)) return;
-    if(r.ok&&r.data.status==='created'){ LEAD=r.data.lead; toast('✓ Lead criado — '+(LEAD.codigo||'')); renderLead(); }
+    if(r.ok&&r.data.status==='created'){ LEAD=r.data.lead; renderLead(); toast('✓ Lead criado — '+(LEAD.codigo||'')); }
     else if(r.ok&&r.data.status==='duplicate'){
       const ex=r.data.existing;
-      toast('Já existe por '+r.data.key+(ex&&ex.codigo?' — '+ex.codigo:''));
       if(ex){ LEAD=ex; renderLead(); } else $('#wa-n-save').disabled=false;
+      toast('Já existe por '+r.data.key+(ex&&ex.codigo?' — '+ex.codigo:''));
     }
     else { $('#wa-n-save').disabled=false; toast('Erro: '+((r.data&&r.data.message)||r.error||'falha ao criar')); }
   };
