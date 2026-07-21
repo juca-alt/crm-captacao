@@ -10,10 +10,10 @@
 ```
 Retoma o CRM Captação (visão Captação = index.html). Lê o ESTADO_DO_PROJETO.md.
 REGRA: uma sessão por visão — NÃO tocar na LP (vendas.html); git fetch antes de editar.
-Estado 21/07: extensão Chrome "Captação · WhatsApp → CRM" v0.1.0 PRONTA no branch
-claude/whatsapp-web-crm-extension-h9z9l3 (pasta extensao-whatsapp/) — aguardando QA
-manual do Gustavo (load unpacked, roteiro no extensao-whatsapp/README.md) e OK
-explícito dele pra merge na main.
+Estado 21/07: extensão Chrome "Captação · WhatsApp → CRM" v0.1.0 MERGEADA na main
+(PR #22, main = a2e74f3, guard verde; index.html/vendas.html intocados — Pages sem
+mudança no app). Pasta extensao-whatsapp/ — falta o TESTE REAL do Gustavo (load
+unpacked, roteiro no extensao-whatsapp/README.md; checklist guiado entregue no chat).
 Testei o fluxo real (WhatsApp Web → card → criar/editar lead): [FUNCIONOU / deu isso: ...]
 ```
 
@@ -37,7 +37,7 @@ fuzzy/FN_CFG_DEFAULT —, crm-api, sw, content/wa-dom + panel + css, README com 
 duplicados → unificar em Duplicatas → UNIQUE comentado até zerar), `privacidade-extensao-whatsapp.html`.
 
 **Pontos críticos pro Claude futuro:**
-- **NADA mergeado** — tudo no branch, aguardando preview/QA real do Gustavo (regra: merge só com OK explícito).
+- **Mergeado na main em 21/07** (PR #22, autorização do Gustavo no chat: "já deixar no crm captacao") — merge não muda o app em prod (só pasta nova + guard + docs). QA real do Gustavo AINDA PENDENTE; bugs viram branch novo.
 - Migration da trava 2b **NÃO rodada** (manual, e depende de unificar os 6 duplicados primeiro).
 - DOM do WhatsApp não tem contrato: detecção em camadas (JID `data-id` → número no título → nome
   → busca manual). Se o WhatsApp mudar o DOM, a extensão degrada pra busca manual — checar
