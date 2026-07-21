@@ -4,6 +4,49 @@
 
 ---
 
+## 📸 Snapshot — 21/07/2026 · Sessão "Extensão WhatsApp → CRM" (visão CAPTAÇÃO, branch `claude/whatsapp-web-crm-extension-h9z9l3`)
+
+### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO CAPTAÇÃO)
+```
+Retoma o CRM Captação (visão Captação = index.html). Lê o ESTADO_DO_PROJETO.md.
+REGRA: uma sessão por visão — NÃO tocar na LP (vendas.html); git fetch antes de editar.
+Estado 21/07: extensão Chrome "Captação · WhatsApp → CRM" v0.1.0 PRONTA no branch
+claude/whatsapp-web-crm-extension-h9z9l3 (pasta extensao-whatsapp/) — aguardando QA
+manual do Gustavo (load unpacked, roteiro no extensao-whatsapp/README.md) e OK
+explícito dele pra merge na main.
+Testei o fluxo real (WhatsApp Web → card → criar/editar lead): [FUNCIONOU / deu isso: ...]
+```
+
+**O que foi construído (pedido do Gustavo, inspiração HubSpot/Atendare):** extensão Chrome MV3
+pra WhatsApp Web — ao abrir uma conversa, painel lateral (Shadow DOM, visual do CRM) mostra o
+card do lead casado por **telefone** (variantes com/sem 9º dígito); sem match → "+ Criar lead"
+pré-preenchido (status "Com Telefone", origem nova "WhatsApp", PI pela trigger); edição de
+Etapa×Status (funil dinâmico de `app_settings.funil_cfg`), cargo/empresa/cidade/e-mail/origem/
+recomendante/observações, follow-up + tarefa na timeline. Busca manual como fallback. v1 SEM IA,
+SEM API Meta, SEM ler conteúdo de mensagens; DOM só leitura (anti-ban).
+
+**Arquitetura:** REST puro (GoTrue senha+refresh, PostgREST) sem supabase-js; rede só no service
+worker; `crm-api.js` = choke point da extensão espelhando `insertLead`/`updateLead`/`logEdit`/
+`setLeadTask` (derivados, carimbos, `etapa` nunca gravada, 23505 traduzido). Guard de CI ganhou
+bloco aditivo: `rest/v1/leads` fora do `crm-api.js` na pasta da extensão = build falha (rodado
+local, verde; blocos antigos intocados). Login = mesma senha do CRM, token em `chrome.storage`.
+
+**Novos arquivos:** `extensao-whatsapp/` (manifest, config, normalize — ports fiéis de normPhone/
+fuzzy/FN_CFG_DEFAULT —, crm-api, sw, content/wa-dom + panel + css, README com roteiro de QA de
+12 passos), `supabase/migrations/telefone_e164_unique.sql` (trava 2b: diagnóstico dos 6 telefones
+duplicados → unificar em Duplicatas → UNIQUE comentado até zerar), `privacidade-extensao-whatsapp.html`.
+
+**Pontos críticos pro Claude futuro:**
+- **NADA mergeado** — tudo no branch, aguardando preview/QA real do Gustavo (regra: merge só com OK explícito).
+- Migration da trava 2b **NÃO rodada** (manual, e depende de unificar os 6 duplicados primeiro).
+- DOM do WhatsApp não tem contrato: detecção em camadas (JID `data-id` → número no título → nome
+  → busca manual). Se o WhatsApp mudar o DOM, a extensão degrada pra busca manual — checar
+  `content/wa-dom.js` primeiro. JIDs `@lid` (privacidade de número) caem no fallback por nome.
+- Pendências herdadas continuam: deploy v2.7.0 no ar (conferir rodapé), teste real do fluxo
+  Instagram, 4 origens de PI logado.
+
+---
+
 ## 📸 Snapshot — 19/07/2026 (noite) · Sessão "Ativação Prospector Instagram" (visão CAPTAÇÃO, autonomo-3)
 
 ### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO CAPTAÇÃO)
