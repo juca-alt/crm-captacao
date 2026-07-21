@@ -3,7 +3,7 @@
 // insertLead()/insertLeadsBatch() no index.html — qualquer origem nova que
 // insira lead por fora fura a rastreabilidade (id + código PI + dedupe).
 // Roda no CI (guard-choke-point.yml) e falha o push/PR que violar.
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const RE = /from\(\s*['"]leads['"]\s*\)\s*\.\s*insert/g;
 const lineOf = (src, i) => src.slice(0, i).split('\n').length;
@@ -33,6 +33,21 @@ try {
     falhas++;
   }
 } catch { /* vendas.html pode não existir em branches antigas */ }
+
+// extensão WhatsApp: todo acesso REST a `leads` fica no crm-api.js (choke point
+// da extensão — espelha insertLead/updateLead; dedupe + código PI + normalização)
+const RE_REST = /rest\/v1\/leads/g;
+try {
+  const walk = (d) => readdirSync(d, { withFileTypes: true })
+    .flatMap((e) => e.isDirectory() ? walk(`${d}/${e.name}`) : [`${d}/${e.name}`]);
+  for (const f of walk('extensao-whatsapp').filter((f) => f.endsWith('.js') && !f.endsWith('/crm-api.js'))) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(RE_REST)) {
+      console.error(`guard: ${f}:${lineOf(src, m.index)} acessa rest/v1/leads fora do crm-api.js — leitura/escrita de leads da extensão é só pelo crm-api.js.`);
+      falhas++;
+    }
+  }
+} catch { /* branches sem a extensão */ }
 
 if (falhas) process.exit(1);
 console.log(`guard ok: ${hits.length} insert(s) em leads, todos dentro de insertLead/insertLeadsBatch.`);

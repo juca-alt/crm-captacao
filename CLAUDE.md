@@ -6,6 +6,7 @@ App single-file HTML + vanilla JS, backend **Supabase** (`kbiinfpjfmuidyzsfegp`)
 - `vendas.html` = **PROD Visão LP** (CRM Life Planner / Vendas). Versão atual: **ISLAND · v0.3.1 · Visão LP**, mobile-ready (gaveta ☰ + barra inferior). Persistência **híbrida**: contatos/funil em localStorage (chave `crmlp_v02_state`); relatório semanal (`lp_relatorio_itens`) e Carteira (`carteira_clientes`/`carteira_apolices`, RLS por dono; migration rodada 19/07) no **Supabase** quando logado, com fallback local. O PR #18 ficou OPEN no GitHub mas o conteúdo dele JÁ está na main (fechar como superado). **Não existe `vendas-dev.html` no repo.** ⚠️ O arquivo tem bytes não-UTF8 — `grep` nele exige `-a` (sem isso falha mudo).
 - `index-dev.html` = staging LEGADO, defasado — não confiar sem conferir.
 - `supabase/` = migrations (rodadas manualmente no SQL editor, nunca automático) + Edge Functions de IA (`capturar-lead`, `importar-relatorio-lp`; motor Gemini, secret compartilhado).
+- `extensao-whatsapp/` = extensão Chrome MV3 "Captação · WhatsApp → CRM" (card do lead na conversa do WhatsApp Web; visão Captação). Choke point próprio: todo `rest/v1/leads` só em `crm-api.js` (guard de CI cobre). DOM do WhatsApp = só leitura (anti-ban).
 - **Guard no CI:** `scripts/guard-choke-point.mjs` + workflow — o build FALHA se `from('leads').insert` aparecer fora de `insertLead`/`insertLeadsBatch` no `index.html`, ou em qualquer lugar do `vendas.html`. Não burlar; novas origens de lead passam por essas 2 funções.
 - Responder no LinkedIn é **manual** (anti-ban). Captação: sem libs novas.
 

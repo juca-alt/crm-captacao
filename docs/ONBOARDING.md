@@ -35,6 +35,8 @@ CRM interno de **recrutamento/captação de Life Planners** (agentes de seguros 
 | `vendas.html` | Módulo "Visão Life Planner": parsing do PDF semanal da Prudential (Atrasos, Pendências, Status T, Aniversariantes). |
 | `ot-captacao-guia-jx92kf.html` | Guia de condução da OT (entrevista). Progresso salvo em `localStorage`. |
 | `privacidade-extensao.html` | Política de privacidade da extensão Chrome "Captação · Garimpo LinkedIn". |
+| `extensao-whatsapp/` | Extensão Chrome MV3 "Captação · WhatsApp → CRM": card do lead na conversa aberta do WhatsApp Web (busca por telefone, criar/atualizar lead). Ver `extensao-whatsapp/README.md`. |
+| `privacidade-extensao-whatsapp.html` | Política de privacidade da extensão Chrome "Captação · WhatsApp → CRM". |
 | `supabase/migrations/*.sql` | Migrações rodadas manualmente no SQL Editor. |
 | `supabase/functions/*/index.ts` | Edge Functions (ver abaixo). |
 | `scripts/guard-choke-point.mjs` | Guard de CI (ver *Regras de ouro*). |
@@ -79,6 +81,10 @@ Ambas com `verify_jwt = ON` e CORS travado na origem do GitHub Pages + localhost
   por `insertLead()` / `insertLeadsBatch()`. O `vendas.html` **não** insere em `leads`. O guard de CI
   (`scripts/guard-choke-point.mjs`) falha o build se isso for violado — é o que preserva a
   rastreabilidade (id + código PI + dedupe).
+- **Choke point da extensão WhatsApp:** na `extensao-whatsapp/`, TODO acesso REST a `leads`
+  (`rest/v1/leads`) mora em `crm-api.js`, que espelha `insertLead`/`updateLead` do app (derivados,
+  `codigo` vazio → trigger PI, dedupe pré-insert por telefone/e-mail, `etapa` nunca gravada).
+  O mesmo guard de CI falha se outro arquivo da extensão tocar `rest/v1/leads`.
 - Não commitar segredos. `SB_KEY` (anon) pode ficar no código; `GEMINI_API_KEY` **nunca**.
 
 ## 6. Como rodar localmente
