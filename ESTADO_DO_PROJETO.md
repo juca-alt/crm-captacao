@@ -4,6 +4,28 @@
 
 ---
 
+## 📸 Snapshot — 23/07/2026 (noite) · SYNC CONTATOS LP → SUPABASE no ar + extensão v0.3.0 (frente "c" CONCLUÍDA no código)
+
+**Pedido do Gustavo: "o que falta do app pro Supabase? bota logo".** PR #28 MERGED (main `f4c7f8b`):
+- **vendas.html v0.4.1**: nova tabela **`lp_contatos`** (migration `supabase/migrations/lp_contatos.sql`
+  — 1 linha/contato, `dados` jsonb, RLS por dono=email, padrão carteira). `salvar()` carimba `_upd`
+  no contato alterado + push com debounce; boot faz merge remoto×local por `_upd` (maior vence) e
+  sobe base local no 1º sync. Deslogado/sem migration = comporta como antes (localStorage).
+  Validado em Chromium (boot offline, carimbo, recarimbo).
+- **Extensão v0.3.0**: Visão LP resolve contato do FUNIL → Carteira → criar; card LP EDITÁVEL
+  (etapa NN/BC, telefone, notas, upsert com `_upd`); criar contato LP direto do chat
+  (NN→SitPlan, BC→Clientes Ativos). QA Playwright **22/22 verde**.
+
+**⚠️ PENDENTE DO GUSTAVO (sem isso o sync não liga; app segue como hoje):**
+1. Rodar `supabase/migrations/lp_contatos.sql` no SQL Editor.
+2. Atualizar a extensão local (ZIP da main + ↻ em chrome://extensions).
+3. Abrir o vendas.html LOGADO uma vez em cada aparelho (1º sync sobe a base local).
+Enum origem: ALTERs rodados por ele em 23/07; lista final do enum ainda não conferida no chat.
+⚠️ SESSÃO LP paralela: o vendas.html ganhou o bloco "SYNC CONTATOS" + salvar() novo — dar fetch
+antes de mexer.
+
+---
+
 ## 📸 Snapshot — 23/07/2026 · Extensão WhatsApp em USO REAL — v0.2.0 (Captação + Visão LP) (sessão da extensão, visão CAPTAÇÃO)
 
 **Teste real do Gustavo ANDOU:** card achou lead pelo telefone (PI00455), salvar revelou que
