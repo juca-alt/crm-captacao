@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.3.1 · Visão LP</title>
+<title>CRM Life Planner · v0.4.0 · Visão LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -322,7 +322,7 @@
 
 <header class="topbar">
   <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
-  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.3.1 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
+  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.4.0 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
   <div class="spacer"></div>
   <button class="perfil-chip" id="btnPerfil" onclick="togglePerfilMenu(event)">
     <span class="avatar" id="avTop">G</span>
@@ -376,6 +376,15 @@
     </div>
 
     <div class="sep"></div>
+    <!-- 4b · NEGÓCIOS BASE DE CLIENTES (funil CLIENTES CARTEIRA do Kommo) -->
+    <button class="nav-grp modulo nav-grp-btn" id="bc-toggle" onclick="toggleGrp('bc')"><span class="ic" style="font-size:13px">💼</span><span class="lbl">Negócios Base de Clientes</span><span class="caret" id="bc-caret">▾</span></button>
+    <div class="nav-grp-wrap" id="bc-group">
+      <button class="nav-btn sub" data-view="bc-funil" onclick="irPara('bc-funil')"><span class="ic">▦</span><span class="lbl">Funil Base de Clientes</span></button>
+      <button class="nav-grp nav-sub-et nav-grp-btn" id="bc-et-toggle" onclick="toggleGrp('bc-et')"><span class="lbl">Etapas Base de Clientes</span><span class="caret" id="bc-et-caret">▾</span></button>
+      <div class="nav-grp-wrap" id="bc-etapas"></div>
+    </div>
+
+    <div class="sep"></div>
     <!-- 5 · OUTROS MÓDULOS -->
     <button class="nav-grp modulo nav-grp-btn" id="outros-toggle" onclick="toggleGrp('outros')"><span class="ic" style="font-size:13px">🧩</span><span class="lbl">Outros módulos</span><span class="caret" id="outros-caret">▾</span></button>
     <div class="nav-grp-wrap" id="outros-group">
@@ -398,7 +407,7 @@
 </div>
 
 <div class="rodape">
-  <span>CRM Life Planner v0.3.1 — Visão LP · Island.</span>
+  <span>CRM Life Planner v0.4.0 — Visão LP · Island.</span>
   <button onclick="resetDemo()">Recarregar demonstração</button>
   <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
 </div>
@@ -427,6 +436,14 @@ const CHAVE='crmlp_v02_state';
 const ETAPAS=['SitPlan','TA','OI/FF','P/C','C2','N','FA','EMISSÃO','DELIVERY','Não','Prop. Cancelada','Apól. Cancelada'];
 const ETAPAS_ENCERR=['Não','Prop. Cancelada','Apól. Cancelada'];
 const ETAPAS_FLUXO=ETAPAS.filter(e=>!ETAPAS_ENCERR.includes(e));
+/* Funil Negócios BASE DE CLIENTES — espelho do funil "CLIENTES CARTEIRA" do Kommo
+   (conta jucasegurocomjucacom, pipeline 12543239, capturado 23/07/2026).
+   Fica de fora a "Etapa de leads de entrada" (etapa de sistema do Kommo); nomes
+   saneados: "Pendência/Atrasot" → Pendência/Atraso, "Delivery.1" → Delivery.
+   Contato com funil:'bc' vive SÓ neste funil (não entra em SitPlan/KPIs de NN). */
+const ETAPAS_BC=['Clientes Ativos','Pendência/Atraso','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Delivery','Venda ganha','Venda perdida'];
+const ETAPAS_BC_ENCERR=['Venda ganha','Venda perdida'];
+const ETAPAS_BC_FLUXO=ETAPAS_BC.filter(e=>!ETAPAS_BC_ENCERR.includes(e));
 const TA_STATUS=['—','Não respondeu','Retornar contato','Sucesso','Declinado'];
 
 /* Resultado de contato (SitPlan/TA) — 1 dropdown, 3 efeitos: loga a tentativa,
@@ -528,7 +545,9 @@ const $=s=>document.querySelector(s);
 const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function user(){ return S.users.find(u=>u.id===S.activeUser); }
 function isMaster(){ return user().papel.startsWith('Master'); }
-function meusContatos(){ return isMaster()? S.contatos : S.contatos.filter(c=>c.lp===S.activeUser); }
+function meusContatos(){ return S.contatos.filter(c=>c.funil!=='bc' && (isMaster()||c.lp===S.activeUser)); }
+function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && (isMaster()||c.lp===S.activeUser)); }
+function etapasDe(c){ return c&&c.funil==='bc'? ETAPAS_BC : ETAPAS; }
 function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(' ')[0] : id; }
 function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
@@ -547,7 +566,8 @@ function waHref(tel){ const d=String(tel||'').replace(/\D/g,''); return d? 'http
 function uid(){ return 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function interacoesDe(c){ if(!Array.isArray(c.interacoes)) c.interacoes=[]; return c.interacoes; }
 function badgeEtapa(e){
-  const m={'SitPlan':'b-cinza','TA':'b-azul','OI/FF':'b-amarelo','P/C':'b-roxo','C2':'b-azul','N':'b-amarelo','FA':'b-azul','EMISSÃO':'b-roxo','DELIVERY':'b-verde','Não':'b-verm','Prop. Cancelada':'b-verm','Apól. Cancelada':'b-verm'};
+  const m={'SitPlan':'b-cinza','TA':'b-azul','OI/FF':'b-amarelo','P/C':'b-roxo','C2':'b-azul','N':'b-amarelo','FA':'b-azul','EMISSÃO':'b-roxo','DELIVERY':'b-verde','Não':'b-verm','Prop. Cancelada':'b-verm','Apól. Cancelada':'b-verm',
+    'Clientes Ativos':'b-verde','Pendência/Atraso':'b-verm','Contato Agenda/Revisita':'b-amarelo','Agendada Revisita':'b-azul','Novo Negócio/Resolução pós Revisita':'b-roxo','N/Emissão':'b-amarelo','Emissão Final':'b-roxo','Delivery':'b-verde','Venda ganha':'b-verde','Venda perdida':'b-verm'};
   return `<span class="badge ${m[e]||'b-cinza'}">${e}</span>`;
 }
 function toast(msg,ok){ const t=document.createElement('div'); t.className='toast'+(ok?' ok':''); t.textContent=msg; $('#toasts').appendChild(t); setTimeout(()=>t.remove(),2600); }
@@ -574,7 +594,7 @@ function renderTopo(){
 
 /* ═══════════════════ NAVEGAÇÃO ═══════════════════ */
 let VIEW='inicio';
-function irPara(v){ VIEW=v; NN_FOCUS=''; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view===v)); render(); window.scrollTo(0,0); }
+function irPara(v){ VIEW=v; NN_FOCUS=''; BC_FOCUS=''; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view===v)); render(); window.scrollTo(0,0); }
 
 /* ── nav mobile: gaveta off-canvas (hambúrguer) + barra inferior ── */
 function toggleMenu(force){
@@ -588,8 +608,8 @@ function toggleMenu(force){
 document.querySelector('.sidebar').addEventListener('click',e=>{ if(e.target.closest('.nav-btn,.nav-cta')) toggleMenu(false); });
 
 /* ═══════════════════ VIEW: INÍCIO ═══════════════════ */
-function contagens(lista){
-  const por={}; ETAPAS.forEach(e=>por[e]=0);
+function contagens(lista,etapas=ETAPAS){
+  const por={}; etapas.forEach(e=>por[e]=0);
   lista.forEach(c=>{ if(por[c.etapa]==null) por[c.etapa]=0; por[c.etapa]++; });
   return por;
 }
@@ -630,7 +650,7 @@ function viewInicio(){
   if(isMaster()){
     porLP=`<div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin-bottom:10px">Funil por Life Planner</h3>
       ${S.users.map(u=>{
-        const l=S.contatos.filter(c=>c.lp===u.id); const p=contagens(l);
+        const l=S.contatos.filter(c=>c.lp===u.id&&c.funil!=='bc'); const p=contagens(l);
         return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed var(--linha)">
           <span class="avatar" style="background:${esc(u.cor)};width:26px;height:26px;font-size:10px">${esc(iniciais(u.nome))}</span>
           <b style="min-width:90px">${esc(u.nome.split(' ')[0])}</b>
@@ -680,17 +700,24 @@ function viewInicio(){
 function toggleGrp(key){
   const map={'cli':['cli-group','cli-toggle'],'cli-cart':['cli-cart-group','cli-cart-toggle'],
              'nn':['nn-group','nn-toggle'],'nn-et':['nn-etapas','nn-et-toggle'],
+             'bc':['bc-group','bc-toggle'],'bc-et':['bc-etapas','bc-et-toggle'],
              'outros':['outros-group','outros-toggle'],'bo':['bo-group','bo-toggle']};
   const m=map[key]; if(!m) return;
   const g=document.getElementById(m[0]), b=document.getElementById(m[1]); if(!g||!b) return;
   const fechado=g.classList.toggle('fechado');
   b.classList.toggle('fechado',fechado);
 }
-function etapaVar(e){ return {'SitPlan':'#5b6770','TA':'var(--azul)','OI/FF':'var(--amarelo)','P/C':'var(--roxo)','C2':'var(--azul)','N':'var(--amarelo)','FA':'var(--azul)','EMISSÃO':'var(--roxo)','DELIVERY':'var(--verde)','Não':'var(--verm)','Prop. Cancelada':'var(--verm)','Apól. Cancelada':'var(--verm)'}[e]||'#5b6770'; }
+function etapaVar(e){ return {'SitPlan':'#5b6770','TA':'var(--azul)','OI/FF':'var(--amarelo)','P/C':'var(--roxo)','C2':'var(--azul)','N':'var(--amarelo)','FA':'var(--azul)','EMISSÃO':'var(--roxo)','DELIVERY':'var(--verde)','Não':'var(--verm)','Prop. Cancelada':'var(--verm)','Apól. Cancelada':'var(--verm)',
+  'Clientes Ativos':'var(--verde)','Pendência/Atraso':'var(--verm)','Contato Agenda/Revisita':'var(--amarelo)','Agendada Revisita':'var(--azul)','Novo Negócio/Resolução pós Revisita':'var(--roxo)','N/Emissão':'var(--amarelo)','Emissão Final':'var(--roxo)','Delivery':'var(--verde)','Venda ganha':'var(--verde)','Venda perdida':'var(--verm)'}[e]||'#5b6770'; }
 function renderNnEtapas(){
   const el=document.getElementById('nn-etapas'); if(!el) return;
   const por=contagens(meusContatos());
   el.innerHTML=ETAPAS.map(e=>`<button class="nav-btn sub sub2" onclick="nnGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
+}
+function renderBcEtapas(){
+  const el=document.getElementById('bc-etapas'); if(!el) return;
+  const por=contagens(meusContatosBC(),ETAPAS_BC);
+  el.innerHTML=ETAPAS_BC.map(e=>`<button class="nav-btn sub sub2" onclick="bcGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
 }
 let NN_MODE='kanban', NN_FOCUS='', NN_ENC=false; // NN_ENC = grupo Encerramentos aberto no kanban
 function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='nn-funil')); render(); }
@@ -774,6 +801,84 @@ function nnMoveEtapa(id,etapa){
   toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
   NN_FOCUS=''; render();
 }
+
+/* ═══════════════════ MÓDULO: NEGÓCIOS BASE DE CLIENTES ═══════════════════ */
+/* Mesmo formato do Funil Novos Negócios (kanban arrastável + lista + etapas na
+   sidebar), mas população própria: contatos com funil:'bc' — clientes da base
+   sendo trabalhados no processo do Kommo "CLIENTES CARTEIRA". */
+let BC_MODE='kanban', BC_FOCUS='', BC_ENC=false; // BC_ENC = grupo Encerramentos aberto no kanban
+function bcGoEtapa(e){ BC_FOCUS=e; VIEW='bc-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='bc-funil')); render(); }
+function bcLista(lista){
+  return `<div class="card" style="padding:6px 10px"><table><thead><tr>
+    <th>Nome</th><th>Etapa</th><th>Perfil</th><th>Origem</th>${isMaster()?'<th>LP</th>':''}
+    </tr></thead><tbody>
+    ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
+      <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
+      <td>${badgeEtapa(c.etapa)}</td>
+      <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)}a<br>${esc(c.profissao)}</td>
+      <td style="font-size:12px">${esc(c.origem)}</td>
+      ${isMaster()?`<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
+    </tr>`).join('')||`<tr><td colspan="${isMaster()?5:4}" class="vazio">Sem clientes no funil.</td></tr>`}
+    </tbody></table></div>`;
+}
+function viewBcFunil(){
+  const lista=meusContatosBC();
+  const toolbar=`<div class="nn-toolbar">
+    <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>
+    <span style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    <span style="flex:1"></span>
+    <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
+  </div>`;
+  let body;
+  const colDe=e=>{
+    const cs=lista.filter(c=>c.etapa===e);
+    return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
+      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
+      ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
+    </div>`;
+  };
+  if(BC_MODE==='lista'){ body=bcLista(lista); }
+  else {
+    const nEnc=lista.filter(c=>ETAPAS_BC_ENCERR.includes(c.etapa)).length;
+    const focoEnc=ETAPAS_BC_ENCERR.includes(BC_FOCUS);
+    const abrirEnc=BC_ENC||focoEnc;
+    const encBloco = abrirEnc
+      ? `<div class="nncol nncol-enc-head" onclick="BC_ENC=false;viewBcFunil()" title="Recolher encerramentos">
+           <div class="nncol-head" style="color:var(--verm)">⏴ recolher</div><div class="nncol-vazia">encerramentos</div>
+         </div>`+ETAPAS_BC_ENCERR.map(colDe).join('')
+      : `<div class="nncol nncol-enc-head" onclick="BC_ENC=true;viewBcFunil()" title="Mostrar Venda ganha / Venda perdida">
+           <div class="nncol-head" style="color:var(--verm)">🏁 Encerramentos <span class="qt">${nEnc}</span></div>
+           <div class="nncol-vazia">clique pra abrir</div>
+         </div>`;
+    body='<div class="nnboard">'+ETAPAS_BC_FLUXO.map(colDe).join('')+encBloco+'</div>';
+  }
+  $('#main').innerHTML=`<h1 class="pg">Funil Negócios Base de Clientes</h1>
+    <div class="sub">Processo da carteira (espelho do Kommo): Clientes Ativos → Pendência/Atraso → Contato Agenda/Revisita → Agendada Revisita → Novo Negócio/Resolução pós Revisita → N/Emissão → Emissão Final → Delivery · encerramentos (ganha/perdida) recolhíveis no fim.</div>
+    ${toolbar}${body}`;
+  if(BC_MODE==='kanban'){
+    wireBcBoard();
+    if(BC_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+BC_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+  }
+}
+function wireBcBoard(){
+  let dragId=null;
+  document.querySelectorAll('.nnboard .nncard').forEach(card=>{
+    card.addEventListener('dragstart',e=>{ dragId=card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
+    card.addEventListener('dragend',()=>{ dragId=null; card.classList.remove('dragging'); });
+  });
+  document.querySelectorAll('.nnboard .nncol[data-etapa]').forEach(col=>{
+    col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); });
+    col.addEventListener('dragleave',()=>col.classList.remove('drop'));
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) bcMoveEtapa(dragId,col.dataset.etapa); });
+  });
+}
+function bcMoveEtapa(id,etapa){
+  const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
+  const de=c.etapa; c.etapa=etapa;
+  logEtapa(c,de,etapa); salvar();
+  toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
+  BC_FOCUS=''; render();
+}
 /* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
 function logEtapa(c,de,para){ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
 function registrarResultado(id,k,dia){
@@ -783,7 +888,9 @@ function registrarResultado(id,k,dia){
   if(r.lig) c.taTentativas=(c.taTentativas||0)+1;
   if(r.ta) c.taStatus=r.ta;
   let extra='';
-  if(r.etapa && c.etapa!==r.etapa){ const de=c.etapa; c.etapa=r.etapa; it.de=de; it.para=r.etapa; extra=` · etapa ${de} → ${r.etapa}`; }
+  // funil BC não tem OI/FF etc. — "Agendou X" vira Agendada Revisita; "Sem interesse" vira Venda perdida
+  const alvo = c.funil==='bc' ? ({'OI/FF':'Agendada Revisita','P/C':'Agendada Revisita','C2':'Agendada Revisita','Não':'Venda perdida'}[r.etapa]||null) : r.etapa;
+  if(alvo && c.etapa!==alvo){ const de=c.etapa; c.etapa=alvo; it.de=de; it.para=alvo; extra=` · etapa ${de} → ${alvo}`; }
   salvar();
   toast(`${c.nome.split(' ')[0]}: ${r.l}${extra}`,true);
   render();
@@ -856,8 +963,8 @@ function renderDrawer(){
       <div class="sec">
         <h3>Etapa de comercialização</h3>
         <div class="stepper">
-          ${ETAPAS.map((e,i)=>{
-            const atualIdx=ETAPAS.indexOf(c.etapa);
+          ${etapasDe(c).map((e,i)=>{
+            const atualIdx=etapasDe(c).indexOf(c.etapa);
             const cls=e===c.etapa?'atual':(i<atualIdx?'feita':'');
             return `<button class="step ${cls}" onclick="mudarEtapa('${e}')">${e}</button>`;
           }).join('')}
@@ -1119,14 +1226,15 @@ function viewMetas(){
 }
 
 /* ═══════════════════ NOVO CONTATO ═══════════════════ */
-function openNovoContato(){
+function openNovoContato(funil){
+  const bc=funil==='bc'; // funil Base de Clientes: nasce em "Clientes Ativos", sem lista de discagem
   const antigo=document.getElementById('ncModal'); if(antigo) antigo.remove();
   const lps=isMaster()? `<label style="font-size:12px">LP dono
       <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
   document.body.insertAdjacentHTML('beforeend',`
-  <div id="ncModal" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+  <div id="ncModal" data-funil="${bc?'bc':'nn'}" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
     <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
-      <h3 style="margin-bottom:12px">➕ Novo contato</h3>
+      <h3 style="margin-bottom:12px">${bc?'➕ Novo negócio — Base de Clientes':'➕ Novo contato'}</h3>
       <div style="display:flex;flex-direction:column;gap:9px">
         <input id="ncNome" placeholder="Nome completo*">
         <input id="ncTel" placeholder="Telefone (com DDD)">
@@ -1134,9 +1242,9 @@ function openNovoContato(){
           <input id="ncIdade" type="number" placeholder="Idade" style="max-width:90px">
           <input id="ncProf" placeholder="Profissão" style="flex:1">
         </div>
-        <input id="ncOrigem" placeholder="Origem / recomendante (quem indicou?)">
+        <input id="ncOrigem" placeholder="${bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'}">
         ${lps}
-        <label class="check-row" style="margin:0"><input type="checkbox" id="ncSitplan" checked> Entrar na lista de discagem de HOJE</label>
+        ${bc?'':'<label class="check-row" style="margin:0"><input type="checkbox" id="ncSitplan" checked> Entrar na lista de discagem de HOJE</label>'}
         <div class="msg-erro" id="ncErro" style="display:none;color:var(--verm);font-size:12px"></div>
         <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
           <button class="btn btn-s" onclick="document.getElementById('ncModal').remove()">Cancelar</button>
@@ -1152,14 +1260,16 @@ function salvarNovoContato(){
   const nome=v('ncNome');
   if(!nome){ const e=document.getElementById('ncErro'); e.textContent='Falta o nome do contato.'; e.style.display='block'; document.getElementById('ncNome').focus(); return; }
   const lpSel=document.getElementById('ncLp');
+  const bc=document.getElementById('ncModal').dataset.funil==='bc';
+  const sp=document.getElementById('ncSitplan');
   const c={ id:uid(), lp: lpSel? lpSel.value : S.activeUser, nome, sexo:'—', idade:+v('ncIdade')||null,
-    profissao:v('ncProf')||'—', telefone:v('ncTel'), estrelas:0, ance:null, etapa:'SitPlan',
+    profissao:v('ncProf')||'—', telefone:v('ncTel'), estrelas:0, ance:null, etapa: bc?'Clientes Ativos':'SitPlan', funil: bc?'bc':'nn',
     origem:v('ncOrigem')||'—', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
-    sitplan: document.getElementById('ncSitplan').checked? hojeISO() : null };
+    sitplan: (!bc && sp && sp.checked)? hojeISO() : null };
   S.contatos.push(c); salvar();
   document.getElementById('ncModal').remove();
-  toast(`${nome.split(' ')[0]} criado${c.sitplan?' — já na lista de hoje':''}`,true);
+  toast(`${nome.split(' ')[0]} criado${c.sitplan?' — já na lista de hoje':''}${bc?' no funil Base de Clientes':''}`,true);
   render(); abrirContato(c.id);
 }
 
@@ -2185,7 +2295,7 @@ function openCarteiraImport(){
     }catch(e){ console.error(e); msg.textContent='Falha ao ler os arquivos. Confira se são os .xls da Prudential.'; } }; }
 
 function render(){
-  renderTopo(); lpCounts(); renderNnEtapas();
+  renderTopo(); lpCounts(); renderNnEtapas(); renderBcEtapas();
   { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
     const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
   { const cs=$('#cnt-sitplan'); if(cs){ const hoje=hojeISO(); cs.textContent=meusContatos().filter(c=>c.sitplan===hoje&&!ultimoResultado(c,hoje)).length||''; } }
@@ -2196,6 +2306,7 @@ function render(){
   else if(VIEW==='cart-clientes') viewCartClientes();
   else if(VIEW==='cart-oportunidades') viewCartOportunidades();
   else if(VIEW==='nn-funil') viewNnFunil();
+  else if(VIEW==='bc-funil') viewBcFunil();
   else if(VIEW==='contatos') viewContatos();
   else if(VIEW==='planos') viewPlanos();
   else if(VIEW==='subst') viewSubst();

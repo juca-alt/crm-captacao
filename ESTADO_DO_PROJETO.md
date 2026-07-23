@@ -4,6 +4,47 @@
 
 ---
 
+## 📸 Snapshot — 23/07/2026 · Sessão "Funil Negócios Base de Clientes" (visão LP, branch `lp-funil-base-clientes`)
+
+### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO LP)
+```
+Retoma o CRM Visão LP (vendas.html). Lê o ESTADO_DO_PROJETO.md.
+REGRA: uma sessão por visão — NÃO tocar na Captação (index.html); git fetch antes de editar.
+Estado 23/07: módulo FUNIL NEGÓCIOS BASE DE CLIENTES pronto na branch lp-funil-base-clientes
+(v0.4.0, PR aberto aguardando validação + OK do Gustavo pra merge). Espelho do funil
+"CLIENTES CARTEIRA" do Kommo (jucasegurocomjucacom, pipeline 12543239). Validei no
+preview local e no meu uso real: [FUNCIONOU / deu isso: ...]. Próximo: Gustavo começa
+a carregar os DADOS OFICIAIS pra usar o MVP 1.0 no dia a dia.
+```
+
+**O que foi construído (pedido do Gustavo 23/07):** módulo **Negócios Base de Clientes** no
+vendas.html (v0.3.1 → **v0.4.0**), mesmo formato do Funil Novos Negócios: grupo na sidebar
+(💼 Funil + lista de Etapas com contagem), kanban arrastável + modo Lista, encerramentos
+recolhíveis. Etapas capturadas ao vivo do Kommo via API interna (`/api/v4/leads/pipelines/12543239`,
+funil "CLIENTES CARTEIRA"): Clientes Ativos → Pendência/Atraso → Contato Agenda/Revisita →
+Agendada Revisita → Novo Negócio/Resolução pós Revisita → N/Emissão → Emissão Final → Delivery,
+encerramentos Venda ganha/Venda perdida (typos do Kommo saneados: "Pendência/Atrasot", "Delivery.1";
+etapa de sistema "leads de entrada" fica de fora).
+
+**Arquitetura:** contato ganha campo `funil: 'nn'|'bc'` (ausente = nn, retrocompatível com
+localStorage existente); `meusContatos()` agora EXCLUI bc (SitPlan/KPIs/Contatos/funil NN não
+veem cliente da base) e `meusContatosBC()` é a população do módulo novo; drawer usa `etapasDe(c)`
+(stepper mostra as etapas do funil certo); motor `registrarResultado` mapeia p/ BC ("Agendou X" →
+Agendada Revisita, "Sem interesse" → Venda perdida); "➕ Novo negócio" reusa o modal de novo
+contato com `openNovoContato('bc')` (nasce em Clientes Ativos, sem lista de discagem).
+
+**Validação (preview local lp-static:8781):** sem erro de console; criar negócio BC ✓; stepper BC
+no drawer ✓; motor mapeado ✓; drag (bcMoveEtapa) + jornada logada ✓; isolamento NN×BC ✓ (contato
+bc não aparece em meusContatos); encerramentos abrem/recolhem ✓; funil NN intacto ✓. Sintaxe
+validada via JavaScriptCore (sem node local); regra do guard ok (0 insert em leads no vendas.html).
+
+**Pendências:** (1) validação REAL do Gustavo no preview + OK explícito pra merge do PR;
+(2) carga dos dados oficiais (ele digita ou a gente importa do Kommo em sessão futura — a API
+interna do Kommo dá os leads por etapa, dá pra automatizar importação depois); (3) validação
+logada do sync carteira ☁️ (pendência anterior, segue).
+
+---
+
 ## 📸 Snapshot — 21/07/2026 · Sessão "Extensão WhatsApp → CRM" (visão CAPTAÇÃO, branch `claude/whatsapp-web-crm-extension-h9z9l3`)
 
 ### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO CAPTAÇÃO)
