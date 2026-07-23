@@ -194,7 +194,7 @@ async function waUpdateLead(id,patch,before){
       return {status:'error',message:'Esse telefone/e-mail já pertence a outro lead — verifique em Duplicatas no CRM.'};
     }
     if(e.code==='auth') throw e;
-    if(/enum origem_t/i.test(e.message||'')) return {status:'error',message:'Origem "WhatsApp" ainda não habilitada no banco — rode supabase/migrations/origem_whatsapp.sql no SQL Editor.'};
+    if(/enum origem_t/i.test(e.message||'')){ const v=(/enum origem_t: "([^"]+)"/.exec(e.message||'')||[])[1]||'?'; return {status:'error',message:`Origem "${v}" não existe no banco — rode supabase/migrations/origem_whatsapp.sql (bloco completo) no SQL Editor.`}; }
     return {status:'error',message:e.message||'falha ao salvar'};
   }
   const lead=rows&&rows[0];
@@ -237,7 +237,7 @@ async function waInsertLead(rec){
       return {status:'duplicate',key,existing};
     }
     if(e.code==='auth') throw e;
-    if(/enum origem_t/i.test(e.message||'')) return {status:'error',message:'Origem "WhatsApp" ainda não habilitada no banco — rode supabase/migrations/origem_whatsapp.sql no SQL Editor.',code:e.code};
+    if(/enum origem_t/i.test(e.message||'')){ const v=(/enum origem_t: "([^"]+)"/.exec(e.message||'')||[])[1]||'?'; return {status:'error',message:`Origem "${v}" não existe no banco — rode supabase/migrations/origem_whatsapp.sql (bloco completo) no SQL Editor.`,code:e.code}; }
     return {status:'error',message:e.message||'falha ao criar lead',code:e.code};
   }
   const lead=rows&&rows[0];
