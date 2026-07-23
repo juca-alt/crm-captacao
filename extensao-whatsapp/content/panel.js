@@ -78,8 +78,11 @@ function wireEtapaStatus(idp){
   const et=$('#'+idp+'-et'), st=$('#'+idp+'-st'); if(!et||!st) return;
   et.onchange=()=>{ st.innerHTML=(FUNIL.STATUS_BY_ETAPA[et.value]||[]).map(s=>`<option>${esc(s)}</option>`).join(''); };
 }
-function origemSelectHTML(id,val){
-  return `<select id="${id}">${ORIGEM_OPTS.map(o=>`<option ${o===(val||'WhatsApp')?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+// comVazio: card de lead existente ganha a opção "— sem origem —" selecionada quando o
+// lead não tem origem — sem isso o select caía em "WhatsApp" e gravava origem sem pedir
+function origemSelectHTML(id,val,comVazio){
+  const vazio=comVazio?`<option value="" ${!val?'selected':''}>— sem origem —</option>`:'';
+  return `<select id="${id}">${vazio}${ORIGEM_OPTS.map(o=>`<option ${o===(val||(comVazio?'':'WhatsApp'))?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
 }
 function fieldHTML(id,label,val,ph){
   return `<div class="field"><label>${esc(label)}</label><input id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}"></div>`;
@@ -155,7 +158,7 @@ function renderLead(sugestoes){
       <div class="row2">${fieldHTML('wa-cargo','Cargo',l.cargo)}${fieldHTML('wa-empresa','Empresa',l.empresa)}</div>
       <div class="row2">${fieldHTML('wa-cidade','Cidade',l.cidade)}${fieldHTML('wa-email','E-mail',l.email)}</div>
       <div class="row2">
-        <div class="field"><label>Origem</label>${origemSelectHTML('wa-origem',l.origem)}</div>
+        <div class="field"><label>Origem</label>${origemSelectHTML('wa-origem',l.origem,true)}</div>
         ${fieldHTML('wa-rec','Recomendante',l.recomendante)}
       </div>
       <div class="field"><label>Observações</label><textarea id="wa-obs">${esc(l.observacoes||'')}</textarea></div>
@@ -176,7 +179,7 @@ function renderLead(sugestoes){
     if(st&&st!==l.status) patch.status=st;
     const map={cargo:'wa-cargo',empresa:'wa-empresa',cidade:'wa-cidade',email:'wa-email',recomendante:'wa-rec',observacoes:'wa-obs'};
     for(const k in map){ const v=$('#'+map[k]).value.trim(); if(v!==String(l[k]??'').trim()) patch[k]=v||null; }
-    const org=$('#wa-origem').value; if(org!==(l.origem||'')) patch.origem=org;
+    const org=$('#wa-origem').value; if(org && org!==(l.origem||'')) patch.origem=org; // vazio = manter como está
     if(!Object.keys(patch).length){ toast('Nada mudou.'); return; }
     saveLead(patch);
   };
