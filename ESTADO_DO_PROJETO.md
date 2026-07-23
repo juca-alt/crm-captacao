@@ -4,6 +4,31 @@
 
 ---
 
+## 📸 Snapshot — 23/07/2026 · Extensão WhatsApp em USO REAL — v0.2.0 (Captação + Visão LP) (sessão da extensão, visão CAPTAÇÃO)
+
+**Teste real do Gustavo ANDOU:** card achou lead pelo telefone (PI00455), salvar revelou que
+`leads.origem` é ENUM (`origem_t`) DEFASADO — faltava até 'Rec Cliente' (a velha pendência
+"validar 4 origens"). Migration `origem_whatsapp.sql` alinha o enum com TODAS as origens do app
++ 'WhatsApp' (Gustavo rodou os ALTERs no SQL Editor em 23/07; conferir lista com
+`select unnest(enum_range(null::public.origem_t))`).
+
+**Extensão v0.2.0 na main** (PRs #25 toast/origem, #26 aba recolher/expandir, #27 seletor de visão):
+- Tabs **Captação × Visão LP** no painel; escolha persiste.
+- **Visão LP** = card da **Carteira** (única fonte LP no Supabase): cliente identificado
+  AUTOMATICAMENTE pelo número (telefone extraído do `dados` jsonb, variantes do 9º dígito),
+  leitura + apólices; sem match → atalho "Criar como lead de Captação".
+- Descoberta da exploração: contatos/funil LP (nn/bc) vivem 100% no `crmlp_v03_state`
+  (localStorage do vendas.html) — card LP editável SÓ depois da frente "sync contatos LP →
+  Supabase" (fazer em sessão LP; nada do vendas.html foi tocado por esta sessão).
+- Card de lead sem origem não grava mais 'WhatsApp' sozinho ("— sem origem —" default).
+- QA automatizado (Chromium+Playwright, mock WhatsApp + Supabase mockado): **18/18 verde**.
+
+**Pendências desta frente:** Gustavo atualizar a extensão local (ZIP main + ↻ em
+chrome://extensions) e seguir o uso real; trava 2b de telefone segue não rodada;
+migration origem rodada mas lista final do enum não conferida no chat.
+
+---
+
 ## 📸 Snapshot — 23/07/2026 · Sessão "Funil Negócios Base de Clientes" — ✅ **NO AR (v0.4.0, MVP 1.0 zerado pro uso real)**
 
 ### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO LP)
