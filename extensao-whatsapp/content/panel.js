@@ -38,6 +38,20 @@ const panel=document.createElement('div');
 panel.className='panel hidden';
 root.appendChild(panel);
 
+// aba na borda do painel: encolhe com 1 clique; o botão CRM (fab) volta pra expandir
+const handle=document.createElement('button');
+handle.className='handle hidden';
+handle.title='Recolher painel';
+handle.textContent='❯';
+root.appendChild(handle);
+
+function setOpen(open){
+  OPEN=open;
+  panel.classList.toggle('hidden',!open);
+  handle.classList.toggle('hidden',!open);
+  fab.classList.toggle('hidden',open); // aberto = fab some (a aba assume); recolhido = fab volta
+}
+
 const $=(sel)=>panel.querySelector(sel);
 
 // ---------- estado ----------
@@ -267,7 +281,7 @@ function renderCreate(sugestoes){
 
 // ---------- wiring comum ----------
 function wireHeader(){
-  $('#wa-close').onclick=()=>{ OPEN=false; panel.classList.add('hidden'); };
+  $('#wa-close').onclick=()=>setOpen(false);
   const lg=$('#wa-logout');
   if(lg) lg.onclick=async()=>{ await send('auth.logout'); AUTH={logged:false,email:'',usuario:''}; refreshFab(); renderLogin(); };
 }
@@ -326,11 +340,8 @@ async function lookup(){
   renderCreate(sugestoes);
 }
 
-fab.onclick=()=>{
-  OPEN=!OPEN;
-  panel.classList.toggle('hidden',!OPEN);
-  if(OPEN) lookup();
-};
+fab.onclick=()=>{ setOpen(true); lookup(); };
+handle.onclick=()=>setOpen(false);
 
 // boot
 const st=await send('auth.status');
