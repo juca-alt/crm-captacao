@@ -110,7 +110,10 @@ function wireEtapaStatus(idp){
 // lead não tem origem — sem isso o select caía em "WhatsApp" e gravava origem sem pedir
 function origemSelectHTML(id,val,comVazio){
   const vazio=comVazio?`<option value="" ${!val?'selected':''}>— sem origem —</option>`:'';
-  return `<select id="${id}">${vazio}${ORIGEM_OPTS.map(o=>`<option ${o===(val||(comVazio?'':'WhatsApp'))?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  // origem legada fora da lista do app (Evento/Outro/Mercado X…): entra como opção
+  // extra selecionada — o card mostra a verdade e não sobrescreve sem querer
+  const extra=(val&&!ORIGEM_OPTS.includes(val))?`<option selected>${esc(val)}</option>`:'';
+  return `<select id="${id}">${vazio}${extra}${ORIGEM_OPTS.map(o=>`<option ${o===(val||(comVazio?'':'WhatsApp'))?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
 }
 function fieldHTML(id,label,val,ph){
   return `<div class="field"><label>${esc(label)}</label><input id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}"></div>`;
