@@ -85,3 +85,15 @@ const LPC_FUNIS={
   bc:{label:'Base de Clientes', cor:'#0d9488', etapas:['Clientes Ativos','Pendência/Atraso','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Delivery','Venda ganha','Venda perdida']}
 };
 function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
+
+// Tokens de nome p/ casar apelidos operacionais do WhatsApp ("OT Andre Jr Due
+// Rec LP Daniel") com o nome limpo do CRM: quebra em palavras ≥3 letras.
+function nameTokens(s){ return fuzzyNameKey(s||'').split(' ').filter(w=>w.length>=3); }
+// Match FORTE por nome: primeiro+último nome do candidato contidos nos tokens do
+// apelido do chat. Continua sendo nome (nunca 100%), mas com essa régua o único
+// candidato forte pode abrir o card direto — com aviso pra conferir.
+function nameStrongMatch(chatName,candName){
+  const set=new Set(nameTokens(chatName));
+  const fl=firstLastKey(candName||'');
+  return !!(fl&&fl.split(' ').every(t=>set.has(t)));
+}

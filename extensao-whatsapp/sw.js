@@ -9,11 +9,12 @@ const HANDLERS={
   'auth.logout': ()=>logout(),
   'funil.get':   ()=>getFunilCfg(),
   'leads.findByPhone': (m)=>findByPhone(m.phone),
+  'leads.findByName':  (m)=>findByName(m.name),
   'leads.searchByName':(m)=>searchByName(m.q),
   'leads.create':(m)=>waInsertLead(m.rec),
   'leads.update':(m)=>waUpdateLead(m.id,m.patch,m.before),
   'task.set':    (m)=>setTask(m.id,m.dateISO,m.texto,m.before),
-  'lp.lookup':  (m)=>lpLookup(m.phone),
+  'lp.lookup':  (m)=>lpLookup(m.phone,m.name),
   'lp.search':  (m)=>lpSearchAll(m.q),
   'lpc.save':   (m)=>lpcSave(m.id,m.dados),
 };
