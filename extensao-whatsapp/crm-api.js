@@ -226,6 +226,51 @@ async function waInsertLead(rec){
   return {status:'created',lead};
 }
 
+// ---------- Visão LP · Carteira (leitura) ----------
+// Contatos/funil da LP vivem no localStorage do vendas.html (fora do alcance);
+// o que existe no Supabase é a CARTEIRA (carteira_clientes/carteira_apolices,
+// jsonb, RLS por dono=email). Telefone fica solto dentro do jsonb → o match é
+// client-side: extrai números do dados e compara nas variantes e164.
+let _cartCache=null, _cartAt=0;
+async function carteiraAll(force){
+  if(!force && _cartCache && Date.now()-_cartAt<5*60*1000) return _cartCache;
+  const clientes=await sbJson('/rest/v1/carteira_clientes?select=ref,dados,atualizado');
+  let apolices=[];
+  try{ apolices=await sbJson('/rest/v1/carteira_apolices?select=chave,dados'); }catch(_){}
+  _cartCache={clientes:clientes||[],apolices:apolices||[]}; _cartAt=Date.now();
+  return _cartCache;
+}
+function phonesFromJson(obj){
+  const out=new Set();
+  const txt=JSON.stringify(obj||{});
+  for(const m of txt.matchAll(/\+?\d[\d\s().\/-]{7,}\d/g)){
+    const e=normPhone(m[0]).e164; if(e) out.add(e);
+  }
+  return out;
+}
+function apolicesDoCliente(cart,cli){
+  const nome=normName((cli.dados&&cli.dados.nome)||cli.ref||'');
+  if(!nome) return [];
+  return cart.apolices.filter(a=>normName(JSON.stringify(a.dados||{})).includes(nome)).map(a=>a.chave);
+}
+async function lpFindByPhone(rawPhone){
+  const vars=new Set(phoneE164Variants(rawPhone));
+  if(!vars.size) return [];
+  const cart=await carteiraAll();
+  return cart.clientes
+    .filter(c=>{ const ph=phonesFromJson(c.dados); return [...vars].some(v=>ph.has(v)); })
+    .map(c=>({ref:c.ref,dados:c.dados,atualizado:c.atualizado,apolices:apolicesDoCliente(cart,c)}))
+    .slice(0,5);
+}
+async function lpSearch(q){
+  q=normName(q||''); if(!q) return [];
+  const cart=await carteiraAll();
+  return cart.clientes
+    .filter(c=>normName((c.dados&&c.dados.nome)||c.ref||'').includes(q))
+    .map(c=>({ref:c.ref,dados:c.dados,atualizado:c.atualizado,apolices:apolicesDoCliente(cart,c)}))
+    .slice(0,10);
+}
+
 // espelho de setLeadTask (L1408-1412): data no lead + descrição na timeline (best-effort)
 async function setTask(id,dateISO,texto,before){
   const r=await waUpdateLead(id,{data_proxima_acao:dateISO},before);

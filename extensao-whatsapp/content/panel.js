@@ -61,6 +61,8 @@ let CHAT=null;                      // conversa aberta (wa-dom)
 let LEAD=null;                      // lead em exibição
 let OPEN=false;
 let BUSY=false;
+let VIEW='captacao';                // 'captacao' (leads) | 'lp' (Carteira) — persiste no chrome.storage
+function saveView(){ try{ chrome.storage.local.set({wa_crm_view:VIEW}); }catch(_){} }
 
 function toast(msg){
   const t=$('#wa-toast'); if(!t) return;
@@ -75,8 +77,20 @@ function headerHTML(){
     <button class="x" id="wa-close" title="Fechar">×</button></div>`;
 }
 function searchHTML(){
-  return `<div class="search"><input id="wa-q" placeholder="Buscar lead por nome ou telefone…">
+  const ph=VIEW==='lp'?'Buscar cliente da Carteira por nome…':'Buscar lead por nome ou telefone…';
+  return `<div class="search"><input id="wa-q" placeholder="${ph}">
     <button class="btn" id="wa-q-go" style="width:auto">🔍</button></div>`;
+}
+function tabsHTML(){
+  return `<div class="tabs">
+    <button class="tab ${VIEW==='captacao'?'on':''}" data-view="captacao">Captação</button>
+    <button class="tab lp ${VIEW==='lp'?'on':''}" data-view="lp">Visão LP</button></div>`;
+}
+function wireTabs(){
+  panel.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+    if(VIEW===b.dataset.view) return;
+    VIEW=b.dataset.view; saveView(); LEAD=null; lookup();
+  });
 }
 function badgeHTML(l){
   const c=FUNIL.ETAPA_COLOR[FUNIL.STATUS_ETAPA[l.status]]||'#64748b';
@@ -132,8 +146,8 @@ function renderLogin(note){
 }
 
 function renderShell(innerHTML){
-  panel.innerHTML=headerHTML()+`<div class="pb">${searchHTML()}${innerHTML}<div class="toast" id="wa-toast"></div></div>`;
-  wireHeader(); wireSearch();
+  panel.innerHTML=headerHTML()+`<div class="pb">${tabsHTML()}${searchHTML()}${innerHTML}<div class="toast" id="wa-toast"></div></div>`;
+  wireHeader(); wireSearch(); wireTabs();
 }
 
 function renderNoChat(){
@@ -279,6 +293,44 @@ function renderCreate(sugestoes){
   };
 }
 
+// ---------- Visão LP · Carteira (leitura) ----------
+function lpFieldRows(d){
+  const rows=[];
+  for(const k in (d||{})){
+    if(/^_/.test(k)||k==='raw'||k==='nome') continue;
+    const v=d[k];
+    if(v==null||v==='') continue;
+    if(typeof v==='object'){ if(Array.isArray(v)&&v.every(x=>typeof x!=='object')&&v.length) rows.push([k,v.join(', ')]); continue; }
+    rows.push([k,String(v)]);
+    if(rows.length>=10) break;
+  }
+  return rows;
+}
+function renderLpCliente(cli){
+  const d=cli.dados||{};
+  renderShell(`
+    <div class="card">
+      <h2>${esc(d.nome||cli.ref||'—')}</h2>
+      <span class="badge" style="background:var(--teal)"><span class="dot"></span>Cliente · Carteira LP</span>
+      ${lpFieldRows(d).map(([k,v])=>`<div class="muted" style="margin-top:3px"><b style="color:var(--txt);text-transform:capitalize">${esc(k)}:</b> ${esc(v)}</div>`).join('')||'<div class="muted">sem detalhes no snapshot importado</div>'}
+    </div>
+    ${cli.apolices&&cli.apolices.length?`<div class="card"><b style="font-size:12px;color:var(--muted)">APÓLICES (${cli.apolices.length})</b>${cli.apolices.map(a=>`<div style="margin-top:4px">📄 ${esc(String(a).split('|')[0])}</div>`).join('')}</div>`:''}
+    <div class="note">Card da <b>Carteira</b> (leitura). O funil e as notas da Visão LP ainda vivem no vendas.html deste aparelho — a frente "sync contatos LP → Supabase" habilita edição aqui.</div>
+  `);
+}
+function renderLpPicker(list){
+  renderShell(`<div class="note">${list.length} clientes parecidos na Carteira — escolha:</div>`+
+    list.map((c,i)=>`<div class="pick" data-i="${i}"><b>${esc((c.dados&&c.dados.nome)||c.ref||'—')}</b><br>
+      <span class="muted">${c.apolices&&c.apolices.length?c.apolices.length+' apólice(s)':'sem apólices vinculadas'}</span></div>`).join(''));
+  panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpCliente(list[+el.dataset.i]); });
+}
+function renderLpEmpty(){
+  renderShell(`<div class="empty"><div class="big">📁</div>Este número não está na <b>Carteira</b> (Visão LP).</div>
+    <div class="note">Os contatos do funil LP ainda não sincronizam com o banco. Se for contato novo, capta pela visão Captação:</div>
+    <button class="btn primary" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>`);
+  $('#wa-lp-to-cap').onclick=()=>{ VIEW='captacao'; saveView(); LEAD=null; lookup(); };
+}
+
 // ---------- wiring comum ----------
 function wireHeader(){
   $('#wa-close').onclick=()=>setOpen(false);
@@ -289,9 +341,15 @@ function wireSearch(){
   const go=async()=>{
     const q=$('#wa-q').value.trim(); if(!q) return;
     renderLoading();
-    const r=await send('leads.searchByName',{q});
+    const r=await send(VIEW==='lp'?'lp.search':'leads.searchByName',{q});
     if(!handleAuthFail(r)) return;
     const list=(r.ok&&r.data)||[];
+    if(VIEW==='lp'){
+      if(!list.length) renderShell(`<div class="empty"><div class="big">🔎</div>Nenhum cliente da Carteira para “${esc(q)}”.</div>`);
+      else if(list.length===1) renderLpCliente(list[0]);
+      else renderLpPicker(list);
+      return;
+    }
     if(!list.length){ renderShell(`<div class="empty"><div class="big">🔎</div>Nenhum lead para “${esc(q)}”.</div>`); }
     else if(list.length===1){ LEAD=list[0]; renderLead(); }
     else renderPicker(list,`${list.length} leads para “${q}” — escolha:`);
@@ -322,6 +380,18 @@ async function lookup(){
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
+  if(VIEW==='lp'){ // Visão LP: identifica o cliente da Carteira pelo número, automático
+    let ms=[];
+    if(c.phoneRaw){
+      const r=await send('lp.findByPhone',{phone:c.phoneRaw});
+      if(!handleAuthFail(r)) return;
+      ms=(r.ok&&r.data)||[];
+    }
+    if(ms.length===1) renderLpCliente(ms[0]);
+    else if(ms.length>1) renderLpPicker(ms);
+    else renderLpEmpty();
+    return;
+  }
   let matches=[];
   if(c.phoneRaw){
     const r=await send('leads.findByPhone',{phone:c.phoneRaw});
@@ -344,6 +414,7 @@ fab.onclick=()=>{ setOpen(true); lookup(); };
 handle.onclick=()=>setOpen(false);
 
 // boot
+try{ const o=await chrome.storage.local.get('wa_crm_view'); if(o&&o.wa_crm_view==='lp') VIEW='lp'; }catch(_){}
 const st=await send('auth.status');
 if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); }
 refreshFab();
