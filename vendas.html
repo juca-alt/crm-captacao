@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.4.0 · Visão LP</title>
+<title>CRM Life Planner · v0.4.1 · Visão LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -322,7 +322,7 @@
 
 <header class="topbar">
   <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
-  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.4.0 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
+  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.4.1 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
   <div class="spacer"></div>
   <button class="perfil-chip" id="btnPerfil" onclick="togglePerfilMenu(event)">
     <span class="avatar" id="avTop">G</span>
@@ -407,7 +407,7 @@
 </div>
 
 <div class="rodape">
-  <span>CRM Life Planner v0.4.0 — Visão LP · Island.</span>
+  <span>CRM Life Planner v0.4.1 — Visão LP · Island.</span>
   <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
 </div>
 
@@ -488,7 +488,66 @@ function seed(){
 
 let S; // estado
 function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); }
-function salvar(){ localStorage.setItem(CHAVE, JSON.stringify(S)); }
+/* salvar() = choke point de persistência dos contatos. Além do localStorage:
+   carimba `_upd` no contato que MUDOU (base do merge entre aparelhos) e agenda
+   o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
+let _lpcLast={};
+function salvar(){
+  const _now=new Date().toISOString();
+  (S.contatos||[]).forEach(c=>{
+    if(!c||c.id==null) return;
+    const k=String(c.id), j=JSON.stringify(c);
+    if(_lpcLast[k]===j) return;                 // não mudou
+    if(_lpcLast[k]===undefined && c._upd) return; // 1º snapshot pós-boot: não recarimbar
+    c._upd=_now;
+  });
+  _lpcLast={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) _lpcLast[String(c.id)]=JSON.stringify(c); });
+  localStorage.setItem(CHAVE, JSON.stringify(S));
+  if(typeof lpcAgendarPush==='function') lpcAgendarPush();
+}
+
+/* ══ SYNC CONTATOS/FUNIL → SUPABASE (frente "c", 23/07/2026) ══════════════════
+   Tabela lp_contatos (migration supabase/migrations/lp_contatos.sql): 1 linha por
+   contato, `dados` jsonb = contato inteiro, RLS por dono=email (padrão carteira).
+   localStorage segue como cache/fallback offline; logado, o banco é o espelho e
+   sincroniza aparelhos. Merge por contato: maior `_upd` vence (edição offline não
+   se perde). A extensão de WhatsApp lê/edita a mesma tabela. */
+const LPC_T='lp_contatos';
+let LPC_REMOTE=false, _lpcTimer=null, _lpcPrev={};
+async function lpcRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
+function _lpcSnap(){ const m={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) m[String(c.id)]=JSON.stringify(c); }); return m; }
+async function lpcCarregar(){
+  LPC_REMOTE=await lpcRemoteOn();
+  if(!LPC_REMOTE) return;
+  try{
+    const {data,error}=await sb.from(LPC_T).select('id,dados');
+    if(error) throw error;
+    const remotos=(data||[]).map(r=>r.dados).filter(Boolean);
+    if(remotos.length){
+      const porId=new Map(remotos.map(c=>[String(c.id),c]));
+      (S.contatos||[]).forEach(c=>{
+        const k=String(c.id), r=porId.get(k);
+        if(!r || String(c._upd||'')>String(r._upd||'')) porId.set(k,c); // local mais novo (ou só local) vence
+      });
+      S.contatos=[...porId.values()];
+      salvar();
+    }
+    _lpcPrev=_lpcSnap();
+    lpcAgendarPush(); // sobe o resultado do merge (e o 1º sync de uma base só-local)
+  }catch(e){ console.warn('lp_contatos: load remoto falhou → segue local',e); LPC_REMOTE=false; }
+}
+function lpcAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_lpcTimer); _lpcTimer=setTimeout(lpcPush,1500); }
+async function lpcPush(){
+  if(!LPC_REMOTE||!sb) return;
+  try{
+    const atual=_lpcSnap(), rows=[], mortos=[];
+    Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]) rows.push({id:k,dados:JSON.parse(atual[k])}); });
+    Object.keys(_lpcPrev).forEach(k=>{ if(!(k in atual)) mortos.push(k); });
+    if(rows.length){ const r=await sb.from(LPC_T).upsert(rows,{onConflict:'dono,id'}); if(r.error) throw r.error; }
+    if(mortos.length){ const r=await sb.from(LPC_T).delete().in('id',mortos); if(r.error) throw r.error; }
+    _lpcPrev=atual;
+  }catch(e){ console.warn('lp_contatos: push falhou (retenta no próximo salvar)',e); }
+}
 function zerarContatos(){ if(confirm('Apagar TODOS os contatos e começar do zero pra uso real? (metas e perfis ficam)')){ S.contatos=[]; salvar(); render(); toast('Base zerada — bom trabalho! Crie o primeiro contato em ➕ Novo contato',true); } }
 
 /* ═══════════════════ HELPERS ═══════════════════ */
@@ -2272,7 +2331,7 @@ function render(){
 }
 carregar();
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
-render(); Promise.all([lpCarregar(),cartCarregar()]).then(render);   // render base já; LP e Carteira (remoto/local) populam e re-renderizam
+render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar()]).then(render);   // render base já; LP, Carteira e Contatos (remoto/local) populam e re-renderizam
 </script>
 </body>
 </html>

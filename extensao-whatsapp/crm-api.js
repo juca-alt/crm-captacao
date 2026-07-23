@@ -271,6 +271,46 @@ async function lpSearch(q){
     .slice(0,10);
 }
 
+// ---------- Visão LP · Contatos/Funil (lp_contatos — sync do vendas.html v0.4.1+) ----------
+// 1 linha por contato (dados jsonb = contato inteiro), RLS por dono. O vendas.html
+// faz merge por `_upd` (maior vence) — toda escrita daqui carimba dados._upd.
+let _lpcCache=null, _lpcAt=0;
+async function lpcAll(force){
+  if(!force && _lpcCache && Date.now()-_lpcAt<2*60*1000) return _lpcCache;
+  try{ _lpcCache=await sbJson('/rest/v1/lp_contatos?select=id,dados,atualizado'); }
+  catch(e){ if(e.code==='auth') throw e; _lpcCache=[]; /* tabela ainda não criada → trata como vazia */ }
+  _lpcAt=Date.now();
+  return _lpcCache;
+}
+function _lpcOut(r){ return {id:r.id,dados:r.dados,atualizado:r.atualizado}; }
+async function lpcFindByPhone(rawPhone){
+  const vars=new Set(phoneE164Variants(rawPhone));
+  if(!vars.size) return [];
+  const rows=await lpcAll();
+  return rows.filter(r=>{ const ph=phonesFromJson(r.dados&&r.dados.telefone||''); return [...vars].some(v=>ph.has(v)); }).map(_lpcOut).slice(0,5);
+}
+async function lpcSearch(q){
+  q=normName(q||''); if(!q) return [];
+  const rows=await lpcAll();
+  return rows.filter(r=>normName((r.dados&&r.dados.nome)||'').includes(q)).map(_lpcOut).slice(0,10);
+}
+async function lpcSave(id,dados){
+  dados=Object.assign({},dados,{_upd:new Date().toISOString()});
+  const rows=await sbJson(`/rest/v1/lp_contatos?on_conflict=dono,id&select=id,dados,atualizado`,
+    {method:'POST',body:{id:String(id),dados},headers:{Prefer:'resolution=merge-duplicates,return=representation'}});
+  _lpcCache=null;
+  return rows&&rows[0]?_lpcOut(rows[0]):{id:String(id),dados};
+}
+// visão combinada da LP: contatos do funil (prioridade) + Carteira
+async function lpLookup(rawPhone){
+  const [contatos,carteira]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone)]);
+  return {contatos,carteira};
+}
+async function lpSearchAll(q){
+  const [contatos,carteira]=await Promise.all([lpcSearch(q),lpSearch(q)]);
+  return {contatos,carteira};
+}
+
 // espelho de setLeadTask (L1408-1412): data no lead + descrição na timeline (best-effort)
 async function setTask(id,dateISO,texto,before){
   const r=await waUpdateLead(id,{data_proxima_acao:dateISO},before);
