@@ -13,8 +13,9 @@ const HANDLERS={
   'leads.create':(m)=>waInsertLead(m.rec),
   'leads.update':(m)=>waUpdateLead(m.id,m.patch,m.before),
   'task.set':    (m)=>setTask(m.id,m.dateISO,m.texto,m.before),
-  'lp.findByPhone': (m)=>lpFindByPhone(m.phone),
-  'lp.search':      (m)=>lpSearch(m.q),
+  'lp.lookup':  (m)=>lpLookup(m.phone),
+  'lp.search':  (m)=>lpSearchAll(m.q),
+  'lpc.save':   (m)=>lpcSave(m.id,m.dados),
 };
 
 chrome.runtime.onMessage.addListener((msg,_sender,sendResponse)=>{

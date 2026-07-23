@@ -324,11 +324,83 @@ function renderLpPicker(list){
       <span class="muted">${c.apolices&&c.apolices.length?c.apolices.length+' apólice(s)':'sem apólices vinculadas'}</span></div>`).join(''));
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpCliente(list[+el.dataset.i]); });
 }
-function renderLpEmpty(){
-  renderShell(`<div class="empty"><div class="big">📁</div>Este número não está na <b>Carteira</b> (Visão LP).</div>
-    <div class="note">Os contatos do funil LP ainda não sincronizam com o banco. Se for contato novo, capta pela visão Captação:</div>
-    <button class="btn primary" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>`);
+
+// ---------- Visão LP · contato do FUNIL (lp_contatos, sync do vendas.html) ----------
+function renderLpContato(row,cartHit){
+  const c=row.dados||{};
+  const fk=lpcFunilDe(c), fun=LPC_FUNIS[fk];
+  renderShell(`
+    <div class="card">
+      <h2>${esc(c.nome||'—')}</h2>
+      <span class="badge" style="background:${fun.cor}"><span class="dot"></span>${esc(fun.label)}</span>
+      <div class="muted">${esc(c.telefone||'sem telefone')}${c.lp?' · LP: '+esc(c.lp):''}${c.taStatus&&c.taStatus!=='—'?' · TA: '+esc(c.taStatus):''}</div>
+      ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
+    </div>
+    <div class="card">
+      <div class="field"><label>Etapa (${esc(fun.label)})</label>
+        <select id="wa-lpc-etapa">${fun.etapas.map(e=>`<option ${e===c.etapa?'selected':''}>${esc(e)}</option>`).join('')}</select></div>
+      ${fieldHTML('wa-lpc-tel','Telefone',c.telefone)}
+      <div class="field"><label>Notas</label><textarea id="wa-lpc-notas">${esc(c.notas||'')}</textarea></div>
+      <button class="btn primary" id="wa-lpc-save">💾 Salvar na Visão LP</button>
+    </div>
+    <div class="note">Sincroniza com o funil do vendas.html (tabela lp_contatos) — o app pega as mudanças ao recarregar.</div>
+  `);
+  $('#wa-lpc-save').onclick=async()=>{
+    if(BUSY) return;
+    const novo=Object.assign({},c,{
+      etapa:$('#wa-lpc-etapa').value,
+      telefone:$('#wa-lpc-tel').value.trim()||null,
+      notas:$('#wa-lpc-notas').value
+    });
+    if(JSON.stringify(novo)===JSON.stringify(c)){ toast('Nada mudou.'); return; }
+    BUSY=true; $('#wa-lpc-save').disabled=true;
+    const r=await send('lpc.save',{id:row.id,dados:novo});
+    BUSY=false;
+    if(!handleAuthFail(r)) return;
+    if(r.ok){ renderLpContato(r.data,cartHit); toast('✓ Salvo na Visão LP'); }
+    else { $('#wa-lpc-save').disabled=false; toast('Erro: '+(r.error||'falha ao salvar')); }
+  };
+}
+function renderLpContatoPicker(list){
+  renderShell(`<div class="note">${list.length} contatos parecidos no funil LP — escolha:</div>`+
+    list.map((r,i)=>{ const c=r.dados||{}; const fun=LPC_FUNIS[lpcFunilDe(c)];
+      return `<div class="pick" data-i="${i}"><b>${esc(c.nome||'—')}</b><br>
+      <span class="muted">${esc(fun.label)} · ${esc(c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
+  panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpContato(list[+el.dataset.i]); });
+}
+function renderLpCreate(){
+  const chatPhone=CHAT&&CHAT.phoneRaw?normPhone(CHAT.phoneRaw):null;
+  renderShell(`
+    <div class="card">
+      <h2 style="margin-bottom:8px">+ Novo contato na Visão LP</h2>
+      ${fieldHTML('wa-lpn-nome','Nome',CHAT&&CHAT.name||'')}
+      ${fieldHTML('wa-lpn-tel','Telefone',chatPhone?chatPhone.telefone:'')}
+      <div class="field"><label>Funil</label><select id="wa-lpn-funil">
+        <option value="nn">Novos Negócios (nasce em SitPlan)</option>
+        <option value="bc">Base de Clientes (nasce em Clientes Ativos)</option></select></div>
+      <div class="field"><label>Notas</label><textarea id="wa-lpn-notas"></textarea></div>
+      <button class="btn primary" id="wa-lpn-save">＋ Criar na Visão LP</button>
+    </div>
+    <div class="note">Ou, se for recrutamento (candidato a LP):</div>
+    <button class="btn" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>
+  `);
   $('#wa-lp-to-cap').onclick=()=>{ VIEW='captacao'; saveView(); LEAD=null; lookup(); };
+  $('#wa-lpn-save').onclick=async()=>{
+    const nome=$('#wa-lpn-nome').value.trim();
+    if(!nome){ toast('Nome é obrigatório.'); return; }
+    if(BUSY) return; BUSY=true; $('#wa-lpn-save').disabled=true;
+    const fk=$('#wa-lpn-funil').value, now=new Date().toISOString();
+    const id='wa'+Date.now();
+    const dados={ id, lp:'gustavo', nome, telefone:$('#wa-lpn-tel').value.trim()||null,
+      etapa:fk==='bc'?'Clientes Ativos':'SitPlan', funil:fk, notas:$('#wa-lpn-notas').value,
+      taStatus:'—', taTentativas:0, estrelas:0, ance:{}, recs:[], eventos:[], planos:[], interacoes:[],
+      criadoEm:now, origemCadastro:'whatsapp-ext' };
+    const r=await send('lpc.save',{id,dados});
+    BUSY=false;
+    if(!handleAuthFail(r)) return;
+    if(r.ok){ renderLpContato(r.data); toast('✓ Contato criado na Visão LP'); }
+    else { $('#wa-lpn-save').disabled=false; toast('Erro: '+(r.error||'falha ao criar')); }
+  };
 }
 
 // ---------- wiring comum ----------
@@ -343,13 +415,16 @@ function wireSearch(){
     renderLoading();
     const r=await send(VIEW==='lp'?'lp.search':'leads.searchByName',{q});
     if(!handleAuthFail(r)) return;
-    const list=(r.ok&&r.data)||[];
     if(VIEW==='lp'){
-      if(!list.length) renderShell(`<div class="empty"><div class="big">🔎</div>Nenhum cliente da Carteira para “${esc(q)}”.</div>`);
-      else if(list.length===1) renderLpCliente(list[0]);
-      else renderLpPicker(list);
+      const d=(r.ok&&r.data)||{}, cs=d.contatos||[], ct=d.carteira||[];
+      if(cs.length===1) renderLpContato(cs[0],ct[0]||null);
+      else if(cs.length>1) renderLpContatoPicker(cs);
+      else if(ct.length===1) renderLpCliente(ct[0]);
+      else if(ct.length>1) renderLpPicker(ct);
+      else renderShell(`<div class="empty"><div class="big">🔎</div>Nada na Visão LP para “${esc(q)}”.</div>`);
       return;
     }
+    const list=(r.ok&&r.data)||[];
     if(!list.length){ renderShell(`<div class="empty"><div class="big">🔎</div>Nenhum lead para “${esc(q)}”.</div>`); }
     else if(list.length===1){ LEAD=list[0]; renderLead(); }
     else renderPicker(list,`${list.length} leads para “${q}” — escolha:`);
@@ -380,16 +455,18 @@ async function lookup(){
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
-  if(VIEW==='lp'){ // Visão LP: identifica o cliente da Carteira pelo número, automático
-    let ms=[];
+  if(VIEW==='lp'){ // Visão LP: contato do funil (lp_contatos) primeiro; senão Carteira; senão criar
+    let contatos=[],carteira=[];
     if(c.phoneRaw){
-      const r=await send('lp.findByPhone',{phone:c.phoneRaw});
+      const r=await send('lp.lookup',{phone:c.phoneRaw});
       if(!handleAuthFail(r)) return;
-      ms=(r.ok&&r.data)||[];
+      if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; }
     }
-    if(ms.length===1) renderLpCliente(ms[0]);
-    else if(ms.length>1) renderLpPicker(ms);
-    else renderLpEmpty();
+    if(contatos.length===1) renderLpContato(contatos[0],carteira[0]||null);
+    else if(contatos.length>1) renderLpContatoPicker(contatos);
+    else if(carteira.length===1) renderLpCliente(carteira[0]);
+    else if(carteira.length>1) renderLpPicker(carteira);
+    else renderLpCreate();
     return;
   }
   let matches=[];

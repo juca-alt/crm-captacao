@@ -77,3 +77,11 @@ const ORIGEM_OPTS=['WhatsApp','LinkedIn','Rec LP','Rec OT','Rec Cliente','Rec Fa
 const REC_ORIGENS=['Rec LP','Rec OT','Rec Cliente','Rec Familiar'];
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// Funis da Visão LP — port fiel do vendas.html (ETAPAS L433 / ETAPAS_BC L441, v0.4.x).
+// Contato LP tem funil:'nn' (Novos Negócios, ausente = nn) ou 'bc' (Base de Clientes).
+const LPC_FUNIS={
+  nn:{label:'Novos Negócios', cor:'#8b5cf6', etapas:['SitPlan','TA','OI/FF','P/C','C2','N','FA','EMISSÃO','DELIVERY','Não','Prop. Cancelada','Apól. Cancelada']},
+  bc:{label:'Base de Clientes', cor:'#0d9488', etapas:['Clientes Ativos','Pendência/Atraso','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Delivery','Venda ganha','Venda perdida']}
+};
+function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
