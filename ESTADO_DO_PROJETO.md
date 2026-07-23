@@ -4,18 +4,30 @@
 
 ---
 
-## 📸 Snapshot — 23/07/2026 · Sessão "Funil Negócios Base de Clientes" (visão LP, branch `lp-funil-base-clientes`)
+## 📸 Snapshot — 23/07/2026 · Sessão "Funil Negócios Base de Clientes" — ✅ **NO AR (v0.4.0, MVP 1.0 zerado pro uso real)**
 
 ### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO LP)
 ```
 Retoma o CRM Visão LP (vendas.html). Lê o ESTADO_DO_PROJETO.md.
 REGRA: uma sessão por visão — NÃO tocar na Captação (index.html); git fetch antes de editar.
-Estado 23/07: módulo FUNIL NEGÓCIOS BASE DE CLIENTES pronto na branch lp-funil-base-clientes
-(v0.4.0, PR aberto aguardando validação + OK do Gustavo pra merge). Espelho do funil
-"CLIENTES CARTEIRA" do Kommo (jucasegurocomjucacom, pipeline 12543239). Validei no
-preview local e no meu uso real: [FUNCIONOU / deu isso: ...]. Próximo: Gustavo começa
-a carregar os DADOS OFICIAIS pra usar o MVP 1.0 no dia a dia.
+Estado 23/07: v0.4.0 NO AR (PR #24 MERGED, main c4c095f) — módulo FUNIL NEGÓCIOS BASE DE
+CLIENTES (espelho do funil CLIENTES CARTEIRA do Kommo, pipeline 12543239) + DADOS DEMO
+ZERADOS (chave localStorage v03, seed vazio, botão demo removido). Estou usando com dados
+reais e: [tudo certo / deu isso: ...]. Frentes candidatas: (a) importar os leads direto do
+Kommo pela API interna (evita digitação manual), (b) ajustes de uso real, (c) sync
+contatos/funil → Supabase (hoje é localStorage por aparelho).
 ```
+
+**✅ DEPLOY 23/07 (autorização explícita do Gustavo no chat):** PR #24 **MERGED** (merge via `gh pr merge`
+— 1ª tentativa deu "Base branch was modified" TRANSITÓRIO do GitHub com main idêntica; retry 5s depois
+passou). Pages reconstruiu em ~1min; confirmado no ar: v0.4.0, módulo BC presente, `crmlp_v03_state`,
+zero dado demo (conferido com `grep -a` — sem o `-a` o grep falha MUDO no vendas.html, pegadinha de sempre).
+
+**Limpeza do demo (2º commit do PR, `d5d8cb6`):** seed sem os 9 contatos fictícios (perfis Gustavo/Daniel
+ficam); chave localStorage `crmlp_v02_state` → **`crmlp_v03_state`** (todo aparelho começa limpo, sem
+depender de clique; estado demo antigo fica abandonado); botão "Recarregar demonstração" + `resetDemo()`
+removidos ("Começar do zero" fica); empty-state de Planos sem referência ao caso demo. As menções
+CINQ/Artur que FICARAM são texto explicativo do método (Princípios/subtítulo de Planos), não dados.
 
 **O que foi construído (pedido do Gustavo 23/07):** módulo **Negócios Base de Clientes** no
 vendas.html (v0.3.1 → **v0.4.0**), mesmo formato do Funil Novos Negócios: grupo na sidebar
