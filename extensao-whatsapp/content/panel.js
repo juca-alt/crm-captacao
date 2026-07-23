@@ -368,9 +368,12 @@ function renderLpContatoPicker(list){
       <span class="muted">${esc(fun.label)} · ${esc(c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpContato(list[+el.dataset.i]); });
 }
-function renderLpCreate(){
+function renderLpCreate(sugestoes){
   const chatPhone=CHAT&&CHAT.phoneRaw?normPhone(CHAT.phoneRaw):null;
   renderShell(`
+    ${sugestoes&&sugestoes.length?`<div class="note"><b>Parecidos no funil LP</b> — confira antes de criar:</div>`+
+      sugestoes.map((r,i)=>{ const cc=r.dados||{}; return `<div class="pick" data-lpsug="${i}"><b>${esc(cc.nome||'—')}</b><br>
+        <span class="muted">${esc(LPC_FUNIS[lpcFunilDe(cc)].label)} · ${esc(cc.etapa||'—')} · ${esc(cc.telefone||'sem telefone')}</span></div>`; }).join(''):''}
     <div class="card">
       <h2 style="margin-bottom:8px">+ Novo contato na Visão LP</h2>
       ${fieldHTML('wa-lpn-nome','Nome',CHAT&&CHAT.name||'')}
@@ -384,6 +387,7 @@ function renderLpCreate(){
     <div class="note">Ou, se for recrutamento (candidato a LP):</div>
     <button class="btn" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>
   `);
+  panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>renderLpContato(sugestoes[+el.dataset.lpsug]); });
   $('#wa-lp-to-cap').onclick=()=>{ VIEW='captacao'; saveView(); LEAD=null; lookup(); };
   $('#wa-lpn-save').onclick=async()=>{
     const nome=$('#wa-lpn-nome').value.trim();
@@ -455,18 +459,17 @@ async function lookup(){
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
-  if(VIEW==='lp'){ // Visão LP: contato do funil (lp_contatos) primeiro; senão Carteira; senão criar
-    let contatos=[],carteira=[];
-    if(c.phoneRaw){
-      const r=await send('lp.lookup',{phone:c.phoneRaw});
-      if(!handleAuthFail(r)) return;
-      if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; }
-    }
+  if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Carteira → criar
+    let contatos=[],carteira=[],byName=null;
+    const r=await send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||''});
+    if(!handleAuthFail(r)) return;
+    if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; byName=r.data.byName; }
     if(contatos.length===1) renderLpContato(contatos[0],carteira[0]||null);
     else if(contatos.length>1) renderLpContatoPicker(contatos);
+    else if(byName&&byName.strong){ renderLpContato(byName.strong,carteira[0]||null); toast('Casado pelo NOME do contato — confira se é a pessoa certa'); }
     else if(carteira.length===1) renderLpCliente(carteira[0]);
     else if(carteira.length>1) renderLpPicker(carteira);
-    else renderLpCreate();
+    else renderLpCreate((byName&&byName.sugestoes)||[]);
     return;
   }
   let matches=[];
@@ -477,12 +480,16 @@ async function lookup(){
   }
   if(matches.length===1){ LEAD=matches[0]; renderLead(); return; }
   if(matches.length>1){ renderPicker(matches,'Mais de um lead com esse telefone — escolha (e unifique em Duplicatas no CRM):'); return; }
-  // sem match por telefone → sugestões por nome (nunca confidente, igual findLeadMatch)
+  // sem match por telefone → nome, tolerante às tags do WhatsApp ("OT Fulano Rec LP…"):
+  // único candidato com primeiro+último nome contidos no apelido abre o card direto
+  // (com aviso); os demais viram sugestão — nome nunca trava criação.
   let sugestoes=[];
   if(c.name){
-    const r=await send('leads.searchByName',{q:c.name});
+    const r=await send('leads.findByName',{name:c.name});
     if(!handleAuthFail(r)) return;
-    sugestoes=((r.ok&&r.data)||[]).slice(0,5); // sugestão apenas — nome nunca trava criação
+    const d=(r.ok&&r.data)||{};
+    if(d.strong){ LEAD=d.strong; renderLead(); toast('Casado pelo NOME do contato — confira se é a pessoa certa'); return; }
+    sugestoes=d.sugestoes||[];
   }
   renderCreate(sugestoes);
 }

@@ -119,6 +119,25 @@ async function searchByName(q){
   return await sbJson(`/rest/v1/leads?select=${LEAD_COLS}&nome=ilike.${pat}&order=atualizado_em.desc.nullslast&limit=10`);
 }
 
+// Busca por nome tolerante às tags do WhatsApp ("OT Fulano Rec LP Daniel"):
+// consulta por CADA token (or=ilike) e ranqueia; strong = único candidato cujo
+// primeiro+último nome estão contidos no apelido do chat.
+async function findByName(nameRaw){
+  const toks=nameTokens(nameRaw).slice(0,6);
+  if(!toks.length) return {strong:null,sugestoes:[]};
+  const ors=toks.map(t=>`nome.ilike.*${t.replace(/[%*,()"]/g,'')}*`).join(',');
+  let rows=[];
+  try{ rows=await sbJson(`/rest/v1/leads?select=${LEAD_COLS}&or=${encodeURIComponent('('+ors+')')}&limit=15`); }
+  catch(e){ if(e.code==='auth') throw e; rows=[]; }
+  const set=new Set(toks);
+  const scored=rows.map(l=>{
+    const lt=nameTokens(l.nome||''); const hit=lt.filter(t=>set.has(t)).length;
+    return {l,cov:lt.length?hit/lt.length:0,strong:nameStrongMatch(nameRaw,l.nome)};
+  }).filter(x=>x.cov>0).sort((a,b)=>(b.strong-a.strong)||(b.cov-a.cov));
+  const strongs=scored.filter(x=>x.strong);
+  return {strong:strongs.length===1?strongs[0].l:null, sugestoes:scored.slice(0,5).map(x=>x.l)};
+}
+
 async function findByEmail(email){
   const e=normEmail(email);
   if(!e) return [];
@@ -301,10 +320,27 @@ async function lpcSave(id,dados){
   _lpcCache=null;
   return rows&&rows[0]?_lpcOut(rows[0]):{id:String(id),dados};
 }
-// visão combinada da LP: contatos do funil (prioridade) + Carteira
-async function lpLookup(rawPhone){
+async function lpcFindByName(nameRaw){
+  const toks=nameTokens(nameRaw);
+  if(!toks.length) return {strong:null,sugestoes:[]};
+  const set=new Set(toks);
+  const rows=await lpcAll();
+  const scored=rows.map(r=>{
+    const n=(r.dados&&r.dados.nome)||'';
+    const lt=nameTokens(n); const hit=lt.filter(t=>set.has(t)).length;
+    return {r,cov:lt.length?hit/lt.length:0,strong:nameStrongMatch(nameRaw,n)};
+  }).filter(x=>x.cov>0).sort((a,b)=>(b.strong-a.strong)||(b.cov-a.cov));
+  const strongs=scored.filter(x=>x.strong);
+  return {strong:strongs.length===1?_lpcOut(strongs[0].r):null, sugestoes:scored.slice(0,5).map(x=>_lpcOut(x.r))};
+}
+
+// visão combinada da LP: contatos do funil (prioridade) + Carteira; sem telefone
+// (ou sem match por telefone), tenta o match forte por nome nos contatos
+async function lpLookup(rawPhone,chatName){
   const [contatos,carteira]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone)]);
-  return {contatos,carteira};
+  let byName=null;
+  if(!contatos.length&&chatName){ byName=await lpcFindByName(chatName); }
+  return {contatos,carteira,byName};
 }
 async function lpSearchAll(q){
   const [contatos,carteira]=await Promise.all([lpcSearch(q),lpSearch(q)]);

@@ -31,7 +31,26 @@ const WA_DOM=(()=>{
     return {name:t,phoneFromTitle:null};
   }
 
-  // -> {isGroup,phoneRaw,name,source:'jid'|'header'|'nome'} | null (nenhum chat aberto)
+  // Camada 2.5 — painel "Dados do contato" aberto: o número aparece como texto
+  // FORA do #main. Cobre os chats @lid (WhatsApp esconde o telefone do JID por
+  // privacidade): o usuário abre os dados do contato e o card resolve sozinho.
+  function phoneFromDetailsPanel(main){
+    // filtro GEOMÉTRICO: só o que está À DIREITA do #main (o drawer de dados).
+    // Sem isso, contato não salvo na LISTA da esquerda (nome = número) seria
+    // lido como telefone da conversa errada.
+    const mr=main.getBoundingClientRect();
+    const spans=document.querySelectorAll('span[dir="auto"], span.copyable-text');
+    for(const el of spans){
+      if(main.contains(el)) continue;
+      const r=el.getBoundingClientRect();
+      if(!r.width || r.left < mr.right-10) continue;
+      const t=(el.textContent||'').replace(/ /g,' ').trim();
+      if(/^\+?[\d\s().-]{10,20}$/.test(t)&&(t.match(/\d/g)||[]).length>=10) return t;
+    }
+    return null;
+  }
+
+  // -> {isGroup,phoneRaw,name,source:'jid'|'header'|'painel'|'nome'} | null (nenhum chat aberto)
   function getOpenChat(){
     const main=document.querySelector('#main');
     if(!main) return null;
@@ -40,6 +59,8 @@ const WA_DOM=(()=>{
     if(jid&&jid.isGroup) return {isGroup:true,name:name||'Grupo',phoneRaw:null,source:'jid'};
     if(jid) return {isGroup:false,phoneRaw:jid.digits,name,source:'jid'};
     if(phoneFromTitle) return {isGroup:false,phoneRaw:phoneFromTitle,name:null,source:'header'};
+    const det=phoneFromDetailsPanel(main);
+    if(det) return {isGroup:false,phoneRaw:det,name,source:'painel'};
     if(name) return {isGroup:false,phoneRaw:null,name,source:'nome'};
     return null;
   }
