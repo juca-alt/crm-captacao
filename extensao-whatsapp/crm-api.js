@@ -144,6 +144,15 @@ async function findByEmail(email){
   return await sbJson(`/rest/v1/leads?select=${LEAD_COLS}&email=ilike.${encodeURIComponent(e)}&limit=2`);
 }
 
+// modelos de mensagem do CRM (Configurações → Modelos); default = MSG_TPL_DEFAULT
+async function getMsgTemplates(){
+  try{
+    const rows=await sbJson(`/rest/v1/app_settings?select=valor&chave=eq.msg_templates&limit=1`);
+    if(rows&&rows[0]&&rows[0].valor){ const a=JSON.parse(rows[0].valor); if(Array.isArray(a)&&a.length) return a; }
+  }catch(_){ /* sem acesso/tabela → default */ }
+  return MSG_TPL_DEFAULT;
+}
+
 async function getFunilCfg(){
   try{
     const rows=await sbJson(`/rest/v1/app_settings?select=valor&chave=eq.funil_cfg&limit=1`);

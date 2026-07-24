@@ -119,6 +119,26 @@ function fieldHTML(id,label,val,ph){
   return `<div class="field"><label>${esc(label)}</label><input id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}"></div>`;
 }
 
+// ---------- modelos de mensagem (mesmos do CRM; copiar → colar → enviar manual) ----------
+let MSGS=MSG_TPL_DEFAULT;
+async function loadMsgs(){ const r=await send('msg.templates'); if(r&&r.ok&&Array.isArray(r.data)&&r.data.length) MSGS=r.data; }
+function msgCardHTML(){
+  if(!MSGS.length) return '';
+  return `<div class="card"><b style="font-size:12px;color:var(--muted)">MENSAGENS PRONTAS</b>
+    <div class="field" style="margin-top:6px"><select id="wa-msg-sel">${MSGS.map((t,i)=>`<option value="${i}">${esc(t.nome)}</option>`).join('')}</select></div>
+    <button class="btn" id="wa-msg-copy">📋 Copiar preenchida</button>
+    <p class="muted" style="margin-top:6px;font-size:11px">Copia com os dados do lead — colar e enviar é com você (anti-ban).</p></div>`;
+}
+function wireMsgCard(l){
+  const btn=$('#wa-msg-copy'); if(!btn) return;
+  btn.onclick=async()=>{
+    const t=MSGS[+($('#wa-msg-sel')&&$('#wa-msg-sel').value||0)]; if(!t) return;
+    const txt=fillTpl(t.texto,l);
+    try{ await navigator.clipboard.writeText(txt); toast('✓ Mensagem copiada — '+(firstName(l.nome)||'')); }
+    catch(_){ toast('Não consegui copiar — clique na conversa e tente de novo.'); }
+  };
+}
+
 // ---------- estados ----------
 function renderLogin(note){
   panel.innerHTML=headerHTML()+`<div class="pb">
@@ -141,7 +161,7 @@ function renderLogin(note){
     $('#wa-login').disabled=false;
     if(!r.ok){ const e=$('#wa-login-err'); e.textContent=r.error||'Falha no login'; e.style.display='block'; return; }
     AUTH={logged:true,email:r.data.email,usuario:r.data.usuario};
-    await loadFunil();
+    await loadFunil(); loadMsgs();
     refreshFab();
     lookup();
   };
@@ -195,6 +215,7 @@ function renderLead(sugestoes){
       <div class="field"><label>Observações</label><textarea id="wa-obs">${esc(l.observacoes||'')}</textarea></div>
       <button class="btn primary" id="wa-save">💾 Salvar no CRM</button>
     </div>
+    ${msgCardHTML()}
     <div class="card">
       <div class="field"><label>Próxima ação (follow-up)</label><input id="wa-task-date" type="date" value="${esc((l.data_proxima_acao||'').slice(0,10))}"></div>
       <div class="field"><label>Descrição da tarefa</label><input id="wa-task-txt" placeholder="ex.: retornar ligação"></div>
@@ -202,7 +223,7 @@ function renderLead(sugestoes){
     </div>
     ${sugestoes&&sugestoes.length?`<div class="note">Outros parecidos: ${sugestoes.map(s=>esc(s.nome+' ('+(s.codigo||'#'+s.id)+')')).join(' · ')}</div>`:''}
   `);
-  wireEtapaStatus('wa-es');
+  wireEtapaStatus('wa-es'); wireMsgCard(l);
   if(semTel) $('#wa-fill-tel').onclick=()=>saveLead({telefone:chatPhone.telefone});
   $('#wa-save').onclick=()=>{
     const patch={};
@@ -346,8 +367,10 @@ function renderLpContato(row,cartHit){
       <div class="field"><label>Notas</label><textarea id="wa-lpc-notas">${esc(c.notas||'')}</textarea></div>
       <button class="btn primary" id="wa-lpc-save">💾 Salvar na Visão LP</button>
     </div>
+    ${msgCardHTML()}
     <div class="note">Sincroniza com o funil do vendas.html (tabela lp_contatos) — o app pega as mudanças ao recarregar.</div>
   `);
+  wireMsgCard(c);
   $('#wa-lpc-save').onclick=async()=>{
     if(BUSY) return;
     const novo=Object.assign({},c,{
@@ -503,7 +526,7 @@ handle.onclick=()=>setOpen(false);
 // boot
 try{ const o=await chrome.storage.local.get('wa_crm_view'); if(o&&o.wa_crm_view==='lp') VIEW='lp'; }catch(_){}
 const st=await send('auth.status');
-if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); }
+if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); }
 refreshFab();
 WA_DOM.observe(c=>{ CHAT=c; LEAD=null; lookup(); });
 })();
