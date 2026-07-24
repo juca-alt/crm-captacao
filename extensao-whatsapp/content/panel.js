@@ -119,23 +119,86 @@ function fieldHTML(id,label,val,ph){
   return `<div class="field"><label>${esc(label)}</label><input id="${id}" value="${esc(val||'')}" placeholder="${esc(ph||'')}"></div>`;
 }
 
-// ---------- modelos de mensagem (mesmos do CRM; copiar → colar → enviar manual) ----------
-let MSGS=MSG_TPL_DEFAULT;
+// ---------- modelos de mensagem (mesmos do CRM; gerenciáveis; escreve no campo) ----------
+// Espelha a extensão do LinkedIn: modelos editáveis + preenchimento com dados do
+// lead. Fonte única = app_settings.msg_templates (sincroniza com o CRM). "Escrever
+// no campo" insere no compositor do WhatsApp; ENVIAR é sempre manual (anti-ban).
+let MSGS=MSG_TPL_DEFAULT.slice();
+let _meEdit=null; // índice em edição no editor (null = novo)
 async function loadMsgs(){ const r=await send('msg.templates'); if(r&&r.ok&&Array.isArray(r.data)&&r.data.length) MSGS=r.data; }
+async function persistMsgs(){ const r=await send('msg.save',{templates:MSGS}); return !!(r&&r.ok); }
+
 function msgCardHTML(){
-  if(!MSGS.length) return '';
-  return `<div class="card"><b style="font-size:12px;color:var(--muted)">MENSAGENS PRONTAS</b>
-    <div class="field" style="margin-top:6px"><select id="wa-msg-sel">${MSGS.map((t,i)=>`<option value="${i}">${esc(t.nome)}</option>`).join('')}</select></div>
-    <button class="btn" id="wa-msg-copy">📋 Copiar preenchida</button>
-    <p class="muted" style="margin-top:6px;font-size:11px">Copia com os dados do lead — colar e enviar é com você (anti-ban).</p></div>`;
+  return `<div class="card">
+    <div style="display:flex;align-items:center;gap:8px"><b style="font-size:12px;color:var(--muted);flex:1">MENSAGENS PRONTAS</b>
+      <button class="btn ghost" id="wa-msg-mng" style="font-size:11px">⚙︎ gerenciar</button></div>
+    <div class="field" style="margin-top:6px"><select id="wa-msg-sel">${MSGS.map((t,i)=>`<option value="${i}">${esc(t.nome)}</option>`).join('')||'<option>— nenhum modelo —</option>'}</select></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn primary" id="wa-msg-fill" style="flex:1">✍️ Escrever no campo</button>
+      <button class="btn" id="wa-msg-copy" style="width:auto" title="Copiar">📋</button>
+    </div>
+    <div id="wa-msg-editor"></div>
+    <p class="muted" style="margin-top:6px;font-size:11px">Preenche com os dados do lead. Você revisa e envia (Enter).</p></div>`;
 }
+function msgEditorHTML(){
+  return `<div style="margin-top:8px;border-top:1px dashed var(--line);padding-top:8px">
+    <div id="wa-msg-list">${MSGS.map((t,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+      <span style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.nome)}</span>
+      <button class="btn ghost" data-medit="${i}" style="padding:2px 6px;font-size:11px">editar</button>
+      <button class="btn ghost" data-mdel="${i}" style="padding:2px 6px;font-size:11px;color:var(--red)">apagar</button></div>`).join('')||'<span class="muted" style="font-size:12px">nenhum modelo ainda</span>'}</div>
+    <div class="field" style="margin-top:8px"><label>Nome do modelo</label><input id="wa-me-nome" placeholder="ex.: Primeiro contato"></div>
+    <div class="field"><label>Texto <span class="muted">— use {{primeiro_nome}} {{nome}} {{recomendante}}</span></label><textarea id="wa-me-texto" placeholder="Olá {{primeiro_nome}}, tudo bem?"></textarea></div>
+    <div style="display:flex;gap:6px">
+      <button class="btn primary" id="wa-me-save" style="flex:1">${_meEdit==null?'＋ Adicionar modelo':'💾 Salvar edição'}</button>
+      <button class="btn" id="wa-me-cancel" style="width:auto">limpar</button></div>`;
+}
+function selectedMsg(){ const s=$('#wa-msg-sel'); const i=s?+s.value:0; return MSGS[i]; }
 function wireMsgCard(l){
-  const btn=$('#wa-msg-copy'); if(!btn) return;
-  btn.onclick=async()=>{
-    const t=MSGS[+($('#wa-msg-sel')&&$('#wa-msg-sel').value||0)]; if(!t) return;
-    const txt=fillTpl(t.texto,l);
-    try{ await navigator.clipboard.writeText(txt); toast('✓ Mensagem copiada — '+(firstName(l.nome)||'')); }
-    catch(_){ toast('Não consegui copiar — clique na conversa e tente de novo.'); }
+  const fill=$('#wa-msg-fill'); if(!fill) return;
+  fill.onclick=()=>{
+    const t=selectedMsg(); if(!t){ toast('Nenhum modelo.'); return; }
+    const ok=WA_DOM.fillComposer(fillTpl(t.texto,l));
+    toast(ok?'✓ Escrito no campo — revise e envie (Enter)':'Abra uma conversa pra escrever no campo.');
+  };
+  $('#wa-msg-copy').onclick=async()=>{
+    const t=selectedMsg(); if(!t) return;
+    try{ await navigator.clipboard.writeText(fillTpl(t.texto,l)); toast('✓ Copiada — '+(firstName(l.nome)||'')); }
+    catch(_){ toast('Não consegui copiar.'); }
+  };
+  $('#wa-msg-mng').onclick=()=>{
+    const box=$('#wa-msg-editor');
+    if(box.innerHTML){ box.innerHTML=''; return; }
+    _meEdit=null; box.innerHTML=msgEditorHTML(); wireMsgEditor(l);
+  };
+}
+function refreshMsgSelect(){
+  const s=$('#wa-msg-sel'); if(s) s.innerHTML=MSGS.map((t,i)=>`<option value="${i}">${esc(t.nome)}</option>`).join('')||'<option>— nenhum modelo —</option>';
+}
+function wireMsgEditor(l){
+  panel.querySelectorAll('[data-medit]').forEach(b=>b.onclick=()=>{
+    _meEdit=+b.dataset.medit; const t=MSGS[_meEdit];
+    $('#wa-msg-editor').innerHTML=msgEditorHTML(); wireMsgEditor(l);
+    $('#wa-me-nome').value=t.nome||''; $('#wa-me-texto').value=t.texto||'';
+  });
+  panel.querySelectorAll('[data-mdel]').forEach(b=>b.onclick=async()=>{
+    const i=+b.dataset.mdel;
+    if(!confirm('Apagar o modelo "'+(MSGS[i].nome||'')+'"?')) return;
+    MSGS.splice(i,1); _meEdit=null;
+    const ok=await persistMsgs(); refreshMsgSelect();
+    $('#wa-msg-editor').innerHTML=msgEditorHTML(); wireMsgEditor(l);
+    toast(ok?'✓ Modelo apagado':'Apagado localmente (não salvou no CRM)');
+  });
+  const cancel=$('#wa-me-cancel'); if(cancel) cancel.onclick=()=>{ _meEdit=null; $('#wa-me-nome').value=''; $('#wa-me-texto').value=''; $('#wa-msg-editor').innerHTML=msgEditorHTML(); wireMsgEditor(l); };
+  const save=$('#wa-me-save'); if(save) save.onclick=async()=>{
+    const nome=$('#wa-me-nome').value.trim(), texto=$('#wa-me-texto').value.trim();
+    if(!nome||!texto){ toast('Preencha nome e texto.'); return; }
+    if(_meEdit==null) MSGS.push({nome,texto}); else MSGS[_meEdit]={nome,texto};
+    _meEdit=null;
+    save.disabled=true;
+    const ok=await persistMsgs();
+    refreshMsgSelect();
+    $('#wa-msg-editor').innerHTML=msgEditorHTML(); wireMsgEditor(l);
+    toast(ok?'✓ Modelo salvo no CRM':'Salvo localmente (CRM indisponível)');
   };
 }
 
