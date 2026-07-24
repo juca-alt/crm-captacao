@@ -81,5 +81,29 @@ const WA_DOM=(()=>{
     return mo;
   }
 
-  return {getOpenChat,observe};
+  // Escreve `text` na caixa de mensagem do WhatsApp (compositor contenteditable).
+  // NÃO envia — o usuário revisa e aperta Enter (anti-ban: sem automação de envio).
+  // execCommand insertText é o que o editor do WhatsApp (Lexical/React) reconhece —
+  // setar textContent direto é ignorado pelo framework.
+  function fillComposer(text){
+    const box=document.querySelector('#main footer div[contenteditable="true"][role="textbox"]')
+           || document.querySelector('#main footer div[contenteditable="true"]')
+           || document.querySelector('footer div[contenteditable="true"]');
+    if(!box) return false;
+    try{
+      box.focus();
+      document.execCommand('selectAll',false,null);
+      const okDel=document.execCommand('insertText',false,text);
+      if(okDel) return true;
+    }catch(_){}
+    // fallback: dispara beforeinput/input com o texto (alguns builds aceitam)
+    try{
+      box.focus();
+      box.dispatchEvent(new InputEvent('beforeinput',{inputType:'insertText',data:text,bubbles:true,cancelable:true}));
+      box.dispatchEvent(new InputEvent('input',{inputType:'insertText',data:text,bubbles:true}));
+      return (box.textContent||'').includes(text.slice(0,8));
+    }catch(_){ return false; }
+  }
+
+  return {getOpenChat,observe,fillComposer};
 })();

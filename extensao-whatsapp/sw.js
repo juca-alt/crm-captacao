@@ -9,6 +9,7 @@ const HANDLERS={
   'auth.logout': ()=>logout(),
   'funil.get':   ()=>getFunilCfg(),
   'msg.templates':()=>getMsgTemplates(),
+  'msg.save':    (m)=>saveMsgTemplates(m.templates),
   'leads.findByPhone': (m)=>findByPhone(m.phone),
   'leads.findByName':  (m)=>findByName(m.name),
   'leads.searchByName':(m)=>searchByName(m.q),

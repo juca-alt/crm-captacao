@@ -152,6 +152,14 @@ async function getMsgTemplates(){
   }catch(_){ /* sem acesso/tabela → default */ }
   return MSG_TPL_DEFAULT;
 }
+// grava os modelos no MESMO lugar do app (app_settings.msg_templates) — o CRM lê no
+// próximo load; upsert por chave, igual ao saveSetting do index.html (L1396).
+async function saveMsgTemplates(arr){
+  await sbJson(`/rest/v1/app_settings?on_conflict=chave`,{method:'POST',
+    body:{chave:'msg_templates',valor:JSON.stringify(arr||[]),atualizado_em:new Date().toISOString()},
+    headers:{Prefer:'resolution=merge-duplicates,return=minimal'}});
+  return true;
+}
 
 async function getFunilCfg(){
   try{
