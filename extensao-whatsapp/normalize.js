@@ -86,6 +86,15 @@ const LPC_FUNIS={
 };
 function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
 
+// ===== Modelos de mensagem — MESMOS do CRM (app_settings 'msg_templates';
+// default = MSG_TPL_DEFAULT do index.html L1339; fillTpl = port fiel L1345).
+// A extensão só COPIA a mensagem preenchida — enviar é manual (anti-ban).
+const MSG_TPL_DEFAULT=[
+  {nome:'Recomendação (WhatsApp)',texto:'Me chamo Gustavo Jucá. Não nos conhecemos ainda. Quem me passou seu telefone foi {{recomendante}}. Ela me recomendou seu nome a respeito de uma oportunidade profissional. Posso retornar para passar mais detalhes?'},
+  {nome:'Conexão LinkedIn',texto:'Olá {{primeiro_nome}}, tudo bem contigo? Encontrei seu perfil por meio de colegas que temos em comum. Acredito que pode haver sinergia em um projeto pelo qual sou responsável. Espero poder me conectar e evoluir essa conversa caso faça sentido para ambos.'}
+];
+function fillTpl(txt,l){ l=l||{}; return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*recomendante\s*\}\}/gi,l.recomendante||'').replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
+
 // Tokens de nome p/ casar apelidos operacionais do WhatsApp ("OT Andre Jr Due
 // Rec LP Daniel") com o nome limpo do CRM: quebra em palavras ≥3 letras.
 function nameTokens(s){ return fuzzyNameKey(s||'').split(' ').filter(w=>w.length>=3); }
