@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.4.1 · Visão LP</title>
+<title>CRM Life Planner · v0.5.0 · Visão LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="revisao-service.js"></script>
 <style>
   :root{
     --azul:#0b3d91; --azul-2:#1259c3; --azul-claro:#eaf1fc; --azul-borda:#c9dbf7;
@@ -316,13 +317,88 @@
     th,td{padding:8px 7px}
     h1.pg{font-size:18px}
   }
+  /* ═══ MÓDULO REVISÃO DE APÓLICES (rev-) ═══ */
+  .rev-hero{background:var(--card);border:1px solid var(--linha);border-radius:var(--radius);padding:22px;margin-bottom:12px;box-shadow:var(--sombra)}
+  .rev-hero .lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .rev-hero .val{font-size:38px;font-weight:800;letter-spacing:-.02em;margin:6px 0 6px;line-height:1.1}
+  .rev-hero .cap{color:var(--cinza);font-size:13px;max-width:72ch}
+  .rev-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
+  .rev-tile{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:12px 14px}
+  .rev-tile .lab{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .rev-tile .val{font-size:19px;font-weight:700;margin:4px 0 2px;line-height:1.15}
+  .rev-tile .cap{font-size:11.5px;color:var(--cinza)}
+  .rev-card{background:var(--card);border:1px solid var(--linha);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;box-shadow:var(--sombra)}
+  .rev-card h3{font-size:15px;margin-bottom:2px}
+  .rev-sec{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:26px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--linha);font-weight:700}
+  .rev-note{color:var(--cinza);font-size:12.5px;margin-bottom:10px;max-width:80ch}
+  .rev-tab{width:100%;border-collapse:collapse;font-size:13px}
+  .rev-tab th{text-align:left;font-weight:700;color:var(--muted);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;padding:8px 9px;border-bottom:1px solid var(--linha);white-space:nowrap}
+  .rev-tab td{padding:8px 9px;border-bottom:1px solid var(--linha);vertical-align:middle}
+  .rev-tab .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .rev-tab tr.tot td{border-top:2px solid var(--azul-borda);border-bottom:0;font-weight:700}
+  .rev-pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;padding:2px 8px;border-radius:999px;border:1px solid var(--linha);white-space:nowrap;color:var(--cinza)}
+  .rev-pill.vit{color:var(--roxo);border-color:var(--roxo);background:var(--roxo-bg)}
+  .rev-pill.temp{color:#b3541e;border-color:#e0a476;background:#fdf1e7}
+  .rev-pill.inc{color:var(--verde);border-color:var(--verde);background:var(--verde-bg)}
+  .rev-pill.no{color:var(--verm);border-color:var(--verm);background:var(--verm-bg)}
+  .rev-exp{border:1px solid var(--linha);border-radius:11px;padding:12px 14px;background:var(--card)}
+  .rev-exp h4{margin:0 0 4px;font-size:13.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rev-exp p{margin:0;font-size:12px;color:var(--cinza);line-height:1.5}
+  .rev-exp .v{font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}
+  .rev-g2{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+  .rev-g3{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .rev-callout{border-left:3px solid var(--amarelo);background:var(--amarelo-bg);padding:12px 14px;border-radius:0 10px 10px 0;margin:12px 0;font-size:12.8px;color:var(--cinza)}
+  .rev-callout b{color:var(--ink)}
+  .rev-callout.red{border-left-color:var(--verm);background:var(--verm-bg)}
+  .rev-callout.grn{border-left-color:var(--verde);background:var(--verde-bg)}
+  .rev-callout.vio{border-left-color:var(--roxo);background:var(--roxo-bg)}
+  .rev-tl-row{display:grid;grid-template-columns:110px 1fr;gap:14px;align-items:start;padding:13px 0;border-bottom:1px solid var(--linha)}
+  .rev-tl-row:last-child{border-bottom:0}
+  .rev-tl-date{text-align:right}
+  .rev-tl-date .d{font-weight:800;font-size:15px}
+  .rev-tl-date .s{font-size:11px;color:var(--muted)}
+  .rev-tl-body{border-left:2px solid var(--linha);padding-left:14px;position:relative}
+  .rev-tl-body::before{content:'';position:absolute;left:-6px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--mark,var(--azul-2));border:2px solid var(--card)}
+  .rev-tl-body h4{margin:0 0 4px;font-size:13.5px}
+  .rev-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .rev-chip{font-size:11px;padding:2px 8px;border-radius:7px;border:1px solid var(--linha);color:var(--cinza);background:var(--fundo)}
+  .rev-bars{display:flex;flex-direction:column;gap:10px}
+  .rev-brow{display:grid;grid-template-columns:var(--lw,150px) 1fr;gap:10px;align-items:center}
+  .rev-brow .k{font-size:12.5px;color:var(--cinza);text-align:right}
+  .rev-btrack{background:var(--linha);border-radius:5px;height:20px;position:relative;overflow:hidden}
+  .rev-bfill{height:100%;border-radius:0 5px 5px 0;background:var(--azul-2)}
+  .rev-bneed{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--verm)}
+  .rev-blabels{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums;gap:8px;flex-wrap:wrap}
+  .rev-gapok{color:var(--verde);font-weight:700}
+  .rev-gapbad{color:var(--verm);font-weight:700}
+  .rev-fld{display:flex;flex-direction:column;gap:4px}
+  .rev-fld label{font-size:11.5px;color:var(--cinza);font-weight:600}
+  .rev-fld .inp{display:flex;align-items:center;gap:6px}
+  .rev-fld .pre{font-size:12px;color:var(--muted)}
+  .rev-fld input{width:100%;padding:8px 10px;border:1px solid var(--linha);border-radius:9px;font-variant-numeric:tabular-nums}
+  .rev-fld input.anos{max-width:64px}
+  .rev-calc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+  @media(max-width:640px){
+    .rev-hero .val{font-size:28px}
+    .rev-tl-row{grid-template-columns:82px 1fr;gap:9px}
+    .rev-brow{grid-template-columns:96px 1fr}
+  }
+  /* impressão: só o conteúdo da revisão, limpo (o consultor imprime/gera PDF) */
+  @media print{
+    .topbar,.sidebar,.bnav,.nav-overlay,#toasts,.drawer,.overlay,.rev-noprint{display:none!important}
+    body{background:#fff}
+    .layout{display:block}
+    .main{padding:0;max-width:none}
+    .rev-card,.rev-tile,.rev-hero,.rev-exp{box-shadow:none;break-inside:avoid}
+    .rev-sec{break-after:avoid}
+  }
 </style>
 </head>
 <body>
 
 <header class="topbar">
   <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
-  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.4.1 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
+  <div class="brand" onclick="location.href='index.html'" style="cursor:pointer" title="Voltar para o CRM de Captação">🛡️ CRM Life Planner <span class="tag">ISLAND · v0.5.0 · Visão LP</span> <span class="tag" style="background:rgba(255,255,255,.28)">⇄ Captação</span></div>
   <div class="spacer"></div>
   <button class="perfil-chip" id="btnPerfil" onclick="togglePerfilMenu(event)">
     <span class="avatar" id="avTop">G</span>
@@ -361,6 +437,8 @@
         <button class="nav-btn sub sub2" data-view="cart-visao" onclick="irPara('cart-visao')"><span class="ic">📊</span><span class="lbl">Visão da Carteira</span></button>
         <button class="nav-btn sub sub2" data-view="cart-clientes" onclick="irPara('cart-clientes')"><span class="ic">🗂️</span><span class="lbl">Clientes</span><span class="cnt" id="cnt-cart"></span></button>
         <button class="nav-btn sub sub2" data-view="cart-oportunidades" onclick="irPara('cart-oportunidades')"><span class="ic">💡</span><span class="lbl">Oportunidades</span><span class="cnt" id="cnt-cart-op"></span></button>
+        <button class="nav-btn sub sub2" data-view="cart-revisao" onclick="irPara('cart-revisao')"><span class="ic">🧭</span><span class="lbl">Revisão de Apólices</span><span class="cnt" id="cnt-rev"></span></button>
+        <button class="nav-btn sub sub2" data-view="rev-catalogo" onclick="irPara('rev-catalogo')"><span class="ic">⚙️</span><span class="lbl">Catálogo Coberturas</span><span class="cnt" id="cnt-rev-cat"></span></button>
       </div>
       <button class="nav-btn sub" data-view="lp-aniversario" onclick="irPara('lp-aniversario')"><span class="ic">🎂</span><span class="lbl">Aniversariantes</span><span class="cnt" id="cnt-aniversario"></span></button>
       <button class="nav-btn sub" data-view="lp-datas" onclick="irPara('lp-datas')"><span class="ic">📅</span><span class="lbl">Aniversário de Apólice</span><span class="cnt" id="cnt-datas"></span></button>
@@ -407,7 +485,7 @@
 </div>
 
 <div class="rodape">
-  <span>CRM Life Planner v0.4.1 — Visão LP · Island.</span>
+  <span>CRM Life Planner v0.5.0 — Visão LP · Island.</span>
   <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
 </div>
 
@@ -2048,6 +2126,572 @@ function lpCarregarExemplo(fecharModal){
   if(!String(VIEW).startsWith('lp-')) irPara('lp-atrasos'); else render();
 }
 
+/* ═══════════════════ MÓDULO REVISÃO DE APÓLICES ═══════════════════
+   Tela que o LP abre NA FRENTE DO CLIENTE na reunião de revisão: consolida as
+   apólices, mostra vencimentos, o que falta e a necessidade de proteção.
+   REGRAS DE NEGÓCIO: 100% em revisao-service.js (RevisaoService, testado —
+   golden test Catarina). Aqui é só dado + formatação.
+   DADOS: tabelas rev_* (migration revisao_apolices.sql), RLS por dono; catálogo
+   e parâmetros compartilhados. Fallback localStorage (preview/deslogado), igual
+   Carteira. Coberturas por apólice vêm do DEMONSTRATIVO (PDF → IA importar-apolice
+   ou form manual) — os .xls da carteira não têm esse detalhe. */
+const REV_CHAVE='crmlp_rev_v1';
+const REV_TAPO='rev_apolices', REV_TCOB='rev_apolice_coberturas', REV_TCAT='rev_cobertura_catalogo', REV_TPAR='rev_parametros';
+let REV={apolices:[],coberturas:[],catalogo:[],parametros:{},_cli:null};
+let REV_REMOTE=false, REV_REF=null, REV_DEMO=false;
+const REV_CALC={};                         // inputs da calculadora por cliente_ref (sessão; nada vai pro banco)
+
+/* fallback do catálogo (espelho do seed da migration) — usado em preview/deslogado */
+const REV_CAT_FALLBACK=(()=>{ const g=[
+  ['MORTE_QUALQUER_CAUSA','vitalicio',0,'WL10F WL10G WL20G WL60G WL65G WV10G WV20G'],
+  ['MORTE_QUALQUER_CAUSA','temporario',0,'TP10G TP20G TP30G DR10G DR15G DR20G DR25G DR30G DT10G DT15G DT20G DT25G'],
+  ['MORTE_ACIDENTAL','temporario',0,'AB05G AB15G AB20G AB30G ABR5G'],
+  ['DOENCAS_GRAVES','temporario',0,'DDMRG DDP5G DDR5G CIA5G CIB5G'],
+  ['INVALIDEZ_PARCIAL','temporario',0,'PD05F PD05G'],
+  ['INVALIDEZ_TOTAL','temporario',0,'PI05G'],
+  ['PERDA_AUTONOMIA','temporario',0,'PA05G PA10G'],
+  ['INTERNACAO','temporario',1,'HC05G'],
+  ['FUNERAL','temporario',0,'AF05G AFC5G AFF5G AFI5G AFP5G AFQ5G'],
+  ['FRATURAS','temporario',0,'BRB5G']];
+  const out=[]; g.forEach(([s,n,d,cods])=>cods.split(' ').forEach(c=>out.push({codigo:c,sinistro:s,natureza:n,eh_diaria:!!d})));
+  'AP10G AP60G AP65G DIMRG DINRG FR20G FR25G TF10G TF20G TR05G WD10G WS00G'.split(' ').forEach(c=>out.push({codigo:c,sinistro:null,natureza:null,eh_diaria:false}));
+  return out; })();
+
+/* textos ao cliente (palavras da Prudential), por sinistro — usados quando o catálogo não tem descrição própria */
+const REV_TX={
+  MORTE_QUALQUER_CAUSA:'Em caso de morte natural ou acidental, o valor do seu seguro de vida será recebido pelas pessoas indicadas como beneficiárias na apólice.',
+  MORTE_ACIDENTAL:'No caso de morte por acidente coberto, quem você indicou como beneficiário na apólice receberá o valor do benefício da cobertura opcional mais o benefício de morte, que é uma garantia básica.',
+  DOENCA_TERMINAL:'Em caso de doença terminal com expectativa de vida máxima de 6 meses, você pode optar por receber antecipadamente uma parte ou todo o valor do benefício da cobertura básica.',
+  INVALIDEZ_TOTAL:'Se sofrer alguma das lesões irreversíveis previstas nas condições gerais, em consequência exclusiva de acidente coberto, você pode receber integralmente o valor do benefício, e o seguro será encerrado.',
+  INVALIDEZ_PARCIAL:'No caso de sofrer um acidente e uma invalidez parcial prevista na apólice, você receberá o valor do seguro. Consulte a tabela de invalidez parcial majorada.',
+  DOENCAS_GRAVES:'Em caso de diagnóstico de doença grave ou realização de procedimento médico que esteja previsto, você receberá o valor determinado na sua apólice.',
+  INTERNACAO:'Pagamento de uma diária para cada dia de internação hospitalar por doença ou acidente coberto. A partir do 5º dia em que estiver internado, você receberá o valor contratado. Caso seja em UTI, a diária será paga em dobro.',
+  CIRURGIAS:'A cobertura pode ser utilizada a cada 12 meses. Pode ser contratada em conjunto com as demais coberturas adicionais. Cobre o que o plano de saúde não cobre: o tempo parado, o acompanhante, o pós-operatório.',
+  FRATURAS:'Opção de cobertura para quebra de ossos com indenização adicional de 50% em caso de fratura exposta. Múltiplas fraturas podem ser cobertas a cada 12 meses.',
+  PERDA_AUTONOMIA:'Se passar a precisar do auxílio de outras pessoas para realizar atividades básicas do seu dia a dia (tomar banho, fazer higiene pessoal, comer, vestir-se etc.) por causa de doença ou acidente, você receberá o valor estabelecido na apólice.',
+  FUNERAL:'Um serviço que atua na organização do funeral em caso de falecimento do segurado titular, disponível em 4 opções: Individual, Casal, Familiar e Plus para pais e pets. Inclui questões administrativas, registros em cartório, sepultamento e cremação.',
+  VITALICIO:'A vigência da cobertura é por toda a vida, desde que sejam pagos os prêmios referentes ao prazo de pagamento escolhido. O valor de resgate é uma característica desse seguro de vida vitalício.',
+  TEMPORARIO:'A vigência desta cobertura será estabelecida na apólice de seguro de vida e corresponderá ao período de pagamento dos prêmios referentes a esta cobertura.'};
+
+const revBRL=v=>'R$ '+cartFmt(v), revK=v=>'R$ '+cartFmtK(v);
+const revPct=v=>v==null?'—':v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%';
+const revDbr=s=>s?String(s).slice(0,10).split('-').reverse().join('/'):'—';
+function revNomeTit(n){ return String(n||'').split(' ').map(w=>['DE','DA','DO','DAS','DOS','E'].includes(w)?w.toLowerCase():(w[0]||'')+w.slice(1).toLowerCase()).join(' '); }
+
+async function revRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
+async function revCarregar(){
+  if(REV_DEMO) return;                     // demo nunca é sobrescrito nem persiste
+  REV_REMOTE=await revRemoteOn();
+  if(REV_REMOTE){ try{
+    const [ra,rc,rk,rp]=await Promise.all([sb.from(REV_TAPO).select('*'),sb.from(REV_TCOB).select('*'),sb.from(REV_TCAT).select('*'),sb.from(REV_TPAR).select('*')]);
+    for(const r of [ra,rc,rk,rp]) if(r.error) throw r.error;
+    REV.apolices=ra.data||[]; REV.coberturas=rc.data||[]; REV.catalogo=rk.data||[];
+    REV.parametros={}; (rp.data||[]).forEach(p=>{ REV.parametros[p.chave]=parseFloat(p.valor); });
+    revSalvar(); return;
+  }catch(e){ console.warn('REV load remoto falhou → fallback local',e); REV_REMOTE=false; } }
+  try{ const raw=localStorage.getItem(REV_CHAVE); if(raw){ const o=JSON.parse(raw);
+    REV.apolices=o.apolices||[]; REV.coberturas=o.coberturas||[]; REV.catalogo=o.catalogo||[]; REV.parametros=o.parametros||{}; } }catch(e){ console.warn('REV load falhou',e); } }
+function revSalvar(){ if(REV_DEMO) return; try{ localStorage.setItem(REV_CHAVE,JSON.stringify({apolices:REV.apolices,coberturas:REV.coberturas,catalogo:REV.catalogo,parametros:REV.parametros})); }catch(e){ console.warn('REV save falhou',e); } }
+function revCatalogo(){ return REV.catalogo.length?REV.catalogo:REV_CAT_FALLBACK; }
+
+/* pendentes de classificação = entradas do catálogo sem sinistro + códigos EM USO fora do catálogo */
+function revPendentes(){ const known={}; revCatalogo().forEach(c=>known[c.codigo]=c); const out={};
+  revCatalogo().forEach(c=>{ if(!c.sinistro) out[c.codigo]={codigo:c.codigo,emCatalogo:true,emUso:false}; });
+  REV.coberturas.forEach(c=>{ const k=known[c.codigo]; if(!k||!k.sinistro){ out[c.codigo]=out[c.codigo]||{codigo:c.codigo,emCatalogo:!!k,emUso:false}; out[c.codigo].emUso=true; } });
+  return Object.values(out).sort((a,b)=>a.codigo.localeCompare(b.codigo)); }
+function revCounts(){ const cr=$('#cnt-rev'); if(cr) cr.textContent=revClientes().length||'';
+  const ck=$('#cnt-rev-cat'); if(ck) ck.textContent=revPendentes().length||''; }
+
+function revClientes(){ const map={};
+  REV.apolices.forEach(a=>{ const r=a.cliente_ref; if(!map[r]) map[r]={ref:r,nome:a.cliente_nome||r,aps:0,ativas:0};
+    map[r].aps++; if(a.status==='Ativa') map[r].ativas++; });
+  CART.clientes.forEach(c=>{ if(map[c.ref]) map[c.ref].nome=c.nome; });
+  return Object.values(map).sort((a,b)=>a.nome.localeCompare(b.nome)); }
+function revAbrir(ref){ REV_REF=ref; irPara('cart-revisao'); }
+
+function revMontar(ref){
+  const cCart=CART.clientes.find(c=>c.ref===ref)||{};
+  const extra=(REV._cli&&REV._cli.ref===ref)?REV._cli:{};
+  const aps=REV.apolices.filter(a=>a.cliente_ref===ref);
+  const nums=new Set(aps.map(a=>a.numero));
+  return RevisaoService.montarRevisao({
+    cliente:{ nome:extra.nome||cCart.nome||(aps[0]&&aps[0].cliente_nome)||ref,
+      nascimento:extra.nascimento||cCart.nascimento||null, profissao:extra.profissao||null,
+      cidade:extra.cidade||null, beneficiario:extra.beneficiario||null,
+      clienteDesde:extra.clienteDesde||aps.map(a=>a.data_emissao).filter(Boolean).sort()[0]||null },
+    apolices:aps, coberturas:REV.coberturas.filter(c=>nums.has(c.apolice_numero)),
+    catalogo:revCatalogo(), parametros:REV.parametros, inputs:REV_CALC[ref]||{}, dataReferencia:hojeISO() }); }
+
+/* ── persistência: upsert de UMA apólice + substituição das coberturas dela ── */
+function revApSemDerivados(a){ const o={}; ['numero','cliente_ref','cliente_nome','proposta','status','data_emissao','inicio_vigencia','tipo_contestacao','idade_emissao','premio_liquido','iof','premio_total','periodicidade','forma_pagamento','cartao_expiracao','dia_pagamento','pago_ate','dias_atraso','proximo_venc','total_pago','num_pagamentos','valor_resgate','valor_resgate_data'].forEach(k=>{ if(a[k]!==undefined) o[k]=(a[k]===''?null:a[k]); }); return o; }
+function revCobLimpa(c){ return {apolice_numero:c.apolice_numero,codigo:c.codigo,nome:c.nome||null,valor_segurado:c.valor_segurado||0,premio_liquido:c.premio_liquido||0,iof:c.iof!=null?c.iof:null,classe_ajuste:c.classe_ajuste||null,termino:c.termino||null,status_cobertura:c.status_cobertura||null}; }
+async function revUpsertApolice(ap,cobs){
+  ap=revApSemDerivados(ap); cobs=(cobs||[]).map(revCobLimpa);
+  REV.apolices=REV.apolices.filter(a=>a.numero!==ap.numero).concat([ap]);
+  REV.coberturas=REV.coberturas.filter(c=>c.apolice_numero!==ap.numero).concat(cobs);
+  revSalvar();
+  if(!REV_REMOTE||REV_DEMO) return {sync:'local'};
+  try{
+    let r=await sb.from(REV_TAPO).upsert(ap,{onConflict:'dono,numero'}); if(r.error) throw r.error;
+    r=await sb.from(REV_TCOB).delete().eq('apolice_numero',ap.numero); if(r.error) throw r.error;
+    if(cobs.length){ r=await sb.from(REV_TCOB).insert(cobs); if(r.error) throw r.error; }
+    return {sync:'remoto'};
+  }catch(e){ console.error('REV sync falhou',e); return {sync:'falhou'}; } }
+async function revExcluirApolice(numero){
+  if(!confirm('Excluir a apólice '+numero+' e as coberturas dela desta base de revisão? (não mexe na Prudential nem na Carteira)')) return;
+  REV.apolices=REV.apolices.filter(a=>a.numero!==numero);
+  REV.coberturas=REV.coberturas.filter(c=>c.apolice_numero!==numero);
+  revSalvar();
+  if(REV_REMOTE&&!REV_DEMO){ try{ const r=await sb.from(REV_TAPO).delete().eq('numero',numero); if(r.error) throw r.error; }catch(e){ console.error(e); toast('Excluída aqui; sync com o banco falhou',false); } }
+  toast('Apólice removida da revisão',true); render(); }
+
+async function revSetResgate(numero,valor){
+  const a=REV.apolices.find(x=>x.numero===numero); if(!a) return;
+  a.valor_resgate=(valor==null||valor==='')?null:parseFloat(valor);
+  a.valor_resgate_data=a.valor_resgate!=null?nowISO():null;
+  revSalvar();
+  if(REV_REMOTE&&!REV_DEMO){ try{ const r=await sb.from(REV_TAPO).update({valor_resgate:a.valor_resgate,valor_resgate_data:a.valor_resgate_data}).eq('numero',numero); if(r.error) throw r.error; }
+    catch(e){ console.error(e); toast('Resgate salvo só neste aparelho (sync falhou)',false); } }
+  revRenderReserva(); }
+
+/* ═══ VIEW: revisão ═══ */
+function viewCartRevisao(){
+  const cls=revClientes();
+  if(REV_REF && !cls.some(c=>c.ref===REV_REF)) REV_REF=null;
+  if(!REV_REF){
+    $('#main').innerHTML=`<h1 class="pg">🧭 Revisão de Apólices</h1>
+      <div class="sub">A tela da reunião de revisão: escolha o cliente. As coberturas detalhadas vêm do <b>demonstrativo de apólice</b> (PDF) — importe ou cadastre.</div>
+      <div class="rev-noprint" style="display:flex;gap:8px;margin:10px 0 14px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="openRevImport()">🤖 Importar demonstrativo (PDF)</button>
+        <button class="btn btn-s" onclick="openRevForm(null)">✍️ Cadastrar apólice manualmente</button></div>
+      ${cls.length?`<div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table class="rev-tab">
+        <thead><tr><th>Cliente</th><th style="text-align:center">Apólices na revisão</th><th style="text-align:center">Ativas</th><th></th></tr></thead>
+        <tbody>${cls.map(c=>`<tr onclick="revAbrir('${esc(c.ref)}')" style="cursor:pointer">
+          <td style="font-weight:600">${esc(revNomeTit(c.nome))}</td>
+          <td style="text-align:center">${c.aps}</td><td style="text-align:center">${c.ativas}</td>
+          <td style="text-align:right"><button class="btn btn-s btn-mini">abrir revisão →</button></td></tr>`).join('')}</tbody></table></div>`
+      :`<div class="rev-card" style="text-align:center;color:var(--muted);padding:34px">Nenhum cliente com apólice detalhada ainda.<br>
+         Importe o demonstrativo (PDF da Prudential) ou cadastre manualmente — a carteira (.xls) não traz cobertura por apólice.<br>
+         <span style="font-size:12px">Dica: abra <code>vendas.html?revdemo=1</code> pra ver a tela com dados de demonstração.</span></div>`}`;
+    return; }
+  const dto=revMontar(REV_REF);
+  const c=dto.cliente;
+  $('#main').innerHTML=`
+    <div class="rev-noprint" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-s btn-mini" onclick="REV_REF=null;render()">← clientes</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-mini" onclick="openRevImport()">🤖 Importar PDF</button>
+      <button class="btn btn-s btn-mini" onclick="openRevForm(null)">✍️ Nova apólice</button>
+      <button class="btn btn-p btn-mini" onclick="window.print()">🖨️ Imprimir / PDF</button></div>
+    ${REV_DEMO?`<div class="rev-callout" style="margin-top:0"><b>Modo demonstração</b> — dados fictícios da Catarina; nada é salvo.</div>`:''}
+    <div style="margin-bottom:6px">
+      <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Revisão de apólices · Prudential do Brasil</div>
+      <h1 class="pg" style="margin:2px 0 2px">${esc(revNomeTit(c.nome))}</h1>
+      <div class="sub">${c.idade!=null?c.idade+' anos':''}${c.profissao?' · '+esc(c.profissao):''}${c.cidade?' · '+esc(c.cidade):''}<br>
+        ${c.clienteDesde?`Cliente Prudential desde <b>${revDbr(c.clienteDesde)}</b> · `:''}${c.beneficiario?`Beneficiário: <b>${esc(c.beneficiario)}</b> · `:''}Life Planner ${esc(user().nome)} · análise em ${revDbr(dto.referencia)}</div></div>
+    ${dto.apolicesAtivas===0?`<div class="rev-callout red"><b>Nenhuma apólice ativa</b> — este cliente tem ${REV.apolices.filter(a=>a.cliente_ref===REV_REF).length} apólice(s) cadastrada(s), todas fora do status Ativa. A revisão considera só apólices ativas.</div>`:''}
+    ${revSecHoje(dto)}
+    ${revSecApolices(dto)}
+    ${revSecTimeline(dto)}
+    ${revSecFaltantes(dto)}
+    ${revSecCalc(dto)}
+    ${revSecVitReserva(dto)}
+    ${revSecResumo(dto)}
+    ${revRodape(dto)}`;
+}
+
+/* ── seção 1: o que você tem hoje ── */
+function revSecHoje(d){
+  const linhas=d.consolidacao.map(r=>{
+    const tag=r.naoContratado?'<span class="rev-pill no">✕ não contratado</span>'
+      :r.incluso?'<span class="rev-pill inc">✓ incluso</span>'
+      :r.natureza==='vitalicio'?'<span class="rev-pill vit">◆ vitalício</span>'
+      :r.sub||r.sinistro!=='MORTE_QUALQUER_CAUSA'||true?'<span class="rev-pill temp">▸ temporário</span>':'';
+    const cap=r.capital>0?(r.ehDiaria?cartFmt(r.capital)+'<span style="font-size:10px;color:var(--muted)">/dia</span>':cartFmt(r.capital)):'—';
+    return `<tr${r.destaque?' style="background:var(--azul-claro)"':''}>
+      <td style="${r.sub?'padding-left:24px;color:var(--cinza)':'font-weight:600'}">${esc(r.rotulo)}</td>
+      <td class="num" style="${r.capital>0?'font-weight:700':'color:var(--muted)'}">${cap}</td>
+      <td class="num" style="color:var(--cinza)">${r.premio===null?'<span style="font-size:11px;color:var(--muted)">incluso</span>':(r.premio>0?cartFmt(r.premio):'—')}</td>
+      <td>${r.sinistro==='MORTE_QUALQUER_CAUSA'&&!r.sub&&!r.naoContratado?'':tag}</td></tr>`; }).join('');
+  const cards=d.consolidacao.filter(r=>r.capital>0&&!r.sub&&!r.incluso&&!r.naoContratado).map(r=>{
+    const t=r.descricao||REV_TX[r.sinistro]||'';
+    return t?`<div class="rev-exp"><h4>${esc(r.rotulo)} <span class="v">${r.ehDiaria?revBRL(r.capital)+'/dia':revBRL(r.capital)}</span></h4><p>${esc(t)}</p></div>`:''; }).join('');
+  return `<div class="rev-sec">1 · O que você tem hoje</div>
+    <div class="rev-hero"><div class="lab">Proteção total em caso de morte${d.apolicesAtivas>1?' — somando as '+d.apolicesAtivas+' apólices':''}</div>
+      <div class="val">${revBRL(d.morte.total)}</div>
+      <div class="cap">Por <b>${revBRL(d.premioMensalTotal)} por mês</b>, em <b>${d.apolicesAtivas} apólice(s)</b> e <b>${d.coberturasAtivas} cobertura(s)</b>. O capital segurado é corrigido pelo IPCA todo ano.</div></div>
+    <div class="rev-tiles">
+      <div class="rev-tile"><div class="lab">Prêmio mensal</div><div class="val">${revBRL(d.premioMensalTotal)}</div>
+        <div class="cap">${d.premioAnualContratado>0?'inclui anuais mensalizados':'soma das apólices ativas'}</div></div>
+      <div class="rev-tile"><div class="lab">Proteção vitalícia</div><div class="val" style="color:var(--roxo)">${revK(d.morte.vitalicio)}</div>
+        <div class="cap">${revPct(d.morte.pctVitalicio)} do capital de morte — nunca vence</div></div>
+      <div class="rev-tile"><div class="lab">Proteção temporária</div><div class="val" style="color:#b3541e">${revK(d.morte.temporario)}</div>
+        <div class="cap">${revPct(d.morte.pctTemporario)} — tem prazo de validade</div></div>
+      <div class="rev-tile"><div class="lab">${d.cliente.beneficiario?'Beneficiário':'Internação (diária)'}</div>
+        <div class="val" style="font-size:15px">${d.cliente.beneficiario?esc(d.cliente.beneficiario):(d.internacao.diaria>0?revBRL(d.internacao.diaria)+'/dia':'—')}</div>
+        <div class="cap">${d.cliente.beneficiario?'':'UTI paga em dobro: '+revBRL(d.internacao.uti)+'/dia'}</div></div></div>
+    <div class="rev-card"><h3>Quadro consolidado das coberturas</h3>
+      <div class="rev-note">Todas as apólices somadas, agrupadas por tipo de sinistro — é assim que a proteção funciona no dia em que precisar dela.</div>
+      <div style="overflow-x:auto"><table class="rev-tab"><thead><tr><th>Se acontecer…</th><th class="num">Você recebe</th><th class="num">Custo/mês</th><th>Natureza</th></tr></thead>
+      <tbody>${linhas}<tr class="tot"><td>Total pago por mês</td><td class="num">—</td><td class="num">${cartFmt(d.premioMensalTotal)}</td>
+        <td style="font-size:11px;color:var(--muted)">inclui IOF de ${cartFmt(d.iofTotal)}</td></tr></tbody></table></div>
+      <div class="rev-note" style="margin:10px 0 0;font-size:11.5px">Resumo simples. Garantias, franquias, carências e exclusões estão nas condições gerais e nas apólices.</div></div>
+    ${cards?`<div class="rev-card"><h3>O que cada cobertura significa</h3><div class="rev-note">Nas palavras da própria Prudential.</div><div class="rev-g2">${cards}</div></div>`:''}`;
+}
+
+/* ── seção 2: apólices em detalhe ── */
+function revSecApolices(d){
+  if(!d.porApolice.length) return '';
+  return `<div class="rev-sec">2 · As apólices em detalhe</div><div class="rev-g2">
+    ${d.porApolice.map(a=>`<div class="rev-card" style="margin:0"><div style="display:flex;justify-content:space-between;align-items:start;gap:8px">
+      <h3>Apólice ${esc(a.numero)}</h3>
+      <span class="rev-noprint"><button class="btn btn-s btn-mini" onclick="openRevForm('${esc(a.numero)}')">✏️ editar</button></span></div>
+      <div class="rev-note" style="margin-bottom:10px">${a.emissao?`Emitida em <b>${revDbr(a.emissao)}</b>`:''}${a.idadeEmissao!=null?` · com <b>${a.idadeEmissao} anos</b>`:''}${a.proposta?` · proposta ${esc(a.proposta)}`:''}${a.contestacao?` · contestação ${esc(a.contestacao)}`:''}${a.totalPago!=null?` · já pagou <b>${revBRL(a.totalPago)}</b>`:''}${a.forma?`<br>${esc(a.forma)}${a.cartaoExpiracao?' (venc. '+revDbr(a.cartaoExpiracao).slice(3)+')':''}${a.diaPagamento?' · dia '+a.diaPagamento:''}${a.periodicidade?' · '+esc(a.periodicidade).toLowerCase():''}`:''}</div>
+      <div style="overflow-x:auto"><table class="rev-tab"><thead><tr><th>Cobertura</th><th class="num">Capital</th><th class="num">Prêmio</th><th>Vigora até</th></tr></thead><tbody>
+      ${a.coberturas.map(cb=>`<tr><td><div style="font-weight:600;font-size:12.5px">${esc(cb.nome||cb.codigo)}</div>
+        <div style="font-size:10.5px;color:var(--muted)">${esc(cb.codigo)}${cb.classe?' · '+esc(cb.classe):''}</div></td>
+        <td class="num">${cartFmt(cb.capital)}${cb.ehDiaria?'<span style="font-size:10px;color:var(--muted)">/dia</span>':''}</td>
+        <td class="num">${cartFmt(cb.premio)}</td>
+        <td style="white-space:nowrap;font-size:12px">${cb.natureza==='vitalicio'?'<span class="rev-pill vit">◆ vitalícia</span>':revDbr(cb.termino)}</td></tr>`).join('')}
+      <tr class="tot"><td>Total</td><td class="num">—</td><td class="num">${cartFmt(a.premioTotal)}</td><td></td></tr></tbody></table></div></div>`).join('')}</div>`;
+}
+
+/* ── seção 3: linha do tempo ── */
+function revSecTimeline(d){
+  const M=d.timeline.marcos;
+  const nTemp=d.coberturasAtivas-(d.timeline.vitalicio.coberturas||[]).length;
+  return `<div class="rev-sec">3 · A linha do tempo da sua proteção</div>
+    ${M.length?`<div class="rev-callout red"><b>Este é o ponto mais importante desta revisão.</b> ${nTemp} das suas ${d.coberturasAtivas} coberturas têm prazo de validade. Elas não são canceladas por escolha sua — elas simplesmente <b>chegam ao fim da vigência contratada</b> e param de proteger, mesmo com a apólice ativa e em dia.</div>`:''}
+    <div class="rev-card"><div>
+      <div class="rev-tl-row"><div class="rev-tl-date"><div class="d">Hoje</div><div class="s">${d.cliente.idade!=null?d.cliente.idade+' anos':''}</div></div>
+        <div class="rev-tl-body" style="--mark:var(--verde)"><h4>Proteção completa — ${revBRL(d.morte.total)} em caso de morte</h4>
+          <div class="rev-note" style="margin:0">${d.coberturasAtivas} cobertura(s) ativa(s), ${revBRL(d.premioMensalTotal)}/mês.</div></div></div>
+      ${M.map(m=>`<div class="rev-tl-row"><div class="rev-tl-date"><div class="d">${revDbr(m.data).slice(3)}</div>
+          <div class="s">${m.idade!=null?m.idade+' anos · ':''}em ${m.tempoAte.n} ${m.tempoAte.unidade}</div></div>
+        <div class="rev-tl-body" style="--mark:var(--verm)">
+          <h4>Terminam ${m.coberturas.length} cobertura(s) — deixa de pagar ${revBRL(m.premioLiberado)}/mês e ${revK(m.capitalPerdido)} em capital segurado deixam de existir${m.diariasPerdidas.length?` (mais ${m.diariasPerdidas.map(x=>revBRL(x.diaria)+'/dia').join(', ')} de diária)`:''}</h4>
+          <div class="rev-chips">${m.coberturas.map(cb=>`<span class="rev-chip">${esc(cb.codigo)} · ${esc(cb.rotulo)} ${cb.ehDiaria?cartFmt(cb.capital)+'/dia':revK(cb.capital).replace('R$ ','')}</span>`).join('')}</div>
+          ${m.quedaMorte?`<div class="rev-note" style="margin:8px 0 0${m.destaqueMeiaProtecao?';color:var(--verm);font-weight:700':''}"><b>Depois desta data, a proteção de morte cai para ${revBRL(m.morteRemanescente)}</b> — ${revPct(m.pctMorteRemanescente)} do que tem hoje.${m.destaqueMeiaProtecao?' ⚠️ Menos da metade da proteção atual.':''}</div>`:''}
+        </div></div>`).join('')}
+      <div class="rev-tl-row"><div class="rev-tl-date"><div class="d">Vitalícia</div><div class="s">sem prazo</div></div>
+        <div class="rev-tl-body" style="--mark:var(--roxo)"><h4>${d.timeline.vitalicio.capital>0?`Sobra ${revBRL(d.timeline.vitalicio.capital)} — ${d.timeline.vitalicio.coberturas.join(', ')}, que não vence`:'Nenhuma cobertura vitalícia contratada'}</h4>
+          <div class="rev-note" style="margin:0">${d.timeline.vitalicio.capital>0?'É a única parte da proteção que atravessa a aposentadoria — e a única que acumula valor de resgate.':'Toda a proteção atual tem prazo. Vale conversar sobre uma parcela vitalícia.'}</div></div></div>
+    </div></div>`;
+}
+
+/* ── seção 4: o que não tem ── */
+function revSecFaltantes(d){
+  if(!d.naoContratados.length) return '';
+  return `<div class="rev-sec">4 · O que você ainda não tem</div><div class="rev-g3">
+    ${d.naoContratados.map(s=>`<div class="rev-exp" style="border-color:var(--verm)">
+      <h4>${esc(RevisaoService.ROTULOS[s])} <span class="rev-pill no">✕ não contratado</span></h4>
+      <p>${esc(REV_TX[s]||'')}</p></div>`).join('')}</div>
+    ${d.internacao.diaria>0?`<div class="rev-callout">Sua <b>Renda Hospitalar é de ${revBRL(d.internacao.diaria)} por dia</b> (${revBRL(d.internacao.uti)} em UTI), a partir do 5º dia de internação. Vale conferir se esse valor ainda cobre um dia parado hoje — a correção pelo IPCA acompanha a inflação, não a sua renda.</div>`:''}`;
+}
+
+/* ── seção 5: calculadora ── */
+function revCalcVal(ref,k){ const map={fix:'despesas_fixas_mensais',edu:'despesas_educacao_mensais',eduA:'anos_educacao',div:'dividas_parcela_mensal',divA:'anos_dividas',pat:'patrimonio_total',ren:'renda_mensal_media'};
+  const o=REV_CALC[ref]||{}; const v=o[map[k]]; return v==null?'':v; }
+function revCalcSet(k,v){ if(!REV_REF) return; const map={fix:'despesas_fixas_mensais',edu:'despesas_educacao_mensais',eduA:'anos_educacao',div:'dividas_parcela_mensal',divA:'anos_dividas',pat:'patrimonio_total',ren:'renda_mensal_media'};
+  const o=REV_CALC[REV_REF]=REV_CALC[REV_REF]||{}; const n=parseFloat(v); o[map[k]]=isFinite(n)?n:null;
+  const el=$('#rev-calc-out'); if(el) el.innerHTML=revCalcOut(revMontar(REV_REF)); }
+function revSecCalc(d){
+  const p=d.parametros;
+  const fld=(lbl,k,extra)=>`<div class="rev-fld"><label>${lbl}</label><div class="inp"><span class="pre">R$</span>
+    <input type="number" step="100" value="${revCalcVal(REV_REF,k)}" oninput="revCalcSet('${k}',this.value)">${extra||''}</div></div>`;
+  return `<div class="rev-sec">5 · Quanto seria o ideal</div>
+    <div class="rev-card"><h3>Calculadora de necessidade de proteção</h3>
+      <div class="rev-note">Preencha com os números reais do cliente. O cálculo segue a metodologia da ferramenta de revisão da Prudential (parâmetros editáveis em ⚙️ Catálogo).</div>
+      <div class="rev-calc-grid">
+        ${fld('Despesas mensais fixas','fix')}
+        ${fld('Educação (por mês)','edu',`<input type="number" class="anos" step="1" value="${revCalcVal(REV_REF,'eduA')||p.educacao_anos_default}" oninput="revCalcSet('eduA',this.value)"><span class="pre">anos</span>`)}
+        ${fld('Dívidas (parcela mensal)','div',`<input type="number" class="anos" step="1" value="${revCalcVal(REV_REF,'divA')||p.dividas_anos_default}" oninput="revCalcSet('divA',this.value)"><span class="pre">anos</span>`)}
+        ${fld('Patrimônio total','pat')}
+        ${fld('Renda mensal média','ren')}</div>
+      <div id="rev-calc-out" style="margin-top:18px">${revCalcOut(d)}</div></div>`;
+}
+function revCalcOut(d){
+  const c=d.calculadora;
+  if(!c.preenchida) return `<div class="rev-callout" style="margin:0">Preencha os campos acima pra comparar o que está <b>contratado</b> com o que a metodologia aponta como <b>necessário</b>. O cálculo roda no navegador; nada é enviado.</div>`;
+  const capEsc=Math.max(...c.linhas.filter(l=>!l.ehDiaria).map(l=>Math.max(l.contratado,l.necessario)),1);
+  const diaEsc=Math.max(...c.linhas.filter(l=>l.ehDiaria).map(l=>Math.max(l.contratado,l.necessario)),1);
+  const fmt=(v,dia)=>dia?cartFmt(v)+'/dia':cartFmtK(v);
+  const barras=c.linhas.map(l=>{ const escala=l.ehDiaria?diaEsc:capEsc; const gap=l.gap;
+    return `<div class="rev-brow" style="--lw:${l.sub?'150':'140'}px">
+      <div class="k" style="${l.sub?'font-size:11.5px':'font-weight:700'}">${esc(l.rotulo)}</div>
+      <div><div class="rev-btrack"><div class="rev-bfill" style="width:${Math.min(100,100*l.contratado/escala).toFixed(1)}%;background:${gap>=0?'var(--verde)':'var(--azul-2)'}"></div>
+        ${l.necessario>0?`<div class="rev-bneed" style="left:${Math.min(99.5,100*l.necessario/escala).toFixed(1)}%"></div>`:''}</div>
+      <div class="rev-blabels"><span>tem ${fmt(l.contratado,l.ehDiaria)}</span>
+        <span>precisa ${fmt(l.necessario,l.ehDiaria)} · <b class="${gap>=0?'rev-gapok':'rev-gapbad'}">${gap>=0?'sobra '+fmt(gap,l.ehDiaria):'faltam '+fmt(-gap,l.ehDiaria)}</b></span></div></div></div>`; }).join('');
+  const gapMorte=c.linhas[0].gap;
+  return `<div class="rev-tiles" style="margin-bottom:16px">
+      <div class="rev-tile"><div class="lab">Necessidade total — morte</div><div class="val">${revK(c.necessidadeMorte)}</div>
+        <div class="cap">${revK(c.capitalVitalicio)} vitalício + ${revK(c.capitalTemporario)} temporário</div></div>
+      <div class="rev-tile"><div class="lab">Contratado hoje</div><div class="val">${revK(d.morte.total)}</div>
+        <div class="cap ${gapMorte>=0?'rev-gapok':'rev-gapbad'}">${gapMorte>=0?'✓ sobra '+revK(gapMorte):'✕ faltam '+revK(-gapMorte)}</div></div>
+      <div class="rev-tile"><div class="lab">Comprometimento de renda</div><div class="val">${c.comprometimentoRenda!=null?revPct(c.comprometimentoRenda):'—'}</div>
+        <div class="cap">recomendado até ${(d.parametros.limite_mensal_pct*100).toLocaleString('pt-BR')}%${c.limiteMensalRecomendado!=null?' = '+revBRL(c.limiteMensalRecomendado)+'/mês':''}</div></div>
+      <div class="rev-tile"><div class="lab">Margem disponível</div><div class="val" style="color:${(c.margemDisponivel||0)>0?'var(--verde)':'var(--verm)'}">${c.margemDisponivel!=null?revBRL(c.margemDisponivel):'—'}</div>
+        <div class="cap">por mês, dentro do limite recomendado</div></div></div>
+    <div class="rev-bars">${barras}</div>
+    <div class="rev-callout" style="margin-top:16px"><b>Como cada número é calculado</b> (com os números deste cliente):
+      Emergenciais = fixas × ${d.parametros.emergenciais_meses} (${revK(c.emergenciais)}) · Restabelecimento = fixas × ${d.parametros.restabelecimento_meses} (${revK(c.restabelecimento)}) · Inventário = ${(d.parametros.inventario_pct*100).toLocaleString('pt-BR')}% do patrimônio (${revK(c.custoInventario)}) → <b>capital vitalício ${revK(c.capitalVitalicio)}</b>.
+      Educação = mensalidade × ${c.inputs.anos_educacao} anos × 12 (${revK(c.educacaoTotal)}) · Dívidas = parcela × 12 × ${c.inputs.anos_dividas} anos (${revK(c.dividasTotal)}) → <b>capital temporário ${revK(c.capitalTemporario)}</b>.
+      Invalidez = ${d.parametros.invalidez_mult}× o capital vitalício (${revK(c.necessidadeInvalidez)}). Doenças Graves = ${d.parametros.dg_meses} meses de despesas, teto ${revK(d.parametros.dg_teto)} (${revK(c.necessidadeDoencasGraves)}).
+      Fraturas = ${d.parametros.fraturas_meses} meses de despesas, teto ${revK(d.parametros.fraturas_teto)}. Diária de internação = despesas ÷ 30, teto ${revBRL(d.parametros.diaria_teto)} (${revBRL(c.necessidadeDiariaInternacao)}/dia).
+      <span style="display:block;margin-top:6px">A linha vermelha em cada barra marca o necessário; a barra é o contratado. Diárias têm escala própria (senão a barra some perto dos capitais de milhão).</span></div>`;
+}
+
+/* ── seção 6: vitalício × temporário + reserva ── */
+function revReservaOut(d){
+  if(!d.reserva.length) return `<div class="rev-note">Nenhuma apólice vitalícia ativa — só coberturas vitalícias acumulam reserva.</div>`;
+  return d.reserva.map(r=>`<div style="border:1px solid var(--linha);border-radius:10px;padding:12px;margin-top:8px">
+    <div style="font-weight:700;font-size:13px;margin-bottom:8px">Apólice ${esc(r.apolice)}</div>
+    <div class="rev-fld rev-noprint" style="max-width:250px;margin-bottom:10px"><label>Valor de resgate informado pela Prudential</label>
+      <div class="inp"><span class="pre">R$</span><input type="number" step="50" value="${r.valorResgate!=null?r.valorResgate:''}" placeholder="preencher do extrato" onchange="revSetResgate('${esc(r.apolice)}',this.value)"></div></div>
+    <div class="rev-g3">
+      <div class="rev-tile"><div class="lab">Valor de resgate</div><div class="val" style="font-size:16px;color:${r.valorResgate!=null?'var(--roxo)':'var(--muted)'}">${r.valorResgate!=null?revBRL(r.valorResgate):'a preencher'}</div>
+        <div class="cap">${r.valorResgateData?'informado em '+revDbr(r.valorResgateData):'do extrato anual'}</div></div>
+      <div class="rev-tile"><div class="lab">Já pago na apólice</div><div class="val" style="font-size:16px">${r.totalPago!=null?revBRL(r.totalPago):'—'}</div>
+        <div class="cap">histórico de cobranças</div></div>
+      <div class="rev-tile"><div class="lab">% recuperável</div><div class="val" style="font-size:16px">${r.pctRecuperavel!=null?revPct(r.pctRecuperavel):'—'}</div>
+        <div class="cap">resgate ÷ total pago</div></div></div></div>`).join('');
+}
+function revRenderReserva(){ const el=$('#rev-reserva-out'); if(el&&REV_REF) el.innerHTML=revReservaOut(revMontar(REV_REF)); }
+function revSecVitReserva(d){
+  return `<div class="rev-sec">6 · Vitalício, temporário e a reserva que se forma</div><div class="rev-g2">
+    <div class="rev-card" style="margin:0"><h3>A diferença que quase ninguém explica</h3>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:10px">
+        <div class="rev-exp" style="border-color:var(--roxo)"><h4>◆ Vitalício — ${revBRL(d.morte.vitalicio)}</h4><p>${esc(REV_TX.VITALICIO)}</p></div>
+        <div class="rev-exp" style="border-color:#e0a476"><h4>▸ Temporário — ${revBRL(d.morte.temporario)}</h4><p>${esc(REV_TX.TEMPORARIO)}</p></div></div>
+      ${d.morte.total>0?`<div class="rev-callout vio" style="margin-bottom:0">Hoje <b>${revPct(d.morte.pctTemporario)} da proteção de morte é temporária</b>. Só <b>${revPct(d.morte.pctVitalicio)}</b> — ${revBRL(d.morte.vitalicio)} — atravessa a vida inteira. Não é erro de contratação: o temporário é o que permite capital alto com prêmio baixo. Mas é uma decisão a revisitar <b>antes</b> do vencimento, não depois.</div>`:''}</div>
+    <div class="rev-card" style="margin:0"><h3>Reserva técnica (valor de resgate)</h3>
+      <div class="rev-note">Só a parte vitalícia acumula reserva. A cada prêmio pago, uma parcela vira provisão matemática — o "valor de resgate" do extrato anual. <b>Não estimamos esse valor</b>: sem a tabela de fatores do produto, qualquer estimativa erraria pra mais. Preencha o valor do extrato.</div>
+      <div id="rev-reserva-out">${revReservaOut(d)}</div>
+      <div class="rev-note" style="margin-top:10px;font-size:11.5px">Nos primeiros anos a reserva é sempre baixa: custo de risco e despesas de aquisição consomem a maior parte do prêmio. A curva acelera com o tempo.</div></div></div>`;
+}
+
+/* ── seção 7: resumo ── */
+function revSecResumo(d){
+  const b=[];
+  if(d.morte.total>0){ const dg=d.consolidacao.filter(l=>l.sinistro==='DOENCAS_GRAVES'&&!l.sub)[0];
+    b.push(`<b>Proteção de hoje:</b> ${revBRL(d.morte.total)} em caso de morte${dg&&dg.capital>0?', '+revBRL(dg.capital)+' em doenças graves':''}, por ${revBRL(d.premioMensalTotal)}/mês.`); }
+  const m0=d.timeline.marcos[0];
+  if(m0) b.push(`<b>O relógio já está correndo.</b> Em <b>${revDbr(m0.data)}</b> (em ${m0.tempoAte.n} ${m0.tempoAte.unidade}) terminam ${m0.coberturas.length} cobertura(s) — ${revBRL(m0.premioLiberado)}/mês deixam de ser pagos e a proteção correspondente deixa de existir.`);
+  const mQ=d.timeline.marcos.filter(m=>m.quedaMorte)[0];
+  if(mQ) b.push(`Em <b>${revDbr(mQ.data)}</b>${mQ.idade!=null?', aos '+mQ.idade+' anos':''}, a proteção de morte cai para <b>${revBRL(mQ.morteRemanescente)}</b> (${revPct(mQ.pctMorteRemanescente)} da atual). Renovar depois custa mais do que estender agora: o prêmio acompanha a idade.`);
+  if(d.naoContratados.length) b.push(`<b>Nunca contratadas:</b> ${d.naoContratados.map(s=>RevisaoService.ROTULOS[s]).join(', ')}.`);
+  b.push(`<b>O que fazer agora:</b> preencher a calculadora com os números reais de hoje — renda, despesas, dívidas, patrimônio — e comparar com o contratado. A proteção foi dimensionada na contratação; a vida mudou desde então.`);
+  return `<div class="rev-sec">7 · Resumo da conversa</div>
+    <div class="rev-card"><ul style="padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--cinza)">${b.map(x=>`<li>${x}</li>`).join('')}</ul></div>`;
+}
+
+/* rodapé: avisos honestos (nunca silenciar) + fonte */
+function revRodape(d){
+  const avisos=[];
+  if(d.naoClassificados.length) avisos.push(`⚠️ ${d.naoClassificados.length} cobertura(s) com código ainda não classificado (${d.naoClassificados.map(n=>n.codigo).join(', ')}) — fora da consolidação por sinistro. <a href="#" onclick="irPara('rev-catalogo');return false">Classificar em ⚙️ Catálogo</a>.`);
+  if(d.descartadas.inativas||d.descartadas.vencidas) avisos.push(`${d.descartadas.inativas?d.descartadas.inativas+' cobertura(s) encerrada(s) (Surrendered/Lapsed)':''}${d.descartadas.inativas&&d.descartadas.vencidas?' e ':''}${d.descartadas.vencidas?d.descartadas.vencidas+' já vencida(s)':''} fora da consolidação.`);
+  return `${avisos.length?`<div class="rev-callout" style="font-size:12px">${avisos.join('<br>')}</div>`:''}
+    <div style="color:var(--muted);font-size:11px;margin-top:20px;border-top:1px solid var(--linha);padding-top:12px;line-height:1.6">
+      Revisão elaborada em ${revDbr(d.referencia)} a partir dos demonstrativos das apólices ${d.porApolice.map(a=>a.numero).join(' e ')||'—'} ·
+      Metodologia de necessidade conforme a ferramenta Revisão de Apólices da Prudential do Brasil ·
+      Life Planner ${esc(user().nome)} · Documento de uso do consultor com o cliente; não substitui as condições gerais do seguro.</div>`;
+}
+
+/* ═══ VIEW: catálogo de coberturas + parâmetros ═══ */
+function viewRevCatalogo(){
+  const pend=revPendentes();
+  const cat=revCatalogo().slice().sort((a,b)=>(a.sinistro?1:0)-(b.sinistro?1:0)||a.codigo.localeCompare(b.codigo));
+  const sinOpts=s=>['<option value="">— classificar —</option>'].concat(RevisaoService.SINISTROS.map(x=>`<option value="${x}"${s===x?' selected':''}>${RevisaoService.ROTULOS[x]}</option>`)).join('');
+  const natOpts=n=>['<option value="">—</option>','<option value="vitalicio"'+(n==='vitalicio'?' selected':'')+'>vitalício</option>','<option value="temporario"'+(n==='temporario'?' selected':'')+'>temporário</option>'].join('');
+  const params=Object.assign({},RevisaoService.PARAMS_DEFAULT,REV.parametros);
+  $('#main').innerHTML=`<h1 class="pg">⚙️ Catálogo de Coberturas</h1>
+    <div class="sub">Cada código de cobertura da Prudential mapeado pra um tipo de sinistro. Compartilhado entre os LPs. ${REV_REMOTE?'☁️ salvando no banco':'⚠️ deslogado — ajustes ficam só neste aparelho'}</div>
+    ${pend.length?`<div class="rev-callout red" style="margin-top:12px"><b>${pend.length} código(s) pendente(s) de classificação:</b> ${pend.map(p=>p.codigo+(p.emUso?' (em uso!)':'')).join(', ')} — enquanto pendentes, caem no bucket "Não classificado" da revisão (nunca somem da tela).</div>`:'<div class="rev-callout grn" style="margin-top:12px">Nenhum código pendente. 🎉</div>'}
+    <div class="rev-card"><h3>Códigos</h3>
+      <div style="overflow-x:auto"><table class="rev-tab"><thead><tr><th>Código</th><th>Sinistro</th><th>Natureza</th><th>Diária?</th></tr></thead><tbody>
+      ${cat.map(c=>`<tr${!c.sinistro?' style="background:var(--verm-bg)"':''}>
+        <td style="font-weight:700">${esc(c.codigo)}</td>
+        <td><select onchange="revCatSalvar('${esc(c.codigo)}','sinistro',this.value)">${sinOpts(c.sinistro)}</select></td>
+        <td><select onchange="revCatSalvar('${esc(c.codigo)}','natureza',this.value)">${natOpts(c.natureza)}</select></td>
+        <td style="text-align:center"><input type="checkbox" ${c.eh_diaria?'checked':''} onchange="revCatSalvar('${esc(c.codigo)}','eh_diaria',this.checked)"></td></tr>`).join('')}
+      </tbody></table></div>
+      <div class="rev-note" style="margin-top:8px">Código novo aparecendo num demonstrativo entra sozinho como pendente. Pra adicionar manualmente: <button class="btn btn-s btn-mini" onclick="revCatNovo()">➕ novo código</button></div></div>
+    <div class="rev-card"><h3>Parâmetros da metodologia</h3>
+      <div class="rev-note">Percentuais e tetos da calculadora — a Prudential muda esses critérios de tempos em tempos. Valem pra todos os clientes.</div>
+      <div style="overflow-x:auto"><table class="rev-tab"><thead><tr><th>Parâmetro</th><th class="num">Valor</th></tr></thead><tbody>
+      ${Object.keys(RevisaoService.PARAMS_DEFAULT).map(k=>`<tr><td>${esc(k)}</td>
+        <td class="num"><input type="number" step="any" value="${params[k]}" style="max-width:130px;text-align:right;padding:5px 8px;border:1px solid var(--linha);border-radius:7px" onchange="revParamSalvar('${k}',this.value)"></td></tr>`).join('')}
+      </tbody></table></div></div>`;
+}
+async function revCatSalvar(codigo,campo,valor){
+  if(!REV.catalogo.length) REV.catalogo=REV_CAT_FALLBACK.map(c=>Object.assign({},c));  // materializa o fallback pra poder editar
+  let c=REV.catalogo.find(x=>x.codigo===codigo);
+  if(!c){ c={codigo:codigo,sinistro:null,natureza:null,eh_diaria:false,descricao_cliente:null}; REV.catalogo.push(c); }
+  c[campo]=(valor===''?null:valor);
+  if(campo==='sinistro'&&valor&&!c.natureza) c.natureza=(valor==='MORTE_QUALQUER_CAUSA'&&/^W/.test(codigo))?'vitalicio':'temporario';
+  revSalvar();
+  if(REV_REMOTE&&!REV_DEMO){ try{ const r=await sb.from(REV_TCAT).upsert({codigo:c.codigo,sinistro:c.sinistro,natureza:c.natureza,eh_diaria:!!c.eh_diaria,descricao_cliente:c.descricao_cliente||null}); if(r.error) throw r.error; toast(codigo+' salvo ☁️',true); }
+    catch(e){ console.error(e); toast(codigo+' salvo só neste aparelho (sync falhou)',false); } }
+  else toast(codigo+' salvo neste aparelho',true);
+  render(); }
+function revCatNovo(){ const cod=prompt('Código da cobertura (ex.: TP15G):'); if(!cod) return; revCatSalvar(cod.trim().toUpperCase(),'sinistro',''); }
+async function revParamSalvar(chave,valor){
+  const n=parseFloat(valor); if(!isFinite(n)) return;
+  REV.parametros[chave]=n; revSalvar();
+  if(REV_REMOTE&&!REV_DEMO){ try{ const r=await sb.from(REV_TPAR).upsert({chave:chave,valor:n}); if(r.error) throw r.error; toast('Parâmetro salvo ☁️',true); }
+    catch(e){ console.error(e); toast('Parâmetro salvo só neste aparelho',false); } }
+  else toast('Parâmetro salvo neste aparelho',true); }
+
+/* ═══ Cadastro manual / edição de apólice + coberturas ═══ */
+function revCobRowHTML(c){ return `<tr>
+    <td><input class="rf-cod" value="${esc(c?c.codigo:'')}" placeholder="TP10G" style="width:76px;text-transform:uppercase"></td>
+    <td><input class="rf-nome" value="${esc(c?c.nome||'':'')}" placeholder="descrição" style="min-width:150px"></td>
+    <td><input class="rf-cap" type="number" step="0.01" value="${c?c.valor_segurado:''}" placeholder="0,00" style="width:110px"></td>
+    <td><input class="rf-pre" type="number" step="0.01" value="${c?c.premio_liquido:''}" placeholder="0,00" style="width:80px"></td>
+    <td><input class="rf-fim" type="date" value="${esc(c?c.termino||'':'')}" style="width:135px"></td>
+    <td><input class="rf-cls" value="${esc(c?c.classe_ajuste||'':'')}" placeholder="Standard" style="width:100px"></td>
+    <td><button class="btn btn-s btn-mini" onclick="this.closest('tr').remove()">✕</button></td></tr>`; }
+function revFormAddCob(){ const tb=document.querySelector('#rf-cobs tbody'); if(tb) tb.insertAdjacentHTML('beforeend',revCobRowHTML(null)); }
+function openRevForm(numero){
+  const a=numero?REV.apolices.find(x=>x.numero===numero):null;
+  const cobs=numero?REV.coberturas.filter(c=>c.apolice_numero===numero):[];
+  const cli=REV_REF?(CART.clientes.find(c=>c.ref===REV_REF)||{}):{};
+  const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.cssText='display:flex;align-items:flex-start;justify-content:center;z-index:60;overflow:auto;padding:20px';
+  const F=(lbl,id,val,tipo,ph)=>`<div class="rev-fld"><label>${lbl}</label><input id="${id}" type="${tipo||'text'}" value="${esc(val==null?'':val)}" placeholder="${ph||''}"></div>`;
+  const cobRow=revCobRowHTML;
+  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;padding:20px;max-width:860px;width:96%;margin:auto">
+    <h2 style="margin-bottom:2px">${numero?'✏️ Editar apólice '+esc(numero):'✍️ Nova apólice (demonstrativo)'}</h2>
+    <div class="rev-note">Campos como no demonstrativo de pagamentos da Prudential. Coberturas: uma linha por código.</div>
+    <div class="rev-calc-grid" style="margin-top:10px">
+      ${F('Nº da apólice','rf-num',a?a.numero:'',null,'001520815')}
+      ${F('Cliente (segurado)','rf-cli',a?(a.cliente_nome||''):(cli.nome||''),null,'NOME COMPLETO')}
+      ${F('Proposta','rf-prop',a?a.proposta:'')}
+      <div class="rev-fld"><label>Status</label><select id="rf-st">${['Ativa','Cancelada','Substituída','Rejeitada','Anulada','Sinistrada'].map(s=>`<option${a&&a.status===s?' selected':''}>${s}</option>`).join('')}</select></div>
+      ${F('Data de emissão','rf-emi',a?a.data_emissao:'','date')}
+      ${F('Idade na emissão','rf-ide',a?a.idade_emissao:'','number')}
+      ${F('Prêmio líquido (R$)','rf-pl',a?a.premio_liquido:'','number')}
+      ${F('IOF (R$)','rf-iof',a?a.iof:'','number')}
+      ${F('Prêmio total (R$)','rf-pt',a?a.premio_total:'','number')}
+      <div class="rev-fld"><label>Periodicidade</label><select id="rf-per"><option></option><option${a&&a.periodicidade==='Mensal'?' selected':''}>Mensal</option><option${a&&a.periodicidade==='Anual'?' selected':''}>Anual</option></select></div>
+      ${F('Forma de pagamento','rf-fp',a?a.forma_pagamento:'',null,'Cartão de crédito final 1881')}
+      ${F('Dia de pagamento','rf-dia',a?a.dia_pagamento:'','number')}
+      ${F('Tipo de contestação','rf-tc',a?a.tipo_contestacao:'',null,'Médica')}
+      ${F('Total já pago (R$)','rf-tp',a?a.total_pago:'','number')}
+      ${F('Pago até','rf-pa',a?a.pago_ate:'','date')}</div>
+    <h3 style="margin:14px 0 6px;font-size:14px">Coberturas</h3>
+    <div style="overflow-x:auto"><table class="rev-tab" id="rf-cobs"><thead><tr><th>Código</th><th>Nome</th><th>Capital/diária</th><th>Prêmio</th><th>Término</th><th>Classe</th><th></th></tr></thead>
+      <tbody>${cobs.map(cobRow).join('')||cobRow(null,0)}</tbody></table></div>
+    <button class="btn btn-s btn-mini" style="margin-top:6px" onclick="revFormAddCob()">➕ cobertura</button>
+    <div id="rf-msg" style="font-size:12px;color:var(--verm);min-height:16px;margin-top:6px"></div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <button class="btn btn-p" id="rf-go">Salvar</button>
+      ${numero?`<button class="btn btn-s" onclick="this.closest('.overlay').remove();revExcluirApolice('${esc(numero)}')">🗑️ Excluir</button>`:''}
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="this.closest('.overlay').remove()">Cancelar</button></div></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  ov.querySelector('#rf-go').onclick=async()=>{
+    const g=id=>ov.querySelector('#'+id).value.trim();
+    const num_=v=>{ const n=parseFloat(v); return isFinite(n)?n:null; };
+    const numAp=g('rf-num'), nomeCli=g('rf-cli');
+    if(!numAp||!nomeCli){ ov.querySelector('#rf-msg').textContent='Número da apólice e cliente são obrigatórios.'; return; }
+    const ap={ numero:numAp, cliente_ref:normKey(nomeCli), cliente_nome:nomeCli, proposta:g('rf-prop')||null,
+      status:ov.querySelector('#rf-st').value, data_emissao:g('rf-emi')||null, idade_emissao:num_(g('rf-ide')),
+      premio_liquido:num_(g('rf-pl')), iof:num_(g('rf-iof')), premio_total:num_(g('rf-pt')),
+      periodicidade:ov.querySelector('#rf-per').value||null, forma_pagamento:g('rf-fp')||null,
+      dia_pagamento:num_(g('rf-dia')), tipo_contestacao:g('rf-tc')||null, total_pago:num_(g('rf-tp')), pago_ate:g('rf-pa')||null,
+      valor_resgate:a?a.valor_resgate:null, valor_resgate_data:a?a.valor_resgate_data:null };
+    const cobs2=[...ov.querySelectorAll('#rf-cobs tbody tr')].map(tr=>({
+      apolice_numero:numAp, codigo:tr.querySelector('.rf-cod').value.trim().toUpperCase(),
+      nome:tr.querySelector('.rf-nome').value.trim()||null,
+      valor_segurado:num_(tr.querySelector('.rf-cap').value)||0, premio_liquido:num_(tr.querySelector('.rf-pre').value)||0,
+      termino:tr.querySelector('.rf-fim').value||null, classe_ajuste:tr.querySelector('.rf-cls').value.trim()||null
+    })).filter(c=>c.codigo);
+    if(numero&&numero!==numAp){ REV.apolices=REV.apolices.filter(x=>x.numero!==numero); REV.coberturas=REV.coberturas.filter(x=>x.apolice_numero!==numero);
+      if(REV_REMOTE&&!REV_DEMO){ try{ await sb.from(REV_TAPO).delete().eq('numero',numero); }catch(e){ console.error(e); } } }
+    const st=await revUpsertApolice(ap,cobs2); ov.remove();
+    REV_REF=ap.cliente_ref;
+    toast(`Apólice ${numAp} salva — ${cobs2.length} cobertura(s)${st.sync==='remoto'?' · ☁️':st.sync==='falhou'?' · ⚠️ só neste aparelho':''}`,st.sync!=='falhou');
+    irPara('cart-revisao'); };
+}
+
+/* ═══ Import do demonstrativo (PDF → IA importar-apolice) ═══ */
+function openRevImport(){
+  const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.cssText='display:flex;align-items:center;justify-content:center;z-index:60';
+  ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;padding:22px;max-width:460px;width:92%">
+    <h2 style="margin-bottom:4px">🤖 Importar demonstrativo</h2>
+    <div class="rev-note">PDF "Demonstrativo de pagamentos" da Prudential (um por apólice; pode selecionar vários). A IA extrai apólice + coberturas; você confere antes de salvar.</div>
+    <input type="file" id="rev-f" accept=".pdf" multiple style="width:100%;margin:10px 0">
+    <div id="rev-imsg" style="font-size:12px;min-height:18px;color:var(--muted)"></div>
+    <div style="display:flex;gap:10px;margin-top:10px"><button class="btn btn-p" id="rev-igo">Ler arquivos</button>
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="this.closest('.overlay').remove()">Fechar</button></div></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov);
+  ov.querySelector('#rev-igo').onclick=async()=>{
+    const msg=ov.querySelector('#rev-imsg'); const files=[...(ov.querySelector('#rev-f').files||[])];
+    if(!files.length){ msg.textContent='Escolha ao menos um PDF.'; return; }
+    if(!sb){ msg.textContent='Sem conexão com o servidor aqui (preview) — use ✍️ Cadastrar manualmente.'; return; }
+    const go=ov.querySelector('#rev-igo'); go.disabled=true;
+    const ok=[],fail=[];
+    for(let i=0;i<files.length;i++){ const f=files[i];
+      msg.textContent=`Lendo ${i+1}/${files.length}: ${f.name}…`;
+      try{
+        const buf=await f.arrayBuffer();
+        let texto=null,pdf_base64=null;
+        try{ const t=await lpPdfText(buf.slice(0)); if(t&&t.replace(/\s/g,'').length>=80) texto=t; }catch(e){}
+        if(!texto) pdf_base64=lpB64(buf);
+        const {data,error}=await sb.functions.invoke('importar-apolice',{body:{texto,pdf_base64}});
+        if(error){ let real=''; try{ const b=error.context?await error.context.clone().json():null; real=(b&&b.erro)||''; }catch(e){}
+          throw new Error(real||error.message||String(error)); }
+        if(!data||!data.ok||!data.dados||!data.dados.apolice) throw new Error((data&&data.erro)||'Resposta inválida da IA');
+        ok.push(data.dados);
+      }catch(e){ console.error(e); fail.push(f.name+': '+((e&&e.message)||e)); } }
+    if(!ok.length){ msg.innerHTML='Nenhum arquivo lido.<br>'+fail.map(esc).join('<br>'); go.disabled=false; return; }
+    // preview de conferência antes de gravar
+    ov.querySelector('div').innerHTML=`<h2 style="margin-bottom:4px">Conferir antes de salvar</h2>
+      ${ok.map(d=>{ const ap=d.apolice, cbs=d.coberturas||[];
+        return `<div style="border:1px solid var(--linha);border-radius:10px;padding:10px;margin:8px 0;font-size:12.5px">
+        <b>${esc(d.cliente&&d.cliente.nome||'?')}</b> · apólice ${esc(ap.numero||'?')} · ${esc(ap.status||'—')} · prêmio ${cartFmt(ap.premio_total||0)}<br>
+        ${cbs.map(c=>`<span class="rev-chip">${esc(c.codigo||'?')} ${cartFmt(c.valor_segurado||0)}${c.termino?' até '+revDbr(c.termino):''}</span>`).join(' ')}</div>`; }).join('')}
+      ${fail.length?`<div class="rev-callout red" style="font-size:12px">Falharam: ${fail.map(esc).join(' · ')}</div>`:''}
+      <div style="display:flex;gap:10px;margin-top:10px"><button class="btn btn-p" id="rev-save">Salvar ${ok.length} apólice(s)</button>
+        <button class="btn btn-ghost" style="margin-left:auto" onclick="this.closest('.overlay').remove()">Descartar</button></div>`;
+    ov.querySelector('#rev-save').onclick=async()=>{
+      let sync='remoto';
+      for(const d of ok){ const nome=(d.cliente&&d.cliente.nome)||'';
+        const ap=Object.assign({},d.apolice,{cliente_ref:normKey(nome),cliente_nome:nome});
+        const st=await revUpsertApolice(ap,(d.coberturas||[]).map(c=>Object.assign({},c,{apolice_numero:ap.numero})));
+        if(st.sync!=='remoto') sync=st.sync; }
+      ov.remove();
+      REV_REF=normKey((ok[0].cliente&&ok[0].cliente.nome)||'')||REV_REF;
+      toast(`${ok.length} apólice(s) importada(s)${sync==='remoto'?' · ☁️':sync==='falhou'?' · ⚠️ só neste aparelho':''}`,sync!=='falhou');
+      irPara('cart-revisao'); }; };
+}
+
+/* ═══ Demo (?revdemo=1): Catarina em memória — NADA é salvo ═══ */
+function revSeedDemo(){
+  REV_DEMO=true;
+  const ref=normKey('CATARINA PAIVA DE ALMEIDA RENDA');
+  REV._cli={ref:ref,nome:'CATARINA PAIVA DE ALMEIDA RENDA',nascimento:'1988-04-15',profissao:'Administradora',
+    cidade:'Piedade · Jaboatão dos Guararapes/PE',beneficiario:'Esposo — 100%',clienteDesde:'2023-06-12'};
+  REV.apolices=[
+    {numero:'001520815',cliente_ref:ref,cliente_nome:REV._cli.nome,proposta:'000092712E',status:'Ativa',data_emissao:'2023-06-12',idade_emissao:35,premio_liquido:225.62,iof:0.85,premio_total:226.47,periodicidade:'Mensal',forma_pagamento:'Cartão de crédito final 1881',cartao_expiracao:'2033-12-01',dia_pagamento:5,pago_ate:'2026-08-12',tipo_contestacao:'Médica',total_pago:7927.25,num_pagamentos:38,valor_resgate:null},
+    {numero:'001524343',cliente_ref:ref,cliente_nome:REV._cli.nome,proposta:'T00084226E',status:'Ativa',data_emissao:'2023-06-12',idade_emissao:35,premio_liquido:258.41,iof:0.99,premio_total:259.40,periodicidade:'Mensal',forma_pagamento:'Cartão de crédito final 1881',cartao_expiracao:'2033-12-01',dia_pagamento:5,pago_ate:'2026-08-12',tipo_contestacao:'Médica',total_pago:9079.49,num_pagamentos:38,valor_resgate:null}];
+  REV.coberturas=[
+    {apolice_numero:'001520815',codigo:'TP10G',nome:'Temporário Preferencial por 10 anos G',valor_segurado:1141485.31,premio_liquido:114.43,termino:'2033-06-12',classe_ajuste:'Super Preferencial'},
+    {apolice_numero:'001520815',codigo:'DDMRG',nome:'Doenças Graves MDL Opc 5-G',valor_segurado:125563.38,premio_liquido:77.06,termino:'2028-06-12',classe_ajuste:'Standard'},
+    {apolice_numero:'001520815',codigo:'PD05G',nome:'Invalidez Parcial Acidente por 5 anos G',valor_segurado:513668.39,premio_liquido:23.12,termino:'2028-06-12',classe_ajuste:null},
+    {apolice_numero:'001520815',codigo:'PA10G',nome:'Perda da Autonomia Pessoal 10-G',valor_segurado:125563.38,premio_liquido:11.01,termino:'2033-06-12',classe_ajuste:'Standard'},
+    {apolice_numero:'001524343',codigo:'WL65G',nome:'Vida Inteira até 65 anos G',valor_segurado:74196.55,premio_liquido:154.58,termino:'2088-06-12',classe_ajuste:'Standard'},
+    {apolice_numero:'001524343',codigo:'DDMRG',nome:'Doenças Graves MDL Opc 5-G',valor_segurado:102733.68,premio_liquido:63.05,termino:'2028-06-12',classe_ajuste:'Standard'},
+    {apolice_numero:'001524343',codigo:'HC05G',nome:'Renda Hospitalar por 5 anos G',valor_segurado:228.30,premio_liquido:14.90,termino:'2028-06-12',classe_ajuste:null},
+    {apolice_numero:'001524343',codigo:'PD05G',nome:'Invalidez Parcial Acidente por 5 anos G',valor_segurado:102733.68,premio_liquido:4.62,termino:'2028-06-12',classe_ajuste:null},
+    {apolice_numero:'001524343',codigo:'PA05G',nome:'Perda da Autonomia Pessoal 5-G',valor_segurado:102733.68,premio_liquido:5.25,termino:'2028-06-12',classe_ajuste:'Standard'},
+    {apolice_numero:'001524343',codigo:'AF05G',nome:'Assistência Funeral por 5 anos G',valor_segurado:13697.82,premio_liquido:16.01,termino:'2028-06-12',classe_ajuste:'Standard'}];
+  REV.catalogo=[]; REV.parametros={};
+  REV_REF=ref; VIEW='cart-revisao';
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='cart-revisao'));
+}
+try{ if(new URLSearchParams(location.search).get('revdemo')==='1') revSeedDemo(); }catch(e){}
+
 /* ═══════════════════ RENDER ═══════════════════ */
 function lpCounts(){ Object.keys(LP_ENT).forEach(e=>{ const el=$('#cnt-'+e); if(el){ const n=lpAtivos(e).length; el.textContent=n||''; } }); }
 /* ═══════════════════ MÓDULO CARTEIRA DE CLIENTES ═══════════════════
@@ -2273,7 +2917,8 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     <div style="display:flex;justify-content:space-between;align-items:start"><h2 style="margin:0">${esc(c.nome)}</h2><button onclick="fecharDrawer()" style="border:none;background:none;font-size:22px;cursor:pointer;line-height:1">×</button></div>
     <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}${dNiver!=null&&dNiver<=30?` · <span class="dias-tag ${diasTagCls(dNiver)}">🎂 ${dNiver===0?'hoje!':'em '+dNiver+'d'}</span>`:''}</div>
     <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}
+      <button class="btn btn-s btn-mini" onclick="fecharDrawer();revAbrir('${esc(c.ref)}')">🧭 Revisão de apólices</button></div>
     ${radHTML}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
     <div style="font-size:13px">${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
@@ -2306,7 +2951,7 @@ function openCarteiraImport(){
     }catch(e){ console.error(e); msg.textContent='Falha ao ler os arquivos. Confira se são os .xls da Prudential.'; } }; }
 
 function render(){
-  renderTopo(); lpCounts(); renderNnEtapas(); renderBcEtapas();
+  renderTopo(); lpCounts(); renderNnEtapas(); renderBcEtapas(); revCounts();
   { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
     const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
   { const cs=$('#cnt-sitplan'); if(cs){ const hoje=hojeISO(); cs.textContent=meusContatos().filter(c=>c.sitplan===hoje&&!ultimoResultado(c,hoje)).length||''; } }
@@ -2316,6 +2961,8 @@ function render(){
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
   else if(VIEW==='cart-oportunidades') viewCartOportunidades();
+  else if(VIEW==='cart-revisao') viewCartRevisao();
+  else if(VIEW==='rev-catalogo') viewRevCatalogo();
   else if(VIEW==='nn-funil') viewNnFunil();
   else if(VIEW==='bc-funil') viewBcFunil();
   else if(VIEW==='contatos') viewContatos();
@@ -2331,7 +2978,7 @@ function render(){
 }
 carregar();
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
-render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar()]).then(render);   // render base já; LP, Carteira e Contatos (remoto/local) populam e re-renderizam
+render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),revCarregar()]).then(render);   // render base já; LP, Carteira, Contatos e Revisão (remoto/local) populam e re-renderizam
 </script>
 </body>
 </html>
