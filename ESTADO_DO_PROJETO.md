@@ -4,6 +4,60 @@
 
 ---
 
+## 📸 Snapshot — 28/07/2026 · Sessão "MÓDULO REVISÃO DE APÓLICES" (visão LP, autonomo-3) — ✅ construído e verificado, **PR aberto AGUARDANDO validação + OK do Gustavo**
+
+### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO LP)
+```
+Retoma o CRM Visão LP (vendas.html). Lê o ESTADO_DO_PROJETO.md (snapshot 28/07).
+REGRA: uma sessão por visão — NÃO tocar na Captação (index.html); git fetch antes de editar.
+Estado 28/07: módulo REVISÃO DE APÓLICES construído na branch feat/lp-revisao-apolices
+(worktree ~/Documents/crm-lp-build), PR aberto, golden test Catarina 100 asserts verdes.
+PENDENTE (nesta ordem): (1) rodar supabase/migrations/revisao_apolices.sql no SQL editor;
+(2) deploy da Edge Function: supabase functions deploy importar-apolice;
+(3) eu validei o preview ?revdemo=1: [tudo certo / deu isso: ...];
+(4) com meu OK explícito → merge do PR.
+Depois do merge: teste real com demonstrativo PDF meu (import IA) + classificar os 12
+códigos pendentes em ⚙️ Catálogo.
+```
+
+**O que existe agora (tudo na branch `feat/lp-revisao-apolices`, 3 commits):**
+- **Migration `supabase/migrations/revisao_apolices.sql`** (NÃO RODADA): `rev_apolices` (+ `valor_resgate`
+  manual), `rev_apolice_coberturas`, `rev_cobertura_catalogo` (compartilhado), `rev_parametros`
+  (16 parâmetros editáveis). Seed com **54 códigos reais** da carteira do Daniel (42 classificados
+  por prefixo + 12 pendentes: AP*/FR*/TF*/TR*/WD*/WS*/DI*). RLS por dono nas 2 primeiras.
+- **`revisao-service.js`** (arquivo novo na raiz, carregado pelo vendas.html): TODA a regra de negócio
+  pura (consolidação por sinistro c/ sublinhas vitalício/temporário, antecipações "incluso",
+  diária/UTI, linha do tempo c/ capital remanescente e destaque <50%, calculadora metodologia
+  oficial, reserva manual + `fatorResgateProvider` plugável pro futuro cálculo automático).
+- **Testes `scripts/test-revisao-core.js`** (portável jsc/Node) + `scripts/test-revisao.mjs` no CI
+  (step novo no guard-choke-point.yml). **Golden test real da Catarina: 100 asserts verdes**
+  (rodado local via jsc — Mac sem Node: `jsc revisao-service.js scripts/test-revisao-core.js`).
+- **vendas.html v0.5.0**: views `cart-revisao` (7 seções + rodapé honesto c/ não-classificados +
+  CSS de impressão, 1º do app) e `rev-catalogo` (classificação + parâmetros); entrada pelo drawer
+  da Carteira; import demonstrativo PDF → **Edge Function `importar-apolice`** (nova, padrão
+  importar-relatorio-lp, mesma GEMINI_API_KEY, NÃO DEPLOYADA) com preview de conferência;
+  form manual completo (criar/editar/excluir apólice+coberturas); `?revdemo=1` = Catarina em
+  memória (nada persiste). Dados híbridos: Supabase logado / localStorage fallback.
+
+**Verificação feita (28/07, preview lp-static via scratchpad — ~/Documents bloqueado pro
+sandbox do preview, mesma lição do /tmp/lp-preview):** console limpo; TODOS os números do golden
+conferidos NA TELA (hero 1.215.681,86 · 6,1%/93,9% · 485,87 · timeline 2028: 7 cob/204,01/40 anos ·
+2033: 125,44/45 anos/6,1% destacado · calculadora 1,05mi/sobra 162,7mil/2,2%/614,13 · reserva
+13,2%); código ZZ99X injetado → aviso no rodapé + linha "Não classificado" (nunca quebra);
+catálogo lista os 12 pendentes; picker/form/mobile OK. Guard ok (0 `from('leads')`).
+
+**Decisões tomadas em autonomia (registradas):** coberturas Surrendered/Lapsed e términos < hoje
+saem da consolidação mas são CONTADAS no rodapé; INVALIDEZ_TOTAL = antecipação (capital de morte)
++ soma de PI* se contratado; prêmio "deixa de pagar" na timeline = prêmio líquido (bate golden);
+inputs da calculadora ficam só na sessão (não persistem — decidir depois se grava);
+catálogo/parâmetros compartilhados entre LPs (aprovado antes de dormir).
+
+**⚠️ Pro Claude futuro:** rev_* no Supabase AINDA NÃO EXISTE (app cai no fallback local sem erro);
+Edge Function importar-apolice AINDA NÃO DEPLOYADA (import IA vai falhar até lá; form manual
+funciona). Merge do PR SÓ com OK explícito do Gustavo (regra de sempre).
+
+---
+
 ## 📸 Snapshot — 23/07/2026 (noite) · SYNC CONTATOS LP → SUPABASE no ar + extensão v0.3.0 (frente "c" CONCLUÍDA no código)
 
 **Pedido do Gustavo: "o que falta do app pro Supabase? bota logo".** PR #28 MERGED (main `f4c7f8b`):
