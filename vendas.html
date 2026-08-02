@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.4.3 · Visão LP</title>
+<title>CRM Life Planner · v0.4.4 · Visão LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -505,7 +505,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.4.3 · Visão LP</span>
+      <span class="tag">ISLAND · v0.4.4 · Visão LP</span>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
 
@@ -517,7 +517,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.4.3 — Visão LP · Island.</span>
+      <span>CRM Life Planner v0.4.4 — Visão LP · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -599,7 +599,26 @@ function seed(){
 }
 
 let S; // estado
-function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); }
+/* ══ NORMALIZAÇÃO DE CONTATO ═══════════════════════════════════════
+   Nem todo contato nasce por `openNovoContato`: os que vêm da extensão
+   de WhatsApp (e do Supabase) chegam com um subconjunto dos campos.
+   Faltando `infoclient`, o drawer quebrava em `ic[b[0]]` e o contato
+   não abria — com a base real 100% vinda da extensão, NENHUM contato
+   abria. Preenche o que falta em memória; não força `salvar()` pra não
+   disparar um push de toda a base à toa (o 1º save real leva junto).
+   ══════════════════════════════════════════════════════════════════ */
+function normContato(c){
+  if(!c||typeof c!=='object') return c;
+  if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
+  ['recs','eventos','planos','interacoes'].forEach(k=>{ if(!Array.isArray(c[k])) c[k]=[]; });
+  ['sexo','profissao','origem','taStatus'].forEach(k=>{ if(c[k]==null||c[k]==='') c[k]='—'; });
+  if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
+  if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
+  if(c.notas==null) c.notas='';
+  return c;
+}
+function normBase(){ (S&&S.contatos||[]).forEach(normContato); }
+function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); normBase(); }
 /* salvar() = choke point de persistência dos contatos. Além do localStorage:
    carimba `_upd` no contato que MUDOU (base do merge entre aparelhos) e agenda
    o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
@@ -642,6 +661,7 @@ async function lpcCarregar(){
         if(!r || String(c._upd||'')>String(r._upd||'')) porId.set(k,c); // local mais novo (ou só local) vence
       });
       S.contatos=[...porId.values()];
+      normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
       salvar();
     }
     _lpcPrev=_lpcSnap();
@@ -1107,6 +1127,7 @@ function ct(){ return S.contatos.find(c=>c.id===CONTATO); }
 
 function renderDrawer(){
   const c=ct(); if(!c) return;
+  normContato(c);                 // cinto e suspensório: contato vindo por outro caminho não derruba o drawer
   const ic=c.infoclient;
   const blocos=[['pessoais','1. Dados pessoais'],['familiar','2. Estrutura familiar'],['financeiro','3. Dados financeiros'],['saude','4. Saúde e estilo de vida']];
   const pct=Math.round(blocos.filter(b=>ic[b[0]]).length/4*100);
