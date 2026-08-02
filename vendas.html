@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.4.2 · Visão LP</title>
+<title>CRM Life Planner · v0.4.3 · Visão LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -241,6 +241,16 @@
   .nncard .nc-foot{display:flex;align-items:center;justify-content:space-between;margin-top:7px;font-size:11.5px}
   .nncol-vazia{font-size:11.5px;color:var(--muted);text-align:center;padding:14px 6px}
 
+  /* ── valor do negócio (PM/mês → PA anual) ── */
+  .vneg{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:600;color:#15803d;background:var(--verde-bg);border-radius:6px;padding:3px 8px;white-space:nowrap}
+  .vneg b{font-weight:800}
+  .vneg-total{margin-top:0;font-size:12px;padding:5px 11px;border-radius:20px}
+  .nncol-pa{font-size:10.5px;font-weight:700;color:#15803d;background:var(--verde-bg);border-radius:6px;padding:3px 7px;margin:-4px 6px 8px;text-align:center}
+  .col-pa{text-align:right;white-space:nowrap}
+  tfoot .col-pa{color:#15803d}
+  tfoot td{border-top:1px solid var(--linha);border-bottom:none;padding-top:10px}
+  .pa-box{margin-top:8px;font-size:13px;background:var(--fundo);border:1px solid var(--linha);border-radius:9px;padding:9px 12px}
+
   .fx{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
   .fx-excedido{background:#fbe3e0;color:#a02418}
   .fx-critico{background:var(--verm-bg);color:var(--verm)}
@@ -474,6 +484,7 @@
     <!-- 5 · OUTROS MÓDULOS -->
     <button class="nav-grp modulo nav-grp-btn fechado" id="outros-toggle" onclick="toggleGrp('outros')"><span class="ic">🧩</span><span class="lbl">Outros módulos</span><span class="caret" id="outros-caret">▾</span></button>
     <div class="nav-grp-wrap fechado" id="outros-group">
+      <button class="nav-btn sub" data-view="revisao" onclick="irPara('revisao')"><span class="ic">🛡️</span><span class="lbl">Revisão de Proteção</span></button>
       <button class="nav-grp nav-sub-et nav-grp-btn fechado" id="bo-toggle" onclick="toggleGrp('bo')"><span class="lbl">BackOffice</span><span class="caret" id="bo-caret">▾</span></button>
       <div class="nav-grp-wrap fechado" id="bo-group">
         <button class="nav-btn sub sub2" data-view="lp-atrasos" onclick="irPara('lp-atrasos')"><span class="ic">⏰</span><span class="lbl">Lista de Atraso</span><span class="cnt" id="cnt-atrasos"></span></button>
@@ -494,7 +505,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.4.2 · Visão LP</span>
+      <span class="tag">ISLAND · v0.4.3 · Visão LP</span>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
 
@@ -506,7 +517,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.4.2 — Visão LP · Island.</span>
+      <span>CRM Life Planner v0.4.3 — Visão LP · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -663,6 +674,29 @@ function etapasDe(c){ return c&&c.funil==='bc'? ETAPAS_BC : ETAPAS; }
 function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(' ')[0] : id; }
 function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
+function brlCurto(v){ v=Number(v||0); return 'R$ '+v.toLocaleString('pt-BR',{maximumFractionDigits:0}); }
+
+/* ══ VALOR DO NEGÓCIO ═══════════════════════════════════════════════
+   Guarda SÓ o prêmio mensal em `c.pm` (número, R$/mês). O PA (prêmio
+   anual) é sempre DERIVADO — pm × 12 — e nunca gravado, pra não existir
+   duas verdades que possam divergir.  Ex.: plano de R$ 600/mês = PA 7.200.
+   `pm` entra no jsonb `dados` de lp_contatos, então não precisa de coluna
+   nova no banco.
+   ══════════════════════════════════════════════════════════════════ */
+const PA_MESES=12;
+function pmDe(c){ const n=Number(c&&c.pm); return isFinite(n)&&n>0? n : 0; }
+function paDe(c){ return pmDe(c)*PA_MESES; }
+function somaPM(lista){ return (lista||[]).reduce((t,c)=>t+pmDe(c),0); }
+function somaPA(lista){ return somaPM(lista)*PA_MESES; }
+/* aceita "600", "600,50", "1.200,00" e "R$ 1.200" */
+function parsePM(txt){
+  const s=String(txt==null?'':txt).replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.');
+  const n=parseFloat(s); return isFinite(n)&&n>0? Math.round(n*100)/100 : 0;
+}
+function valorTag(c){
+  const pm=pmDe(c); if(!pm) return '';
+  return `<span class="vneg" title="Prêmio mensal × ${PA_MESES} = prêmio anual (PA)">${brlCurto(pm)}/mês · <b>PA ${brlCurto(paDe(c))}</b></span>`;
+}
 function estrelasHtml(n){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="${i<=n?'':'off'}">★</span>`; return `<span class="estrelas">${h}</span>`; }
 /* ── ANCE: estrelas derivadas dos critérios (fallback: estrelas manuais antigas) ── */
 function anceScore(c){ if(!c||!c.ance) return null; return ANCE_DEFS.filter(d=>c.ance[d[0]]).length; }
@@ -847,12 +881,13 @@ function nnCard(c){
     <div class="nc-nome">${esc(c.nome)}</div>
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
+    ${valorTag(c)}
     <div class="nc-foot">${estrelasHtml(estrelasDe(c))}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
 }
 function nnLista(lista){
   return `<div class="card" style="padding:6px 10px"><table><thead><tr>
-    <th>Nome</th><th>Etapa</th><th>Perfil</th><th>TA</th><th>Classificação</th>${isMaster()?'<th>LP</th>':''}
+    <th>Nome</th><th>Etapa</th><th>Perfil</th><th>TA</th><th>Classificação</th><th class="col-pa">Valor (PA)</th>${isMaster()?'<th>LP</th>':''}
     </tr></thead><tbody>
     ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
       <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
@@ -860,15 +895,17 @@ function nnLista(lista){
       <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)}a<br>${esc(c.profissao)}</td>
       <td style="font-size:12px">${esc(c.taStatus)}</td>
       <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)}</td>
+      <td class="col-pa">${pmDe(c)? `<b>${brlCurto(paDe(c))}</b><br><span style="font-size:11px;color:var(--muted)">${brlCurto(pmDe(c))}/mês</span>` : '<span style="color:#cbd5e1">—</span>'}</td>
       ${isMaster()?`<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
-    </tr>`).join('')||`<tr><td colspan="${isMaster()?6:5}" class="vazio">Sem contatos no funil.</td></tr>`}
-    </tbody></table></div>`;
+    </tr>`).join('')||`<tr><td colspan="${isMaster()?7:6}" class="vazio">Sem contatos no funil.</td></tr>`}
+    </tbody>${somaPA(lista)?`<tfoot><tr><td colspan="5" style="text-align:right;color:var(--muted);font-size:12px">Total no funil</td><td class="col-pa"><b>${brlCurto(somaPA(lista))}</b></td>${isMaster()?'<td></td>':''}</tr></tfoot>`:''}</table></div>`;
 }
 function viewNnFunil(){
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>
     <span style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
@@ -877,6 +914,7 @@ function viewNnFunil(){
     const cs=lista.filter(c=>c.etapa===e);
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
+      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
   };
@@ -931,22 +969,24 @@ let BC_MODE='kanban', BC_FOCUS='', BC_ENC=false; // BC_ENC = grupo Encerramentos
 function bcGoEtapa(e){ BC_FOCUS=e; VIEW='bc-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='bc-funil')); render(); }
 function bcLista(lista){
   return `<div class="card" style="padding:6px 10px"><table><thead><tr>
-    <th>Nome</th><th>Etapa</th><th>Perfil</th><th>Origem</th>${isMaster()?'<th>LP</th>':''}
+    <th>Nome</th><th>Etapa</th><th>Perfil</th><th>Origem</th><th class="col-pa">Valor (PA)</th>${isMaster()?'<th>LP</th>':''}
     </tr></thead><tbody>
     ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
       <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
       <td>${badgeEtapa(c.etapa)}</td>
       <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)}a<br>${esc(c.profissao)}</td>
       <td style="font-size:12px">${esc(c.origem)}</td>
+      <td class="col-pa">${pmDe(c)? `<b>${brlCurto(paDe(c))}</b><br><span style="font-size:11px;color:var(--muted)">${brlCurto(pmDe(c))}/mês</span>` : '<span style="color:#cbd5e1">—</span>'}</td>
       ${isMaster()?`<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
-    </tr>`).join('')||`<tr><td colspan="${isMaster()?5:4}" class="vazio">Sem clientes no funil.</td></tr>`}
-    </tbody></table></div>`;
+    </tr>`).join('')||`<tr><td colspan="${isMaster()?6:5}" class="vazio">Sem clientes no funil.</td></tr>`}
+    </tbody>${somaPA(lista)?`<tfoot><tr><td colspan="4" style="text-align:right;color:var(--muted);font-size:12px">Total no funil</td><td class="col-pa"><b>${brlCurto(somaPA(lista))}</b></td>${isMaster()?'<td></td>':''}</tr></tfoot>`:''}</table></div>`;
 }
 function viewBcFunil(){
   const lista=meusContatosBC();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>
     <span style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
   </div>`;
@@ -955,6 +995,7 @@ function viewBcFunil(){
     const cs=lista.filter(c=>c.etapa===e);
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
+      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
   };
@@ -1094,6 +1135,18 @@ function renderDrawer(){
       </div>
 
       <div class="sec">
+        <h3>Valor do negócio</h3>
+        <div class="linha-form" style="align-items:center">
+          <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Prêmio mensal R$</span>
+          <input id="drwPM" type="text" inputmode="decimal" placeholder="600" value="${pmDe(c)? String(pmDe(c)).replace('.',','):''}"
+                 style="flex:0 0 120px;min-width:100px" oninput="drwPMPreview()" onkeydown="if(event.key==='Enter')drwSalvarPM()">
+          <button class="btn btn-p btn-mini" onclick="drwSalvarPM()">Salvar</button>
+          ${pmDe(c)? `<button class="btn btn-ghost btn-mini" onclick="drwLimparPM()">Limpar</button>`:''}
+        </div>
+        <div id="drwPApreview" class="pa-box">${pmDe(c)? `PA <b>${brl(paDe(c))}</b> <span style="color:var(--muted)">(${brl(pmDe(c))} × ${PA_MESES})</span>` : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`}</div>
+      </div>
+
+      <div class="sec">
         <h3>Registrar contato</h3>
         <div class="linha-form" style="align-items:center">
           <select id="drwRes">
@@ -1181,6 +1234,24 @@ function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.eta
 function setTA(v){ const c=ct(); if(!c) return; c.taStatus=v; salvar(); toast('Status do TA atualizado',true); }
 function tent(d){ const c=ct(); if(!c) return; c.taTentativas=Math.max(0,(c.taTentativas||0)+d); salvar(); renderDrawer(); }
 function drwRegistrar(){ const sel=$('#drwRes'); const k=sel&&sel.value; if(!k){ toast('Escolha o resultado do contato'); return; } const id=CONTATO; registrarResultado(id,k); if(CONTATO) renderDrawer(); }
+/* ── valor do negócio (drawer) — o PA reage enquanto digita, sem re-render
+      (re-renderizar aqui roubaria o foco do campo) ── */
+function drwPMPreview(){
+  const el=$('#drwPM'), box=$('#drwPApreview'); if(!el||!box) return;
+  const pm=parsePM(el.value);
+  box.innerHTML = pm
+    ? `PA <b>${brl(pm*PA_MESES)}</b> <span style="color:var(--muted)">(${brl(pm)} × ${PA_MESES})</span>`
+    : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`;
+}
+function drwSalvarPM(){
+  const c=ct(), el=$('#drwPM'); if(!c||!el) return;
+  const pm=parsePM(el.value);
+  if(String(el.value).trim() && !pm){ toast('Valor inválido — use só números (ex.: 600 ou 1.200,50)'); return; }
+  c.pm = pm || null;                       // salvar() carimba o _upd do sync sozinho
+  salvar(); render();
+  toast(pm? `${brlCurto(pm)}/mês · PA ${brlCurto(pm*PA_MESES)}` : 'Valor do negócio removido', true);
+}
+function drwLimparPM(){ const c=ct(); if(!c) return; c.pm=null; salvar(); render(); toast('Valor do negócio removido',true); }
 function toggleAnce(k){ const c=ct(); if(!c) return; if(!c.ance) c.ance={a:false,n:false,c:false,e:false,avisado:false}; c.ance[k]=!c.ance[k]; salvar(); renderDrawer(); }
 function setSitplan(iso){ const c=ct(); if(!c) return; c.sitplan=iso||null; salvar(); renderDrawer(); toast(iso? `Na lista de ${dataBR(iso)}` : 'Removido da lista de discagem',true); }
 function toggleIC(b){ const c=ct(); if(!c) return; c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
@@ -1444,6 +1515,32 @@ function viewSubst(){
 }
 
 /* ═══════════════════ VIEW: PRINCÍPIOS ═══════════════════ */
+/* ══ REVISÃO DE PROTEÇÃO ═══════════════════════════════════════════
+   A peça de apresentação pro cliente (artefato `revisao-protecao.html`,
+   self-contained) embutida aqui dentro pra ficar a um clique no menu.
+   Fica em arquivo SEPARADO de propósito: são 260KB que não têm por que
+   entrar no single-file do app, e assim dá pra atualizar a peça sem
+   tocar no CRM. ════════════════════════════════════════════════════ */
+function viewRevisaoProtecao(){
+  $('#main').innerHTML=`
+    <h1 class="pg">Revisão de Proteção</h1>
+    <div class="sub">Peça de apresentação pro cliente. Abra em tela cheia pra apresentar ou imprimir em PDF.</div>
+    <div class="toolbar">
+      <button class="btn btn-p btn-mini" onclick="window.open('revisao-protecao.html','_blank','noopener')">⛶ Abrir em tela cheia</button>
+      <button class="btn btn-s btn-mini" onclick="revImprimir()">🖨️ Imprimir / PDF</button>
+      <span style="flex:1"></span>
+      <span style="font-size:11.5px;color:var(--muted)">Material de apoio — não puxa dado do CRM.</span>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <iframe id="revFrame" src="revisao-protecao.html" title="Revisão de Proteção"
+              style="width:100%;height:calc(100vh - 260px);min-height:460px;border:0;display:block"></iframe>
+    </div>`;
+}
+function revImprimir(){
+  const f=$('#revFrame');
+  try{ f.contentWindow.focus(); f.contentWindow.print(); }
+  catch(e){ window.open('revisao-protecao.html','_blank','noopener'); toast('Abri em outra aba — use Cmd+P por lá'); }
+}
 function viewPrincipios(){
   const prs=[
     ['⚡','Troca de perfil instantânea','No LP Business, trocar de usuário tranca a tela ("Estamos trocando seu usuário…"). Aqui: um clique, zero espera.'],
@@ -2420,7 +2517,8 @@ const TITULO_VIEW={inicio:'Início',sitplan:'SitPlan & TA',metas:'Metas',contato
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Funil Novos Negócios','bc-funil':'Funil Base de Clientes','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
-  'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações'};
+  'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações',
+  revisao:'Revisão de Proteção'};
 function renderTituloTopo(){
   const el=$('#tbTitulo'); if(!el) return;
   const ativo=document.querySelector('.sidebar .nav-btn.ativo .lbl');
@@ -2456,6 +2554,7 @@ function render(){
   else if(VIEW==='lp-statust') viewLpStatusT();
   else if(VIEW==='lp-aniversario') viewLpAniversario();
   else if(VIEW==='lp-datas') viewLpDatas();
+  else if(VIEW==='revisao') viewRevisaoProtecao();
   else viewPrincipios();
   ocultarTituloDuplicado();
   if(CONTATO) renderDrawer();
