@@ -1,5 +1,6 @@
 // ===== CONFIG — mesmos valores do index.html (chave publishable, já pública no app) =====
 // Carregado no service worker (importScripts) e nos content scripts (ordem do manifest).
-const SB_URL = "https://kbiinfpjfmuidyzsfegp.supabase.co";
-const SB_KEY = "sb_publishable_dJIyTLNxc88kS3p3cCOZYg_laSzn727";
-const EXT_VERSION = "v0.5.0 · WhatsApp → CRM";
+// 03/08/2026: banco próprio do Gustavo (crm-playground) — o kbiinf… é do Guto desde 29/07.
+const SB_URL = "https://cjieobmdpqcupzdpckef.supabase.co";
+const SB_KEY = "sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR";
+const EXT_VERSION = "v0.6.0 · WhatsApp → CRM (banco próprio)";
