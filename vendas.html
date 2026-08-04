@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.0 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.1 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -540,7 +540,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.9.0 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.9.1 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -553,7 +553,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.9.0 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.9.1 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -651,6 +651,7 @@ function normContato(c){
   if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
   if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
   if(c.notas==null) c.notas='';
+  if(c.pm!=null&&c.premio_mes==null){ const n=Number(c.pm); if(isFinite(n)&&n>0) c.premio_mes=n; } // espelho canônico (regra_premio)
   return c;
 }
 function normBase(){ (S&&S.contatos||[]).forEach(normContato); }
@@ -765,6 +766,39 @@ function anceScore(c){ if(!c||!c.ance) return null; return ANCE_DEFS.filter(d=>c
 function estrelasDe(c){ const s=anceScore(c); return s==null? (c.estrelas||0) : s; }
 function isQuente(c){ return estrelasDe(c)>=4; }
 function quenteChip(c){ return isQuente(c)? ' <span class="badge b-quente">🔥 Quente</span>' : ''; }
+/* ── B5: temperatura MANUAL do negócio (dicionario_temperatura em app_settings;
+   regra_temperatura do banco: manual, nada esfria sozinho). Conceito separado
+   do 🔥 do ANCE acima (que é score de qualificação, não temperatura). ── */
+function tempDic(){ return DIC.temp||{quente:{cor:'#DC2626',label:'Quente',ordem:1},morno:{cor:'#F59E0B',label:'Morno',ordem:2},frio:{cor:'#3B82F6',label:'Frio',ordem:3}}; } // espelho do default do banco; o valor do banco vence quando carrega
+function tempKeys(){ return Object.entries(tempDic()).sort((a,b)=>(a[1].ordem||9)-(b[1].ordem||9)).map(([k])=>k); }
+function tempEmoji(k){ return k==='quente'?'🔥':k==='morno'?'🌤️':k==='frio'?'❄️':''; }
+function tempChipHtml(c,clicavel){
+  const t=c&&c.temperatura, d=tempDic()[t];
+  const st=d?`background:${d.cor}1a;color:${d.cor};border:1px solid ${d.cor}66`:'background:transparent;color:var(--muted);border:1px dashed var(--linha)';
+  const cl=clicavel?` onclick="event.stopPropagation();ciclaTemp('${esc(c.id)}')" title="Temperatura (manual): clique alterna quente → morno → frio → limpar"`:'';
+  return `<span class="badge"${cl} style="cursor:${clicavel?'pointer':'default'};${st}">${d?tempEmoji(t)+' '+esc(d.label):'○ temp.'}</span>`;
+}
+function ciclaTemp(id){
+  const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
+  const ordem=[null,...tempKeys()], i=ordem.indexOf(c.temperatura||null);
+  c.temperatura=ordem[(i+1)%ordem.length];
+  salvar(); render();
+  if(typeof ct==='function'&&ct()&&String(ct().id)===String(id)) renderDrawer();
+}
+function setTemperatura(k){ const c=ct(); if(!c) return; c.temperatura=(c.temperatura===k?null:k); salvar(); renderDrawer(); render(); }
+/* prêmio total anual: 12× por padrão (regra_premio do banco); ajustável à mão na ficha.
+   O PA dos funis/somas segue SEMPRE pm×12 (pmDe/paDe/somaPA) — fonte única, não muda. */
+function totalDe(c){ const t=Number(c&&c.premio_total); return (c&&c.premio_total_manual&&isFinite(t)&&t>0)? t : paDe(c); }
+function abrirContatoPM(id){ abrirContato(id); setTimeout(()=>{ const el=$('#drwPM'); if(el){ el.focus(); try{ el.select(); }catch(_){} } },80); }
+function drwAjustarTotal(){
+  const c=ct(); if(!c||!pmDe(c)) return;
+  const v=prompt('Prêmio total (anual). Deixe vazio pra voltar ao cálculo automático (12×):', String(totalDe(c)).replace('.',','));
+  if(v===null) return;
+  if(!String(v).trim()){ c.premio_total_manual=false; c.premio_total=Math.round(paDe(c)*100)/100; }
+  else { const n=parsePM(v); if(!n){ toast('Valor inválido — use só números (ex.: 7.200 ou 7200,50)'); return; }
+    c.premio_total=n; c.premio_total_manual=true; }
+  salvar(); renderDrawer(); toast('Prêmio total atualizado',true);
+}
 /* ── datas / telefone / interações ── */
 function hojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function isoAddDias(iso,n){ const p=iso.split('-').map(Number); const dt=new Date(p[0],p[1]-1,p[2]+n); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
@@ -946,8 +980,8 @@ function nnCard(c){
     <div class="nc-nome">${esc(c.nome)}</div>
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
-    ${valorTag(c)}
-    <div class="nc-foot">${estrelasHtml(estrelasDe(c))}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
+    ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
+    <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
 }
 function nnLista(lista){
@@ -959,7 +993,7 @@ function nnLista(lista){
       <td>${badgeEtapa(c.etapa)}</td>
       <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)}a<br>${esc(c.profissao)}</td>
       <td style="font-size:12px">${esc(c.taStatus)}</td>
-      <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)}</td>
+      <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)} ${tempChipHtml(c,true)}</td>
       <td class="col-pa">${pmDe(c)? `<b>${brlCurto(paDe(c))}</b><br><span style="font-size:11px;color:var(--muted)">${brlCurto(pmDe(c))}/mês</span>` : '<span style="color:#cbd5e1">—</span>'}</td>
       ${isMaster()?`<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
     </tr>`).join('')||`<tr><td colspan="${isMaster()?7:6}" class="vazio">Sem contatos no funil.</td></tr>`}
@@ -1037,7 +1071,7 @@ function bcLista(lista){
     <th>Nome</th><th>Etapa</th><th>Perfil</th><th>Origem</th><th class="col-pa">Valor (PA)</th>${isMaster()?'<th>LP</th>':''}
     </tr></thead><tbody>
     ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
-      <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
+      <td><b>${esc(c.nome)}</b>${c.temperatura?' '+tempChipHtml(c,true):''}<br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
       <td>${badgeEtapa(c.etapa)}</td>
       <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)}a<br>${esc(c.profissao)}</td>
       <td style="font-size:12px">${esc(c.origem)}</td>
@@ -1153,7 +1187,7 @@ function viewContatos(){
       </tr></thead><tbody>
       ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
         <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
-        <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)}</td>
+        <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)} ${tempChipHtml(c,true)}</td>
         <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)} anos<br>${esc(c.profissao)}</td>
         <td>${badgeEtapa(c.etapa)}</td>
         <td style="font-size:12px">${esc(c.taStatus)}<br><span style="color:var(--muted)">${esc(c.taTentativas)} tent.</span></td>
@@ -1209,7 +1243,13 @@ function renderDrawer(){
           <button class="btn btn-p btn-mini" onclick="drwSalvarPM()">Salvar</button>
           ${pmDe(c)? `<button class="btn btn-ghost btn-mini" onclick="drwLimparPM()">Limpar</button>`:''}
         </div>
-        <div id="drwPApreview" class="pa-box">${pmDe(c)? `PA <b>${brl(paDe(c))}</b> <span style="color:var(--muted)">(${brl(pmDe(c))} × ${PA_MESES})</span>` : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`}</div>
+        <div id="drwPApreview" class="pa-box">${pmDe(c)? `PA <b>${brl(totalDe(c))}</b> <span style="color:var(--muted)">${c.premio_total_manual?'(total ajustado à mão · 12× seria '+brl(paDe(c))+')':'('+brl(pmDe(c))+' × '+PA_MESES+')'}</span> <button class="btn btn-ghost btn-mini" onclick="drwAjustarTotal()">ajustar total</button>` : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`}</div>
+        <div class="linha-form" style="align-items:center;margin-top:10px;gap:6px;flex-wrap:wrap">
+          <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Temperatura</span>
+          ${tempKeys().map(k=>{ const d=tempDic()[k], on=c.temperatura===k;
+            return `<button class="btn btn-mini" onclick="setTemperatura('${k}')" title="${on?'Clique de novo pra limpar':'Marcar '+esc(d.label)}" style="${on?`background:${d.cor};color:#fff;border:1px solid ${d.cor}`:`background:${d.cor}14;color:${d.cor};border:1px solid ${d.cor}55`}">${tempEmoji(k)} ${esc(d.label)}</button>`; }).join('')}
+          <span style="font-size:11px;color:var(--muted)">manual — nada esfria sozinho</span>
+        </div>
       </div>
 
       <div class="sec">
@@ -1314,10 +1354,13 @@ function drwSalvarPM(){
   const pm=parsePM(el.value);
   if(String(el.value).trim() && !pm){ toast('Valor inválido — use só números (ex.: 600 ou 1.200,50)'); return; }
   c.pm = pm || null;                       // salvar() carimba o _upd do sync sozinho
+  c.premio_mes = c.pm;                     // campos canônicos (regra_premio): espelham o pm
+  if(c.pm) c.premio_total = c.premio_total_manual? c.premio_total : Math.round(c.pm*PA_MESES*100)/100;
+  else { c.premio_total=null; c.premio_total_manual=false; }
   salvar(); render();
   toast(pm? `${brlCurto(pm)}/mês · PA ${brlCurto(pm*PA_MESES)}` : 'Valor do negócio removido', true);
 }
-function drwLimparPM(){ const c=ct(); if(!c) return; c.pm=null; salvar(); render(); toast('Valor do negócio removido',true); }
+function drwLimparPM(){ const c=ct(); if(!c) return; c.pm=null; c.premio_mes=null; c.premio_total=null; c.premio_total_manual=false; salvar(); render(); toast('Valor do negócio removido',true); }
 function toggleAnce(k){ const c=ct(); if(!c) return; if(!c.ance) c.ance={a:false,n:false,c:false,e:false,avisado:false}; c.ance[k]=!c.ance[k]; salvar(); renderDrawer(); }
 function setSitplan(iso){ const c=ct(); if(!c) return; c.sitplan=iso||null; salvar(); renderDrawer(); toast(iso? `Na lista de ${dataBR(iso)}` : 'Removido da lista de discagem',true); }
 function toggleIC(b){ const c=ct(); if(!c) return; c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
