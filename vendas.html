@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.5.1 · Base de Nomes</title>
+<title>CRM Life Planner · v0.5.2 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -517,7 +517,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.5.1 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.5.2 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -530,7 +530,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.5.1 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.5.2 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2753,7 +2753,7 @@ function viewBnEstoque(){
       ${l.slice(0,FBN.mostrar).map(c=>`
         <tr class="clicavel">
           <td onclick="event.stopPropagation()"><input type="checkbox" ${FBN.sel.has(c.id)?'checked':''} onchange="this.checked?FBN.sel.add('${esc(c.id)}'):FBN.sel.delete('${esc(c.id)}');viewBnEstoque()"></td>
-          <td onclick="bnEditar('${esc(c.id)}')"><b>${esc(c.nome)}</b>${c.contexto? `<br><span style="font-size:11.5px;color:var(--muted)">${esc(c.contexto)}</span>`:''}</td>
+          <td onclick="bnEditar('${esc(c.id)}')"><b>${esc(c.nome)}</b>${(c.contexto||c.cidade||c.idade)? `<br><span style="font-size:11.5px;color:var(--muted)">${esc([c.contexto,c.cidade,c.idade&&(c.idade+' anos')].filter(Boolean).join(' · '))}</span>`:''}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${c.telefone? esc(c.telefone):'<span style="color:var(--muted)">—</span>'}</td>
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.trilha||'')}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${bnBadgeEst(c.estagio)}</td>
@@ -2777,10 +2777,18 @@ function bnEditorHtml(c){
       <label>Trilha<select id="bne-tri">${BN_TRILHAS.map(t=>`<option ${c.trilha===t?'selected':''} value="${t}">${t}</option>`).join('')}</select></label>
       <label>Estágio<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select></label>
       <label>Prioridade<select id="bne-pri"><option value="">—</option><option ${String(c.prioridade)==='1'?'selected':''} value="1">P1</option><option ${String(c.prioridade)==='2'?'selected':''} value="2">P2</option><option ${String(c.prioridade)==='3'?'selected':''} value="3">P3</option></select></label>
+      <label>Idade<input id="bne-idade" type="number" min="0" max="120" value="${esc(c.idade||'')}"></label>
+      <label>Estado civil<select id="bne-ec"><option value="">—</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)'].map(e=>`<option ${c.estado_civil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select></label>
+      <label>Filhos<select id="bne-fi"><option value="">—</option><option ${c.filhos==='sim'?'selected':''} value="sim">Sim</option><option ${c.filhos==='nao'?'selected':''} value="nao">Não</option></select></label>
+      <label>Renda estimada (R$/mês)<input id="bne-renda" type="number" min="0" step="500" value="${esc(c.renda_estimada||'')}"></label>
+      <label>Cidade/UF<input id="bne-cid" value="${esc(c.cidade||'')}" placeholder="Recife/PE"></label>
+      <label>E-mail<input id="bne-mail" value="${esc(c.email||'')}"></label>
+      <label>Empresa · Cargo<input id="bne-emp" value="${esc([c.empresa,c.cargo].filter(Boolean).join(' · '))}" placeholder="Empresa · Cargo"></label>
       <label>Notas<input id="bne-not" value="${esc(c.notas||'')}"></label>
     </div>
     <div style="margin-top:10px;display:flex;gap:8px">
       <button class="btn btn-p btn-mini" onclick="bnSalvarEdicao('${esc(c.id)}')">💾 Salvar</button>
+      <button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')">${c.funil_contato_id?'👤 Abrir no funil':'🚀 Criar contato no funil'}</button>
       <button class="btn btn-s btn-mini" onclick="FBN.edit=null;viewBnEstoque()">Cancelar</button>
     </div></div>`;
 }
@@ -2791,7 +2799,24 @@ function bnSalvarEdicao(id){
   c.telefone=$('#bne-tel').value.trim()||null; c.recomendante=$('#bne-rec').value.trim()||null;
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
+  c.idade=$('#bne-idade').value?Number($('#bne-idade').value):null;
+  c.estado_civil=$('#bne-ec').value||null; c.filhos=$('#bne-fi').value||null;
+  c.renda_estimada=$('#bne-renda').value?Number($('#bne-renda').value):null;
+  c.cidade=$('#bne-cid').value.trim()||null; c.email=$('#bne-mail').value.trim()||null;
+  { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); c.empresa=ec[0]||null; c.cargo=ec[1]||null; }
   FBN.edit=null; bnSalvar(); render(); toast('Salvo',true);
+}
+/* A base ACIONÁVEL no resto do app: um clique cria o contato no funil de
+   Novos Negócios (tela Contatos), carregando nome/telefone/qualificação. */
+function bnPromover(id){
+  const b=bnPor(id); if(!b) return;
+  if(b.funil_contato_id && S.contatos.some(x=>x.id===b.funil_contato_id)){ abrirContato(b.funil_contato_id); return; }
+  const c={id:'bn'+Date.now(), lp:S.activeUser, funil:'nn', nome:b.nome, telefone:b.telefone||'',
+    etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'',
+    idade:b.idade||'', profissao:b.cargo||'', notas:[b.notas,b.contexto&&('ctx: '+b.contexto)].filter(Boolean).join(' | '),
+    criadoEm:new Date().toISOString(), sitplan:null};
+  S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id;
+  salvar(); bnSalvar(); render(); toast(b.nome.split(' ')[0]+' agora é contato do funil ✓',true);
 }
 function bnLote(acao){
   const ids=[...FBN.sel]; if(!ids.length) return;
@@ -3010,7 +3035,7 @@ function render(){
   if(VIEW==='inicio'&&typeof bnVivos==='function'&&bnVivos().length){
     const v=bnVivos(), tel=v.filter(c=>c.telefone).length, hoje=hojeISO();
     const ta=v.filter(c=>c.ta_dia===hoje).length, dp=BN.dups.filter(d=>!d.decisao).length;
-    $('#main').insertAdjacentHTML('beforeend', `
+    const _pc=$('#main .card'); (_pc?_pc:{insertAdjacentHTML:(p,h)=>$('#main').insertAdjacentHTML('beforeend',h)}).insertAdjacentHTML('beforebegin', `
     <div class="card" style="margin-top:14px">
       <h3 style="font-size:13px;margin-bottom:10px">📦 Base de Nomes</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
