@@ -21,6 +21,22 @@ const HANDLERS={
   'lpc.save':   (m)=>lpcSave(m.id,m.dados),
 };
 
+// Extensão recarregada/atualizada → reinjeta o painel nas abas do WhatsApp já
+// abertas. Sem isso o content script antigo fica órfão ("Extension context
+// invalidated") até o usuário dar F5 na página. O panel.js novo remove a UI
+// órfã no boot, então reinjetar é idempotente.
+chrome.runtime.onInstalled.addListener(async()=>{
+  try{
+    const tabs=await chrome.tabs.query({url:'https://web.whatsapp.com/*'});
+    for(const t of tabs){
+      try{
+        await chrome.scripting.executeScript({target:{tabId:t.id},
+          files:['config.js','normalize.js','content/wa-dom.js','content/panel.js']});
+      }catch(_){/* aba descarregada/suspensa — o F5 manual resolve essa */}
+    }
+  }catch(_){}
+});
+
 chrome.runtime.onMessage.addListener((msg,_sender,sendResponse)=>{
   const h=HANDLERS[msg&&msg.type];
   if(!h){ sendResponse({ok:false,error:'mensagem desconhecida: '+(msg&&msg.type)}); return; }
