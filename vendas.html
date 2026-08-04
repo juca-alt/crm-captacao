@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.7.0 · Base de Nomes</title>
+<title>CRM Life Planner · v0.8.0 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -371,6 +371,16 @@
     h1.pg{font-size:18px}
   }
 
+  /* Estoque de Nomes no celular: a tabela de 13 colunas rolava lateral e
+     virava lupa — vira lista de cartões (regra device-layout: mobile e
+     desktop são visões distintas; desktop segue com a tabela). */
+  .bn-cards{display:none}
+  @media(max-width:980px){
+    .bn-tabela{display:none}
+    .bn-cards{display:flex;flex-direction:column;gap:8px}
+    .bn-card{padding:0;overflow:hidden}
+  }
+
   /* ================================================================
      🎨 AJUSTES DE VISUAL — mesmo painel e MESMA chave da Captação
      (crm-tweaks-v1): o que ele escolhe num app vale nos dois.
@@ -450,6 +460,7 @@
     <button class="nav-grp modulo nav-grp-btn fechado" id="sp-toggle" onclick="toggleGrp('sp')"><span class="ic">📞</span><span class="lbl">SitPlan &amp; TA</span><span class="cnt" id="cnt-sp"></span><span class="caret" id="sp-caret">▾</span></button>
     <div class="nav-grp-wrap fechado" id="sp-group">
       <button class="nav-btn sub" data-view="bn-estoque" onclick="irPara('bn-estoque')"><span class="ic">📦</span><span class="lbl">Estoque de Nomes</span><span class="cnt" id="cnt-bn"></span></button>
+      <button class="nav-btn sub" data-view="bn-sitplan" onclick="irPara('bn-sitplan')"><span class="ic">⏱️</span><span class="lbl">SitPlan (sessão)</span><span class="cnt" id="cnt-bn-sp"></span></button>
       <button class="nav-btn sub" data-view="bn-ta" onclick="irPara('bn-ta')"><span class="ic">📞</span><span class="lbl">Lista de TA</span><span class="cnt" id="cnt-bn-ta"></span></button>
       <button class="nav-btn sub" data-view="bn-recs" onclick="irPara('bn-recs')"><span class="ic">🙌</span><span class="lbl">Recomendações</span><span class="cnt" id="cnt-bn-recs"></span></button>
       <button class="nav-btn sub" data-view="bn-dups" onclick="irPara('bn-dups')"><span class="ic">🔀</span><span class="lbl">Duplicatas</span><span class="cnt" id="cnt-bn-dups"></span></button>
@@ -518,7 +529,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.7.0 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.8.0 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -531,7 +542,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.7.0 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.8.0 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -673,6 +684,7 @@ async function lpcCarregar(){
     const remotosBn=todos.filter(c=>c.funil==='bn');
     const remotos=todos.filter(c=>c.funil!=='bn');
     if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn);
+    _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
     if(remotos.length){
       const porId=new Map(remotos.map(c=>[String(c.id),c]));
       (S.contatos||[]).forEach(c=>{
@@ -2606,12 +2618,13 @@ function bnSalvar(){
   BN.contatos.forEach(c=>{ if(!c||!c.id) return; const k=c.id,j=JSON.stringify(c);
     if(_bnLast[k]===j) return; if(_bnLast[k]===undefined&&c._upd) return; c._upd=now; });
   _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); });
+  _bnRecCountCache=null; // nomes podem ter mudado → recontar os "rec" embutidos
   localStorage.setItem(BN_CHAVE,JSON.stringify(BN));
   bnAgendarPush();
 }
 
 /* ── sync com lp_contatos (funil:'bn'), merge por maior _upd ── */
-let _bnPrev={},_bnTimer=null;
+let _bnPrev={},_bnTimer=null,_bnRemoteLoaded=false;
 function _bnSnap(){ const m={}; BN.contatos.forEach(c=>{ if(c&&c.id) m[c.id]=JSON.stringify(c); }); return m; }
 function bnMergeRemoto(remotos){
   const porId=new Map(remotos.map(c=>[String(c.id),c]));
@@ -2623,6 +2636,11 @@ function bnMergeRemoto(remotos){
 function bnAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_bnTimer); _bnTimer=setTimeout(bnPush,2000); }
 async function bnPush(){
   if(!LPC_REMOTE||!sb) return;
+  /* editar um nome ANTES do load remoto terminar fazia o diff comparar com _bnPrev
+     vazio → re-subia os 5.2k inteiros (upsert idempotente, mas 13 lotes à toa).
+     Espera o merge; o 1º sync de uma base só-local segue passando (load termina
+     sem bn remoto e libera). */
+  if(!_bnRemoteLoaded){ bnAgendarPush(); return; }
   try{
     const atual=_bnSnap(), rows=[];
     Object.keys(atual).forEach(k=>{ if(atual[k]!==_bnPrev[k]) rows.push({id:k,dados:{...JSON.parse(atual[k]),funil:'bn'}}); });
@@ -2637,7 +2655,7 @@ async function bnPush(){
    lp_perfis: papel admin|lp + modulos jsonb {chave:bool}. Chave ausente segue
    o default abaixo. A blindagem de DADOS é o RLS; aqui é visibilidade de UI. */
 const MODS={
-  bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-ta','bn-dups'], grp:'sp'},
+  bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-sitplan','bn-ta','bn-dups','bn-recs'], grp:'sp'},
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','lp-statust']},
@@ -2735,6 +2753,9 @@ function bnFiltroExcluir(nome){ if(!confirm('Excluir o filtro “'+nome+'”?'))
   BN.filtros=(BN.filtros||[]).filter(f=>f.nome!==nome); bnSalvar(); viewBnEstoque(); }
 function bnSort(col){ if(FBN.sort===col){ if(FBN.dir>0) FBN.dir=-1; else {FBN.sort='';FBN.dir=1;} } else {FBN.sort=col;FBN.dir=1;} viewBnEstoque(); }
 function bnTh(col,label){ const on=FBN.sort===col; return `<th onclick="bnSort('${col}')" style="cursor:pointer;white-space:nowrap" title="Ordenar">${label}${on?(FBN.dir>0?' ↑':' ↓'):''}</th>`; }
+/* A carga de 04/08 gravou `filhos` como BOOLEAN no banco (1.414 contatos); o
+   app antigo usava 'sim'/'nao'. Normaliza a leitura pros dois mundos. */
+function bnFilhosStr(v){ return (v===true||v==='sim')?'sim':(v===false||v==='nao')?'nao':''; }
 function bnFiltrados(){
   let l=bnVivos();
   if(FBN.busca){ const q=FBN.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
@@ -2746,7 +2767,7 @@ function bnFiltrados(){
   if(FBN.prof){ const q=FBN.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
   if(FBN.cid){ const q=FBN.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
   if(FBN.ecivil) l=l.filter(c=>c.estado_civil===FBN.ecivil);
-  if(FBN.filhos) l=l.filter(c=>c.filhos===FBN.filhos);
+  if(FBN.filhos) l=l.filter(c=>bnFilhosStr(c.filhos)===FBN.filhos);
   if(FBN.idmin) l=l.filter(c=>Number(c.idade)>=Number(FBN.idmin));
   if(FBN.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FBN.idmax));
   if(FBN.rmin) l=l.filter(c=>Number(c.renda_estimada)>=Number(FBN.rmin));
@@ -2773,12 +2794,13 @@ function viewBnEstoque(){
       <select onchange="FBN.tel=this.value;viewBnEstoque()"><option value="">Telefone: tanto faz</option><option ${FBN.tel==='com'?'selected':''} value="com">Com telefone</option><option ${FBN.tel==='sem'?'selected':''} value="sem">Só nome</option></select>
       ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnEstoque()"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">${esc(u.nome.split(' ')[0])}</option>`).join('')}</select>`:''}
       <button class="btn btn-p btn-mini" onclick="bnNovo()">➕ Novo nome</button>
+      ${bnRecCount()? `<button class="btn btn-s btn-mini" onclick="bnRecScan()" title="Extrair recomendante embutido no nome (com preview — nada aplica sozinho)">🪄 Rec no nome (${bnRecCount()})</button>`:''}
       <label class="btn btn-s btn-mini" style="cursor:pointer">⬆️ Importar<input type="file" multiple accept=".json,.csv" style="display:none" onchange="bnImportarArquivos(this)"></label>
     </div>
     <div class="toolbar" style="flex-wrap:wrap">
       <input type="search" style="max-width:170px" placeholder="Profissão/empresa…" value="${esc(FBN.prof)}" oninput="FBN.prof=this.value;FBN.mostrar=150;viewBnEstoque()">
       <input type="search" style="max-width:140px" placeholder="Cidade…" value="${esc(FBN.cid)}" oninput="FBN.cid=this.value;FBN.mostrar=150;viewBnEstoque()">
-      <select onchange="FBN.ecivil=this.value;viewBnEstoque()"><option value="">Estado civil</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)'].map(e=>`<option ${FBN.ecivil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select>
+      <select onchange="FBN.ecivil=this.value;viewBnEstoque()"><option value="">Estado civil</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>`<option ${FBN.ecivil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select>
       <select onchange="FBN.filhos=this.value;viewBnEstoque()"><option value="">Filhos?</option><option ${FBN.filhos==='sim'?'selected':''} value="sim">Com filhos</option><option ${FBN.filhos==='nao'?'selected':''} value="nao">Sem filhos</option></select>
       <input type="number" style="max-width:92px" placeholder="Idade ≥" value="${esc(FBN.idmin)}" oninput="FBN.idmin=this.value;viewBnEstoque()">
       <input type="number" style="max-width:92px" placeholder="Idade ≤" value="${esc(FBN.idmax)}" oninput="FBN.idmax=this.value;viewBnEstoque()">
@@ -2797,7 +2819,7 @@ function viewBnEstoque(){
       <button class="btn btn-p btn-mini" onclick="bnLoteLista()">📋 Adicionar à lista…</button>
       <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnEstoque()">Limpar</button>
     </div>`:''}
-    <div class="card" style="padding:6px 10px;overflow-x:auto">
+    <div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
       <table><thead><tr><th></th>${bnTh('nome','Nome')}${bnTh('telefone','Telefone')}${bnTh('cargo','Profissão')}${bnTh('idade','Idade')}${bnTh('cidade','Cidade')}${bnTh('renda_estimada','Renda')}${bnTh('estado_civil','Civil')}${bnTh('filhos','Filhos')}${bnTh('trilha','Trilha')}${bnTh('estagio','Estágio')}${bnTh('prioridade','P')}${bnTh('recomendante','Recomendante')}${bnTh('n_origens','Orig.')}</tr></thead><tbody>
       ${l.slice(0,FBN.mostrar).map(c=>`
         <tr class="clicavel">
@@ -2809,7 +2831,7 @@ function viewBnEstoque(){
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.cidade||'')}</td>
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${c.renda_estimada? brlCurto(c.renda_estimada):''}</td>
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc((c.estado_civil||'').split('(')[0])}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${c.filhos==='sim'?'👶':c.filhos==='nao'?'—':''}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${bnFilhosStr(c.filhos)==='sim'?'👶':bnFilhosStr(c.filhos)==='nao'?'—':''}</td>
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.trilha||'')}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${bnBadgeEst(c.estagio)}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${esc(c.prioridade||'')}</td>
@@ -2817,10 +2839,24 @@ function viewBnEstoque(){
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px;color:var(--muted)">${esc(c.n_origens||1)}</td>
         </tr>
         ${FBN.edit===c.id? `<tr><td colspan="8">${bnEditorHtml(c)}</td></tr>`:''}`).join('')
-        || `<tr><td colspan="8" class="vazio">${tot?'Nenhum nome nesse filtro.':'⬆️ Use o botão Importar acima com o contatos.json (e os CSVs de dup/origens) da base tratada.'}</td></tr>`}
+        || `<tr><td colspan="14" class="vazio">${tot?'Nenhum nome nesse filtro.':'⬆️ Use o botão Importar acima com o contatos.json (e os CSVs de dup/origens) da base tratada.'}</td></tr>`}
       </tbody></table>
-      ${l.length>FBN.mostrar? `<div style="text-align:center;padding:10px"><button class="btn btn-s" onclick="FBN.mostrar+=300;viewBnEstoque()">Mostrar mais (${(l.length-FBN.mostrar).toLocaleString('pt-BR')} restantes)</button></div>`:''}
-    </div>`;
+    </div>
+    <div class="bn-cards">
+      ${l.slice(0,FBN.mostrar).map(c=>`
+      <div class="card bn-card">
+        <div style="display:flex;gap:10px;align-items:flex-start;padding:11px 12px">
+          <input type="checkbox" style="margin-top:3px" ${FBN.sel.has(c.id)?'checked':''} onchange="this.checked?FBN.sel.add('${esc(c.id)}'):FBN.sel.delete('${esc(c.id)}');viewBnEstoque()">
+          <div style="flex:1;min-width:0" onclick="bnEditar('${esc(c.id)}')">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>${esc(c.nome)}</b>${bnBadgeEst(c.estagio)}${c.prioridade? `<span class="badge b-cinza">P${esc(c.prioridade)}</span>`:''}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">${c.telefone? '📞 '+esc(c.telefone):'🕳️ só nome'}${c.cargo? ' · '+esc(c.cargo):''}${c.cidade? ' · '+esc(c.cidade):''}${c.idade? ' · '+esc(c.idade)+' anos':''}</div>
+            ${(c.recomendante||c.contexto)? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${c.recomendante? '🙌 '+esc(c.recomendante):''}${c.recomendante&&c.contexto?' · ':''}${esc(c.contexto||'')}</div>`:''}
+          </div>
+        </div>
+        ${FBN.edit===c.id? `<div style="padding:0 10px 10px">${bnEditorHtml(c)}</div>`:''}
+      </div>`).join('') || `<div class="card vazio" style="padding:14px">${tot?'Nenhum nome nesse filtro.':'⬆️ Importe a base tratada pelo botão Importar.'}</div>`}
+    </div>
+    ${l.length>FBN.mostrar? `<div style="text-align:center;padding:10px"><button class="btn btn-s" onclick="FBN.mostrar+=300;viewBnEstoque()">Mostrar mais (${(l.length-FBN.mostrar).toLocaleString('pt-BR')} restantes)</button></div>`:''}`;
 }
 function bnEditorHtml(c){
   return `<div class="card" style="padding:12px;background:var(--bg)">
@@ -2833,8 +2869,8 @@ function bnEditorHtml(c){
       <label>Estágio<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select></label>
       <label>Prioridade<select id="bne-pri"><option value="">—</option><option ${String(c.prioridade)==='1'?'selected':''} value="1">P1</option><option ${String(c.prioridade)==='2'?'selected':''} value="2">P2</option><option ${String(c.prioridade)==='3'?'selected':''} value="3">P3</option></select></label>
       <label>Idade<input id="bne-idade" type="number" min="0" max="120" value="${esc(c.idade||'')}"></label>
-      <label>Estado civil<select id="bne-ec"><option value="">—</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)'].map(e=>`<option ${c.estado_civil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select></label>
-      <label>Filhos<select id="bne-fi"><option value="">—</option><option ${c.filhos==='sim'?'selected':''} value="sim">Sim</option><option ${c.filhos==='nao'?'selected':''} value="nao">Não</option></select></label>
+      <label>Estado civil<select id="bne-ec"><option value="">—</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>`<option ${c.estado_civil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select></label>
+      <label>Filhos<select id="bne-fi"><option value="">—</option><option ${bnFilhosStr(c.filhos)==='sim'?'selected':''} value="sim">Sim</option><option ${bnFilhosStr(c.filhos)==='nao'?'selected':''} value="nao">Não</option></select></label>
       <label>Renda estimada (R$/mês)<input id="bne-renda" type="number" min="0" step="500" value="${esc(c.renda_estimada||'')}"></label>
       <label>Cidade/UF<input id="bne-cid" value="${esc(c.cidade||'')}" placeholder="Recife/PE"></label>
       <label>E-mail<input id="bne-mail" value="${esc(c.email||'')}"></label>
@@ -2855,7 +2891,8 @@ function bnSalvarEdicao(id){
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
   c.idade=$('#bne-idade').value?Number($('#bne-idade').value):null;
-  c.estado_civil=$('#bne-ec').value||null; c.filhos=$('#bne-fi').value||null;
+  c.estado_civil=$('#bne-ec').value||null;
+  c.filhos=$('#bne-fi').value==='sim'?true:($('#bne-fi').value==='nao'?false:null); // boolean = formato canônico do banco (carga 04/08)
   c.renda_estimada=$('#bne-renda').value?Number($('#bne-renda').value):null;
   c.cidade=$('#bne-cid').value.trim()||null; c.email=$('#bne-mail').value.trim()||null;
   { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); c.empresa=ec[0]||null; c.cargo=ec[1]||null; }
@@ -2882,6 +2919,9 @@ function bnLote(acao){
   toast(ids.length+' atualizado'+(ids.length>1?'s':''),true);
 }
 function bnListasTodas(){ const set=new Set(); bnVivos().forEach(c=>(c.listas||[]).forEach(n=>set.add(n))); return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+/* TA acionável = lista de HOJE ∪ listas nomeadas (união distinta) — é o que o
+   card do Início e o badge do menu contam (achado #2 da varredura 04/08) */
+function bnEmListaTa(){ const hoje=hojeISO(); return bnVivos().filter(c=>c.ta_dia===hoje||((c.listas||[]).length>0)); }
 function bnLoteLista(){
   const ids=[...FBN.sel]; if(!ids.length){ toast('Selecione contatos primeiro',false); return; }
   const atuais=bnListasTodas();
@@ -2895,6 +2935,83 @@ function bnNovo(){
     trilha:'seguro',tipo:null,estagio:'estoque',recomendante:null,cidade:null,prioridade:null,
     notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[]};
   BN.contatos.unshift(c); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
+}
+
+/* ── FERRAMENTA: REC EMBUTIDO NO NOME (achado #5 — P1 do handoff) ──────────
+   ~320 nomes vieram "Fulano Rec Beltrano" (regra 4: nome sujo não é lixo, é
+   dado). Parser conservador + PREVIEW com checkbox — nada aplica sozinho; o
+   hist guarda o nome original de cada um (reversível na unha). */
+const BN_CTX_TOKENS=new Set(['med','medica','medico','médica','médico','ot','adv','psi','fisio','nutri','eng','arq','cardio','dent','dentista','salao','salão','vet','fono']);
+let _bnRecCountCache=null;
+function bnRecParse(nomeOrig){
+  const n=String(nomeOrig||'').trim(); if(!n||n.length<5) return null;
+  let base='',rec='';
+  let m=/^(.*?)\s*\(\s*recs?\.?\s*[:\-]?\s*([^)]*)\)\s*(.*)$/i.exec(n);
+  if(m){ base=(m[1]+' '+m[3]).trim(); rec=(m[2]||'').trim(); }
+  else{
+    m=/^(.+?)\s*(?:[-–—\/~,]\s*)*\brecs?\b\.?\s*[:\-]?\s*(.+)$/i.exec(n);
+    if(!m) return null; base=m[1].trim(); rec=m[2].trim();
+  }
+  base=base.replace(/[\s\-–—\/~,]+$/,'').trim();
+  rec=rec.replace(/^[\s.:,\-–—]+/,'').trim().replace(/^\((.*)\)$/,'$1').trim();
+  if(base.length<3||rec.length<2) return null;
+  const partes=base.split(/\s+/), ctx=[];
+  while(partes.length>1&&BN_CTX_TOKENS.has(partes[partes.length-1].toLowerCase().replace(/\.$/,''))) ctx.unshift(partes.pop());
+  return {nome:partes.join(' '),contexto:ctx.join(' '),rec};
+}
+function bnRecCandidatos(){ const out=[]; bnVivos().forEach(c=>{ const p=bnRecParse(c.nome); if(p) out.push({c,p}); }); return out; }
+function bnRecCount(){ if(_bnRecCountCache==null) _bnRecCountCache=bnRecCandidatos().length; return _bnRecCountCache; }
+function bnRecScan(){
+  const cand=bnRecCandidatos();
+  if(!cand.length){ toast('Nenhum nome com "rec" embutido 🎉',true); return; }
+  const ov=document.createElement('div');
+  ov.id='bnrec-ov';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(12,22,38,.5);z-index:130;display:flex;align-items:center;justify-content:center;padding:14px';
+  ov.innerHTML=`<div class="card" style="max-width:980px;width:100%;max-height:88vh;display:flex;flex-direction:column;padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <b style="font-size:15px">🪄 Rec embutido no nome — preview</b>
+      <span style="font-size:12px;color:var(--muted)">${cand.length} candidatos</span>
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-mini" onclick="document.getElementById('bnrec-ov').remove()">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:9px">Nada é aplicado sem você: desmarque o que não fizer sentido. Quem já tem recomendante DIFERENTE vem desmarcado (e nunca é sobrescrito). O nome original fica no histórico do contato.</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-s btn-mini" onclick="document.querySelectorAll('.bnrec-ck').forEach(x=>x.checked=true)">Marcar todos</button>
+      <button class="btn btn-s btn-mini" onclick="document.querySelectorAll('.bnrec-ck').forEach(x=>x.checked=false)">Desmarcar todos</button>
+    </div>
+    <div style="overflow:auto;flex:1;border:1px solid var(--linha);border-radius:10px">
+      <table style="width:100%"><thead><tr><th></th><th>Nome hoje</th><th>→ Nome limpo</th><th>Contexto</th><th>Recomendante</th></tr></thead><tbody>
+      ${cand.map(({c,p})=>{ const tem=(c.recomendante||'').trim();
+        const conflito=!!(tem&&tem.toLowerCase()!==p.rec.toLowerCase());
+        return `<tr style="${conflito?'opacity:.75':''}">
+          <td><input type="checkbox" class="bnrec-ck" value="${esc(c.id)}" ${conflito?'':'checked'}></td>
+          <td style="font-size:12px">${esc(c.nome)}</td>
+          <td style="font-size:12px"><b>${esc(p.nome)}</b></td>
+          <td style="font-size:12px">${esc(p.contexto||'')}</td>
+          <td style="font-size:12px">${esc(p.rec)}${conflito? `<br><span style="color:var(--verm,#dc2626);font-size:11px">já tem: ${esc(tem)}</span>`:''}</td>
+        </tr>`; }).join('')}
+      </tbody></table>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="bnRecAplicar()">✅ Aplicar marcados</button>
+      <button class="btn btn-s" onclick="document.getElementById('bnrec-ov').remove()">Cancelar</button>
+      <span style="font-size:12px;color:var(--muted)">Aplica: nome limpo + contexto + recomendante (campo já preenchido não é tocado).</span>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function bnRecAplicar(){
+  const ids=[...document.querySelectorAll('.bnrec-ck:checked')].map(x=>x.value);
+  let n=0;
+  ids.forEach(id=>{ const c=bnPor(id); if(!c) return; const p=bnRecParse(c.nome); if(!p) return;
+    (c.hist=c.hist||[]).push({tipo:'rec_nome',de:c.nome,dia:hojeISO(),ts:new Date().toISOString()});
+    c.nome=p.nome;
+    if(p.contexto&&!(c.contexto||'').toLowerCase().includes(p.contexto.toLowerCase()))
+      c.contexto=[(c.contexto||'').trim(),p.contexto].filter(Boolean).join(' · ');
+    if(!(c.recomendante||'').trim()) c.recomendante=p.rec;
+    n++; });
+  const ov=document.getElementById('bnrec-ov'); if(ov) ov.remove();
+  bnSalvar(); render(); toast(n+' nome'+(n===1?'':'s')+' limpo'+(n===1?'':'s')+' — recomendante extraído ✓',true);
 }
 
 /* ── TELA: LISTA DE TA (do estoque) ──────────────────────────────────────── */
@@ -2957,6 +3074,121 @@ async function bnResultado(id,res){
     catch(e){ console.warn('lp_interacoes: falhou (fica só no hist local)',e); } }
 }
 
+/* ── TELA: SITPLAN CRONOMETRADO (achado #6 — P1 do handoff) ────────────────
+   A sessão clássica do método: tempo fechado, um nome por vez. Matéria-prima
+   default = os só-nome (regra 3: eles NÃO são base morta) — qualifica, pega
+   telefone com o recomendante do lado e manda pra lista de TA. Fecha
+   registrando em lp_sitplan (trabalhados/promovidos) quando logado. */
+let BNSP={on:false,t0:null,dur:1500,fonte:'sonome',fila:[],idx:0,trab:0,promo:0,iv:null,fimAvisado:false,resumo:null};
+function bnSpFmt(s){ return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+function bnSpPool(fonte){
+  const v=bnVivos().filter(c=>c.estagio!=='descartado'&&c.estagio!=='cliente');
+  const l=fonte==='comtel'? v.filter(c=>c.telefone)
+        : fonte==='filtro'? bnFiltrados().filter(c=>c.estagio!=='descartado'&&c.estagio!=='cliente')
+        : v.filter(c=>!c.telefone);
+  return l.slice().sort((a,b)=>((a.prioridade||9)-(b.prioridade||9))||String(a.nome).localeCompare(String(b.nome),'pt-BR'));
+}
+function bnSpIniciar(){
+  const pool=bnSpPool(BNSP.fonte);
+  if(!pool.length){ toast('Nenhum nome nessa fonte',false); return; }
+  BNSP.fila=pool.map(c=>c.id); BNSP.on=true; BNSP.t0=Date.now();
+  BNSP.idx=0; BNSP.trab=0; BNSP.promo=0; BNSP.fimAvisado=false; BNSP.resumo=null;
+  clearInterval(BNSP.iv); BNSP.iv=setInterval(bnSpTick,1000);
+  viewBnSitplan();
+}
+function bnSpRestante(){ return Math.max(0,BNSP.dur-Math.floor((Date.now()-BNSP.t0)/1000)); }
+function bnSpTick(){
+  const el=document.getElementById('bnsp-timer'); if(!el) return;
+  const r=bnSpRestante(); el.textContent=bnSpFmt(r);
+  if(r===0&&!BNSP.fimAvisado){ BNSP.fimAvisado=true; el.style.color='var(--verm,#dc2626)'; toast('⏱️ Tempo esgotado — feche a sessão com o resumo',false); }
+}
+function bnSpAtual(){ while(BNSP.idx<BNSP.fila.length){ const c=bnPor(BNSP.fila[BNSP.idx]); if(c&&!c.merged_into) return c; BNSP.idx++; } return null; }
+function bnSpCampos(c){
+  const t=$('#bnsp-tel'); if(t&&t.value.trim()) c.telefone=t.value.trim();
+  const r=$('#bnsp-rec'); if(r&&r.value.trim()&&!(c.recomendante||'').trim()) c.recomendante=r.value.trim();
+}
+function bnSpPri(p){ const c=bnSpAtual(); if(!c) return; bnSpCampos(c); c.prioridade=(c.prioridade===p?null:p); viewBnSitplan(); }
+function bnSpAcao(a){
+  const c=bnSpAtual(); if(!c){ bnSpEncerrar(); return; }
+  if(a==='pular'){ BNSP.idx++; viewBnSitplan(); return; }
+  const tinhaTel=!!(c.telefone||'').trim();
+  bnSpCampos(c);
+  if(a==='hoje'){ c.ta_dia=hojeISO(); if(c.estagio==='estoque') c.estagio='lista_ta'; BNSP.promo++; }
+  else if(a==='descartar'){ c.estagio='descartado'; }
+  else if(a==='salvar'&&!tinhaTel&&(c.telefone||'').trim()){ BNSP.promo++; if(c.estagio==='estoque') c.estagio='lista_ta'; }
+  (c.hist=c.hist||[]).push({tipo:'sitplan',res:a,dia:hojeISO(),ts:new Date().toISOString()});
+  BNSP.trab++; BNSP.idx++; bnSalvar(); viewBnSitplan();
+}
+async function bnSpEncerrar(){
+  clearInterval(BNSP.iv); BNSP.iv=null;
+  const min=Math.max(1,Math.round((Date.now()-BNSP.t0)/60000));
+  BNSP.resumo={trab:BNSP.trab,promo:BNSP.promo,min};
+  if(BNSP.trab&&LPC_REMOTE&&sb){
+    try{ const r=await sb.from('lp_sitplan').insert({data:hojeISO(),contatos_trabalhados:BNSP.trab,promovidos:BNSP.promo,notas:'sessão cronometrada · '+min+' min'}); if(r.error) throw r.error; toast('SitPlan registrado no histórico ☁️',true); }
+    catch(e){ console.warn('lp_sitplan: registro falhou',e); }
+  }
+  BNSP.on=false; if(VIEW==='bn-sitplan') viewBnSitplan();
+}
+function viewBnSitplan(){
+  const nSo=bnSpPool('sonome').length, nTel=bnSpPool('comtel').length, nF=bnSpPool('filtro').length;
+  if(!BNSP.on){
+    $('#main').innerHTML=`
+    <h1 class="pg">SitPlan Cronometrado</h1>
+    <div class="sub">Tempo fechado, um nome por vez: qualifica, pega telefone e manda pra lista de TA. Os ${nSo.toLocaleString('pt-BR')} só-nome são a matéria-prima.</div>
+    ${BNSP.resumo? `<div class="card" style="padding:14px;margin-bottom:12px"><b>Última sessão:</b> ${BNSP.resumo.trab} trabalhado${BNSP.resumo.trab===1?'':'s'} · ${BNSP.resumo.promo} promovido${BNSP.resumo.promo===1?'':'s'} · ${BNSP.resumo.min} min</div>`:''}
+    <div class="card" style="padding:16px;max-width:640px">
+      <div style="font-weight:700;margin-bottom:8px">Fonte da fila</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn btn-mini ${BNSP.fonte==='sonome'?'btn-p':'btn-s'}" onclick="BNSP.fonte='sonome';viewBnSitplan()">🕳️ Só nome <b style="opacity:.75">${nSo.toLocaleString('pt-BR')}</b></button>
+        <button class="btn btn-mini ${BNSP.fonte==='comtel'?'btn-p':'btn-s'}" onclick="BNSP.fonte='comtel';viewBnSitplan()">📞 Com telefone <b style="opacity:.75">${nTel.toLocaleString('pt-BR')}</b></button>
+        <button class="btn btn-mini ${BNSP.fonte==='filtro'?'btn-p':'btn-s'}" onclick="BNSP.fonte='filtro';viewBnSitplan()" title="Usa os filtros aplicados agora na tela Estoque">🔍 Filtro do Estoque <b style="opacity:.75">${nF.toLocaleString('pt-BR')}</b></button>
+      </div>
+      <div style="font-weight:700;margin-bottom:8px">Duração</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+        ${[[900,'15 min'],[1500,'25 min'],[2700,'45 min'],[3600,'60 min']].map(([s,l])=>`<button class="btn btn-mini ${BNSP.dur===s?'btn-p':'btn-s'}" onclick="BNSP.dur=${s};viewBnSitplan()">${l}</button>`).join('')}
+      </div>
+      <button class="btn btn-p" onclick="bnSpIniciar()">▶️ Começar sessão</button>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:10px">Fila em ordem de prioridade (P1 primeiro). Atalhos: <b>Enter</b> salva & próximo · <b>→</b> pula.</div>
+    </div>`;
+    return;
+  }
+  const c=bnSpAtual(), pos=Math.min(BNSP.idx+1,BNSP.fila.length);
+  $('#main').innerHTML=`
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+      <div id="bnsp-timer" style="font-size:34px;font-weight:800;font-variant-numeric:tabular-nums;${bnSpRestante()===0?'color:var(--verm,#dc2626)':''}">${bnSpFmt(bnSpRestante())}</div>
+      <div style="font-size:13px;color:var(--muted)">${pos}/${BNSP.fila.length} da fila · <b>${BNSP.trab}</b> trabalhados · <b>${BNSP.promo}</b> promovidos</div>
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-mini" onclick="bnSpEncerrar()">⏹️ Encerrar sessão</button>
+    </div>
+    ${c? `
+    <div class="card" style="padding:20px;max-width:680px">
+      <div style="font-size:26px;font-weight:800;line-height:1.2">${esc(c.nome)}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px">${esc([c.contexto,c.cargo,c.cidade,c.idade&&(c.idade+' anos')].filter(Boolean).join(' · ')||'sem contexto')} ${bnBadgeEst(c.estagio)}</div>
+      ${(c.recomendante||'').trim()? `<div style="font-size:13px;margin-top:6px">🙌 rec: <b>${esc(c.recomendante)}</b></div>`:''}
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:14px">
+        <label>Telefone<input id="bnsp-tel" inputmode="tel" placeholder="(81) 9…" value="${esc(c.telefone||'')}"></label>
+        <label>Recomendante${(c.recomendante||'').trim()?' (já tem — não sobrescreve)':''}<input id="bnsp-rec" value="${esc(c.recomendante||'')}" placeholder="quem indicou?"></label>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:12px;align-items:center">
+        <span style="font-size:12px;color:var(--muted)">Prioridade:</span>
+        ${[1,2,3].map(p=>`<button class="btn btn-mini ${c.prioridade===p?'btn-p':'btn-s'}" onclick="bnSpPri(${p})">P${p}</button>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-p" onclick="bnSpAcao('hoje')">📞 Pra lista de HOJE</button>
+        <button class="btn btn-s" onclick="bnSpAcao('salvar')">💾 Salvar & próximo</button>
+        <button class="btn btn-s" onclick="bnSpAcao('pular')">⏭️ Pular</button>
+        <button class="btn btn-s" onclick="bnSpAcao('descartar')">🗑️ Descartar</button>
+      </div>
+    </div>`
+    : `<div class="card" style="padding:20px;max-width:680px"><b>🎉 Fila esgotada!</b> ${BNSP.trab} trabalhados nesta sessão.<div style="margin-top:10px"><button class="btn btn-p" onclick="bnSpEncerrar()">Fechar com resumo</button></div></div>`}`;
+}
+document.addEventListener('keydown',e=>{
+  if(VIEW!=='bn-sitplan'||!BNSP.on) return;
+  const emInput=e.target&&/^(input|textarea|select)$/i.test(e.target.tagName);
+  if(e.key==='Enter'){ e.preventDefault(); bnSpAcao('salvar'); }
+  else if(e.key==='ArrowRight'&&!emInput){ bnSpAcao('pular'); }
+});
+
 /* ── TELA: RECOMENDAÇÕES (formato replicado do módulo da Captação) ─────────
    Sub-abas em chips (trilha), filtro por recomendante, cartões agrupados por
    quem indicou, linha com iniciais + qualificação + pill de estágio. */
@@ -2999,13 +3231,41 @@ function viewBnRecs(){
 }
 
 /* ── TELA: FILA DE DUPLICATAS ────────────────────────────────────────────── */
+/* Rastro no cartão (achado #3 da varredura 04/08): o número de origens sozinho
+   não dizia DE ONDE cada lado veio — busca as linhas de lp_contato_origens sob
+   demanda (cache por contato; o rastro vive só no banco, regra 1). */
+let _bnOrig={},_bnOrigOpen=new Set();
+async function bnVerOrigens(id){
+  if(_bnOrigOpen.has(id)){ _bnOrigOpen.delete(id); viewBnDups(); return; }
+  if(!(LPC_REMOTE&&sb)){ toast('Faça login — o rastro de origens vive no banco',false); return; }
+  if(!_bnOrig[id]){
+    try{
+      const {data,error}=await sb.from('lp_contato_origens')
+        .select('sistema,arquivo,funil,etapa,data_mod,nome_origem,tipo,telefone').eq('contato_id',id);
+      if(error) throw error; _bnOrig[id]=data||[];
+    }catch(e){ toast('Não deu pra buscar o rastro: '+(e.message||e),false); return; }
+  }
+  _bnOrigOpen.add(id); viewBnDups();
+}
+function bnOrigHtml(c){
+  if(!_bnOrigOpen.has(c.id)) return '';
+  const rows=_bnOrig[c.id]||[];
+  if(!rows.length) return `<div style="margin-top:8px;font-size:12px;color:var(--muted)">Sem linhas de rastro no banco pra este id.</div>`;
+  return `<div style="margin-top:8px;border-top:1px dashed var(--linha);padding-top:7px;display:flex;flex-direction:column;gap:4px">
+    ${rows.map(o=>`<div style="font-size:11.5px;line-height:1.45"><b>${esc(o.sistema||'?')}</b> · ${esc(o.arquivo||'—')}${(o.funil||o.etapa)? ` · ${esc([o.funil,o.etapa].filter(Boolean).join('/'))}`:''}${o.data_mod? ` · ${esc(o.data_mod)}`:''}${(o.nome_origem&&o.nome_origem!==c.nome)? `<br><span style="color:var(--muted)">como “${esc(o.nome_origem)}”${o.telefone? ' · '+esc(o.telefone):''}</span>`:(o.telefone? `<br><span style="color:var(--muted)">tel na origem: ${esc(o.telefone)}</span>`:'')}</div>`).join('')}
+  </div>`;
+}
 function bnDupCard(c,outro,d,lado){
   if(!c) return `<div class="card" style="flex:1;padding:12px"><i>Contato ${lado} não encontrado no estoque.</i></div>`;
   const linhas=[['Telefone',c.telefone],['E-mail',c.email],['Empresa',c.empresa],['Trilha',c.trilha],['Estágio',BN_EST_LABEL[c.estagio]||c.estagio],['Recomendante',c.recomendante],['Notas',c.notas],['Tags',c.tags],['Origens',c.n_origens]];
   return `<div class="card" style="flex:1;min-width:240px;padding:12px">
     <div style="font-weight:700;margin-bottom:6px">${esc(c.nome)} <span style="color:var(--muted);font-size:11px">${esc(c.id)}</span></div>
     ${linhas.filter(l=>l[1]).map(l=>`<div style="font-size:12.5px"><span style="color:var(--muted)">${l[0]}:</span> ${esc(l[1])}</div>`).join('')}
-    ${!d.decisao? `<button class="btn btn-p btn-mini" style="margin-top:9px" onclick="bnFundir('${esc(d.id_a)}','${esc(d.id_b)}','${esc(c.id)}')">✅ Fundir mantendo este</button>`:''}
+    <div style="margin-top:9px;display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-s btn-mini" onclick="bnVerOrigens('${esc(c.id)}')">${_bnOrigOpen.has(c.id)? '✖ Fechar rastro':`🔎 Rastro (${esc(c.n_origens||1)})`}</button>
+      ${!d.decisao? `<button class="btn btn-p btn-mini" onclick="bnFundir('${esc(d.id_a)}','${esc(d.id_b)}','${esc(c.id)}')">✅ Fundir mantendo este</button>`:''}
+    </div>
+    ${bnOrigHtml(c)}
   </div>`;
 }
 function viewBnDups(){
@@ -3100,7 +3360,7 @@ async function admMod(email,k,on){
 }
 
 const TITULO_VIEW={inicio:'Início',sitplan:'Lista do Dia (funil)',metas:'Metas',contatos:'Contatos',
-  'bn-estoque':'Estoque de Nomes','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
+  'bn-estoque':'Estoque de Nomes','bn-sitplan':'SitPlan Cronometrado','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Funil Novos Negócios','bc-funil':'Funil Base de Clientes','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
@@ -3130,7 +3390,8 @@ function render(){
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
     const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
     const cr=$('#cnt-bn-recs'); if(cr) cr.textContent=bnVivos().filter(b=>(b.recomendante||'').trim()).length||'';
-    const ct2=$('#cnt-bn-ta'); if(ct2) ct2.textContent=bnVivos().filter(b=>b.ta_dia===hojeISO()).length||''; }
+    const ct2=$('#cnt-bn-ta'); if(ct2) ct2.textContent=bnEmListaTa().length||'';
+    const csp2=$('#cnt-bn-sp'); if(csp2){ const n=bnVivos().filter(c=>!c.telefone&&c.estagio!=='descartado'&&c.estagio!=='cliente').length; csp2.textContent=n? n.toLocaleString('pt-BR'):''; } }
   aplicarGates();
   if(VIEW==='inicio') viewInicio();
   else if(VIEW==='sitplan') viewSitplan();
@@ -3150,6 +3411,7 @@ function render(){
   else if(VIEW==='lp-datas') viewLpDatas();
   else if(VIEW==='revisao') viewRevisaoProtecao();
   else if(VIEW==='bn-estoque') viewBnEstoque();
+  else if(VIEW==='bn-sitplan') viewBnSitplan();
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
   else if(VIEW==='bn-recs') viewBnRecs();
@@ -3158,6 +3420,7 @@ function render(){
   if(VIEW==='inicio'&&typeof bnVivos==='function'&&bnVivos().length){
     const v=bnVivos(), tel=v.filter(c=>c.telefone).length, hoje=hojeISO();
     const ta=v.filter(c=>c.ta_dia===hoje).length, dp=BN.dups.filter(d=>!d.decisao).length;
+    const emL=bnEmListaTa().length;
     const _pc=$('#main .card'); (_pc?_pc:{insertAdjacentHTML:(p,h)=>$('#main').insertAdjacentHTML('beforeend',h)}).insertAdjacentHTML('beforebegin', `
     <div class="card" style="margin-top:14px">
       <h3 style="font-size:13px;margin-bottom:10px">📦 Base de Nomes</h3>
@@ -3165,6 +3428,7 @@ function render(){
         <div class="clicavel" onclick="irPara('bn-estoque')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${v.length.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">NOMES VIVOS</div></div>
         <div class="clicavel" onclick="FBN.tel='com';irPara('bn-estoque')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${tel.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">COM TELEFONE</div></div>
         <div class="clicavel" onclick="irPara('bn-ta')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${ta}</div><div style="font-size:11px;color:var(--muted)">TA DE HOJE</div></div>
+        <div class="clicavel" onclick="irPara('bn-ta')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${emL.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">EM LISTAS DE TA</div></div>
         <div class="clicavel" onclick="irPara('bn-dups')" style="cursor:pointer"><div style="font-size:24px;font-weight:800;color:${dp?'var(--verm,#dc2626)':'inherit'}">${dp}</div><div style="font-size:11px;color:var(--muted)">DUPLICATAS</div></div>
       </div>
     </div>`);
