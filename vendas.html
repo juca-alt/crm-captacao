@@ -1193,41 +1193,221 @@ function registrarResultado(id,k,dia){
 function ultimoResultado(c,dia){ const its=interacoesDe(c).filter(i=>i.dia===dia&&RES_BY_K[i.k]); return its.length? its[its.length-1] : null; }
 
 /* ═══════════════════ VIEW: CONTATOS ═══════════════════ */
-let FILTRO={busca:'',etapa:'',lp:''};
-function viewContatos(){
-  let lista=meusContatos();
-  if(FILTRO.busca) lista=lista.filter(c=>c.nome.toLowerCase().includes(FILTRO.busca.toLowerCase()));
-  if(FILTRO.etapa) lista=lista.filter(c=>c.etapa===FILTRO.etapa);
-  if(FILTRO.lp && isMaster()) lista=lista.filter(c=>c.lp===FILTRO.lp);
+/* ══ FILTROS 2.0 — MOTOR DE MULTI-SELEÇÃO REUTILIZÁVEL ═════════════════════
+   O Estoque (B1, v0.9.0) estreou o multi-filtro por CSV; a v0.9.5 promove o
+   mesmo motor a GENÉRICO, pra qualquer tela ganhar a experiência de planilha
+   (multi-seleção, ordenar por coluna, colunas ligáveis) sem recriar código.
+   Cada tela registra um NAMESPACE (`fxReg`) com seu objeto de estado e a
+   função que redesenha; os handlers vão por nome no onclick, então o valor
+   precisa ser escapado pra JS ANTES do HTML (jsq→esc) — recomendante com
+   apóstrofo (D'Angelo) quebrava a chamada.
+   CSV continua sendo o formato guardado: os filtros salvos do Estoque, que
+   nasceram com valor único, seguem lendo/gravando igual.
+   ═════════════════════════════════════════════════════════════════════════ */
+const FX_ST={}, FX_RENDER={};
+function fxReg(ns,st,fn){ FX_ST[ns]=st; FX_RENDER[ns]=fn; }   // idempotente: a view chama a cada render
+function fxRender(ns){ const f=window[FX_RENDER[ns]]; if(typeof f==='function') f(); }
+/* escape pra dentro de string JS em atributo HTML: o parser decodifica as
+   entidades ANTES do JS ler, então escapa-se a aspa primeiro (\') e o esc()
+   depois protege o HTML. */
+function jsq(s){ return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function csvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).filter(Boolean)); }
+function fxMultiTgl(ns,key,v,on){ const st=FX_ST[ns]; if(!st) return;
+  const s=csvSet(st[key]); if(on)s.add(v); else s.delete(v);
+  st[key]=[...s].join(','); if('mostrar' in st) st.mostrar=150; st.pop=key; fxRender(ns); }
+function fxLimpar(ns,key){ const st=FX_ST[ns]; if(!st) return;
+  st[key]=''; st.pop=''; if('mostrar' in st) st.mostrar=150; fxRender(ns); }
+function fxPopTgl(ns,k,open){ const st=FX_ST[ns]; if(!st) return; if(open) st.pop=k; else if(st.pop===k) st.pop=''; }
+function fxMultiHtml(ns,key,titulo,opts){
+  const st=FX_ST[ns]||{}, sel=csvSet(st[key]);
+  return `<details class="bn-multi"${st.pop===key?' open':''} ontoggle="fxPopTgl('${ns}','${key}',this.open)">
+    <summary class="${sel.size?'on':''}">${esc(titulo)}: ${sel.size||'todos'}</summary>
+    <div class="bn-multi-pop">
+      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(o.v)?'checked':''} onchange="fxMultiTgl('${ns}','${key}','${esc(jsq(o.v))}',this.checked)">${esc(o.l)}</label>`).join('')}
+      ${sel.size?`<button class="btn btn-s btn-mini" onclick="fxLimpar('${ns}','${key}')">Limpar</button>`:''}
+    </div></details>`;
+}
+/* ordenar por coluna (mesma regra do Estoque: ↑ → ↓ → sem ordenação) */
+function fxSort(ns,col){ const st=FX_ST[ns]; if(!st) return;
+  if(st.sort===col){ if(st.dir>0) st.dir=-1; else { st.sort=''; st.dir=1; } } else { st.sort=col; st.dir=1; }
+  fxRender(ns); }
+function fxTh(ns,col,label){ const st=FX_ST[ns]||{}, on=st.sort===col;
+  return `<th onclick="fxSort('${ns}','${col}')" style="cursor:pointer;white-space:nowrap" title="Ordenar">${esc(label)}${on?(st.dir>0?' ↑':' ↓'):''}</th>`; }
+function fxOrdenar(ns,l,valDe){ const st=FX_ST[ns]||{}; if(!st.sort) return l;
+  const k=st.sort, d=st.dir, v=valDe||((c,k)=>c[k]);
+  return l.slice().sort((a,b)=>{ const va=v(a,k), vb=v(b,k);
+    if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
+    if(typeof va==='number'||typeof vb==='number') return (Number(va)-Number(vb))*d;
+    return String(va).localeCompare(String(vb),'pt-BR')*d; }); }
+/* colunas ligáveis por tela, guardadas por aparelho (mesmo desenho do Estoque) */
+function fxColsHtml(ns,catalogo,vis,fixa){
+  const st=FX_ST[ns]||{}, v=new Set(vis);
+  return `<details class="bn-multi"${st.pop==='cols'?' open':''} ontoggle="fxPopTgl('${ns}','cols',this.open)">
+    <summary>🧩 Colunas (${v.size})</summary>
+    <div class="bn-multi-pop">
+      ${Object.keys(catalogo).filter(k=>k!==fixa).map(k=>`<label><input type="checkbox" ${v.has(k)?'checked':''} onchange="${ns}ColToggle('${k}',this.checked)">${esc(catalogo[k].label)}</label>`).join('')}
+      <button class="btn btn-s btn-mini" onclick="${ns}ColPadrao()">Padrão</button>
+    </div></details>`;
+}
 
+/* ── BOTTOM-SHEET DE FILTROS (celular) ─────────────────────────────────────
+   No mobile o CSS esconde `.toolbar .bn-multi` e os selects (L421): sem o
+   sheet, a tela fica SEM os filtros no celular. O B7 resolveu isso pro
+   Estoque; aqui o mesmo sheet vira genérico, e cada tela só declara a SPEC
+   (grupos de chips + inputs). Inputs de texto usam o caminho "quiet" — o
+   sheet não se redesenha a cada tecla, senão o campo perde o foco (bug
+   corrigido na varredura de 04/08). */
+const FX_SHEET={};
+let FX_SHEET_NS='';
+function fxSheetReg(ns,fn){ FX_SHEET[ns]=fn; }
+function fxSheetAbrir(ns){
+  if($('#fx-sheet-bd')) return;
+  FX_SHEET_NS=ns;
+  document.body.insertAdjacentHTML('beforeend','<div class="sheet-bd" id="fx-sheet-bd"><div class="sheet" id="fx-sheet"></div></div>');
+  document.getElementById('fx-sheet-bd').onclick=e=>{ if(e.target.id==='fx-sheet-bd') fxSheetFechar(); };
+  fxSheetRender();
+}
+function fxSheetFechar(){ const s=$('#fx-sheet-bd'); if(s) s.remove(); const ns=FX_SHEET_NS; FX_SHEET_NS=''; if(ns) fxRender(ns); }
+function fxSheetSet(ns,k,v){ const st=FX_ST[ns]; if(!st) return; st[k]=v; if('mostrar' in st) st.mostrar=150; fxRender(ns); fxSheetRender(); }
+function fxSheetTgl(ns,k,v){ const st=FX_ST[ns]; if(!st) return; const s=csvSet(st[k]); if(s.has(v)) s.delete(v); else s.add(v); fxSheetSet(ns,k,[...s].join(',')); }
+function fxSheetQuiet(ns,k,v){ const st=FX_ST[ns]; if(!st) return; st[k]=v; if('mostrar' in st) st.mostrar=150; fxRender(ns);
+  const b=$('#fx-sheet-ver'), sp=FX_SHEET[ns]&&FX_SHEET[ns](); if(b&&sp) b.textContent=sp.ver(); }
+function fxSheetLimpar(ns){ const sp=FX_SHEET[ns]&&FX_SHEET[ns](); if(sp&&sp.limpar) sp.limpar(); fxSheetRender(); }
+function fxSheetRender(){
+  const el=$('#fx-sheet'), ns=FX_SHEET_NS; if(!el||!FX_SHEET[ns]) return;
+  const sp=FX_SHEET[ns](), st=FX_ST[ns]||{};
+  const grp=(t,inner)=>`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(t)}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${inner}</div></div>`;
+  // `req` = grupo que sempre tem um escolhido (ex.: ordem): clicar no que já
+  // está on não desmarca, senão o chip apaga mas a lista continua ordenada.
+  const chip=(k,v,l,multi,req)=>{ const on=multi?csvSet(st[k]).has(v):st[k]===v;
+    const val=(on&&!req)?'':esc(jsq(v));
+    return `<button class="sheet-chip ${on?'on':''}" onclick="${multi?`fxSheetTgl('${ns}','${k}','${esc(jsq(v))}')`:`fxSheetSet('${ns}','${k}','${val}')`}">${esc(l)}</button>`; };
+  const inp=(k,l,extra)=>`<label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">${esc(l)}<input ${extra||''} value="${esc(st[k]||'')}" oninput="fxSheetQuiet('${ns}','${k}',this.value)"></label>`;
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><b style="flex:1;font-size:16px">🎛️ ${esc(sp.titulo)}</b>
+      <button class="btn btn-s btn-mini" onclick="fxSheetLimpar('${ns}')">Limpar tudo</button>
+      <button class="btn btn-ghost btn-mini" onclick="fxSheetFechar()" style="font-size:17px" aria-label="Fechar">✕</button></div>
+    ${(sp.grupos||[]).map(g=>grp(g.t,g.opts.map(o=>chip(g.k,o.v,o.l,g.multi!==false,g.req)).join(''))).join('')}
+    ${(sp.inputs&&sp.inputs.length)? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">${sp.inputs.map(i=>inp(i.k,i.l,i.extra)).join('')}</div>`:''}
+    <button class="btn btn-p" id="fx-sheet-ver" style="width:100%;padding:12px;font-size:15px" onclick="fxSheetFechar()">${esc(sp.ver())}</button>`;
+}
+
+
+let FILTRO={busca:'',etapa:'',lp:'',temp:'',estrelas:'',tastatus:'',origem:'',prof:'',idmin:'',idmax:'',pmmin:'',sort:'',dir:1,pop:''};
+/* Filtros 2.0 na tela Contatos: era busca + etapa única. Agora o mesmo motor
+   do Estoque (multi-seleção, ordenar por coluna, sheet no celular) sobre o
+   funil de Novos Negócios. `origem` vira multi derivada dos valores reais. */
+const CT_COLS={
+  nome:{label:'Nome'},
+  classificacao:{label:'Classificação'},
+  perfil:{label:'Perfil'},
+  etapa:{label:'Etapa'},
+  ta:{label:'TA'},
+  origem:{label:'Origem'},
+  valor:{label:'Valor'},
+  temperatura:{label:'Temperatura'},
+  idade:{label:'Idade'},
+  profissao:{label:'Profissão'},
+  telefone:{label:'Telefone'}
+};
+const CT_COLS_DEF=['nome','classificacao','perfil','etapa','ta','origem'];
+let CTP={cols:null};
+function ctPrefLer(){ try{ const r=localStorage.getItem('crmlp_ct_cols_v1'); if(r) CTP=Object.assign(CTP,JSON.parse(r)); }catch(_){}
+  if(!Array.isArray(CTP.cols)||!CTP.cols.length) CTP.cols=null; }
+function ctPrefSalvar(){ localStorage.setItem('crmlp_ct_cols_v1',JSON.stringify(CTP)); }
+function ctColsVis(){ const v=(CTP.cols||CT_COLS_DEF).filter(k=>CT_COLS[k]); return v.includes('nome')?v:['nome',...v]; }
+function ctColToggle(k,on){ const v=new Set(ctColsVis()); if(on)v.add(k); else v.delete(k);
+  CTP.cols=Object.keys(CT_COLS).filter(x=>v.has(x)); if(!CTP.cols.includes('nome')) CTP.cols.unshift('nome');
+  ctPrefSalvar(); FILTRO.pop='cols'; viewContatos(); }
+function ctColPadrao(){ CTP.cols=null; ctPrefSalvar(); FILTRO.pop='cols'; viewContatos(); }
+const CT_CAMPOS=['busca','etapa','lp','temp','estrelas','tastatus','origem','prof','idmin','idmax','pmmin'];
+function ctFiltroLimpar(){ CT_CAMPOS.forEach(k=>FILTRO[k]=''); viewContatos(); }
+function ctFiltrosAtivos(){ return CT_CAMPOS.filter(k=>k!=='busca'&&FILTRO[k]).length; }
+function ctOrigens(){ return [...new Set(meusContatos().map(c=>(c.origem||'—')))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+function ctTaStatus(){ return [...new Set(meusContatos().map(c=>(c.taStatus||'—')))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+function ctFiltrados(){
+  let l=meusContatos();
+  if(FILTRO.busca){ const q=FILTRO.busca.toLowerCase();
+    l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.profissao||'').toLowerCase().includes(q)); }
+  if(FILTRO.etapa){ const s=csvSet(FILTRO.etapa); l=l.filter(c=>s.has(c.etapa)); }   // CSV = multi (compat: etapa única é CSV de 1)
+  if(FILTRO.lp && isMaster()){ const s=csvSet(FILTRO.lp); l=l.filter(c=>s.has(c.lp)); }
+  if(FILTRO.temp){ const s=csvSet(FILTRO.temp); l=l.filter(c=>s.has(c.temperatura||'sem')); }
+  if(FILTRO.estrelas){ const s=csvSet(FILTRO.estrelas); l=l.filter(c=>s.has(String(estrelasDe(c)))); }
+  if(FILTRO.tastatus){ const s=csvSet(FILTRO.tastatus); l=l.filter(c=>s.has(c.taStatus||'—')); }
+  if(FILTRO.origem){ const s=csvSet(FILTRO.origem); l=l.filter(c=>s.has(c.origem||'—')); }
+  if(FILTRO.prof){ const q=FILTRO.prof.toLowerCase(); l=l.filter(c=>(c.profissao||'').toLowerCase().includes(q)); }
+  if(FILTRO.idmin) l=l.filter(c=>Number(c.idade)>=Number(FILTRO.idmin));
+  if(FILTRO.idmax) l=l.filter(c=>c.idade!=null&&c.idade!==''&&Number(c.idade)<=Number(FILTRO.idmax));
+  if(FILTRO.pmmin) l=l.filter(c=>pmDe(c)>=Number(FILTRO.pmmin));
+  return fxOrdenar('ct',l,(c,k)=> k==='classificacao'? estrelasDe(c)
+                              : k==='valor'? pmDe(c)
+                              : k==='perfil'? (c.profissao||'')
+                              : k==='ta'? (c.taStatus||'')
+                              : k==='temperatura'? ((tempDic()[c.temperatura]||{}).ordem||9)
+                              : k==='etapa'? etapasDe(c).indexOf(c.etapa)
+                              : c[k]);
+}
+function ctCelHtml(c,k){
+  switch(k){
+    case 'nome': return `<b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span>`;
+    case 'classificacao': return `${estrelasHtml(estrelasDe(c))}${quenteChip(c)} ${tempChipHtml(c,true)}`;
+    case 'perfil': return `<span style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)} anos<br>${esc(c.profissao)}</span>`;
+    case 'etapa': return badgeEtapa(c.etapa);
+    case 'ta': return `<span style="font-size:12px">${esc(c.taStatus)}<br><span style="color:var(--muted)">${esc(c.taTentativas)} tent.</span></span>`;
+    case 'origem': return `<span style="font-size:12px">${esc(c.origem)}</span>`;
+    case 'valor': return valorTag(c)||'<span style="color:var(--muted)">—</span>';
+    case 'temperatura': return tempChipHtml(c,true);
+    case 'idade': return esc(c.idade??'');
+    case 'profissao': return `<span style="font-size:12px">${esc(c.profissao)}</span>`;
+    case 'telefone': return `<span style="font-size:12px">${esc(c.telefone)}</span>`;
+    default: return esc(c[k]??'');
+  }
+}
+/* spec do sheet de filtros dos Contatos (celular) */
+fxSheetReg('ct',()=>({titulo:'Filtros dos Contatos',
+  grupos:[
+    {k:'etapa',t:'Etapa',opts:ETAPAS.map(e=>({v:e,l:e}))},
+    {k:'temp',t:'Temperatura',opts:tempKeys().map(k=>({v:k,l:tempEmoji(k)+' '+(tempDic()[k].label||k)})).concat([{v:'sem',l:'○ sem temp.'}])},
+    {k:'estrelas',t:'Classificação (ANCE)',opts:[0,1,2,3,4,5].map(n=>({v:String(n),l:n+'★'}))},
+    {k:'tastatus',t:'Status de TA',opts:ctTaStatus().map(s=>({v:s,l:s}))},
+    {k:'origem',t:'Origem',opts:ctOrigens().map(o=>({v:o,l:o}))}],
+  inputs:[{k:'prof',l:'Profissão'},{k:'pmmin',l:'Prêmio/mês ≥',extra:'type="number" step="100"'},
+    {k:'idmin',l:'Idade ≥',extra:'type="number"'},{k:'idmax',l:'Idade ≤',extra:'type="number"'}],
+  limpar:()=>ctFiltroLimpar(),
+  ver:()=>'Ver '+ctFiltrados().length.toLocaleString('pt-BR')+' contato(s)'}));
+function viewContatos(){
+  fxReg('ct',FILTRO,'viewContatos');
+  const lista=ctFiltrados(), cols=ctColsVis(), tot=meusContatos().length;
   $('#main').innerHTML=`
     <h1 class="pg">Contatos</h1>
-    <div class="sub">Resultado (${lista.length}) — clique no contato pra abrir o perfil completo.</div>
-    <div class="toolbar">
-      <input type="search" placeholder="Buscar por nome…" value="${esc(FILTRO.busca)}" oninput="FILTRO.busca=this.value;viewContatos()">
-      <select onchange="FILTRO.etapa=this.value;viewContatos()">
-        <option value="">Todas as etapas</option>
-        ${ETAPAS.map(e=>`<option ${FILTRO.etapa===e?'selected':''}>${e}</option>`).join('')}
-      </select>
-      ${isMaster()? `<select onchange="FILTRO.lp=this.value;viewContatos()">
-        <option value="">Todos os LPs</option>
-        ${S.users.map(u=>`<option value="${esc(u.id)}" ${FILTRO.lp===u.id?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}
-      </select>`:''}
+    <div class="sub">Resultado (${lista.length}${lista.length!==tot? ' de '+tot:''}) — clique no contato pra abrir o perfil completo.</div>
+    <div class="toolbar" style="flex-wrap:wrap">
+      <input type="search" placeholder="Buscar nome, telefone ou profissão…" value="${esc(FILTRO.busca)}" oninput="FILTRO.busca=this.value;viewContatos()">
+      <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('ct')">🎛️ Filtros${ctFiltrosAtivos()?' ('+ctFiltrosAtivos()+')':''}</button>
+      ${fxMultiHtml('ct','etapa','Etapas',ETAPAS.map(e=>({v:e,l:e})))}
+      ${fxMultiHtml('ct','temp','Temperatura',tempKeys().map(k=>({v:k,l:tempEmoji(k)+' '+(tempDic()[k].label||k)})).concat([{v:'sem',l:'○ sem temp.'}]))}
+      ${fxMultiHtml('ct','estrelas','Classificação',[0,1,2,3,4,5].map(n=>({v:String(n),l:n+'★'})))}
+      ${fxMultiHtml('ct','origem','Origem',ctOrigens().map(o=>({v:o,l:o})))}
+      ${isMaster()? fxMultiHtml('ct','lp','LP',S.users.map(u=>({v:u.id,l:u.nome.split(' ')[0]}))):''}
       <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
     </div>
-    <div class="card" style="padding:6px 10px">
+    <div class="toolbar" style="flex-wrap:wrap">
+      ${fxMultiHtml('ct','tastatus','Status de TA',ctTaStatus().map(s=>({v:s,l:s})))}
+      ${fxColsHtml('ct',CT_COLS,cols,'nome')}
+      <input type="search" style="max-width:150px" placeholder="Profissão…" value="${esc(FILTRO.prof)}" oninput="FILTRO.prof=this.value;viewContatos()">
+      <input type="number" style="max-width:92px" placeholder="Idade ≥" value="${esc(FILTRO.idmin)}" oninput="FILTRO.idmin=this.value;viewContatos()">
+      <input type="number" style="max-width:92px" placeholder="Idade ≤" value="${esc(FILTRO.idmax)}" oninput="FILTRO.idmax=this.value;viewContatos()">
+      <input type="number" style="max-width:130px" step="100" placeholder="Prêmio/mês ≥" value="${esc(FILTRO.pmmin)}" oninput="FILTRO.pmmin=this.value;viewContatos()">
+      ${ctFiltrosAtivos()? `<button class="btn btn-s btn-mini" onclick="ctFiltroLimpar()">Limpar filtros (${ctFiltrosAtivos()})</button>`:''}
+    </div>
+    <div class="card" style="padding:6px 10px;overflow-x:auto">
       <table><thead><tr>
-        <th>Nome</th><th>Classificação</th><th>Perfil</th><th>Etapa</th><th>TA</th><th>Origem</th>${isMaster()?'<th>LP</th>':''}
+        ${cols.map(k=>fxTh('ct',k,CT_COLS[k].label)).join('')}${isMaster()?'<th>LP</th>':''}
       </tr></thead><tbody>
-      ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(c.id)}')">
-        <td><b>${esc(c.nome)}</b><br><span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone)}</span></td>
-        <td>${estrelasHtml(estrelasDe(c))}${quenteChip(c)} ${tempChipHtml(c,true)}</td>
-        <td style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)} anos<br>${esc(c.profissao)}</td>
-        <td>${badgeEtapa(c.etapa)}</td>
-        <td style="font-size:12px">${esc(c.taStatus)}<br><span style="color:var(--muted)">${esc(c.taTentativas)} tent.</span></td>
-        <td style="font-size:12px">${esc(c.origem)}</td>
+      ${lista.map(c=>`<tr class="clicavel" onclick="abrirContato('${esc(jsq(c.id))}')">
+        ${cols.map(k=>`<td>${ctCelHtml(c,k)}</td>`).join('')}
         ${isMaster()? `<td><span class="badge b-cinza">${esc(lpNome(c.lp))}</span></td>`:''}
-      </tr>`).join('') || `<tr><td colspan="${isMaster()?7:6}" class="vazio">Nenhum contato com esse filtro.</td></tr>`}
+      </tr>`).join('') || `<tr><td colspan="${cols.length+(isMaster()?1:0)}" class="vazio">Nenhum contato com esse filtro.</td></tr>`}
       </tbody></table>
     </div>`;
 }
@@ -2930,105 +3110,6 @@ async function bnImportarArquivos(input){
   toast(`Importado: ${nCont} contatos · ${nDup} pares de dup · ${nOrig} origens${avisos.length? ' · ⚠️ '+avisos.join(' | '):''}`,!avisos.length);
 }
 
-/* ══ FILTROS 2.0 — MOTOR DE MULTI-SELEÇÃO REUTILIZÁVEL ═════════════════════
-   O Estoque (B1, v0.9.0) estreou o multi-filtro por CSV; a v0.9.5 promove o
-   mesmo motor a GENÉRICO, pra qualquer tela ganhar a experiência de planilha
-   (multi-seleção, ordenar por coluna, colunas ligáveis) sem recriar código.
-   Cada tela registra um NAMESPACE (`fxReg`) com seu objeto de estado e a
-   função que redesenha; os handlers vão por nome no onclick, então o valor
-   precisa ser escapado pra JS ANTES do HTML (jsq→esc) — recomendante com
-   apóstrofo (D'Angelo) quebrava a chamada.
-   CSV continua sendo o formato guardado: os filtros salvos do Estoque, que
-   nasceram com valor único, seguem lendo/gravando igual.
-   ═════════════════════════════════════════════════════════════════════════ */
-const FX_ST={}, FX_RENDER={};
-function fxReg(ns,st,fn){ FX_ST[ns]=st; FX_RENDER[ns]=fn; }   // idempotente: a view chama a cada render
-function fxRender(ns){ const f=window[FX_RENDER[ns]]; if(typeof f==='function') f(); }
-/* escape pra dentro de string JS em atributo HTML: o parser decodifica as
-   entidades ANTES do JS ler, então escapa-se a aspa primeiro (\') e o esc()
-   depois protege o HTML. */
-function jsq(s){ return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
-function csvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).filter(Boolean)); }
-function fxMultiTgl(ns,key,v,on){ const st=FX_ST[ns]; if(!st) return;
-  const s=csvSet(st[key]); if(on)s.add(v); else s.delete(v);
-  st[key]=[...s].join(','); if('mostrar' in st) st.mostrar=150; st.pop=key; fxRender(ns); }
-function fxLimpar(ns,key){ const st=FX_ST[ns]; if(!st) return;
-  st[key]=''; st.pop=''; if('mostrar' in st) st.mostrar=150; fxRender(ns); }
-function fxPopTgl(ns,k,open){ const st=FX_ST[ns]; if(!st) return; if(open) st.pop=k; else if(st.pop===k) st.pop=''; }
-function fxMultiHtml(ns,key,titulo,opts){
-  const st=FX_ST[ns]||{}, sel=csvSet(st[key]);
-  return `<details class="bn-multi"${st.pop===key?' open':''} ontoggle="fxPopTgl('${ns}','${key}',this.open)">
-    <summary class="${sel.size?'on':''}">${esc(titulo)}: ${sel.size||'todos'}</summary>
-    <div class="bn-multi-pop">
-      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(o.v)?'checked':''} onchange="fxMultiTgl('${ns}','${key}','${esc(jsq(o.v))}',this.checked)">${esc(o.l)}</label>`).join('')}
-      ${sel.size?`<button class="btn btn-s btn-mini" onclick="fxLimpar('${ns}','${key}')">Limpar</button>`:''}
-    </div></details>`;
-}
-/* ordenar por coluna (mesma regra do Estoque: ↑ → ↓ → sem ordenação) */
-function fxSort(ns,col){ const st=FX_ST[ns]; if(!st) return;
-  if(st.sort===col){ if(st.dir>0) st.dir=-1; else { st.sort=''; st.dir=1; } } else { st.sort=col; st.dir=1; }
-  fxRender(ns); }
-function fxTh(ns,col,label){ const st=FX_ST[ns]||{}, on=st.sort===col;
-  return `<th onclick="fxSort('${ns}','${col}')" style="cursor:pointer;white-space:nowrap" title="Ordenar">${esc(label)}${on?(st.dir>0?' ↑':' ↓'):''}</th>`; }
-function fxOrdenar(ns,l,valDe){ const st=FX_ST[ns]||{}; if(!st.sort) return l;
-  const k=st.sort, d=st.dir, v=valDe||((c,k)=>c[k]);
-  return l.slice().sort((a,b)=>{ const va=v(a,k), vb=v(b,k);
-    if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
-    if(typeof va==='number'||typeof vb==='number') return (Number(va)-Number(vb))*d;
-    return String(va).localeCompare(String(vb),'pt-BR')*d; }); }
-/* colunas ligáveis por tela, guardadas por aparelho (mesmo desenho do Estoque) */
-function fxColsHtml(ns,catalogo,vis,fixa){
-  const st=FX_ST[ns]||{}, v=new Set(vis);
-  return `<details class="bn-multi"${st.pop==='cols'?' open':''} ontoggle="fxPopTgl('${ns}','cols',this.open)">
-    <summary>🧩 Colunas (${v.size})</summary>
-    <div class="bn-multi-pop">
-      ${Object.keys(catalogo).filter(k=>k!==fixa).map(k=>`<label><input type="checkbox" ${v.has(k)?'checked':''} onchange="${ns}ColToggle('${k}',this.checked)">${esc(catalogo[k].label)}</label>`).join('')}
-      <button class="btn btn-s btn-mini" onclick="${ns}ColPadrao()">Padrão</button>
-    </div></details>`;
-}
-
-/* ── BOTTOM-SHEET DE FILTROS (celular) ─────────────────────────────────────
-   No mobile o CSS esconde `.toolbar .bn-multi` e os selects (L421): sem o
-   sheet, a tela fica SEM os filtros no celular. O B7 resolveu isso pro
-   Estoque; aqui o mesmo sheet vira genérico, e cada tela só declara a SPEC
-   (grupos de chips + inputs). Inputs de texto usam o caminho "quiet" — o
-   sheet não se redesenha a cada tecla, senão o campo perde o foco (bug
-   corrigido na varredura de 04/08). */
-const FX_SHEET={};
-let FX_SHEET_NS='';
-function fxSheetReg(ns,fn){ FX_SHEET[ns]=fn; }
-function fxSheetAbrir(ns){
-  if($('#fx-sheet-bd')) return;
-  FX_SHEET_NS=ns;
-  document.body.insertAdjacentHTML('beforeend','<div class="sheet-bd" id="fx-sheet-bd"><div class="sheet" id="fx-sheet"></div></div>');
-  document.getElementById('fx-sheet-bd').onclick=e=>{ if(e.target.id==='fx-sheet-bd') fxSheetFechar(); };
-  fxSheetRender();
-}
-function fxSheetFechar(){ const s=$('#fx-sheet-bd'); if(s) s.remove(); const ns=FX_SHEET_NS; FX_SHEET_NS=''; if(ns) fxRender(ns); }
-function fxSheetSet(ns,k,v){ const st=FX_ST[ns]; if(!st) return; st[k]=v; if('mostrar' in st) st.mostrar=150; fxRender(ns); fxSheetRender(); }
-function fxSheetTgl(ns,k,v){ const st=FX_ST[ns]; if(!st) return; const s=csvSet(st[k]); if(s.has(v)) s.delete(v); else s.add(v); fxSheetSet(ns,k,[...s].join(',')); }
-function fxSheetQuiet(ns,k,v){ const st=FX_ST[ns]; if(!st) return; st[k]=v; if('mostrar' in st) st.mostrar=150; fxRender(ns);
-  const b=$('#fx-sheet-ver'), sp=FX_SHEET[ns]&&FX_SHEET[ns](); if(b&&sp) b.textContent=sp.ver(); }
-function fxSheetLimpar(ns){ const sp=FX_SHEET[ns]&&FX_SHEET[ns](); if(sp&&sp.limpar) sp.limpar(); fxSheetRender(); }
-function fxSheetRender(){
-  const el=$('#fx-sheet'), ns=FX_SHEET_NS; if(!el||!FX_SHEET[ns]) return;
-  const sp=FX_SHEET[ns](), st=FX_ST[ns]||{};
-  const grp=(t,inner)=>`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(t)}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${inner}</div></div>`;
-  // `req` = grupo que sempre tem um escolhido (ex.: ordem): clicar no que já
-  // está on não desmarca, senão o chip apaga mas a lista continua ordenada.
-  const chip=(k,v,l,multi,req)=>{ const on=multi?csvSet(st[k]).has(v):st[k]===v;
-    const val=(on&&!req)?'':esc(jsq(v));
-    return `<button class="sheet-chip ${on?'on':''}" onclick="${multi?`fxSheetTgl('${ns}','${k}','${esc(jsq(v))}')`:`fxSheetSet('${ns}','${k}','${val}')`}">${esc(l)}</button>`; };
-  const inp=(k,l,extra)=>`<label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">${esc(l)}<input ${extra||''} value="${esc(st[k]||'')}" oninput="fxSheetQuiet('${ns}','${k}',this.value)"></label>`;
-  el.innerHTML=`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><b style="flex:1;font-size:16px">🎛️ ${esc(sp.titulo)}</b>
-      <button class="btn btn-s btn-mini" onclick="fxSheetLimpar('${ns}')">Limpar tudo</button>
-      <button class="btn btn-ghost btn-mini" onclick="fxSheetFechar()" style="font-size:17px" aria-label="Fechar">✕</button></div>
-    ${(sp.grupos||[]).map(g=>grp(g.t,g.opts.map(o=>chip(g.k,o.v,o.l,g.multi!==false,g.req)).join(''))).join('')}
-    ${(sp.inputs&&sp.inputs.length)? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">${sp.inputs.map(i=>inp(i.k,i.l,i.extra)).join('')}</div>`:''}
-    <button class="btn btn-p" id="fx-sheet-ver" style="width:100%;padding:12px;font-size:15px" onclick="fxSheetFechar()">${esc(sp.ver())}</button>`;
-}
-
 /* ── TELA: ESTOQUE DE NOMES ──────────────────────────────────────────────── */
 let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',lp:'',prof:'',cid:'',ecivil:'',filhos:'',idmin:'',idmax:'',rmin:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1,pop:''};
 const FBN_CAMPOS=['busca','trilha','estagio','pri','tel','lp','prof','cid','ecivil','filhos','idmin','idmax','rmin'];
@@ -4052,9 +4133,10 @@ function lpkGo(i){
   // (e o nome recém-criado) — quem navega pela busca quer VER o alvo, então
   // os filtros são limpos antes de abrir.
   const limpaF=()=>{ FBN_CAMPOS.forEach(k=>FBN[k]=''); FBN.mostrar=150; };
+  const limpaCT=()=>{ CT_CAMPOS.forEach(k=>FILTRO[k]=''); };   // mesma lição, agora que Contatos também filtra
   if(!r){ if(q){ limpaF(); irPara('bn-estoque'); bnNovo(q); } return; }
   if(r.t==='bn'){ limpaF(); FBN.edit=r.id; irPara('bn-estoque'); }
-  else if(r.t==='funil'){ abrirContato(r.id); }
+  else if(r.t==='funil'){ limpaCT(); abrirContato(r.id); }
   else { irPara('cart-clientes'); cartAbrir(r.id); }
 }
 function lpkAbrir(){
@@ -4084,7 +4166,7 @@ document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#lpk-bd')?lpkFechar():lpkAbrir(); }
 });
 
-carregar(); bnCarregarLocal(); bnPrefLer(); taPrefLer(); recPrefLer(); dicCacheLer();
+carregar(); bnCarregarLocal(); bnPrefLer(); taPrefLer(); recPrefLer(); ctPrefLer(); dicCacheLer();
 document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique fora fecha
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
   if(fechou) FBN.pop=''; });
