@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.8.0 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.0 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -382,6 +382,16 @@
     .bn-card{padding:0;overflow:hidden}
   }
 
+  /* ── B1: planilha do Estoque — popover de multi-filtros/colunas + célula editável ── */
+  details.bn-multi{position:relative;display:inline-block}
+  details.bn-multi summary{list-style:none;cursor:pointer;font-size:12.5px;padding:8px 12px;border:1px solid var(--linha);border-radius:10px;background:var(--card);white-space:nowrap;user-select:none;color:var(--cinza)}
+  details.bn-multi summary::-webkit-details-marker{display:none}
+  details.bn-multi summary.on{border-color:var(--primary);color:var(--primary);font-weight:600}
+  details.bn-multi[open] summary{border-color:var(--primary)}
+  .bn-multi-pop{position:absolute;z-index:60;top:calc(100% + 6px);left:0;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.14);padding:10px;min-width:190px;display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+  .bn-multi-pop label{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;white-space:nowrap}
+  .bn-tabela td input,.bn-tabela td select{width:100%;min-width:80px;padding:5px 7px;font-size:12.5px;border:1px solid var(--primary);border-radius:7px}
+
   /* ================================================================
      🎨 AJUSTES DE VISUAL — mesmo painel e MESMA chave da Captação
      (crm-tweaks-v1): o que ele escolhe num app vale nos dois.
@@ -530,7 +540,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.8.0 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.9.0 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -543,7 +553,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.8.0 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.9.0 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2586,6 +2596,79 @@ let BN={contatos:[],dups:[]};
 const BN_TRILHAS=['seguro','recrutamento'];
 const BN_ESTAGIOS=['estoque','lista_ta','oi_agendado','cliente','descartado'];
 const BN_EST_LABEL={estoque:'Estoque',lista_ta:'Lista de TA',oi_agendado:'OI agendado',cliente:'Cliente',descartado:'Descartado',fundido:'Fundido'};
+
+/* ── dicionários de exibição (app_settings do banco; cache local pra offline/
+   deslogado). Regra do dicionario_civil_cod: por extenso onde couber; o código
+   ("C/CF") só em espaço curto — por isso badge curto + tooltip por extenso. ── */
+let DIC={civil:null,temp:null};
+function dicCacheLer(){ try{ const r=localStorage.getItem('crmlp_dic_v1'); if(r) DIC=Object.assign(DIC,JSON.parse(r)); }catch(_){} }
+async function dicCarregar(){
+  if(!sb) return; try{
+    const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return;
+    const {data,error}=await sb.from('app_settings').select('chave,valor').in('chave',['dicionario_civil_cod','dicionario_temperatura']);
+    if(error) throw error;
+    (data||[]).forEach(r=>{ const v=typeof r.valor==='string'?JSON.parse(r.valor):r.valor;
+      if(r.chave==='dicionario_civil_cod') DIC.civil=v; else if(r.chave==='dicionario_temperatura') DIC.temp=v; });
+    localStorage.setItem('crmlp_dic_v1',JSON.stringify(DIC));
+  }catch(e){ console.warn('dicionarios: app_settings indisponível → cache local',e); }
+}
+function bnCivilInvMap(){ return DIC.civil?Object.fromEntries(Object.entries(DIC.civil.civil||{}).map(([k,v])=>[v,k])):{}; }
+function bnCivilCod(c){ // código canônico: direto da carga ou recomposto dos campos soltos
+  if(c.civil_cod) return c.civil_cod;
+  const a=c.estado_civil?(bnCivilInvMap()[c.estado_civil]||null):null, f=bnFilhosStr(c.filhos);
+  if(!a&&!f) return null;
+  return (a||'?')+'/'+(f==='sim'?'CF':f==='nao'?'SF':'?');
+}
+function bnCivilInfo(cod){
+  if(!cod) return null; const d=DIC.civil||{}; const [a,b]=String(cod).split('/');
+  const longo=[a&&a!=='?'?((d.civil||{})[a]||a):null, b&&b!=='?'?((d.filhos||{})[b]||b):null].filter(Boolean).join(' · ');
+  return {cod, longo:longo||'Não informado'};
+}
+function bnCivilDe(c){ // estado civil legível: campo direto ou derivado do código
+  if(c.estado_civil) return c.estado_civil;
+  const a=String(c.civil_cod||'').split('/')[0];
+  return a&&a!=='?'?(((DIC.civil||{}).civil||{})[a]||''):'';
+}
+function bnFilhosStr2(c){ // filhos: campo direto ou derivado do código (445 da carga só têm o código)
+  const s=bnFilhosStr(c.filhos); if(s) return s;
+  const b=String(c.civil_cod||'').split('/')[1]; return b==='CF'?'sim':b==='SF'?'nao':'';
+}
+function bnCivilRecalc(c){ // edição gravou civil/filhos → recompõe o código; sem info nova preserva o da carga
+  const a=c.estado_civil?(bnCivilInvMap()[c.estado_civil]||'?'):null, f=bnFilhosStr(c.filhos);
+  if(!a&&!f) return c.civil_cod||null;
+  return (a||'?')+'/'+(f==='sim'?'CF':f==='nao'?'SF':'?');
+}
+
+/* ── B1: catálogo de colunas da planilha + preferências por aparelho ── */
+const BN_COLS={
+  nome:{label:'Nome'},                              // fixa; clique abre a ficha
+  telefone:{label:'Telefone',edit:'text'},
+  cargo:{label:'Profissão',edit:'text'},
+  idade:{label:'Idade',edit:'num'},
+  cidade:{label:'Cidade',edit:'text'},
+  renda_estimada:{label:'Renda',edit:'num'},
+  civil_cod:{label:'Civil/Filhos'},                 // badge do código; edição pela ficha
+  estado_civil:{label:'Civil',edit:'sel'},
+  filhos:{label:'Filhos',edit:'sel'},
+  trilha:{label:'Trilha',edit:'sel'},
+  estagio:{label:'Estágio',edit:'sel'},
+  prioridade:{label:'P',edit:'sel'},
+  recomendante:{label:'Recomendante',edit:'text'},
+  contexto:{label:'Contexto',edit:'text'},
+  email:{label:'E-mail',edit:'text'},
+  notas:{label:'Notas',edit:'text'},
+  n_origens:{label:'Orig.'}
+};
+const BN_COLS_DEF=['nome','telefone','cargo','idade','cidade','renda_estimada','civil_cod','trilha','estagio','prioridade','recomendante','n_origens'];
+let BNP={cols:null,inline:false};
+function bnPrefLer(){ try{ const r=localStorage.getItem('crmlp_bn_cols_v1'); if(r) BNP=Object.assign(BNP,JSON.parse(r)); }catch(_){}
+  if(!Array.isArray(BNP.cols)||!BNP.cols.length) BNP.cols=null; }
+function bnPrefSalvar(){ localStorage.setItem('crmlp_bn_cols_v1',JSON.stringify(BNP)); }
+function bnColsVis(){ return (BNP.cols||BN_COLS_DEF).filter(k=>BN_COLS[k]); }
+function bnColToggle(k,on){ const v=new Set(bnColsVis()); if(on)v.add(k); else v.delete(k);
+  BNP.cols=Object.keys(BN_COLS).filter(x=>v.has(x)); if(!BNP.cols.includes('nome')) BNP.cols.unshift('nome');
+  bnPrefSalvar(); FBN.pop='cols'; viewBnEstoque(); }
+function bnCsvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).filter(Boolean)); }
 /* Separação por LP: cada nome carrega `lp` (sem valor = gustavo, dono da base
    importada). Perfil não-Master só vê o que é dele; Master vê tudo e pode
    filtrar por LP (FBN.lp). A separação ENTRE CONTAS já é o RLS por dono. */
@@ -2742,7 +2825,7 @@ async function bnImportarArquivos(input){
 }
 
 /* ── TELA: ESTOQUE DE NOMES ──────────────────────────────────────────────── */
-let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',lp:'',prof:'',cid:'',ecivil:'',filhos:'',idmin:'',idmax:'',rmin:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1};
+let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',lp:'',prof:'',cid:'',ecivil:'',filhos:'',idmin:'',idmax:'',rmin:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1,pop:''};
 const FBN_CAMPOS=['busca','trilha','estagio','pri','tel','lp','prof','cid','ecivil','filhos','idmin','idmax','rmin'];
 function bnFiltroLimpar(){ FBN_CAMPOS.forEach(k=>FBN[k]=''); FBN.mostrar=150; viewBnEstoque(); }
 function bnFiltroSalvar(){ const ativo=FBN_CAMPOS.some(k=>FBN[k]); if(!ativo){ toast('Monte um filtro primeiro',false); return; }
@@ -2764,19 +2847,19 @@ function bnFiltrados(){
   let l=bnVivos();
   if(FBN.busca){ const q=FBN.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
   if(FBN.trilha) l=l.filter(c=>c.trilha===FBN.trilha);
-  if(FBN.estagio) l=l.filter(c=>c.estagio===FBN.estagio);
-  if(FBN.pri) l=l.filter(c=>String(c.prioridade)===FBN.pri);
+  if(FBN.estagio){ const s=bnCsvSet(FBN.estagio); l=l.filter(c=>s.has(c.estagio)); }   // CSV = multi (compat: valor único é CSV de 1)
+  if(FBN.pri){ const s=bnCsvSet(FBN.pri); l=l.filter(c=>s.has(String(c.prioridade))); }
   if(FBN.tel==='com') l=l.filter(c=>c.telefone);
   if(FBN.tel==='sem') l=l.filter(c=>!c.telefone);   // sem-telefone é matéria-prima do SitPlan: só filtra se VOCÊ pedir
   if(FBN.prof){ const q=FBN.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
   if(FBN.cid){ const q=FBN.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
-  if(FBN.ecivil) l=l.filter(c=>c.estado_civil===FBN.ecivil);
-  if(FBN.filhos) l=l.filter(c=>bnFilhosStr(c.filhos)===FBN.filhos);
+  if(FBN.ecivil){ const s=bnCsvSet(FBN.ecivil); l=l.filter(c=>s.has(bnCivilDe(c))); }  // lê civil_cod da carga também
+  if(FBN.filhos) l=l.filter(c=>bnFilhosStr2(c)===FBN.filhos);
   if(FBN.idmin) l=l.filter(c=>Number(c.idade)>=Number(FBN.idmin));
   if(FBN.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FBN.idmax));
   if(FBN.rmin) l=l.filter(c=>Number(c.renda_estimada)>=Number(FBN.rmin));
   if(FBN.sort){ const k=FBN.sort, d=FBN.dir;
-    l=l.slice().sort((a,b)=>{ const va=a[k], vb=b[k];
+    l=l.slice().sort((a,b)=>{ const va=k==='civil_cod'?bnCivilCod(a):a[k], vb=k==='civil_cod'?bnCivilCod(b):b[k];
       if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
       if(typeof va==='number'||typeof vb==='number') return (Number(va)-Number(vb))*d;
       return String(va).localeCompare(String(vb),'pt-BR')*d; }); }
@@ -2787,14 +2870,15 @@ function bnBadgeEst(e){ const cores={estoque:'b-cinza',lista_ta:'b-azul',oi_agen
 function viewBnEstoque(){
   const l=bnFiltrados(), tot=bnVivos().length;
   const comTel=bnVivos().filter(c=>c.telefone).length;
+  const cols=bnColsVis(), NC=cols.length+1;
   $('#main').innerHTML=`
     <h1 class="pg">Estoque de Nomes</h1>
     <div class="sub">${tot? `${tot.toLocaleString('pt-BR')} nomes vivos · ${comTel.toLocaleString('pt-BR')} com telefone · ${(tot-comTel).toLocaleString('pt-BR')} só nome (matéria-prima do SitPlan)`:'Nenhum nome ainda — importe a base tratada.'}</div>
     <div class="toolbar">
       <input type="search" placeholder="Buscar nome, telefone ou recomendante…" value="${esc(FBN.busca)}" oninput="FBN.busca=this.value;FBN.mostrar=150;viewBnEstoque()">
       <select onchange="FBN.trilha=this.value;viewBnEstoque()"><option value="">Trilhas: todas</option>${BN_TRILHAS.map(t=>`<option ${FBN.trilha===t?'selected':''} value="${t}">${t}</option>`).join('')}</select>
-      <select onchange="FBN.estagio=this.value;viewBnEstoque()"><option value="">Estágios: todos</option>${BN_ESTAGIOS.map(e=>`<option ${FBN.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select>
-      <select onchange="FBN.pri=this.value;viewBnEstoque()"><option value="">Prioridade: todas</option><option ${FBN.pri==='1'?'selected':''} value="1">P1</option><option ${FBN.pri==='2'?'selected':''} value="2">P2</option><option ${FBN.pri==='3'?'selected':''} value="3">P3</option></select>
+      ${bnMultiHtml('estagio','Estágios',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
+      ${bnMultiHtml('pri','Prioridade',[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}])}
       <select onchange="FBN.tel=this.value;viewBnEstoque()"><option value="">Telefone: tanto faz</option><option ${FBN.tel==='com'?'selected':''} value="com">Com telefone</option><option ${FBN.tel==='sem'?'selected':''} value="sem">Só nome</option></select>
       ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnEstoque()"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">${esc(u.nome.split(' ')[0])}</option>`).join('')}</select>`:''}
       <button class="btn btn-p btn-mini" onclick="bnNovo()">➕ Novo nome</button>
@@ -2804,11 +2888,13 @@ function viewBnEstoque(){
     <div class="toolbar" style="flex-wrap:wrap">
       <input type="search" style="max-width:170px" placeholder="Profissão/empresa…" value="${esc(FBN.prof)}" oninput="FBN.prof=this.value;FBN.mostrar=150;viewBnEstoque()">
       <input type="search" style="max-width:140px" placeholder="Cidade…" value="${esc(FBN.cid)}" oninput="FBN.cid=this.value;FBN.mostrar=150;viewBnEstoque()">
-      <select onchange="FBN.ecivil=this.value;viewBnEstoque()"><option value="">Estado civil</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>`<option ${FBN.ecivil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select>
+      ${bnMultiHtml('ecivil','Estado civil',['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>({v:e,l:e})))}
       <select onchange="FBN.filhos=this.value;viewBnEstoque()"><option value="">Filhos?</option><option ${FBN.filhos==='sim'?'selected':''} value="sim">Com filhos</option><option ${FBN.filhos==='nao'?'selected':''} value="nao">Sem filhos</option></select>
       <input type="number" style="max-width:92px" placeholder="Idade ≥" value="${esc(FBN.idmin)}" oninput="FBN.idmin=this.value;viewBnEstoque()">
       <input type="number" style="max-width:92px" placeholder="Idade ≤" value="${esc(FBN.idmax)}" oninput="FBN.idmax=this.value;viewBnEstoque()">
       <input type="number" style="max-width:110px" placeholder="Renda ≥" step="1000" value="${esc(FBN.rmin)}" oninput="FBN.rmin=this.value;viewBnEstoque()">
+      ${bnColsHtml()}
+      <button class="btn btn-mini ${BNP.inline?'btn-p':'btn-s'}" onclick="BNP.inline=!BNP.inline;bnPrefSalvar();viewBnEstoque()" title="Edição direto na célula: com o modo ligado, clicar numa célula edita ali mesmo (o nome continua abrindo a ficha completa)">✏️ Célula${BNP.inline?' ON':''}</button>
       <button class="btn btn-s btn-mini" onclick="bnFiltroSalvar()">💾 Salvar filtro</button>
       <button class="btn btn-s btn-mini" onclick="bnFiltroLimpar()">Limpar</button>
     </div>
@@ -2824,26 +2910,14 @@ function viewBnEstoque(){
       <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnEstoque()">Limpar</button>
     </div>`:''}
     <div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
-      <table><thead><tr><th></th>${bnTh('nome','Nome')}${bnTh('telefone','Telefone')}${bnTh('cargo','Profissão')}${bnTh('idade','Idade')}${bnTh('cidade','Cidade')}${bnTh('renda_estimada','Renda')}${bnTh('estado_civil','Civil')}${bnTh('filhos','Filhos')}${bnTh('trilha','Trilha')}${bnTh('estagio','Estágio')}${bnTh('prioridade','P')}${bnTh('recomendante','Recomendante')}${bnTh('n_origens','Orig.')}</tr></thead><tbody>
+      <table><thead><tr><th></th>${cols.map(k=>bnTh(k,BN_COLS[k].label)).join('')}</tr></thead><tbody>
       ${l.slice(0,FBN.mostrar).map(c=>`
         <tr class="clicavel">
           <td onclick="event.stopPropagation()"><input type="checkbox" ${FBN.sel.has(c.id)?'checked':''} onchange="this.checked?FBN.sel.add('${esc(c.id)}'):FBN.sel.delete('${esc(c.id)}');viewBnEstoque()"></td>
-          <td onclick="bnEditar('${esc(c.id)}')"><b>${esc(c.nome)}</b>${(c.contexto||c.cidade||c.idade)? `<br><span style="font-size:11.5px;color:var(--muted)">${esc([c.contexto,c.cidade,c.idade&&(c.idade+' anos')].filter(Boolean).join(' · '))}</span>`:''}</td>
-          <td onclick="bnEditar('${esc(c.id)}')">${c.telefone? esc(c.telefone):'<span style="color:var(--muted)">—</span>'}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.cargo||'')}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.idade||'')}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.cidade||'')}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${c.renda_estimada? brlCurto(c.renda_estimada):''}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc((c.estado_civil||'').split('(')[0])}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${bnFilhosStr(c.filhos)==='sim'?'👶':bnFilhosStr(c.filhos)==='nao'?'—':''}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.trilha||'')}</td>
-          <td onclick="bnEditar('${esc(c.id)}')">${bnBadgeEst(c.estagio)}</td>
-          <td onclick="bnEditar('${esc(c.id)}')">${esc(c.prioridade||'')}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.recomendante||'')}</td>
-          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px;color:var(--muted)">${esc(c.n_origens||1)}</td>
+          ${cols.map(k=>`<td onclick="bnCelClique(event,'${esc(c.id)}','${k}')"${k==='nome'?'':' style="font-size:12px"'}>${bnCelHtml(c,k)}</td>`).join('')}
         </tr>
-        ${FBN.edit===c.id? `<tr><td colspan="8">${bnEditorHtml(c)}</td></tr>`:''}`).join('')
-        || `<tr><td colspan="14" class="vazio">${tot?'Nenhum nome nesse filtro.':'⬆️ Use o botão Importar acima com o contatos.json (e os CSVs de dup/origens) da base tratada.'}</td></tr>`}
+        ${FBN.edit===c.id? `<tr><td colspan="${NC}">${bnEditorHtml(c)}</td></tr>`:''}`).join('')
+        || `<tr><td colspan="${NC}" class="vazio">${tot?'Nenhum nome nesse filtro.':'⬆️ Use o botão Importar acima com o contatos.json (e os CSVs de dup/origens) da base tratada.'}</td></tr>`}
       </tbody></table>
     </div>
     <div class="bn-cards">
@@ -2862,6 +2936,81 @@ function viewBnEstoque(){
     </div>
     ${l.length>FBN.mostrar? `<div style="text-align:center;padding:10px"><button class="btn btn-s" onclick="FBN.mostrar+=300;viewBnEstoque()">Mostrar mais (${(l.length-FBN.mostrar).toLocaleString('pt-BR')} restantes)</button></div>`:''}`;
 }
+/* ── B1: célula da planilha (conteúdo por coluna) + popovers + edição inline ── */
+function bnCelHtml(c,k){
+  switch(k){
+    case 'nome': return `<b>${esc(c.nome)}</b>${(c.contexto||c.cidade||c.idade)? `<br><span style="font-size:11.5px;color:var(--muted)">${esc([c.contexto,c.cidade,c.idade&&(c.idade+' anos')].filter(Boolean).join(' · '))}</span>`:''}`;
+    case 'telefone': return c.telefone? esc(c.telefone):'<span style="color:var(--muted)">—</span>';
+    case 'renda_estimada': return c.renda_estimada? brlCurto(c.renda_estimada):'';
+    case 'civil_cod': { const i=bnCivilInfo(bnCivilCod(c)); return i?`<span class="badge b-cinza" title="${esc(i.longo)}">${esc(i.cod)}</span>`:''; }
+    case 'estado_civil': return esc(bnCivilDe(c).split('(')[0]);
+    case 'filhos': { const s=bnFilhosStr2(c); return s==='sim'?'👶':s==='nao'?'—':''; }
+    case 'estagio': return bnBadgeEst(c.estagio);
+    case 'n_origens': return `<span style="color:var(--muted)">${esc(c.n_origens||1)}</span>`;
+    default: return esc(c[k]??'');
+  }
+}
+function bnMultiHtml(key,titulo,opts){
+  const sel=bnCsvSet(FBN[key]);
+  return `<details class="bn-multi"${FBN.pop===key?' open':''} ontoggle="bnPopTgl('${key}',this.open)">
+    <summary class="${sel.size?'on':''}">${esc(titulo)}: ${sel.size||'todos'}</summary>
+    <div class="bn-multi-pop">
+      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(o.v)?'checked':''} onchange="bnMultiTgl('${key}','${esc(o.v)}',this.checked)">${esc(o.l)}</label>`).join('')}
+      ${sel.size?`<button class="btn btn-s btn-mini" onclick="FBN['${key}']='';FBN.pop='';FBN.mostrar=150;viewBnEstoque()">Limpar</button>`:''}
+    </div></details>`;
+}
+function bnMultiTgl(key,v,on){ const s=bnCsvSet(FBN[key]); if(on)s.add(v); else s.delete(v);
+  FBN[key]=[...s].join(','); FBN.mostrar=150; FBN.pop=key; viewBnEstoque(); }
+function bnPopTgl(k,open){ if(open) FBN.pop=k; else if(FBN.pop===k) FBN.pop=''; }
+function bnColsHtml(){
+  const vis=new Set(bnColsVis());
+  return `<details class="bn-multi"${FBN.pop==='cols'?' open':''} ontoggle="bnPopTgl('cols',this.open)">
+    <summary>🧩 Colunas (${vis.size})</summary>
+    <div class="bn-multi-pop">
+      ${Object.keys(BN_COLS).filter(k=>k!=='nome').map(k=>`<label><input type="checkbox" ${vis.has(k)?'checked':''} onchange="bnColToggle('${k}',this.checked)">${esc(BN_COLS[k].label)}</label>`).join('')}
+      <button class="btn btn-s btn-mini" onclick="BNP.cols=null;bnPrefSalvar();FBN.pop='cols';viewBnEstoque()">Padrão</button>
+    </div></details>`;
+}
+function bnCelClique(ev,id,k){
+  const col=BN_COLS[k];
+  if(k==='nome'||!BNP.inline||!col||!col.edit){ bnEditar(id); return; }
+  ev.stopPropagation();
+  const td=ev.currentTarget; if(td.querySelector('input,select')) return;
+  const c=bnPor(id); if(!c) return;
+  let el; const fecha=fn=>{ if(el.dataset.done) return; el.dataset.done='1'; fn(); };
+  if(col.edit==='sel'){
+    const OPS={
+      trilha:BN_TRILHAS.map(t=>[t,t]),
+      estagio:BN_ESTAGIOS.map(e=>[e,BN_EST_LABEL[e]]),
+      prioridade:[['','—'],['1','P1'],['2','P2'],['3','P3']],
+      estado_civil:[['','—'],...['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>[e,e])],
+      filhos:[['','—'],['sim','Sim'],['nao','Não']]
+    }[k]||[];
+    el=document.createElement('select');
+    el.innerHTML=OPS.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');
+    el.value=k==='filhos'?bnFilhosStr2(c):k==='estado_civil'?bnCivilDe(c):k==='prioridade'?String(c.prioridade||''):(c[k]||'');
+    el.onchange=()=>fecha(()=>bnCelGravar(id,k,el.value));
+    el.onblur=()=>fecha(()=>viewBnEstoque());
+  }else{
+    el=document.createElement('input');
+    el.type=col.edit==='num'?'number':'text';
+    el.value=c[k]??'';
+    el.onkeydown=e=>{ if(e.key==='Enter') fecha(()=>bnCelGravar(id,k,el.value));
+      else if(e.key==='Escape') fecha(()=>viewBnEstoque()); };
+    el.onblur=()=>fecha(()=>bnCelGravar(id,k,el.value));
+  }
+  td.innerHTML=''; td.appendChild(el); el.focus();
+  try{ if(el.select) el.select(); }catch(_){}
+}
+function bnCelGravar(id,k,v){
+  const c=bnPor(id); if(!c){ viewBnEstoque(); return; }
+  v=String(v??'').trim();
+  if(k==='idade'||k==='renda_estimada'||k==='prioridade') c[k]=v?Number(v):null;
+  else if(k==='filhos'){ c.filhos=v==='sim'?true:(v==='nao'?false:null); c.civil_cod=bnCivilRecalc(c); }
+  else if(k==='estado_civil'){ c.estado_civil=v||null; c.civil_cod=bnCivilRecalc(c); }
+  else c[k]=v||null;
+  bnSalvar(); viewBnEstoque(); toast('Salvo',true);
+}
 function bnEditorHtml(c){
   return `<div class="card" style="padding:12px;background:var(--bg)">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
@@ -2873,8 +3022,8 @@ function bnEditorHtml(c){
       <label>Estágio<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select></label>
       <label>Prioridade<select id="bne-pri"><option value="">—</option><option ${String(c.prioridade)==='1'?'selected':''} value="1">P1</option><option ${String(c.prioridade)==='2'?'selected':''} value="2">P2</option><option ${String(c.prioridade)==='3'?'selected':''} value="3">P3</option></select></label>
       <label>Idade<input id="bne-idade" type="number" min="0" max="120" value="${esc(c.idade||'')}"></label>
-      <label>Estado civil<select id="bne-ec"><option value="">—</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>`<option ${c.estado_civil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select></label>
-      <label>Filhos<select id="bne-fi"><option value="">—</option><option ${bnFilhosStr(c.filhos)==='sim'?'selected':''} value="sim">Sim</option><option ${bnFilhosStr(c.filhos)==='nao'?'selected':''} value="nao">Não</option></select></label>
+      <label>Estado civil<select id="bne-ec"><option value="">—</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>`<option ${bnCivilDe(c)===e?'selected':''} value="${e}">${e}</option>`).join('')}</select></label>
+      <label>Filhos<select id="bne-fi"><option value="">—</option><option ${bnFilhosStr2(c)==='sim'?'selected':''} value="sim">Sim</option><option ${bnFilhosStr2(c)==='nao'?'selected':''} value="nao">Não</option></select></label>
       <label>Renda estimada (R$/mês)<input id="bne-renda" type="number" min="0" step="500" value="${esc(c.renda_estimada||'')}"></label>
       <label>Cidade/UF<input id="bne-cid" value="${esc(c.cidade||'')}" placeholder="Recife/PE"></label>
       <label>E-mail<input id="bne-mail" value="${esc(c.email||'')}"></label>
@@ -2897,6 +3046,7 @@ function bnSalvarEdicao(id){
   c.idade=$('#bne-idade').value?Number($('#bne-idade').value):null;
   c.estado_civil=$('#bne-ec').value||null;
   c.filhos=$('#bne-fi').value==='sim'?true:($('#bne-fi').value==='nao'?false:null); // boolean = formato canônico do banco (carga 04/08)
+  c.civil_cod=bnCivilRecalc(c); // mantém o código da carga em sincronia com civil/filhos editados
   c.renda_estimada=$('#bne-renda').value?Number($('#bne-renda').value):null;
   c.cidade=$('#bne-cid').value.trim()||null; c.email=$('#bne-mail').value.trim()||null;
   { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); c.empresa=ec[0]||null; c.cargo=ec[1]||null; }
@@ -3440,9 +3590,12 @@ function render(){
   ocultarTituloDuplicado();
   if(CONTATO) renderDrawer();
 }
-carregar(); bnCarregarLocal();
+carregar(); bnCarregarLocal(); bnPrefLer(); dicCacheLer();
+document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique fora fecha
+  document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
+  if(fechou) FBN.pop=''; });
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
-render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar()]).then(render);   // render base já; LP, Carteira, Contatos e Perfil (remoto/local) populam e re-renderizam
+render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
 </script>
 
 <!-- ========== 🎨 AJUSTES DE VISUAL (mesma chave da Captação) ========== -->
