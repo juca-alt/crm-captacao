@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.4.4 · Visão LP</title>
+<title>CRM Life Planner · v0.5.0 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -517,7 +517,8 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.4.4 · Visão LP</span>
+      <span class="tag">ISLAND · v0.5.0 · Base de Nomes</span>
+      <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
 
@@ -529,7 +530,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.4.4 — Visão LP · Island.</span>
+      <span>CRM Life Planner v0.5.0 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2570,6 +2571,26 @@ const BN_ESTAGIOS=['estoque','lista_ta','oi_agendado','cliente','descartado'];
 const BN_EST_LABEL={estoque:'Estoque',lista_ta:'Lista de TA',oi_agendado:'OI agendado',cliente:'Cliente',descartado:'Descartado',fundido:'Fundido'};
 function bnVivos(){ return BN.contatos.filter(b=>!b.merged_into); }
 function bnPor(id){ return BN.contatos.find(b=>b.id===id); }
+/* Atualizar app: limpa caches (SW/CacheStorage) e recarrega — versão nova na hora */
+async function atualizarApp(){
+  try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+  try{ const regs=await (navigator.serviceWorker&&navigator.serviceWorker.getRegistrations&&navigator.serviceWorker.getRegistrations())||[]; await Promise.all(regs.map(r=>r.update())); }catch(e){}
+  location.reload();
+}
+/* Fila de duplicatas: além do import local, carrega do banco (lp_dup_fila) —
+   decisões locais mais novas vencem; o que só existe no banco entra. */
+async function bnDupsCarregar(){
+  if(!sb) return; try{
+    const {data:sess}=await sb.auth.getSession(); if(!sess||!sess.session) return;
+    const {data,error}=await sb.from('lp_dup_fila').select('id_a,id_b,motivo,chave,decisao,decidido_em');
+    if(error) throw error;
+    const local=new Map(BN.dups.map(d=>[d.id_a+'|'+d.id_b,d]));
+    (data||[]).forEach(r=>{ const k=r.id_a+'|'+r.id_b, l=local.get(k);
+      if(!l) BN.dups.push({id_a:r.id_a,id_b:r.id_b,motivo:r.motivo||'',chave:r.chave||'',decisao:r.decisao||null,decidido_em:r.decidido_em||null});
+      else if(!l.decisao&&r.decisao){ l.decisao=r.decisao; l.decidido_em=r.decidido_em; } });
+    bnSalvar(); render();
+  }catch(e){ console.warn('lp_dup_fila: load remoto falhou → segue local',e); }
+}
 function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(raw) BN=JSON.parse(raw); }catch(e){ BN={contatos:[],dups:[]}; } if(!Array.isArray(BN.contatos)) BN.contatos=[]; if(!Array.isArray(BN.dups)) BN.dups=[]; }
 
 /* persistência: carimba _upd só em quem mudou (mesma mecânica do salvar()) */
@@ -2989,7 +3010,7 @@ function render(){
 }
 carregar(); bnCarregarLocal();
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
-render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar()]).then(render);   // render base já; LP, Carteira, Contatos e Perfil (remoto/local) populam e re-renderizam
+render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar()]).then(render);   // render base já; LP, Carteira, Contatos e Perfil (remoto/local) populam e re-renderizam
 </script>
 
 <!-- ========== 🎨 AJUSTES DE VISUAL (mesma chave da Captação) ========== -->
