@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.3 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.4 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -574,7 +574,7 @@
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
       <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
-      <span class="tag">ISLAND · v0.9.3 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.9.4 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -587,7 +587,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.9.3 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.9.4 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2539,6 +2539,7 @@ function viewCartVisao(){ const r=cartResumo();
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-p" onclick="irPara('cart-oportunidades')">💡 Ver oportunidades</button><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
 
 function viewCartClientes(){ const q=normKey(CART_Q);
+  const _af=document.activeElement?document.activeElement.id:'';  // devolve o foco pro campo certo após o re-render
   const fset=bnCsvSet(FCART.flags);
   const enr=CART.clientes.map(c=>({c,n:cartApolicesDoCliente(c.ref).length,rd:cartRadar(c.ref),dN:lpDiasAte(c.nascimento)}));
   const lista=enr.filter(({c,n,rd,dN})=>{
@@ -2570,15 +2571,18 @@ function viewCartClientes(){ const q=normKey(CART_Q);
       ${fchip('atraso','⏰ Atraso','em atraso no relatório')}${fchip('statust','⏳ Status T','proposta no Status T')}${fchip('pendencia','📋 Pendência','pendência de emissão')}${fchip('niver','🎂 Aniversário','aniversário nos próximos '+JANELA_DIAS+' dias')}
       <span style="width:1px;height:20px;background:var(--linha)"></span>
       ${achip('1','1 apólice')}${achip('2+','2+ apólices')}
-      <input type="number" placeholder="Idade ≥" value="${esc(FCART.idmin)}" oninput="FCART.idmin=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
-      <input type="number" placeholder="Idade ≤" value="${esc(FCART.idmax)}" oninput="FCART.idmax=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
+      <input id="fcart-idmin" type="number" placeholder="Idade ≥" value="${esc(FCART.idmin)}" oninput="FCART.idmin=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
+      <input id="fcart-idmax" type="number" placeholder="Idade ≤" value="${esc(FCART.idmax)}" oninput="FCART.idmax=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
       ${temFiltro?`<span style="font-size:12px;color:var(--muted)">${lista.length} de ${CART.clientes.length}</span><button class="btn btn-s btn-mini" onclick="fcartLimpar()">Limpar</button>`:''}
     </div>
     <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left">
       <th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px;text-align:center">Idade</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:center">Apólices</th><th style="padding:9px 10px;text-align:right">Prêmio/mês</th><th style="padding:9px 10px;text-align:right">Capital Segurado</th></tr></thead>
     <tbody>${linhas||`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">Nenhum cliente encontrado.</td></tr>`}</tbody></table></div>`:cartVazio()}`;
-  const el=$('#cart-q'); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } }
+  // achado da varredura 04/08: refocar SEMPRE o cart-q roubava o foco dos
+  // inputs de idade a cada tecla; agora volta pro campo que estava ativo
+  // (e não abre teclado sozinho no celular ao entrar na tela).
+  if(['cart-q','fcart-idmin','fcart-idmax'].includes(_af)){ const el=$('#'+_af); if(el){ el.focus(); if(el.setSelectionRange&&el.type!=='number') el.setSelectionRange(el.value.length,el.value.length); } } }
 
 /* ---- Oportunidades: aniversários da carteira (nascimento REAL do .xls), gaps de
    cobertura e radar da semana — tudo derivado, nada digitado. ---- */
@@ -3779,8 +3783,12 @@ function lpkGo(i){
   const q=$('#lpk-in')?$('#lpk-in').value.trim():'';
   const r=i==='__novo'?null:LPK_RES[+i];
   lpkFechar();
-  if(!r){ if(q){ irPara('bn-estoque'); bnNovo(q); } return; }
-  if(r.t==='bn'){ FBN.busca=''; FBN.edit=r.id; irPara('bn-estoque'); }
+  // achado da varredura 04/08: filtro ativo no Estoque escondia a ficha aberta
+  // (e o nome recém-criado) — quem navega pela busca quer VER o alvo, então
+  // os filtros são limpos antes de abrir.
+  const limpaF=()=>{ FBN_CAMPOS.forEach(k=>FBN[k]=''); FBN.mostrar=150; };
+  if(!r){ if(q){ limpaF(); irPara('bn-estoque'); bnNovo(q); } return; }
+  if(r.t==='bn'){ limpaF(); FBN.edit=r.id; irPara('bn-estoque'); }
   else if(r.t==='funil'){ abrirContato(r.id); }
   else { irPara('cart-clientes'); cartAbrir(r.id); }
 }
