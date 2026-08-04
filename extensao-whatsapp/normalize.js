@@ -86,6 +86,48 @@ const LPC_FUNIS={
 };
 function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
 
+// ===== SHAPE CANÔNICO DO CONTATO LP — port fiel de salvarNovoContato
+// (vendas.html L1593-1606, v0.9.4). O contato tem que NASCER completo aqui:
+// até a v0.6.1 a extensão gravava um subconjunto em lp_contatos.dados e o
+// drawer do app estourava em `c.infoclient.pessoais` — com a base real 100%
+// vinda daqui, NENHUM contato abria (fix #38). O vendas.html segue com o
+// `normContato()` (L680) como rede de segurança pros registros antigos; campo
+// novo no shape do app entra aqui junto.
+function lpcHojeISO(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// Completa o que faltar SEM sobrescrever o que já veio (espelho do normContato
+// do app + os campos que só o salvarNovoContato cria: ance/idade/sitplan/criadoEm).
+function lpcNormContato(c){
+  c=(c&&typeof c==='object')?c:{};
+  if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
+  ['recs','eventos','planos','interacoes'].forEach(k=>{ if(!Array.isArray(c[k])) c[k]=[]; });
+  ['sexo','profissao','origem','taStatus'].forEach(k=>{ if(c[k]==null||c[k]==='') c[k]='—'; });
+  if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
+  if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
+  if(c.notas==null) c.notas='';
+  if(c.ance===undefined) c.ance=null;        // null = ANCE não preenchido (anceScore do app trata)
+  if(c.idade===undefined) c.idade=null;
+  if(c.sitplan===undefined) c.sitplan=null;  // fora da lista de discagem (a extensão não agenda SitPlan)
+  if(c.telefone===undefined) c.telefone=null;
+  // espelho canônico do prêmio (regra_premio do normContato, v0.9.1): `pm` é o
+  // campo do funil; `premio_mes` é o canônico da ficha. Só ESPELHA, nunca inventa.
+  if(c.pm!=null&&c.premio_mes==null){ const n=Number(c.pm); if(isFinite(n)&&n>0) c.premio_mes=n; }
+  c.funil=lpcFunilDe(c);                     // ausente/estranho ⇒ 'nn', igual ao app
+  if(!c.etapa) c.etapa=LPC_FUNIS[c.funil].etapas[0];  // nn → SitPlan, bc → Clientes Ativos
+  if(!c.criadoEm) c.criadoEm=lpcHojeISO();   // data LOCAL (hojeISO do app), não UTC
+  return c;
+}
+
+// Contato novo no shape completo: `campos` = o que a UI coletou (nome, telefone,
+// funil, notas…); o resto nasce aqui no padrão do app.
+function lpcNovoContato(campos){
+  const c=Object.assign({},campos||{});
+  if(!c.id) c.id='wa'+Date.now();
+  if(!c.lp) c.lp='gustavo';                  // a extensão não tem seletor de LP dono (no app: S.activeUser)
+  if(!c.origemCadastro) c.origemCadastro='whatsapp-ext';
+  return lpcNormContato(c);
+}
+
 // ===== Modelos de mensagem — MESMOS do CRM (app_settings 'msg_templates';
 // default = MSG_TPL_DEFAULT do index.html L1339; fillTpl = port fiel L1345).
 // A extensão só COPIA a mensagem preenchida — enviar é manual (anti-ban).

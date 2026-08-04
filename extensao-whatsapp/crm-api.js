@@ -337,7 +337,12 @@ async function lpcSearch(q){
   return rows.filter(r=>normName((r.dados&&r.dados.nome)||'').includes(q)).map(_lpcOut).slice(0,10);
 }
 async function lpcSave(id,dados){
-  dados=Object.assign({},dados,{_upd:new Date().toISOString()});
+  // shape canônico ANTES de gravar (lpcNormContato, normalize.js). O app tem o
+  // normContato() como rede de segurança, mas contato incompleto no banco volta
+  // incompleto a cada edição — normalizar no choke point fecha o ciclo na origem.
+  dados=lpcNormContato(Object.assign({},dados));
+  if(dados.id==null) dados.id=String(id);
+  dados._upd=new Date().toISOString();
   const rows=await sbJson(`/rest/v1/lp_contatos?on_conflict=dono,id&select=id,dados,atualizado`,
     {method:'POST',body:{id:String(id),dados},headers:{Prefer:'resolution=merge-duplicates,return=representation'}});
   _lpcCache=null;
