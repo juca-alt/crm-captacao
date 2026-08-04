@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.4 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.5 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -574,7 +574,7 @@
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
       <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
-      <span class="tag">ISLAND · v0.9.4 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.9.5 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -587,7 +587,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.9.4 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.9.5 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2930,6 +2930,105 @@ async function bnImportarArquivos(input){
   toast(`Importado: ${nCont} contatos · ${nDup} pares de dup · ${nOrig} origens${avisos.length? ' · ⚠️ '+avisos.join(' | '):''}`,!avisos.length);
 }
 
+/* ══ FILTROS 2.0 — MOTOR DE MULTI-SELEÇÃO REUTILIZÁVEL ═════════════════════
+   O Estoque (B1, v0.9.0) estreou o multi-filtro por CSV; a v0.9.5 promove o
+   mesmo motor a GENÉRICO, pra qualquer tela ganhar a experiência de planilha
+   (multi-seleção, ordenar por coluna, colunas ligáveis) sem recriar código.
+   Cada tela registra um NAMESPACE (`fxReg`) com seu objeto de estado e a
+   função que redesenha; os handlers vão por nome no onclick, então o valor
+   precisa ser escapado pra JS ANTES do HTML (jsq→esc) — recomendante com
+   apóstrofo (D'Angelo) quebrava a chamada.
+   CSV continua sendo o formato guardado: os filtros salvos do Estoque, que
+   nasceram com valor único, seguem lendo/gravando igual.
+   ═════════════════════════════════════════════════════════════════════════ */
+const FX_ST={}, FX_RENDER={};
+function fxReg(ns,st,fn){ FX_ST[ns]=st; FX_RENDER[ns]=fn; }   // idempotente: a view chama a cada render
+function fxRender(ns){ const f=window[FX_RENDER[ns]]; if(typeof f==='function') f(); }
+/* escape pra dentro de string JS em atributo HTML: o parser decodifica as
+   entidades ANTES do JS ler, então escapa-se a aspa primeiro (\') e o esc()
+   depois protege o HTML. */
+function jsq(s){ return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function csvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).filter(Boolean)); }
+function fxMultiTgl(ns,key,v,on){ const st=FX_ST[ns]; if(!st) return;
+  const s=csvSet(st[key]); if(on)s.add(v); else s.delete(v);
+  st[key]=[...s].join(','); if('mostrar' in st) st.mostrar=150; st.pop=key; fxRender(ns); }
+function fxLimpar(ns,key){ const st=FX_ST[ns]; if(!st) return;
+  st[key]=''; st.pop=''; if('mostrar' in st) st.mostrar=150; fxRender(ns); }
+function fxPopTgl(ns,k,open){ const st=FX_ST[ns]; if(!st) return; if(open) st.pop=k; else if(st.pop===k) st.pop=''; }
+function fxMultiHtml(ns,key,titulo,opts){
+  const st=FX_ST[ns]||{}, sel=csvSet(st[key]);
+  return `<details class="bn-multi"${st.pop===key?' open':''} ontoggle="fxPopTgl('${ns}','${key}',this.open)">
+    <summary class="${sel.size?'on':''}">${esc(titulo)}: ${sel.size||'todos'}</summary>
+    <div class="bn-multi-pop">
+      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(o.v)?'checked':''} onchange="fxMultiTgl('${ns}','${key}','${esc(jsq(o.v))}',this.checked)">${esc(o.l)}</label>`).join('')}
+      ${sel.size?`<button class="btn btn-s btn-mini" onclick="fxLimpar('${ns}','${key}')">Limpar</button>`:''}
+    </div></details>`;
+}
+/* ordenar por coluna (mesma regra do Estoque: ↑ → ↓ → sem ordenação) */
+function fxSort(ns,col){ const st=FX_ST[ns]; if(!st) return;
+  if(st.sort===col){ if(st.dir>0) st.dir=-1; else { st.sort=''; st.dir=1; } } else { st.sort=col; st.dir=1; }
+  fxRender(ns); }
+function fxTh(ns,col,label){ const st=FX_ST[ns]||{}, on=st.sort===col;
+  return `<th onclick="fxSort('${ns}','${col}')" style="cursor:pointer;white-space:nowrap" title="Ordenar">${esc(label)}${on?(st.dir>0?' ↑':' ↓'):''}</th>`; }
+function fxOrdenar(ns,l,valDe){ const st=FX_ST[ns]||{}; if(!st.sort) return l;
+  const k=st.sort, d=st.dir, v=valDe||((c,k)=>c[k]);
+  return l.slice().sort((a,b)=>{ const va=v(a,k), vb=v(b,k);
+    if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
+    if(typeof va==='number'||typeof vb==='number') return (Number(va)-Number(vb))*d;
+    return String(va).localeCompare(String(vb),'pt-BR')*d; }); }
+/* colunas ligáveis por tela, guardadas por aparelho (mesmo desenho do Estoque) */
+function fxColsHtml(ns,catalogo,vis,fixa){
+  const st=FX_ST[ns]||{}, v=new Set(vis);
+  return `<details class="bn-multi"${st.pop==='cols'?' open':''} ontoggle="fxPopTgl('${ns}','cols',this.open)">
+    <summary>🧩 Colunas (${v.size})</summary>
+    <div class="bn-multi-pop">
+      ${Object.keys(catalogo).filter(k=>k!==fixa).map(k=>`<label><input type="checkbox" ${v.has(k)?'checked':''} onchange="${ns}ColToggle('${k}',this.checked)">${esc(catalogo[k].label)}</label>`).join('')}
+      <button class="btn btn-s btn-mini" onclick="${ns}ColPadrao()">Padrão</button>
+    </div></details>`;
+}
+
+/* ── BOTTOM-SHEET DE FILTROS (celular) ─────────────────────────────────────
+   No mobile o CSS esconde `.toolbar .bn-multi` e os selects (L421): sem o
+   sheet, a tela fica SEM os filtros no celular. O B7 resolveu isso pro
+   Estoque; aqui o mesmo sheet vira genérico, e cada tela só declara a SPEC
+   (grupos de chips + inputs). Inputs de texto usam o caminho "quiet" — o
+   sheet não se redesenha a cada tecla, senão o campo perde o foco (bug
+   corrigido na varredura de 04/08). */
+const FX_SHEET={};
+let FX_SHEET_NS='';
+function fxSheetReg(ns,fn){ FX_SHEET[ns]=fn; }
+function fxSheetAbrir(ns){
+  if($('#fx-sheet-bd')) return;
+  FX_SHEET_NS=ns;
+  document.body.insertAdjacentHTML('beforeend','<div class="sheet-bd" id="fx-sheet-bd"><div class="sheet" id="fx-sheet"></div></div>');
+  document.getElementById('fx-sheet-bd').onclick=e=>{ if(e.target.id==='fx-sheet-bd') fxSheetFechar(); };
+  fxSheetRender();
+}
+function fxSheetFechar(){ const s=$('#fx-sheet-bd'); if(s) s.remove(); const ns=FX_SHEET_NS; FX_SHEET_NS=''; if(ns) fxRender(ns); }
+function fxSheetSet(ns,k,v){ const st=FX_ST[ns]; if(!st) return; st[k]=v; if('mostrar' in st) st.mostrar=150; fxRender(ns); fxSheetRender(); }
+function fxSheetTgl(ns,k,v){ const st=FX_ST[ns]; if(!st) return; const s=csvSet(st[k]); if(s.has(v)) s.delete(v); else s.add(v); fxSheetSet(ns,k,[...s].join(',')); }
+function fxSheetQuiet(ns,k,v){ const st=FX_ST[ns]; if(!st) return; st[k]=v; if('mostrar' in st) st.mostrar=150; fxRender(ns);
+  const b=$('#fx-sheet-ver'), sp=FX_SHEET[ns]&&FX_SHEET[ns](); if(b&&sp) b.textContent=sp.ver(); }
+function fxSheetLimpar(ns){ const sp=FX_SHEET[ns]&&FX_SHEET[ns](); if(sp&&sp.limpar) sp.limpar(); fxSheetRender(); }
+function fxSheetRender(){
+  const el=$('#fx-sheet'), ns=FX_SHEET_NS; if(!el||!FX_SHEET[ns]) return;
+  const sp=FX_SHEET[ns](), st=FX_ST[ns]||{};
+  const grp=(t,inner)=>`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(t)}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${inner}</div></div>`;
+  // `req` = grupo que sempre tem um escolhido (ex.: ordem): clicar no que já
+  // está on não desmarca, senão o chip apaga mas a lista continua ordenada.
+  const chip=(k,v,l,multi,req)=>{ const on=multi?csvSet(st[k]).has(v):st[k]===v;
+    const val=(on&&!req)?'':esc(jsq(v));
+    return `<button class="sheet-chip ${on?'on':''}" onclick="${multi?`fxSheetTgl('${ns}','${k}','${esc(jsq(v))}')`:`fxSheetSet('${ns}','${k}','${val}')`}">${esc(l)}</button>`; };
+  const inp=(k,l,extra)=>`<label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">${esc(l)}<input ${extra||''} value="${esc(st[k]||'')}" oninput="fxSheetQuiet('${ns}','${k}',this.value)"></label>`;
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><b style="flex:1;font-size:16px">🎛️ ${esc(sp.titulo)}</b>
+      <button class="btn btn-s btn-mini" onclick="fxSheetLimpar('${ns}')">Limpar tudo</button>
+      <button class="btn btn-ghost btn-mini" onclick="fxSheetFechar()" style="font-size:17px" aria-label="Fechar">✕</button></div>
+    ${(sp.grupos||[]).map(g=>grp(g.t,g.opts.map(o=>chip(g.k,o.v,o.l,g.multi!==false,g.req)).join(''))).join('')}
+    ${(sp.inputs&&sp.inputs.length)? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">${sp.inputs.map(i=>inp(i.k,i.l,i.extra)).join('')}</div>`:''}
+    <button class="btn btn-p" id="fx-sheet-ver" style="width:100%;padding:12px;font-size:15px" onclick="fxSheetFechar()">${esc(sp.ver())}</button>`;
+}
+
 /* ── TELA: ESTOQUE DE NOMES ──────────────────────────────────────────────── */
 let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',lp:'',prof:'',cid:'',ecivil:'',filhos:'',idmin:'',idmax:'',rmin:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1,pop:''};
 const FBN_CAMPOS=['busca','trilha','estagio','pri','tel','lp','prof','cid','ecivil','filhos','idmin','idmax','rmin'];
@@ -2974,6 +3073,7 @@ function bnFiltrados(){
 function bnBadgeEst(e){ const cores={estoque:'b-cinza',lista_ta:'b-azul',oi_agendado:'b-roxo',cliente:'b-verde',descartado:'b-verm'};
   return `<span class="badge ${cores[e]||'b-cinza'}">${esc(BN_EST_LABEL[e]||e)}</span>`; }
 function viewBnEstoque(){
+  fxReg('bn',FBN,'viewBnEstoque');
   const l=bnFiltrados(), tot=bnVivos().length;
   const comTel=bnVivos().filter(c=>c.telefone).length;
   const cols=bnColsVis(), NC=cols.length+1;
@@ -3096,27 +3196,12 @@ function bnCelHtml(c,k){
     default: return esc(c[k]??'');
   }
 }
-function bnMultiHtml(key,titulo,opts){
-  const sel=bnCsvSet(FBN[key]);
-  return `<details class="bn-multi"${FBN.pop===key?' open':''} ontoggle="bnPopTgl('${key}',this.open)">
-    <summary class="${sel.size?'on':''}">${esc(titulo)}: ${sel.size||'todos'}</summary>
-    <div class="bn-multi-pop">
-      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(o.v)?'checked':''} onchange="bnMultiTgl('${key}','${esc(o.v)}',this.checked)">${esc(o.l)}</label>`).join('')}
-      ${sel.size?`<button class="btn btn-s btn-mini" onclick="FBN['${key}']='';FBN.pop='';FBN.mostrar=150;viewBnEstoque()">Limpar</button>`:''}
-    </div></details>`;
-}
-function bnMultiTgl(key,v,on){ const s=bnCsvSet(FBN[key]); if(on)s.add(v); else s.delete(v);
-  FBN[key]=[...s].join(','); FBN.mostrar=150; FBN.pop=key; viewBnEstoque(); }
-function bnPopTgl(k,open){ if(open) FBN.pop=k; else if(FBN.pop===k) FBN.pop=''; }
-function bnColsHtml(){
-  const vis=new Set(bnColsVis());
-  return `<details class="bn-multi"${FBN.pop==='cols'?' open':''} ontoggle="bnPopTgl('cols',this.open)">
-    <summary>🧩 Colunas (${vis.size})</summary>
-    <div class="bn-multi-pop">
-      ${Object.keys(BN_COLS).filter(k=>k!=='nome').map(k=>`<label><input type="checkbox" ${vis.has(k)?'checked':''} onchange="bnColToggle('${k}',this.checked)">${esc(BN_COLS[k].label)}</label>`).join('')}
-      <button class="btn btn-s btn-mini" onclick="BNP.cols=null;bnPrefSalvar();FBN.pop='cols';viewBnEstoque()">Padrão</button>
-    </div></details>`;
-}
+/* wrappers finos sobre o motor genérico (o Estoque é o namespace 'bn') */
+function bnMultiHtml(key,titulo,opts){ return fxMultiHtml('bn',key,titulo,opts); }
+function bnMultiTgl(key,v,on){ fxMultiTgl('bn',key,v,on); }
+function bnPopTgl(k,open){ fxPopTgl('bn',k,open); }
+function bnColPadrao(){ BNP.cols=null; bnPrefSalvar(); FBN.pop='cols'; viewBnEstoque(); }
+function bnColsHtml(){ return fxColsHtml('bn',BN_COLS,bnColsVis(),'nome'); }
 function bnCelClique(ev,id,k){
   const col=BN_COLS[k];
   if(k==='nome'||!BNP.inline||!col||!col.edit){ bnEditar(id); return; }
@@ -3317,61 +3402,183 @@ function bnRecAplicar(){
 /* ── TELA: LISTA DE TA (do estoque) ──────────────────────────────────────── */
 const BN_RES=[['atendeu','✅ Atendeu'],['nao_atendeu','📵 Não atendeu'],['agendou','🗓️ Agendou'],['recusou','🚫 Recusou'],['numero_errado','❌ Nº errado']];
 let BNTA={lista:'hoje'};
+/* Filtros 2.0 na lista de TA: a lista é a ferramenta de trabalho do dia, então
+   ela precisa das mesmas lentes do Estoque (multi-seleção + ordenar + colunas).
+   `res` é o filtro do dia: pendente ou um dos resultados já registrados. */
+let FTA={busca:'',trilha:'',estagio:'',pri:'',res:'',cid:'',prof:'',idmin:'',idmax:'',rmin:'',sort:'',dir:1,pop:'',sel:new Set()};
+const FTA_CAMPOS=['busca','trilha','estagio','pri','res','cid','prof','idmin','idmax','rmin'];
+function taFiltroLimpar(){ FTA_CAMPOS.forEach(k=>FTA[k]=''); viewBnTa(); }
+function taFiltrosAtivos(){ return FTA_CAMPOS.filter(k=>k!=='busca'&&FTA[k]).length; }
+/* colunas extras da planilha do TA — reusa o catálogo do Estoque (BN_COLS) */
+const TA_COLS_DEF=['recomendante','cargo','cidade','idade'];
+let TAP={cols:null};
+function taPrefLer(){ try{ const r=localStorage.getItem('crmlp_ta_cols_v1'); if(r) TAP=Object.assign(TAP,JSON.parse(r)); }catch(_){}
+  if(!Array.isArray(TAP.cols)) TAP.cols=null; }
+function taPrefSalvar(){ localStorage.setItem('crmlp_ta_cols_v1',JSON.stringify(TAP)); }
+function taColsVis(){ return (TAP.cols||TA_COLS_DEF).filter(k=>BN_COLS[k]&&k!=='nome'&&k!=='telefone'); }
+function taColToggle(k,on){ const v=new Set(taColsVis()); if(on)v.add(k); else v.delete(k);
+  TAP.cols=Object.keys(BN_COLS).filter(x=>v.has(x)); taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
+function taColPadrao(){ TAP.cols=null; taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
+function taResHoje(c){ const hoje=hojeISO(); return (c.hist||[]).filter(h=>h.dia===hoje&&h.tipo==='ta').map(h=>h.res).pop()||''; }
+function taDaLista(){ const hoje=hojeISO();
+  return BNTA.lista==='hoje'? bnVivos().filter(c=>c.ta_dia===hoje) : bnVivos().filter(c=>(c.listas||[]).includes(BNTA.lista)); }
+function taFiltrados(){
+  let l=taDaLista();
+  if(FTA.busca){ const q=FTA.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
+  if(FTA.trilha){ const s=csvSet(FTA.trilha); l=l.filter(c=>s.has(c.trilha)); }
+  if(FTA.estagio){ const s=csvSet(FTA.estagio); l=l.filter(c=>s.has(c.estagio)); }
+  if(FTA.pri){ const s=csvSet(FTA.pri); l=l.filter(c=>s.has(String(c.prioridade))); }
+  if(FTA.res){ const s=csvSet(FTA.res); l=l.filter(c=>{ const r=taResHoje(c); return s.has(r||'pendente'); }); }
+  if(FTA.cid){ const q=FTA.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
+  if(FTA.prof){ const q=FTA.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
+  if(FTA.idmin) l=l.filter(c=>Number(c.idade)>=Number(FTA.idmin));
+  if(FTA.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FTA.idmax));
+  if(FTA.rmin) l=l.filter(c=>Number(c.renda_estimada)>=Number(FTA.rmin));
+  return fxOrdenar('ta',l,(c,k)=> k==='tent'? (c.hist||[]).filter(h=>h.tipo==='ta').length
+                              : k==='res'? (taResHoje(c)||'￿')
+                              : k==='civil_cod'? bnCivilCod(c) : c[k]);
+}
+/* spec do sheet de filtros do TA (celular) */
+fxSheetReg('ta',()=>({titulo:'Filtros da Lista de TA',
+  grupos:[
+    {k:'res',t:'Resultado de hoje',opts:[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]})))},
+    {k:'trilha',t:'Trilha',opts:BN_TRILHAS.map(t=>({v:t,l:t}))},
+    {k:'estagio',t:'Estágio',opts:BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))},
+    {k:'pri',t:'Prioridade',opts:[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}]}],
+  inputs:[{k:'prof',l:'Profissão/empresa'},{k:'cid',l:'Cidade'},
+    {k:'idmin',l:'Idade ≥',extra:'type="number"'},{k:'idmax',l:'Idade ≤',extra:'type="number"'},
+    {k:'rmin',l:'Renda ≥ (R$/mês)',extra:'type="number" step="1000"'}],
+  limpar:()=>taFiltroLimpar(),
+  ver:()=>'Ver '+taFiltrados().length.toLocaleString('pt-BR')+' nome(s)'}));
 function viewBnTa(){
+  fxReg('ta',FTA,'viewBnTa');
   const hoje=hojeISO();
   const nomes=bnListasTodas();
   if(BNTA.lista!=='hoje'&&!nomes.includes(BNTA.lista)) BNTA.lista='hoje';
   const emHoje=bnVivos().filter(c=>c.ta_dia===hoje);
-  const lista=BNTA.lista==='hoje'? emHoje : bnVivos().filter(c=>(c.listas||[]).includes(BNTA.lista));
-  const feitos=lista.filter(c=>(c.hist||[]).some(h=>h.dia===hoje));
+  const base=taDaLista(), lista=taFiltrados();
+  const feitos=base.filter(c=>(c.hist||[]).some(h=>h.dia===hoje));
   const cand=bnVivos().filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hoje : !(c.listas||[]).includes(BNTA.lista))).slice(0,400);
+  const cols=taColsVis(), NC=cols.length+5;
+  const selNaLista=[...FTA.sel].filter(id=>lista.some(c=>c.id===id));
   $('#main').innerHTML=`
     <h1 class="pg">Lista de TA</h1>
-    <div class="sub">${lista.length? `${feitos.length}/${lista.length} trabalhados hoje (${dataBR(hoje)})`:'Monte quantas listas quiser — Hoje é a rápida; as nomeadas você cria do Estoque (📋).'}</div>
+    <div class="sub">${base.length? `${feitos.length}/${base.length} trabalhados hoje (${dataBR(hoje)})${lista.length!==base.length? ` · ${lista.length} no filtro`:''}`:'Monte quantas listas quiser — Hoje é a rápida; as nomeadas você cria do Estoque (📋).'}</div>
     <div class="toolbar" style="flex-wrap:wrap;gap:6px">
-      <button class="btn btn-mini ${BNTA.lista==='hoje'?'btn-p':'btn-s'}" onclick="BNTA.lista='hoje';viewBnTa()">📅 Hoje <b style="opacity:.75">${emHoje.length}</b></button>
+      <button class="btn btn-mini ${BNTA.lista==='hoje'?'btn-p':'btn-s'}" onclick="BNTA.lista='hoje';FTA.sel.clear();viewBnTa()">📅 Hoje <b style="opacity:.75">${emHoje.length}</b></button>
       ${nomes.map(n=>{ const q=bnVivos().filter(c=>(c.listas||[]).includes(n)).length;
-        return `<button class="btn btn-mini ${BNTA.lista===n?'btn-p':'btn-s'}" onclick="BNTA.lista='${esc(n)}';viewBnTa()">📋 ${esc(n)} <b style="opacity:.75">${q}</b></button>`; }).join('')}
-      ${BNTA.lista!=='hoje'? `<button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(BNTA.lista)}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}
+        return `<button class="btn btn-mini ${BNTA.lista===n?'btn-p':'btn-s'}" onclick="BNTA.lista='${esc(jsq(n))}';FTA.sel.clear();viewBnTa()">📋 ${esc(n)} <b style="opacity:.75">${q}</b></button>`; }).join('')}
+      ${BNTA.lista!=='hoje'? `<button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(jsq(BNTA.lista))}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}
+    </div>
+    <div class="toolbar" style="flex-wrap:wrap">
+      <input type="search" style="max-width:230px" placeholder="Buscar na lista…" value="${esc(FTA.busca)}" oninput="FTA.busca=this.value;viewBnTa()">
+      <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('ta')">🎛️ Filtros${taFiltrosAtivos()?' ('+taFiltrosAtivos()+')':''}</button>
+      ${fxMultiHtml('ta','res','Resultado de hoje',[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]}))))}
+      ${fxMultiHtml('ta','trilha','Trilhas',BN_TRILHAS.map(t=>({v:t,l:t})))}
+      ${fxMultiHtml('ta','estagio','Estágios',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
+      ${fxMultiHtml('ta','pri','Prioridade',[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}])}
+      ${fxColsHtml('ta',BN_COLS,cols,'nome')}
+      ${taFiltrosAtivos()? `<button class="btn btn-s btn-mini" onclick="taFiltroLimpar()">Limpar filtros (${taFiltrosAtivos()})</button>`:''}
+    </div>
+    <div class="toolbar" style="flex-wrap:wrap">
+      <input type="search" style="max-width:150px" placeholder="Profissão…" value="${esc(FTA.prof)}" oninput="FTA.prof=this.value;viewBnTa()">
+      <input type="search" style="max-width:130px" placeholder="Cidade…" value="${esc(FTA.cid)}" oninput="FTA.cid=this.value;viewBnTa()">
+      <input type="number" style="max-width:92px" placeholder="Idade ≥" value="${esc(FTA.idmin)}" oninput="FTA.idmin=this.value;viewBnTa()">
+      <input type="number" style="max-width:92px" placeholder="Idade ≤" value="${esc(FTA.idmax)}" oninput="FTA.idmax=this.value;viewBnTa()">
+      <input type="number" style="max-width:110px" placeholder="Renda ≥" step="1000" value="${esc(FTA.rmin)}" oninput="FTA.rmin=this.value;viewBnTa()">
     </div>
     <div class="toolbar">
-      <select id="bnta-add" style="max-width:340px"><option value="">＋ Adicionar ${BNTA.lista==='hoje'?'à lista de hoje':'a “'+esc(BNTA.lista)+'”'}…</option>
-        ${cand.map(c=>`<option value="${esc(c.id)}">${esc(c.nome)} · ${esc(c.telefone)}</option>`).join('')}</select>
-      <button class="btn btn-p btn-mini" onclick="bnTaAdd($('#bnta-add').value)">Adicionar</button>
+      <input id="bnta-add" list="bnta-cand" style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'à lista de hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)">
+      <datalist id="bnta-cand">${cand.map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}" data-id="${esc(c.id)}"></option>`).join('')}</datalist>
+      <button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
       <span style="font-size:12px;color:var(--muted)">Em massa: selecione no Estoque → 📋 Adicionar à lista…</span>
     </div>
+    ${selNaLista.length? `<div class="card" style="padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <b>${selNaLista.length} selecionado${selNaLista.length>1?'s':''}</b>
+      <button class="btn btn-s btn-mini" onclick="bnTaTirarLote()">✕ Tirar da lista</button>
+      <button class="btn btn-s btn-mini" onclick="bnTaMoverLote()">📋 Mover pra outra lista…</button>
+      <button class="btn btn-s btn-mini" onclick="FTA.sel.clear();viewBnTa()">Limpar seleção</button>
+    </div>`:''}
     <div class="card" style="padding:6px 10px;overflow-x:auto">
-      <table><thead><tr><th>Nome</th><th>Ligar</th><th>Tent.</th><th>Resultado de hoje</th></tr></thead><tbody>
-      ${lista.map(c=>{ const rHoje=(c.hist||[]).filter(h=>h.dia===hoje).map(h=>h.res).pop();
+      <table><thead><tr><th></th>${fxTh('ta','nome','Nome')}<th>Ligar</th>${cols.map(k=>fxTh('ta',k,BN_COLS[k].label)).join('')}${fxTh('ta','tent','Tent.')}${fxTh('ta','res','Resultado de hoje')}<th></th></tr></thead><tbody>
+      ${lista.map(c=>{ const rHoje=taResHoje(c);
         return `<tr>
-        <td><b>${esc(c.nome)}</b>${c.recomendante? `<br><span style="font-size:11.5px;color:var(--muted)">rec: ${esc(c.recomendante)}</span>`:''}</td>
+        <td onclick="event.stopPropagation()"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()"></td>
+        <td><b>${esc(c.nome)}</b>${c.recomendante&&!cols.includes('recomendante')? `<br><span style="font-size:11.5px;color:var(--muted)">rec: ${esc(c.recomendante)}</span>`:''}</td>
         <td>${c.telefone? `<a class="btn btn-s btn-mini" style="text-decoration:none" href="tel:${esc((c.telefone||'').replace(/[^+\d]/g,''))}">📞</a>
              ${waHref(c.telefone)? `<a class="btn btn-s btn-mini" style="text-decoration:none" target="_blank" rel="noopener" href="${esc(waHref(c.telefone))}">💬</a>`:''} <span style="font-size:12px">${esc(c.telefone)}</span>`:'—'}</td>
+        ${cols.map(k=>`<td style="font-size:12px">${bnCelHtml(c,k)}</td>`).join('')}
         <td>${(c.hist||[]).filter(h=>h.tipo==='ta').length}</td>
-        <td>${rHoje? `<b>${esc((BN_RES.find(r=>r[0]===rHoje)||['',rHoje])[1])}</b> <button class="btn btn-s btn-mini" onclick="bnTaTirar('${esc(c.id)}')">tirar da lista</button>`
-             : BN_RES.map(r=>`<button class="btn btn-s btn-mini" onclick="bnResultado('${esc(c.id)}','${r[0]}')">${r[1]}</button>`).join(' ')}</td>
-      </tr>`;}).join('') || `<tr><td colspan="4" class="vazio">Lista de hoje vazia.</td></tr>`}
+        <td>${rHoje? `<b>${esc((BN_RES.find(r=>r[0]===rHoje)||['',rHoje])[1])}</b> <button class="btn btn-s btn-mini" onclick="bnResultadoDesfazer('${esc(jsq(c.id))}')" title="Registrei sem querer — desfaz o resultado de hoje">↩︎</button>`
+             : BN_RES.map(r=>`<button class="btn btn-s btn-mini" onclick="bnResultado('${esc(jsq(c.id))}','${r[0]}')">${r[1]}</button>`).join(' ')}</td>
+        <td><button class="btn btn-s btn-mini" onclick="bnTaTirar('${esc(jsq(c.id))}')" title="Tirar da lista (o nome continua no Estoque)">✕</button></td>
+      </tr>`;}).join('') || `<tr><td colspan="${NC}" class="vazio">${base.length? 'Nenhum nome nesse filtro.' : (BNTA.lista==='hoje'?'Lista de hoje vazia.':'Lista vazia.')}</td></tr>`}
       </tbody></table>
     </div>`;
 }
 function bnTaAdd(id){ const c=bnPor(id); if(!c) return;
   if(BNTA.lista==='hoje') c.ta_dia=hojeISO(); else c.listas=[...new Set([...(c.listas||[]),BNTA.lista])];
   bnSalvar(); render(); }
+/* o campo virou input+datalist (buscável): casa o texto escolhido com o candidato */
+function bnTaAddPorNome(txt){
+  const t=String(txt||'').trim(); if(!t){ toast('Digite um nome',false); return; }
+  const nome=t.split(' · ')[0].trim().toLowerCase(), tel=(t.split(' · ')[1]||'').trim();
+  const pool=bnVivos().filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hojeISO() : !(c.listas||[]).includes(BNTA.lista)));
+  const c=pool.find(x=>(x.nome||'').toLowerCase()===nome&&(!tel||x.telefone===tel))||pool.find(x=>(x.nome||'').toLowerCase()===nome);
+  if(!c){ toast('Não achei esse nome entre os candidatos (já está na lista?)',false); return; }
+  bnTaAdd(c.id); const el=$('#bnta-add'); if(el) el.value='';
+  toast(c.nome.split(' ')[0]+' na lista ✓',true);
+}
 function bnTaTirar(id){ const c=bnPor(id); if(!c) return;
   if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista);
-  bnSalvar(); render(); }
+  FTA.sel.delete(id); bnSalvar(); render(); }
+function bnTaTirarLote(){
+  const ids=[...FTA.sel]; if(!ids.length) return;
+  ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
+    if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista); });
+  FTA.sel.clear(); bnSalvar(); render(); toast(ids.length+' tirado'+(ids.length>1?'s':'')+' da lista (seguem no Estoque)',true);
+}
+function bnTaMoverLote(){
+  const ids=[...FTA.sel]; if(!ids.length) return;
+  const atuais=bnListasTodas();
+  const nome=prompt('Mover para qual lista? (nova ou existente'+(atuais.length? ' — já existem: '+atuais.join(', '):'')+')'); if(!nome) return;
+  const n=nome.trim(); if(!n) return;
+  ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
+    c.listas=[...new Set([...(c.listas||[]),n])];
+    if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=c.listas.filter(x=>x!==BNTA.lista); });
+  FTA.sel.clear(); bnSalvar(); render(); toast(ids.length+' movido'+(ids.length>1?'s':'')+' pra “'+n+'”',true);
+}
 function bnListaApagar(nome){ if(!confirm('Apagar a lista “'+nome+'”? (os contatos continuam na base)')) return;
   BN.contatos.forEach(c=>{ if(c.listas) c.listas=c.listas.filter(n=>n!==nome); });
   BNTA.lista='hoje'; bnSalvar(); render(); toast('Lista apagada',true); }
 async function bnResultado(id,res){
   const c=bnPor(id); if(!c) return;
-  (c.hist=c.hist||[]).push({tipo:'ta',res,dia:hojeISO(),ts:new Date().toISOString()});
+  // `estAntes` é o que torna o ↩︎ (desfazer) fiel: sem ele, um clique errado em
+  // "Recusou" deixava o nome descartado pra sempre.
+  const h={tipo:'ta',res,dia:hojeISO(),ts:new Date().toISOString(),estAntes:c.estagio,revAntes:!!c.precisa_revisao};
+  (c.hist=c.hist||[]).push(h);
   if(res==='agendou') c.estagio='oi_agendado';
   else if(res==='recusou') c.estagio='descartado';
   else if(res==='numero_errado'){ c.precisa_revisao=true; c.estagio='estoque'; }
   bnSalvar(); render();
-  if(LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_interacoes').insert({contato_id:id,tipo:'ta',resultado:res}); if(r.error) throw r.error; }
+  if(LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_interacoes').insert({contato_id:id,tipo:'ta',resultado:res}).select('id').single();
+      if(r.error) throw r.error; if(r.data&&r.data.id!=null){ h.rid=r.data.id; bnSalvar(); } }
     catch(e){ console.warn('lp_interacoes: falhou (fica só no hist local)',e); } }
+}
+/* ↩︎ desfazer o resultado de HOJE (clique errado): tira o registro do dia,
+   devolve o estágio que o contato tinha antes e apaga a interação espelhada
+   no banco — só a que ESTE clique criou (por id), nunca um DELETE amplo. */
+async function bnResultadoDesfazer(id){
+  const c=bnPor(id); if(!c) return;
+  const hoje=hojeISO(), hist=c.hist||[];
+  let i=-1; for(let k=hist.length-1;k>=0;k--){ if(hist[k].dia===hoje&&hist[k].tipo==='ta'){ i=k; break; } }
+  if(i<0){ toast('Nada pra desfazer hoje',false); return; }
+  const h=hist[i];
+  hist.splice(i,1);
+  if(h.estAntes){ c.estagio=h.estAntes; c.precisa_revisao=!!h.revAntes; }
+  bnSalvar(); render(); toast('Resultado de hoje desfeito',true);
+  if(h.rid!=null&&LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_interacoes').delete().eq('id',h.rid); if(r.error) throw r.error; }
+    catch(e){ console.warn('lp_interacoes: não deu pra apagar o espelho',e); } }
 }
 
 /* ── TELA: SITPLAN CRONOMETRADO (achado #6 — P1 do handoff) ────────────────
@@ -3492,8 +3699,35 @@ document.addEventListener('keydown',e=>{
 /* ── TELA: RECOMENDAÇÕES (formato replicado do módulo da Captação) ─────────
    Sub-abas em chips (trilha), filtro por recomendante, cartões agrupados por
    quem indicou, linha com iniciais + qualificação + pill de estágio. */
-let BNR={tab:'all',recom:''};
+/* Recomendações 2.0 (v0.9.5): as mesmas lentes do Estoque + os grupos passam a
+   abrir/fechar. `abertos` guarda quem está EXPANDIDO; `modo` decide o padrão
+   (recolhido é o default: com 300+ recomendantes a tela era uma rolagem sem
+   fim). A escolha fica por aparelho, como as colunas. */
+let BNR={tab:'all',recom:'',busca:'',trilha:'',estagio:'',pri:'',tel:'',cid:'',ord:'qtd',min:'',pop:'',sort:'',dir:1};
+const BNR_CAMPOS=['busca','trilha','estagio','pri','tel','cid','min'];
+let RECP={modo:'fechado',abertos:[]};
+function recPrefLer(){ try{ const r=localStorage.getItem('crmlp_rec_v1'); if(r) RECP=Object.assign(RECP,JSON.parse(r)); }catch(_){}
+  if(!Array.isArray(RECP.abertos)) RECP.abertos=[]; }
+function recPrefSalvar(){ localStorage.setItem('crmlp_rec_v1',JSON.stringify(RECP)); }
+function recAberto(n){ const tem=RECP.abertos.includes(n); return RECP.modo==='aberto'? !tem : tem; }  // no modo aberto, a lista guarda os FECHADOS
+function recTgl(n){ const i=RECP.abertos.indexOf(n); if(i>=0) RECP.abertos.splice(i,1); else RECP.abertos.push(n);
+  recPrefSalvar(); viewBnRecs(); }
+function recTodos(abrir){ RECP.modo=abrir?'aberto':'fechado'; RECP.abertos=[]; recPrefSalvar(); viewBnRecs(); }
+function recFiltroLimpar(){ BNR_CAMPOS.forEach(k=>BNR[k]=''); BNR.recom=''; viewBnRecs(); }
+function recFiltrosAtivos(){ return BNR_CAMPOS.filter(k=>k!=='busca'&&BNR[k]).length+(BNR.recom?1:0); }
+/* spec do sheet de filtros das Recomendações (celular) */
+fxSheetReg('rec',()=>({titulo:'Filtros das Recomendações',
+  grupos:[
+    {k:'trilha',t:'Trilha',opts:BN_TRILHAS.map(t=>({v:t,l:t}))},
+    {k:'estagio',t:'Estágio',opts:BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))},
+    {k:'pri',t:'Prioridade',opts:[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}]},
+    {k:'tel',t:'Telefone',multi:false,opts:[{v:'com',l:'Com telefone'},{v:'sem',l:'Só nome'}]},
+    {k:'ord',t:'Ordem dos grupos',multi:false,req:true,opts:[{v:'qtd',l:'Mais nomes'},{v:'qtd_asc',l:'Menos nomes'},{v:'nome',l:'A→Z'}]}],
+  inputs:[{k:'cid',l:'Cidade'},{k:'min',l:'Mín. de nomes por rec.',extra:'type="number" min="2"'}],
+  limpar:()=>recFiltroLimpar(),
+  ver:()=>'Ver recomendações'}));
 function viewBnRecs(){
+  fxReg('rec',BNR,'viewBnRecs');
   const all=bnVivos().filter(b=>(b.recomendante||'').trim());
   const cnt=t=>all.filter(b=>b.trilha===t).length;
   const TABS=[['all','Todas',all.length],['seguro','Seguro',cnt('seguro')],['recrutamento','Recrutamento',cnt('recrutamento')]];
@@ -3501,8 +3735,20 @@ function viewBnRecs(){
   const recomSet=[...new Set(lista.map(b=>b.recomendante.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   if(BNR.recom && !recomSet.includes(BNR.recom)) BNR.recom='';
   if(BNR.recom) lista=lista.filter(b=>b.recomendante.trim()===BNR.recom);
+  // Filtros 2.0: as mesmas lentes do Estoque, agora sobre os recomendados
+  if(BNR.busca){ const q=BNR.busca.toLowerCase(); lista=lista.filter(b=>(b.nome||'').toLowerCase().includes(q)||(b.recomendante||'').toLowerCase().includes(q)||(b.telefone||'').includes(q)); }
+  if(BNR.trilha){ const s=csvSet(BNR.trilha); lista=lista.filter(b=>s.has(b.trilha)); }
+  if(BNR.estagio){ const s=csvSet(BNR.estagio); lista=lista.filter(b=>s.has(b.estagio)); }
+  if(BNR.pri){ const s=csvSet(BNR.pri); lista=lista.filter(b=>s.has(String(b.prioridade))); }
+  if(BNR.tel==='com') lista=lista.filter(b=>b.telefone);
+  if(BNR.tel==='sem') lista=lista.filter(b=>!b.telefone);
+  if(BNR.cid){ const q=BNR.cid.toLowerCase(); lista=lista.filter(b=>(b.cidade||'').toLowerCase().includes(q)); }
   const groups={}; lista.forEach(b=>{ const k=b.recomendante.trim(); (groups[k]=groups[k]||[]).push(b); });
-  const names=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
+  if(BNR.min){ const m=Number(BNR.min)||0; Object.keys(groups).forEach(k=>{ if(groups[k].length<m) delete groups[k]; }); }
+  const names=Object.keys(groups).sort((a,b)=> BNR.ord==='nome'? a.localeCompare(b,'pt-BR')
+                                             : BNR.ord==='qtd_asc'? (groups[a].length-groups[b].length)||a.localeCompare(b,'pt-BR')
+                                             : (groups[b].length-groups[a].length)||a.localeCompare(b,'pt-BR'));
+  const nomesQtd=names.reduce((s,n)=>s+groups[n].length,0);
   const row=b=>`<div class="clicavel" onclick="FBN.busca='';FBN.edit='${esc(b.id)}';irPara('bn-estoque')" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:11px;cursor:pointer;background:var(--bg)">
       <span style="width:36px;height:36px;border-radius:50%;background:var(--primary,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${esc(iniciais(b.nome))}</span>
       <div style="flex:1;min-width:0">
@@ -3517,17 +3763,36 @@ function viewBnRecs(){
     <div class="sub">Quem indicou quem na sua base — ${all.length.toLocaleString('pt-BR')} nomes com recomendante registrado.</div>
     <div class="toolbar" style="flex-wrap:wrap">
       ${TABS.map(([k,lb,n])=>`<button class="btn btn-mini ${BNR.tab===k?'btn-p':'btn-s'}" onclick="BNR.tab='${k}';BNR.recom='';viewBnRecs()">${lb} <b style="opacity:.75">${n}</b></button>`).join('')}
+      <input type="search" style="max-width:210px" placeholder="Buscar nome ou recomendante…" value="${esc(BNR.busca)}" oninput="BNR.busca=this.value;viewBnRecs()">
+      <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('rec')">🎛️ Filtros${recFiltrosAtivos()?' ('+recFiltrosAtivos()+')':''}</button>
       <select onchange="BNR.recom=this.value;viewBnRecs()" style="max-width:280px"><option value="">Recomendante: todos (${recomSet.length})</option>${recomSet.map(r=>`<option ${BNR.recom===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
-      ${BNR.recom? `<button class="btn btn-s btn-mini" onclick="BNR.recom='';viewBnRecs()">limpar</button>`:''}
+      ${recFiltrosAtivos()? `<button class="btn btn-s btn-mini" onclick="recFiltroLimpar()">Limpar filtros (${recFiltrosAtivos()})</button>`:''}
     </div>
-    ${names.length? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${lista.length.toLocaleString('pt-BR')} nome${lista.length>1?'s':''} · ${names.length.toLocaleString('pt-BR')} recomendante${names.length>1?'s':''}</div>`:''}
-    ${names.map(n=>`<div class="card" style="padding:13px 15px;margin-bottom:12px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <div class="toolbar" style="flex-wrap:wrap">
+      ${fxMultiHtml('rec','trilha','Trilhas',BN_TRILHAS.map(t=>({v:t,l:t})))}
+      ${fxMultiHtml('rec','estagio','Estágios',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
+      ${fxMultiHtml('rec','pri','Prioridade',[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}])}
+      <select onchange="BNR.tel=this.value;viewBnRecs()"><option value="">Telefone: tanto faz</option><option ${BNR.tel==='com'?'selected':''} value="com">Com telefone</option><option ${BNR.tel==='sem'?'selected':''} value="sem">Só nome</option></select>
+      <input type="search" style="max-width:130px" placeholder="Cidade…" value="${esc(BNR.cid)}" oninput="BNR.cid=this.value;viewBnRecs()">
+      <input type="number" style="max-width:130px" min="2" placeholder="Mín. por rec." value="${esc(BNR.min)}" oninput="BNR.min=this.value;viewBnRecs()" title="Só recomendantes com pelo menos N nomes — acha quem realmente abastece a base">
+      <select onchange="BNR.ord=this.value;viewBnRecs()" title="Ordem dos grupos">
+        <option ${BNR.ord==='qtd'?'selected':''} value="qtd">Mais nomes primeiro</option>
+        <option ${BNR.ord==='qtd_asc'?'selected':''} value="qtd_asc">Menos nomes primeiro</option>
+        <option ${BNR.ord==='nome'?'selected':''} value="nome">Nome (A→Z)</option></select>
+      <button class="btn btn-s btn-mini" onclick="recTodos(true)">⊞ Expandir tudo</button>
+      <button class="btn btn-s btn-mini" onclick="recTodos(false)">⊟ Recolher tudo</button>
+    </div>
+    ${names.length? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${nomesQtd.toLocaleString('pt-BR')} nome${nomesQtd>1?'s':''} · ${names.length.toLocaleString('pt-BR')} recomendante${names.length>1?'s':''}</div>`:''}
+    ${names.map(n=>{ const ab=recAberto(n);
+      return `<div class="card" style="padding:13px 15px;margin-bottom:12px">
+        <div class="clicavel" onclick="recTgl('${esc(jsq(n))}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;${ab?'margin-bottom:8px':''}">
+          <span style="font-size:12px;color:var(--muted);width:14px">${ab?'▾':'▸'}</span>
           <span style="font-weight:800;font-size:15px">🙌 ${esc(n)}</span>
           <span style="font-size:12px;font-weight:700;color:var(--muted);background:var(--bg);padding:2px 9px;border-radius:8px">${groups[n].length}</span>
+          ${!ab? `<span style="font-size:11.5px;color:var(--muted);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(groups[n].slice(0,4).map(b=>b.nome).join(' · '))}${groups[n].length>4?' …':''}</span>`:''}
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px">${groups[n].map(row).join('')}</div>
-      </div>`).join('') || `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">Nenhum nome com recomendante ${BNR.tab==='all'?'':'nessa trilha'}.</div>`}`;
+        ${ab? `<div style="display:flex;flex-direction:column;gap:6px">${groups[n].map(row).join('')}</div>`:''}
+      </div>`; }).join('') || `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">Nenhum nome com recomendante ${recFiltrosAtivos()?'nesse filtro':(BNR.tab==='all'?'':'nessa trilha')}.</div>`}`;
 }
 
 /* ── TELA: FILA DE DUPLICATAS ────────────────────────────────────────────── */
@@ -3819,7 +4084,7 @@ document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#lpk-bd')?lpkFechar():lpkAbrir(); }
 });
 
-carregar(); bnCarregarLocal(); bnPrefLer(); dicCacheLer();
+carregar(); bnCarregarLocal(); bnPrefLer(); taPrefLer(); recPrefLer(); dicCacheLer();
 document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique fora fecha
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
   if(fechou) FBN.pop=''; });
