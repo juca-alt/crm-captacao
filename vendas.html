@@ -2598,10 +2598,15 @@ const CART_TCLI='carteira_clientes', CART_TAPO='carteira_apolices';
 let CART={clientes:[],apolices:[],importadoEm:null};
 let CART_REMOTE=false;                    // true quando há sessão Supabase → lê/grava no banco
 let CART_Q='';
-let FCART={flags:'',idmin:'',idmax:'',apolices:''};   // B4: filtros da tela Clientes (flags CSV: atraso,statust,pendencia,niver)
+/* B4 + Filtros 2.0: `gaps` (CSV) é o filtro que serve à VENDA — quem NÃO tem
+   determinada cobertura é exatamente a lista de abordagem. `sort/dir/pop` ligam
+   a tela no motor genérico (ordenar por qualquer coluna). */
+let FCART={flags:'',idmin:'',idmax:'',apolices:'',gaps:'',pmmin:'',sort:'',dir:1,pop:''};
 function fcartTgl(k){ const s=bnCsvSet(FCART.flags); if(s.has(k)) s.delete(k); else s.add(k); FCART.flags=[...s].join(','); viewCartClientes(); }
 function fcartAp(v){ FCART.apolices=(FCART.apolices===v?'':v); viewCartClientes(); }
-function fcartLimpar(){ FCART={flags:'',idmin:'',idmax:'',apolices:''}; CART_Q=''; viewCartClientes(); }
+function fcartGap(k){ const s=bnCsvSet(FCART.gaps); if(s.has(k)) s.delete(k); else s.add(k); FCART.gaps=[...s].join(','); viewCartClientes(); }
+function fcartLimpar(){ FCART={flags:'',idmin:'',idmax:'',apolices:'',gaps:'',pmmin:'',sort:'',dir:1,pop:''}; CART_Q=''; viewCartClientes(); }
+function fcartAtivos(){ return ['flags','idmin','idmax','apolices','gaps','pmmin'].filter(k=>FCART[k]).length; }
 async function cartRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
 async function cartCarregar(){
   CART_REMOTE=await cartRemoteOn();
@@ -2719,22 +2724,30 @@ function viewCartVisao(){ const r=cartResumo();
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-p" onclick="irPara('cart-oportunidades')">💡 Ver oportunidades</button><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
 
 function viewCartClientes(){ const q=normKey(CART_Q);
+  fxReg('cart',FCART,'viewCartClientes');
   const _af=document.activeElement?document.activeElement.id:'';  // devolve o foco pro campo certo após o re-render
-  const fset=bnCsvSet(FCART.flags);
+  const fset=bnCsvSet(FCART.flags), gset=bnCsvSet(FCART.gaps);
   const enr=CART.clientes.map(c=>({c,n:cartApolicesDoCliente(c.ref).length,rd:cartRadar(c.ref),dN:lpDiasAte(c.nascimento)}));
-  const lista=enr.filter(({c,n,rd,dN})=>{
+  const filtrada=enr.filter(({c,n,rd,dN})=>{
     if(q && !(c.ref.indexOf(q)>=0||normKey(c.nome).indexOf(q)>=0||(c.email&&normKey(c.email).indexOf(q)>=0))) return false;
     if(FCART.idmin && !(c.idade!=null&&c.idade>=+FCART.idmin)) return false;
     if(FCART.idmax && !(c.idade!=null&&c.idade<=+FCART.idmax)) return false;
+    if(FCART.pmmin && !(c.cob.pm>=+FCART.pmmin)) return false;
     if(FCART.apolices==='1'&&n!==1) return false;
     if(FCART.apolices==='2+'&&n<2) return false;
+    // gaps: marcar "HC" lista quem NÃO tem HC (valor zerado) — lista de abordagem
+    if(gset.size && ![...gset].every(k=>!(c.cob[k]>0))) return false;
     if(fset.size){ const has={atraso:rd.atrasos.length>0,statust:rd.statust.length>0,pendencia:rd.pendencias.length>0,niver:dN!=null&&dN<=JANELA_DIAS};
       if(![...fset].every(k=>has[k])) return false; }
     return true;
-  }).sort((a,b)=>a.c.nome.localeCompare(b.c.nome));
+  });
+  const lista=FCART.sort? fxOrdenar('cart',filtrada,(x,k)=> k==='nome'? x.c.nome : k==='idade'? x.c.idade
+                            : k==='contato'? (x.c.celular||x.c.telefone||'') : k==='apolices'? x.n
+                            : k==='pm'? x.c.cob.pm : k==='cs'? x.c.cob.cs : null)
+                        : filtrada.slice().sort((a,b)=>a.c.nome.localeCompare(b.c.nome));
   const fchip=(k,l,t)=>`<button class="sheet-chip ${fset.has(k)?'on':''}" onclick="fcartTgl('${k}')" title="${esc(t)}">${l}</button>`;
   const achip=(v,l)=>`<button class="sheet-chip ${FCART.apolices===v?'on':''}" onclick="fcartAp('${v}')">${l}</button>`;
-  const temFiltro=fset.size||FCART.apolices||FCART.idmin||FCART.idmax||q;
+  const temFiltro=fset.size||gset.size||FCART.apolices||FCART.idmin||FCART.idmax||FCART.pmmin||q;
   const linhas=lista.map(({c,n,rd,dN})=>{
     const flags=(rd.atrasos.length?'<span title="em atraso no relatório">⏰</span>':'')+(rd.statust.length?'<span title="no Status T">⏳</span>':'')+(rd.pendencias.length?'<span title="pendência de emissão">📋</span>':'')+(dN!=null&&dN<=JANELA_DIAS?'<span title="aniversário próximo">🎂</span>':'');
     return `<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
@@ -2753,16 +2766,21 @@ function viewCartClientes(){ const q=normKey(CART_Q);
       ${achip('1','1 apólice')}${achip('2+','2+ apólices')}
       <input id="fcart-idmin" type="number" placeholder="Idade ≥" value="${esc(FCART.idmin)}" oninput="FCART.idmin=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
       <input id="fcart-idmax" type="number" placeholder="Idade ≤" value="${esc(FCART.idmax)}" oninput="FCART.idmax=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
+      <input id="fcart-pmmin" type="number" step="50" placeholder="PM ≥" value="${esc(FCART.pmmin)}" oninput="FCART.pmmin=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
       ${temFiltro?`<span style="font-size:12px;color:var(--muted)">${lista.length} de ${CART.clientes.length}</span><button class="btn btn-s btn-mini" onclick="fcartLimpar()">Limpar</button>`:''}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;align-items:center">
+      <span style="font-size:12px;color:var(--muted)">Sem cobertura de:</span>
+      ${CART_COBS.map(([k,l])=>`<button class="sheet-chip ${gset.has(k)?'on':''}" onclick="fcartGap('${k}')" title="Clientes SEM ${esc(l)} — lista de abordagem">${esc(l)}</button>`).join('')}
     </div>
     <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left">
-      <th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px;text-align:center">Idade</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:center">Apólices</th><th style="padding:9px 10px;text-align:right">Prêmio/mês</th><th style="padding:9px 10px;text-align:right">Capital Segurado</th></tr></thead>
+      ${fxTh('cart','nome','Cliente')}${fxTh('cart','idade','Idade')}${fxTh('cart','contato','Contato')}${fxTh('cart','apolices','Apólices')}${fxTh('cart','pm','Prêmio/mês')}${fxTh('cart','cs','Capital Segurado')}</tr></thead>
     <tbody>${linhas||`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">Nenhum cliente encontrado.</td></tr>`}</tbody></table></div>`:cartVazio()}`;
   // achado da varredura 04/08: refocar SEMPRE o cart-q roubava o foco dos
   // inputs de idade a cada tecla; agora volta pro campo que estava ativo
   // (e não abre teclado sozinho no celular ao entrar na tela).
-  if(['cart-q','fcart-idmin','fcart-idmax'].includes(_af)){ const el=$('#'+_af); if(el){ el.focus(); if(el.setSelectionRange&&el.type!=='number') el.setSelectionRange(el.value.length,el.value.length); } } }
+  if(['cart-q','fcart-idmin','fcart-idmax','fcart-pmmin'].includes(_af)){ const el=$('#'+_af); if(el){ el.focus(); if(el.setSelectionRange&&el.type!=='number') el.setSelectionRange(el.value.length,el.value.length); } } }
 
 /* ---- Oportunidades: aniversários da carteira (nascimento REAL do .xls), gaps de
    cobertura e radar da semana — tudo derivado, nada digitado. ---- */
