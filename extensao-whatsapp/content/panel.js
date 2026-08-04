@@ -506,13 +506,11 @@ function renderLpCreate(sugestoes){
     const nome=$('#wa-lpn-nome').value.trim();
     if(!nome){ toast('Nome é obrigatório.'); return; }
     if(BUSY) return; BUSY=true; $('#wa-lpn-save').disabled=true;
-    const fk=$('#wa-lpn-funil').value, now=new Date().toISOString();
-    const id='wa'+Date.now();
-    const dados={ id, lp:'gustavo', nome, telefone:$('#wa-lpn-tel').value.trim()||null,
-      etapa:fk==='bc'?'Clientes Ativos':'SitPlan', funil:fk, notas:$('#wa-lpn-notas').value,
-      taStatus:'—', taTentativas:0, estrelas:0, ance:{}, recs:[], eventos:[], planos:[], interacoes:[],
-      criadoEm:now, origemCadastro:'whatsapp-ext' };
-    const r=await send('lpc.save',{id,dados});
+    // shape completo do vendas.html vem do lpcNovoContato (normalize.js) — aqui
+    // só o que a UI coletou; nada de subconjunto (era o que quebrava o drawer).
+    const dados=lpcNovoContato({ nome, telefone:$('#wa-lpn-tel').value.trim()||null,
+      funil:$('#wa-lpn-funil').value, notas:$('#wa-lpn-notas').value });
+    const r=await send('lpc.save',{id:dados.id,dados});
     BUSY=false;
     if(!handleAuthFail(r)) return;
     if(r.ok){ renderLpContato(r.data); toast('✓ Contato criado na Visão LP'); }

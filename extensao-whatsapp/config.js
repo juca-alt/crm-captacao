@@ -3,4 +3,4 @@
 // 03/08/2026: banco próprio do Gustavo (crm-playground) — o kbiinf… é do Guto desde 29/07.
 const SB_URL = "https://cjieobmdpqcupzdpckef.supabase.co";
 const SB_KEY = "sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR";
-const EXT_VERSION = "v0.6.1 · WhatsApp → CRM (banco próprio)";
+const EXT_VERSION = "v0.6.2 · WhatsApp → CRM (banco próprio)";
