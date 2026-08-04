@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.6.0 · Base de Nomes</title>
+<title>CRM Life Planner · v0.7.0 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -518,7 +518,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.6.0 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.7.0 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -531,7 +531,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.6.0 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.7.0 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2570,7 +2570,12 @@ let BN={contatos:[],dups:[]};
 const BN_TRILHAS=['seguro','recrutamento'];
 const BN_ESTAGIOS=['estoque','lista_ta','oi_agendado','cliente','descartado'];
 const BN_EST_LABEL={estoque:'Estoque',lista_ta:'Lista de TA',oi_agendado:'OI agendado',cliente:'Cliente',descartado:'Descartado',fundido:'Fundido'};
-function bnVivos(){ return BN.contatos.filter(b=>!b.merged_into); }
+/* Separação por LP: cada nome carrega `lp` (sem valor = gustavo, dono da base
+   importada). Perfil não-Master só vê o que é dele; Master vê tudo e pode
+   filtrar por LP (FBN.lp). A separação ENTRE CONTAS já é o RLS por dono. */
+function bnVivos(){ const m=isMaster();
+  return BN.contatos.filter(b=>!b.merged_into &&
+    (m? (!FBN.lp||(b.lp||'gustavo')===FBN.lp) : (b.lp||'gustavo')===S.activeUser)); }
 function bnPor(id){ return BN.contatos.find(b=>b.id===id); }
 /* Atualizar app: limpa caches (SW/CacheStorage) e recarrega — versão nova na hora */
 async function atualizarApp(){
@@ -2715,7 +2720,19 @@ async function bnImportarArquivos(input){
 }
 
 /* ── TELA: ESTOQUE DE NOMES ──────────────────────────────────────────────── */
-let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1};
+let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',lp:'',prof:'',cid:'',ecivil:'',filhos:'',idmin:'',idmax:'',rmin:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1};
+const FBN_CAMPOS=['busca','trilha','estagio','pri','tel','lp','prof','cid','ecivil','filhos','idmin','idmax','rmin'];
+function bnFiltroLimpar(){ FBN_CAMPOS.forEach(k=>FBN[k]=''); FBN.mostrar=150; viewBnEstoque(); }
+function bnFiltroSalvar(){ const ativo=FBN_CAMPOS.some(k=>FBN[k]); if(!ativo){ toast('Monte um filtro primeiro',false); return; }
+  const nome=prompt('Nome do filtro salvo (ex.: Médicos Recife, Rec de cliente):'); if(!nome) return;
+  BN.filtros=BN.filtros||[]; const f={}; FBN_CAMPOS.forEach(k=>{ if(FBN[k]) f[k]=FBN[k]; });
+  const i=BN.filtros.findIndex(x=>x.nome===nome.trim()); const item={nome:nome.trim(),f};
+  if(i>=0) BN.filtros[i]=item; else BN.filtros.push(item);
+  bnSalvar(); viewBnEstoque(); toast('Filtro “'+nome.trim()+'” salvo',true); }
+function bnFiltroAplicar(nome){ const x=(BN.filtros||[]).find(f=>f.nome===nome); if(!x) return;
+  FBN_CAMPOS.forEach(k=>FBN[k]=x.f[k]||''); FBN.mostrar=150; viewBnEstoque(); }
+function bnFiltroExcluir(nome){ if(!confirm('Excluir o filtro “'+nome+'”?')) return;
+  BN.filtros=(BN.filtros||[]).filter(f=>f.nome!==nome); bnSalvar(); viewBnEstoque(); }
 function bnSort(col){ if(FBN.sort===col){ if(FBN.dir>0) FBN.dir=-1; else {FBN.sort='';FBN.dir=1;} } else {FBN.sort=col;FBN.dir=1;} viewBnEstoque(); }
 function bnTh(col,label){ const on=FBN.sort===col; return `<th onclick="bnSort('${col}')" style="cursor:pointer;white-space:nowrap" title="Ordenar">${label}${on?(FBN.dir>0?' ↑':' ↓'):''}</th>`; }
 function bnFiltrados(){
@@ -2726,6 +2743,13 @@ function bnFiltrados(){
   if(FBN.pri) l=l.filter(c=>String(c.prioridade)===FBN.pri);
   if(FBN.tel==='com') l=l.filter(c=>c.telefone);
   if(FBN.tel==='sem') l=l.filter(c=>!c.telefone);   // sem-telefone é matéria-prima do SitPlan: só filtra se VOCÊ pedir
+  if(FBN.prof){ const q=FBN.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
+  if(FBN.cid){ const q=FBN.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
+  if(FBN.ecivil) l=l.filter(c=>c.estado_civil===FBN.ecivil);
+  if(FBN.filhos) l=l.filter(c=>c.filhos===FBN.filhos);
+  if(FBN.idmin) l=l.filter(c=>Number(c.idade)>=Number(FBN.idmin));
+  if(FBN.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FBN.idmax));
+  if(FBN.rmin) l=l.filter(c=>Number(c.renda_estimada)>=Number(FBN.rmin));
   if(FBN.sort){ const k=FBN.sort, d=FBN.dir;
     l=l.slice().sort((a,b)=>{ const va=a[k], vb=b[k];
       if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
@@ -2747,22 +2771,45 @@ function viewBnEstoque(){
       <select onchange="FBN.estagio=this.value;viewBnEstoque()"><option value="">Estágios: todos</option>${BN_ESTAGIOS.map(e=>`<option ${FBN.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select>
       <select onchange="FBN.pri=this.value;viewBnEstoque()"><option value="">Prioridade: todas</option><option ${FBN.pri==='1'?'selected':''} value="1">P1</option><option ${FBN.pri==='2'?'selected':''} value="2">P2</option><option ${FBN.pri==='3'?'selected':''} value="3">P3</option></select>
       <select onchange="FBN.tel=this.value;viewBnEstoque()"><option value="">Telefone: tanto faz</option><option ${FBN.tel==='com'?'selected':''} value="com">Com telefone</option><option ${FBN.tel==='sem'?'selected':''} value="sem">Só nome</option></select>
+      ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnEstoque()"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">${esc(u.nome.split(' ')[0])}</option>`).join('')}</select>`:''}
       <button class="btn btn-p btn-mini" onclick="bnNovo()">➕ Novo nome</button>
       <label class="btn btn-s btn-mini" style="cursor:pointer">⬆️ Importar<input type="file" multiple accept=".json,.csv" style="display:none" onchange="bnImportarArquivos(this)"></label>
     </div>
+    <div class="toolbar" style="flex-wrap:wrap">
+      <input type="search" style="max-width:170px" placeholder="Profissão/empresa…" value="${esc(FBN.prof)}" oninput="FBN.prof=this.value;FBN.mostrar=150;viewBnEstoque()">
+      <input type="search" style="max-width:140px" placeholder="Cidade…" value="${esc(FBN.cid)}" oninput="FBN.cid=this.value;FBN.mostrar=150;viewBnEstoque()">
+      <select onchange="FBN.ecivil=this.value;viewBnEstoque()"><option value="">Estado civil</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)'].map(e=>`<option ${FBN.ecivil===e?'selected':''} value="${e}">${e}</option>`).join('')}</select>
+      <select onchange="FBN.filhos=this.value;viewBnEstoque()"><option value="">Filhos?</option><option ${FBN.filhos==='sim'?'selected':''} value="sim">Com filhos</option><option ${FBN.filhos==='nao'?'selected':''} value="nao">Sem filhos</option></select>
+      <input type="number" style="max-width:92px" placeholder="Idade ≥" value="${esc(FBN.idmin)}" oninput="FBN.idmin=this.value;viewBnEstoque()">
+      <input type="number" style="max-width:92px" placeholder="Idade ≤" value="${esc(FBN.idmax)}" oninput="FBN.idmax=this.value;viewBnEstoque()">
+      <input type="number" style="max-width:110px" placeholder="Renda ≥" step="1000" value="${esc(FBN.rmin)}" oninput="FBN.rmin=this.value;viewBnEstoque()">
+      <button class="btn btn-s btn-mini" onclick="bnFiltroSalvar()">💾 Salvar filtro</button>
+      <button class="btn btn-s btn-mini" onclick="bnFiltroLimpar()">Limpar</button>
+    </div>
+    ${(BN.filtros&&BN.filtros.length)? `<div class="toolbar" style="flex-wrap:wrap;gap:6px">
+      <span style="font-size:12px;color:var(--muted)">Filtros salvos:</span>
+      ${BN.filtros.map(f=>`<span class="badge b-cinza" style="cursor:pointer;padding:5px 10px" onclick="bnFiltroAplicar('${esc(f.nome)}')">${esc(f.nome)} <b onclick="event.stopPropagation();bnFiltroExcluir('${esc(f.nome)}')" title="excluir" style="opacity:.6">✕</b></span>`).join('')}
+    </div>`:''}
     ${FBN.sel.size? `<div class="card" style="padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <b>${FBN.sel.size} selecionado${FBN.sel.size>1?'s':''}</b>
       ${BN_ESTAGIOS.map(e=>`<button class="btn btn-s btn-mini" onclick="bnLote('${e}')">→ ${BN_EST_LABEL[e]}</button>`).join('')}
       <button class="btn btn-s btn-mini" onclick="bnLote('_ta')">📞 Lista de hoje</button>
+      <button class="btn btn-p btn-mini" onclick="bnLoteLista()">📋 Adicionar à lista…</button>
       <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnEstoque()">Limpar</button>
     </div>`:''}
     <div class="card" style="padding:6px 10px;overflow-x:auto">
-      <table><thead><tr><th></th>${bnTh('nome','Nome')}${bnTh('telefone','Telefone')}${bnTh('trilha','Trilha')}${bnTh('estagio','Estágio')}${bnTh('prioridade','P')}${bnTh('recomendante','Recomendante')}${bnTh('n_origens','Origens')}</tr></thead><tbody>
+      <table><thead><tr><th></th>${bnTh('nome','Nome')}${bnTh('telefone','Telefone')}${bnTh('cargo','Profissão')}${bnTh('idade','Idade')}${bnTh('cidade','Cidade')}${bnTh('renda_estimada','Renda')}${bnTh('estado_civil','Civil')}${bnTh('filhos','Filhos')}${bnTh('trilha','Trilha')}${bnTh('estagio','Estágio')}${bnTh('prioridade','P')}${bnTh('recomendante','Recomendante')}${bnTh('n_origens','Orig.')}</tr></thead><tbody>
       ${l.slice(0,FBN.mostrar).map(c=>`
         <tr class="clicavel">
           <td onclick="event.stopPropagation()"><input type="checkbox" ${FBN.sel.has(c.id)?'checked':''} onchange="this.checked?FBN.sel.add('${esc(c.id)}'):FBN.sel.delete('${esc(c.id)}');viewBnEstoque()"></td>
           <td onclick="bnEditar('${esc(c.id)}')"><b>${esc(c.nome)}</b>${(c.contexto||c.cidade||c.idade)? `<br><span style="font-size:11.5px;color:var(--muted)">${esc([c.contexto,c.cidade,c.idade&&(c.idade+' anos')].filter(Boolean).join(' · '))}</span>`:''}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${c.telefone? esc(c.telefone):'<span style="color:var(--muted)">—</span>'}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.cargo||'')}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.idade||'')}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.cidade||'')}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${c.renda_estimada? brlCurto(c.renda_estimada):''}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc((c.estado_civil||'').split('(')[0])}</td>
+          <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${c.filhos==='sim'?'👶':c.filhos==='nao'?'—':''}</td>
           <td onclick="bnEditar('${esc(c.id)}')" style="font-size:12px">${esc(c.trilha||'')}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${bnBadgeEst(c.estagio)}</td>
           <td onclick="bnEditar('${esc(c.id)}')">${esc(c.prioridade||'')}</td>
@@ -2834,9 +2881,17 @@ function bnLote(acao){
   FBN.sel.clear(); bnSalvar(); render();
   toast(ids.length+' atualizado'+(ids.length>1?'s':''),true);
 }
+function bnListasTodas(){ const set=new Set(); bnVivos().forEach(c=>(c.listas||[]).forEach(n=>set.add(n))); return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+function bnLoteLista(){
+  const ids=[...FBN.sel]; if(!ids.length){ toast('Selecione contatos primeiro',false); return; }
+  const atuais=bnListasTodas();
+  const nome=prompt('Nome da lista de TA (nova ou existente'+(atuais.length? ' — já existem: '+atuais.join(', '):'')+'):'); if(!nome) return;
+  const n=nome.trim(); ids.forEach(id=>{ const c=bnPor(id); if(!c) return; c.listas=[...new Set([...(c.listas||[]),n])]; });
+  FBN.sel.clear(); bnSalvar(); render(); toast(ids.length+' na lista “'+n+'”',true);
+}
 function bnNovo(){
   const nome=prompt('Nome do novo contato:'); if(!nome) return;
-  const c={id:'N'+Date.now(),nome:nome.trim(),telefone:null,email:null,empresa:null,cargo:null,
+  const c={id:'N'+Date.now(),lp:S.activeUser,listas:[],nome:nome.trim(),telefone:null,email:null,empresa:null,cargo:null,
     trilha:'seguro',tipo:null,estagio:'estoque',recomendante:null,cidade:null,prioridade:null,
     notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[]};
   BN.contatos.unshift(c); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
@@ -2844,19 +2899,29 @@ function bnNovo(){
 
 /* ── TELA: LISTA DE TA (do estoque) ──────────────────────────────────────── */
 const BN_RES=[['atendeu','✅ Atendeu'],['nao_atendeu','📵 Não atendeu'],['agendou','🗓️ Agendou'],['recusou','🚫 Recusou'],['numero_errado','❌ Nº errado']];
+let BNTA={lista:'hoje'};
 function viewBnTa(){
   const hoje=hojeISO();
-  const lista=bnVivos().filter(c=>c.ta_dia===hoje);
+  const nomes=bnListasTodas();
+  if(BNTA.lista!=='hoje'&&!nomes.includes(BNTA.lista)) BNTA.lista='hoje';
+  const emHoje=bnVivos().filter(c=>c.ta_dia===hoje);
+  const lista=BNTA.lista==='hoje'? emHoje : bnVivos().filter(c=>(c.listas||[]).includes(BNTA.lista));
   const feitos=lista.filter(c=>(c.hist||[]).some(h=>h.dia===hoje));
-  const cand=bnVivos().filter(c=>c.ta_dia!==hoje&&c.estagio==='lista_ta'&&c.telefone).slice(0,400);
+  const cand=bnVivos().filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hoje : !(c.listas||[]).includes(BNTA.lista))).slice(0,400);
   $('#main').innerHTML=`
     <h1 class="pg">Lista de TA</h1>
-    <div class="sub">${lista.length? `${feitos.length}/${lista.length} trabalhados hoje (${dataBR(hoje)})`:'Monte a lista do dia a partir do estoque.'}</div>
+    <div class="sub">${lista.length? `${feitos.length}/${lista.length} trabalhados hoje (${dataBR(hoje)})`:'Monte quantas listas quiser — Hoje é a rápida; as nomeadas você cria do Estoque (📋).'}</div>
+    <div class="toolbar" style="flex-wrap:wrap;gap:6px">
+      <button class="btn btn-mini ${BNTA.lista==='hoje'?'btn-p':'btn-s'}" onclick="BNTA.lista='hoje';viewBnTa()">📅 Hoje <b style="opacity:.75">${emHoje.length}</b></button>
+      ${nomes.map(n=>{ const q=bnVivos().filter(c=>(c.listas||[]).includes(n)).length;
+        return `<button class="btn btn-mini ${BNTA.lista===n?'btn-p':'btn-s'}" onclick="BNTA.lista='${esc(n)}';viewBnTa()">📋 ${esc(n)} <b style="opacity:.75">${q}</b></button>`; }).join('')}
+      ${BNTA.lista!=='hoje'? `<button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(BNTA.lista)}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}
+    </div>
     <div class="toolbar">
-      <select id="bnta-add" style="max-width:340px"><option value="">＋ Adicionar à lista de hoje…</option>
+      <select id="bnta-add" style="max-width:340px"><option value="">＋ Adicionar ${BNTA.lista==='hoje'?'à lista de hoje':'a “'+esc(BNTA.lista)+'”'}…</option>
         ${cand.map(c=>`<option value="${esc(c.id)}">${esc(c.nome)} · ${esc(c.telefone)}</option>`).join('')}</select>
       <button class="btn btn-p btn-mini" onclick="bnTaAdd($('#bnta-add').value)">Adicionar</button>
-      <span style="font-size:12px;color:var(--muted)">Dica: selecione vários no Estoque e use "📞 Lista de hoje".</span>
+      <span style="font-size:12px;color:var(--muted)">Em massa: selecione no Estoque → 📋 Adicionar à lista…</span>
     </div>
     <div class="card" style="padding:6px 10px;overflow-x:auto">
       <table><thead><tr><th>Nome</th><th>Ligar</th><th>Tent.</th><th>Resultado de hoje</th></tr></thead><tbody>
@@ -2872,8 +2937,15 @@ function viewBnTa(){
       </tbody></table>
     </div>`;
 }
-function bnTaAdd(id){ const c=bnPor(id); if(!c) return; c.ta_dia=hojeISO(); bnSalvar(); render(); }
-function bnTaTirar(id){ const c=bnPor(id); if(!c) return; c.ta_dia=null; bnSalvar(); render(); }
+function bnTaAdd(id){ const c=bnPor(id); if(!c) return;
+  if(BNTA.lista==='hoje') c.ta_dia=hojeISO(); else c.listas=[...new Set([...(c.listas||[]),BNTA.lista])];
+  bnSalvar(); render(); }
+function bnTaTirar(id){ const c=bnPor(id); if(!c) return;
+  if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista);
+  bnSalvar(); render(); }
+function bnListaApagar(nome){ if(!confirm('Apagar a lista “'+nome+'”? (os contatos continuam na base)')) return;
+  BN.contatos.forEach(c=>{ if(c.listas) c.listas=c.listas.filter(n=>n!==nome); });
+  BNTA.lista='hoje'; bnSalvar(); render(); toast('Lista apagada',true); }
 async function bnResultado(id,res){
   const c=bnPor(id); if(!c) return;
   (c.hist=c.hist||[]).push({tipo:'ta',res,dia:hojeISO(),ts:new Date().toISOString()});
