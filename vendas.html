@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.1 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.2 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -392,6 +392,23 @@
   .bn-multi-pop label{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;white-space:nowrap}
   .bn-tabela td input,.bn-tabela td select{width:100%;min-width:80px;padding:5px 7px;font-size:12.5px;border:1px solid var(--primary);border-radius:7px}
 
+  /* ── B3: busca global ⌘K (padrão Captação) com escopo ── */
+  .cmdk-bd{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(2px)}
+  .cmdk{background:var(--card);border-radius:16px;width:min(640px,94vw);box-shadow:0 24px 80px rgba(0,0,0,.35);overflow:hidden}
+  .cmdk input{width:100%;border:none;outline:none;padding:16px 18px;font-size:16px;border-bottom:1px solid var(--linha)}
+  .cmdk-scopes{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--linha);flex-wrap:wrap}
+  .cmdk-scopes button{font-size:12px;padding:5px 11px;border-radius:99px;border:1px solid var(--linha);background:var(--fundo);color:var(--cinza);cursor:pointer}
+  .cmdk-scopes button.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+  .cmdk-res{max-height:52vh;overflow:auto;padding:6px}
+  .cmdk-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer}
+  .cmdk-row.sel,.cmdk-row:hover{background:var(--fundo)}
+  .cmdk-row .cm{flex:1;min-width:0}
+  .cmdk-row .cn{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmdk-row .cs{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cmdk-row .ck{font-size:11px;color:var(--muted);flex-shrink:0;white-space:nowrap}
+  .cmdk-foot{padding:8px 14px;border-top:1px solid var(--linha);font-size:11px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+  .cmdk-foot .kbd{border:1px solid var(--linha);border-radius:5px;padding:0 5px;font-family:ui-monospace,monospace;font-size:10px}
+
   /* ================================================================
      🎨 AJUSTES DE VISUAL — mesmo painel e MESMA chave da Captação
      (crm-tweaks-v1): o que ele escolhe num app vale nos dois.
@@ -540,7 +557,8 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.9.1 · Base de Nomes</span>
+      <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
+      <span class="tag">ISLAND · v0.9.2 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -553,7 +571,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.9.1 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.9.2 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3126,9 +3144,9 @@ function bnLoteLista(){
   const n=nome.trim(); ids.forEach(id=>{ const c=bnPor(id); if(!c) return; c.listas=[...new Set([...(c.listas||[]),n])]; });
   FBN.sel.clear(); bnSalvar(); render(); toast(ids.length+' na lista “'+n+'”',true);
 }
-function bnNovo(){
-  const nome=prompt('Nome do novo contato:'); if(!nome) return;
-  const c={id:'N'+Date.now(),lp:S.activeUser,listas:[],nome:nome.trim(),telefone:null,email:null,empresa:null,cargo:null,
+function bnNovo(nome){ // nome opcional (⌘K passa pronto; o botão do Estoque pergunta)
+  nome=nome||prompt('Nome do novo contato:'); if(!nome) return;
+  const c={id:'N'+Date.now(),lp:S.activeUser,listas:[],nome:String(nome).trim(),telefone:null,email:null,empresa:null,cargo:null,
     trilha:'seguro',tipo:null,estagio:'estoque',recomendante:null,cidade:null,prioridade:null,
     notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[]};
   BN.contatos.unshift(c); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
@@ -3633,6 +3651,85 @@ function render(){
   ocultarTituloDuplicado();
   if(CONTATO) renderDrawer();
 }
+/* ── B3: busca global ⌘K com escopo (padrão da Captação) ─────────────────
+   Fontes: Estoque (BN), funis NN/BC (contatos do LP ativo) e Clientes da
+   Carteira. Enter abre direto no lugar certo; sem resultado, cria nome novo
+   no Estoque. O botão 🔍 da topbar cobre o celular (sem teclado ⌘K). */
+let LPK_SEL=0, LPK_RES=[], LPK_SCOPE='all';
+const LPK_SCOPES=[['all','Tudo'],['bn','📦 Estoque'],['funil','🎯 Funis'],['cart','📁 Clientes']];
+function lpkNorm(s){ return normKey(String(s||'')); }
+function lpkMatches(q){
+  if(!q) return [];
+  const n=lpkNorm(q), out=[];
+  const hit=campos=>campos.some(x=>x&&lpkNorm(x).includes(n));
+  if(LPK_SCOPE==='all'||LPK_SCOPE==='bn'){
+    bnVivos().filter(c=>hit([c.nome,c.telefone,c.recomendante,c.cargo,c.empresa,c.cidade,c.contexto,c.notas]))
+      .slice(0,LPK_SCOPE==='bn'?14:6)
+      .forEach(c=>out.push({t:'bn',id:c.id,nome:c.nome,sub:[c.cargo,c.cidade,BN_EST_LABEL[c.estagio]].filter(Boolean).join(' · ')||'Estoque de Nomes',tag:'📦 Estoque'}));
+  }
+  if(LPK_SCOPE==='all'||LPK_SCOPE==='funil'){
+    (S.contatos||[]).filter(c=>c.lp===S.activeUser&&hit([c.nome,c.telefone,c.profissao,c.notas]))
+      .slice(0,LPK_SCOPE==='funil'?14:6)
+      .forEach(c=>out.push({t:'funil',id:c.id,nome:c.nome,sub:[(c.funil==='bc'?'Base de Clientes':'Novos Negócios'),c.etapa,c.telefone].filter(Boolean).join(' · '),tag:'🎯 '+(c.etapa||'Funil')}));
+  }
+  if(LPK_SCOPE==='all'||LPK_SCOPE==='cart'){
+    (CART.clientes||[]).filter(c=>hit([c.nome,c.ref,c.email,c.celular,c.telefone]))
+      .slice(0,LPK_SCOPE==='cart'?14:6)
+      .forEach(c=>out.push({t:'cart',id:c.ref,nome:c.nome,sub:['Carteira',c.idade!=null?c.idade+' anos':null,c.celular||c.telefone].filter(Boolean).join(' · '),tag:'📁 Cliente'}));
+  }
+  const pref=x=>lpkNorm(x.nome).startsWith(n)?0:1;
+  return out.sort((a,b)=>pref(a)-pref(b)).slice(0,18);
+}
+function lpkRender(){
+  const box=$('#lpk-res'); if(!box) return;
+  const q=$('#lpk-in').value.trim();
+  LPK_RES=lpkMatches(q);
+  document.querySelectorAll('.cmdk-scopes button').forEach(b=>b.classList.toggle('on',b.dataset.sc===LPK_SCOPE));
+  if(!q){ box.innerHTML='<div style="padding:16px;color:var(--muted);font-size:13px">Digite pra buscar em tudo — nome, telefone, recomendante, profissão… Troque o escopo acima (ou com Tab).</div>'; return; }
+  const rows=LPK_RES.map((r,i)=>`<div class="cmdk-row ${i===LPK_SEL?'sel':''}" data-lpk="${i}">
+    <div class="cm"><div class="cn">${esc(r.nome)}</div><div class="cs">${esc(r.sub)}</div></div>
+    <div class="ck">${esc(r.tag)}</div></div>`).join('');
+  const novo=`<div class="cmdk-row ${LPK_SEL===LPK_RES.length?'sel':''}" data-lpk="__novo">
+    <div class="cm"><div class="cn">＋ Novo nome no Estoque: “${esc(q)}”</div><div class="cs">não achou? vira matéria-prima do SitPlan agora</div></div></div>`;
+  box.innerHTML=rows+novo;
+  box.querySelectorAll('[data-lpk]').forEach(el=>el.onclick=()=>lpkGo(el.dataset.lpk));
+}
+function lpkGo(i){
+  const q=$('#lpk-in')?$('#lpk-in').value.trim():'';
+  const r=i==='__novo'?null:LPK_RES[+i];
+  lpkFechar();
+  if(!r){ if(q){ irPara('bn-estoque'); bnNovo(q); } return; }
+  if(r.t==='bn'){ FBN.busca=''; FBN.edit=r.id; irPara('bn-estoque'); }
+  else if(r.t==='funil'){ abrirContato(r.id); }
+  else { irPara('cart-clientes'); cartAbrir(r.id); }
+}
+function lpkAbrir(){
+  if($('#lpk-bd')) return;
+  LPK_SEL=0;
+  document.body.insertAdjacentHTML('beforeend',`<div class="cmdk-bd" id="lpk-bd"><div class="cmdk">
+    <input id="lpk-in" placeholder="Buscar em tudo — nome, telefone, recomendante…" autocomplete="off"/>
+    <div class="cmdk-scopes">${LPK_SCOPES.map(([k,l])=>`<button data-sc="${k}" onclick="LPK_SCOPE='${k}';LPK_SEL=0;lpkRender();document.getElementById('lpk-in').focus()">${l}</button>`).join('')}</div>
+    <div class="cmdk-res" id="lpk-res"></div>
+    <div class="cmdk-foot"><span><span class="kbd">↑↓</span> navegar</span><span><span class="kbd">Tab</span> escopo</span><span><span class="kbd">Enter</span> abrir</span><span><span class="kbd">Esc</span> fechar</span></div>
+  </div></div>`);
+  const bd=$('#lpk-bd'), inp=$('#lpk-in');
+  bd.onclick=e=>{ if(e.target===bd) lpkFechar(); };
+  inp.oninput=()=>{ LPK_SEL=0; lpkRender(); };
+  inp.onkeydown=e=>{
+    const max=LPK_RES.length; // último índice = criar nome novo
+    if(e.key==='ArrowDown'){ e.preventDefault(); LPK_SEL=Math.min(LPK_SEL+1,max); lpkRender(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); LPK_SEL=Math.max(LPK_SEL-1,0); lpkRender(); }
+    else if(e.key==='Tab'){ e.preventDefault(); const i=LPK_SCOPES.findIndex(s=>s[0]===LPK_SCOPE); LPK_SCOPE=LPK_SCOPES[(i+1)%LPK_SCOPES.length][0]; LPK_SEL=0; lpkRender(); }
+    else if(e.key==='Enter'){ e.preventDefault(); if(!inp.value.trim()) return; lpkGo(LPK_SEL<LPK_RES.length?String(LPK_SEL):'__novo'); }
+    else if(e.key==='Escape'){ lpkFechar(); }
+  };
+  lpkRender(); inp.focus();
+}
+function lpkFechar(){ const bd=$('#lpk-bd'); if(bd) bd.remove(); }
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#lpk-bd')?lpkFechar():lpkAbrir(); }
+});
+
 carregar(); bnCarregarLocal(); bnPrefLer(); dicCacheLer();
 document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique fora fecha
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
