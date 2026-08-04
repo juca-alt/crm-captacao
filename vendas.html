@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.5.2 · Base de Nomes</title>
+<title>CRM Life Planner · v0.6.0 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -451,6 +451,7 @@
     <div class="nav-grp-wrap fechado" id="sp-group">
       <button class="nav-btn sub" data-view="bn-estoque" onclick="irPara('bn-estoque')"><span class="ic">📦</span><span class="lbl">Estoque de Nomes</span><span class="cnt" id="cnt-bn"></span></button>
       <button class="nav-btn sub" data-view="bn-ta" onclick="irPara('bn-ta')"><span class="ic">📞</span><span class="lbl">Lista de TA</span><span class="cnt" id="cnt-bn-ta"></span></button>
+      <button class="nav-btn sub" data-view="bn-recs" onclick="irPara('bn-recs')"><span class="ic">🙌</span><span class="lbl">Recomendações</span><span class="cnt" id="cnt-bn-recs"></span></button>
       <button class="nav-btn sub" data-view="bn-dups" onclick="irPara('bn-dups')"><span class="ic">🔀</span><span class="lbl">Duplicatas</span><span class="cnt" id="cnt-bn-dups"></span></button>
       <button class="nav-btn sub" data-view="sitplan" onclick="irPara('sitplan')"><span class="ic">🗓️</span><span class="lbl">Lista do dia (funil)</span><span class="cnt" id="cnt-sitplan"></span></button>
     </div>
@@ -517,7 +518,7 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <span class="tag">ISLAND · v0.5.2 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.6.0 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -530,7 +531,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.5.2 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.6.0 — Base de Nomes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2714,7 +2715,9 @@ async function bnImportarArquivos(input){
 }
 
 /* ── TELA: ESTOQUE DE NOMES ──────────────────────────────────────────────── */
-let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',mostrar:150,sel:new Set(),edit:null};
+let FBN={busca:'',trilha:'',estagio:'',pri:'',tel:'',mostrar:150,sel:new Set(),edit:null,sort:'',dir:1};
+function bnSort(col){ if(FBN.sort===col){ if(FBN.dir>0) FBN.dir=-1; else {FBN.sort='';FBN.dir=1;} } else {FBN.sort=col;FBN.dir=1;} viewBnEstoque(); }
+function bnTh(col,label){ const on=FBN.sort===col; return `<th onclick="bnSort('${col}')" style="cursor:pointer;white-space:nowrap" title="Ordenar">${label}${on?(FBN.dir>0?' ↑':' ↓'):''}</th>`; }
 function bnFiltrados(){
   let l=bnVivos();
   if(FBN.busca){ const q=FBN.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
@@ -2723,6 +2726,11 @@ function bnFiltrados(){
   if(FBN.pri) l=l.filter(c=>String(c.prioridade)===FBN.pri);
   if(FBN.tel==='com') l=l.filter(c=>c.telefone);
   if(FBN.tel==='sem') l=l.filter(c=>!c.telefone);   // sem-telefone é matéria-prima do SitPlan: só filtra se VOCÊ pedir
+  if(FBN.sort){ const k=FBN.sort, d=FBN.dir;
+    l=l.slice().sort((a,b)=>{ const va=a[k], vb=b[k];
+      if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
+      if(typeof va==='number'||typeof vb==='number') return (Number(va)-Number(vb))*d;
+      return String(va).localeCompare(String(vb),'pt-BR')*d; }); }
   return l;
 }
 function bnBadgeEst(e){ const cores={estoque:'b-cinza',lista_ta:'b-azul',oi_agendado:'b-roxo',cliente:'b-verde',descartado:'b-verm'};
@@ -2749,7 +2757,7 @@ function viewBnEstoque(){
       <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnEstoque()">Limpar</button>
     </div>`:''}
     <div class="card" style="padding:6px 10px;overflow-x:auto">
-      <table><thead><tr><th></th><th>Nome</th><th>Telefone</th><th>Trilha</th><th>Estágio</th><th>P</th><th>Recomendante</th><th>Origens</th></tr></thead><tbody>
+      <table><thead><tr><th></th>${bnTh('nome','Nome')}${bnTh('telefone','Telefone')}${bnTh('trilha','Trilha')}${bnTh('estagio','Estágio')}${bnTh('prioridade','P')}${bnTh('recomendante','Recomendante')}${bnTh('n_origens','Origens')}</tr></thead><tbody>
       ${l.slice(0,FBN.mostrar).map(c=>`
         <tr class="clicavel">
           <td onclick="event.stopPropagation()"><input type="checkbox" ${FBN.sel.has(c.id)?'checked':''} onchange="this.checked?FBN.sel.add('${esc(c.id)}'):FBN.sel.delete('${esc(c.id)}');viewBnEstoque()"></td>
@@ -2877,6 +2885,47 @@ async function bnResultado(id,res){
     catch(e){ console.warn('lp_interacoes: falhou (fica só no hist local)',e); } }
 }
 
+/* ── TELA: RECOMENDAÇÕES (formato replicado do módulo da Captação) ─────────
+   Sub-abas em chips (trilha), filtro por recomendante, cartões agrupados por
+   quem indicou, linha com iniciais + qualificação + pill de estágio. */
+let BNR={tab:'all',recom:''};
+function viewBnRecs(){
+  const all=bnVivos().filter(b=>(b.recomendante||'').trim());
+  const cnt=t=>all.filter(b=>b.trilha===t).length;
+  const TABS=[['all','Todas',all.length],['seguro','Seguro',cnt('seguro')],['recrutamento','Recrutamento',cnt('recrutamento')]];
+  let lista=BNR.tab==='all'? all.slice() : all.filter(b=>b.trilha===BNR.tab);
+  const recomSet=[...new Set(lista.map(b=>b.recomendante.trim()))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  if(BNR.recom && !recomSet.includes(BNR.recom)) BNR.recom='';
+  if(BNR.recom) lista=lista.filter(b=>b.recomendante.trim()===BNR.recom);
+  const groups={}; lista.forEach(b=>{ const k=b.recomendante.trim(); (groups[k]=groups[k]||[]).push(b); });
+  const names=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
+  const row=b=>`<div class="clicavel" onclick="FBN.busca='';FBN.edit='${esc(b.id)}';irPara('bn-estoque')" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:11px;cursor:pointer;background:var(--bg)">
+      <span style="width:36px;height:36px;border-radius:50%;background:var(--primary,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${esc(iniciais(b.nome))}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.nome)}</div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc([b.contexto,b.cidade,b.idade&&(b.idade+' anos'),b.telefone].filter(Boolean).join(' · ')||'—')}</div>
+      </div>
+      <span style="font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">${esc(b.trilha||'')}</span>
+      ${bnBadgeEst(b.estagio)}
+    </div>`;
+  $('#main').innerHTML=`
+    <h1 class="pg">Recomendações</h1>
+    <div class="sub">Quem indicou quem na sua base — ${all.length.toLocaleString('pt-BR')} nomes com recomendante registrado.</div>
+    <div class="toolbar" style="flex-wrap:wrap">
+      ${TABS.map(([k,lb,n])=>`<button class="btn btn-mini ${BNR.tab===k?'btn-p':'btn-s'}" onclick="BNR.tab='${k}';BNR.recom='';viewBnRecs()">${lb} <b style="opacity:.75">${n}</b></button>`).join('')}
+      <select onchange="BNR.recom=this.value;viewBnRecs()" style="max-width:280px"><option value="">Recomendante: todos (${recomSet.length})</option>${recomSet.map(r=>`<option ${BNR.recom===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
+      ${BNR.recom? `<button class="btn btn-s btn-mini" onclick="BNR.recom='';viewBnRecs()">limpar</button>`:''}
+    </div>
+    ${names.length? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${lista.length.toLocaleString('pt-BR')} nome${lista.length>1?'s':''} · ${names.length.toLocaleString('pt-BR')} recomendante${names.length>1?'s':''}</div>`:''}
+    ${names.map(n=>`<div class="card" style="padding:13px 15px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-weight:800;font-size:15px">🙌 ${esc(n)}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--muted);background:var(--bg);padding:2px 9px;border-radius:8px">${groups[n].length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">${groups[n].map(row).join('')}</div>
+      </div>`).join('') || `<div class="card" style="padding:24px;text-align:center;color:var(--muted)">Nenhum nome com recomendante ${BNR.tab==='all'?'':'nessa trilha'}.</div>`}`;
+}
+
 /* ── TELA: FILA DE DUPLICATAS ────────────────────────────────────────────── */
 function bnDupCard(c,outro,d,lado){
   if(!c) return `<div class="card" style="flex:1;padding:12px"><i>Contato ${lado} não encontrado no estoque.</i></div>`;
@@ -2979,7 +3028,7 @@ async function admMod(email,k,on){
 }
 
 const TITULO_VIEW={inicio:'Início',sitplan:'Lista do Dia (funil)',metas:'Metas',contatos:'Contatos',
-  'bn-estoque':'Estoque de Nomes','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','lp-adm':'Acessos & Módulos',
+  'bn-estoque':'Estoque de Nomes','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Funil Novos Negócios','bc-funil':'Funil Base de Clientes','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
@@ -3008,6 +3057,7 @@ function render(){
   if(VIEW&&VIEW.startsWith('bn-')){ ['sp-toggle','sp-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#sp-caret'); if(c) c.textContent='▴'; }
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
     const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
+    const cr=$('#cnt-bn-recs'); if(cr) cr.textContent=bnVivos().filter(b=>(b.recomendante||'').trim()).length||'';
     const ct2=$('#cnt-bn-ta'); if(ct2) ct2.textContent=bnVivos().filter(b=>b.ta_dia===hojeISO()).length||''; }
   aplicarGates();
   if(VIEW==='inicio') viewInicio();
@@ -3030,6 +3080,7 @@ function render(){
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
+  else if(VIEW==='bn-recs') viewBnRecs();
   else if(VIEW==='lp-adm') viewLpAdm();
   else viewPrincipios();
   if(VIEW==='inicio'&&typeof bnVivos==='function'&&bnVivos().length){
