@@ -1212,6 +1212,11 @@ function fxRender(ns){ const f=window[FX_RENDER[ns]]; if(typeof f==='function') 
    depois protege o HTML. */
 function jsq(s){ return String(s??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 function csvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).filter(Boolean)); }
+/* O CSV nasceu pra enumerações (estágio, prioridade). Nas telas novas ele passou
+   a receber TEXTO LIVRE do usuário — origem "Indicação, cliente antigo" partia
+   em dois e o filtro trazia todo mundo de "Indicação". A vírgula do VALOR vira
+   \u0001 na chave; filtro salvo antigo (sem vírgula) continua idêntico. */
+function csvKey(v){ return String(v??'').replace(/,/g,'\u0001'); }
 function fxMultiTgl(ns,key,v,on){ const st=FX_ST[ns]; if(!st) return;
   const s=csvSet(st[key]); if(on)s.add(v); else s.delete(v);
   st[key]=[...s].join(','); if('mostrar' in st) st.mostrar=150; st.pop=key; fxRender(ns); }
@@ -1223,7 +1228,7 @@ function fxMultiHtml(ns,key,titulo,opts){
   return `<details class="bn-multi"${st.pop===key?' open':''} ontoggle="fxPopTgl('${ns}','${key}',this.open)">
     <summary class="${sel.size?'on':''}">${esc(titulo)}: ${sel.size||'todos'}</summary>
     <div class="bn-multi-pop">
-      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(o.v)?'checked':''} onchange="fxMultiTgl('${ns}','${key}','${esc(jsq(o.v))}',this.checked)">${esc(o.l)}</label>`).join('')}
+      ${opts.map(o=>`<label><input type="checkbox" ${sel.has(csvKey(o.v))?'checked':''} onchange="fxMultiTgl('${ns}','${key}','${esc(jsq(csvKey(o.v)))}',this.checked)">${esc(o.l)}</label>`).join('')}
       ${sel.size?`<button class="btn btn-s btn-mini" onclick="fxLimpar('${ns}','${key}')">Limpar</button>`:''}
     </div></details>`;
 }
@@ -1279,8 +1284,8 @@ function fxSheetRender(){
   const grp=(t,inner)=>`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">${esc(t)}</div><div style="display:flex;gap:6px;flex-wrap:wrap">${inner}</div></div>`;
   // `req` = grupo que sempre tem um escolhido (ex.: ordem): clicar no que já
   // está on não desmarca, senão o chip apaga mas a lista continua ordenada.
-  const chip=(k,v,l,multi,req)=>{ const on=multi?csvSet(st[k]).has(v):st[k]===v;
-    const val=(on&&!req)?'':esc(jsq(v));
+  const chip=(k,v,l,multi,req)=>{ const on=multi?csvSet(st[k]).has(csvKey(v)):st[k]===v;
+    const val=(on&&!req)?'':esc(jsq(multi?csvKey(v):v));
     return `<button class="sheet-chip ${on?'on':''}" onclick="${multi?`fxSheetTgl('${ns}','${k}','${esc(jsq(v))}')`:`fxSheetSet('${ns}','${k}','${val}')`}">${esc(l)}</button>`; };
   const inp=(k,l,extra)=>`<label style="font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:4px">${esc(l)}<input ${extra||''} value="${esc(st[k]||'')}" oninput="fxSheetQuiet('${ns}','${k}',this.value)"></label>`;
   el.innerHTML=`
@@ -1329,12 +1334,12 @@ function ctFiltrados(){
   let l=meusContatos();
   if(FILTRO.busca){ const q=FILTRO.busca.toLowerCase();
     l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.profissao||'').toLowerCase().includes(q)); }
-  if(FILTRO.etapa){ const s=csvSet(FILTRO.etapa); l=l.filter(c=>s.has(c.etapa)); }   // CSV = multi (compat: etapa única é CSV de 1)
-  if(FILTRO.lp && isMaster()){ const s=csvSet(FILTRO.lp); l=l.filter(c=>s.has(c.lp)); }
-  if(FILTRO.temp){ const s=csvSet(FILTRO.temp); l=l.filter(c=>s.has(c.temperatura||'sem')); }
-  if(FILTRO.estrelas){ const s=csvSet(FILTRO.estrelas); l=l.filter(c=>s.has(String(estrelasDe(c)))); }
-  if(FILTRO.tastatus){ const s=csvSet(FILTRO.tastatus); l=l.filter(c=>s.has(c.taStatus||'—')); }
-  if(FILTRO.origem){ const s=csvSet(FILTRO.origem); l=l.filter(c=>s.has(c.origem||'—')); }
+  if(FILTRO.etapa){ const s=csvSet(FILTRO.etapa); l=l.filter(c=>s.has(csvKey(c.etapa))); }   // CSV = multi (compat: etapa única é CSV de 1)
+  if(FILTRO.lp && isMaster()){ const s=csvSet(FILTRO.lp); l=l.filter(c=>s.has(csvKey(c.lp))); }
+  if(FILTRO.temp){ const s=csvSet(FILTRO.temp); l=l.filter(c=>s.has(csvKey(c.temperatura||'sem'))); }
+  if(FILTRO.estrelas){ const s=csvSet(FILTRO.estrelas); l=l.filter(c=>s.has(csvKey(estrelasDe(c)))); }
+  if(FILTRO.tastatus){ const s=csvSet(FILTRO.tastatus); l=l.filter(c=>s.has(csvKey(c.taStatus||'—'))); }
+  if(FILTRO.origem){ const s=csvSet(FILTRO.origem); l=l.filter(c=>s.has(csvKey(c.origem||'—'))); }
   if(FILTRO.prof){ const q=FILTRO.prof.toLowerCase(); l=l.filter(c=>(c.profissao||'').toLowerCase().includes(q)); }
   if(FILTRO.idmin) l=l.filter(c=>Number(c.idade)>=Number(FILTRO.idmin));
   if(FILTRO.idmax) l=l.filter(c=>c.idade!=null&&c.idade!==''&&Number(c.idade)<=Number(FILTRO.idmax));
@@ -3151,13 +3156,13 @@ function bnFiltrados(){
   let l=bnVivos();
   if(FBN.busca){ const q=FBN.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
   if(FBN.trilha) l=l.filter(c=>c.trilha===FBN.trilha);
-  if(FBN.estagio){ const s=bnCsvSet(FBN.estagio); l=l.filter(c=>s.has(c.estagio)); }   // CSV = multi (compat: valor único é CSV de 1)
-  if(FBN.pri){ const s=bnCsvSet(FBN.pri); l=l.filter(c=>s.has(String(c.prioridade))); }
+  if(FBN.estagio){ const s=bnCsvSet(FBN.estagio); l=l.filter(c=>s.has(csvKey(c.estagio))); }   // CSV = multi (compat: valor único é CSV de 1)
+  if(FBN.pri){ const s=bnCsvSet(FBN.pri); l=l.filter(c=>s.has(csvKey(c.prioridade))); }
   if(FBN.tel==='com') l=l.filter(c=>c.telefone);
   if(FBN.tel==='sem') l=l.filter(c=>!c.telefone);   // sem-telefone é matéria-prima do SitPlan: só filtra se VOCÊ pedir
   if(FBN.prof){ const q=FBN.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
   if(FBN.cid){ const q=FBN.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
-  if(FBN.ecivil){ const s=bnCsvSet(FBN.ecivil); l=l.filter(c=>s.has(bnCivilDe(c))); }  // lê civil_cod da carga também
+  if(FBN.ecivil){ const s=bnCsvSet(FBN.ecivil); l=l.filter(c=>s.has(csvKey(bnCivilDe(c)))); }  // lê civil_cod da carga também
   if(FBN.filhos) l=l.filter(c=>bnFilhosStr2(c)===FBN.filhos);
   if(FBN.idmin) l=l.filter(c=>Number(c.idade)>=Number(FBN.idmin));
   if(FBN.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FBN.idmax));
@@ -3504,9 +3509,9 @@ let BNTA={lista:'hoje'};
 /* Filtros 2.0 na lista de TA: a lista é a ferramenta de trabalho do dia, então
    ela precisa das mesmas lentes do Estoque (multi-seleção + ordenar + colunas).
    `res` é o filtro do dia: pendente ou um dos resultados já registrados. */
-let FTA={busca:'',trilha:'',estagio:'',pri:'',res:'',cid:'',prof:'',idmin:'',idmax:'',rmin:'',sort:'',dir:1,pop:'',sel:new Set()};
+let FTA={busca:'',trilha:'',estagio:'',pri:'',res:'',cid:'',prof:'',idmin:'',idmax:'',rmin:'',sort:'',dir:1,pop:'',sel:new Set(),recem:new Set()};
 const FTA_CAMPOS=['busca','trilha','estagio','pri','res','cid','prof','idmin','idmax','rmin'];
-function taFiltroLimpar(){ FTA_CAMPOS.forEach(k=>FTA[k]=''); viewBnTa(); }
+function taFiltroLimpar(){ FTA_CAMPOS.forEach(k=>FTA[k]=''); FTA.recem.clear(); viewBnTa(); }
 function taFiltrosAtivos(){ return FTA_CAMPOS.filter(k=>k!=='busca'&&FTA[k]).length; }
 /* colunas extras da planilha do TA — reusa o catálogo do Estoque (BN_COLS) */
 const TA_COLS_DEF=['recomendante','cargo','cidade','idade'];
@@ -3521,18 +3526,23 @@ function taColPadrao(){ TAP.cols=null; taPrefSalvar(); FTA.pop='cols'; viewBnTa(
 function taResHoje(c){ const hoje=hojeISO(); return (c.hist||[]).filter(h=>h.dia===hoje&&h.tipo==='ta').map(h=>h.res).pop()||''; }
 function taDaLista(){ const hoje=hojeISO();
   return BNTA.lista==='hoje'? bnVivos().filter(c=>c.ta_dia===hoje) : bnVivos().filter(c=>(c.listas||[]).includes(BNTA.lista)); }
+/* Quem ACABOU de receber resultado continua visível até o próximo ajuste de
+   filtro: sob "⏳ Pendente" a linha sumia no clique e levava junto o ↩︎ de
+   desfazer — mesma classe do achado de 04/08 (filtro escondendo o alvo). */
 function taFiltrados(){
   let l=taDaLista();
+  const recem=FTA.recem.size? taDaLista().filter(c=>FTA.recem.has(c.id)) : [];
   if(FTA.busca){ const q=FTA.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
-  if(FTA.trilha){ const s=csvSet(FTA.trilha); l=l.filter(c=>s.has(c.trilha)); }
-  if(FTA.estagio){ const s=csvSet(FTA.estagio); l=l.filter(c=>s.has(c.estagio)); }
-  if(FTA.pri){ const s=csvSet(FTA.pri); l=l.filter(c=>s.has(String(c.prioridade))); }
-  if(FTA.res){ const s=csvSet(FTA.res); l=l.filter(c=>{ const r=taResHoje(c); return s.has(r||'pendente'); }); }
+  if(FTA.trilha){ const s=csvSet(FTA.trilha); l=l.filter(c=>s.has(csvKey(c.trilha))); }
+  if(FTA.estagio){ const s=csvSet(FTA.estagio); l=l.filter(c=>s.has(csvKey(c.estagio))); }
+  if(FTA.pri){ const s=csvSet(FTA.pri); l=l.filter(c=>s.has(csvKey(c.prioridade))); }
+  if(FTA.res){ const s=csvSet(FTA.res); l=l.filter(c=>{ const r=taResHoje(c); return s.has(csvKey(r||'pendente')); }); }
   if(FTA.cid){ const q=FTA.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
   if(FTA.prof){ const q=FTA.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
   if(FTA.idmin) l=l.filter(c=>Number(c.idade)>=Number(FTA.idmin));
   if(FTA.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FTA.idmax));
   if(FTA.rmin) l=l.filter(c=>Number(c.renda_estimada)>=Number(FTA.rmin));
+  if(recem.length){ const vis=new Set(l.map(c=>c.id)); recem.forEach(c=>{ if(!vis.has(c.id)) l.push(c); }); }
   return fxOrdenar('ta',l,(c,k)=> k==='tent'? (c.hist||[]).filter(h=>h.tipo==='ta').length
                               : k==='res'? (taResHoje(c)||'￿')
                               : k==='civil_cod'? bnCivilCod(c) : c[k]);
@@ -3564,9 +3574,9 @@ function viewBnTa(){
     <h1 class="pg">Lista de TA</h1>
     <div class="sub">${base.length? `${feitos.length}/${base.length} trabalhados hoje (${dataBR(hoje)})${lista.length!==base.length? ` · ${lista.length} no filtro`:''}`:'Monte quantas listas quiser — Hoje é a rápida; as nomeadas você cria do Estoque (📋).'}</div>
     <div class="toolbar" style="flex-wrap:wrap;gap:6px">
-      <button class="btn btn-mini ${BNTA.lista==='hoje'?'btn-p':'btn-s'}" onclick="BNTA.lista='hoje';FTA.sel.clear();viewBnTa()">📅 Hoje <b style="opacity:.75">${emHoje.length}</b></button>
+      <button class="btn btn-mini ${BNTA.lista==='hoje'?'btn-p':'btn-s'}" onclick="BNTA.lista='hoje';FTA.sel.clear();FTA.recem.clear();viewBnTa()">📅 Hoje <b style="opacity:.75">${emHoje.length}</b></button>
       ${nomes.map(n=>{ const q=bnVivos().filter(c=>(c.listas||[]).includes(n)).length;
-        return `<button class="btn btn-mini ${BNTA.lista===n?'btn-p':'btn-s'}" onclick="BNTA.lista='${esc(jsq(n))}';FTA.sel.clear();viewBnTa()">📋 ${esc(n)} <b style="opacity:.75">${q}</b></button>`; }).join('')}
+        return `<button class="btn btn-mini ${BNTA.lista===n?'btn-p':'btn-s'}" onclick="BNTA.lista='${esc(jsq(n))}';FTA.sel.clear();FTA.recem.clear();viewBnTa()">📋 ${esc(n)} <b style="opacity:.75">${q}</b></button>`; }).join('')}
       ${BNTA.lista!=='hoje'? `<button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(jsq(BNTA.lista))}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}
     </div>
     <div class="toolbar" style="flex-wrap:wrap">
@@ -3631,21 +3641,28 @@ function bnTaAddPorNome(txt){
 function bnTaTirar(id){ const c=bnPor(id); if(!c) return;
   if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista);
   FTA.sel.delete(id); bnSalvar(); render(); }
+/* A seleção sobrevive à mudança de filtro: quem foi marcado e depois saiu do
+   filtro continua em FTA.sel. A barra conta só os VISÍVEIS, então a ação tem
+   que agir sobre o mesmo conjunto — senão o rótulo diz 4 e saem 11
+   (achado da varredura desta sessão). */
+function taSelVisivel(){ const vis=new Set(taFiltrados().map(c=>c.id)); return [...FTA.sel].filter(id=>vis.has(id)); }
 function bnTaTirarLote(){
-  const ids=[...FTA.sel]; if(!ids.length) return;
+  const ids=taSelVisivel(); if(!ids.length) return;
   ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
     if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista); });
-  FTA.sel.clear(); bnSalvar(); render(); toast(ids.length+' tirado'+(ids.length>1?'s':'')+' da lista (seguem no Estoque)',true);
+  ids.forEach(id=>FTA.sel.delete(id)); bnSalvar(); render();
+  toast(ids.length+' tirado'+(ids.length>1?'s':'')+' da lista (seguem no Estoque)',true);
 }
 function bnTaMoverLote(){
-  const ids=[...FTA.sel]; if(!ids.length) return;
+  const ids=taSelVisivel(); if(!ids.length) return;
   const atuais=bnListasTodas();
   const nome=prompt('Mover para qual lista? (nova ou existente'+(atuais.length? ' — já existem: '+atuais.join(', '):'')+')'); if(!nome) return;
   const n=nome.trim(); if(!n) return;
   ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
     c.listas=[...new Set([...(c.listas||[]),n])];
     if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=c.listas.filter(x=>x!==BNTA.lista); });
-  FTA.sel.clear(); bnSalvar(); render(); toast(ids.length+' movido'+(ids.length>1?'s':'')+' pra “'+n+'”',true);
+  ids.forEach(id=>FTA.sel.delete(id)); bnSalvar(); render();
+  toast(ids.length+' movido'+(ids.length>1?'s':'')+' pra “'+n+'”',true);
 }
 function bnListaApagar(nome){ if(!confirm('Apagar a lista “'+nome+'”? (os contatos continuam na base)')) return;
   BN.contatos.forEach(c=>{ if(c.listas) c.listas=c.listas.filter(n=>n!==nome); });
@@ -3656,6 +3673,7 @@ async function bnResultado(id,res){
   // "Recusou" deixava o nome descartado pra sempre.
   const h={tipo:'ta',res,dia:hojeISO(),ts:new Date().toISOString(),estAntes:c.estagio,revAntes:!!c.precisa_revisao};
   (c.hist=c.hist||[]).push(h);
+  FTA.recem.add(id);            // segura a linha na tela pra dar tempo de desfazer
   if(res==='agendou') c.estagio='oi_agendado';
   else if(res==='recusou') c.estagio='descartado';
   else if(res==='numero_errado'){ c.precisa_revisao=true; c.estagio='estoque'; }
@@ -3836,9 +3854,9 @@ function viewBnRecs(){
   if(BNR.recom) lista=lista.filter(b=>b.recomendante.trim()===BNR.recom);
   // Filtros 2.0: as mesmas lentes do Estoque, agora sobre os recomendados
   if(BNR.busca){ const q=BNR.busca.toLowerCase(); lista=lista.filter(b=>(b.nome||'').toLowerCase().includes(q)||(b.recomendante||'').toLowerCase().includes(q)||(b.telefone||'').includes(q)); }
-  if(BNR.trilha){ const s=csvSet(BNR.trilha); lista=lista.filter(b=>s.has(b.trilha)); }
-  if(BNR.estagio){ const s=csvSet(BNR.estagio); lista=lista.filter(b=>s.has(b.estagio)); }
-  if(BNR.pri){ const s=csvSet(BNR.pri); lista=lista.filter(b=>s.has(String(b.prioridade))); }
+  if(BNR.trilha){ const s=csvSet(BNR.trilha); lista=lista.filter(b=>s.has(csvKey(b.trilha))); }
+  if(BNR.estagio){ const s=csvSet(BNR.estagio); lista=lista.filter(b=>s.has(csvKey(b.estagio))); }
+  if(BNR.pri){ const s=csvSet(BNR.pri); lista=lista.filter(b=>s.has(csvKey(b.prioridade))); }
   if(BNR.tel==='com') lista=lista.filter(b=>b.telefone);
   if(BNR.tel==='sem') lista=lista.filter(b=>!b.telefone);
   if(BNR.cid){ const q=BNR.cid.toLowerCase(); lista=lista.filter(b=>(b.cidade||'').toLowerCase().includes(q)); }
