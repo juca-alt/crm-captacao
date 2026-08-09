@@ -4,6 +4,53 @@
 
 ---
 
+## 📸 Snapshot — 09/08/2026 · **UX 2.0 (mobile + desktop)** — `vendas.html` v0.9.5 → **v0.10.0** (branch `claude/ux-2-0-mobile-desktop-k14xq5`, AGUARDANDO validação do Gustavo)
+
+### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO LP)
+```
+Retoma o CRM Visão LP (vendas.html). Lê o ESTADO_DO_PROJETO.md.
+REGRA: uma sessão por visão — NÃO tocar na Captação (index.html); git fetch antes de editar.
+Estado 09/08: branch claude/ux-2-0-mobile-desktop-k14xq5 com a UX 2.0 (v0.10.0) — NÃO mergeada.
+Abri no iPhone/desktop e: [aprovado, pode subir / deu isso: ...]
+```
+
+**Pedido do Gustavo:** print do `vendas.html` no iPhone + "Aplicar ux 2.0 mobile e desktop".
+No print: a status bar do iOS (relógio/5G) escrevendo POR CIMA da topbar, os botões
+🔍/🔄/⇄ estourando pro lado (o "Captação" cortado na borda), a Base de Nomes como uma
+torre de 5 números e o funil cortado dentro do card.
+
+**O que mudou (só `vendas.html`; nenhuma tela removida, nenhum dado tocado):**
+- **Safe-area de verdade:** topbar e gaveta com `env(safe-area-inset-top)`; content/topbar
+  respeitando `left/right` (paisagem). Era a causa raiz do print.
+- **Topbar do celular enxuta:** ☰ · título · 🔍 (ícone) · **⋯**. Atualizar, Captação, Todos os
+  módulos, 🎨 Ajustes e a versão migraram pro menu ⋯. Desktop segue igual (rótulos completos).
+- **Início reconstruído:** KPIs viram tiles CLICÁVEIS (levam pra tela certa); a **Base de Nomes
+  virou parte do `viewInicio()`**. Isso mata um bug de DESKTOP: o bloco era injetado com
+  `insertAdjacentHTML('beforebegin')` antes do 1º `.card` e caía DENTRO do grid do funil,
+  roubando a coluna larga — o funil ia pros 258px e ficava cortado. Agora o funil ocupa a
+  faixa inteira e mostra as 11 etapas.
+- **Funil device-distinct:** desktop = colunas (como antes, mas inteiro); celular = **lista de
+  barras horizontais** com nome, quantidade e "↳ x% seguem pra Y", cada linha tocável.
+  O HTML traz as duas formas e o CSS escolhe — sem listener de resize.
+- **Kanban no celular:** uma etapa por tela com `scroll-snap` (84vw) em vez de duas colunas
+  meio cortadas; "➕ Novo contato" em largura cheia acima da dica (NN e BC).
+- **FAB 🎨 sai do celular** (tampava os números do funil) e vira item do menu ⋯.
+- Contadores da lateral padronizados (5.225, não 5225); tiles em nº ímpar ocupam a linha toda.
+
+**Validação (preview local `http://127.0.0.1:8791`, base semeada de 5.225 nomes + 16 contatos;
+banco INTOCADO):** 22 views × 5 viewports (320/390/820/1024/1440) — **zero erro de console,
+zero estouro horizontal**. Safe-area provada reescrevendo a regra com inset real de 47px.
+Sintaxe dos 2 blocos inline validada no Node; `scripts/guard-choke-point.mjs` verde.
+
+**Pendências desta frente:**
+1. **Validação real do Gustavo** (iPhone + desktop) e **OK explícito pra merge** — sem isso não sobe.
+2. Não mexi na **Lista de TA no celular**: segue tabela rolável (decisão "planilha" da v0.9.5).
+   Se incomodar no uso real, vira card list como o Estoque (mesma regra device-layout).
+3. Na Lista de TA/Estoque o celular mostra o botão **Filtros** E os inputs soltos de
+   profissão/cidade/idade/renda — herdado da v0.9.3, não toquei pra não regredir o Filtros 2.0.
+
+---
+
 ## 📸 Snapshot — 23/07/2026 (noite) · SYNC CONTATOS LP → SUPABASE no ar + extensão v0.3.0 (frente "c" CONCLUÍDA no código)
 
 **Pedido do Gustavo: "o que falta do app pro Supabase? bota logo".** PR #28 MERGED (main `f4c7f8b`):

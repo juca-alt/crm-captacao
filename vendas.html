@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.5 · Base de Nomes</title>
+<title>CRM Life Planner · v0.10.0 · UX 2.0</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -27,13 +27,23 @@
   button{font:inherit;cursor:pointer;border:none;background:none}
   input,select,textarea{font-family:inherit;font-size:14px}
 
-  /* ── topbar (branca, título da view + ações — padrão Captação) ── */
-  .topbar{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid var(--linha);position:sticky;top:0;z-index:50}
+  /* ── topbar (branca, título da view + ações — padrão Captação) ──
+     UX 2.0: a barra é o teto do app e no iPhone divide o espaço com a status
+     bar do sistema (viewport-fit=cover). Sem env(safe-area-inset-top) o
+     relógio/5G escreviam POR CIMA do ☰ e do título — era o print do Gustavo. */
+  .topbar{display:flex;align-items:center;gap:12px;padding:14px 22px;padding-top:calc(14px + env(safe-area-inset-top,0px));background:#fff;border-bottom:1px solid var(--linha);position:sticky;top:0;z-index:50}
   .topbar h2{font-size:17px;font-weight:700;flex-shrink:0}
   .topbar .spacer{flex:1}
   .topbar .tag{font-size:10px;font-weight:700;background:var(--fundo);border:1px solid var(--linha);color:var(--muted);padding:3px 9px;border-radius:20px;letter-spacing:.4px;white-space:nowrap}
-  .topbar .tb-link{font-size:12.5px;font-weight:600;color:var(--muted);padding:7px 12px;border-radius:9px;border:1px solid var(--linha);background:#fff;white-space:nowrap}
+  .topbar .tb-link{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--muted);padding:7px 12px;border-radius:9px;border:1px solid var(--linha);background:#fff;white-space:nowrap}
   .topbar .tb-link:hover{border-color:#cbd5e1;color:var(--ink)}
+  .topbar .tb-mais{display:none}
+  /* menu de overflow da topbar (só no celular, onde as ações não cabem) */
+  .tb-menu{position:fixed;z-index:100;background:#fff;border:1px solid var(--linha);border-radius:14px;box-shadow:0 20px 60px rgba(15,23,42,.25);padding:6px;min-width:212px;display:none}
+  .tb-menu.aberto{display:block}
+  .tb-menu button{display:flex;align-items:center;gap:10px;width:100%;padding:12px 12px;border-radius:10px;font-size:14px;font-weight:600;color:var(--ink);text-align:left}
+  .tb-menu button:hover{background:var(--fundo)}
+  .tb-menu .tb-menu-v{padding:9px 12px 4px;font-size:10.5px;font-weight:700;letter-spacing:.4px;color:var(--muted);text-transform:uppercase}
   .avatar{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:#fff;flex-shrink:0}
 
   /* ── marca + perfil dentro da barra lateral (padrão Captação) ── */
@@ -87,6 +97,23 @@
   .kpi .num{font-size:21px;font-weight:800}
   .kpi .lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 
+  /* ── UX 2.0: cabeçalho de card e tiles clicáveis ─────────────────────────
+     O Início virou uma pilha de números soltos; agora cada bloco tem cabeçalho
+     com título + atalho, e todo número que representa uma lista LEVA até ela. */
+  .card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .card-h h3{font-size:13px;font-weight:800;letter-spacing:.01em}
+  .card-h .ir{font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap;padding:4px 2px}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:10px}
+  .tile{background:#fff;border:1px solid var(--linha);border-radius:var(--radius);box-shadow:var(--sombra);padding:12px 14px;text-align:left;min-width:0;transition:border-color .12s,box-shadow .12s,transform .12s}
+  .tile[data-ir]{cursor:pointer}
+  .tile[data-ir]:hover{border-color:var(--azul-borda);box-shadow:0 4px 14px rgba(15,23,42,.08)}
+  .tile[data-ir]:active{transform:scale(.985)}
+  .tile .num{font-size:23px;font-weight:800;line-height:1.1;letter-spacing:-.01em}
+  .tile .lbl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:3px;line-height:1.3}
+  .tile.alerta .num{color:var(--verm)}
+  .tile.plano{background:transparent;border-color:transparent;box-shadow:none;padding:8px 4px} /* tile dentro de card */
+  .tile.plano:hover{background:var(--fundo);border-color:var(--linha);box-shadow:none}
+
   /* ── funil ── */
   .funil{display:flex;align-items:flex-end;gap:6px;margin-top:10px;overflow-x:auto;padding-bottom:6px}
   .etapa-col{flex:1 0 46px;text-align:center}
@@ -97,6 +124,21 @@
   .etapa-col .nm{font-size:11px;color:var(--muted);font-weight:700}
   .seta-conv{align-self:center;text-align:center;color:var(--muted);font-size:10.5px;font-weight:700;padding-bottom:38px;min-width:34px}
   .seta-conv .pct{color:var(--azul);font-size:11.5px}
+
+  /* Funil no celular = LISTA de barras horizontais (regra device-layout: as
+     11 colunas verticais não cabem em 390px — rolavam pro lado e o Gustavo só
+     via as 4 primeiras). Desktop segue com as colunas; o HTML traz os dois e
+     o CSS escolhe, sem listener de resize. */
+  .funil-lista{display:none}
+  .fl-row{display:grid;grid-template-columns:96px 1fr 44px;align-items:center;gap:10px;padding:5px 0;border-radius:8px}
+  .fl-row:active{background:var(--fundo)}
+  .fl-nm{font-size:12.5px;font-weight:700;color:var(--cinza);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fl-bar{height:20px;background:#f1f5f9;border-radius:7px;overflow:hidden}
+  .fl-bar>i{display:block;height:100%;background:var(--primary);border-radius:7px;min-width:3px;transition:width .3s}
+  .fl-row.zerada .fl-bar>i{background:#e2e8f0}
+  .fl-qt{font-size:15px;font-weight:800;text-align:right}
+  .fl-conv{font-size:10px;font-weight:700;color:var(--muted);padding:0 0 2px 106px;line-height:1.35}
+  .fl-conv b{color:var(--azul)}
 
   /* ── tabela (cabeçalho cinza-claro + zebra de hover, igual Captação) ── */
   table{width:100%;border-collapse:collapse}
@@ -225,6 +267,8 @@
   .nav-grp-wrap.fechado{display:none}
   /* board Kanban — Funil Novos Negócios */
   .nn-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .nn-dica{font-size:12px;color:var(--muted)}
+  .nn-sp{flex:1}
   .seg{display:inline-flex;border:1px solid var(--linha);border-radius:9px;overflow:hidden;background:#fff}
   .seg button{padding:8px 14px;font-size:12.5px;font-weight:600;color:var(--muted);background:#fff;border:none;cursor:pointer}
   .seg button.on{background:var(--primary);color:#fff}
@@ -300,14 +344,20 @@
     html{overflow-x:hidden}
     body{-webkit-tap-highlight-color:transparent}
 
-    /* topbar compacta + hambúrguer */
-    .topbar{gap:8px;padding:10px 12px}
-    .topbar h2{font-size:16px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .topbar .tag{display:none}
-    .menu-btn{display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;color:var(--cinza);font-size:21px;border-radius:9px;background:var(--fundo)}
+    /* topbar compacta + hambúrguer.
+       UX 2.0: no celular só cabem 2 ações. "Buscar" fica como ícone e
+       Atualizar/Captação/versão migram pro menu ⋯ — antes os 3 botões
+       estouravam pro lado e o "⇄ Captação" saía cortado na borda. */
+    .topbar{gap:8px;padding:8px 10px;padding-top:calc(8px + env(safe-area-inset-top,0px));padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+    .topbar h2{font-size:16px;min-width:0;flex:1;flex-shrink:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .topbar .tag,.topbar .spacer,.topbar .tb-so-desk{display:none}
+    .topbar .tb-link{padding:0;width:42px;height:42px;justify-content:center;font-size:17px;border-radius:11px;background:var(--fundo);border-color:transparent;flex-shrink:0}
+    .topbar .tb-link .tb-tx{display:none}
+    .topbar .tb-mais{display:inline-flex;font-size:20px;line-height:1}
+    .menu-btn{display:flex;align-items:center;justify-content:center;width:42px;height:42px;flex-shrink:0;color:var(--cinza);font-size:21px;border-radius:11px;background:var(--fundo)}
 
     /* sidebar → gaveta off-canvas com rótulos completos */
-    .sidebar{position:fixed;top:0;left:0;height:100vh;height:100dvh;width:min(310px,86vw);z-index:96;transform:translateX(-108%);transition:transform .22s ease;overflow-y:auto;padding:10px 12px calc(24px + env(safe-area-inset-bottom))}
+    .sidebar{position:fixed;top:0;left:0;height:100vh;height:100dvh;width:min(310px,86vw);z-index:96;transform:translateX(-108%);transition:transform .22s ease;overflow-y:auto;padding:calc(10px + env(safe-area-inset-top,0px)) 12px calc(24px + env(safe-area-inset-bottom))}
     .sidebar.aberta{transform:translateX(0);box-shadow:12px 0 40px rgba(16,30,54,.3)}
     .nav-overlay{position:fixed;inset:0;background:rgba(12,22,38,.45);z-index:95}
     .nav-overlay.aberto{display:block}
@@ -327,23 +377,50 @@
     .sidebar .nav-grp.modulo .ic{font-size:17px}
 
     /* barra de navegação inferior (zona do polegar) */
-    .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:70;background:#fff;border-top:1px solid var(--linha);padding:5px max(8px,env(safe-area-inset-left)) max(5px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-right));box-shadow:0 -6px 20px rgba(16,30,54,.08)}
+    .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:70;background:rgba(255,255,255,.94);backdrop-filter:blur(10px);border-top:1px solid var(--linha);padding:5px max(8px,env(safe-area-inset-left)) max(5px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-right));box-shadow:0 -6px 20px rgba(16,30,54,.08)}
     .bnav .nav-btn{flex:1;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:52px;margin:0;padding:5px 2px;border-radius:12px;font-size:10px;font-weight:700;color:var(--muted)}
     .bnav .nav-btn .ic{width:auto;font-size:19px}
     .bnav .nav-btn.ativo{color:var(--primary);background:var(--azul-claro)}
 
     /* conteúdo respira e nada estoura pro lado */
-    .content{padding:16px 12px calc(80px + env(safe-area-inset-bottom))}
+    .content{padding:14px 12px calc(80px + env(safe-area-inset-bottom));padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
     .rodape{padding:10px 14px calc(86px + env(safe-area-inset-bottom))}
     .card{padding:14px;overflow-x:auto}
     .sec{overflow-x:auto;flex-shrink:0}
     .nav-btn .cnt:empty{display:none}
     .kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
     .kpi{min-width:0!important;padding:10px 12px}
-    .funil{overflow-x:auto;padding-bottom:8px}
+    /* UX 2.0 no celular: 2 colunas fixas (o auto-fit caía pra 1 coluna nos
+       aparelhos estreitos e a Base de Nomes virava uma torre de 5 números) */
+    .tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .tile{padding:11px 12px}
+    .tile .num{font-size:21px}
+    .tile.plano{padding:9px 10px;background:var(--fundo);border-color:var(--linha)}
+    /* número ímpar de tiles: o último ocupa a linha inteira em vez de deixar
+       um buraco (é o caso das 5 caixas da Base de Nomes) */
+    .tiles>.tile:last-child:nth-child(odd){grid-column:1/-1}
+    .card-h{margin-bottom:10px}
+    h1.pg{font-size:17px;line-height:1.25}
+    .sub{font-size:12px;margin-bottom:14px}
+    /* o funil vira lista: some com as colunas e o scroll lateral dentro do card */
+    .funil{display:none}
+    .funil-lista{display:block}
     .etapa-col{flex:1 0 48px}
     .seta-conv{flex:0 0 30px;min-width:30px}
-    .nncol{flex:0 0 240px}
+    /* UX 2.0 — kanban no celular: uma etapa por tela, com encaixe (scroll-snap).
+       Com 240px cabiam DUAS colunas meio cortadas: nome do contato e prêmio
+       ficavam ilegíveis na coluna da direita. Agora se navega deslizando. */
+    .nnboard{scroll-snap-type:x mandatory;scroll-padding-left:12px;gap:10px}
+    .nncol{flex:0 0 84vw;scroll-snap-align:start}
+    .nncol-enc-head{flex:0 0 60vw;min-width:0;max-width:none}
+    /* toolbar do funil no celular: segmentado, ação principal e SÓ DEPOIS a
+       dica (que antes empurrava o "Novo contato" pra uma linha órfã) */
+    .nn-toolbar{gap:8px}
+    .nn-toolbar>.seg{order:1}
+    .nn-toolbar>.btn{order:2;flex:1 1 100%;justify-content:center}
+    .nn-toolbar>.vneg-total{order:3}
+    .nn-toolbar>.nn-dica{order:4;font-size:11.5px;line-height:1.45}
+    .nn-sp{display:none}
 
     /* alvos de toque + inputs ≥16px (sem auto-zoom do iOS) */
     input,select,textarea{font-size:16px}
@@ -369,7 +446,9 @@
   @media(max-width:640px){
     .drawer{width:100vw;right:-102vw}
     th,td{padding:8px 7px}
-    h1.pg{font-size:18px}
+    h1.pg{font-size:17px}
+    .fl-row{grid-template-columns:84px 1fr 36px;gap:8px}
+    .fl-conv{padding-left:92px}
   }
 
   /* Estoque de Nomes no celular: a tabela de 13 colunas rolava lateral e
@@ -472,8 +551,11 @@
   /* fica DEPOIS das regras base do FAB de propósito: no celular ele não pode
      cobrir a barra de navegação inferior, onde mora o botão Menu */
   @media(max-width:980px){
-    #tw-fab{width:42px;height:42px;font-size:18px;right:12px;bottom:calc(74px + env(safe-area-inset-bottom))}
-    #tw-panel{right:12px;bottom:calc(126px + env(safe-area-inset-bottom));width:min(268px,calc(100vw - 24px))}
+    /* UX 2.0: no celular o FAB some — ajuste de visual é ferramenta rara e o
+       botão flutuante tampava os números do funil (dá pra ver no print).
+       Ele passa a morar no menu ⋯ da topbar. */
+    #tw-fab{display:none}
+    #tw-panel{right:10px;left:10px;width:auto;bottom:calc(78px + env(safe-area-inset-bottom))}
   }
 </style>
 </head>
@@ -573,10 +655,11 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
-      <span class="tag">ISLAND · v0.9.5 · Base de Nomes</span>
-      <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
-      <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
+      <button class="tb-link" onclick="lpkAbrir()" aria-label="Buscar" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍<span class="tb-tx">Buscar</span></button>
+      <span class="tag">ISLAND · v0.10.0 · UX 2.0</span>
+      <button class="tb-link tb-so-desk" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄<span class="tb-tx">Atualizar</span></button>
+      <button class="tb-link tb-so-desk" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄<span class="tb-tx">Captação</span></button>
+      <button class="tb-link tb-mais" id="btnTbMais" onclick="tbMais(event)" aria-label="Mais ações">⋯</button>
     </header>
 
     <div class="banner-homolog" id="bannerHomolog" style="display:none">
@@ -587,10 +670,19 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.9.5 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.10.0 — UX 2.0 · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
+</div>
+
+<!-- menu ⋯ da topbar: as ações que não cabem na barra do celular -->
+<div class="tb-menu" id="tbMenu">
+  <div class="tb-menu-v">ISLAND · v0.10.0 · UX 2.0</div>
+  <button onclick="tbMaisFechar();atualizarApp()">🔄 Atualizar o app</button>
+  <button onclick="tbMaisFechar();location.href='index.html'">⇄ Ir pra Captação</button>
+  <button onclick="tbMaisFechar();toggleMenu(true)">☰ Todos os módulos</button>
+  <button onclick="tbMaisFechar();document.getElementById('tw-panel').classList.toggle('hidden')">🎨 Ajustes de visual</button>
 </div>
 
 <div class="nav-overlay" id="navOverlay" onclick="toggleMenu(false)"></div>
@@ -892,12 +984,31 @@ function toggleMenu(force){
 // tocar num item de navegação fecha a gaveta (grupos colapsáveis ficam abertos)
 document.querySelector('.sidebar').addEventListener('click',e=>{ if(e.target.closest('.nav-btn,.nav-cta')) toggleMenu(false); });
 
+/* ── UX 2.0: menu ⋯ da topbar (celular) ──────────────────────────────────
+   Ancorado no botão porque a topbar é sticky com safe-area: posição fixa
+   por cálculo erra quando o iOS muda a altura da status bar. */
+function tbMais(ev){
+  if(ev) ev.stopPropagation();
+  const m=document.getElementById('tbMenu'), b=document.getElementById('btnTbMais');
+  if(!m||!b) return;
+  if(m.classList.contains('aberto')){ tbMaisFechar(); return; }
+  const r=b.getBoundingClientRect();
+  m.style.top=(r.bottom+8)+'px';
+  m.style.right=Math.max(8,window.innerWidth-r.right)+'px';
+  m.classList.add('aberto');
+}
+function tbMaisFechar(){ const m=document.getElementById('tbMenu'); if(m) m.classList.remove('aberto'); }
+document.addEventListener('click',e=>{ if(!e.target.closest('#tbMenu,#btnTbMais')) tbMaisFechar(); });
+
 /* ═══════════════════ VIEW: INÍCIO ═══════════════════ */
 function contagens(lista,etapas=ETAPAS){
   const por={}; etapas.forEach(e=>por[e]=0);
   lista.forEach(c=>{ if(por[c.etapa]==null) por[c.etapa]=0; por[c.etapa]++; });
   return por;
 }
+/* UX 2.0: o mesmo funil em DUAS formas — colunas (desktop) e lista de barras
+   horizontais (celular). Os dois vão no HTML e o CSS escolhe pelo breakpoint;
+   assim não há listener de resize nem re-render ao girar o aparelho. */
 function funilHtml(lista){
   const por=contagens(lista);
   const ordem=ETAPAS_FLUXO; // funil = fluxo vivo; encerramentos ficam no resumo abaixo
@@ -913,6 +1024,19 @@ function funilHtml(lista){
       const prox=por[ordem[i+1]];
       const pct=q>0? Math.round(prox/q*100) : 0;
       h+=`<div class="seta-conv">→<br><span class="pct">${pct}%</span></div>`;
+    }
+  });
+  h+='</div><div class="funil-lista">';
+  ordem.forEach((e,i)=>{
+    const q=por[e];
+    h+=`<div class="fl-row ${q===0?'zerada':''}" onclick="nnGoEtapa('${esc(e)}')" style="cursor:pointer">
+          <span class="fl-nm">${esc(e)}</span>
+          <span class="fl-bar"><i style="width:${Math.max(2,Math.round(q/max*100))}%"></i></span>
+          <span class="fl-qt">${q}</span>
+        </div>`;
+    if(i<ordem.length-1&&q>0){
+      const pct=Math.round(por[ordem[i+1]]/q*100);
+      h+=`<div class="fl-conv">↳ <b>${pct}%</b> seguem pra ${esc(ordem[i+1])}</div>`;
     }
   });
   return h+'</div>';
@@ -948,23 +1072,24 @@ function viewInicio(){
   $('#main').innerHTML=`
     <h1 class="pg">Seja bem-vindo(a), ${esc(user().nome)}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
-    <div class="kpis">
-      <div class="kpi"><div class="num">${novos}</div><div class="lbl">SitPlan</div></div>
-      <div class="kpi"><div class="num">${andamento}</div><div class="lbl">Em andamento</div></div>
-      <div class="kpi"><div class="num">${abordados}</div><div class="lbl">Abordados</div></div>
-      <div class="kpi"><div class="num">${clientes}</div><div class="lbl">Delivery</div></div>
+    <div class="tiles" style="margin-bottom:14px">
+      <button class="tile" data-ir onclick="irPara('sitplan')"><div class="num">${novos}</div><div class="lbl">SitPlan</div></button>
+      <button class="tile" data-ir onclick="irPara('nn-funil')"><div class="num">${andamento}</div><div class="lbl">Em andamento</div></button>
+      <button class="tile" data-ir onclick="irPara('contatos')"><div class="num">${abordados}</div><div class="lbl">Abordados</div></button>
+      <button class="tile" data-ir onclick="nnGoEtapa('DELIVERY')"><div class="num">${clientes}</div><div class="lbl">Delivery</div></button>
     </div>
-    <div class="grid g2 g-funil">
+    ${bnResumoHtml()}
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-h"><h3>Funil de vendas</h3><button class="ir" onclick="irPara('nn-funil')">Abrir funil →</button></div>
+      ${funilHtml(lista)}
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">Processo: SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · Encerrados: Não ${contagens(lista)['Não']||0} · Prop. canc. ${contagens(lista)['Prop. Cancelada']||0} · Apól. canc. ${contagens(lista)['Apól. Cancelada']||0}</div>
+    </div>
+    <div class="grid g2">
       <div class="card">
-        <h3 style="font-size:13px">Funil de vendas</h3>
-        ${funilHtml(lista)}
-        <div style="font-size:11px;color:var(--muted);margin-top:8px">Processo: SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · Encerrados: Não ${contagens(lista)['Não']||0} · Prop. canc. ${contagens(lista)['Prop. Cancelada']||0} · Apól. canc. ${contagens(lista)['Apól. Cancelada']||0}</div>
-      </div>
-      <div class="card">
-        <h3 style="font-size:13px;margin-bottom:8px">Telephone Approach</h3>
-        <div class="kpis" style="margin-bottom:8px">
-          <div class="kpi" style="min-width:100px"><div class="num">${ta.lig}</div><div class="lbl">Ligações</div></div>
-          <div class="kpi" style="min-width:100px"><div class="num">${ta['Sucesso']}</div><div class="lbl">Sucesso</div></div>
+        <div class="card-h"><h3>Telephone Approach</h3><button class="ir" onclick="irPara('bn-ta')">Lista de TA →</button></div>
+        <div class="tiles" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:10px">
+          <div class="tile plano"><div class="num">${ta.lig}</div><div class="lbl">Ligações</div></div>
+          <div class="tile plano"><div class="num">${ta['Sucesso']}</div><div class="lbl">Sucesso</div></div>
         </div>
         <div style="font-size:12.5px;color:var(--muted);line-height:1.9">
           <span class="badge b-verde">Sucesso ${ta['Sucesso']}</span>
@@ -972,11 +1097,36 @@ function viewInicio(){
           <span class="badge b-cinza">Não respondeu ${ta['Não respondeu']}</span>
           <span class="badge b-verm">Declinado ${ta['Declinado']}</span>
         </div>
-        <h3 style="font-size:13px;margin:16px 0 4px">Para acompanhar</h3>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Para acompanhar</h3>${eventos.length?`<span class="ir" style="color:var(--muted)">${eventos.length} pendente(s)</span>`:''}</div>
         ${eventos.length? eventos.map(e=>`<div class="evento"><span class="dt">${esc(e.data.split('-').reverse().join('/'))} ${esc(e.hora)}</span><span><b>${esc(e.tipo)}</b> · ${esc(e.contato)} <span class="badge b-amarelo">${esc(e.status)}</span></span></div>`).join('') : '<div class="vazio" style="padding:14px">Sem eventos pendentes.</div>'}
       </div>
     </div>
     ${porLP}`;
+}
+/* Base de Nomes no Início — UX 2.0.
+   Antes isso era injetado no render() com insertAdjacentHTML('beforebegin')
+   ANTES do primeiro .card: no desktop o card caía DENTRO do grid do funil e
+   roubava a coluna larga (o funil ia pros 258px e ficava cortado). Agora é
+   parte da view, na ordem certa, e os números continuam levando pra tela. */
+function bnResumoHtml(){
+  if(typeof bnVivos!=='function') return '';
+  const v=bnVivos(); if(!v.length) return '';
+  const tel=v.filter(c=>c.telefone).length, hoje=hojeISO();
+  const ta=v.filter(c=>c.ta_dia===hoje).length, dp=BN.dups.filter(d=>!d.decisao).length;
+  const emL=bnEmListaTa().length;
+  const t=(n,l,ir,cls='')=>`<button class="tile plano ${cls}" data-ir onclick="${ir}"><div class="num">${typeof n==='number'?n.toLocaleString('pt-BR'):n}</div><div class="lbl">${l}</div></button>`;
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="card-h"><h3>📦 Base de Nomes</h3><button class="ir" onclick="irPara('bn-estoque')">Abrir estoque →</button></div>
+    <div class="tiles">
+      ${t(v.length,'Nomes vivos',"irPara('bn-estoque')")}
+      ${t(tel,'Com telefone',"FBN.tel='com';irPara('bn-estoque')")}
+      ${t(ta,'TA de hoje',"irPara('bn-ta')")}
+      ${t(emL,'Em listas de TA',"irPara('bn-ta')")}
+      ${t(dp,'Duplicatas',"irPara('bn-dups')",dp?'alerta':'')}
+    </div>
+  </div>`;
 }
 
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
@@ -1037,9 +1187,9 @@ function viewNnFunil(){
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>
-    <span style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    <span class="nn-dica">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: deslize entre as etapas e mude a etapa no perfil do contato).</span>
     ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
-    <span style="flex:1"></span>
+    <span class="nn-sp"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
   let body;
@@ -1118,9 +1268,9 @@ function viewBcFunil(){
   const lista=meusContatosBC();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>
-    <span style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    <span class="nn-dica">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: deslize entre as etapas e mude a etapa no perfil do contato).</span>
     ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
-    <span style="flex:1"></span>
+    <span class="nn-sp"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
   </div>`;
   let body;
@@ -4069,10 +4219,12 @@ function render(){
   { const cs=$('#cnt-sitplan'); if(cs){ const hoje=hojeISO(); cs.textContent=meusContatos().filter(c=>c.sitplan===hoje&&!ultimoResultado(c,hoje)).length||''; } }
   { const csp=$('#cnt-sp'); if(csp) csp.textContent=bnVivos().length? bnVivos().length.toLocaleString('pt-BR'):''; }
   if(VIEW&&VIEW.startsWith('bn-')){ ['sp-toggle','sp-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#sp-caret'); if(c) c.textContent='▴'; }
-  { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
-    const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
-    const cr=$('#cnt-bn-recs'); if(cr) cr.textContent=bnVivos().filter(b=>(b.recomendante||'').trim()).length||'';
-    const ct2=$('#cnt-bn-ta'); if(ct2) ct2.textContent=bnEmListaTa().length||'';
+  // contadores da lateral no mesmo formato (5.225, não 5225) — UX 2.0
+  { const fmt=n=>n?n.toLocaleString('pt-BR'):'';
+    const cb=$('#cnt-bn'); if(cb) cb.textContent=fmt(bnVivos().length);
+    const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=fmt(BN.dups.filter(d=>!d.decisao).length);
+    const cr=$('#cnt-bn-recs'); if(cr) cr.textContent=fmt(bnVivos().filter(b=>(b.recomendante||'').trim()).length);
+    const ct2=$('#cnt-bn-ta'); if(ct2) ct2.textContent=fmt(bnEmListaTa().length);
     const csp2=$('#cnt-bn-sp'); if(csp2){ const n=bnVivos().filter(c=>!c.telefone&&c.estagio!=='descartado'&&c.estagio!=='cliente').length; csp2.textContent=n? n.toLocaleString('pt-BR'):''; } }
   aplicarGates();
   if(VIEW==='inicio') viewInicio();
@@ -4099,22 +4251,6 @@ function render(){
   else if(VIEW==='bn-recs') viewBnRecs();
   else if(VIEW==='lp-adm') viewLpAdm();
   else viewPrincipios();
-  if(VIEW==='inicio'&&typeof bnVivos==='function'&&bnVivos().length){
-    const v=bnVivos(), tel=v.filter(c=>c.telefone).length, hoje=hojeISO();
-    const ta=v.filter(c=>c.ta_dia===hoje).length, dp=BN.dups.filter(d=>!d.decisao).length;
-    const emL=bnEmListaTa().length;
-    const _pc=$('#main .card'); (_pc?_pc:{insertAdjacentHTML:(p,h)=>$('#main').insertAdjacentHTML('beforeend',h)}).insertAdjacentHTML('beforebegin', `
-    <div class="card" style="margin-top:14px">
-      <h3 style="font-size:13px;margin-bottom:10px">📦 Base de Nomes</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
-        <div class="clicavel" onclick="irPara('bn-estoque')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${v.length.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">NOMES VIVOS</div></div>
-        <div class="clicavel" onclick="FBN.tel='com';irPara('bn-estoque')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${tel.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">COM TELEFONE</div></div>
-        <div class="clicavel" onclick="irPara('bn-ta')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${ta}</div><div style="font-size:11px;color:var(--muted)">TA DE HOJE</div></div>
-        <div class="clicavel" onclick="irPara('bn-ta')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${emL.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">EM LISTAS DE TA</div></div>
-        <div class="clicavel" onclick="irPara('bn-dups')" style="cursor:pointer"><div style="font-size:24px;font-weight:800;color:${dp?'var(--verm,#dc2626)':'inherit'}">${dp}</div><div style="font-size:11px;color:var(--muted)">DUPLICATAS</div></div>
-      </div>
-    </div>`);
-  }
   ocultarTituloDuplicado();
   if(CONTATO) renderDrawer();
 }
