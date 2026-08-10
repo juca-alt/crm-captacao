@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.7 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.8 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -574,7 +574,7 @@
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
       <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
-      <span class="tag">ISLAND · v0.9.7 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.9.8 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -2136,7 +2136,9 @@ function semDados(titulo,sub){
 const AT_TABLE='vendas_atrasos', AT_CHAVE='crmlp_atrasos_v1';
 let AT={itens:[],carregadoEm:null}; let AT_REMOTE=false, AT_EMAIL='';
 let FAT={q:'',qcampo:'todos',lp:'',status:'',faixa:''}; let _atPend=null;
-const AT_STATUS={SEM:'Sem tratativa',EM:'Em tratativa',AGUARD:'Aguardando',RESOLV:'Resolvido',SUMIU:'Sumiu — verificar'};
+const AT_STATUS={SEM:'Sem tratativa',RESOLV:'Resolvido',SUMIU:'Sumiu — verificar'};
+// status de tratativa (dropdown na ficha, igual ao artefato + novos pedidos do Gustavo)
+const AT_STATUS_OPTS=['Sem tratativa','Mensagem enviada','Aguardando cliente','Boleto enviado','Boleto pago cliente','Aguardando baixa sistema','Ajuda do corretor','Postergação solicitada','Resolvido'];
 
 /* ── núcleo puro (validado em node/browser) ── */
 // BUG 7: apólice sempre string; tira ".0" de float, só dígitos, zero-pad 9.
@@ -2152,7 +2154,8 @@ function atFmtBR(iso){ if(!iso) return '—'; const p=String(iso).split('-'); re
 function atBrNum(s){ if(s==null) return null; const v=parseFloat(String(s).replace(/\./g,'').replace(',','.')); return isNaN(v)?null:v; }
 function atTitleC(s){ return (s||'').toLowerCase().replace(/(^|\s|\/)\S/g,c=>c.toUpperCase()); }
 // BUG 6: status deriva do estado real (tratativa / prox_contato / resolvido).
-function atDerivarStatus(rec,hoje){ if(rec.resolvido_em) return AT_STATUS.RESOLV; if(rec.status===AT_STATUS.SUMIU) return AT_STATUS.SUMIU; if(rec.tratativa&&String(rec.tratativa).trim()) return AT_STATUS.EM; if(rec.prox_contato){ const d=atParseISO(rec.prox_contato),h=hoje||atHojeLocal(); if(d&&d>h) return AT_STATUS.AGUARD; } return AT_STATUS.SEM; }
+// status agora é MANUAL (dropdown na ficha). resolvido_em manda quando setado.
+function atDerivarStatus(rec){ if(rec.resolvido_em) return AT_STATUS.RESOLV; return rec.status||AT_STATUS.SEM; }
 
 // Nome do rótulo (Segurado / Responsável) mais PRÓXIMO do nº da apólice, dentro do
 // bloco travado entre as vizinhas — não pega o nome do bloco de cima nem de baixo.
@@ -2170,39 +2173,41 @@ function atParseOficial(txt){
   if(!marks.length){ errors.push('Não encontrei números de apólice (formato 00XXXXXXX). Confira se colou o relatório oficial completo.'); return {records:[],errors}; }
   const records=[];
   for(let i=0;i<marks.length;i++){
-    const num=marks[i].num, ini=marks[i].idx, end=(i+1<marks.length)?marks[i+1].idx:txt.length;
-    const backStop=(i>0)?(marks[i-1].idx+marks[i-1].num.length):0;        // BUG 3: não cruza a apólice vizinha
-    const b=txt.slice(Math.max(backStop,ini-420),end).split(/Total:/)[0];
-    const dts=[]; const dre=/(\d{2}\/\d{2}\/\d{4})/g; let dm; while((dm=dre.exec(b))) dts.push({s:dm[1],iso:atBrToISO(dm[1]),idx:dm.index});
-    let pago=null; for(let j=0;j<dts.length;j++){ if(/^\s{0,3}\//.test(b.slice(dts[j].idx+10,dts[j].idx+15))){ pago=dts[j]; break; } }
+    const num=marks[i].num, ini=marks[i].idx, numEnd=ini+num.length, end=(i+1<marks.length)?marks[i+1].idx:txt.length;
+    // BLOCO FORWARD (formato real Prudential): TODO o registro (nome, contato, forma,
+    // datas, motivo, prêmio) vem DEPOIS do nº da apólice, até a próxima apólice. Ler
+    // para FRENTE mata o bug (antigo do artefato) em que uma apólice herdava as datas
+    // da de cima. Corta "Total:" do rodapé da seção.
+    const blk=txt.slice(numEnd,end).split(/Total:/)[0];
+    // datas SÓ deste registro: emissão, "pago até /", "vencido em"
+    const dts=[]; const dre=/(\d{2}\/\d{2}\/\d{4})/g; let dm; while((dm=dre.exec(blk))) dts.push({iso:atBrToISO(dm[1]),idx:dm.index});
+    let pago=null; for(let j=0;j<dts.length;j++){ if(/^\s{0,3}\//.test(blk.slice(dts[j].idx+10,dts[j].idx+15))){ pago=dts[j]; break; } }
     const others=dts.filter(d=>d!==pago);
     let emissao=null; if(others.length) emissao=others.reduce((a,c)=>(c.iso<a.iso?c:a));
     const rest=others.filter(d=>d!==emissao);
     let venc=null; if(rest.length){ const ap=pago?rest.filter(d=>d.idx>pago.idx):[]; venc=(ap[0]||rest[rest.length-1]); }
-    const premM=[]; const pre=/(\d{1,3}(?:\.\d{3})*,\d{2})/g; let pm; while((pm=pre.exec(b))) premM.push(atBrNum(pm[1]));
-    const premio=premM.length?premM[premM.length-1]:null;
-    const motivo=(b.match(/(DADOS DO CART[ÃA]O[^\n]*?(EMISSOR|EXPIRAD|BLOQUEAD)[^\n]*|SUSPEITA DE FRAUDE[^\n]*|LIMITE INSUFICIENTE[^\n]*|CART[ÃA]O\s+EXPIRAD[^\n]*|D[ée]bito n[ãa]o[^\n]{2,60}|LIBERE LIMITE[^\n]*)/i)||[])[0]||'';
-    const tel=(b.match(/Cel\.?:?\s*(\(\d{2}\)\s*[\d\-\s]{8,})/i)||[])[1]||'';
-    const forma=(b.match(/(Cart[ãa]o\s+\w+[^\n]{0,18}|Boleto|D[ée]bito[^\n]{0,18})/i)||[])[0]||'';
-    // nomes: segurado e resp_pagto (colunas SEPARADAS). Janela do bloco: do nº até a
-    // próxima apólice, com 90 chars de folga p/ trás — não herda o nome do bloco de cima.
-    const nmStart=Math.max(backStop,ini-90); const nomeWin=txt.slice(nmStart,end), anchor=ini-nmStart;
-    let seg=atNomeProx(nomeWin,anchor,'Segurad[oa]'), resp=atNomeProx(nomeWin,anchor,'Respons[áa]vel(?:\\s+pelo)?\\s+Pagamento');
-    // fallback (relatório SEM rótulo "Segurado:"): a linha da pessoa é
-    // "SEGURADO [Responsável pelo Pagamento: RESP] Cel.: … Email: …". O segurado é o
-    // nome ANTES de "Responsável"; se não houver, o nome antes do contato. Sempre o
-    // mais próximo do nº da apólice e travado entre as vizinhas (não herda cima/baixo).
-    if(!seg){ // janela TRAVADA do bloco (nomeWin) — não alcança o nome/resp do bloco vizinho
-      const pick=(rs)=>{ const re=new RegExp(rs,'gi'); let m,b='',bd=Infinity; while((m=re.exec(nomeWin))){ const d=Math.abs(m.index-anchor); if(d<bd){ bd=d; b=m[1]; } } return b; };
-      const NM="([A-ZÀ-ÿ][A-Za-zÀ-ÿ.'\\-]+(?:\\s+[A-ZÀ-ÿ][A-Za-zÀ-ÿ.'\\-]+){1,4})";
-      seg=pick(NM+"\\s+Respons[áa]vel") || pick(NM+"\\s+(?:Cel\\.?:?|E-?mail:?|CPF)"); }
-    // guarda: se o fallback pegou o mesmo nome do responsável (resp colado no Cel), descarta — fica pra confirmar
-    if(seg&&resp&&seg.toLowerCase().trim()===resp.toLowerCase().trim()) seg='';
+    // prêmio = última money com vírgula do bloco (guarda a posição p/ delimitar o motivo)
+    const pre=/(\d{1,3}(?:\.\d{3})*,\d{2})/g; let pm, premio=null, premIdx=-1; while((pm=pre.exec(blk))){ premio=atBrNum(pm[1]); premIdx=pm.index; }
+    // nome: entre "Ativa" (status da apólice) e o 1º contato (Cel/Tel/Com/Email). Coluna
+    // "Responsável pelo Pagamento / Segurado": 1 nome = segurado; empresa + pessoa =
+    // resp(empresa) + segurado(pessoa). 2 pessoas coladas não dá p/ separar do texto
+    // colado (colunas achatam) → nome inteiro no segurado (editável na ficha).
+    let blob=(blk.match(/\bAtiv[ao]\b\s+([\s\S]*?)\s+(?:Cel\.?:|Tel\.?:|Com\.?:|Email:)/i)||[])[1]||'';
+    blob=blob.replace(/\s+/g,' ').trim();
+    let seg=blob, resp='';
+    const compM=blob.match(/^(.+?\b(?:LTDA|EIRELI|MEI|S\/?A)\b(?:\s+ME\b)?)\s+([A-ZÀ-ÿ].+)$/i);
+    if(compM){ resp=compM[1].trim(); seg=compM[2].trim(); }
+    const tel=(blk.match(/Cel\.?:?\s*(\(\d{2}\)\s*[\d\-\s]{7,})/i)||[])[1]||'';
+    let forma=(blk.match(/(?:Mensal|Anual|Semestral|Trimestral)\s+([\s\S]*?)\s+\d{2}\/\d{2}\/\d{4}/i)||[])[1]||'';
+    forma=forma.replace(/\s+/g,' ').trim();
+    // motivo (Retorno Cobrança Rejeitada): texto entre a data de vencido e o prêmio (vazio p/ boleto)
+    let motivo=''; if(venc&&premIdx>venc.idx) motivo=blk.slice(venc.idx+10,premIdx).replace(/^[\s\/]+/,'').replace(/\s+/g,' ').trim();
     // BUG 5: pago_ate e vencido_em vêm de matches independentes; NUNCA copiamos um no outro.
-    records.push({ apolice:atNormApolice(num), lp_servico:lpAt(ini), segurado:atTitleC(seg).replace(/\s+/g,' ').trim(), resp_pagto:atTitleC(resp).replace(/\s+/g,' ').trim(),
+    records.push({ apolice:atNormApolice(num), lp_servico:lpAt(ini),
+      segurado:atTitleC(seg).replace(/\s+/g,' ').trim(), resp_pagto:atTitleC(resp).replace(/\s+/g,' ').trim(),
       pago_ate:pago?pago.iso:null, vencido_em:venc?venc.iso:null, premio,
       motivo_recusa:atTitleC(motivo).replace(/\s+/g,' ').trim(), celular:tel.replace(/\s+/g,' ').trim(),
-      forma_pagto:atTitleC(forma).replace(/\s+/g,' ').trim() });
+      forma_pagto:forma });
   }
   return {records,errors};
 }
@@ -2266,27 +2271,44 @@ async function atPatch(id,patch){ const r=AT.itens.find(x=>String(x.id)===String
 /* ── modais ── */
 function atModal(html){ atClose(); const ov=document.createElement('div'); ov.className='overlay aberto'; ov.id='at-ov'; ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center'; ov.innerHTML=`<div class="lp-modal-card" onclick="event.stopPropagation()">${html}</div>`; ov.onclick=()=>atClose(); document.body.appendChild(ov); return ov; }
 function atClose(){ const o=document.getElementById('at-ov'); if(o) o.remove(); }
-function atStatusCor(st){ return st===AT_STATUS.SEM?'b-verm':st===AT_STATUS.EM?'b-azul':st===AT_STATUS.AGUARD?'b-amarelo':st===AT_STATUS.RESOLV?'b-verde':st===AT_STATUS.SUMIU?'b-roxo':'b-cinza'; }
+function atStatusCor(st){ if(st===AT_STATUS.RESOLV) return 'b-verde'; if(st===AT_STATUS.SEM) return 'b-verm'; if(st===AT_STATUS.SUMIU) return 'b-roxo'; if(st==='Boleto pago cliente'||st==='Aguardando baixa sistema') return 'b-azul'; return 'b-amarelo'; }
 function atFocus(id){ const e=document.getElementById(id); if(e){ e.focus(); try{ const v=e.value; e.setSelectionRange(v.length,v.length); }catch(_){} } }
 function atWaMsg(r){ const nome=(r.segurado||'').split(' ')[0]; return 'Olá'+(nome?' '+atTitleC(nome):'')+'! Sobre sua apólice '+r.apolice+' — identificamos o prêmio em atraso. Podemos ajudar a regularizar?'; }
 
-function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apolice===id); if(!r) return; const d=atDiasAtraso(r.vencido_em); const wa=cartWaUrl(r.celular,atWaMsg(r));
-  atModal(`<h2>${esc(atTitleC(r.segurado)||'—')}</h2>
+function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apolice===id); if(!r) return; const d=atDiasAtraso(r.vencido_em); const wa=cartWaUrl(r.celular,atWaMsg(r)); const stAtual=atDerivarStatus(r);
+  const opts=AT_STATUS_OPTS.slice(); if(stAtual===AT_STATUS.SUMIU) opts.push(AT_STATUS.SUMIU);
+  atModal(`<h2>${esc(atTitleC(r.segurado)||('Apólice '+r.apolice))}</h2>
    <div class="sub">Apólice ${esc(r.apolice)} · LP ${esc(r.lp_servico||'—')}${r.forma_pagto?' · '+esc(r.forma_pagto):''}</div>
    <div style="font-size:13px;margin-top:8px">${r.resp_pagto&&normKey(r.resp_pagto)!==normKey(r.segurado)?'Resp. pagamento: <b>'+esc(atTitleC(r.resp_pagto))+'</b> · ':''}${d!=null?'<b>'+d+' dias</b> em atraso':'—'} · vence ${atFmtBR(r.vencido_em)}${r.pago_ate?' · pago até '+atFmtBR(r.pago_ate):''} · <b>${r.premio!=null?brl(r.premio):'—'}</b></div>
    ${r.motivo_recusa?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(r.motivo_recusa)}</div>`:''}
    <div style="font-size:13px;margin-top:6px">${esc(r.celular||'')}${wa?` · <a href="${wa}" target="_blank" rel="noopener" style="color:var(--verde);font-weight:600">💬 WhatsApp</a>`:''}</div>
-   <label style="display:block;font-size:12px;color:var(--muted);margin-top:12px;font-weight:600">Tratativa (nota de cobrança)</label>
+   <label style="display:block;font-size:12px;color:var(--muted);margin-top:12px;font-weight:600">Status</label>
+   <select id="at_st" style="width:100%;margin-top:3px">${opts.map(s=>`<option${stAtual===s?' selected':''}>${esc(s)}</option>`).join('')}</select>
+   <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">Tratativa (nota de cobrança)</label>
    <textarea id="at_tr" rows="2" style="width:100%;margin-top:3px">${esc(r.tratativa||'')}</textarea>
    <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">Próximo contato</label>
    <input id="at_px" type="date" value="${r.prox_contato||''}" style="margin-top:3px">
+   <details style="margin-top:12px"><summary style="font-size:12px;color:var(--muted);cursor:pointer">✏️ Corrigir dados (segurado · responsável · vencimento · prêmio)</summary>
+     <label style="display:block;font-size:11px;color:var(--muted);margin-top:8px">Segurado</label><input id="at_seg" value="${esc(atTitleC(r.segurado))}" style="width:100%">
+     <label style="display:block;font-size:11px;color:var(--muted);margin-top:6px">Responsável pelo pagamento (se ≠ do segurado)</label><input id="at_resp" value="${esc(atTitleC(r.resp_pagto||''))}" style="width:100%">
+     <div style="display:flex;gap:8px;margin-top:6px"><div style="flex:1"><label style="display:block;font-size:11px;color:var(--muted)">Vencido em</label><input id="at_ve" type="date" value="${r.vencido_em||''}" style="width:100%"></div><div style="width:120px"><label style="display:block;font-size:11px;color:var(--muted)">Prêmio (R$)</label><input id="at_pr" value="${r.premio!=null?String(r.premio).replace('.',','):''}" style="width:100%"></div></div>
+   </details>
    <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
-     ${!r.resolvido_em?`<button class="btn btn-s" onclick="atResolver('${esc(r.apolice)}')">✓ Marcar resolvido</button>`:`<button class="btn btn-s" onclick="atReabrir('${esc(r.apolice)}')">↩ Reabrir</button>`}
      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button>
      <button class="btn btn-p" onclick="atSalvarFicha('${esc(r.apolice)}')">Salvar</button>
    </div>`);
 }
-async function atSalvarFicha(ap){ const tr=(($('#at_tr')||{}).value||'').trim(); const px=($('#at_px')||{}).value||null; await atPatch(ap,{tratativa:tr,prox_contato:px}); atClose(); render(); toast('Tratativa salva',true); }
+async function atSalvarFicha(ap){
+  const ex=AT.itens.find(x=>x.apolice===ap)||{};
+  const st=($('#at_st')||{}).value||AT_STATUS.SEM;
+  const patch={ status:st, tratativa:(($('#at_tr')||{}).value||'').trim(), prox_contato:($('#at_px')||{}).value||null };
+  const seg=$('#at_seg'); if(seg) patch.segurado=(seg.value||'').trim();
+  const resp=$('#at_resp'); if(resp) patch.resp_pagto=(resp.value||'').trim();
+  const ve=$('#at_ve'); if(ve&&ve.value) patch.vencido_em=ve.value;
+  const pr=$('#at_pr'); if(pr&&pr.value){ const n=atBrNum(pr.value); if(n!=null) patch.premio=n; }
+  patch.resolvido_em = (st===AT_STATUS.RESOLV) ? (ex.resolvido_em||atHojeISO()) : null;  // Resolvido carimba a data; sair de Resolvido limpa
+  await atPatch(ap,patch); atClose(); render(); toast('Salvo',true);
+}
 async function atResolver(ap){ await atPatch(ap,{resolvido_em:atHojeISO()}); atClose(); render(); toast('Marcada como resolvida',true); }
 async function atReabrir(ap){ const r=AT.itens.find(x=>x.apolice===ap); if(r&&r.status===AT_STATUS.SUMIU) r.status=''; await atPatch(ap,{resolvido_em:null}); atClose(); render(); toast('Reaberta',true); }
 
@@ -2411,7 +2433,7 @@ function viewLpAtrasos(){
       <select onchange="FAT.lp=this.value;viewLpAtrasos()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">
         <option value="">Todos os LPs</option>${['Daniel','Gustavo','Rebeca'].map(k=>`<option${FAT.lp===k?' selected':''}>${k}</option>`).join('')}</select>
       <select onchange="FAT.status=this.value;viewLpAtrasos()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">
-        <option value="">Todos os status</option>${[AT_STATUS.SEM,AT_STATUS.EM,AT_STATUS.AGUARD,AT_STATUS.SUMIU].map(s=>`<option${FAT.status===s?' selected':''}>${s}</option>`).join('')}</select>
+        <option value="">Todos os status</option>${AT_STATUS_OPTS.concat([AT_STATUS.SUMIU]).map(s=>`<option${FAT.status===s?' selected':''}>${s}</option>`).join('')}</select>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       ${chip('','Todas')}${chip('50','🔴 ≥50d')}${chip('30','🟠 30–49')}${chip('15','🔵 15–29')}${chip('0','< 15d')}
