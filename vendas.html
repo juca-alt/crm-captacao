@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.6 · Base de Nomes</title>
+<title>CRM Life Planner · v0.9.7 · Base de Nomes</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -574,7 +574,7 @@
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
       <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
-      <span class="tag">ISLAND · v0.9.6 · Base de Nomes</span>
+      <span class="tag">ISLAND · v0.9.7 · Base de Nomes</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -2187,7 +2187,17 @@ function atParseOficial(txt){
     // nomes: segurado e resp_pagto (colunas SEPARADAS). Janela do bloco: do nº até a
     // próxima apólice, com 90 chars de folga p/ trás — não herda o nome do bloco de cima.
     const nmStart=Math.max(backStop,ini-90); const nomeWin=txt.slice(nmStart,end), anchor=ini-nmStart;
-    const seg=atNomeProx(nomeWin,anchor,'Segurad[oa]'), resp=atNomeProx(nomeWin,anchor,'Respons[áa]vel(?:\\s+pelo)?\\s+Pagamento');
+    let seg=atNomeProx(nomeWin,anchor,'Segurad[oa]'), resp=atNomeProx(nomeWin,anchor,'Respons[áa]vel(?:\\s+pelo)?\\s+Pagamento');
+    // fallback (relatório SEM rótulo "Segurado:"): a linha da pessoa é
+    // "SEGURADO [Responsável pelo Pagamento: RESP] Cel.: … Email: …". O segurado é o
+    // nome ANTES de "Responsável"; se não houver, o nome antes do contato. Sempre o
+    // mais próximo do nº da apólice e travado entre as vizinhas (não herda cima/baixo).
+    if(!seg){ // janela TRAVADA do bloco (nomeWin) — não alcança o nome/resp do bloco vizinho
+      const pick=(rs)=>{ const re=new RegExp(rs,'gi'); let m,b='',bd=Infinity; while((m=re.exec(nomeWin))){ const d=Math.abs(m.index-anchor); if(d<bd){ bd=d; b=m[1]; } } return b; };
+      const NM="([A-ZÀ-ÿ][A-Za-zÀ-ÿ.'\\-]+(?:\\s+[A-ZÀ-ÿ][A-Za-zÀ-ÿ.'\\-]+){1,4})";
+      seg=pick(NM+"\\s+Respons[áa]vel") || pick(NM+"\\s+(?:Cel\\.?:?|E-?mail:?|CPF)"); }
+    // guarda: se o fallback pegou o mesmo nome do responsável (resp colado no Cel), descarta — fica pra confirmar
+    if(seg&&resp&&seg.toLowerCase().trim()===resp.toLowerCase().trim()) seg='';
     // BUG 5: pago_ate e vencido_em vêm de matches independentes; NUNCA copiamos um no outro.
     records.push({ apolice:atNormApolice(num), lp_servico:lpAt(ini), segurado:atTitleC(seg).replace(/\s+/g,' ').trim(), resp_pagto:atTitleC(resp).replace(/\s+/g,' ').trim(),
       pago_ate:pago?pago.iso:null, vencido_em:venc?venc.iso:null, premio,
@@ -2313,7 +2323,7 @@ function atPreviewOficial(recs){ const d=atDiffOficial(AT.itens,recs); _atPend={
 }
 async function atAplicarOficialUI(){ const p=_atPend; if(!p||p.tipo!=='oficial') return; const origem=atHojeISO(); const up=[]; let nNovos=0;
   p.updates.forEach(u=>{ const ex=AT.itens.find(x=>x.apolice===u.apolice); if(!ex) return; u.ch.forEach(c=>{ ex[c[0]]=c[2]; }); if(u.reabre){ ex.resolvido_em=null; if(ex.status===AT_STATUS.SUMIU) ex.status=''; } ex.origem_relatorio=origem; ex.status=atDerivarStatus(ex); up.push(ex); });
-  p.novos.forEach((n,i)=>{ const seg=(($('#atnv_'+i+'_seg')||{}).value||'').trim(); if(!seg) return; const lp=($('#atnv_'+i+'_lp')||{}).value||n.lp_servico; const resp=(($('#atnv_'+i+'_resp')||{}).value||'').trim(); const rec=Object.assign({},n,{id:null,segurado:seg,lp_servico:lp,resp_pagto:resp,tratativa:'',prox_contato:null,resolvido_em:null,responsavel:'',origem_relatorio:origem}); rec.status=atDerivarStatus(rec); AT.itens.push(rec); up.push(rec); nNovos++; });
+  p.novos.forEach((n,i)=>{ const seg=(($('#atnv_'+i+'_seg')||{}).value||'').trim(); const lp=($('#atnv_'+i+'_lp')||{}).value||n.lp_servico; const resp=(($('#atnv_'+i+'_resp')||{}).value||'').trim(); const rec=Object.assign({},n,{id:null,segurado:seg,lp_servico:lp,resp_pagto:resp,tratativa:'',prox_contato:null,resolvido_em:null,responsavel:'',origem_relatorio:origem}); rec.status=atDerivarStatus(rec); AT.itens.push(rec); up.push(rec); nNovos++; });   // NÃO exige nome — aplica mesmo sem segurado (fica editável; o backfill preenche quando o parser/você acertar o nome)
   p.sumiram.forEach((s,i)=>{ const cb=$('#atsm_'+i); if(cb&&cb.checked){ const ex=AT.itens.find(x=>x.apolice===s.apolice); if(ex){ ex.status=AT_STATUS.SUMIU; if(!ex.origem_relatorio) ex.origem_relatorio=origem; up.push(ex); } } });
   AT.carregadoEm=origem; atSalvarLocal(); let msg='';
   if(AT_REMOTE){ try{ await atUpsertRemoto(up); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('AT upsert',e); } }
