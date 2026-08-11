@@ -330,12 +330,22 @@
     .col-hide{display:none}
   }
   @media(max-width:400px){ .brand .btxt{display:none} }
+
+  /* linhas/cards clicáveis + ficha de edição */
+  .rowlink{cursor:pointer}
+  tbody tr.rowlink:hover{background:var(--panel2)}
+  .fichaGrid{display:grid;grid-template-columns:1fr 1fr;gap:11px 12px;margin-top:4px}
+  .fichaGrid .full{grid-column:1/3}
+  .fichaGrid label{display:block;font-size:12px;color:var(--mut);font-weight:600;margin:0 0 5px}
+  .fichaGrid textarea.inp{resize:vertical;min-height:44px}
+  @media(max-width:560px){ .fichaGrid{grid-template-columns:1fr} .fichaGrid .full{grid-column:1} }
 </style>
 </head>
 <body>
 <div id="app">
   <header class="top">
     <button class="btn icon burger" id="burger" onclick="toggleDrawer()" aria-label="Menu">☰</button>
+    <button class="btn" id="backBtn" onclick="sairDoApp()" title="Voltar ao CRM (sair do painel)">← Voltar ao CRM</button>
     <div class="brand">
       <div class="logo">SJ</div>
       <div class="btxt"><h1>Painel do Life Planner</h1><small>SeguroComJucá · TA · SITPLAN · Recomendações</small></div>
@@ -460,6 +470,36 @@
     <div class="foot">
       <button class="btn" style="flex:1;justify-content:center" onclick="loadDemo()">Ver demonstração</button>
       <button class="btn pri" style="flex:1;justify-content:center" id="liGo" onclick="doLogin()">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- FICHA (detalhe / edição do contato) -->
+<div class="scrim hide" id="fichaScrim" onclick="if(event.target===this)closeFicha()">
+  <div class="modal" style="max-width:540px">
+    <h2 style="display:flex;align-items:center;gap:8px;justify-content:space-between">Ficha do contato
+      <button class="btn icon" onclick="closeFicha()" title="Fechar" style="margin:-6px -6px 0 0">✕</button></h2>
+    <p class="s" id="fichaSub" style="margin:0 0 6px"></p>
+    <div class="fichaGrid">
+      <div class="full"><label>Nome</label><input class="inp" id="fx_nome"></div>
+      <div><label>Profissão</label><input class="inp" id="fx_cargo"></div>
+      <div><label>Empresa</label><input class="inp" id="fx_empresa"></div>
+      <div><label>Telefone</label><input class="inp" id="fx_tel" inputmode="tel" placeholder="+55 81 9…"></div>
+      <div><label>Cidade</label><input class="inp" id="fx_cidade"></div>
+      <div><label>Idade</label><input class="inp" id="fx_idade" type="number" min="0" max="120"></div>
+      <div><label>Renda estimada (R$)</label><input class="inp" id="fx_renda" type="number" min="0" step="500"></div>
+      <div><label>Estágio</label><select class="inp" id="fx_estagio"></select></div>
+      <div><label>Prioridade</label><select class="inp" id="fx_pri"><option value="1">🔥 Alta</option><option value="2">Normal</option><option value="3">Baixa</option></select></div>
+      <div class="full"><label>Recomendante</label><input class="inp" id="fx_rec"></div>
+      <div class="full"><label>Contexto / notas</label><textarea class="inp" id="fx_notas" rows="2"></textarea></div>
+    </div>
+    <div class="err" id="fichaErr"></div>
+    <div class="foot" style="justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:8px" id="fichaQuick"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeFicha()">Cancelar</button>
+        <button class="btn pri" id="fichaSave" onclick="saveFicha()">Salvar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -871,8 +911,8 @@ function renderMain(){
     const sub=[c.cargo,c.empresa].filter(Boolean).join(" · ")||"—";
     const tel=c.hasFone?`<span class="tel">${fmtTel(c.tel)}</span>`:`<span class="noTel">sem telefone</span>`;
     const recH=c.recomendante?`<span class="rec">👤 <b>${esc(c.recomendante)}</b></span>`:`<span class="rec" style="color:var(--mut2)">—</span>`;
-    return `<tr>
-      <td><input type="checkbox" class="ck" ${S.sel.has(c.id)?"checked":""} onchange="toggleSel('${c.id}')"></td>
+    return `<tr class="rowlink" onclick="rowClick(event,'${c.id}')" title="Abrir ficha (editar)">
+      <td><input type="checkbox" class="ck" ${S.sel.has(c.id)?"checked":""} onchange="toggleSel('${c.id}')" onclick="event.stopPropagation()"></td>
       <td><div class="nm"><span class="pri" style="background:${priColor}"></span>${esc(c.nome)}</div><div class="sub col-hide">${esc(sub)}${c.cidade?" · "+esc(c.cidade):""}</div></td>
       <td class="col-hide"><div>${esc(c.cargo||"—")}</div><div class="sub">${esc(c.empresa||"")}</div></td>
       <td>${c.idade??"<span class='noTel'>—</span>"}</td>
@@ -902,9 +942,9 @@ function renderCards(list){
     if(c.cidade)chips.push(`<span class="mchip">📍 ${esc(c.cidade)}</span>`);
     if(c.recomendante)chips.push(`<span class="mchip rec">👤 <b>${esc(c.recomendante)}</b></span>`);
     const tel=c.hasFone?`<span class="mtel">${fmtTel(c.tel)}</span>`:`<span class="noTel">sem telefone</span>`;
-    return `<div class="mcard">
+    return `<div class="mcard rowlink" onclick="cardClick(event,'${c.id}')">
       <div class="mhead">
-        <input type="checkbox" class="ck mck" ${S.sel.has(c.id)?"checked":""} onchange="toggleSel('${c.id}')">
+        <input type="checkbox" class="ck mck" ${S.sel.has(c.id)?"checked":""} onchange="toggleSel('${c.id}')" onclick="event.stopPropagation()">
         <div class="mmid">
           <div class="mname"><span class="pri" style="background:${priColor}"></span>${esc(c.nome)}</div>
           <div class="msub">${esc(sub)}${c.cidade&&!c.cargo&&!c.empresa?"":""}</div>
@@ -1248,6 +1288,61 @@ function renderFocusDone(){
       </div>
       <button class="btn pri" style="justify-content:center;width:100%" onclick="exitFocus()">Salvar e fechar${S.live?" (grava SITPLAN)":""}</button>
     </div>`;
+}
+
+/* ============================================================
+   SAIR DO PAINEL + FICHA (linha/card clicável → editar → grava no CRM)
+   ============================================================ */
+function sairDoApp(){ if(history.length>1){history.back();} else {location.href="vendas.html";} }
+
+let _fichaId=null;
+function rowClick(e,id){ if(e.target.closest("input,a,button,select,label,.menu")) return; openFicha(id); }
+function cardClick(e,id){ if(e.target.closest("input,a,button,select,label,.menu")) return; openFicha(id); }
+function openFicha(id){
+  const c=S.cont.find(x=>x.id===id); if(!c)return;
+  _fichaId=id;
+  const V=(k,v)=>{const el=document.getElementById(k); if(el)el.value=(v==null?"":v);};
+  document.getElementById("fichaSub").textContent=(ESTAGIO_LBL[c.estagio]||c.estagio||"")+" · id "+c.id+(S.live?"":" · demo (edições não gravam no CRM)");
+  V("fx_nome", c.nome==="(sem nome)"?"":c.nome);
+  V("fx_cargo", c.cargo); V("fx_empresa", c.empresa); V("fx_tel", c.tel);
+  V("fx_cidade", c.cidade); V("fx_idade", c.idade); V("fx_renda", c.renda);
+  const se=document.getElementById("fx_estagio");
+  se.innerHTML=ESTAGIOS.map(e=>`<option value="${e}">${ESTAGIO_LBL[e]}</option>`).join("");
+  se.value=c.estagio;
+  document.getElementById("fx_pri").value=String(c.prioridade||2);
+  V("fx_rec", c.recomendante); V("fx_notas", c.contexto||c.notas||"");
+  document.getElementById("fichaQuick").innerHTML=c.hasFone
+    ? `<a class="btn sm" href="tel:${digits(c.tel)}" title="Ligar">📞 Ligar</a><a class="btn sm" href="${waLink(c)}" target="_blank" onclick="markMsg('${c.id}')" title="WhatsApp">💬</a>`
+    : "";
+  document.getElementById("fichaErr").textContent="";
+  document.getElementById("fichaScrim").classList.remove("hide");
+}
+function closeFicha(){document.getElementById("fichaScrim").classList.add("hide");_fichaId=null;}
+async function saveFicha(){
+  const c=S.cont.find(x=>x.id===_fichaId); if(!c){closeFicha();return;}
+  const g=id=>(document.getElementById(id).value||"").trim();
+  const nome=g("fx_nome");
+  const err=document.getElementById("fichaErr"); err.textContent="";
+  if(!nome){err.textContent="O nome não pode ficar vazio.";return;}
+  const btn=document.getElementById("fichaSave"), bt=btn.textContent; btn.disabled=true; btn.textContent="Salvando…";
+  c.nome=nome;
+  c.cargo=g("fx_cargo"); c.cargoK=cargoKey(c.cargo);
+  c.empresa=g("fx_empresa");
+  c.tel=g("fx_tel"); c.hasFone=hasFone(c.tel);
+  c.cidade=g("fx_cidade");
+  const iv=g("fx_idade"); c.idade=(iv===""?null:+iv);
+  const rv=g("fx_renda"); c.renda=(rv===""?null:+rv);
+  c.estagio=document.getElementById("fx_estagio").value;
+  c.prioridade=+document.getElementById("fx_pri").value||2;
+  c.recomendante=g("fx_rec"); c.recKey=normKey(c.recomendante);
+  const notas=g("fx_notas"); c.contexto=notas;
+  Object.assign(c._d,{nome:c.nome,cargo:c.cargo,empresa:c.empresa,telefone:c.tel,cidade:c.cidade,
+    idade:c.idade,renda_estimada:c.renda,recomendante:c.recomendante,contexto:notas});
+  const ok=await persistContato(c);
+  btn.disabled=false; btn.textContent=bt;
+  if(ok===false){err.textContent="Não consegui gravar no CRM. Tente de novo.";return;}
+  closeFicha(); buildUserLists(); renderAll();
+  toast(primeiroNome(c.nome)+" salvo"+(S.live?" ✓":" (demo)"), S.live?"ok":"info");
 }
 
 /* ============================================================
