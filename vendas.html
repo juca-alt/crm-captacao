@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.9.9 · Base de Nomes</title>
+<title>CRM Life Planner · v0.10.0 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -393,6 +393,18 @@
   .bn-tabela td input,.bn-tabela td select{width:100%;min-width:80px;padding:5px 7px;font-size:12.5px;border:1px solid var(--primary);border-radius:7px}
 
   /* ── B3: busca global ⌘K (padrão Captação) com escopo ── */
+  /* ── B3.2: busca inline na topbar (o ⌘K continua existindo; isto é o campo
+     sempre visível que ele pediu — mesma fonte de dados, resultado em typeahead) ── */
+  .tb-busca{position:relative;display:flex;align-items:center;gap:6px;background:var(--fundo);border:1px solid var(--linha);border-radius:10px;padding:5px 10px;min-width:210px;max-width:300px;flex:0 1 260px}
+  .tb-busca:focus-within{border-color:var(--azul);background:#fff}
+  .tb-busca .lupa{font-size:12.5px;opacity:.65;flex-shrink:0}
+  .tb-busca input{border:0;background:transparent;outline:0;font-size:13px;width:100%;min-width:0;color:var(--ink)}
+  .tb-busca input::-webkit-search-cancel-button{cursor:pointer}
+  .tb-drop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 18px 50px rgba(16,30,54,.18);max-height:60vh;overflow:auto;z-index:80;padding:6px;display:none}
+  .tb-drop.on{display:block}
+  .tb-drop .cmdk-row{padding:7px 10px}
+  .tb-so-mob{display:none}
+  @media(max-width:980px){ .tb-busca{display:none} .tb-so-mob{display:inline-flex} }
   .cmdk-bd{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(2px)}
   .cmdk{background:var(--card);border-radius:16px;width:min(640px,94vw);box-shadow:0 24px 80px rgba(0,0,0,.35);overflow:hidden}
   .cmdk input{width:100%;border:none;outline:none;padding:16px 18px;font-size:16px;border-bottom:1px solid var(--linha)}
@@ -577,8 +589,15 @@
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
-      <button class="tb-link" onclick="lpkAbrir()" title="Buscar em tudo — Estoque, funis e Clientes (⌘K / Ctrl+K)">🔍 Buscar</button>
-      <span class="tag">ISLAND · v0.9.9 · Base de Nomes</span>
+      <div class="tb-busca">
+        <span class="lupa">🔍</span>
+        <input id="tbq" type="search" autocomplete="off" placeholder="Buscar cliente, telefone, recomendante…"
+               oninput="tbBusca()" onfocus="tbBusca()" onkeydown="tbBuscaKey(event)"
+               title="Busca em tudo — Estoque, funis e Clientes da Carteira (⌘K abre em tela cheia)">
+        <div class="tb-drop" id="tbDrop"></div>
+      </div>
+      <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
+      <span class="tag">ISLAND · v0.10.0 · Substituição</span>
       <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
@@ -591,7 +610,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.9.5 — Base de Nomes · Island.</span>
+      <span>CRM Life Planner v0.10.0 — Substituição de Apólice · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1829,21 +1848,619 @@ function viewPlanos(){
 }
 function setPlanoStatusG(cid,pid,v){ const c=S.contatos.find(c=>c.id===cid); if(!c) return; const p=c.planos.find(x=>x.id===pid); if(!p) return; p.status=v; salvar(); toast(`Plano: ${v}`,true); }
 
-/* ═══════════════════ VIEW: SUBSTITUIÇÃO ═══════════════════ */
+/* ═══════════════════ SUBSTITUIÇÃO DE APÓLICE (módulo nativo) ═══════════════════
+   Port do artefato controle-substituicao.html v1.9 (que vivia SOLTO, fora do repo —
+   o menu apontava pra um arquivo que nem existe mais aqui). Agora é módulo do CRM,
+   gravando em subst_clientes / subst_apolices / subst_pagamentos (RLS por dono),
+   com localStorage como degradação graciosa igual ao resto do app.
+
+   MODELO (renomeado na ida, pra tirar a ambiguidade do artefato):
+     cliente  {ref,nome,cpf,tel,email,final}
+     apolice  {ref,cli,numero,papel,emissao,premio,dia,venc,lp,forma,
+               podePostergar,dataPostergada,impresso,motivo}
+        · artefato chamava de `id` o que aqui é `ref`, e de `ref` o que aqui é `venc`.
+        · `impresso` = data de impressão do documento = VERSÃO do dado (ver subDiff*).
+     pagamento{ref,apo,venc,valor,status,enviado,comprovante,confirmado,primeiro,obs}
+        · status: aguardando → comprovante → confirmado
+
+   REGRA DE OURO: a apólice antiga não pode cair antes da nova completar 6 meses.
+   Cair = 59 dias de atraso. Então o jogo é manter cada antiga na faixa 30–40 dias:
+   atrasa de propósito (economia real pro cliente) sem nunca chegar no limite.
+   ══════════════════════════════════════════════════════════════════════════════ */
+const SUB_LIMITE=59, SUB_FMIN=30, SUB_FMAX=40;
+const SUB_TC='subst_clientes', SUB_TA='subst_apolices', SUB_TP='subst_pagamentos';
+const SUB_LS='crmlp_subst_v1';
+let SUB={clientes:[],apolices:[],pagamentos:[],config:{}};
+let SUB_REMOTE=false, SUB_EMAIL='', SUB_CLI=null, _subPend=null, _subCtx=null, _subPg=undefined;
+
+/* ── datas: reaproveita o núcleo do módulo de Atraso (at*), que já é à prova de fuso ── */
+function subISO(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function subDDiff(a,b){ return Math.round((b-a)/864e5); }
+function subAddDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function subAddMonths(iso,n){ const d=atParseISO(iso); if(!d) return null; d.setMonth(d.getMonth()+n); return subISO(d); }
+function subFmtCurto(iso){ const p=String(iso||'').split('-'); return p.length>=3?(p[2]+'/'+p[1]):'—'; }
+function subIni(nome){ const p=String(nome||'?').trim().split(' '); return ((p[0][0]||'')+(p.length>1?p[p.length-1][0]:'')).toUpperCase(); }
+function subRef(n){ return String(n||'x').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g,'').slice(0,16)+Math.random().toString(36).slice(2,5); }
+
+/* ── regras de fôlego ── */
+function subEref(a){ return (a.podePostergar&&a.dataPostergada)?a.dataPostergada:a.venc; }
+function subAtraso(ref,hoje){ if(!ref) return 0; const d=subDDiff(atParseISO(ref),hoje||atHojeLocal()); return d>0?d:0; }
+function subFolego(ref,hoje){ return SUB_LIMITE-subAtraso(ref,hoje); }
+function subLimiteDt(ref){ return subAddDays(atParseISO(ref),SUB_LIMITE); }
+function subCor(f){ if(f<=7) return 'red'; if(f<=25) return 'amber'; return 'green'; }
+function subCorVar(c){ return c==='red'?'var(--verm)':c==='amber'?'var(--amar)':'var(--verde)'; }
+function subBadge(c){ return c==='red'?'b-verm':c==='amber'?'b-amarelo':'b-verde'; }
+
+/* ── consultas ── */
+function subApsDe(cliRef){ return SUB.apolices.filter(a=>a.cli===cliRef); }
+function subGatilho(cliRef){ return subApsDe(cliRef).find(a=>a.papel==='gatilho'); }
+function subJanela(cliRef){ const g=subGatilho(cliRef); if(!g||!g.emissao) return null; return {inicio:g.emissao,fim:subAddMonths(g.emissao,6)}; }
+function subPiorFolego(cliRef,hoje){ const aps=subApsDe(cliRef); if(!aps.length) return SUB_LIMITE; return Math.min(...aps.map(a=>subFolego(subEref(a),hoje))); }
+function subPagsDe(apoRef){ return SUB.pagamentos.filter(p=>p.apo===apoRef); }
+function subNome2(a){ return a?((a.papel==='gatilho'?'Nova':'Antiga')+' '+a.numero):'—'; }
+function subCliDe(ref){ return SUB.clientes.find(c=>c.ref===ref); }
+
+/* ── timeline: histórico pago + o que está em aberto + cadência entre pagamentos ── */
+function subTimeline(cliRef,hoje){
+  hoje=hoje||atHojeLocal(); const hojeS=subISO(hoje);
+  const aps=subApsDe(cliRef), j=subJanela(cliRef);
+  const start=j?subAddMonths(j.inicio,-3):'0000-00-00';
+  const rows=[];
+  SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado').forEach(p=>{
+    if(p.venc<start&&!p.primeiro) return;
+    const a=aps.find(x=>x.ref===p.apo), pago=p.confirmado||p.venc; let sit,c;
+    if(p.primeiro){ sit='Início da janela'; c='info'; }
+    else if(pago>p.venc){ sit='Pago c/ atraso ('+subDDiff(atParseISO(p.venc),atParseISO(pago))+'d)'; c='warning'; }
+    else { sit='Pago'; c='success'; }
+    rows.push({a,venc:p.venc,pago,valor:p.valor,sit,c});
+  });
+  aps.forEach(a=>{ if(subAtraso(subEref(a),hoje)>0){
+    const ag=subPagsDe(a.ref).find(p=>p.status==='aguardando'||p.status==='comprovante');
+    rows.push({a,venc:subEref(a),pago:null,valor:a.premio,
+      sit:ag?('Boleto enviado · vence '+subFmtCurto(ag.venc)):'Em aberto',
+      c:ag?'info':subCor(subFolego(subEref(a),hoje))}); } });
+  rows.sort((x,y)=>String(x.venc).localeCompare(String(y.venc)));
+  const venc=[];
+  SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&(p.status==='aguardando'||p.status==='comprovante')&&p.venc>=hojeS)
+    .forEach(p=>{ const a=aps.find(x=>x.ref===p.apo); venc.push({dt:p.venc,label:'Boleto '+subNome2(a),valor:p.valor}); });
+  aps.forEach(a=>venc.push({dt:subISO(subLimiteDt(subEref(a))),label:subNome2(a)+' — limite '+SUB_LIMITE+'d',lim:true}));
+  venc.sort((x,y)=>x.dt.localeCompare(y.dt));
+  const pagos=rows.filter(r=>r.pago).map(r=>r.pago).sort();
+  const ultimo=pagos.length?pagos[pagos.length-1]:null;
+  let maxGap=0; for(let i=1;i<pagos.length;i++) maxGap=Math.max(maxGap,subDDiff(atParseISO(pagos[i-1]),atParseISO(pagos[i])));
+  const emAberto=ultimo?subDDiff(atParseISO(ultimo),hoje):0;
+  let prev=null;
+  rows.filter(r=>r.pago).slice().sort((x,y)=>x.pago.localeCompare(y.pago))
+    .forEach(r=>{ r.intervalo=(prev!=null)?subDDiff(atParseISO(prev),atParseISO(r.pago)):null; prev=r.pago; });
+  return {rows,venc,ultimo,maiorIntervalo:Math.max(maxGap,emAberto),emAberto,start};
+}
+
+function subSugestao(cliRef,hoje){
+  hoje=hoje||atHojeLocal(); const aps=subApsDe(cliRef);
+  const agora=aps.filter(a=>subAtraso(subEref(a),hoje)>SUB_FMAX)
+    .map(a=>({a,dias:subAtraso(subEref(a),hoje),lim:subLimiteDt(subEref(a))})).sort((x,y)=>y.dias-x.dias);
+  const prox=aps.map(a=>({a,quando:subAddDays(atParseISO(subEref(a)),SUB_FMAX)}))
+    .filter(x=>x.quando>=hoje).sort((x,y)=>x.quando-y.quando);
+  const pior=aps.slice().sort((x,y)=>subAtraso(subEref(y),hoje)-subAtraso(subEref(x),hoje))[0];
+  return {agora,prox,pior};
+}
+
+/* ═══ ESPELHO DA PRUDENTIAL (Detalhes da Apólice, texto colado) ═══════════════
+   Separa por MUDANÇA do número da apólice — não depende do cabeçalho
+   "Detalhes/Impresso", que some quando o texto vem copiado da página aberta. */
+function subSplitEspelhos(txt){
+  const t=txt||'', re=/Ap[óo]lice:\s*(\d{6,})/gi, marks=[]; let m;
+  while((m=re.exec(t))) marks.push({num:m[1],idx:m.index});
+  if(!marks.length) return [];
+  const byNum={};
+  for(let i=0;i<marks.length;i++){
+    if(i>0&&marks[i].num===marks[i-1].num) continue;
+    const num=marks[i].num; let end=t.length;
+    for(let k=i+1;k<marks.length;k++){ if(marks[k].num!==num){ end=marks[k].idx; break; } }
+    byNum[num]=(byNum[num]||'')+'\n'+t.slice(marks[i].idx,end);
+  }
+  return Object.keys(byNum).map(n=>({numero:n,txt:byNum[n]}));
+}
+function subDigitos(s){ return String(s||'').replace(/\D/g,''); }
+function subFmtCPF(s){ const d=subDigitos(s); return d.length===11?(d.slice(0,3)+'.'+d.slice(3,6)+'.'+d.slice(6,9)+'-'+d.slice(9)):(s||''); }
+function subExtrai(txt){
+  const t=(txt||'').replace(/\u00a0/g,' ');
+  const g=re=>{ const m=t.match(re); return m?m[1].trim():null; };
+  const numero=g(/Ap[óo]lice:\s*(\d{6,})/i); if(!numero) return null;
+  const nome=g(/Segurado:\s*([^\n]+?)\s*(?:CPF:|\n)/i);
+  return { numero, nome:nome||null,
+    /* o artefato ancorava o CPF em início de linha — funciona no texto do pdf.js
+       (um item por linha) mas NÃO no PDF real nem no texto colado do navegador,
+       onde vem "Segurado: FULANO CPF: 031788184-13" na MESMA linha. \b não casa CNPJ. */
+    cpf:subFmtCPF(g(/\bCPF:\s*([\d.\-]{11,14})/i)),
+    tel:(g(/Celular:\s*(\(\d{2}\)\s*[\d\-\s]{7,})/i)||'').trim(),
+    email:g(/E-?mail:\s*([^\s]+@[^\s]+)/i)||'',
+    emissao:atBrToISO(g(/Data da Emiss[ãa]o:\s*(\d{2}\/\d{2}\/\d{4})/i)),
+    premio:atBrNum(g(/Pr[êe]mio Total:\s*([\d.]*,\d{2})/i)),
+    dia:(()=>{ const d=g(/Dia escolhido para pagamento:\s*(\d{1,2})/i); return d?parseInt(d,10):null; })(),
+    venc:atBrToISO(g(/Vencimento do Pr[óo]ximo Pr[êe]mio:\s*(\d{2}\/\d{2}\/\d{4})/i)),
+    pagoAte:atBrToISO(g(/Pago at[ée]:\s*(\d{2}\/\d{2}\/\d{4})/i)),
+    diasRel:(()=>{ const d=g(/Dias Atraso:\s*(\d{1,3})/i); return d?parseInt(d,10):null; })(),
+    impresso:atBrToISO(g(/Impresso[^\n]*?em\s*(\d{2}\/\d{2}\/\d{4})/i)) };
+}
+/* só a seção "Histórico de cobranças" (pagos) — nunca "Pagamentos Rejeitados" */
+function subParsePags(t){
+  const re=/Hist[óo]rico de cobran[çc]as[\s\S]*?(?=Esclarecemos|Pagamentos Rejeitados|Detalhes da Ap[óo]lice|Life Planner é a marca|$)/gi;
+  let m,blob=''; while((m=re.exec(t))) blob+=' '+m[0];
+  const pr=/(\d{2}\/\d{2}\/\d{4})\s+(-?\d[\d.]*,\d{2})/g;
+  const out=[], seen={}; let p;
+  while((p=pr.exec(blob))){
+    const d=atBrToISO(p[1]), v=atBrNum(p[2]); if(!d||v==null||v<=0) continue;
+    const k=d+'|'+v.toFixed(2); if(seen[k]) continue; seen[k]=1; out.push({pago:d,valor:v});
+  }
+  return out;
+}
+
+/* ═══ VERSIONAMENTO: a data de impressão manda ════════════════════════════════
+   Documento impresso ANTES do que já foi aplicado não sobrescreve nada (stale).
+   Vale pro espelho (Impresso em) e pra lista de atraso (origem_relatorio). */
+function subDiffEspelho(txt){
+  const blocos=subSplitEspelhos(txt), updates=[], naoCad=[];
+  blocos.forEach(b=>{
+    const r=subExtrai(b.txt); if(!r||!r.numero) return;
+    const a=SUB.apolices.find(x=>atNormApolice(x.numero)===atNormApolice(r.numero));
+    if(!a){ naoCad.push(r); return; }
+    const stale=!!(a.impresso&&r.impresso&&r.impresso<a.impresso);
+    const ch=[];
+    if(r.premio!=null&&Math.abs((a.premio||0)-r.premio)>0.001) ch.push(['premio','Prêmio',a.premio,r.premio]);
+    if(r.dia!=null&&a.dia!=r.dia) ch.push(['dia','Dia',a.dia,r.dia]);
+    if(r.venc&&a.venc!==r.venc) ch.push(['venc','Venc. em aberto',a.venc,r.venc]);
+    const j=subJanela(a.cli), startStr=j?subAddMonths(j.inicio,-3):subAddMonths(atHojeISO(),-6);
+    const existentes={}; SUB.pagamentos.filter(p=>p.apo===a.ref&&p.confirmado).forEach(p=>{ existentes[p.confirmado]=1; });
+    const novos=subParsePags(b.txt).filter(p=>p.pago>=startStr&&!existentes[p.pago]);
+    if(ch.length||novos.length||r.impresso) updates.push({apo:a,rec:r,ch,novos,stale});
+  });
+  return {updates,naoCad};
+}
+
+/* ═══ PONTE COM A LISTA DE ATRASO ═════════════════════════════════════════════
+   O relatório oficial que ele JÁ cola no CRM tem por apólice: vencido_em,
+   pago_ate, prêmio e motivo da recusa — exatamente o que a substituição precisa.
+   Então a Lista de Atraso vira 2ª fonte de atualização, sem colar espelho nenhum. */
+function subDiffAtraso(itens){
+  const updates=[], semPar=[];
+  (itens||[]).forEach(it=>{
+    const num=atNormApolice(it.apolice); if(!num) return;
+    const a=SUB.apolices.find(x=>atNormApolice(x.numero)===num);
+    if(!a){ semPar.push(it); return; }
+    const dataRel=it.origem_relatorio||null;
+    const stale=!!(a.impresso&&dataRel&&dataRel<a.impresso);
+    const ch=[];
+    if(it.premio!=null&&Number(it.premio)>0&&Math.abs((a.premio||0)-Number(it.premio))>0.001) ch.push(['premio','Prêmio',a.premio,Number(it.premio)]);
+    if(it.vencido_em&&a.venc!==it.vencido_em) ch.push(['venc','Venc. em aberto',a.venc,it.vencido_em]);
+    if(it.motivo_recusa&&a.motivo!==it.motivo_recusa) ch.push(['motivo','Motivo da cobrança',a.motivo,it.motivo_recusa]);
+    if(ch.length) updates.push({apo:a,rec:{numero:it.apolice,impresso:dataRel,pagoAte:it.pago_ate||null},ch,novos:[],stale});
+  });
+  return {updates,semPar};
+}
+
+/* ═══ PERSISTÊNCIA (Supabase → sync entre aparelhos; localStorage = fallback) ═══ */
+async function subRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ SUB_EMAIL=(data.session.user&&data.session.user.email)||''; return true; } }catch(e){} return false; }
+function subCliRow(c){ return {lp_email:SUB_EMAIL,ref:c.ref,nome:c.nome||'',cpf:c.cpf||null,tel:c.tel||null,email:c.email||null,valor_final:c.final!=null?c.final:null}; }
+function subApoRow(a){ return {lp_email:SUB_EMAIL,ref:a.ref,cli_ref:a.cli,numero:String(a.numero||''),papel:a.papel||'proteger',emissao:a.emissao||null,premio:a.premio!=null?a.premio:0,dia:a.dia!=null?a.dia:null,venc_aberto:a.venc||null,lp:a.lp||null,forma:a.forma||null,pode_postergar:a.podePostergar===undefined?null:a.podePostergar,data_postergada:a.dataPostergada||null,impresso:a.impresso||null,motivo:a.motivo||null}; }
+function subPagRow(p){ return {lp_email:SUB_EMAIL,ref:p.ref,apo_ref:p.apo,venc:p.venc||null,valor:p.valor!=null?p.valor:0,status:p.status||'confirmado',enviado:p.enviado||null,comprovante:p.comprovante||null,confirmado:p.confirmado||null,primeiro:!!p.primeiro,obs:p.obs||null}; }
+function subCliDeRow(r){ return {ref:r.ref,nome:r.nome||'',cpf:r.cpf||'',tel:r.tel||'',email:r.email||'',final:r.valor_final!=null?Number(r.valor_final):null}; }
+function subApoDeRow(r){ return {ref:r.ref,cli:r.cli_ref,numero:String(r.numero||''),papel:r.papel||'proteger',emissao:r.emissao||null,premio:r.premio!=null?Number(r.premio):0,dia:r.dia!=null?Number(r.dia):null,venc:r.venc_aberto||null,lp:r.lp||'',forma:r.forma||'Boleto',podePostergar:r.pode_postergar,dataPostergada:r.data_postergada||null,impresso:r.impresso||null,motivo:r.motivo||''}; }
+function subPagDeRow(r){ return {ref:r.ref,apo:r.apo_ref,venc:r.venc||null,valor:r.valor!=null?Number(r.valor):0,status:r.status||'confirmado',enviado:r.enviado||null,comprovante:r.comprovante||null,confirmado:r.confirmado||null,primeiro:!!r.primeiro,obs:r.obs||''}; }
+
+function subSalvarLocal(){ try{ localStorage.setItem(SUB_LS,JSON.stringify(SUB)); }catch(e){} }
+async function subCarregar(){
+  SUB_REMOTE=await subRemoteOn();
+  if(SUB_REMOTE){ try{
+    const [rc,ra,rp]=await Promise.all([sb.from(SUB_TC).select('*'),sb.from(SUB_TA).select('*'),sb.from(SUB_TP).select('*')]);
+    if(rc.error||ra.error||rp.error) throw (rc.error||ra.error||rp.error);
+    SUB={clientes:(rc.data||[]).map(subCliDeRow),apolices:(ra.data||[]).map(subApoDeRow),pagamentos:(rp.data||[]).map(subPagDeRow),config:SUB.config||{}};
+    subSalvarLocal(); return;
+  }catch(e){ console.warn('SUB load remoto falhou → local',e); SUB_REMOTE=false; } }
+  try{ const r=localStorage.getItem(SUB_LS); if(r){ const d=JSON.parse(r); SUB={clientes:d.clientes||[],apolices:d.apolices||[],pagamentos:d.pagamentos||[],config:d.config||{}}; } }catch(e){}
+}
+async function subPush(o){   // o = {clientes:[],apolices:[],pagamentos:[]}
+  subSalvarLocal();
+  if(!SUB_REMOTE||!sb) return false;
+  try{
+    if(o.clientes&&o.clientes.length){ const r=await sb.from(SUB_TC).upsert(o.clientes.map(subCliRow),{onConflict:'lp_email,ref'}); if(r.error) throw r.error; }
+    if(o.apolices&&o.apolices.length){ const r=await sb.from(SUB_TA).upsert(o.apolices.map(subApoRow),{onConflict:'lp_email,ref'}); if(r.error) throw r.error; }
+    if(o.pagamentos&&o.pagamentos.length){ const r=await sb.from(SUB_TP).upsert(o.pagamentos.map(subPagRow),{onConflict:'lp_email,ref'}); if(r.error) throw r.error; }
+    return true;
+  }catch(e){ console.error('SUB push',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; }
+}
+
+/* ═══ VIEW: PORTFÓLIO ═══════════════════════════════════════════════════════ */
 function viewSubst(){
+  if(SUB_CLI) return viewSubstCliente(SUB_CLI);
+  const hoje=atHojeLocal();
+  const cabec=`<h1 class="pg">Substituição de Apólice</h1>
+    <div class="sub">${SUB_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · a antiga não pode cair antes da nova completar 6 meses · limite ${SUB_LIMITE} dias.</div>`;
+  if(!SUB.clientes.length){
+    $('#main').innerHTML=cabec+`<div class="card" style="text-align:center;padding:34px">
+      Nenhum cliente em transição ainda.<br><span style="font-size:12.5px;color:var(--muted)">Traga seus dados do controle antigo (o arquivo <b>controle-substituicao.html</b> exporta um backup JSON) ou cole o espelho da apólice.</span><br><br>
+      <button class="btn btn-p" onclick="subColarEspelho()">📋 Colar espelho</button>
+      <button class="btn btn-s" onclick="document.getElementById('sub-imp').click()" style="margin-left:8px">⬆︎ Importar backup do controle antigo</button>
+      <input id="sub-imp" type="file" accept="application/json" style="display:none" onchange="subImportarArquivo(this)">
+      <button class="btn btn-ghost" onclick="subNovoCliente()" style="margin-left:8px">＋ Cliente</button></div>`;
+    return;
+  }
+  const kpi=(l,n,s,d)=>`<div class="kpi"${d?' style="border:1.5px solid var(--verm-borda,#f3c9c9)"':''}><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
+  const urg=SUB.clientes.filter(c=>subPiorFolego(c.ref,hoje)<=7).length;
+  const aguard=SUB.pagamentos.filter(p=>p.status==='aguardando'||p.status==='comprovante').length;
+  const cls=SUB.clientes.slice().sort((a,b)=>subPiorFolego(a.ref,hoje)-subPiorFolego(b.ref,hoje));
+  const linhas=cls.map(c=>{
+    const f=subPiorFolego(c.ref,hoje), col=subCor(f), j=subJanela(c.ref), n=subApsDe(c.ref).length;
+    const aps=subApsDe(c.ref);
+    const lim=aps.length?Math.min(...aps.map(a=>subLimiteDt(subEref(a)).getTime())):null;
+    const ag=aps.some(a=>subPagsDe(a.ref).some(p=>p.status==='aguardando'||p.status==='comprovante'));
+    return `<tr onclick="subAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
+      <td style="padding:10px 8px"><div style="display:flex;align-items:center;gap:9px">
+        <div class="av-mini" style="background:var(--fundo);color:${subCorVar(col)};font-weight:700;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11.5px">${subIni(c.nome)}</div>
+        <div style="min-width:0"><div style="font-weight:600">${esc(atTitleC(c.nome))}</div>
+        <div style="font-size:11.5px;color:var(--muted)">${n} apólice${n>1?'s':''} · janela até ${j?atFmtBR(j.fim):'—'}${ag?' · boleto aguardando':''}</div></div></div></td>
+      <td style="text-align:right;padding:10px 8px"><div style="font-weight:700;color:${subCorVar(col)}">${f<0?'vencido':f+' dias'}</div>
+        <div style="font-size:11px;color:var(--muted)">limite ${lim?atFmtBR(subISO(new Date(lim))):'—'}</div></td></tr>`;
+  }).join('');
+  $('#main').innerHTML=cabec+`
+    <div class="kpis" style="margin-top:10px">
+      ${kpi('Clientes em transição',SUB.clientes.length)}
+      ${kpi('Apólices em controle',SUB.apolices.length)}
+      ${kpi('Ação urgente (≤7d)',urg,'fôlego acabando',urg>0)}
+      ${kpi('Boleto aguardando',aguard,'em acompanhamento')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <button class="btn btn-p" onclick="subColarEspelho()">📋 Colar espelho</button>
+      <button class="btn btn-s" onclick="subPuxarAtraso()">⏰ Puxar da Lista de Atraso</button>
+      <button class="btn btn-ghost" onclick="subNovoCliente()">＋ Cliente</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('sub-imp').click()">⬆︎ Importar backup</button>
+      <input id="sub-imp" type="file" accept="application/json" style="display:none" onchange="subImportarArquivo(this)">
+      <button class="btn btn-ghost" onclick="subExportar()">⬇︎ Exportar backup</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:13px"><tbody>${linhas}</tbody></table></div>
+    <div class="card" style="margin-top:12px;font-size:12.5px;color:var(--muted)">
+      <b>Como este módulo pensa:</b> a apólice antiga só cai com ${SUB_LIMITE} dias de atraso. Enquanto a nova não completa 6 meses, o jogo é segurar cada antiga na faixa de ${SUB_FMIN}–${SUB_FMAX} dias — atraso de propósito, com folga pro imprevisto. O fôlego mostrado é quanto falta pra bater no limite.</div>`;
+}
+
+/* ═══ VIEW: CLIENTE ═════════════════════════════════════════════════════════ */
+function subAbrir(ref){ SUB_CLI=ref; viewSubst(); window.scrollTo(0,0); }
+function subVoltar(){ SUB_CLI=null; viewSubst(); window.scrollTo(0,0); }
+
+function viewSubstCliente(cliRef){
+  const c=subCliDe(cliRef); if(!c){ subVoltar(); return; }
+  const hoje=atHojeLocal();
+  const j=subJanela(cliRef), aps=subApsDe(cliRef);
+  const prog=j?Math.max(0,Math.min(100,Math.round(subDDiff(atParseISO(j.inicio),hoje)/Math.max(1,subDDiff(atParseISO(j.inicio),atParseISO(j.fim)))*100))):0;
+  const antigas=aps.filter(a=>a.papel==='proteger');
+  const baseAntigas=antigas.reduce((s,a)=>s+(a.premio||0),0);
+  const conf=SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado'&&!p.primeiro);
+  const totalPago=conf.reduce((s,p)=>s+(p.valor||0),0);
+  const meses=j?Math.max(1,Math.round(subDDiff(atParseISO(j.inicio),hoje)/30)):1;
+  const pagoMes=conf.length?totalPago/meses:null;
+  const economia=pagoMes!==null?Math.max(0,baseAntigas*meses-totalPago):null;
+  const tl=subTimeline(cliRef,hoje);
+
+  const cards=aps.map(a=>{
+    const er=subEref(a), f=subFolego(er,hoje), col=subCor(f), at=subAtraso(er,hoje);
+    const pct=Math.max(3,Math.min(100,Math.round(at/SUB_LIMITE*100)));
+    const ag=subPagsDe(a.ref).find(p=>p.status==='aguardando'||p.status==='comprovante');
+    const postergada=a.podePostergar&&a.dataPostergada;
+    const ganho=postergada?subDDiff(atParseISO(a.venc),atParseISO(a.dataPostergada)):0;
+    const badge=a.papel==='gatilho'?`<span class="badge b-azul">Nova (gatilho)</span>`
+      :(ag?`<span class="badge b-azul">Boleto enviado</span>`:`<span class="badge ${subBadge(col)}">${at===0?'Em dia':(at<=SUB_FMAX?'Na faixa':'Proteger')}</span>`);
+    let pstg;
+    if(a.podePostergar===true&&a.dataPostergada) pstg=`<span class="badge b-roxo">Postergada p/ ${subFmtCurto(a.dataPostergada)}${ganho>0?' (+'+ganho+'d)':''}</span>`;
+    else if(a.podePostergar===false) pstg=`<span style="color:var(--muted);font-size:12px">Não pode postergar</span>`;
+    else pstg=`<span style="color:var(--muted);font-size:12px">Postergação não avaliada</span>`;
+    const kv=(k,v,cor)=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px"><span style="color:var(--muted)">${k}</span><span style="font-weight:600${cor?';color:'+cor:''}">${v}</span></div>`;
+    return `<div class="card" style="padding:14px 16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-weight:700;font-size:13.5px">${a.papel==='gatilho'?'Nova':'Antiga'} · ${esc(a.numero)}</span>${badge}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">${a.lp?'LP '+esc(String(a.lp).split(' ')[0])+' · ':''}${a.dia?'vence dia '+a.dia+' · ':''}${esc(a.forma||'')}</div>
+      ${a.motivo?`<div style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:6px;padding:4px 8px;margin-bottom:8px">⚠ Cobrança: ${esc(atTitleC(a.motivo))}</div>`:''}
+      ${kv('Prêmio',brl(a.premio))}
+      ${kv('Venc. em aberto',atFmtBR(a.venc))}
+      ${postergada?kv('Vencimento postergado',atFmtBR(a.dataPostergada),'var(--roxo,#7c3aed)'):''}
+      ${kv('Dias em atraso',at+' dias',at>0?subCorVar(col):'var(--verde)')}
+      <div style="margin-top:8px">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px"><span style="color:var(--muted)">Fôlego até cancelar (${SUB_LIMITE}d)</span><span style="font-weight:700;color:${subCorVar(col)}">${f<0?'vencido':f+' dias'}</span></div>
+        <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${subCorVar(col)}"></div></div>
+        <div style="font-size:11px;color:${col==='red'?subCorVar(col):'var(--muted)'};margin-top:3px">Limite: ${atFmtBR(subISO(subLimiteDt(er)))}</div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">${pstg}<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="subPostergar('${esc(a.ref)}')">Postergação</button></div>
+      <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-s" style="flex:1;font-size:12px" onclick="subBoleto('${esc(a.ref)}')">Registrar boleto</button><button class="btn btn-p" style="flex:1;font-size:12px" onclick="subPagarRapido('${esc(a.ref)}')">Marcar pago</button></div></div>`;
+  }).join('');
+
+  let tracker='';
+  SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&(p.status==='aguardando'||p.status==='comprovante')).forEach(p=>{
+    const a=aps.find(x=>x.ref===p.apo), st=p.status, s2=st!=='aguardando';
+    const passo=(feito,ativo,ic,t,sub)=>`<div style="flex:1;text-align:center"><div style="width:28px;height:28px;border-radius:50%;margin:0 auto 5px;display:flex;align-items:center;justify-content:center;background:var(--fundo);color:${feito?'var(--verde)':ativo?'var(--amar)':'var(--muted)'};border:1px solid var(--linha)">${ic}</div><div style="font-size:11.5px;font-weight:600;color:${ativo?'var(--amar)':feito?'var(--ink)':'var(--muted)'}">${t}</div><div style="font-size:10.5px;color:var(--muted)">${sub||''}</div></div>`;
+    const conn=on=>`<div style="flex:0 0 26px;height:2px;margin-top:13px;background:${on?'var(--verde)':'var(--linha)'}"></div>`;
+    tracker+=`<div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:6px"><span style="font-weight:600;font-size:13.5px">Acompanhamento do boleto — ${subNome2(a)}</span><span style="font-size:12.5px;font-weight:600">${brl(p.valor)} · vence ${subFmtCurto(p.venc)}</span></div>
+      <div style="display:flex;align-items:flex-start">${passo(true,false,'✓','Enviado',p.enviado?subFmtCurto(p.enviado):'')}${conn(s2)}${passo(s2,st==='aguardando',s2?'✓':'●','Comprovante',st==='aguardando'?'cliente envia':'')}${conn(false)}${passo(false,st==='comprovante','◦','Confirmado','Prudential demora')}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">${st==='aguardando'?`<button class="btn btn-s" style="flex:1;font-size:12px" onclick="subComprovante('${esc(p.ref)}')">Comprovante recebido</button>`:''}<button class="btn btn-p" style="flex:1;font-size:12px" onclick="subConfirmarPag('${esc(p.ref)}')">Marcar confirmado no sistema</button></div></div>`;
+  });
+
+  const sg=subSugestao(cliRef,hoje);
+  const pior=sg.pior, atPior=pior?subAtraso(subEref(pior),hoje):0;
+  const pos=Math.min(100,Math.round(atPior/SUB_LIMITE*100));
+  let sugLinhas='';
+  if(sg.agora.length) sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--verm);font-weight:700">!</span><span><b>Agora:</b> ${sg.agora.map(x=>subNome2(x.a)+' ('+x.dias+'d)').join(', ')} acima da faixa — pagar até ${sg.agora.map(x=>atFmtBR(subISO(x.lim))).join(' / ')} pra voltar à faixa segura.</span></div>`;
+  else sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--verde);font-weight:700">✓</span><span><b>Agora:</b> todas dentro da faixa segura. Nada urgente.</span></div>`;
+  sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--azul);font-weight:700">↻</span><span><b>Cadência:</b> pagar cada apólice ao chegar a ~${SUB_FMAX} dias de atraso, alternando — nenhuma passa dos ${SUB_LIMITE} e o desembolso fica intercalado.</span></div>`;
+  if(sg.prox.length) sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--verde);font-weight:700">→</span><span><b>Próxima ação:</b> ${subNome2(sg.prox[0].a)} → emitir boleto em ~${atFmtBR(subISO(sg.prox[0].quando))}.</span></div>`;
+
+  const hist=tl.rows.length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="text-align:left;color:var(--muted);font-size:11.5px"><th style="padding:6px 8px">Apólice</th><th>Vencimento</th><th>Pago em</th><th style="text-align:center">Intervalo</th><th style="text-align:right;padding-right:8px">Situação</th></tr></thead>
+      <tbody>${tl.rows.map(r=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 8px">${subNome2(r.a)}</td><td>${atFmtBR(r.venc)}</td><td>${r.pago?atFmtBR(r.pago):'—'}</td><td style="text-align:center;color:var(--muted)">${r.pago&&r.intervalo!=null?r.intervalo+'d':'—'}</td><td style="text-align:right;padding-right:8px">${esc(r.sit)}${r.valor&&r.pago?' · '+brl(r.valor):''}</td></tr>`).join('')}
+      ${tl.venc.slice(0,4).map(v=>`<tr style="border-top:1px solid var(--linha);color:var(--muted)"><td style="padding:6px 8px">${esc(v.label.replace(' — limite '+SUB_LIMITE+'d','').replace('Boleto ',''))}</td><td>${atFmtBR(v.dt)}</td><td>a vencer</td><td style="text-align:center">—</td><td style="text-align:right;padding-right:8px">${v.lim?('limite '+SUB_LIMITE+'d'):brl(v.valor)}</td></tr>`).join('')}</tbody></table>`
+    :`<div style="padding:16px;color:var(--muted);font-size:12.5px">Sem histórico no período. Cole o espelho da apólice ou puxe da Lista de Atraso.</div>`;
+
+  const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num" style="font-size:18px">${n}</div>${s?`<div style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   $('#main').innerHTML=`
-    <h1 class="pg">Substituição de Apólice</h1>
-    <div class="sub">Primeiro módulo do CRM — já existe, funciona e tem dados reais.</div>
-    <div class="card" style="max-width:680px">
-      <p style="line-height:1.7;margin-bottom:12px">
-        O módulo de <b>Controle de Substituição</b> vive no arquivo <b>controle-substituicao.html</b> (nesta mesma pasta),
-        com 5 clientes e 14 apólices reais em acompanhamento. Pela <b>regra de ouro do projeto</b>, ele tem
-        <b>uma única instância</b> — os dados moram no localStorage daquele arquivo, então este CRM <i>não duplica</i> o módulo;
-        ele vira uma aba de verdade na fase 2 (Supabase), quando os dados saírem do navegador.
-      </p>
-      <button class="btn btn-p" onclick="navigator.clipboard.writeText('controle-substituicao.html').then(()=>toast('Nome do arquivo copiado',true),()=>toast('Copie manualmente: controle-substituicao.html'))">Copiar nome do arquivo</button>
-      <span style="font-size:12px;color:var(--muted);margin-left:10px">Abra pelo seu atalho/aba de sempre no Chrome.</span>
+    <button class="btn btn-ghost" onclick="subVoltar()" style="margin-bottom:10px">← Voltar</button>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px"><div style="background:var(--azul-claro);color:var(--azul);font-weight:700;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center">${subIni(c.nome)}</div>
+        <div><div style="font-weight:700;font-size:15px">${esc(atTitleC(c.nome))}</div><div style="font-size:12px;color:var(--muted)">${c.cpf?'CPF '+esc(c.cpf):''}${c.tel?' · '+esc(c.tel):''}</div></div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
+    <div class="card" style="margin-top:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700">${j?Math.max(0,subDDiff(hoje,atParseISO(j.fim)))+' dias restantes':'sem apólice gatilho'}</span></div>
+      <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${prog}%;background:var(--azul)"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px"><span>Emissão nova · ${j?atFmtBR(j.inicio):'—'}</span><span>Hoje · ${atFmtBR(atHojeISO())}</span><span>Liberado · ${j?atFmtBR(j.fim):'—'}</span></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px">${cards}</div>
+    ${tracker}
+    <h2 class="sec" style="margin-top:18px;font-size:14px">Vantagem para o cliente <span style="font-weight:400;color:var(--muted);font-size:12px">— custo normal das antigas × o que paga de fato no fluxo</span></h2>
+    <div class="kpis">
+      ${kpi('Custo das antigas / mês',brl(baseAntigas))}
+      ${kpi('Paga de fato / mês',pagoMes!==null?brl(pagoMes):'—')}
+      ${kpi('Economia acumulada',economia!==null?brl(economia):'—','desde a emissão da nova')}
+    </div>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
+      <div><div style="font-size:12.5px">🔒 Valor final após a transição</div><div style="font-size:11px;color:var(--muted)">formato definitivo do plano — você define ao fechar</div></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="font-weight:700${c.final?'':';color:var(--muted)'}">${c.final?brl(c.final):'a definir'}</span><button class="btn btn-ghost" onclick="subDefinirFinal('${esc(cliRef)}')">${c.final?'Editar':'Definir'}</button></div></div>
+    <h2 class="sec" style="margin-top:18px;font-size:14px">Histórico e fluxo de pagamentos <span style="font-weight:400;color:var(--muted);font-size:12px">— de ${atFmtBR(tl.start)} (3 meses antes da nova) até hoje</span></h2>
+    <div class="kpis">
+      ${kpi('Último pagamento',tl.ultimo?atFmtBR(tl.ultimo):'—')}
+      ${kpi('Maior intervalo',tl.maiorIntervalo+' dias')}
+      ${kpi('Em aberto hoje',tl.emAberto+' dias',tl.emAberto>SUB_FMAX?'acima da faixa':'')}
+    </div>
+    <div class="card" style="padding:0;overflow:auto">${hist}</div>
+    <div class="card" style="margin-top:12px">
+      <div style="font-weight:600;font-size:14px">💡 Sugestão de fluxo e regularização</div>
+      <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">Manter cada apólice na faixa segura de ${SUB_FMIN}–${SUB_FMAX} dias de atraso — tempo hábil de ajuste, longe do limite de ${SUB_LIMITE}.</div>
+      <div style="position:relative;height:9px;background:var(--fundo);border-radius:99px;margin-bottom:4px">
+        <div style="position:absolute;left:${Math.round(SUB_FMIN/SUB_LIMITE*100)}%;width:${Math.round((SUB_FMAX-SUB_FMIN)/SUB_LIMITE*100)}%;top:0;bottom:0;background:#c0dd97;border-radius:2px"></div>
+        <div style="position:absolute;left:${pos}%;top:-3px;width:2px;height:15px;background:${pior?subCorVar(subCor(subFolego(subEref(pior),hoje))):'var(--muted)'}"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span>0</span><span style="color:#3b6d11">faixa ${SUB_FMIN}–${SUB_FMAX}</span><span>pior: ${atPior}d · limite ${SUB_LIMITE}</span></div>
+      ${sugLinhas}</div>
+    <div class="card" style="margin-top:12px;font-size:12px;color:var(--muted)"><b>Sobre as datas:</b> quando um boleto não é pago na data e acumula, o próximo pode vir com intervalo menor — não é cobrança a mais, é o sistema acertando o que ficou em aberto.</div>`;
+}
+
+/* ═══ AÇÕES (modais reaproveitam o overlay do módulo de Atraso) ═══════════════ */
+function subApo(ref){ return SUB.apolices.find(a=>a.ref===ref); }
+function subPag(ref){ return SUB.pagamentos.find(p=>p.ref===ref); }
+
+function subPostergar(apoRef){
+  const a=subApo(apoRef); if(!a) return; _subCtx=apoRef; _subPg=undefined;
+  const bt=(v,l,on)=>`<button class="btn ${on?'btn-p':'btn-ghost'}" id="subpg_${v}" onclick="subSetPg(${v==='sim'?'true':v==='nao'?'false':'null'})" style="font-size:12.5px">${l}</button>`;
+  atModal(`<h3 style="margin:0 0 4px">Postergação — ${esc(a.numero)}</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Informação que você pega com a assistente da Prudential.</div>
+    <label style="font-size:12.5px;font-weight:600">Pode postergar?</label>
+    <div style="display:flex;gap:6px;margin:6px 0 12px">${bt('sim','Pode',a.podePostergar===true)}${bt('nao','Não pode',a.podePostergar===false)}${bt('na','Não avaliei',a.podePostergar==null)}</div>
+    <label style="font-size:12.5px;font-weight:600">Nova data de vencimento (se postergar)</label>
+    <input id="subpg_data" type="date" value="${a.dataPostergada||''}" style="width:100%;margin-top:5px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarPostergar()">Salvar</button></div>`);
+}
+function subSetPg(v){ _subPg=v; ['sim','nao','na'].forEach(k=>{ const el=document.getElementById('subpg_'+k); if(el){ el.className='btn btn-ghost'; } });
+  const alvo=document.getElementById(v===true?'subpg_sim':v===false?'subpg_nao':'subpg_na'); if(alvo) alvo.className='btn btn-p'; }
+async function subSalvarPostergar(){
+  const a=subApo(_subCtx); if(!a) return;
+  if(_subPg!==undefined) a.podePostergar=_subPg;
+  const d=($('#subpg_data')||{}).value; a.dataPostergada=d||null;
+  atClose(); await subPush({apolices:[a]}); viewSubst(); toast('Postergação salva',true);
+}
+
+function subBoleto(apoRef){
+  const a=subApo(apoRef); if(!a) return; _subCtx=apoRef;
+  const venc=subISO(subAddDays(atHojeLocal(),2));
+  atModal(`<h3 style="margin:0 0 4px">Registrar envio de boleto</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${subNome2(a)}</div>
+    <label style="font-size:12.5px;font-weight:600">Valor do boleto (com juros/multa)</label>
+    <input id="subbl_val" type="number" step="0.01" value="${Number(a.premio||0).toFixed(2)}" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">Vencimento do boleto</label>
+    <input id="subbl_venc" type="date" value="${venc}" style="width:100%;margin-top:5px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarBoleto()">Registrar</button></div>`);
+}
+async function subSalvarBoleto(){
+  const a=subApo(_subCtx); if(!a) return;
+  const val=parseFloat(($('#subbl_val')||{}).value)||a.premio;
+  const venc=($('#subbl_venc')||{}).value||atHojeISO();
+  const p={ref:subRef('p'),apo:a.ref,venc,valor:val,status:'aguardando',enviado:atHojeISO(),comprovante:null,confirmado:null,primeiro:false,obs:''};
+  SUB.pagamentos.push(p); atClose(); await subPush({pagamentos:[p]}); viewSubst(); toast('Boleto registrado',true);
+}
+async function subComprovante(pagRef){
+  const p=subPag(pagRef); if(!p) return;
+  p.comprovante=atHojeISO(); p.status='comprovante';
+  await subPush({pagamentos:[p]}); viewSubst(); toast('Comprovante marcado',true);
+}
+/* confirmar = o dinheiro entrou no sistema da Prudential: avança 1 mês o vencimento
+   em aberto e zera a postergação (ela valia pra aquela parcela). */
+async function subConfirmarPag(pagRef){
+  const p=subPag(pagRef); if(!p) return; const a=subApo(p.apo); if(!a) return;
+  p.confirmado=atHojeISO(); p.status='confirmado';
+  a.venc=subAddMonths(a.venc,1); if(a.dataPostergada) a.dataPostergada=null;
+  await subPush({pagamentos:[p],apolices:[a]}); viewSubst(); toast('Pagamento confirmado',true);
+}
+async function subPagarRapido(apoRef){
+  const a=subApo(apoRef); if(!a) return;
+  if(!confirm('Marcar pagamento confirmado da apólice '+a.numero+' ('+brl(a.premio)+')?\nIsso avança o vencimento em aberto em 1 mês.')) return;
+  const p={ref:subRef('p'),apo:a.ref,venc:a.venc,valor:a.premio,status:'confirmado',enviado:atHojeISO(),comprovante:atHojeISO(),confirmado:atHojeISO(),primeiro:false,obs:'Lançamento rápido'};
+  SUB.pagamentos.push(p); a.venc=subAddMonths(a.venc,1); if(a.dataPostergada) a.dataPostergada=null;
+  await subPush({pagamentos:[p],apolices:[a]}); viewSubst(); toast('Pagamento lançado',true);
+}
+function subDefinirFinal(cliRef){
+  const c=subCliDe(cliRef); if(!c) return; _subCtx=cliRef;
+  atModal(`<h3 style="margin:0 0 4px">Valor final após a transição</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Prêmio mensal do plano definitivo</div>
+    <label style="font-size:12.5px;font-weight:600">Valor (R$)</label>
+    <input id="subfin" type="number" step="0.01" value="${c.final||''}" style="width:100%;margin-top:5px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarFinal()">Salvar</button></div>`);
+}
+async function subSalvarFinal(){
+  const c=subCliDe(_subCtx); if(!c) return;
+  const v=parseFloat(($('#subfin')||{}).value); c.final=(v>0)?v:null;
+  atClose(); await subPush({clientes:[c]}); viewSubst(); toast('Valor final salvo',true);
+}
+
+/* ── cadastro manual ── */
+function subFormCliente(c){
+  return `<label style="font-size:12.5px;font-weight:600">Nome</label><input id="subc_nome" value="${esc(c?c.nome:'')}" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">CPF</label><input id="subc_cpf" value="${esc(c?c.cpf:'')}" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">Telefone</label><input id="subc_tel" value="${esc(c?c.tel:'')}" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">E-mail</label><input id="subc_mail" value="${esc(c?c.email:'')}" style="width:100%;margin-top:5px">`;
+}
+function subNovoCliente(){ _subCtx=null;
+  atModal(`<h3 style="margin:0 0 10px">Novo cliente em transição</h3>${subFormCliente(null)}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarCliente()">Criar</button></div>`); }
+function subEditarCliente(cliRef){ _subCtx=cliRef; const c=subCliDe(cliRef);
+  atModal(`<h3 style="margin:0 0 10px">Editar cliente</h3>${subFormCliente(c)}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarCliente()">Salvar</button></div>`); }
+async function subSalvarCliente(){
+  const nome=(($('#subc_nome')||{}).value||'').trim(); if(!nome){ toast('Nome é obrigatório'); return; }
+  let c=_subCtx?subCliDe(_subCtx):null;
+  if(!c){ c={ref:subRef(nome),nome,cpf:'',tel:'',email:'',final:null}; SUB.clientes.push(c); }
+  c.nome=nome; c.cpf=(($('#subc_cpf')||{}).value||'').trim(); c.tel=(($('#subc_tel')||{}).value||'').trim(); c.email=(($('#subc_mail')||{}).value||'').trim();
+  atClose(); await subPush({clientes:[c]}); viewSubst(); toast('Cliente salvo',true);
+}
+function subNovaApolice(cliRef){ _subCtx=cliRef;
+  atModal(`<h3 style="margin:0 0 10px">Nova apólice em controle</h3>
+    <label style="font-size:12.5px;font-weight:600">Número da apólice</label><input id="suba_num" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">Papel</label>
+    <select id="suba_papel" style="width:100%;margin:5px 0 10px"><option value="proteger">Antiga (proteger até a janela fechar)</option><option value="gatilho">Nova (gatilho — abre a janela de 6 meses)</option></select>
+    <label style="font-size:12.5px;font-weight:600">Data de emissão</label><input id="suba_em" type="date" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">Prêmio mensal (R$)</label><input id="suba_pr" type="number" step="0.01" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">Vencimento em aberto</label><input id="suba_venc" type="date" style="width:100%;margin:5px 0 10px">
+    <label style="font-size:12.5px;font-weight:600">LP responsável</label><input id="suba_lp" placeholder="Gustavo / Daniel / Rebeca" style="width:100%;margin-top:5px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarApolice()">Criar</button></div>`); }
+async function subSalvarApolice(){
+  const num=(($('#suba_num')||{}).value||'').trim(); if(!num){ toast('Número da apólice é obrigatório'); return; }
+  const a={ref:subRef('a'),cli:_subCtx,numero:num,papel:($('#suba_papel')||{}).value||'proteger',
+    emissao:($('#suba_em')||{}).value||null,premio:parseFloat(($('#suba_pr')||{}).value)||0,dia:null,
+    venc:($('#suba_venc')||{}).value||atHojeISO(),lp:(($('#suba_lp')||{}).value||'').trim(),forma:'Boleto',
+    podePostergar:null,dataPostergada:null,impresso:null,motivo:''};
+  SUB.apolices.push(a); atClose(); await subPush({apolices:[a]}); viewSubst(); toast('Apólice cadastrada',true);
+}
+
+/* ═══ ENTRADA 1: COLAR ESPELHO ══════════════════════════════════════════════ */
+function subColarEspelho(){
+  atModal(`<h3 style="margin:0 0 4px">Colar espelho da apólice</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Abra <b>Detalhes da Apólice</b> no portal da Prudential (ou o PDF), selecione tudo e cole aqui. Pode colar VÁRIAS apólices de uma vez.</div>
+    <textarea id="sub_esp" style="width:100%;height:190px;font-size:12px;font-family:ui-monospace,monospace" placeholder="Apólice: 001737611 …"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subProcessarEspelho()">Ler</button></div>`);
+}
+function subProcessarEspelho(){
+  const txt=(($('#sub_esp')||{}).value||'');
+  if(txt.trim().length<40){ toast('Cole o texto do espelho primeiro'); return; }
+  const d=subDiffEspelho(txt);
+  if(!d.updates.length&&!d.naoCad.length){ toast('Não reconheci nenhuma apólice no texto'); return; }
+  subPreview('espelho',d.updates,d.naoCad);
+}
+
+/* ═══ ENTRADA 2: PUXAR DA LISTA DE ATRASO ═══════════════════════════════════ */
+function subPuxarAtraso(){
+  if(!AT.itens||!AT.itens.length){ toast('A Lista de Atraso está vazia — cole o relatório oficial lá primeiro'); return; }
+  const d=subDiffAtraso(AT.itens.filter(r=>!r.resolvido_em));
+  if(!d.updates.length){ toast('Nada novo — a substituição já está igual à Lista de Atraso',true); return; }
+  subPreview('atraso',d.updates,[]);
+}
+
+/* ═══ PREVIEW ÚNICO (as duas entradas confirmam pelo mesmo caminho) ══════════ */
+function subPreview(origem,updates,naoCad){
+  _subPend={origem,updates};
+  const validos=updates.filter(u=>!u.stale), velhos=updates.filter(u=>u.stale);
+  const fmtV=(campo,v)=>campo==='premio'?brl(v):(campo==='venc'?atFmtBR(v):(v==null||v===''?'—':esc(String(v))));
+  const blocos=updates.map(u=>{
+    const c=subCliDe(u.apo.cli);
+    return `<div style="border:1px solid var(--linha);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12.5px${u.stale?';opacity:.5':''}">
+      <div style="font-weight:600">${esc(c?atTitleC(c.nome):'—')} · Apólice ${esc(u.apo.numero)}${u.stale?' · <span style="color:var(--amar)">documento mais ANTIGO — ignorado</span>':''}</div>
+      <div style="font-size:11px;color:var(--muted);margin:2px 0 5px">${origem==='espelho'?'espelho':'relatório'} de ${u.rec.impresso?atFmtBR(u.rec.impresso):'data não identificada'} · base atual ${u.apo.impresso?atFmtBR(u.apo.impresso):'nunca sincronizada'}</div>
+      ${u.ch.map(ch=>`<div style="margin-top:3px">${esc(ch[1])}: <span style="color:var(--muted)">${fmtV(ch[0],ch[2])}</span> → <b>${fmtV(ch[0],ch[3])}</b></div>`).join('')}
+      ${u.novos&&u.novos.length?`<div style="margin-top:5px;color:var(--verde)">＋ ${u.novos.length} pagamento(s) do histórico: ${u.novos.map(p=>atFmtBR(p.pago)+' '+brl(p.valor)).join(' · ')}</div>`:''}
     </div>`;
+  }).join('');
+  const naoCadHtml=(naoCad&&naoCad.length)?`<div style="margin-top:10px;font-size:12px;color:var(--muted)">Não cadastradas (crie o cliente/apólice pra trazer): ${naoCad.map(r=>esc(r.numero||r)).join(', ')}</div>`:'';
+  atModal(`<h3 style="margin:0 0 4px">Confira antes de aplicar</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${validos.length} apólice(s) a atualizar${velhos.length?' · '+velhos.length+' ignorada(s) por serem de documento mais antigo':''}. Pagamentos já lançados não se repetem.</div>
+    <div style="max-height:46vh;overflow:auto">${blocos}${naoCadHtml}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subConfirmarPreview()"${validos.length?'':' disabled'}>Aplicar ${validos.length}</button></div>`);
+}
+async function subConfirmarPreview(){
+  const p=_subPend; if(!p) return;
+  const aps=[], pags=[];
+  p.updates.filter(u=>!u.stale).forEach(u=>{
+    u.ch.forEach(ch=>{ u.apo[ch[0]]=ch[3]; });
+    if(u.rec.impresso) u.apo.impresso=u.rec.impresso;   // carimba a VERSÃO aplicada
+    aps.push(u.apo);
+    (u.novos||[]).forEach(n=>{
+      const pg={ref:subRef('p'),apo:u.apo.ref,venc:n.pago,valor:n.valor,status:'confirmado',
+        enviado:null,comprovante:null,confirmado:n.pago,primeiro:false,obs:'Importado do espelho'};
+      SUB.pagamentos.push(pg); pags.push(pg);
+    });
+  });
+  atClose(); _subPend=null;
+  const ok=await subPush({apolices:aps,pagamentos:pags});
+  viewSubst();
+  toast(aps.length+' apólice(s) atualizada(s)'+(pags.length?' · '+pags.length+' pagamento(s)':'')+(ok?' · sincronizado':' · só neste aparelho'),true);
+}
+
+/* ═══ BACKUP: traz o controle antigo pra dentro do CRM ═══════════════════════ */
+function subImportarArquivo(inp){
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=async()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(!d.clientes||!d.apolices){ toast('Arquivo não parece um backup do controle de substituição'); inp.value=''; return; }
+      const novo=subImportarBackup(d);
+      const msg='Importar '+novo.clientes.length+' cliente(s), '+novo.apolices.length+' apólice(s) e '+novo.pagamentos.length+' pagamento(s)?'
+        +(novo.orfaos.length?('\n\nAtenção: '+novo.orfaos.length+' pagamento(s) apontam pra apólices que não existem mais no arquivo — entram junto, mas não aparecem na timeline até a apólice ser recadastrada.'):'')
+        +(SUB.clientes.length?'\n\nIsso SUBSTITUI o que já está aqui.':'');
+      if(!confirm(msg)){ inp.value=''; return; }
+      SUB={clientes:novo.clientes,apolices:novo.apolices,pagamentos:novo.pagamentos,config:SUB.config||{}};
+      const ok=await subPush({clientes:SUB.clientes,apolices:SUB.apolices,pagamentos:SUB.pagamentos});
+      viewSubst();
+      toast('Backup importado'+(ok?' e sincronizado':' (só neste aparelho)'),true);
+    }catch(e){ console.error(e); toast('Arquivo inválido'); }
+    inp.value='';
+  };
+  r.readAsText(f);
+}
+/* converte o shape do artefato v1.9 (id/ref/finais) pro shape do módulo */
+function subImportarBackup(data){
+  const out={clientes:[],apolices:[],pagamentos:[],orfaos:[]};
+  const finais=(data&&data.finais)||{};
+  (data.clientes||[]).forEach(c=>out.clientes.push({ref:c.id,nome:c.nome||'',cpf:c.cpf||'',tel:c.tel||'',email:c.email||'',final:finais[c.id]!=null?Number(finais[c.id]):null}));
+  (data.apolices||[]).forEach(a=>out.apolices.push({ref:a.id,cli:a.cli,numero:String(a.numero||''),papel:a.papel||'proteger',
+    emissao:a.emissao||null,premio:a.premio!=null?Number(a.premio):0,dia:a.dia!=null?Number(a.dia):null,
+    venc:a.ref||null,lp:a.lp||'',forma:a.forma||'Boleto',
+    podePostergar:a.podePostergar===undefined?null:a.podePostergar,
+    dataPostergada:a.dataPostergada||null,impresso:a.impresso||null,motivo:a.motivo||''}));
+  (data.pagamentos||[]).forEach(p=>out.pagamentos.push({ref:p.id,apo:p.apo,venc:p.venc||null,valor:p.valor!=null?Number(p.valor):0,
+    status:p.status||'confirmado',enviado:p.enviado||null,comprovante:p.comprovante||null,
+    confirmado:p.confirmado||null,primeiro:!!p.primeiro,obs:p.obs||''}));
+  /* pagamento cujo `apo` não existe mais fica invisível na timeline (o filtro por
+     apólice o descarta). No backup real de 16/07 são 14 de 79 — não jogamos fora
+     nem escondemos: entram no estado e o import avisa quantos são. */
+  const refs={}; out.apolices.forEach(a=>{ refs[a.ref]=1; });
+  out.orfaos=out.pagamentos.filter(p=>!refs[p.apo]);
+  return out;
+}
+function subExportar(){
+  const d={clientes:SUB.clientes,apolices:SUB.apolices,pagamentos:SUB.pagamentos,exportadoEm:atHojeISO(),origem:'CRM Life Planner · módulo Substituição'};
+  const b=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+  const u=URL.createObjectURL(b), a=document.createElement('a');
+  a.href=u; a.download='substituicao-backup-'+atHojeISO()+'.json'; a.click(); URL.revokeObjectURL(u);
+  toast('Backup baixado',true);
 }
 
 /* ═══════════════════ VIEW: PRINCÍPIOS ═══════════════════ */
@@ -2258,7 +2875,11 @@ function atDiffOficial(existing,recs){
 
 /* ── camada de dados (Supabase → sync entre aparelhos; localStorage = fallback) ── */
 async function atRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ AT_EMAIL=(data.session.user&&data.session.user.email)||''; return true; } }catch(e){} return false; }
-function atRowToRec(row){ return { id:row.id, apolice:row.apolice||'', lp_servico:row.lp_servico||'', segurado:row.segurado||'', resp_pagto:row.resp_pagto||'', premio:row.premio!=null?Number(row.premio):null, vencido_em:row.vencido_em||null, pago_ate:row.pago_ate||null, forma_pagto:row.forma_pagto||'', celular:row.celular||'', motivo_recusa:row.motivo_recusa||'', tratativa:row.tratativa||'', prox_contato:row.prox_contato||null, resolvido_em:row.resolvido_em||null, responsavel:row.responsavel||'', origem_relatorio:row.origem_relatorio||null, status:row.status||'' }; }
+/* BUG 7 (parte 2): a escrita já normalizava, a LEITURA não. Linha gravada fora do
+   formato canônico (import antigo, edição à mão, colagem com ".0") nunca casava com
+   o relatório novo → a apólice caía em "sumiu" E entrava de novo como nova. Chave
+   normalizada nas DUAS pontas mata a duplicata e o falso "sumiu" na origem. */
+function atRowToRec(row){ return { id:row.id, apolice:atNormApolice(row.apolice||''), lp_servico:row.lp_servico||'', segurado:row.segurado||'', resp_pagto:row.resp_pagto||'', premio:row.premio!=null?Number(row.premio):null, vencido_em:row.vencido_em||null, pago_ate:row.pago_ate||null, forma_pagto:row.forma_pagto||'', celular:row.celular||'', motivo_recusa:row.motivo_recusa||'', tratativa:row.tratativa||'', prox_contato:row.prox_contato||null, resolvido_em:row.resolvido_em||null, responsavel:row.responsavel||'', origem_relatorio:row.origem_relatorio||null, status:row.status||'' }; }
 function atRecToRow(r){ return { lp_email:AT_EMAIL, apolice:r.apolice, lp_servico:r.lp_servico||null, segurado:r.segurado||'', resp_pagto:r.resp_pagto||null, premio:r.premio!=null?r.premio:null, vencido_em:r.vencido_em||null, pago_ate:r.pago_ate||null, forma_pagto:r.forma_pagto||null, celular:r.celular||null, motivo_recusa:r.motivo_recusa||null, tratativa:r.tratativa||null, prox_contato:r.prox_contato||null, resolvido_em:r.resolvido_em||null, responsavel:r.responsavel||null, origem_relatorio:r.origem_relatorio||null, status:r.status||atDerivarStatus(r) }; }
 async function atCarregar(){
   AT_REMOTE=await atRemoteOn();
@@ -2267,7 +2888,7 @@ async function atCarregar(){
     AT.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null;
     atSalvarLocal(); return;
   }catch(e){ console.warn('AT load remoto falhou → local',e); AT_REMOTE=false; } }
-  try{ const raw=localStorage.getItem(AT_CHAVE); if(raw){ const o=JSON.parse(raw); AT.itens=Array.isArray(o.itens)?o.itens:[]; AT.carregadoEm=o.carregadoEm||null; } }catch(e){ console.warn('AT load local',e); }
+  try{ const raw=localStorage.getItem(AT_CHAVE); if(raw){ const o=JSON.parse(raw); AT.itens=(Array.isArray(o.itens)?o.itens:[]).map(x=>{ x.apolice=atNormApolice(x.apolice||''); return x; });   /* chave normalizada também na leitura local */ AT.carregadoEm=o.carregadoEm||null; } }catch(e){ console.warn('AT load local',e); }
 }
 function atSalvarLocal(){ try{ localStorage.setItem(AT_CHAVE,JSON.stringify(AT)); }catch(e){} }
 async function atUpsertRemoto(recs){ if(!AT_REMOTE||!sb||!recs.length) return; const rows=recs.filter(r=>r.apolice).map(atRecToRow); if(!rows.length) return; const {error}=await sb.from(AT_TABLE).upsert(rows,{onConflict:'lp_email,apolice'}); if(error) throw error; }
@@ -2333,8 +2954,15 @@ function atProcessar(){ const txt=($('#at_txt')||{}).value||''; const err=$('#at
     if(err) err.textContent=(of.errors[0]||'Não reconheci o formato. Confira se colou o relatório oficial completo (com números de apólice).');
   }catch(e){ if(err) err.textContent='Erro ao ler: '+((e&&e.message)||e); console.error(e); }
 }
+/* Abatimento de parcela: o vencimento em aberto ANDA PRA FRENTE e o atraso encolhe.
+   Antes isso passava como uma troca de data qualquer; agora o preview diz em quantos
+   dias o atraso caiu — é o "recalcular e atualizar os dias" pedido, na cara. */
+function atChDelta(c){ if(c[0]!=='vencido_em'||!c[1]||!c[2]) return '';
+  const d=Math.round((atParseISO(c[2])-atParseISO(c[1]))/864e5);
+  if(d>0) return ' <span class="badge b-verde">abatimento · −'+d+'d de atraso</span>';
+  if(d<0) return ' <span class="badge b-verm">+'+(-d)+'d de atraso</span>'; return ''; }
 function atChLabel(c){ const map={vencido_em:'Vencido',pago_ate:'Pago até',premio:'Prêmio',motivo_recusa:'Motivo',lp_servico:'LP',celular:'Cel'}; const nm=map[c[0]]||c[0];
-  const f=(k,v)=>k==='premio'?(v!=null?brl(v):'—'):(k==='vencido_em'||k==='pago_ate')?atFmtBR(v):esc(v||'—'); return nm+': <span style="color:var(--muted)">'+f(c[0],c[1])+'</span> → <b>'+f(c[0],c[2])+'</b>'; }
+  const f=(k,v)=>k==='premio'?(v!=null?brl(v):'—'):(k==='vencido_em'||k==='pago_ate')?atFmtBR(v):esc(v||'—'); return nm+': <span style="color:var(--muted)">'+f(c[0],c[1])+'</span> → <b>'+f(c[0],c[2])+'</b>'+atChDelta(c); }
 function atPreviewOficial(recs){ const d=atDiffOficial(AT.itens,recs); _atPend={tipo:'oficial',updates:d.updates,novos:d.novos,sumiram:d.sumiram,recs};
   let h=`<h2>Relatório oficial — confira antes de aplicar</h2>`;
   if(!d.updates.length&&!d.novos.length&&!d.sumiram.length) h+=`<div class="sub">Nada mudou — a lista já está igual ao relatório.</div>`;
@@ -2343,15 +2971,31 @@ function atPreviewOficial(recs){ const d=atDiffOficial(AT.itens,recs); _atPend={
   if(d.novos.length){ h+=`<div class="sub" style="margin-top:10px"><b>Novas na lista (${d.novos.length})</b> — confirme segurado e LP</div>`;
     d.novos.forEach((n,i)=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px">Apólice <b>${n.apolice}</b> · vence ${atFmtBR(n.vencido_em)} · ${n.premio!=null?brl(n.premio):'—'}${n.motivo_recusa?' · '+esc(n.motivo_recusa):''}
       <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap"><input id="atnv_${i}_seg" placeholder="Segurado" value="${esc(n.segurado||'')}" style="flex:1;min-width:140px"><input id="atnv_${i}_resp" placeholder="Resp. pagto (se ≠)" value="${esc(n.resp_pagto||'')}" style="flex:1;min-width:130px"><select id="atnv_${i}_lp">${['Daniel','Gustavo','Rebeca'].map(k=>`<option value="${k}"${n.lp_servico===k?' selected':''}>${k}</option>`).join('')}</select></div></div>`; }); }
-  if(d.sumiram.length){ h+=`<div class="sub" style="margin-top:10px"><b>Sumiram do relatório (${d.sumiram.length})</b> — marcar "verificar"? (não afirma pagamento)</div>`;
-    d.sumiram.forEach((s,i)=>{ h+=`<label style="display:block;font-size:12px;padding:3px 0"><input type="checkbox" id="atsm_${i}" checked> ${esc(atTitleC(s.segurado)||s.apolice)} · ${s.apolice}${s.premio!=null?' · '+brl(s.premio):''}</label>`; }); }
+  /* Saiu do relatório NÃO é um estado só. O relatório oficial é a lista de quem está
+     em atraso: sair dela quer dizer, na maioria das vezes, que regularizou — mas o app
+     nunca AFIRMA pagamento sozinho (regra que segue valendo). Então as três saídas
+     ficam visíveis e ele escolhe antes de aplicar; o padrão é "regularizada", que é o
+     que a ausência no relatório significa. Nenhum caminho aqui mexe nos dias: quem
+     continua em atraso segue com o vencimento intacto e os dias recalculando sozinhos. */
+  if(d.sumiram.length){ h+=`<div class="sub" style="margin-top:10px"><b>Saíram do relatório (${d.sumiram.length})</b> — o que aconteceu com cada uma?</div>`;
+    d.sumiram.forEach((s,i)=>{ const dias=atDiasAtraso(s.vencido_em); h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px">
+      <b>${esc(atTitleC(s.segurado)||s.apolice)}</b> · ${s.apolice}${s.premio!=null?' · '+brl(s.premio):''}${dias!=null?' · estava com '+dias+'d':''}
+      <select id="atsm_${i}" style="width:100%;margin-top:5px">
+        <option value="paga" selected>Regularizada — sair da lista</option>
+        <option value="manter">Continua em atraso, só saiu do corte — manter (dias seguem contando)</option>
+        <option value="sumiu">Não sei — marcar "verificar"</option>
+      </select></div>`; }); }
   h+=`<div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="atAplicarOficialUI()">Aplicar</button></div>`;
   atModal(h);
 }
 async function atAplicarOficialUI(){ const p=_atPend; if(!p||p.tipo!=='oficial') return; const origem=atHojeISO(); const up=[]; let nNovos=0;
   p.updates.forEach(u=>{ const ex=AT.itens.find(x=>x.apolice===u.apolice); if(!ex) return; u.ch.forEach(c=>{ ex[c[0]]=c[2]; }); if(u.reabre){ ex.resolvido_em=null; if(ex.status===AT_STATUS.SUMIU) ex.status=''; } ex.origem_relatorio=origem; ex.status=atDerivarStatus(ex); up.push(ex); });
   p.novos.forEach((n,i)=>{ const seg=(($('#atnv_'+i+'_seg')||{}).value||'').trim(); const lp=($('#atnv_'+i+'_lp')||{}).value||n.lp_servico; const resp=(($('#atnv_'+i+'_resp')||{}).value||'').trim(); const rec=Object.assign({},n,{id:null,segurado:seg,lp_servico:lp,resp_pagto:resp,tratativa:'',prox_contato:null,resolvido_em:null,responsavel:'',origem_relatorio:origem}); rec.status=atDerivarStatus(rec); AT.itens.push(rec); up.push(rec); nNovos++; });   // NÃO exige nome — aplica mesmo sem segurado (fica editável; o backfill preenche quando o parser/você acertar o nome)
-  p.sumiram.forEach((s,i)=>{ const cb=$('#atsm_'+i); if(cb&&cb.checked){ const ex=AT.itens.find(x=>x.apolice===s.apolice); if(ex){ ex.status=AT_STATUS.SUMIU; if(!ex.origem_relatorio) ex.origem_relatorio=origem; up.push(ex); } } });
+  p.sumiram.forEach((s,i)=>{ const op=(($('#atsm_'+i)||{}).value)||'paga'; if(op==='manter') return;   // manter = não toca em nada; os dias continuam derivando de vencido_em
+    const ex=AT.itens.find(x=>x.apolice===s.apolice); if(!ex) return;
+    if(op==='paga'){ ex.resolvido_em=origem; if(ex.status===AT_STATUS.SUMIU) ex.status=''; }
+    else { ex.status=AT_STATUS.SUMIU; }
+    if(!ex.origem_relatorio) ex.origem_relatorio=origem; ex.status=atDerivarStatus(ex); up.push(ex); });
   AT.carregadoEm=origem; atSalvarLocal(); let msg='';
   if(AT_REMOTE){ try{ await atUpsertRemoto(up); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('AT upsert',e); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
@@ -3391,8 +4035,8 @@ const MODS={
   bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-sitplan','bn-ta','bn-dups','bn-recs'], grp:'sp'},
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
-  backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','lp-statust']},
-  planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','subst']}
+  backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','lp-statust','subst']},
+  planos:   {label:'Planos & Simulações',                 def:true,  views:['planos']}
 };
 let PERFIL=null; // {email,papel,modulos} — null = deslogado/sem linha → defaults
 function souAdm(){ return !!(PERFIL&&PERFIL.papel==='admin'); }
@@ -4498,8 +5142,8 @@ function lpkRender(){
   box.innerHTML=rows+novo;
   box.querySelectorAll('[data-lpk]').forEach(el=>el.onclick=()=>lpkGo(el.dataset.lpk));
 }
-function lpkGo(i){
-  const q=$('#lpk-in')?$('#lpk-in').value.trim():'';
+function lpkGo(i,qExt){
+  const q=(qExt!=null)?String(qExt).trim():($('#lpk-in')?$('#lpk-in').value.trim():'');
   const r=i==='__novo'?null:LPK_RES[+i];
   lpkFechar();
   // achado da varredura 04/08: filtro ativo no Estoque escondia a ficha aberta
@@ -4534,6 +5178,44 @@ function lpkAbrir(){
   };
   lpkRender(); inp.focus();
 }
+/* ── busca inline da topbar: mesmo motor (lpkMatches) do ⌘K, em typeahead ──
+   Escopo sempre 'all' aqui: quem quer filtrar por escopo usa o ⌘K. Manter o
+   LPK_SCOPE global intocado evita que um filtro escolhido lá vaze pro campo. */
+let TB_SEL=0, TB_RES=[];
+function tbBusca(){
+  const inp=$('#tbq'), box=$('#tbDrop'); if(!inp||!box) return;
+  const q=inp.value.trim();
+  if(!q){ box.classList.remove('on'); box.innerHTML=''; TB_RES=[]; return; }
+  const scopeAnt=LPK_SCOPE; LPK_SCOPE='all';
+  TB_RES=lpkMatches(q).slice(0,8);
+  LPK_SCOPE=scopeAnt;
+  if(TB_SEL>TB_RES.length) TB_SEL=0;
+  const linhas=TB_RES.map((r,i)=>`<div class="cmdk-row ${i===TB_SEL?'sel':''}" data-tb="${i}">
+    <div class="cm"><div class="cn">${esc(r.nome)}</div><div class="cs">${esc(r.sub)}</div></div>
+    <div class="ck">${esc(r.tag)}</div></div>`).join('');
+  const novo=`<div class="cmdk-row ${TB_SEL===TB_RES.length?'sel':''}" data-tb="__novo">
+    <div class="cm"><div class="cn">＋ Novo nome no Estoque: “${esc(q)}”</div>
+    <div class="cs">não achou? vira matéria-prima do SitPlan agora</div></div></div>`;
+  box.innerHTML=linhas+novo; box.classList.add('on');
+  box.querySelectorAll('[data-tb]').forEach(el=>el.onclick=()=>tbBuscaIr(el.dataset.tb));
+}
+function tbBuscaFechar(){ const box=$('#tbDrop'); if(box){ box.classList.remove('on'); box.innerHTML=''; } TB_SEL=0; }
+function tbBuscaIr(i){
+  const inp=$('#tbq'), q=inp?inp.value.trim():'';
+  LPK_RES=TB_RES;                       // lpkGo navega pela lista corrente
+  tbBuscaFechar(); if(inp){ inp.value=''; inp.blur(); }
+  lpkGo(i==='__novo'?'__novo':String(i), q);
+}
+function tbBuscaKey(e){
+  const max=TB_RES.length;              // último índice = criar nome novo
+  if(e.key==='ArrowDown'){ e.preventDefault(); TB_SEL=Math.min(TB_SEL+1,max); tbBusca(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); TB_SEL=Math.max(TB_SEL-1,0); tbBusca(); }
+  else if(e.key==='Enter'){ e.preventDefault(); const inp=$('#tbq'); if(!inp||!inp.value.trim()) return;
+    tbBuscaIr(TB_SEL<TB_RES.length?String(TB_SEL):'__novo'); }
+  else if(e.key==='Escape'){ tbBuscaFechar(); const inp=$('#tbq'); if(inp) inp.blur(); }
+}
+/* clique fora fecha o dropdown (o campo em si continua com o texto) */
+document.addEventListener('click',e=>{ if(!e.target.closest('.tb-busca')) tbBuscaFechar(); });
 function lpkFechar(){ const bd=$('#lpk-bd'); if(bd) bd.remove(); }
 document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#lpk-bd')?lpkFechar():lpkAbrir(); }
@@ -4544,7 +5226,7 @@ document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
   if(fechou) FBN.pop=''; });
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
-render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
+render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
 </script>
 
 <!-- ========== 🎨 AJUSTES DE VISUAL (mesma chave da Captação) ========== -->
