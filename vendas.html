@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.3 · Substituição</title>
+<title>CRM Life Planner · v0.10.4 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -391,6 +391,8 @@
   details.bn-multi[open] summary{border-color:var(--primary)}
   .bn-multi-pop{position:absolute;z-index:60;top:calc(100% + 6px);left:0;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 12px 30px rgba(15,23,42,.14);padding:10px;min-width:190px;display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
   .bn-multi-pop label{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer;white-space:nowrap}
+  .colres{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:col-resize;user-select:none}
+  .colres:hover{background:var(--linha)}
   .bn-tabela td input,.bn-tabela td select{width:100%;min-width:80px;padding:5px 7px;font-size:12.5px;border:1px solid var(--primary);border-radius:7px}
 
   /* ── B3: busca global ⌘K (padrão Captação) com escopo ── */
@@ -598,7 +600,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.3 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.4 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -612,7 +614,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.3 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.4 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -793,6 +795,20 @@ function isMaster(){ return user().papel.startsWith('Master'); }
 function meusContatos(){ return S.contatos.filter(c=>c.funil!=='bc' && (isMaster()||c.lp===S.activeUser)); }
 function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && (isMaster()||c.lp===S.activeUser)); }
 function etapasDe(c){ return c&&c.funil==='bc'? ETAPAS_BC : ETAPAS; }
+/* Funil errado era beco sem saida: o card so mostra as etapas da esteira em que
+   o contato ESTA, e a unica saida era apagar e recriar — perdendo historico e
+   deixando duplicata. Trocar de esteira e decisao do LP, entao virou campo, com
+   a etapa de destino escolhida na hora (nao inventamos equivalencia sozinhos). */
+const FUNIS=[['nn','Novos Negócios'],['bc','Negócios Base de Clientes']];
+function funilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
+function funilNome(f){ const x=FUNIS.find(y=>y[0]===f); return x?x[1]:f; }
+function etapasDoFunil(f){ return f==='bc'?ETAPAS_BC:ETAPAS; }
+function etapaSugerida(c,dest){
+  const mapa=dest==='bc'
+    ? {'EMISSÃO':'Emissão Final','DELIVERY':'Delivery','Não':'Venda perdida','Prop. Cancelada':'Venda perdida','Apól. Cancelada':'Venda perdida'}
+    : {'Emissão Final':'EMISSÃO','Delivery':'DELIVERY','N/Emissão':'N','Venda ganha':'EMISSÃO','Venda perdida':'Não'};
+  return mapa[c.etapa]||etapasDoFunil(dest)[0];
+}
 function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(' ')[0] : id; }
 function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
@@ -1312,15 +1328,40 @@ function fxOrdenar(ns,l,valDe){ const st=FX_ST[ns]||{}; if(!st.sort) return l;
     if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
     if(typeof va==='number'||typeof vb==='number') return (Number(va)-Number(vb))*d;
     return String(va).localeCompare(String(vb),'pt-BR')*d; }); }
-/* colunas ligáveis por tela, guardadas por aparelho (mesmo desenho do Estoque) */
+/* colunas ligáveis por tela, guardadas por aparelho (mesmo desenho do Estoque).
+   A ORDEM também é sua: antes o catálogo mandava (Object.keys) e ligar uma
+   coluna nova rearranjava tudo. Agora a lista visível é uma fila que você move
+   com ↑↓; ligar coluna ANEXA no fim e não bagunça o que já estava arrumado. */
 function fxColsHtml(ns,catalogo,vis,fixa){
   const st=FX_ST[ns]||{}, v=new Set(vis);
+  const ordem=vis.filter(k=>k!==fixa&&catalogo[k]);
+  const ocultas=Object.keys(catalogo).filter(k=>k!==fixa&&!v.has(k));
+  const linha=(k,i)=>`<div style="display:flex;align-items:center;gap:4px">
+      <label style="flex:1;min-width:0"><input type="checkbox" checked onchange="${ns}ColToggle('${k}',this.checked)">${esc(catalogo[k].label)}</label>
+      <button class="btn btn-ghost btn-mini" style="padding:1px 6px" title="Subir"${i===0?' disabled':''} onclick="${ns}ColMover('${k}',-1)">↑</button>
+      <button class="btn btn-ghost btn-mini" style="padding:1px 6px" title="Descer"${i===ordem.length-1?' disabled':''} onclick="${ns}ColMover('${k}',1)">↓</button></div>`;
   return `<details class="bn-multi"${st.pop==='cols'?' open':''} ontoggle="fxPopTgl('${ns}','cols',this.open)">
     <summary>🧩 Colunas (${v.size})</summary>
     <div class="bn-multi-pop">
-      ${Object.keys(catalogo).filter(k=>k!==fixa).map(k=>`<label><input type="checkbox" ${v.has(k)?'checked':''} onchange="${ns}ColToggle('${k}',this.checked)">${esc(catalogo[k].label)}</label>`).join('')}
+      <div style="font-size:11px;color:var(--muted)">Marque o que aparece · ↑↓ muda a ordem (fica salva neste aparelho)</div>
+      ${ordem.map(linha).join('')||'<span style="font-size:12px;color:var(--muted)">nenhuma coluna ligada</span>'}
+      ${ocultas.length?`<div style="font-size:11px;color:var(--muted);border-top:1px solid var(--linha);padding-top:6px;margin-top:2px">Ocultas</div>
+      ${ocultas.map(k=>`<label><input type="checkbox" onchange="${ns}ColToggle('${k}',this.checked)">${esc(catalogo[k].label)}</label>`).join('')}`:''}
       <button class="btn btn-s btn-mini" onclick="${ns}ColPadrao()">Padrão</button>
     </div></details>`;
+}
+/* ligar/desligar preservando a ordem escolhida (o Set de antes perdia ela) */
+function fxColsSet(atual,k,on,fixa){
+  let l=atual.slice().filter(Boolean);
+  if(on){ if(!l.includes(k)) l.push(k); } else l=l.filter(x=>x!==k);
+  if(fixa&&!l.includes(fixa)) l.unshift(fixa);
+  return l;
+}
+function fxColsMover(atual,k,d,fixa){
+  const l=atual.slice(), i=l.indexOf(k); if(i<0) return l;
+  const j=i+d; if(j<0||j>=l.length) return l;
+  if(fixa&&l[j]===fixa) return l;
+  const t=l[i]; l[i]=l[j]; l[j]=t; return l;
 }
 
 /* ── BOTTOM-SHEET DE FILTROS (celular) ─────────────────────────────────────
@@ -1389,8 +1430,9 @@ function ctPrefLer(){ try{ const r=localStorage.getItem('crmlp_ct_cols_v1'); if(
   if(!Array.isArray(CTP.cols)||!CTP.cols.length) CTP.cols=null; }
 function ctPrefSalvar(){ localStorage.setItem('crmlp_ct_cols_v1',JSON.stringify(CTP)); }
 function ctColsVis(){ const v=(CTP.cols||CT_COLS_DEF).filter(k=>CT_COLS[k]); return v.includes('nome')?v:['nome',...v]; }
-function ctColToggle(k,on){ const v=new Set(ctColsVis()); if(on)v.add(k); else v.delete(k);
-  CTP.cols=Object.keys(CT_COLS).filter(x=>v.has(x)); if(!CTP.cols.includes('nome')) CTP.cols.unshift('nome');
+function ctColToggle(k,on){ CTP.cols=fxColsSet(ctColsVis(),k,on,'nome');
+  ctPrefSalvar(); FILTRO.pop='cols'; viewContatos(); }
+function ctColMover(k,d){ CTP.cols=fxColsMover(ctColsVis(),k,d,'nome');
   ctPrefSalvar(); FILTRO.pop='cols'; viewContatos(); }
 function ctColPadrao(){ CTP.cols=null; ctPrefSalvar(); FILTRO.pop='cols'; viewContatos(); }
 const CT_CAMPOS=['busca','etapa','lp','temp','estrelas','tastatus','origem','prof','idmin','idmax','pmmin'];
@@ -1510,7 +1552,11 @@ function renderDrawer(){
     <div class="drawer-body">
 
       <div class="sec">
-        <h3>Etapa de comercialização</h3>
+        <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>Etapa de comercialização</span>
+          <select id="drwFunil" title="Esteira em que este contato é trabalhado" style="font-size:12px;font-weight:400;max-width:230px" onchange="drwPedirFunil(this.value)">
+            ${FUNIS.map(f=>`<option value="${f[0]}" ${funilDe(c)===f[0]?'selected':''}>Funil: ${esc(f[1])}</option>`).join('')}
+          </select></h3>
+        <div id="drwFunilBox"></div>
         <div class="stepper">
           ${etapasDe(c).map((e,i)=>{
             const atualIdx=etapasDe(c).indexOf(c.etapa);
@@ -1624,6 +1670,29 @@ function renderDrawer(){
     </div>`;
 }
 function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
+function drwPedirFunil(dest){
+  const c=ct(), box=$('#drwFunilBox'); if(!c||!box) return;
+  if(funilDe(c)===dest){ box.innerHTML=''; return; }
+  const eta=etapasDoFunil(dest), sug=etapaSugerida(c,dest);
+  box.innerHTML=`<div style="border:1px solid var(--linha);border-radius:9px;padding:9px 11px;margin:8px 0;font-size:12.5px;background:var(--fundo)">
+    <div style="margin-bottom:7px">Mover <b>${esc(c.nome.split(' ')[0])}</b> de <b>${esc(funilNome(funilDe(c)))}</b> para <b>${esc(funilNome(dest))}</b> — histórico, recomendações e valor do negócio vão junto. Nada é recriado.</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span style="color:var(--muted)">Etapa de destino</span>
+      <select id="drwFunilEt">${eta.map(e=>`<option ${e===sug?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <button class="btn btn-p btn-mini" onclick="drwMoverFunil('${esc(dest)}')">Mover</button>
+      <button class="btn btn-ghost btn-mini" onclick="drwCancelarFunil()">Cancelar</button></div></div>`;
+}
+function drwCancelarFunil(){ const c=ct(), s=$('#drwFunil'), box=$('#drwFunilBox');
+  if(s&&c) s.value=funilDe(c); if(box) box.innerHTML=''; }
+function drwMoverFunil(dest){
+  const c=ct(); if(!c||funilDe(c)===dest) return;
+  const nova=(($('#drwFunilEt')||{}).value)||etapasDoFunil(dest)[0];
+  const deF=funilNome(funilDe(c)), deE=c.etapa;
+  c.funil=(dest==='bc')?'bc':'nn'; c.etapa=nova;
+  interacoesDe(c).push({id:uid(),k:'funil',l:`Funil: ${deF} → ${funilNome(dest)} (etapa ${deE} → ${nova})`,de:deE,para:nova,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar(); renderDrawer(); render();
+  toast(`${c.nome.split(' ')[0]} → ${funilNome(dest)} · ${nova}`,true);
+}
 function setTA(v){ const c=ct(); if(!c) return; c.taStatus=v; salvar(); toast('Status do TA atualizado',true); }
 function tent(d){ const c=ct(); if(!c) return; c.taTentativas=Math.max(0,(c.taTentativas||0)+d); salvar(); renderDrawer(); }
 function drwRegistrar(){ const sel=$('#drwRes'); const k=sel&&sel.value; if(!k){ toast('Escolha o resultado do contato'); return; } const id=CONTATO; registrarResultado(id,k); if(CONTATO) renderDrawer(); }
@@ -4201,8 +4270,9 @@ function bnPrefLer(){ try{ const r=localStorage.getItem('crmlp_bn_cols_v1'); if(
   if(!Array.isArray(BNP.cols)||!BNP.cols.length) BNP.cols=null; }
 function bnPrefSalvar(){ localStorage.setItem('crmlp_bn_cols_v1',JSON.stringify(BNP)); }
 function bnColsVis(){ return (BNP.cols||BN_COLS_DEF).filter(k=>BN_COLS[k]); }
-function bnColToggle(k,on){ const v=new Set(bnColsVis()); if(on)v.add(k); else v.delete(k);
-  BNP.cols=Object.keys(BN_COLS).filter(x=>v.has(x)); if(!BNP.cols.includes('nome')) BNP.cols.unshift('nome');
+function bnColToggle(k,on){ BNP.cols=fxColsSet(bnColsVis(),k,on,'nome');
+  bnPrefSalvar(); FBN.pop='cols'; viewBnEstoque(); }
+function bnColMover(k,d){ BNP.cols=fxColsMover(bnColsVis(),k,d,'nome');
   bnPrefSalvar(); FBN.pop='cols'; viewBnEstoque(); }
 function bnCsvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).filter(Boolean)); }
 /* Separação por LP: cada nome carrega `lp` (sem valor = gustavo, dono da base
@@ -4557,6 +4627,19 @@ function bnMultiTgl(key,v,on){ fxMultiTgl('bn',key,v,on); }
 function bnPopTgl(k,open){ fxPopTgl('bn',k,open); }
 function bnColPadrao(){ BNP.cols=null; bnPrefSalvar(); FBN.pop='cols'; viewBnEstoque(); }
 function bnColsHtml(){ return fxColsHtml('bn',BN_COLS,bnColsVis(),'nome'); }
+/* Navegacao por teclado na planilha: Enter grava, Esc cancela, Tab grava e pula
+   pra proxima celula EDITAVEL da mesma linha (Shift+Tab volta). As colunas
+   visiveis dependem da tela, entao o proximo campo sai da lista da view atual. */
+function celColsAtuais(){ return VIEW==='bn-recs'?recColsVis():(VIEW==='bn-ta'?taColsVis():bnColsVis()); }
+function celProx(k,tras){
+  const cols=celColsAtuais().filter(x=>x==='nome'||(BN_COLS[x]&&BN_COLS[x].edit));
+  const i=cols.indexOf(k); if(i<0) return '';
+  for(let j=i+(tras?-1:1); j>=0&&j<cols.length; j+=(tras?-1:1)) if(cols[j]!=='nome') return cols[j];
+  return '';
+}
+function celFocar(id,k){ if(!k) return;
+  const td=document.querySelector(`td[onclick*="'${id}','${k}'"]`);
+  if(td) td.dispatchEvent(new MouseEvent('click',{bubbles:true})); }
 function bnCelClique(ev,id,k){
   const col=BN_COLS[k];
   if(k==='nome'||!BNP.inline||!col||!col.edit){ bnEditar(id); return; }
@@ -4576,26 +4659,28 @@ function bnCelClique(ev,id,k){
     el.innerHTML=OPS.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join('');
     el.value=k==='filhos'?bnFilhosStr2(c):k==='estado_civil'?bnCivilDe(c):k==='prioridade'?String(c.prioridade||''):(c[k]||'');
     el.onchange=()=>fecha(()=>bnCelGravar(id,k,el.value));
-    el.onblur=()=>fecha(()=>viewBnEstoque());
+    el.onblur=()=>fecha(()=>render());
   }else{
     el=document.createElement('input');
     el.type=col.edit==='num'?'number':'text';
     el.value=c[k]??'';
     el.onkeydown=e=>{ if(e.key==='Enter') fecha(()=>bnCelGravar(id,k,el.value));
-      else if(e.key==='Escape') fecha(()=>viewBnEstoque()); };
+      else if(e.key==='Escape') fecha(()=>render());
+      else if(e.key==='Tab'){ e.preventDefault(); const prox=celProx(k,e.shiftKey);
+        fecha(()=>{ bnCelGravar(id,k,el.value); celFocar(id,prox); }); } };
     el.onblur=()=>fecha(()=>bnCelGravar(id,k,el.value));
   }
   td.innerHTML=''; td.appendChild(el); el.focus();
   try{ if(el.select) el.select(); }catch(_){}
 }
 function bnCelGravar(id,k,v){
-  const c=bnPor(id); if(!c){ viewBnEstoque(); return; }
+  const c=bnPor(id); if(!c){ render(); return; }
   v=String(v??'').trim();
   if(k==='idade'||k==='renda_estimada'||k==='prioridade') c[k]=v?Number(v):null;
   else if(k==='filhos'){ c.filhos=v==='sim'?true:(v==='nao'?false:null); c.civil_cod=bnCivilRecalc(c); }
   else if(k==='estado_civil'){ c.estado_civil=v||null; c.civil_cod=bnCivilRecalc(c); }
   else c[k]=v||null;
-  bnSalvar(); viewBnEstoque(); toast('Salvo',true);
+  bnSalvar(); render(); toast('Salvo',true);
 }
 function bnEditorHtml(c){
   return `<div class="card" style="padding:12px;background:var(--bg)">
@@ -4794,8 +4879,8 @@ function taPrefLer(){ try{ const r=localStorage.getItem('crmlp_ta_cols_v1'); if(
   if(!Array.isArray(TAP.cols)) TAP.cols=null; }
 function taPrefSalvar(){ localStorage.setItem('crmlp_ta_cols_v1',JSON.stringify(TAP)); }
 function taColsVis(){ return (TAP.cols||TA_COLS_DEF).filter(k=>BN_COLS[k]&&k!=='nome'&&k!=='telefone'); }
-function taColToggle(k,on){ const v=new Set(taColsVis()); if(on)v.add(k); else v.delete(k);
-  TAP.cols=Object.keys(BN_COLS).filter(x=>v.has(x)); taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
+function taColToggle(k,on){ TAP.cols=fxColsSet(taColsVis(),k,on,''); taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
+function taColMover(k,d){ TAP.cols=fxColsMover(taColsVis(),k,d,''); taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
 function taColPadrao(){ TAP.cols=null; taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
 function taResHoje(c){ const hoje=hojeISO(); return (c.hist||[]).filter(h=>h.dia===hoje&&h.tipo==='ta').map(h=>h.res).pop()||''; }
 function taDaLista(){ const hoje=hojeISO();
@@ -5096,11 +5181,66 @@ document.addEventListener('keydown',e=>{
    fim). A escolha fica por aparelho, como as colunas. */
 let BNR={tab:'all',recom:'',busca:'',trilha:'',estagio:'',pri:'',tel:'',cid:'',ord:'qtd',min:'',pop:'',sort:'',dir:1};
 const BNR_CAMPOS=['busca','trilha','estagio','pri','tel','cid','min'];
-let RECP={modo:'fechado',abertos:[]};
+/* Modo TABELA das Recomendações (item 2.2): a planilha do Estoque já existia —
+   catálogo de colunas, edição na célula, ordenação por cabeçalho e ações em
+   lote. Aqui ela é reaproveitada sobre os recomendados, com colunas próprias
+   (recomendante na frente), filtro POR COLUNA e largura arrastável. */
+const REC_COLS_DEF=['nome','recomendante','telefone','cargo','cidade','trilha','estagio','prioridade'];
+let RECP={modo:'fechado',abertos:[],vis:'grupo',cols:null,w:{}};
+function recColsVis(){ const v=(RECP.cols||REC_COLS_DEF).filter(k=>BN_COLS[k]); return v.includes('nome')?v:['nome',...v]; }
+function recColToggle(k,on){ RECP.cols=fxColsSet(recColsVis(),k,on,'nome'); recPrefSalvar(); BNR.pop='cols'; viewBnRecs(); }
+function recColMover(k,d){ RECP.cols=fxColsMover(recColsVis(),k,d,'nome'); recPrefSalvar(); BNR.pop='cols'; viewBnRecs(); }
+function recColPadrao(){ RECP.cols=null; RECP.w={}; recPrefSalvar(); BNR.pop='cols'; viewBnRecs(); }
+function recVis(v){ RECP.vis=v; recPrefSalvar(); viewBnRecs(); }
+/* filtro por coluna: contém, sem diferenciar acento/caixa (normKey já faz isso) */
+function recColFiltro(k,v){ BNR.cf=Object.assign({},BNR.cf||{}); if(v) BNR.cf[k]=v; else delete BNR.cf[k]; viewBnRecs(); }
+function recPassaCf(c){ const f=BNR.cf||{};
+  return Object.keys(f).every(k=>{ const alvo=k==='estagio'?(BN_EST_LABEL[c.estagio]||c.estagio):c[k];
+    return normKey(String(alvo??'')).includes(normKey(f[k])); }); }
+/* largura arrastável (mouse; no celular a tela usa os cards) */
+let _recRz=null;
+function recRzStart(ev,k){ ev.preventDefault(); ev.stopPropagation();
+  const th=ev.target.closest('th'); if(!th) return;
+  _recRz={k,x0:ev.clientX,w0:th.getBoundingClientRect().width,th};
+  document.addEventListener('mousemove',recRzMove); document.addEventListener('mouseup',recRzEnd); }
+function recRzMove(ev){ if(!_recRz) return;
+  const w=Math.max(60,Math.round(_recRz.w0+(ev.clientX-_recRz.x0)));
+  _recRz.w=w; _recRz.th.style.width=w+'px'; _recRz.th.style.minWidth=w+'px'; }
+function recRzEnd(){ if(!_recRz) return;
+  document.removeEventListener('mousemove',recRzMove); document.removeEventListener('mouseup',recRzEnd);
+  if(_recRz.w){ RECP.w=Object.assign({},RECP.w||{}); RECP.w[_recRz.k]=_recRz.w; recPrefSalvar(); }
+  _recRz=null; }
 function recPrefLer(){ try{ const r=localStorage.getItem('crmlp_rec_v1'); if(r) RECP=Object.assign(RECP,JSON.parse(r)); }catch(_){}
-  if(!Array.isArray(RECP.abertos)) RECP.abertos=[]; }
+  if(!Array.isArray(RECP.abertos)) RECP.abertos=[];
+  if(RECP.vis!=='tabela') RECP.vis='grupo';
+  if(!Array.isArray(RECP.cols)||!RECP.cols.length) RECP.cols=null;
+  if(!RECP.w||typeof RECP.w!=='object') RECP.w={}; }
 function recPrefSalvar(){ localStorage.setItem('crmlp_rec_v1',JSON.stringify(RECP)); }
 function recAberto(n){ const tem=RECP.abertos.includes(n); return RECP.modo==='aberto'? !tem : tem; }  // no modo aberto, a lista guarda os FECHADOS
+let _recCfT=null;
+function recCfInput(k,v){ clearTimeout(_recCfT);
+  _recCfT=setTimeout(()=>{ recColFiltro(k,v); atFocus('reccf-'+k); },200); }
+/* No celular o CSS esconde .bn-tabela (L381) — sem o par .bn-cards a tela ficaria
+   VAZIA no modo tabela. Mesmo desenho do Estoque: tabela no desktop, cartão no
+   celular, com a MESMA lista já filtrada e ordenada. */
+function recTabelaHtml(l,row){
+  const cols=recColsVis(), NC=cols.length+1;
+  const cf=BNR.cf||{};
+  const seta=k=>BNR.sort===k?(BNR.dir>0?' ↑':' ↓'):'';
+  const wst=k=>RECP.w&&RECP.w[k]?`width:${RECP.w[k]}px;min-width:${RECP.w[k]}px;`:'';
+  const th=k=>`<th style="${wst(k)}white-space:nowrap;position:relative;cursor:pointer" title="Clique pra ordenar · arraste a borda pra redimensionar" onclick="fxSort('rec','${k}')">${esc(BN_COLS[k].label)}${seta(k)}<span class="colres" onmousedown="recRzStart(event,'${k}')"></span></th>`;
+  const filtro=k=>`<th style="${wst(k)}padding:2px 4px"><input id="reccf-${k}" type="search" placeholder="filtrar…" value="${esc(cf[k]||'')}" oninput="recCfInput('${k}',this.value)" style="width:100%;min-width:60px;font-size:11.5px;padding:3px 6px"></th>`;
+  return `<div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
+    <table><thead><tr><th style="width:26px"></th>${cols.map(th).join('')}</tr>
+    <tr><th></th>${cols.map(filtro).join('')}</tr></thead><tbody>
+    ${l.length? l.map(c=>`<tr class="clicavel">
+      <td onclick="event.stopPropagation()"><input type="checkbox" ${FBN.sel.has(c.id)?'checked':''} onchange="this.checked?FBN.sel.add('${esc(c.id)}'):FBN.sel.delete('${esc(c.id)}');viewBnRecs()"></td>
+      ${cols.map(k=>`<td onclick="bnCelClique(event,'${esc(c.id)}','${k}')"${k==='nome'?'':' style="font-size:12px"'}>${bnCelHtml(c,k)}</td>`).join('')}
+    </tr>`).join('') : `<tr><td colspan="${NC}" class="vazio">Nenhum nome nesse filtro.</td></tr>`}
+    </tbody></table></div>
+    <div class="bn-cards">${l.length? l.map(c=>`<div class="card" style="padding:0">${row(c)}</div>`).join('')
+      :`<div class="card" style="padding:20px;text-align:center;color:var(--muted)">Nenhum nome nesse filtro.</div>`}</div>`;
+}
 function recTgl(n){ const i=RECP.abertos.indexOf(n); if(i>=0) RECP.abertos.splice(i,1); else RECP.abertos.push(n);
   recPrefSalvar(); viewBnRecs(); }
 function recTodos(abrir){ RECP.modo=abrir?'aberto':'fechado'; RECP.abertos=[]; recPrefSalvar(); viewBnRecs(); }
@@ -5140,6 +5280,9 @@ function viewBnRecs(){
                                              : BNR.ord==='qtd_asc'? (groups[a].length-groups[b].length)||a.localeCompare(b,'pt-BR')
                                              : (groups[b].length-groups[a].length)||a.localeCompare(b,'pt-BR'));
   const nomesQtd=names.reduce((s,n)=>s+groups[n].length,0);
+  /* a tabela parte dos MESMOS grupos já filtrados (inclusive o "mín. por rec."),
+     e só então aplica o filtro por coluna e a ordenação do cabeçalho */
+  const tabList=fxOrdenar('rec',names.reduce((a,n)=>a.concat(groups[n]),[]).filter(recPassaCf));
   const row=b=>`<div class="clicavel" onclick="FBN.busca='';FBN.edit='${esc(b.id)}';irPara('bn-estoque')" style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:11px;cursor:pointer;background:var(--bg)">
       <span style="width:36px;height:36px;border-radius:50%;background:var(--primary,#2563eb);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0">${esc(iniciais(b.nome))}</span>
       <div style="flex:1;min-width:0">
@@ -5172,11 +5315,23 @@ function viewBnRecs(){
         <option ${BNR.ord==='qtd'?'selected':''} value="qtd">Mais nomes primeiro</option>
         <option ${BNR.ord==='qtd_asc'?'selected':''} value="qtd_asc">Menos nomes primeiro</option>
         <option ${BNR.ord==='nome'?'selected':''} value="nome">Nome (A→Z)</option></select>
-      <button class="btn btn-s btn-mini" onclick="recTodos(true)">⊞ Expandir tudo</button>
-      <button class="btn btn-s btn-mini" onclick="recTodos(false)">⊟ Recolher tudo</button>
+      ${RECP.vis==='grupo'?`<button class="btn btn-s btn-mini" onclick="recTodos(true)">⊞ Expandir tudo</button>
+      <button class="btn btn-s btn-mini" onclick="recTodos(false)">⊟ Recolher tudo</button>`:''}
+      <span style="flex:1"></span>
+      <button class="btn btn-mini ${RECP.vis==='grupo'?'btn-p':'btn-s'}" onclick="recVis('grupo')" title="Agrupado por recomendante">🙌 Agrupado</button>
+      <button class="btn btn-mini ${RECP.vis==='tabela'?'btn-p':'btn-s'}" onclick="recVis('tabela')" title="Planilha: edição na célula, ordenação e filtro por coluna, ações em lote">▦ Tabela</button>
+      ${RECP.vis==='tabela'?`${fxColsHtml('rec',BN_COLS,recColsVis(),'nome')}
+      <button class="btn btn-mini ${BNP.inline?'btn-p':'btn-s'}" onclick="BNP.inline=!BNP.inline;bnPrefSalvar();viewBnRecs()" title="Edição direto na célula: clicar edita ali mesmo (o nome continua abrindo a ficha)">✏️ Célula${BNP.inline?' ON':''}</button>`:''}
     </div>
-    ${names.length? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${nomesQtd.toLocaleString('pt-BR')} nome${nomesQtd>1?'s':''} · ${names.length.toLocaleString('pt-BR')} recomendante${names.length>1?'s':''}</div>`:''}
-    ${names.map(n=>{ const ab=recAberto(n);
+    ${names.length? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${nomesQtd.toLocaleString('pt-BR')} nome${nomesQtd>1?'s':''} · ${names.length.toLocaleString('pt-BR')} recomendante${names.length>1?'s':''}${RECP.vis==='tabela'&&tabList.length!==nomesQtd?' · '+tabList.length+' no filtro de coluna':''}</div>`:''}
+    ${FBN.sel.size? `<div class="card" style="padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <b>${FBN.sel.size} selecionado${FBN.sel.size>1?'s':''}</b>
+      ${BN_ESTAGIOS.map(e=>`<button class="btn btn-s btn-mini" onclick="bnLote('${e}')">→ ${BN_EST_LABEL[e]}</button>`).join('')}
+      <button class="btn btn-s btn-mini" onclick="bnLote('_ta')">📞 Lista de hoje</button>
+      <button class="btn btn-p btn-mini" onclick="bnLoteLista()">📋 Adicionar à lista…</button>
+      <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnRecs()">Limpar</button>
+    </div>`:''}
+    ${RECP.vis==='tabela'? recTabelaHtml(tabList,row) : names.map(n=>{ const ab=recAberto(n);
       return `<div class="card" style="padding:13px 15px;margin-bottom:12px">
         <div class="clicavel" onclick="recTgl('${esc(jsq(n))}')" style="display:flex;align-items:center;gap:8px;cursor:pointer;${ab?'margin-bottom:8px':''}">
           <span style="font-size:12px;color:var(--muted);width:14px">${ab?'▾':'▸'}</span>
