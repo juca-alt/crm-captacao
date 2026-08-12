@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.5 · Substituição</title>
+<title>CRM Life Planner · v0.10.6 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -600,7 +600,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.5 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.6 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -614,7 +614,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.5 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.6 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2258,14 +2258,23 @@ function viewSubstCliente(cliRef){
   const tl=subTimeline(cliRef,hoje);
   /* KPIs zerados por AUSENCIA de dado leem como "cliente nunca pagou". Marcar
      isso muda a leitura da tela e diz o que fazer pra resolver. */
-  const semPagos=aps.length>0&&!tl.rows.some(r=>r.pago);
+  const pagosNoBanco=SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado'&&!p.primeiro).length;
+  const semPagos=aps.length>0&&pagosNoBanco===0;
+  /* pagamento existe mas ficou FORA do período exibido: dizer isso é diferente
+     de dizer que não há pagamento — a timeline corta o que antecede a janela */
+  const pagosForaDoPeriodo=pagosNoBanco-tl.rows.filter(r=>r.pago&&!r.primeiro).length;
   /* Contagem regressiva da janela: o gatilho oficial e a EMISSAO DA NOVA e a
      partir dela correm 180 dias corridos. Mostrar so "dias restantes" escondia
      metade da informacao — quanto ja andou e quanto ja se gastou da janela. */
   const jCorridos=j?subDDiff(atParseISO(j.inicio),hoje):null;
   const jFaltam=j?Math.max(0,subDDiff(hoje,atParseISO(j.fim))):null;
-  const jTxt=j?`<div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">🗓️ Janela ${SUB_JANELA_DIAS}d · ${jCorridos}d corridos · faltam ${jFaltam}d (até ${atFmtBR(j.fim)})</div>`
-             :`<div style="font-size:11px;color:var(--amar);margin:-4px 0 8px">🗓️ Janela não iniciada — falta a data de emissão da nova</div>`;
+  /* emissão digitada no futuro (erro de digitação acontece) dava "-293 de 180
+     dias · faltam 473" com cara de número real — a janela simplesmente ainda
+     não começou, e é isso que a tela deve dizer */
+  const jFuturo=j&&jCorridos<0;
+  const jTxt=!j?`<div style="font-size:11px;color:var(--amar);margin:-4px 0 8px">🗓️ Janela não iniciada — falta a data de emissão da nova</div>`
+    :jFuturo?`<div style="font-size:11px;color:var(--amar);margin:-4px 0 8px">🗓️ Janela ainda não começou — a nova é emitida em ${atFmtBR(j.inicio)} (confira a data)</div>`
+    :`<div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">🗓️ Janela ${SUB_JANELA_DIAS}d · ${jCorridos}d corridos · faltam ${jFaltam}d (até ${atFmtBR(j.fim)})</div>`;
 
   const cards=aps.map(a=>{
     const er=subEref(a), f=subFolego(er,hoje), col=subCor(f), at=subAtraso(er,hoje);
@@ -2326,7 +2335,7 @@ function viewSubstCliente(cliRef){
         <div><div style="font-weight:700;font-size:15px">${esc(atTitleC(c.nome))}</div><div style="font-size:12px;color:var(--muted)">${c.cpf?'CPF '+esc(c.cpf):''}${c.tel?' · '+esc(c.tel):''}</div></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
     <div class="card" style="margin-top:12px">
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700">${j?(jCorridos+' de '+SUB_JANELA_DIAS+' dias · faltam '+jFaltam):(subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho')}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700">${j?(jFuturo?('começa em '+atFmtBR(j.inicio)):(jCorridos+' de '+SUB_JANELA_DIAS+' dias · faltam '+jFaltam)):(subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho')}</span></div>
       <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${prog}%;background:var(--azul)"></div></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px"><span>Emissão nova · ${j?atFmtBR(j.inicio):'—'}</span><span>Hoje · ${atFmtBR(atHojeISO())}</span><span>Liberado · ${j?atFmtBR(j.fim):'—'}</span></div>
       ${(!j&&subGatilho(cliRef))?`<div style="margin-top:8px;font-size:12px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:8px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -2354,6 +2363,7 @@ function viewSubstCliente(cliRef){
       <div style="font-size:12px;color:var(--muted);margin:4px 0 9px">Último pagamento, maior intervalo e economia acumulada ficam zerados por falta de dado — não porque o cliente não pagou. O espelho da apólice (Prudential) traz o histórico oficial; a Lista de Atraso só traz o que está em aberto.</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" style="font-size:12px" onclick="subColarEspelho()">📋 Colar espelho da apólice</button>
       <button class="btn btn-s" style="font-size:12px" onclick="subPagarRapido('${esc(aps[0].ref)}')">Registrar um pagamento</button></div></div>`:''}
+    ${(!semPagos&&pagosForaDoPeriodo>0)?`<div style="font-size:11.5px;color:var(--muted);margin:8px 0 0">ℹ️ ${pagosForaDoPeriodo} pagamento(s) registrados fora do período acima — a lista começa 3 meses antes da emissão da nova.</div>`:''}
     <div class="card" style="padding:0;overflow:auto;margin-top:10px">${hist}</div>
     <div class="card" style="margin-top:12px;font-size:12px;color:var(--muted)"><b>Sobre as datas:</b> quando um boleto não é pago na data e acumula, o próximo pode vir com intervalo menor — não é cobrança a mais, é o sistema acertando o que ficou em aberto.</div>`;
 }
@@ -4703,6 +4713,34 @@ function celIdsNaTela(){
     return m?m[1]:null; }).filter(Boolean);
 }
 function celColsColaveis(){ return celColsAtuais().filter(k=>BN_COLS[k]&&BN_COLS[k].edit); }
+/* opções válidas de cada coluna de lista: [chave, rótulo] */
+function celOpcoes(k){ return {
+    trilha:BN_TRILHAS.map(t=>[t,t]),
+    estagio:BN_ESTAGIOS.map(e=>[e,BN_EST_LABEL[e]]),
+    prioridade:[['1','P1'],['2','P2'],['3','P3']],
+    estado_civil:['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>[e,e]),
+    filhos:[['sim','Sim'],['nao','Não']]
+  }[k]||null; }
+/* traduz o texto colado pro valor que o app entende.
+   {ok:false,motivo} quando não dá — melhor recusar a célula do que gravar lixo
+   que a tela mostra bonito e nenhuma contagem enxerga. */
+function celNormalizarColado(k,v){
+  const col=BN_COLS[k]; v=String(v??'').trim();
+  if(!v) return {ok:true,valor:''};
+  const ops=celOpcoes(k);
+  if(ops){
+    const alvo=normKey(v);
+    const hit=ops.find(([val,lab])=>normKey(val)===alvo||normKey(lab)===alvo);
+    if(!hit) return {ok:false,motivo:'valor fora da lista ('+ops.map(o=>o[1]).join(' / ')+')'};
+    return {ok:true,valor:hit[0]};
+  }
+  if(col&&col.edit==='num'){
+    const n=Number(String(v).replace(/\./g,'').replace(',','.'));
+    if(!isFinite(n)) return {ok:false,motivo:'não é número'};
+    return {ok:true,valor:String(n)};
+  }
+  return {ok:true,valor:v};
+}
 function celPorNome(){ const m={}; bnVivos().forEach(c=>{ const k=normKey(c.nome||''); if(k&&!m[k]) m[k]=c; }); return m; }
 function bnColarAbrir(){
   const cols=celColsColaveis();
@@ -4728,7 +4766,7 @@ function bnColarPreview(){
   const cols=celColsColaveis(), c0=($('#bnpz_col')||{}).value||cols[0];
   const iCol=Math.max(0,cols.indexOf(c0));
   const porNome=celPorNome(), ids=celIdsNaTela();
-  const muda=[], semPar=[], foraDaGrade=new Set();
+  const muda=[], semPar=[], recusadas=[], foraDaGrade=new Set();
   linhas.forEach((cel,li)=>{
     let c=null, dados=cel;
     if(modo==='nome'){ c=porNome[normKey(cel[0]||'')]||null; dados=cel.slice(1); if(!c){ semPar.push(cel[0]||'(linha '+(li+1)+')'); return; } }
@@ -4737,18 +4775,23 @@ function bnColarPreview(){
       const k=cols[iCol+di]; if(!k){ foraDaGrade.add(String(iCol+di+1)); return; }
       v=String(v??'').trim();
       if(!v&&!limpaVazio) return;
+      const norm=celNormalizarColado(k,v);
+      if(!norm.ok){ recusadas.push(`${c.nome} · ${BN_COLS[k].label}: "${v}" — ${norm.motivo}`); return; }
       const antes=bnCelHtmlTexto(c,k);
-      const clone=Object.assign({},c); bnCelValor(clone,k,v);
+      const clone=Object.assign({},c); bnCelValor(clone,k,norm.valor);
       const depois=bnCelHtmlTexto(clone,k);
       if(String(antes)===String(depois)) return;
-      muda.push({id:c.id,nome:c.nome,k,antes,depois,valor:v});
+      muda.push({id:c.id,nome:c.nome,k,antes,depois,valor:norm.valor});
     });
   });
-  _bnPaste={muda,semPar,fora:[...foraDaGrade]};
-  if(!muda.length){ toast(semPar.length?'Nada casou — confira o modo de casamento':'Nada a mudar: os valores já são esses',false); return; }
+  _bnPaste={muda,semPar,recusadas,fora:[...foraDaGrade]};
+  if(!muda.length){ toast(recusadas.length?recusadas.length+' célula(s) recusadas — nenhum valor válido':(semPar.length?'Nada casou — confira o modo de casamento':'Nada a mudar: os valores já são esses'),false);
+    if(recusadas.length) atModal(`<h3 style="margin:0 0 6px">Nada foi aplicado</h3><div style="font-size:12.5px;color:var(--muted);margin-bottom:9px">${recusadas.length} célula(s) recusadas por valor inválido:</div><div style="max-height:40vh;overflow:auto;font-size:12.5px">${recusadas.map(r=>`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin-bottom:6px">${esc(r)}</div>`).join('')}</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-p" onclick="bnColarAbrir()">Voltar</button></div>`);
+    return; }
   atModal(`<h3 style="margin:0 0 4px">Conferir antes de aplicar</h3>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${muda.length} alteração(ões) em ${new Set(muda.map(m=>m.id)).size} contato(s)${semPar.length?` · <b style="color:var(--amar)">${semPar.length} linha(s) sem par</b>`:''}${foraDaGrade.size?` · ${foraDaGrade.size} coluna(s) do bloco além da tabela`:''}. Desmarque o que não fizer sentido.</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${muda.length} alteração(ões) em ${new Set(muda.map(m=>m.id)).size} contato(s)${semPar.length?` · <b style="color:var(--amar)">${semPar.length} linha(s) sem par</b>`:''}${recusadas.length?` · <b style="color:var(--verm)">${recusadas.length} célula(s) recusadas</b>`:''}${foraDaGrade.size?` · ${foraDaGrade.size} coluna(s) do bloco além da tabela`:''}. Desmarque o que não fizer sentido.</div>
     ${semPar.length?`<div style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:8px;padding:7px 9px;margin-bottom:9px">Sem par (nada será feito com elas): ${esc(semPar.slice(0,6).join(' · '))}${semPar.length>6?' …':''}</div>`:''}
+    ${recusadas.length?`<div style="font-size:11.5px;color:var(--verm);background:#fdeeee;border:1px solid #f3c9c9;border-radius:8px;padding:7px 9px;margin-bottom:9px"><b>Recusadas</b> (valor que o app não reconhece — nada será gravado): ${esc(recusadas.slice(0,5).join(' · '))}${recusadas.length>5?' …':''}</div>`:''}
     <div style="max-height:46vh;overflow:auto">
       ${muda.map((m,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--linha);border-radius:8px;padding:8px 9px;margin-bottom:6px;font-size:12.5px;cursor:pointer">
         <input type="checkbox" id="bnpz_${i}" checked style="margin-top:3px">
@@ -4811,7 +4854,12 @@ function bnEditorHtml(c){
       <button class="btn btn-s btn-mini" onclick="FBN.edit=null;viewBnEstoque()">Cancelar</button>
     </div></div>`;
 }
-function bnEditar(id){ FBN.edit=FBN.edit===id?null:id; viewBnEstoque(); }
+function bnEditar(id){ FBN.edit=FBN.edit===id?null:id;
+  /* a ficha vive no Estoque: chamado de outra tela (ex.: tabela das
+     Recomendações), renderizar o Estoque sem trocar a VIEW deixava o menu
+     marcando a tela errada e o próximo render() fechava a ficha sozinho. */
+  if(VIEW!=='bn-estoque'){ FBN.busca=''; irPara('bn-estoque'); return; }
+  viewBnEstoque(); }
 function bnSalvarEdicao(id){
   const c=bnPor(id); if(!c) return;
   c.nome=$('#bne-nome').value.trim()||c.nome; c.contexto=$('#bne-ctx').value.trim();
@@ -5781,6 +5829,38 @@ document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
   if(fechou) FBN.pop=''; });
 if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById('bannerHomolog'); if(bh) bh.style.display='flex'; }
+/* ══ SELF-CHECK DE BOOT ══════════════════════════════════════════════════════
+   Cada invariante aqui nasceu de um bug que passou no teste feliz. Roda em
+   ~1ms, só reclama no console e nunca derruba a tela — a graça é o erro
+   aparecer no dia em que alguém reintroduzir a regra quebrada. */
+function lpSelfCheck(){
+  const falhas=[];
+  const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
+  try{
+    /* colar em massa: rótulo vira CHAVE e lixo é recusado (12/08: "Cliente"
+       gravava estagio="Cliente", badge certo na tela e ZERO em toda contagem) */
+    ok('colar: rótulo de estágio vira chave', celNormalizarColado('estagio','Cliente').valor==='cliente');
+    ok('colar: chave de estágio continua válida', celNormalizarColado('estagio','lista_ta').valor==='lista_ta');
+    ok('colar: estágio inventado é recusado', celNormalizarColado('estagio','Vip').ok===false);
+    ok('colar: trilha maiúscula normaliza', celNormalizarColado('trilha','SEGURO').valor==='seguro');
+    ok('colar: prioridade não-numérica é recusada', celNormalizarColado('prioridade','Alta').ok===false);
+    ok('colar: número com vírgula entra', celNormalizarColado('renda_estimada','12.500,50').valor==='12500.5');
+    /* motivo de cobrança: só a última mensagem, sem as datas do log */
+    const poluido='30/06/2026 / 26/06/2026 Última Mensagem Retorno Cobrança Rejeitada Dados Do Cartão Expirados/Bloqueados - Contate O Banco Emissor Boleto Em Aberto';
+    ok('motivo: some com as datas do log', !/\d{2}\/\d{2}\/\d{4}/.test(atMotivoUltimo(poluido)));
+    ok('motivo: fica com a ÚLTIMA mensagem', atMotivoUltimo(poluido)==='Boleto Em Aberto');
+    ok('motivo: vazio não quebra', atMotivoUltimo(null)==='' && atMotivoUltimo('')==='');
+    /* ordem de colunas: a coluna fixa nunca perde o primeiro lugar */
+    ok('colunas: nome não sai da frente', fxColsMover(['nome','tel','cid'],'tel',-1,'nome')[0]==='nome');
+    ok('colunas: ligar anexa no fim', fxColsSet(['nome','tel'],'cid',true,'nome').join()==='nome,tel,cid');
+    ok('colunas: desligar não bagunça a ordem', fxColsSet(['nome','tel','cid'],'tel',false,'nome').join()==='nome,cid');
+    /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
+    ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
+  }catch(e){ falhas.push('exceção: '+e.message); }
+  if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
+  return falhas;
+}
+lpSelfCheck();
 render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
 </script>
 
