@@ -1665,19 +1665,37 @@ async function boot(){
   applyTheme(safeGet('lp_theme')||'dark');
   S.filters=defFilters();
   // interconexão: ?q=Nome (vindo da Carteira/CRM) já abre com a busca aplicada
-  try{const qp=new URLSearchParams(location.search).get("q");
+  let _abrirQ=null;
+  try{const sp=new URLSearchParams(location.search), qp=sp.get("q");
     if(qp){S.filters.q=qp;const q1=document.getElementById("q"),q2=document.getElementById("qMain");
       if(q1)q1.value=qp; if(q2)q2.value=qp;
-      const clr=document.getElementById("qClear"); if(clr)clr.classList.remove("hide");}
+      const clr=document.getElementById("qClear"); if(clr)clr.classList.remove("hide");
+      if(sp.get("abrir")==="1") _abrirQ=qp;}
   }catch(e){}
   buildRanges();
   initLayout();
   if(await bootSession()){
     toast("Sessão do CRM reaproveitada — sem senha ✓","ok");
     await reload();
+    if(_abrirQ) abrirFichaPorNome(_abrirQ);
   } else {
     openLogin();
   }
+}
+/* Vindo da Carteira (?q=Nome&abrir=1) ele quer VER O CLIENTE, não uma lista
+   filtrada com um resultado. Só abre quando não há dúvida de quem é: nome exato
+   primeiro, senão um único candidato por prefixo/trecho. Ambíguo ou sem match,
+   mantém a busca aplicada e diz o porquê — abrir a ficha errada é pior que não abrir. */
+function abrirFichaPorNome(q){
+  const n=stripAccent(String(q||"")).toLowerCase().trim(); if(!n) return;
+  const lista=S.cont||[];
+  const nome=c=>stripAccent(String(c.nome||"")).toLowerCase().trim();
+  const exatos=lista.filter(c=>nome(c)===n);
+  const cand=exatos.length?exatos
+    :(()=>{ const p=lista.filter(c=>nome(c).startsWith(n)); return p.length?p:lista.filter(c=>nome(c).includes(n)); })();
+  if(cand.length===1){ openFicha(cand[0].id); return; }
+  if(cand.length>1) toast(cand.length+" contatos com esse nome — escolha na lista","warn");
+  else toast("“"+q+"” não está no CRM ainda","warn");
 }
 boot();
 </script>

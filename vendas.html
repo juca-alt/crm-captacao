@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.0 · Substituição</title>
+<title>CRM Life Planner · v0.10.1 · Caderno</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -246,6 +246,7 @@
   .vneg{display:inline-block;margin-top:6px;font-size:11.5px;font-weight:600;color:#15803d;background:var(--verde-bg);border-radius:6px;padding:3px 8px;white-space:nowrap}
   .vneg b{font-weight:800}
   .vneg-total{margin-top:0;font-size:12px;padding:5px 11px;border-radius:20px}
+  .nnrec{font-size:10.5px;font-weight:700;color:#7c3aed;background:#f3ecff;border-radius:6px;padding:2px 6px;margin-left:6px;white-space:nowrap}
   .nncol-pa{font-size:10.5px;font-weight:700;color:#15803d;background:var(--verde-bg);border-radius:6px;padding:3px 7px;margin:-4px 6px 8px;text-align:center}
   .col-pa{text-align:right;white-space:nowrap}
   tfoot .col-pa{color:#15803d}
@@ -597,8 +598,9 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.0 · Substituição</span>
-      <button class="tb-link" onclick="atualizarApp()" title="Atualizar o app pra versão mais recente (limpa o cache e recarrega)">🔄 Atualizar</button>
+      <span class="tag">ISLAND · v0.10.1 · Caderno</span>
+      <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
+      <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
 
@@ -610,7 +612,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.0 — Substituição de Apólice · Island.</span>
+      <span>CRM Life Planner v0.10.1 — Caderno de ajustes · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -822,6 +824,15 @@ function estrelasHtml(n){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="${i<=
 function anceScore(c){ if(!c||!c.ance) return null; return ANCE_DEFS.filter(d=>c.ance[d[0]]).length; }
 function estrelasDe(c){ const s=anceScore(c); return s==null? (c.estrelas||0) : s; }
 function isQuente(c){ return estrelasDe(c)>=4; }
+/* Quantas recomendações ele PEDIU nesse contato. O app já registra as coletadas
+   (c.recs); o pedido fica no histórico de interações/eventos — se nunca foi
+   registrado um pedido, caímos no nº de coletadas pra não inventar denominador. */
+function recsPedidas(c){
+  if(c&&c.recsPedidas!=null) return Number(c.recsPedidas)||0;
+  const ev=[].concat(c&&c.interacoes||[],c&&c.eventos||[]);
+  const n=ev.filter(x=>/recomenda/i.test(JSON.stringify(x||''))).length;
+  return n||((c&&c.recs||[]).length);
+}
 function quenteChip(c){ return isQuente(c)? ' <span class="badge b-quente">🔥 Quente</span>' : ''; }
 /* ── B5: temperatura MANUAL do negócio (dicionario_temperatura em app_settings;
    regra_temperatura do banco: manual, nada esfria sozinho). Conceito separado
@@ -1031,14 +1042,36 @@ function renderBcEtapas(){
   el.innerHTML=ETAPAS_BC.map(e=>`<button class="nav-btn sub sub2" onclick="bcGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
 }
 let NN_MODE='kanban', NN_FOCUS='', NN_ENC=false; // NN_ENC = grupo Encerramentos aberto no kanban
+/* ── Ordenação dos cards dentro da coluna (vale pros dois funis) ──
+   'livre' = a ordem que o arrasto deixou (é o default: mexer nisso sozinho
+   apagaria a organização manual dele). As outras são leituras da coluna.
+   'aleatoria' sorteia UMA vez e guarda o embaralhamento em NN_SEED — se
+   sorteasse a cada render, o card fugiria do cursor no meio do arrasto. */
+let NN_ORD='livre', NN_SEED={};
+const NN_ORDS=[['livre','Livre (arrasto)'],['temp','Temperatura'],['pa','PA (maior)'],['rec','Atividade recente'],['aleatoria','Aleatória']];
+function nnOrdSet(v){ NN_ORD=v; if(v==='aleatoria'){ NN_SEED={}; (S.contatos||[]).forEach(c=>{ NN_SEED[c.id]=Math.random(); }); } render(); }
+function nnOrdenar(cs){
+  const a=cs.slice();
+  if(NN_ORD==='temp')      return a.sort((x,y)=>estrelasDe(y)-estrelasDe(x));
+  if(NN_ORD==='pa')        return a.sort((x,y)=>paDe(y)-paDe(x));
+  if(NN_ORD==='rec')       return a.sort((x,y)=>String(y._upd||'').localeCompare(String(x._upd||'')));
+  if(NN_ORD==='aleatoria') return a.sort((x,y)=>(NN_SEED[x.id]||0)-(NN_SEED[y.id]||0));
+  return a;   // livre: não mexe
+}
+function nnOrdSelect(){ return `<select onchange="nnOrdSet(this.value)" title="Ordem dos cards dentro de cada coluna" style="max-width:170px">${NN_ORDS.map(([k,l])=>`<option value="${k}"${NN_ORD===k?' selected':''}>↕ ${l}</option>`).join('')}</select>`; }
 function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='nn-funil')); render(); }
 function nnCard(c){
+  /* Recomendações são métrica PRÓPRIA: pedir e colher não depende de fechar
+     contrato, e sem isso no card o funil só conta dinheiro. Só aparece quando
+     existe pedido registrado — card limpo continua limpo. */
+  const _rp=recsPedidas(c), _rc=(c.recs||[]).length;
+  const _recBadge=(_rp||_rc)?`<span class="nnrec" title="Recomendações pedidas / coletadas">🤝 ${_rc}/${_rp||_rc}</span>`:'';
   return `<div class="nncard" draggable="true" data-id="${esc(c.id)}" onclick="abrirContato('${esc(c.id)}')">
     <div class="nc-nome">${esc(c.nome)}</div>
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
-    <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
+    <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}${_recBadge}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
 }
 function nnLista(lista){
@@ -1059,7 +1092,7 @@ function nnLista(lista){
 function viewNnFunil(){
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
-    <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>
+    <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}
     <span style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
     ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
     <span style="flex:1"></span>
@@ -1067,7 +1100,7 @@ function viewNnFunil(){
   </div>`;
   let body;
   const colDe=e=>{
-    const cs=lista.filter(c=>c.etapa===e);
+    const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
       ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
@@ -1106,15 +1139,21 @@ function wireNnBoard(){
   document.querySelectorAll('.nnboard .nncol[data-etapa]').forEach(col=>{
     col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); });
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
-    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) nnMoveEtapa(dragId,col.dataset.etapa); });
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) nnMoveEtapa(dragId,col.dataset.etapa,document.querySelector('.nncard.dragging')||document.querySelector('.nncard[data-id="'+dragId+'"]'),col); });
   });
 }
-function nnMoveEtapa(id,etapa){
+function nnMoveEtapa(id,etapa,cardEl,colEl){
   const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
   const de=c.etapa; c.etapa=etapa;
+  /* UI otimista: o card vai pra coluna nova NA HORA, antes de salvar e de
+     re-renderizar o quadro inteiro. Antes, salvar()+render() rodavam primeiro e
+     o card só aparecia no destino depois — era esse o engasgo ao arrastar. */
+  if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); colEl.appendChild(cardEl); }
   logEtapa(c,de,etapa); salvar();
   toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
-  NN_FOCUS=''; render();
+  NN_FOCUS='';
+  /* re-render depois do frame: reconcilia contadores/somas de PA sem travar o gesto */
+  requestAnimationFrame(()=>setTimeout(render,0));
 }
 
 /* ═══════════════════ MÓDULO: NEGÓCIOS BASE DE CLIENTES ═══════════════════ */
@@ -1140,7 +1179,7 @@ function bcLista(lista){
 function viewBcFunil(){
   const lista=meusContatosBC();
   const toolbar=`<div class="nn-toolbar">
-    <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>
+    <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>${nnOrdSelect()}
     <span style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
     ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
     <span style="flex:1"></span>
@@ -1148,7 +1187,7 @@ function viewBcFunil(){
   </div>`;
   let body;
   const colDe=e=>{
-    const cs=lista.filter(c=>c.etapa===e);
+    const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
       ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
@@ -1187,15 +1226,21 @@ function wireBcBoard(){
   document.querySelectorAll('.nnboard .nncol[data-etapa]').forEach(col=>{
     col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); });
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
-    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) bcMoveEtapa(dragId,col.dataset.etapa); });
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) bcMoveEtapa(dragId,col.dataset.etapa,document.querySelector('.nncard.dragging')||document.querySelector('.nncard[data-id="'+dragId+'"]'),col); });
   });
 }
-function bcMoveEtapa(id,etapa){
+function bcMoveEtapa(id,etapa,cardEl,colEl){
   const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
   const de=c.etapa; c.etapa=etapa;
+  /* UI otimista: o card vai pra coluna nova NA HORA, antes de salvar e de
+     re-renderizar o quadro inteiro. Antes, salvar()+render() rodavam primeiro e
+     o card só aparecia no destino depois — era esse o engasgo ao arrastar. */
+  if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); colEl.appendChild(cardEl); }
   logEtapa(c,de,etapa); salvar();
   toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
-  BC_FOCUS=''; render();
+  BC_FOCUS='';
+  /* re-render depois do frame: reconcilia contadores/somas de PA sem travar o gesto */
+  requestAnimationFrame(()=>setTimeout(render,0));
 }
 /* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
 function logEtapa(c,de,para){ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
@@ -1884,6 +1929,14 @@ function subRef(n){ return String(n||'x').toLowerCase().normalize('NFD').replace
 
 /* ── regras de fôlego ── */
 function subEref(a){ return (a.podePostergar&&a.dataPostergada)?a.dataPostergada:a.venc; }
+/* De onde veio o vencimento em aberto que estamos contando?
+   'oficial' = veio do espelho ou do relatório de atraso da seguradora.
+   'estimado' = nós mesmos avançamos 1 mês ao lançar um pagamento aqui.
+   Lançamento local acerta na maioria das vezes, mas quando o pagamento abate
+   parcela diferente do previsto o erro FICA e vai somando a cada lançamento —
+   é assim que os dias em atraso derrapam. Marcar a fonte não conserta sozinho:
+   deixa o desvio visível e faz o próximo documento oficial mandar. */
+function subVencFonte(a){ return a.vencFonte==='estimado'?'estimado':'oficial'; }
 function subAtraso(ref,hoje){ if(!ref) return 0; const d=subDDiff(atParseISO(ref),hoje||atHojeLocal()); return d>0?d:0; }
 function subFolego(ref,hoje){ return SUB_LIMITE-subAtraso(ref,hoje); }
 function subLimiteDt(ref){ return subAddDays(atParseISO(ref),SUB_LIMITE); }
@@ -1894,7 +1947,12 @@ function subBadge(c){ return c==='red'?'b-verm':c==='amber'?'b-amarelo':'b-verde
 /* ── consultas ── */
 function subApsDe(cliRef){ return SUB.apolices.filter(a=>a.cli===cliRef); }
 function subGatilho(cliRef){ return subApsDe(cliRef).find(a=>a.papel==='gatilho'); }
-function subJanela(cliRef){ const g=subGatilho(cliRef); if(!g||!g.emissao) return null; return {inicio:g.emissao,fim:subAddMonths(g.emissao,6)}; }
+/* A janela fecha 180 DIAS corridos após a emissão da nova — não "6 meses de
+   calendário". A diferença é real: 6 meses a partir de 10/03 dá 10/09 (184 dias),
+   e o indicador de risco mostrava folga que não existia. */
+const SUB_JANELA_DIAS=180;
+function subJanela(cliRef){ const g=subGatilho(cliRef); if(!g||!g.emissao) return null;
+  return {inicio:g.emissao, fim:subISO(subAddDays(atParseISO(g.emissao),SUB_JANELA_DIAS))}; }
 function subPiorFolego(cliRef,hoje){ const aps=subApsDe(cliRef); if(!aps.length) return SUB_LIMITE; return Math.min(...aps.map(a=>subFolego(subEref(a),hoje))); }
 function subPagsDe(apoRef){ return SUB.pagamentos.filter(p=>p.apo===apoRef); }
 function subNome2(a){ return a?((a.papel==='gatilho'?'Nova':'Antiga')+' '+a.numero):'—'; }
@@ -2042,10 +2100,10 @@ function subDiffAtraso(itens){
 /* ═══ PERSISTÊNCIA (Supabase → sync entre aparelhos; localStorage = fallback) ═══ */
 async function subRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ SUB_EMAIL=(data.session.user&&data.session.user.email)||''; return true; } }catch(e){} return false; }
 function subCliRow(c){ return {lp_email:SUB_EMAIL,ref:c.ref,nome:c.nome||'',cpf:c.cpf||null,tel:c.tel||null,email:c.email||null,valor_final:c.final!=null?c.final:null}; }
-function subApoRow(a){ return {lp_email:SUB_EMAIL,ref:a.ref,cli_ref:a.cli,numero:String(a.numero||''),papel:a.papel||'proteger',emissao:a.emissao||null,premio:a.premio!=null?a.premio:0,dia:a.dia!=null?a.dia:null,venc_aberto:a.venc||null,lp:a.lp||null,forma:a.forma||null,pode_postergar:a.podePostergar===undefined?null:a.podePostergar,data_postergada:a.dataPostergada||null,impresso:a.impresso||null,motivo:a.motivo||null}; }
+function subApoRow(a){ return {lp_email:SUB_EMAIL,ref:a.ref,cli_ref:a.cli,numero:String(a.numero||''),papel:a.papel||'proteger',emissao:a.emissao||null,premio:a.premio!=null?a.premio:0,dia:a.dia!=null?a.dia:null,venc_aberto:a.venc||null,lp:a.lp||null,forma:a.forma||null,pode_postergar:a.podePostergar===undefined?null:a.podePostergar,data_postergada:a.dataPostergada||null,impresso:a.impresso||null,motivo:a.motivo||null,dados:{vencFonte:subVencFonte(a)}}; }
 function subPagRow(p){ return {lp_email:SUB_EMAIL,ref:p.ref,apo_ref:p.apo,venc:p.venc||null,valor:p.valor!=null?p.valor:0,status:p.status||'confirmado',enviado:p.enviado||null,comprovante:p.comprovante||null,confirmado:p.confirmado||null,primeiro:!!p.primeiro,obs:p.obs||null}; }
 function subCliDeRow(r){ return {ref:r.ref,nome:r.nome||'',cpf:r.cpf||'',tel:r.tel||'',email:r.email||'',final:r.valor_final!=null?Number(r.valor_final):null}; }
-function subApoDeRow(r){ return {ref:r.ref,cli:r.cli_ref,numero:String(r.numero||''),papel:r.papel||'proteger',emissao:r.emissao||null,premio:r.premio!=null?Number(r.premio):0,dia:r.dia!=null?Number(r.dia):null,venc:r.venc_aberto||null,lp:r.lp||'',forma:r.forma||'Boleto',podePostergar:r.pode_postergar,dataPostergada:r.data_postergada||null,impresso:r.impresso||null,motivo:r.motivo||''}; }
+function subApoDeRow(r){ return {ref:r.ref,cli:r.cli_ref,numero:String(r.numero||''),papel:r.papel||'proteger',emissao:r.emissao||null,premio:r.premio!=null?Number(r.premio):0,dia:r.dia!=null?Number(r.dia):null,venc:r.venc_aberto||null,lp:r.lp||'',forma:r.forma||'Boleto',podePostergar:r.pode_postergar,dataPostergada:r.data_postergada||null,impresso:r.impresso||null,motivo:r.motivo||'',vencFonte:(r.dados&&r.dados.vencFonte)||'oficial'}; }
 function subPagDeRow(r){ return {ref:r.ref,apo:r.apo_ref,venc:r.venc||null,valor:r.valor!=null?Number(r.valor):0,status:r.status||'confirmado',enviado:r.enviado||null,comprovante:r.comprovante||null,confirmado:r.confirmado||null,primeiro:!!r.primeiro,obs:r.obs||''}; }
 
 function subSalvarLocal(){ try{ localStorage.setItem(SUB_LS,JSON.stringify(SUB)); }catch(e){} }
@@ -2162,6 +2220,7 @@ function viewSubstCliente(cliRef){
       ${kv('Venc. em aberto',atFmtBR(a.venc))}
       ${postergada?kv('Vencimento postergado',atFmtBR(a.dataPostergada),'var(--roxo,#7c3aed)'):''}
       ${kv('Dias em atraso',at+' dias',at>0?subCorVar(col):'var(--verde)')}
+      ${subVencFonte(a)==='estimado'?`<div style="font-size:11px;color:var(--muted);margin:-2px 0 4px">↺ vencimento estimado pelo lançamento local — o próximo relatório oficial confirma</div>`:''}
       <div style="margin-top:8px">
         <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px"><span style="color:var(--muted)">Fôlego até cancelar (${SUB_LIMITE}d)</span><span style="font-weight:700;color:${subCorVar(col)}">${f<0?'vencido':f+' dias'}</span></div>
         <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${subCorVar(col)}"></div></div>
@@ -2288,15 +2347,15 @@ async function subComprovante(pagRef){
 async function subConfirmarPag(pagRef){
   const p=subPag(pagRef); if(!p) return; const a=subApo(p.apo); if(!a) return;
   p.confirmado=atHojeISO(); p.status='confirmado';
-  a.venc=subAddMonths(a.venc,1); if(a.dataPostergada) a.dataPostergada=null;
-  await subPush({pagamentos:[p],apolices:[a]}); viewSubst(); toast('Pagamento confirmado',true);
+  a.venc=subAddMonths(a.venc,1); a.vencFonte='estimado'; if(a.dataPostergada) a.dataPostergada=null;
+  await subPush({pagamentos:[p],apolices:[a]}); viewSubst(); toast('Pagamento confirmado · vencimento estimado até o próximo relatório',true);
 }
 async function subPagarRapido(apoRef){
   const a=subApo(apoRef); if(!a) return;
   if(!confirm('Marcar pagamento confirmado da apólice '+a.numero+' ('+brl(a.premio)+')?\nIsso avança o vencimento em aberto em 1 mês.')) return;
   const p={ref:subRef('p'),apo:a.ref,venc:a.venc,valor:a.premio,status:'confirmado',enviado:atHojeISO(),comprovante:atHojeISO(),confirmado:atHojeISO(),primeiro:false,obs:'Lançamento rápido'};
-  SUB.pagamentos.push(p); a.venc=subAddMonths(a.venc,1); if(a.dataPostergada) a.dataPostergada=null;
-  await subPush({pagamentos:[p],apolices:[a]}); viewSubst(); toast('Pagamento lançado',true);
+  SUB.pagamentos.push(p); a.venc=subAddMonths(a.venc,1); a.vencFonte='estimado'; if(a.dataPostergada) a.dataPostergada=null;
+  await subPush({pagamentos:[p],apolices:[a]}); viewSubst(); toast('Pagamento lançado · vencimento estimado até o próximo relatório',true);
 }
 function subDefinirFinal(cliRef){
   const c=subCliDe(cliRef); if(!c) return; _subCtx=cliRef;
@@ -2398,7 +2457,7 @@ async function subConfirmarPreview(){
   const p=_subPend; if(!p) return;
   const aps=[], pags=[];
   p.updates.filter(u=>!u.stale).forEach(u=>{
-    u.ch.forEach(ch=>{ u.apo[ch[0]]=ch[3]; });
+    u.ch.forEach(ch=>{ u.apo[ch[0]]=ch[3]; if(ch[0]==='venc') u.apo.vencFonte='oficial'; });   // documento da seguradora manda: zera o desvio acumulado do lançamento local
     if(u.rec.impresso) u.apo.impresso=u.rec.impresso;   // carimba a VERSÃO aplicada
     aps.push(u.apo);
     (u.novos||[]).forEach(n=>{
@@ -3967,6 +4026,28 @@ function bnVivos(){ const m=isMaster();
     (m? (!FBN.lp||(b.lp||'gustavo')===FBN.lp) : (b.lp||'gustavo')===S.activeUser)); }
 function bnPor(id){ return BN.contatos.find(b=>b.id===id); }
 /* Atualizar app: limpa caches (SW/CacheStorage) e recarrega — versão nova na hora */
+/* Dois botões, dois propósitos — antes eram um só e qualquer refresh custava um
+   reload, derrubando a rota, o modal aberto e o trabalho em andamento:
+     🔄 Sincronizar   = dados novos do servidor, SEM reload (mantém tudo na tela)
+     ⬆︎ Atualizar app = versão nova do código, com limpeza de cache e reload
+   Enquanto roda, o botão vira "⏳ Sincronizando…" pra não parecer travado. */
+let _syncRodando=false;
+async function sincronizarDados(){
+  if(_syncRodando) return;
+  _syncRodando=true;
+  const bt=document.getElementById('tb-sync'), rot=bt?bt.textContent:'';
+  if(bt){ bt.textContent='⏳ Sincronizando…'; bt.disabled=true; }
+  const viewAntes=VIEW, temModal=!!document.querySelector('.overlay.aberto, #at-ov, .cmdk-bd');
+  try{
+    const r=await Promise.allSettled([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar()]);
+    const falhas=r.filter(x=>x.status==='rejected').length;
+    /* modal aberto = ele está no meio de alguma coisa: os dados entram na memória
+       mas o re-render espera, senão a tela se mexe embaixo da mão dele. */
+    if(!temModal){ VIEW=viewAntes; render(); }
+    toast(falhas?('Sincronizado com '+falhas+' falha(s) — veja o console'):(temModal?'Dados atualizados (a tela recarrega ao fechar o modal)':'Dados atualizados'),!falhas);
+  }catch(e){ console.error('sync',e); toast('Não consegui sincronizar agora',false); }
+  finally{ _syncRodando=false; if(bt){ bt.textContent=rot||'🔄 Sincronizar'; bt.disabled=false; } }
+}
 async function atualizarApp(){
   try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
   try{ const regs=await (navigator.serviceWorker&&navigator.serviceWorker.getRegistrations&&navigator.serviceWorker.getRegistrations())||[]; await Promise.all(regs.map(r=>r.update())); }catch(e){}
@@ -4166,7 +4247,8 @@ function viewBnEstoque(){
     <h1 class="pg">Estoque de Nomes</h1>
     <div class="sub">${tot? `${tot.toLocaleString('pt-BR')} nomes vivos · ${comTel.toLocaleString('pt-BR')} com telefone · ${(tot-comTel).toLocaleString('pt-BR')} só nome (matéria-prima do SitPlan)`:'Nenhum nome ainda — importe a base tratada.'}</div>
     <div class="toolbar">
-      <input type="search" placeholder="Buscar nome, telefone ou recomendante…" value="${esc(FBN.busca)}" oninput="FBN.busca=this.value;FBN.mostrar=150;viewBnEstoque()">
+      <input id="bn-q" type="search" list="bn-sug" autocomplete="off" placeholder="Buscar nome, telefone ou recomendante…" value="${esc(FBN.busca)}" oninput="bnBuscaInput(this.value)">
+      <datalist id="bn-sug">${bnSugestoes(FBN.busca)}</datalist>
       <button class="btn btn-s btn-mini bn-mob" onclick="bnSheetAbrir()">🎛️ Filtros${bnFiltrosAtivos()?' ('+bnFiltrosAtivos()+')':''}</button>
       <select onchange="FBN.trilha=this.value;viewBnEstoque()"><option value="">Trilhas: todas</option>${BN_TRILHAS.map(t=>`<option ${FBN.trilha===t?'selected':''} value="${t}">${t}</option>`).join('')}</select>
       ${bnMultiHtml('estagio','Estágios',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
@@ -4392,6 +4474,29 @@ function bnListasTodas(){ const set=new Set(); bnVivos().forEach(c=>(c.listas||[
 /* TA acionável = lista de HOJE ∪ listas nomeadas (união distinta) — é o que o
    card do Início e o badge do menu contam (achado #2 da varredura 04/08) */
 function bnEmListaTa(){ const hoje=hojeISO(); return bnVivos().filter(c=>c.ta_dia===hoje||((c.listas||[]).length>0)); }
+/* O oninput chamava viewBnEstoque() a cada tecla: o re-render destrói o <input>
+   e recria — o foco ia embora no 1º caractere e ele tinha que clicar de novo.
+   Debounce segura o re-render e atFocus devolve o cursor (mesmo padrão que a
+   Lista de Atraso já usava). O datalist dá o autocompletar pedido. */
+let _bnQT=null;
+function bnBuscaInput(v){
+  FBN.busca=v; FBN.mostrar=150;
+  clearTimeout(_bnQT);
+  _bnQT=setTimeout(()=>{ viewBnEstoque(); atFocus('bn-q'); },180);
+}
+/* sugestões = nomes e recomendantes vivos que casam com o que já foi digitado */
+function bnSugestoes(q){
+  const n=normKey(String(q||'')); if(n.length<2) return '';
+  const vistos={}, out=[];
+  bnVivos().forEach(c=>{
+    [c.nome,c.recomendante].forEach(v=>{
+      if(!v||out.length>=12) return;
+      if(!normKey(v).includes(n)||vistos[v]) return;
+      vistos[v]=1; out.push('<option value="'+esc(v)+'"></option>');
+    });
+  });
+  return out.join('');
+}
 function bnLoteLista(){
   const ids=[...FBN.sel]; if(!ids.length){ toast('Selecione contatos primeiro',false); return; }
   const atuais=bnListasTodas();
