@@ -4,57 +4,94 @@
 
 ---
 
-## 📸 Snapshot — 28/07/2026 · Sessão "MÓDULO REVISÃO DE APÓLICES" (visão LP, autonomo-3) — ✅ construído e verificado, **PR aberto AGUARDANDO validação + OK do Gustavo**
+## 📸 Snapshot — 11/08/2026 · 🔁 SUBSTITUIÇÃO nativa e OPERÁVEL (v0.10.2) + caderno de 8 ajustes + fix do "Ver no CRM"
 
-### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO LP)
-```
-Retoma o CRM Visão LP (vendas.html). Lê o ESTADO_DO_PROJETO.md (snapshot 28/07).
-REGRA: uma sessão por visão — NÃO tocar na Captação (index.html); git fetch antes de editar.
-Estado 28/07: módulo REVISÃO DE APÓLICES construído na branch feat/lp-revisao-apolices
-(worktree ~/Documents/crm-lp-build), PR aberto, golden test Catarina 100 asserts verdes.
-PENDENTE (nesta ordem): (1) rodar supabase/migrations/revisao_apolices.sql no SQL editor;
-(2) deploy da Edge Function: supabase functions deploy importar-apolice;
-(3) eu validei o preview ?revdemo=1: [tudo certo / deu isso: ...];
-(4) com meu OK explícito → merge do PR.
-Depois do merge: teste real com demonstrativo PDF meu (import IA) + classificar os 12
-códigos pendentes em ⚙️ Catálogo.
-```
+**Estado em 30 s:** `main` = `0513250`, **tudo no ar** em `juca-alt.github.io/crm-captacao/`. Quatro entregas hoje, nesta ordem: (1) **PR #58 / v0.10.0** — o módulo **Substituição de Apólice** deixou de ser um stub morto e virou módulo de verdade no `vendas.html`, gravando em `subst_clientes/subst_apolices/subst_pagamentos`; (2) **PR #59 / v0.10.1** — 8 dos 14 itens do caderno de ajustes dele; (3) **PR #60** — fix do "Ver no CRM", achado no uso real dele; (4) **PR #61 / v0.10.2** — a Lista de Atraso virou a porta de entrada do módulo (cria cliente+apólice) e a apólice virou editável.
 
-**O que existe agora (tudo na branch `feat/lp-revisao-apolices`, 3 commits):**
-- **Migration `supabase/migrations/revisao_apolices.sql`** (NÃO RODADA): `rev_apolices` (+ `valor_resgate`
-  manual), `rev_apolice_coberturas`, `rev_cobertura_catalogo` (compartilhado), `rev_parametros`
-  (16 parâmetros editáveis). Seed com **54 códigos reais** da carteira do Daniel (42 classificados
-  por prefixo + 12 pendentes: AP*/FR*/TF*/TR*/WD*/WS*/DI*). RLS por dono nas 2 primeiras.
-- **`revisao-service.js`** (arquivo novo na raiz, carregado pelo vendas.html): TODA a regra de negócio
-  pura (consolidação por sinistro c/ sublinhas vitalício/temporário, antecipações "incluso",
-  diária/UTI, linha do tempo c/ capital remanescente e destaque <50%, calculadora metodologia
-  oficial, reserva manual + `fatorResgateProvider` plugável pro futuro cálculo automático).
-- **Testes `scripts/test-revisao-core.js`** (portável jsc/Node) + `scripts/test-revisao.mjs` no CI
-  (step novo no guard-choke-point.yml). **Golden test real da Catarina: 100 asserts verdes**
-  (rodado local via jsc — Mac sem Node: `jsc revisao-service.js scripts/test-revisao-core.js`).
-- **vendas.html v0.5.0**: views `cart-revisao` (7 seções + rodapé honesto c/ não-classificados +
-  CSS de impressão, 1º do app) e `rev-catalogo` (classificação + parâmetros); entrada pelo drawer
-  da Carteira; import demonstrativo PDF → **Edge Function `importar-apolice`** (nova, padrão
-  importar-relatorio-lp, mesma GEMINI_API_KEY, NÃO DEPLOYADA) com preview de conferência;
-  form manual completo (criar/editar/excluir apólice+coberturas); `?revdemo=1` = Catarina em
-  memória (nada persiste). Dados híbridos: Supabase logado / localStorage fallback.
+### 1. Substituição de Apólice — de stub morto a módulo (PR #58, v0.10.0)
+O item 🔁 Substituições do menu abria uma tela dizendo "o módulo vive no arquivo `controle-substituicao.html` nesta mesma pasta" — **arquivo que não existe no repo**. O de verdade vivia solto em `~/Documents/Claude/Projects/CRM Life Planner/Artefatos/` (90KB, v1.9, localStorage `csa_state_v3`).
 
-**Verificação feita (28/07, preview lp-static via scratchpad — ~/Documents bloqueado pro
-sandbox do preview, mesma lição do /tmp/lp-preview):** console limpo; TODOS os números do golden
-conferidos NA TELA (hero 1.215.681,86 · 6,1%/93,9% · 485,87 · timeline 2028: 7 cob/204,01/40 anos ·
-2033: 125,44/45 anos/6,1% destacado · calculadora 1,05mi/sobra 162,7mil/2,2%/614,13 · reserva
-13,2%); código ZZ99X injetado → aviso no rodapé + linha "Não classificado" (nunca quebra);
-catálogo lista os 12 pendentes; picker/form/mobile OK. Guard ok (0 `from('leads')`).
+**REGRA DE OURO do domínio (preservada):** a apólice antiga não pode cair antes da nova completar a janela. Cair = **59 dias** de atraso. O jogo é segurar cada antiga na **faixa 30–40 dias** — atraso de propósito, economia real pro cliente, com folga pro imprevisto. `papel:'gatilho'` = a nova (abre a janela); `'proteger'` = as antigas.
 
-**Decisões tomadas em autonomia (registradas):** coberturas Surrendered/Lapsed e términos < hoje
-saem da consolidação mas são CONTADAS no rodapé; INVALIDEZ_TOTAL = antecipação (capital de morte)
-+ soma de PI* se contratado; prêmio "deixa de pagar" na timeline = prêmio líquido (bate golden);
-inputs da calculadora ficam só na sessão (não persistem — decidir depois se grava);
-catálogo/parâmetros compartilhados entre LPs (aprovado antes de dormir).
+- Portfólio por fôlego + ficha do cliente (janela, cards por apólice, gauge, tracker de boleto, vantagem pro cliente, timeline com cadência, sugestão de próxima ação)
+- Ações: boleto → comprovante → confirmado (avança 1 mês, zera postergação), marcar pago, postergação, valor final, cadastro manual
+- **Migration aplicada** (`subst_apolice_modulo_v1`, versionada em `supabase/migrations/subst_apolice.sql`): RLS por dono `lp_email = auth.jwt()->>'email'` + DEFAULT, `revoke anon`
+- **Versionamento por data de impressão**: espelho traz `Impresso em`, atraso traz `origem_relatorio`; documento mais antigo que o aplicado = `stale`, não sobrescreve
+- **Duas fontes de update**: colar espelho OU **puxar da Lista de Atraso** (o relatório que ele já cola tem vencido_em/pago_ate/prêmio/motivo)
+- Import do backup JSON do controle antigo (o dado real entra sem passar pelo repo, que é PÚBLICO)
 
-**⚠️ Pro Claude futuro:** rev_* no Supabase AINDA NÃO EXISTE (app cai no fallback local sem erro);
-Edge Function importar-apolice AINDA NÃO DEPLOYADA (import IA vai falhar até lá; form manual
-funciona). Merge do PR SÓ com OK explícito do Gustavo (regra de sempre).
+**Também na #58 — Lista de Atraso, o caso do abatimento de parcelas:** (a) bug latente real — a ESCRITA normalizava o nº da apólice, a **LEITURA não** (`atRowToRec` + carga do localStorage): linha fora do formato canônico nunca casava com o relatório novo → caía em "sumiu" **E** entrava de novo como nova; (b) "saiu do relatório" deixou de ter destino único → 3 saídas explícitas (regularizada / continua em atraso só saiu do corte / não sei), padrão *regularizada*; (c) vencimento que anda pra frente agora é rotulado `abatimento · −Nd de atraso`.
+
+**Também na #58 — busca inline na topbar** (typeahead sobre o mesmo motor do ⌘K). De quebra **zerou o estouro horizontal da topbar a 375px** (medido em iframe real: 415→371px).
+
+### 2. Caderno de ajustes — 8 dos 14 itens (PR #59, v0.10.1)
+- **Janela = 180 DIAS corridos**, não "6 meses de calendário" (`SUB_JANELA_DIAS`). Emissão 10/03 fecha **06/09**, não 10/09 — o indicador mostrava folga inexistente.
+- **Dias em atraso, raiz do acúmulo:** lançar pagamento no app avançava `venc` 1 mês por ESTIMATIVA; quando o pagamento abatia parcela diferente, o erro ficava e **somava a cada lançamento**. Agora existe `vencFonte` ('oficial'|'estimado'), o card avisa, e qualquer documento oficial devolve pra 'oficial' zerando o desvio.
+- **Busca do Estoque não perde o foco:** o `oninput` re-renderizava a view a cada tecla, destruindo o `<input>`. Debounce 180ms + `atFocus('bn-q')` + autocomplete por `<datalist>`.
+- Ordenação do kanban (5 modos, default Livre) · contador de recomendações no card · **Sincronizar ≠ Atualizar app** (dados sem reload, preservando rota/modal) · **DnD otimista** (card muda de coluna no mesmo tick do drop).
+
+### 3. Fix do "Ver no CRM" (PR #60) — achado no uso real dele
+Print do George de Melo Santos: clicar em "Ver no CRM" abria o painel com o nome certo na busca e **"Nenhuma pessoa com esses filtros"**. O `&abrir=1` não bastava — o painel abre na lista padrão **"Prontos p/ ligar"**, que exige `estagio==='lista_ta'`, e cliente da carteira é `estagio==='cliente'` (mais trilha 'seguro' e faixas de idade/renda). Fix = `irParaOndeEstA()`: zera filtros, preenche a busca e **troca a lista** pela que contém a pessoa, antes de abrir a ficha.
+
+### 4. Substituição operável de verdade (PR #61, v0.10.2) — pedido no fechamento
+Ele perguntou: *"eu tb posso add os clientes e puxar pela lista de atraso né? quero que seja funcional"*. **Estava capenga:** o "Puxar da Lista de Atraso" só ATUALIZAVA apólices já cadastradas — com o módulo vazio respondia "nada novo" e não fazia nada. Mas quem está em substituição está, por construção, em atraso, e o relatório oficial já traz cliente/apólice/prêmio/vencimento/LP/motivo.
+- Preview em 2 seções (**Atualizar o que já está aqui** / **Trazer pra cá**), checkbox por apólice (opt-in) + escolha do papel + "Marcar todas". Cliente criado só se não existir, casando por nome normalizado (as N apólices da mesma pessoa caem num cliente só). Entra como fonte `oficial` + data do relatório → reprocessar não duplica.
+- ⚠️ **O outro lado:** apólice vinda do atraso não tem **data de emissão** e sem ela a janela de 180d não fecha — a tela dizia "sem apólice gatilho" mesmo havendo uma. Agora distingue "sem gatilho" de **"falta a data de emissão da nova"**, com aviso + botão que resolve na hora.
+- **✏️ Editar apólice** em cada card (papel, emissão, prêmio, dia, vencimento, LP, forma) + **remover do controle**. Vencimento mexido à mão vira `estimado`.
+- **LIÇÃO:** entregar o "atualizar" sem o "criar" deixou o módulo inutilizável na partida. Sempre checar o caminho do **estado inicial vazio**.
+
+**Verificação da sessão:** 105 golden asserts (jsc) contra o **backup real** do controle antigo e o **espelho real em PDF** do Drive; E2E no browser em cada entrega (fluxo de boleto completo, ponte com o atraso, as 3 saídas do "sumiu", foco da busca, DnD no mesmo tick, os 3 casos do "Ver no CRM"); console limpo; desktop e mobile por screenshot; prod confirmada pelo CONTEÚDO, não só pelo número da versão.
+
+**⚠️ PENDENTE (dele) e próximas frentes:**
+1. ✅ **Backup da Substituição JÁ IMPORTADO por ele** (confirmou no fechamento). Agora pode também **puxar da Lista de Atraso** pra trazer clientes/apólices que faltarem, e completar a **data de emissão** da apólice-gatilho pelo ✏️ (sem ela a janela de 180d não fecha).
+2. **Caso Ricardo Da Fonte** — não reproduzi (base vazia). Corrigi o mecanismo pela especificação; se após importar ainda divergir, precisa do print da ficha + relatório.
+3. **Caso Gilvania** — precisa dos **dois relatórios** (antes/depois do abatimento) pra fechar em definitivo.
+4. **Item 4 do caderno** (botão "Adicionar" na aba Oportunidades): esse selector **não existe** em `vendas.html` nem `carteira.html` — **precisa de print** pra conectar a coisa certa.
+5. **Itens 6+7+9** (duplo modelo do card Cliente×Oportunidades · modal Mover Estágio em etapa única · converter contato→aba Clientes): dependem de definir a **trilha de follow-up de cliente**. Viram UMA frente, sessão própria.
+6. **Item 13** (extensão Wapp, PA/PM editáveis): outra base (`extensao-whatsapp/`), já reservado como frente "extensão WA 2.0".
+7. **Item 14** (Google Agenda): precisa OAuth — o **Painel Central já tem** integração persistente, reaproveitar de lá.
+8. **PR #35** (Revisão de Apólices) segue aberto desde 28/07 e **precisa rebase** (mexe no mesmo `vendas.html`, que mudou muito hoje).
+
+**Pontos críticos que o Claude futuro NÃO pode esquecer:**
+- **Espelhos REAIS da Prudential estão no Drive**: `~/Library/CloudStorage/GoogleDrive-juca@.../Meu Drive/Prudential/Apolices Carteira {Jucá,Daniel,Rebeca}` (345 PDFs, da skill `apolices-prudential`). Ler com `pdfplumber`. **Calibrar sempre no texto real** — foi assim que achei que o CPF não era extraído (a regex exigia início de linha, mas o PDF traz `Segurado: FULANO CPF: ...` na mesma linha).
+- No `painel-lp.html`, `S.cont` é a base INTEIRA, mas **`SMART[S.activeList].base` + `passFilter` decidem o que aparece** — achar o contato em memória não significa que ele está visível.
+- **Em linha compacta do `vendas.html`, usar `/* */` e NUNCA `//`**: um comentário `//` engoliu o resto da linha (incluindo o fechamento de um `try`) e derrubou o script inteiro com "Unexpected end of script".
+- **Bisect de sintaxe por fatia de linhas dá falso positivo** (corta no meio de função). O certo é reconstruir do `git show HEAD:arquivo` e aplicar patch por patch checando cada estágio.
+- **`innerWidth: 0`** no `javascript_tool` de novo. Pra medir layout: montar um **iframe de 375px dentro da página** e medir `scrollWidth` lá.
+- Editar o `vendas.html` por **python com latin-1** (`s.encode('utf-8').decode('latin-1')` nas âncoras acentuadas), não por Edit direto.
+- O classificador **barra `gh pr merge` e `git push <sha>:main`** por padrão; **passa** quando o Gustavo autoriza expressamente na mesma sessão.
+- `git fetch` ANTES de editar o clone compartilhado; `grep -a` obrigatório no `vendas.html`; sem node na máquina (testes no browser interno ou via `jsc`).
+
+**Prompt pronto pra retomar (cole num chat novo):**
+> Sessão CRM **Visão LP** (repo `juca-alt/crm-captacao`, git real em `~/Documents/crm-captacao`, playground Supabase `cjieobmdpqcupzdpckef`). Leia as memórias `crm-lp-substituicao` + `crm-lp-caderno-ajustes`. Estado: `main` = `0513250`, v0.10.2 no ar — módulo **Substituição de Apólice** nativo (tabelas `subst_*`, RLS por dono), 8 ajustes do caderno e o fix do "Ver no CRM". **Já importei o backup da Substituição**; falta completar a data de emissão das apólices-gatilho (✏️ no card) pra janela de 180d fechar. **Frentes na fila, eu escolho:** (a) itens 6+7+9 do caderno = duplo modelo do card + modal Mover Estágio + converter contato→Clientes (precisa definir a trilha de follow-up de cliente); (b) item 4 (te mando o print da aba Oportunidades); (c) extensão WA 2.0; (d) Google Agenda reaproveitando o OAuth do Painel Central; (e) rebase do PR #35. **Regras:** `git fetch` antes de editar, `grep -a` no `vendas.html`, editar por python/latin-1, uma sessão só nesta visão.
+
+---
+
+## 📸 Snapshot — 10/08/2026 · ⏰ LISTA DE ATRASO virou MÓDULO no ar (v0.9.9) — backoffice.html standalone → `vendas_atrasos`/Supabase
+
+**Estado em 30 s:** a **Lista de Atraso** (antes só o artefato `backoffice.html` em localStorage) agora é um **módulo dentro do `vendas.html`** (Outros módulos → BackOffice → Lista de Atraso), gravando na tabela **`vendas_atrasos`** do playground `cjieobmdpqcupzdpckef`. **NO AR** em `juca-alt.github.io/crm-captacao/vendas.html` (v0.9.9, main `d269685`, PRs #54→#57 mergeados hoje). Fluxo: **📋 Colar relatório** → detecta oficial Prudential × assistentes → preview → aplica (upsert por `(lp_email, apolice)`). Dias em atraso são DERIVADOS (hoje − vencido_em), nunca coluna.
+
+**O que foi feito nesta sessão (evolução v0.9.6 → v0.9.9):**
+- **v0.9.6 (#54):** módulo criado + migration aplicada (`supabase/migrations/vendas_atrasos.sql`: +7 colunas, UNIQUE `(lp_email,apolice)`, RLS por dono `lp_email=jwt email`). Os 7 bugs do prompt corrigidos na origem (upsert por apólice, dias derivado, presente nunca vira "pago", pago≠venc, apólice string normalizada).
+- **v0.9.7 (#55):** aplicar não exige mais nome (desbloqueou) + 1ª tentativa de ler nome sem rótulo.
+- **v0.9.8 (#56) — O FIX GRANDE:** com o **relatório real** do Gustavo (salvo em `scratchpad/relatorio-real.txt`), descobri que TODO o registro vem **DEPOIS** do nº da apólice → reescrevi o parser p/ **janela FORWARD** `[nº..próxima apólice]`. Isso consertou o **bug de datas herdadas da apólice de cima** (Gilvania 001737611=22/06, 001505343=27/06) — **que já existia no artefato backoffice.html**. Nome extraído entre `Ativa` e o 1º contato (some o "Ativa" que vazava). **Status workflow de volta** (dropdown na ficha) + os 2 novos que ele pediu (`Boleto pago cliente`, `Aguardando baixa sistema`). Ficha ganhou edição de segurado/responsável/vencimento/prêmio.
+- **v0.9.9 (#57):** re-colar CONSERTA nomes "Ativa …" salvos na v0.9.7 (heal), preservando nome corrigido à mão.
+
+**Verificação:** 73 golden asserts contra o relatório REAL (`scratchpad/atrasos-core.js` + `atrasos-test.html`, rodo no browser interno — SEM node na máquina). E2E no app conferido (10 registros, datas/prêmio/LP/nome ok).
+
+**⚠️ PENDENTE / próximas frentes:**
+1. **Gustavo re-colar o relatório LOGADO** (Cmd+Shift+R p/ pegar a v0.9.9) → cura datas + nomes dos registros que já tinha aplicado.
+2. **Separar automático os ~8 registros "2 nomes" (resp≠segurado, ex. Everton/Ludmila):** o texto colado do PDF achata as colunas → não dá p/ separar. Empresa+pessoa (LTDA/EIRELI) já separa. Solução real = ligar o **upload de PDF com coordenadas** (o `lpPdfText`/`lpMergeWrap` do LP antigo já faz isso por gap de coluna) — frente a mais, aguardando OK.
+3. Colisão histórica: o módulo Revisão de Apólices (PR #35, aberto) também mexe no `vendas.html` — vai precisar rebase.
+
+**Pontos críticos que o Claude futuro NÃO pode esquecer:**
+- `grep -a` obrigatório no `vendas.html` (bytes não-UTF8). **`git fetch` ANTES de editar** (clone compartilhado; a v0.9.5 subiu por baixo enquanto eu editava a v0.9.4).
+- Sem node na máquina → rodo testes no **browser interno** (python3 `http.server` no scratchpad; `preview_start {url}` abre :8799, mas `navigate` direto a localhost é bloqueado por policy → usar `preview_start` + `javascript_tool` com `tabId` explícito).
+- `let`/`const` no topo do `<script>` NÃO viram `window.*` — testar por nome nu.
+- O `MFB` do relatório é sempre "Gustavo Melo Juca"; o LP de serviço (Daniel/Gustavo/Rebeca) vem do agrupamento `LP:` — é o `lp_servico`, distinto do `lp_email` (dono do registro).
+
+**Prompt pronto pra retomar (cole num chat novo):**
+> Sessão CRM Life Planner (`vendas.html`, repo `juca-alt/crm-captacao`, playground Supabase `cjieobmdpqcupzdpckef`). O módulo **Lista de Atraso** (Outros módulos → BackOffice) está NO AR (v0.9.9, `vendas_atrasos`). Leia o snapshot 10/08 do `ESTADO_DO_PROJETO.md` + a memória `crm-captacao-visao-lp`. Retomar em UMA das frentes: (a) **upload de PDF com coordenadas** pra separar automático os ~8 registros de 2 nomes (resp≠segurado) — o `lpPdfText`/`lpMergeWrap` do LP antigo já faz isso; (b) ajustes que o Gustavo pedir depois de usar. Regras: `grep -a` no vendas.html, `git fetch` antes de editar, sem node → testo no browser interno (fixture real em `scratchpad/relatorio-real.txt`, golden em `atrasos-core.js`+`atrasos-test.html`).
 
 ---
 

@@ -34,7 +34,13 @@ async function login(email,password){
     body:JSON.stringify({email,password})
   });
   const data=await r.json().catch(()=>({}));
-  if(!r.ok) throw {code:'auth',message:data.error_description||data.msg||'E-mail ou senha inválidos.'};
+  if(!r.ok){
+    const raw=data.error_description||data.msg||'';
+    // GoTrue devolve "Invalid login credentials" — traduz; o resto passa como veio
+    const msg=(/invalid login credentials/i.test(raw)||data.error_code==='invalid_credentials')
+      ?'E-mail ou senha incorretos.':(raw||'Falha no login — tente de novo.');
+    throw {code:'auth',message:msg};
+  }
   const s=sessionFromTokenResponse(data);
   await setSession(s);
   return {email:s.user_email,usuario:s.usuario};
@@ -331,7 +337,12 @@ async function lpcSearch(q){
   return rows.filter(r=>normName((r.dados&&r.dados.nome)||'').includes(q)).map(_lpcOut).slice(0,10);
 }
 async function lpcSave(id,dados){
-  dados=Object.assign({},dados,{_upd:new Date().toISOString()});
+  // shape canônico ANTES de gravar (lpcNormContato, normalize.js). O app tem o
+  // normContato() como rede de segurança, mas contato incompleto no banco volta
+  // incompleto a cada edição — normalizar no choke point fecha o ciclo na origem.
+  dados=lpcNormContato(Object.assign({},dados));
+  if(dados.id==null) dados.id=String(id);
+  dados._upd=new Date().toISOString();
   const rows=await sbJson(`/rest/v1/lp_contatos?on_conflict=dono,id&select=id,dados,atualizado`,
     {method:'POST',body:{id:String(id),dados},headers:{Prefer:'resolution=merge-duplicates,return=representation'}});
   _lpcCache=null;

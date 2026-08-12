@@ -8,18 +8,28 @@
 if(window.__waCrmPanelLoaded) return; window.__waCrmPanelLoaded=true;
 
 // ---------- bridge com o service worker ----------
+// Contexto morto (extensão recarregada com a aba aberta) vira code:'ctx' com
+// mensagem acionável — nunca mais "Extension context invalidated" cru na cara.
+const CTX_MSG='A extensão foi atualizada. Recarregue esta página do WhatsApp pra reconectar.';
+function ctxMorto(m){ return /context invalidated|receiving end does not exist|message port closed/i.test(m||''); }
+function ctxErr(m){ return ctxMorto(m)?{ok:false,code:'ctx',error:CTX_MSG}:{ok:false,error:m}; }
 function send(type,payload){
   return new Promise(res=>{
+    let vivo=true; try{ vivo=!!(chrome.runtime&&chrome.runtime.id); }catch(_){ vivo=false; }
+    if(!vivo){ res({ok:false,code:'ctx',error:CTX_MSG}); return; }
     try{
       chrome.runtime.sendMessage(Object.assign({type},payload||{}),r=>{
-        if(chrome.runtime.lastError) res({ok:false,error:chrome.runtime.lastError.message});
+        if(chrome.runtime.lastError) res(ctxErr(chrome.runtime.lastError.message));
         else res(r||{ok:false,error:'sem resposta do service worker'});
       });
-    }catch(e){ res({ok:false,error:String(e)}); }
+    }catch(e){ res(ctxErr(String(e))); }
   });
 }
 
 // ---------- shadow DOM ----------
+// Reinjeção pós-reload da extensão (sw.js onInstalled): a UI da injeção anterior
+// ficou órfã no DOM — remove antes de criar a nova (senão empilha 2 botões CRM).
+document.querySelectorAll('#wa-crm-host').forEach(e=>e.remove());
 const host=document.createElement('div');
 host.id='wa-crm-host';
 document.documentElement.appendChild(host);
@@ -222,6 +232,7 @@ function renderLogin(note){
     $('#wa-login').disabled=true;
     const r=await send('auth.login',{email,password:pass});
     $('#wa-login').disabled=false;
+    if(r.code==='ctx'){ renderCtxLost(); return; }
     if(!r.ok){ const e=$('#wa-login-err'); e.textContent=r.error||'Falha no login'; e.style.display='block'; return; }
     AUTH={logged:true,email:r.data.email,usuario:r.data.usuario};
     await loadFunil(); loadMsgs();
@@ -229,6 +240,19 @@ function renderLogin(note){
     lookup();
   };
   $('#wa-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#wa-login').click(); });
+}
+
+// extensão recarregada com a aba aberta: 1 botão resolve (recarrega a página)
+function renderCtxLost(){
+  panel.innerHTML=headerHTML()+`<div class="pb">
+    <div class="warn">🔌 ${esc(CTX_MSG)}</div>
+    <div class="card" style="margin-top:10px">
+      <button class="btn primary" id="wa-reload">🔄 Recarregar página agora</button>
+      <p class="muted" style="margin-top:8px;font-size:11px">Seu login e a conversa aberta continuam — só reconecta a extensão.</p>
+    </div>
+    <div class="toast" id="wa-toast"></div></div>`;
+  const x=panel.querySelector('#wa-close'); if(x) x.onclick=()=>setOpen(false);
+  $('#wa-reload').onclick=()=>location.reload();
 }
 
 function renderShell(innerHTML){
@@ -482,13 +506,11 @@ function renderLpCreate(sugestoes){
     const nome=$('#wa-lpn-nome').value.trim();
     if(!nome){ toast('Nome é obrigatório.'); return; }
     if(BUSY) return; BUSY=true; $('#wa-lpn-save').disabled=true;
-    const fk=$('#wa-lpn-funil').value, now=new Date().toISOString();
-    const id='wa'+Date.now();
-    const dados={ id, lp:'gustavo', nome, telefone:$('#wa-lpn-tel').value.trim()||null,
-      etapa:fk==='bc'?'Clientes Ativos':'SitPlan', funil:fk, notas:$('#wa-lpn-notas').value,
-      taStatus:'—', taTentativas:0, estrelas:0, ance:{}, recs:[], eventos:[], planos:[], interacoes:[],
-      criadoEm:now, origemCadastro:'whatsapp-ext' };
-    const r=await send('lpc.save',{id,dados});
+    // shape completo do vendas.html vem do lpcNovoContato (normalize.js) — aqui
+    // só o que a UI coletou; nada de subconjunto (era o que quebrava o drawer).
+    const dados=lpcNovoContato({ nome, telefone:$('#wa-lpn-tel').value.trim()||null,
+      funil:$('#wa-lpn-funil').value, notas:$('#wa-lpn-notas').value });
+    const r=await send('lpc.save',{id:dados.id,dados});
     BUSY=false;
     if(!handleAuthFail(r)) return;
     if(r.ok){ renderLpContato(r.data); toast('✓ Contato criado na Visão LP'); }
@@ -527,6 +549,7 @@ function wireSearch(){
   if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
 }
 function handleAuthFail(r){
+  if(r&&!r.ok&&r.code==='ctx'){ renderCtxLost(); return false; }
   if(r&&!r.ok&&r.code==='auth'){ AUTH.logged=false; refreshFab(); renderLogin('Sessão expirou — entre de novo.'); return false; }
   return true;
 }

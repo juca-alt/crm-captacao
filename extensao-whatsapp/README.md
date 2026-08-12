@@ -29,7 +29,14 @@ envia mensagem, nunca clica, nunca automatiza nada no WhatsApp (anti-ban).
   `insertLead`/`updateLead` do index.html (derivados, carimbos, `codigo` vazio → trigger PI, dedupe
   pré-insert por telefone/e-mail, tradução do 23505, `lead_events` via port do `logEdit`).
   O CI (`scripts/guard-choke-point.mjs`) **falha** se `rest/v1/leads` aparecer em outro arquivo da extensão.
-- `etapa` NUNCA é gravada — deriva do status (regra do app).
+- `etapa` NUNCA é gravada em `leads` — deriva do status (regra do app).
+- **Contato da Visão LP (`lp_contatos.dados`) nasce no SHAPE COMPLETO**: `lpcNovoContato`/
+  `lpcNormContato` (normalize.js) são o port fiel do `salvarNovoContato` do vendas.html
+  (`infoclient`, `recs`/`eventos`/`planos`/`interacoes`, `sexo`/`profissao`/`origem`/`taStatus`,
+  `ance`, `idade`, `sitplan`, `funil`, `etapa`, `criadoEm`, espelho `pm`→`premio_mes`). Gravar
+  subconjunto quebrava o drawer do app (`c.infoclient.pessoais`) — fix #38. O `lpcSave`
+  normaliza no choke point, então a EDIÇÃO de contato antigo também sobe completa. Campo
+  novo no shape do app entra aqui junto.
 - Rede só no service worker (`sw.js`); content scripts só DOM/UI (Shadow DOM).
 - Tokens de sessão em `chrome.storage.local`; refresh automático com promise única.
 - Vanilla JS, zero libs (regra do projeto).
