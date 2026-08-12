@@ -793,6 +793,20 @@ function isMaster(){ return user().papel.startsWith('Master'); }
 function meusContatos(){ return S.contatos.filter(c=>c.funil!=='bc' && (isMaster()||c.lp===S.activeUser)); }
 function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && (isMaster()||c.lp===S.activeUser)); }
 function etapasDe(c){ return c&&c.funil==='bc'? ETAPAS_BC : ETAPAS; }
+/* Funil errado era beco sem saida: o card so mostra as etapas da esteira em que
+   o contato ESTA, e a unica saida era apagar e recriar — perdendo historico e
+   deixando duplicata. Trocar de esteira e decisao do LP, entao virou campo, com
+   a etapa de destino escolhida na hora (nao inventamos equivalencia sozinhos). */
+const FUNIS=[['nn','Novos Negócios'],['bc','Negócios Base de Clientes']];
+function funilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
+function funilNome(f){ const x=FUNIS.find(y=>y[0]===f); return x?x[1]:f; }
+function etapasDoFunil(f){ return f==='bc'?ETAPAS_BC:ETAPAS; }
+function etapaSugerida(c,dest){
+  const mapa=dest==='bc'
+    ? {'EMISSÃO':'Emissão Final','DELIVERY':'Delivery','Não':'Venda perdida','Prop. Cancelada':'Venda perdida','Apól. Cancelada':'Venda perdida'}
+    : {'Emissão Final':'EMISSÃO','Delivery':'DELIVERY','N/Emissão':'N','Venda ganha':'EMISSÃO','Venda perdida':'Não'};
+  return mapa[c.etapa]||etapasDoFunil(dest)[0];
+}
 function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(' ')[0] : id; }
 function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
@@ -1510,7 +1524,11 @@ function renderDrawer(){
     <div class="drawer-body">
 
       <div class="sec">
-        <h3>Etapa de comercialização</h3>
+        <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>Etapa de comercialização</span>
+          <select id="drwFunil" title="Esteira em que este contato é trabalhado" style="font-size:12px;font-weight:400;max-width:230px" onchange="drwPedirFunil(this.value)">
+            ${FUNIS.map(f=>`<option value="${f[0]}" ${funilDe(c)===f[0]?'selected':''}>Funil: ${esc(f[1])}</option>`).join('')}
+          </select></h3>
+        <div id="drwFunilBox"></div>
         <div class="stepper">
           ${etapasDe(c).map((e,i)=>{
             const atualIdx=etapasDe(c).indexOf(c.etapa);
@@ -1624,6 +1642,29 @@ function renderDrawer(){
     </div>`;
 }
 function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
+function drwPedirFunil(dest){
+  const c=ct(), box=$('#drwFunilBox'); if(!c||!box) return;
+  if(funilDe(c)===dest){ box.innerHTML=''; return; }
+  const eta=etapasDoFunil(dest), sug=etapaSugerida(c,dest);
+  box.innerHTML=`<div style="border:1px solid var(--linha);border-radius:9px;padding:9px 11px;margin:8px 0;font-size:12.5px;background:var(--fundo)">
+    <div style="margin-bottom:7px">Mover <b>${esc(c.nome.split(' ')[0])}</b> de <b>${esc(funilNome(funilDe(c)))}</b> para <b>${esc(funilNome(dest))}</b> — histórico, recomendações e valor do negócio vão junto. Nada é recriado.</div>
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span style="color:var(--muted)">Etapa de destino</span>
+      <select id="drwFunilEt">${eta.map(e=>`<option ${e===sug?'selected':''}>${esc(e)}</option>`).join('')}</select>
+      <button class="btn btn-p btn-mini" onclick="drwMoverFunil('${esc(dest)}')">Mover</button>
+      <button class="btn btn-ghost btn-mini" onclick="drwCancelarFunil()">Cancelar</button></div></div>`;
+}
+function drwCancelarFunil(){ const c=ct(), s=$('#drwFunil'), box=$('#drwFunilBox');
+  if(s&&c) s.value=funilDe(c); if(box) box.innerHTML=''; }
+function drwMoverFunil(dest){
+  const c=ct(); if(!c||funilDe(c)===dest) return;
+  const nova=(($('#drwFunilEt')||{}).value)||etapasDoFunil(dest)[0];
+  const deF=funilNome(funilDe(c)), deE=c.etapa;
+  c.funil=(dest==='bc')?'bc':'nn'; c.etapa=nova;
+  interacoesDe(c).push({id:uid(),k:'funil',l:`Funil: ${deF} → ${funilNome(dest)} (etapa ${deE} → ${nova})`,de:deE,para:nova,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar(); renderDrawer(); render();
+  toast(`${c.nome.split(' ')[0]} → ${funilNome(dest)} · ${nova}`,true);
+}
 function setTA(v){ const c=ct(); if(!c) return; c.taStatus=v; salvar(); toast('Status do TA atualizado',true); }
 function tent(d){ const c=ct(); if(!c) return; c.taTentativas=Math.max(0,(c.taTentativas||0)+d); salvar(); renderDrawer(); }
 function drwRegistrar(){ const sel=$('#drwRes'); const k=sel&&sel.value; if(!k){ toast('Escolha o resultado do contato'); return; } const id=CONTATO; registrarResultado(id,k); if(CONTATO) renderDrawer(); }
