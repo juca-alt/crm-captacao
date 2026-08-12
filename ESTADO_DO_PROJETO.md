@@ -6,7 +6,7 @@
 
 ## 📸 Snapshot — 11/08/2026 · 🔁 SUBSTITUIÇÃO nativa e OPERÁVEL (v0.10.2) + caderno de 8 ajustes + fix do "Ver no CRM"
 
-**Estado em 30 s:** `main` = `0513250`, **tudo no ar** em `juca-alt.github.io/crm-captacao/`. Três entregas hoje, nesta ordem: (1) **PR #58 / v0.10.0** — o módulo **Substituição de Apólice** deixou de ser um stub morto e virou módulo de verdade no `vendas.html`, gravando em `subst_clientes/subst_apolices/subst_pagamentos`; (2) **PR #59 / v0.10.1** — 8 dos 14 itens do caderno de ajustes dele; (3) **PR #60** — fix do "Ver no CRM", achado no uso real dele.
+**Estado em 30 s:** `main` = `0513250`, **tudo no ar** em `juca-alt.github.io/crm-captacao/`. Quatro entregas hoje, nesta ordem: (1) **PR #58 / v0.10.0** — o módulo **Substituição de Apólice** deixou de ser um stub morto e virou módulo de verdade no `vendas.html`, gravando em `subst_clientes/subst_apolices/subst_pagamentos`; (2) **PR #59 / v0.10.1** — 8 dos 14 itens do caderno de ajustes dele; (3) **PR #60** — fix do "Ver no CRM", achado no uso real dele; (4) **PR #61 / v0.10.2** — a Lista de Atraso virou a porta de entrada do módulo (cria cliente+apólice) e a apólice virou editável.
 
 ### 1. Substituição de Apólice — de stub morto a módulo (PR #58, v0.10.0)
 O item 🔁 Substituições do menu abria uma tela dizendo "o módulo vive no arquivo `controle-substituicao.html` nesta mesma pasta" — **arquivo que não existe no repo**. O de verdade vivia solto em `~/Documents/Claude/Projects/CRM Life Planner/Artefatos/` (90KB, v1.9, localStorage `csa_state_v3`).
