@@ -1993,16 +1993,6 @@ function subTimeline(cliRef,hoje){
   return {rows,venc,ultimo,maiorIntervalo:Math.max(maxGap,emAberto),emAberto,start};
 }
 
-function subSugestao(cliRef,hoje){
-  hoje=hoje||atHojeLocal(); const aps=subApsDe(cliRef);
-  const agora=aps.filter(a=>subAtraso(subEref(a),hoje)>SUB_FMAX)
-    .map(a=>({a,dias:subAtraso(subEref(a),hoje),lim:subLimiteDt(subEref(a))})).sort((x,y)=>y.dias-x.dias);
-  const prox=aps.map(a=>({a,quando:subAddDays(atParseISO(subEref(a)),SUB_FMAX)}))
-    .filter(x=>x.quando>=hoje).sort((x,y)=>x.quando-y.quando);
-  const pior=aps.slice().sort((x,y)=>subAtraso(subEref(y),hoje)-subAtraso(subEref(x),hoje))[0];
-  return {agora,prox,pior};
-}
-
 /* ═══ ESPELHO DA PRUDENTIAL (Detalhes da Apólice, texto colado) ═══════════════
    Separa por MUDANÇA do número da apólice — não depende do cabeçalho
    "Detalhes/Impresso", que some quando o texto vem copiado da página aberta. */
@@ -2197,6 +2187,16 @@ function viewSubstCliente(cliRef){
   const pagoMes=conf.length?totalPago/meses:null;
   const economia=pagoMes!==null?Math.max(0,baseAntigas*meses-totalPago):null;
   const tl=subTimeline(cliRef,hoje);
+  /* KPIs zerados por AUSENCIA de dado leem como "cliente nunca pagou". Marcar
+     isso muda a leitura da tela e diz o que fazer pra resolver. */
+  const semPagos=aps.length>0&&!tl.rows.some(r=>r.pago);
+  /* Contagem regressiva da janela: o gatilho oficial e a EMISSAO DA NOVA e a
+     partir dela correm 180 dias corridos. Mostrar so "dias restantes" escondia
+     metade da informacao — quanto ja andou e quanto ja se gastou da janela. */
+  const jCorridos=j?subDDiff(atParseISO(j.inicio),hoje):null;
+  const jFaltam=j?Math.max(0,subDDiff(hoje,atParseISO(j.fim))):null;
+  const jTxt=j?`<div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">🗓️ Janela ${SUB_JANELA_DIAS}d · ${jCorridos}d corridos · faltam ${jFaltam}d (até ${atFmtBR(j.fim)})</div>`
+             :`<div style="font-size:11px;color:var(--amar);margin:-4px 0 8px">🗓️ Janela não iniciada — falta a data de emissão da nova</div>`;
 
   const cards=aps.map(a=>{
     const er=subEref(a), f=subFolego(er,hoje), col=subCor(f), at=subAtraso(er,hoje);
@@ -2216,8 +2216,10 @@ function viewSubstCliente(cliRef){
         <span style="font-weight:700;font-size:13.5px">${a.papel==='gatilho'?'Nova':'Antiga'} · ${esc(a.numero)}</span>
         <span style="display:flex;align-items:center;gap:6px">${badge}<button class="btn btn-ghost" style="font-size:11px;padding:2px 7px" title="Editar dados desta apólice" onclick="event.stopPropagation();subEditarApolice('${esc(a.ref)}')">✏️</button></span></div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">${a.lp?'LP '+esc(String(a.lp).split(' ')[0])+' · ':''}${a.dia?'vence dia '+a.dia+' · ':''}${esc(a.forma||'')}</div>
-      ${a.motivo?`<div style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:6px;padding:4px 8px;margin-bottom:8px">⚠ Cobrança: ${esc(atTitleC(a.motivo))}</div>`:''}
+      ${jTxt}
+      ${a.motivo?`<div title="${esc(atTitleC(a.motivo))}" style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:6px;padding:4px 8px;margin-bottom:8px;cursor:help">⚠ Cobrança: ${esc(atMotivoUltimo(atTitleC(a.motivo)))}</div>`:''}
       ${kv('Prêmio',brl(a.premio))}
+      ${kv('Emissão',a.emissao?atFmtBR(a.emissao):'—')}
       ${kv('Venc. em aberto',atFmtBR(a.venc))}
       ${postergada?kv('Vencimento postergado',atFmtBR(a.dataPostergada),'var(--roxo,#7c3aed)'):''}
       ${kv('Dias em atraso',at+' dias',at>0?subCorVar(col):'var(--verde)')}
@@ -2241,15 +2243,6 @@ function viewSubstCliente(cliRef){
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">${st==='aguardando'?`<button class="btn btn-s" style="flex:1;font-size:12px" onclick="subComprovante('${esc(p.ref)}')">Comprovante recebido</button>`:''}<button class="btn btn-p" style="flex:1;font-size:12px" onclick="subConfirmarPag('${esc(p.ref)}')">Marcar confirmado no sistema</button></div></div>`;
   });
 
-  const sg=subSugestao(cliRef,hoje);
-  const pior=sg.pior, atPior=pior?subAtraso(subEref(pior),hoje):0;
-  const pos=Math.min(100,Math.round(atPior/SUB_LIMITE*100));
-  let sugLinhas='';
-  if(sg.agora.length) sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--verm);font-weight:700">!</span><span><b>Agora:</b> ${sg.agora.map(x=>subNome2(x.a)+' ('+x.dias+'d)').join(', ')} acima da faixa — pagar até ${sg.agora.map(x=>atFmtBR(subISO(x.lim))).join(' / ')} pra voltar à faixa segura.</span></div>`;
-  else sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--verde);font-weight:700">✓</span><span><b>Agora:</b> todas dentro da faixa segura. Nada urgente.</span></div>`;
-  sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--azul);font-weight:700">↻</span><span><b>Cadência:</b> pagar cada apólice ao chegar a ~${SUB_FMAX} dias de atraso, alternando — nenhuma passa dos ${SUB_LIMITE} e o desembolso fica intercalado.</span></div>`;
-  if(sg.prox.length) sugLinhas+=`<div style="display:flex;gap:8px;margin-top:7px;font-size:12.5px"><span style="color:var(--verde);font-weight:700">→</span><span><b>Próxima ação:</b> ${subNome2(sg.prox[0].a)} → emitir boleto em ~${atFmtBR(subISO(sg.prox[0].quando))}.</span></div>`;
-
   const hist=tl.rows.length?`<table style="width:100%;border-collapse:collapse;font-size:12.5px">
       <thead><tr style="text-align:left;color:var(--muted);font-size:11.5px"><th style="padding:6px 8px">Apólice</th><th>Vencimento</th><th>Pago em</th><th style="text-align:center">Intervalo</th><th style="text-align:right;padding-right:8px">Situação</th></tr></thead>
       <tbody>${tl.rows.map(r=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 8px">${subNome2(r.a)}</td><td>${atFmtBR(r.venc)}</td><td>${r.pago?atFmtBR(r.pago):'—'}</td><td style="text-align:center;color:var(--muted)">${r.pago&&r.intervalo!=null?r.intervalo+'d':'—'}</td><td style="text-align:right;padding-right:8px">${esc(r.sit)}${r.valor&&r.pago?' · '+brl(r.valor):''}</td></tr>`).join('')}
@@ -2264,7 +2257,7 @@ function viewSubstCliente(cliRef){
         <div><div style="font-weight:700;font-size:15px">${esc(atTitleC(c.nome))}</div><div style="font-size:12px;color:var(--muted)">${c.cpf?'CPF '+esc(c.cpf):''}${c.tel?' · '+esc(c.tel):''}</div></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
     <div class="card" style="margin-top:12px">
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700">${j?Math.max(0,subDDiff(hoje,atParseISO(j.fim)))+' dias restantes':(subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho')}</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700">${j?(jCorridos+' de '+SUB_JANELA_DIAS+' dias · faltam '+jFaltam):(subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho')}</span></div>
       <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${prog}%;background:var(--azul)"></div></div>
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px"><span>Emissão nova · ${j?atFmtBR(j.inicio):'—'}</span><span>Hoje · ${atFmtBR(atHojeISO())}</span><span>Liberado · ${j?atFmtBR(j.fim):'—'}</span></div>
       ${(!j&&subGatilho(cliRef))?`<div style="margin-top:8px;font-size:12px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:8px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -2281,21 +2274,18 @@ function viewSubstCliente(cliRef){
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
       <div><div style="font-size:12.5px">🔒 Valor final após a transição</div><div style="font-size:11px;color:var(--muted)">formato definitivo do plano — você define ao fechar</div></div>
       <div style="display:flex;align-items:center;gap:10px"><span style="font-weight:700${c.final?'':';color:var(--muted)'}">${c.final?brl(c.final):'a definir'}</span><button class="btn btn-ghost" onclick="subDefinirFinal('${esc(cliRef)}')">${c.final?'Editar':'Definir'}</button></div></div>
-    <h2 class="sec" style="margin-top:18px;font-size:14px">Histórico e fluxo de pagamentos <span style="font-weight:400;color:var(--muted);font-size:12px">— de ${atFmtBR(tl.start)} (3 meses antes da nova) até hoje</span></h2>
+    <h2 class="sec" style="margin-top:18px;font-size:14px">Histórico e fluxo de pagamentos <span style="font-weight:400;color:var(--muted);font-size:12px">— ${j?('de '+atFmtBR(tl.start)+' (3 meses antes da nova) até hoje'):'todo o histórico registrado'}</span></h2>
     <div class="kpis">
       ${kpi('Último pagamento',tl.ultimo?atFmtBR(tl.ultimo):'—')}
       ${kpi('Maior intervalo',tl.maiorIntervalo+' dias')}
       ${kpi('Em aberto hoje',tl.emAberto+' dias',tl.emAberto>SUB_FMAX?'acima da faixa':'')}
     </div>
-    <div class="card" style="padding:0;overflow:auto">${hist}</div>
-    <div class="card" style="margin-top:12px">
-      <div style="font-weight:600;font-size:14px">💡 Sugestão de fluxo e regularização</div>
-      <div style="font-size:12px;color:var(--muted);margin:3px 0 10px">Manter cada apólice na faixa segura de ${SUB_FMIN}–${SUB_FMAX} dias de atraso — tempo hábil de ajuste, longe do limite de ${SUB_LIMITE}.</div>
-      <div style="position:relative;height:9px;background:var(--fundo);border-radius:99px;margin-bottom:4px">
-        <div style="position:absolute;left:${Math.round(SUB_FMIN/SUB_LIMITE*100)}%;width:${Math.round((SUB_FMAX-SUB_FMIN)/SUB_LIMITE*100)}%;top:0;bottom:0;background:#c0dd97;border-radius:2px"></div>
-        <div style="position:absolute;left:${pos}%;top:-3px;width:2px;height:15px;background:${pior?subCorVar(subCor(subFolego(subEref(pior),hoje))):'var(--muted)'}"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:4px"><span>0</span><span style="color:#3b6d11">faixa ${SUB_FMIN}–${SUB_FMAX}</span><span>pior: ${atPior}d · limite ${SUB_LIMITE}</span></div>
-      ${sugLinhas}</div>
+    ${semPagos?`<div class="card" style="margin-top:10px;border:1px solid #eddcc0;background:var(--amar-claro,#fff8e6)">
+      <div style="font-size:12.5px;font-weight:600;color:var(--amar)">⚠ Ação necessária: nenhum pagamento vinculado às ${aps.length} apólice${aps.length>1?'s':''} deste cliente.</div>
+      <div style="font-size:12px;color:var(--muted);margin:4px 0 9px">Último pagamento, maior intervalo e economia acumulada ficam zerados por falta de dado — não porque o cliente não pagou. O espelho da apólice (Prudential) traz o histórico oficial; a Lista de Atraso só traz o que está em aberto.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-p" style="font-size:12px" onclick="subColarEspelho()">📋 Colar espelho da apólice</button>
+      <button class="btn btn-s" style="font-size:12px" onclick="subPagarRapido('${esc(aps[0].ref)}')">Registrar um pagamento</button></div></div>`:''}
+    <div class="card" style="padding:0;overflow:auto;margin-top:10px">${hist}</div>
     <div class="card" style="margin-top:12px;font-size:12px;color:var(--muted)"><b>Sobre as datas:</b> quando um boleto não é pago na data e acumula, o próximo pode vir com intervalo menor — não é cobrança a mais, é o sistema acertando o que ficou em aberto.</div>`;
 }
 
@@ -2376,24 +2366,70 @@ async function subSalvarFinal(){
 }
 
 /* ── cadastro manual ── */
+/* Quem entra em substituicao esta, por construcao, em atraso — e o relatorio
+   oficial ja tem nome, telefone, apolices, premios, vencimento e LP. Digitar
+   tudo de novo era retrabalho E fonte de divergencia (numero digitado torto
+   nunca mais casa com o relatorio). O cadastro agora completa a partir dele. */
+let _subNovoAps=null;
+function subAtrasoPorNome(){ const m={};
+  (AT.itens||[]).filter(r=>!r.resolvido_em).forEach(it=>{ const n=subNomeDoAtraso(it); if(!n) return; (m[n]=m[n]||[]).push(it); });
+  return m; }
+function subSugNomes(){ const m=subAtrasoPorNome();
+  return Object.keys(m).filter(n=>!SUB.clientes.some(c=>normKey(c.nome)===normKey(n)))
+    .sort((a,b)=>a.localeCompare(b,'pt-BR')).map(n=>({nome:n,itens:m[n]})); }
+function subPreencherDoAtraso(v){
+  const alvo=(subSugNomes().find(g=>normKey(g.nome)===normKey(v))||null);
+  const box=$('#subc_aps'); _subNovoAps=alvo;
+  if(!alvo){ if(box) box.innerHTML=''; return; }
+  const nome=$('#subc_nome'), tel=$('#subc_tel');
+  if(nome&&!nome.value.trim()) nome.value=alvo.nome;
+  const cel=(alvo.itens.find(i=>i.celular)||{}).celular||'';
+  if(tel&&!tel.value.trim()&&cel) tel.value=cel;
+  if(box) box.innerHTML=`<div style="border:1px solid var(--linha);border-radius:8px;padding:9px;margin:8px 0 2px;font-size:12.5px">
+    <div style="font-weight:600;margin-bottom:5px">${alvo.itens.length} apólice(s) em atraso encontradas — trazer junto?</div>
+    ${alvo.itens.map((it,i)=>`<label style="display:flex;gap:7px;align-items:flex-start;margin-bottom:5px;cursor:pointer">
+      <input type="checkbox" id="subca_${i}" checked style="margin-top:3px">
+      <span>${esc(atNormApolice(it.apolice))}${it.premio?' · '+brl(it.premio):''} · vence ${atFmtBR(it.vencido_em)}${it.lp_servico?' · LP '+esc(it.lp_servico):''}
+      <select id="subcap_${i}" style="font-size:11.5px;margin-left:4px"><option value="proteger">Antiga (proteger)</option><option value="gatilho">Nova (gatilho)</option></select></span></label>`).join('')}
+    <div style="font-size:11px;color:var(--muted)">Vencimento e prêmio entram como <b>oficiais</b> (vieram do relatório). A emissão da nova você informa depois no ✏️ do card.</div></div>`;
+}
 function subFormCliente(c){
-  return `<label style="font-size:12.5px;font-weight:600">Nome</label><input id="subc_nome" value="${esc(c?c.nome:'')}" style="width:100%;margin:5px 0 10px">
+  const sug=c?[]:subSugNomes();
+  return `${sug.length?`<label style="font-size:12.5px;font-weight:600">Buscar na Lista de Atraso</label>
+    <input id="subc_busca" list="subc_sug" autocomplete="off" placeholder="digite o nome — puxa telefone, apólices, prêmios e vencimentos" style="width:100%;margin:5px 0 2px" oninput="subPreencherDoAtraso(this.value)">
+    <datalist id="subc_sug">${sug.map(g=>`<option value="${esc(g.nome)}">${g.itens.length} apólice(s) em atraso</option>`).join('')}</datalist>
+    <div id="subc_aps"></div>
+    <div style="height:1px;background:var(--linha);margin:10px 0"></div>`:''}<label style="font-size:12.5px;font-weight:600">Nome</label><input id="subc_nome" value="${esc(c?c.nome:'')}" style="width:100%;margin:5px 0 10px">
     <label style="font-size:12.5px;font-weight:600">CPF</label><input id="subc_cpf" value="${esc(c?c.cpf:'')}" style="width:100%;margin:5px 0 10px">
     <label style="font-size:12.5px;font-weight:600">Telefone</label><input id="subc_tel" value="${esc(c?c.tel:'')}" style="width:100%;margin:5px 0 10px">
     <label style="font-size:12.5px;font-weight:600">E-mail</label><input id="subc_mail" value="${esc(c?c.email:'')}" style="width:100%;margin-top:5px">`;
 }
-function subNovoCliente(){ _subCtx=null;
+function subNovoCliente(){ _subCtx=null; _subNovoAps=null;
   atModal(`<h3 style="margin:0 0 10px">Novo cliente em transição</h3>${subFormCliente(null)}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarCliente()">Criar</button></div>`); }
-function subEditarCliente(cliRef){ _subCtx=cliRef; const c=subCliDe(cliRef);
+function subEditarCliente(cliRef){ _subCtx=cliRef; _subNovoAps=null; const c=subCliDe(cliRef);
   atModal(`<h3 style="margin:0 0 10px">Editar cliente</h3>${subFormCliente(c)}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarCliente()">Salvar</button></div>`); }
 async function subSalvarCliente(){
   const nome=(($('#subc_nome')||{}).value||'').trim(); if(!nome){ toast('Nome é obrigatório'); return; }
-  let c=_subCtx?subCliDe(_subCtx):null;
+  let c=_subCtx?subCliDe(_subCtx):null; const novo=!c;
   if(!c){ c={ref:subRef(nome),nome,cpf:'',tel:'',email:'',final:null}; SUB.clientes.push(c); }
   c.nome=nome; c.cpf=(($('#subc_cpf')||{}).value||'').trim(); c.tel=(($('#subc_tel')||{}).value||'').trim(); c.email=(($('#subc_mail')||{}).value||'').trim();
-  atClose(); await subPush({clientes:[c]}); viewSubst(); toast('Cliente salvo',true);
+  const aps=[];
+  if(novo&&_subNovoAps) _subNovoAps.itens.forEach((it,i)=>{
+    const cb=$('#subca_'+i); if(!cb||!cb.checked) return;
+    const num=atNormApolice(it.apolice);
+    if(SUB.apolices.some(x=>x.cli===c.ref&&x.numero===num)) return;
+    const a={ref:subRef('a'),cli:c.ref,numero:num,papel:(($('#subcap_'+i)||{}).value)||'proteger',
+      emissao:null,premio:it.premio!=null?Number(it.premio):0,dia:null,
+      venc:it.vencido_em||atHojeISO(),vencFonte:'oficial',
+      lp:it.lp_servico||'',forma:it.forma_pagto||'',podePostergar:null,dataPostergada:null,
+      impresso:it.origem_relatorio||null,motivo:it.motivo_recusa||''};
+    SUB.apolices.push(a); aps.push(a);
+  });
+  _subNovoAps=null;
+  atClose(); await subPush({clientes:[c],apolices:aps}); viewSubst();
+  toast('Cliente salvo'+(aps.length?' · '+aps.length+' apólice(s) trazida(s) da Lista de Atraso':''),true);
 }
 function subNovaApolice(cliRef){ _subCtx=cliRef;
   atModal(`<h3 style="margin:0 0 10px">Nova apólice em controle</h3>
@@ -2858,6 +2894,21 @@ function lpMotivoClasse(rec){
 }
 const MOTIVO_LABEL={cartao_expirado:'Cartão expirado',suspeita_fraude:'Suspeita de fraude',limite_insuficiente:'Limite insuficiente',convenio_inativo:'Convênio inativo',debito_nao_autorizado:'Débito não autorizado',boleto_aberto:'Boleto em aberto',outro:'Outro'};
 const MOTIVO_COR={cartao_expirado:'b-amarelo',suspeita_fraude:'b-verm',limite_insuficiente:'b-roxo',convenio_inativo:'b-cinza',debito_nao_autorizado:'b-verm',boleto_aberto:'b-azul',outro:'b-cinza'};
+/* O relatorio da Prudential concatena TODAS as tentativas de cobranca numa
+   celula so: datas soltas + a mesma mensagem repetida N vezes. Na tabela isso
+   vira um paredao ilegivel e empurra as outras colunas. O que opera e a ULTIMA
+   mensagem; o texto inteiro continua no registro (tooltip e ficha). */
+const AT_MSG_INI=/(Dados Do Cart[ãa]o|Cart[ãa]o Expirado|Transa[çc][ãa]o N[ãa]o Autorizada|Transa[çc][ãa]o n[ãa]o autorizada|Suspeita De Fraude|Limite Insuficiente|Saldo Insuficiente|Boleto Em Aberto|Conv[êe]nio|D[ée]bito N[ãa]o Autorizado|Pagamento N[ãa]o Autorizado|Sem Retorno)/gi;
+function atMotivoUltimo(txt){
+  let t=String(txt||'').replace(/\s+/g,' ').trim(); if(!t) return '';
+  t=t.replace(/[ÚU]ltima Mensagem Retorno Cobran[çc]a Rejeitada/gi,' ')
+     .replace(/\d{2}\/\d{2}\/\d{4}/g,' ').replace(/\s+\/\s+/g,' ').replace(/\s+/g,' ').trim();
+  AT_MSG_INI.lastIndex=0; let m,ini=-1; while((m=AT_MSG_INI.exec(t))!==null) ini=m.index;
+  const s=(ini>=0?t.slice(ini):t).trim();
+  return s.length>120?s.slice(0,117)+'…':s;
+}
+/* houve mais de uma tentativa? entao vale sinalizar que ha historico escondido */
+function atMotivoTemHist(txt){ const t=String(txt||''); return t.length>0 && atMotivoUltimo(t).replace(/…$/,'').length < t.replace(/\s+/g,' ').trim().length-6; }
 // §4.1 — script de contato por classe (provisório; texto final vem do Cowork)
 const LP_ACOES={
   cartao_expirado:'Cartão expirado — pedir validade/novo número do cartão.',
@@ -3295,7 +3346,7 @@ function viewLpAtrasos(){
         <td style="font-size:12px">${esc(r.lp_servico||'—')}</td>
         <td style="font-size:12px">${atFmtBR(r.vencido_em)}</td>
         <td style="font-weight:700">${r.premio!=null?brl(r.premio):'—'}</td>
-        <td style="font-size:11px;color:var(--muted);max-width:180px">${esc(r.motivo_recusa||'—')}</td>
+        <td style="font-size:11px;color:var(--muted);max-width:200px;cursor:help" title="${esc(r.motivo_recusa||'')}">${esc(atMotivoUltimo(r.motivo_recusa)||'—')}${atMotivoTemHist(r.motivo_recusa)?`<span style="opacity:.6"> · ver histórico</span>`:''}</td>
         <td><span class="badge ${atStatusCor(st)}">${st}</span>${r.tratativa?`<br><span style="font-size:10.5px;color:var(--muted)">${esc(r.tratativa)}</span>`:''}</td>
       </tr>`; }).join(''):`<tr><td colspan="8" style="padding:16px;text-align:center;color:var(--muted)">Nenhuma apólice com esses filtros.</td></tr>`}
     </tbody></table></div>
@@ -4161,6 +4212,7 @@ function bnVivos(){ const m=isMaster();
   return BN.contatos.filter(b=>!b.merged_into &&
     (m? (!FBN.lp||(b.lp||'gustavo')===FBN.lp) : (b.lp||'gustavo')===S.activeUser)); }
 function bnPor(id){ return BN.contatos.find(b=>b.id===id); }
+function bnLpLabel(id){ const u=(S.users||[]).find(x=>x.id===(id||'gustavo')); return u?String(u.nome).split(' ')[0]:(id||'gustavo'); }
 /* Atualizar app: limpa caches (SW/CacheStorage) e recarrega — versão nova na hora */
 /* Dois botões, dois propósitos — antes eram um só e qualquer refresh custava um
    reload, derrubando a rota, o modal aberto e o trabalho em andamento:
@@ -5094,6 +5146,7 @@ function viewBnRecs(){
         <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.nome)}</div>
         <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc([b.contexto,b.cidade,b.idade&&(b.idade+' anos'),b.telefone].filter(Boolean).join(' · ')||'—')}</div>
       </div>
+      ${isMaster()&&!FBN.lp?`<span style="font-size:10.5px;font-weight:700;color:var(--muted);background:var(--bg);border:1px solid var(--linha);border-radius:7px;padding:1px 6px;white-space:nowrap">LP ${esc(bnLpLabel(b.lp))}</span>`:''}
       <span style="font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">${esc(b.trilha||'')}</span>
       ${bnBadgeEst(b.estagio)}
     </div>`;
@@ -5104,6 +5157,7 @@ function viewBnRecs(){
       ${TABS.map(([k,lb,n])=>`<button class="btn btn-mini ${BNR.tab===k?'btn-p':'btn-s'}" onclick="BNR.tab='${k}';BNR.recom='';viewBnRecs()">${lb} <b style="opacity:.75">${n}</b></button>`).join('')}
       <input type="search" style="max-width:210px" placeholder="Buscar nome ou recomendante…" value="${esc(BNR.busca)}" oninput="BNR.busca=this.value;viewBnRecs()">
       <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('rec')">🎛️ Filtros${recFiltrosAtivos()?' ('+recFiltrosAtivos()+')':''}</button>
+      ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnRecs()" title="Recomendados de qual Life Planner"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">LP ${esc(String(u.nome).split(' ')[0])}</option>`).join('')}</select>`:''}
       <select onchange="BNR.recom=this.value;viewBnRecs()" style="max-width:280px"><option value="">Recomendante: todos (${recomSet.length})</option>${recomSet.map(r=>`<option ${BNR.recom===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
       ${recFiltrosAtivos()? `<button class="btn btn-s btn-mini" onclick="recFiltroLimpar()">Limpar filtros (${recFiltrosAtivos()})</button>`:''}
     </div>
