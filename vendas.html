@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.4 · Substituição</title>
+<title>CRM Life Planner · v0.10.5 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -600,7 +600,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.4 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.5 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -614,7 +614,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.4 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.5 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -4527,6 +4527,7 @@ function viewBnEstoque(){
       <input type="number" style="max-width:110px" placeholder="Renda ≥" step="1000" value="${esc(FBN.rmin)}" oninput="FBN.rmin=this.value;viewBnEstoque()">
       ${bnColsHtml()}
       <button class="btn btn-mini ${BNP.inline?'btn-p':'btn-s'}" onclick="BNP.inline=!BNP.inline;bnPrefSalvar();viewBnEstoque()" title="Edição direto na célula: com o modo ligado, clicar numa célula edita ali mesmo (o nome continua abrindo a ficha completa)">✏️ Célula${BNP.inline?' ON':''}</button>
+      <button class="btn btn-s btn-mini" onclick="bnColarAbrir()" title="Colar um bloco do Excel/Sheets — com conferência antes de gravar">📋 Colar células</button>
       <button class="btn btn-s btn-mini" onclick="bnFiltroSalvar()">💾 Salvar filtro</button>
       <button class="btn btn-s btn-mini" onclick="bnFiltroLimpar()">Limpar</button>
     </div>
@@ -4541,6 +4542,7 @@ function viewBnEstoque(){
       <button class="btn btn-p btn-mini" onclick="bnLoteLista()">📋 Adicionar à lista…</button>
       <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnEstoque()">Limpar</button>
     </div>`:''}
+    ${bnUndoBarra()}
     <div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
       <table><thead><tr><th></th>${cols.map(k=>bnTh(k,BN_COLS[k].label)).join('')}</tr></thead><tbody>
       ${l.slice(0,FBN.mostrar).map(c=>`
@@ -4673,15 +4675,117 @@ function bnCelClique(ev,id,k){
   td.innerHTML=''; td.appendChild(el); el.focus();
   try{ if(el.select) el.select(); }catch(_){}
 }
-function bnCelGravar(id,k,v){
-  const c=bnPor(id); if(!c){ render(); return; }
+function bnCelValor(c,k,v){
   v=String(v??'').trim();
   if(k==='idade'||k==='renda_estimada'||k==='prioridade') c[k]=v?Number(v):null;
   else if(k==='filhos'){ c.filhos=v==='sim'?true:(v==='nao'?false:null); c.civil_cod=bnCivilRecalc(c); }
   else if(k==='estado_civil'){ c.estado_civil=v||null; c.civil_cod=bnCivilRecalc(c); }
   else c[k]=v||null;
+}
+function bnCelGravar(id,k,v){
+  const c=bnPor(id); if(!c){ render(); return; }
+  bnCelValor(c,k,v);
   bnSalvar(); render(); toast('Salvo',true);
 }
+/* ══ COLAR CÉLULAS EM MASSA ══════════════════════════════════════════════════
+   Colar do Excel/Sheets é o que faz a planilha valer a pena — e escrever em
+   lote na base real sem conferência é justamente o que este app nunca faz.
+   Então o caminho é: cola → PREVIEW linha a linha (quem muda, de quê pra quê,
+   opt-out por mudança) → aplica → e ainda dá pra DESFAZER, porque colar
+   desalinhado é fácil demais e some no meio de 800 nomes. */
+let _bnPaste=null, _bnUndoCels=null;
+/* a ordem de casamento por POSIÇÃO é a que está na TELA — então ela sai do DOM,
+   não de uma segunda lista que poderia divergir do que ele está vendo */
+function celIdsNaTela(){
+  return [...document.querySelectorAll('.bn-tabela tbody tr')].map(tr=>{
+    const td=tr.querySelector('td[onclick^="bnCelClique"]');
+    const m=td&&td.getAttribute('onclick').match(/'([^']+)','([^']+)'/);
+    return m?m[1]:null; }).filter(Boolean);
+}
+function celColsColaveis(){ return celColsAtuais().filter(k=>BN_COLS[k]&&BN_COLS[k].edit); }
+function celPorNome(){ const m={}; bnVivos().forEach(c=>{ const k=normKey(c.nome||''); if(k&&!m[k]) m[k]=c; }); return m; }
+function bnColarAbrir(){
+  const cols=celColsColaveis();
+  if(!cols.length){ toast('Nenhuma coluna editável nesta tela'); return; }
+  _bnPaste=null;
+  atModal(`<h3 style="margin:0 0 4px">📋 Colar células</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Copie o bloco do Excel/Sheets e cole aqui. Nada é gravado antes de você conferir a lista de mudanças.</div>
+    <textarea id="bnpz_txt" rows="7" placeholder="cole aqui (uma linha por contato, colunas separadas por tabulação)" style="width:100%;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px">
+      <label style="font-size:12.5px;font-weight:600">Casar por
+        <select id="bnpz_modo" style="margin-left:5px"><option value="nome">Nome (1ª coluna do bloco)</option><option value="pos">Posição (ordem da tela)</option></select></label>
+      <label style="font-size:12.5px;font-weight:600">1ª coluna de dados
+        <select id="bnpz_col" style="margin-left:5px">${cols.map(k=>`<option value="${k}">${esc(BN_COLS[k].label)}</option>`).join('')}</select></label>
+    </div>
+    <label style="display:flex;gap:7px;align-items:center;font-size:12.5px;margin-top:9px"><input type="checkbox" id="bnpz_vazio">Célula vazia LIMPA o campo <span style="color:var(--muted)">(desmarcado: vazio é ignorado)</span></label>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="bnColarPreview()">Conferir</button></div>`);
+}
+function bnColarPreview(){
+  const txt=(($('#bnpz_txt')||{}).value||'').replace(/\r/g,'');
+  const linhas=txt.split('\n').map(l=>l.split('\t')).filter(l=>l.some(x=>String(x).trim()!==''));
+  if(!linhas.length){ toast('Cole alguma coisa primeiro'); return; }
+  const modo=($('#bnpz_modo')||{}).value||'nome', limpaVazio=!!(($('#bnpz_vazio')||{}).checked);
+  const cols=celColsColaveis(), c0=($('#bnpz_col')||{}).value||cols[0];
+  const iCol=Math.max(0,cols.indexOf(c0));
+  const porNome=celPorNome(), ids=celIdsNaTela();
+  const muda=[], semPar=[], foraDaGrade=new Set();
+  linhas.forEach((cel,li)=>{
+    let c=null, dados=cel;
+    if(modo==='nome'){ c=porNome[normKey(cel[0]||'')]||null; dados=cel.slice(1); if(!c){ semPar.push(cel[0]||'(linha '+(li+1)+')'); return; } }
+    else { const id=ids[li]; c=id?bnPor(id):null; if(!c){ semPar.push('linha '+(li+1)+' (a tela não tem essa linha)'); return; } }
+    dados.forEach((v,di)=>{
+      const k=cols[iCol+di]; if(!k){ foraDaGrade.add(String(iCol+di+1)); return; }
+      v=String(v??'').trim();
+      if(!v&&!limpaVazio) return;
+      const antes=bnCelHtmlTexto(c,k);
+      const clone=Object.assign({},c); bnCelValor(clone,k,v);
+      const depois=bnCelHtmlTexto(clone,k);
+      if(String(antes)===String(depois)) return;
+      muda.push({id:c.id,nome:c.nome,k,antes,depois,valor:v});
+    });
+  });
+  _bnPaste={muda,semPar,fora:[...foraDaGrade]};
+  if(!muda.length){ toast(semPar.length?'Nada casou — confira o modo de casamento':'Nada a mudar: os valores já são esses',false); return; }
+  atModal(`<h3 style="margin:0 0 4px">Conferir antes de aplicar</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${muda.length} alteração(ões) em ${new Set(muda.map(m=>m.id)).size} contato(s)${semPar.length?` · <b style="color:var(--amar)">${semPar.length} linha(s) sem par</b>`:''}${foraDaGrade.size?` · ${foraDaGrade.size} coluna(s) do bloco além da tabela`:''}. Desmarque o que não fizer sentido.</div>
+    ${semPar.length?`<div style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:8px;padding:7px 9px;margin-bottom:9px">Sem par (nada será feito com elas): ${esc(semPar.slice(0,6).join(' · '))}${semPar.length>6?' …':''}</div>`:''}
+    <div style="max-height:46vh;overflow:auto">
+      ${muda.map((m,i)=>`<label style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--linha);border-radius:8px;padding:8px 9px;margin-bottom:6px;font-size:12.5px;cursor:pointer">
+        <input type="checkbox" id="bnpz_${i}" checked style="margin-top:3px">
+        <span><b>${esc(m.nome)}</b> · ${esc(BN_COLS[m.k].label)}<br>
+        <span style="color:var(--muted)">${esc(m.antes||'—')}</span> → <b>${esc(m.depois||'—')}</b></span></label>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="bnColarAbrir()">Voltar</button><button class="btn btn-p" onclick="bnColarAplicar()">Aplicar</button></div>`);
+}
+/* comparar pelo TEXTO da célula (e não pelo valor cru) evita "mudança" que não
+   muda nada na tela — ex.: 'sim' virando true no campo filhos */
+function bnCelHtmlTexto(c,k){ const d=document.createElement('div'); d.innerHTML=bnCelHtml(c,k); return (d.textContent||'').trim(); }
+function bnColarAplicar(){
+  const p=_bnPaste; if(!p) return;
+  const undo=[]; let n=0;
+  p.muda.forEach((m,i)=>{
+    const cb=$('#bnpz_'+i); if(!cb||!cb.checked) return;
+    const c=bnPor(m.id); if(!c) return;
+    undo.push({id:m.id,k:m.k,antes:c[m.k]===undefined?null:c[m.k],civil:c.civil_cod,filhos:c.filhos,ec:c.estado_civil});
+    bnCelValor(c,m.k,m.valor); n++;
+  });
+  _bnPaste=null; atClose();
+  if(!n){ toast('Nada marcado',false); return; }
+  _bnUndoCels=undo; bnSalvar(); render();
+  toast(n+' célula(s) coladas · dá pra desfazer no topo da tabela',true);
+}
+function bnColarDesfazer(){
+  const u=_bnUndoCels; if(!u||!u.length) return;
+  u.forEach(x=>{ const c=bnPor(x.id); if(!c) return;
+    c[x.k]=x.antes; c.civil_cod=x.civil; c.filhos=x.filhos; c.estado_civil=x.ec; });
+  _bnUndoCels=null; bnSalvar(); render(); toast('Colagem desfeita',true);
+}
+function bnUndoBarra(){ return (_bnUndoCels&&_bnUndoCels.length)
+  ? `<div class="card" style="padding:8px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;border:1px solid #eddcc0;background:var(--amar-claro,#fff8e6)">
+      <span style="font-size:12.5px">📋 ${_bnUndoCels.length} célula(s) coladas agora há pouco.</span>
+      <button class="btn btn-s btn-mini" onclick="bnColarDesfazer()">↩︎ Desfazer a colagem</button>
+      <button class="btn btn-ghost btn-mini" onclick="_bnUndoCels=null;render()">Ok, manter</button></div>`
+  : ''; }
 function bnEditorHtml(c){
   return `<div class="card" style="padding:12px;background:var(--bg)">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
@@ -5230,7 +5334,7 @@ function recTabelaHtml(l,row){
   const wst=k=>RECP.w&&RECP.w[k]?`width:${RECP.w[k]}px;min-width:${RECP.w[k]}px;`:'';
   const th=k=>`<th style="${wst(k)}white-space:nowrap;position:relative;cursor:pointer" title="Clique pra ordenar · arraste a borda pra redimensionar" onclick="fxSort('rec','${k}')">${esc(BN_COLS[k].label)}${seta(k)}<span class="colres" onmousedown="recRzStart(event,'${k}')"></span></th>`;
   const filtro=k=>`<th style="${wst(k)}padding:2px 4px"><input id="reccf-${k}" type="search" placeholder="filtrar…" value="${esc(cf[k]||'')}" oninput="recCfInput('${k}',this.value)" style="width:100%;min-width:60px;font-size:11.5px;padding:3px 6px"></th>`;
-  return `<div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
+  return `${bnUndoBarra()}<div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
     <table><thead><tr><th style="width:26px"></th>${cols.map(th).join('')}</tr>
     <tr><th></th>${cols.map(filtro).join('')}</tr></thead><tbody>
     ${l.length? l.map(c=>`<tr class="clicavel">
@@ -5321,7 +5425,8 @@ function viewBnRecs(){
       <button class="btn btn-mini ${RECP.vis==='grupo'?'btn-p':'btn-s'}" onclick="recVis('grupo')" title="Agrupado por recomendante">🙌 Agrupado</button>
       <button class="btn btn-mini ${RECP.vis==='tabela'?'btn-p':'btn-s'}" onclick="recVis('tabela')" title="Planilha: edição na célula, ordenação e filtro por coluna, ações em lote">▦ Tabela</button>
       ${RECP.vis==='tabela'?`${fxColsHtml('rec',BN_COLS,recColsVis(),'nome')}
-      <button class="btn btn-mini ${BNP.inline?'btn-p':'btn-s'}" onclick="BNP.inline=!BNP.inline;bnPrefSalvar();viewBnRecs()" title="Edição direto na célula: clicar edita ali mesmo (o nome continua abrindo a ficha)">✏️ Célula${BNP.inline?' ON':''}</button>`:''}
+      <button class="btn btn-mini ${BNP.inline?'btn-p':'btn-s'}" onclick="BNP.inline=!BNP.inline;bnPrefSalvar();viewBnRecs()" title="Edição direto na célula: clicar edita ali mesmo (o nome continua abrindo a ficha)">✏️ Célula${BNP.inline?' ON':''}</button>
+      <button class="btn btn-s btn-mini" onclick="bnColarAbrir()" title="Colar um bloco do Excel/Sheets — com conferência antes de gravar">📋 Colar células</button>`:''}
     </div>
     ${names.length? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${nomesQtd.toLocaleString('pt-BR')} nome${nomesQtd>1?'s':''} · ${names.length.toLocaleString('pt-BR')} recomendante${names.length>1?'s':''}${RECP.vis==='tabela'&&tabList.length!==nomesQtd?' · '+tabList.length+' no filtro de coluna':''}</div>`:''}
     ${FBN.sel.size? `<div class="card" style="padding:8px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
