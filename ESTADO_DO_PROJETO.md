@@ -4,9 +4,9 @@
 
 ---
 
-## 📸 Snapshot — 11/08/2026 · 🔁 SUBSTITUIÇÃO virou módulo nativo (v0.10.0) + caderno de 8 ajustes (v0.10.1) + fix do "Ver no CRM"
+## 📸 Snapshot — 11/08/2026 · 🔁 SUBSTITUIÇÃO nativa e OPERÁVEL (v0.10.2) + caderno de 8 ajustes + fix do "Ver no CRM"
 
-**Estado em 30 s:** `main` = `462913a`, **tudo no ar** em `juca-alt.github.io/crm-captacao/`. Três entregas hoje, nesta ordem: (1) **PR #58 / v0.10.0** — o módulo **Substituição de Apólice** deixou de ser um stub morto e virou módulo de verdade no `vendas.html`, gravando em `subst_clientes/subst_apolices/subst_pagamentos`; (2) **PR #59 / v0.10.1** — 8 dos 14 itens do caderno de ajustes dele; (3) **PR #60** — fix do "Ver no CRM", achado no uso real dele.
+**Estado em 30 s:** `main` = `0513250`, **tudo no ar** em `juca-alt.github.io/crm-captacao/`. Três entregas hoje, nesta ordem: (1) **PR #58 / v0.10.0** — o módulo **Substituição de Apólice** deixou de ser um stub morto e virou módulo de verdade no `vendas.html`, gravando em `subst_clientes/subst_apolices/subst_pagamentos`; (2) **PR #59 / v0.10.1** — 8 dos 14 itens do caderno de ajustes dele; (3) **PR #60** — fix do "Ver no CRM", achado no uso real dele.
 
 ### 1. Substituição de Apólice — de stub morto a módulo (PR #58, v0.10.0)
 O item 🔁 Substituições do menu abria uma tela dizendo "o módulo vive no arquivo `controle-substituicao.html` nesta mesma pasta" — **arquivo que não existe no repo**. O de verdade vivia solto em `~/Documents/Claude/Projects/CRM Life Planner/Artefatos/` (90KB, v1.9, localStorage `csa_state_v3`).
@@ -33,10 +33,17 @@ O item 🔁 Substituições do menu abria uma tela dizendo "o módulo vive no ar
 ### 3. Fix do "Ver no CRM" (PR #60) — achado no uso real dele
 Print do George de Melo Santos: clicar em "Ver no CRM" abria o painel com o nome certo na busca e **"Nenhuma pessoa com esses filtros"**. O `&abrir=1` não bastava — o painel abre na lista padrão **"Prontos p/ ligar"**, que exige `estagio==='lista_ta'`, e cliente da carteira é `estagio==='cliente'` (mais trilha 'seguro' e faixas de idade/renda). Fix = `irParaOndeEstA()`: zera filtros, preenche a busca e **troca a lista** pela que contém a pessoa, antes de abrir a ficha.
 
+### 4. Substituição operável de verdade (PR #61, v0.10.2) — pedido no fechamento
+Ele perguntou: *"eu tb posso add os clientes e puxar pela lista de atraso né? quero que seja funcional"*. **Estava capenga:** o "Puxar da Lista de Atraso" só ATUALIZAVA apólices já cadastradas — com o módulo vazio respondia "nada novo" e não fazia nada. Mas quem está em substituição está, por construção, em atraso, e o relatório oficial já traz cliente/apólice/prêmio/vencimento/LP/motivo.
+- Preview em 2 seções (**Atualizar o que já está aqui** / **Trazer pra cá**), checkbox por apólice (opt-in) + escolha do papel + "Marcar todas". Cliente criado só se não existir, casando por nome normalizado (as N apólices da mesma pessoa caem num cliente só). Entra como fonte `oficial` + data do relatório → reprocessar não duplica.
+- ⚠️ **O outro lado:** apólice vinda do atraso não tem **data de emissão** e sem ela a janela de 180d não fecha — a tela dizia "sem apólice gatilho" mesmo havendo uma. Agora distingue "sem gatilho" de **"falta a data de emissão da nova"**, com aviso + botão que resolve na hora.
+- **✏️ Editar apólice** em cada card (papel, emissão, prêmio, dia, vencimento, LP, forma) + **remover do controle**. Vencimento mexido à mão vira `estimado`.
+- **LIÇÃO:** entregar o "atualizar" sem o "criar" deixou o módulo inutilizável na partida. Sempre checar o caminho do **estado inicial vazio**.
+
 **Verificação da sessão:** 105 golden asserts (jsc) contra o **backup real** do controle antigo e o **espelho real em PDF** do Drive; E2E no browser em cada entrega (fluxo de boleto completo, ponte com o atraso, as 3 saídas do "sumiu", foco da busca, DnD no mesmo tick, os 3 casos do "Ver no CRM"); console limpo; desktop e mobile por screenshot; prod confirmada pelo CONTEÚDO, não só pelo número da versão.
 
 **⚠️ PENDENTE (dele) e próximas frentes:**
-1. **Importar o backup fresco da Substituição, LOGADO** — exportar do `controle-substituicao.html` (o de `~/Downloads` é de 16/07 e o artefato semeia dados mais novos no boot) e usar o botão ⬆︎ Importar backup. Sem isso o módulo está vazio em produção.
+1. ✅ **Backup da Substituição JÁ IMPORTADO por ele** (confirmou no fechamento). Agora pode também **puxar da Lista de Atraso** pra trazer clientes/apólices que faltarem, e completar a **data de emissão** da apólice-gatilho pelo ✏️ (sem ela a janela de 180d não fecha).
 2. **Caso Ricardo Da Fonte** — não reproduzi (base vazia). Corrigi o mecanismo pela especificação; se após importar ainda divergir, precisa do print da ficha + relatório.
 3. **Caso Gilvania** — precisa dos **dois relatórios** (antes/depois do abatimento) pra fechar em definitivo.
 4. **Item 4 do caderno** (botão "Adicionar" na aba Oportunidades): esse selector **não existe** em `vendas.html` nem `carteira.html` — **precisa de print** pra conectar a coisa certa.
@@ -56,7 +63,7 @@ Print do George de Melo Santos: clicar em "Ver no CRM" abria o painel com o nome
 - `git fetch` ANTES de editar o clone compartilhado; `grep -a` obrigatório no `vendas.html`; sem node na máquina (testes no browser interno ou via `jsc`).
 
 **Prompt pronto pra retomar (cole num chat novo):**
-> Sessão CRM **Visão LP** (repo `juca-alt/crm-captacao`, git real em `~/Documents/crm-captacao`, playground Supabase `cjieobmdpqcupzdpckef`). Leia as memórias `crm-lp-substituicao` + `crm-lp-caderno-ajustes`. Estado: `main` = `462913a`, v0.10.1 no ar — módulo **Substituição de Apólice** nativo (tabelas `subst_*`, RLS por dono), 8 ajustes do caderno e o fix do "Ver no CRM". **Meu passo pendente:** importar o backup fresco da Substituição logado. **Frentes na fila, eu escolho:** (a) itens 6+7+9 do caderno = duplo modelo do card + modal Mover Estágio + converter contato→Clientes (precisa definir a trilha de follow-up de cliente); (b) item 4 (te mando o print da aba Oportunidades); (c) extensão WA 2.0; (d) Google Agenda reaproveitando o OAuth do Painel Central; (e) rebase do PR #35. **Regras:** `git fetch` antes de editar, `grep -a` no `vendas.html`, editar por python/latin-1, uma sessão só nesta visão.
+> Sessão CRM **Visão LP** (repo `juca-alt/crm-captacao`, git real em `~/Documents/crm-captacao`, playground Supabase `cjieobmdpqcupzdpckef`). Leia as memórias `crm-lp-substituicao` + `crm-lp-caderno-ajustes`. Estado: `main` = `0513250`, v0.10.2 no ar — módulo **Substituição de Apólice** nativo (tabelas `subst_*`, RLS por dono), 8 ajustes do caderno e o fix do "Ver no CRM". **Já importei o backup da Substituição**; falta completar a data de emissão das apólices-gatilho (✏️ no card) pra janela de 180d fechar. **Frentes na fila, eu escolho:** (a) itens 6+7+9 do caderno = duplo modelo do card + modal Mover Estágio + converter contato→Clientes (precisa definir a trilha de follow-up de cliente); (b) item 4 (te mando o print da aba Oportunidades); (c) extensão WA 2.0; (d) Google Agenda reaproveitando o OAuth do Painel Central; (e) rebase do PR #35. **Regras:** `git fetch` antes de editar, `grep -a` no `vendas.html`, editar por python/latin-1, uma sessão só nesta visão.
 
 ---
 
