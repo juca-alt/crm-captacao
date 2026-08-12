@@ -1685,17 +1685,43 @@ async function boot(){
 /* Vindo da Carteira (?q=Nome&abrir=1) ele quer VER O CLIENTE, não uma lista
    filtrada com um resultado. Só abre quando não há dúvida de quem é: nome exato
    primeiro, senão um único candidato por prefixo/trecho. Ambíguo ou sem match,
-   mantém a busca aplicada e diz o porquê — abrir a ficha errada é pior que não abrir. */
+   mantém a busca aplicada e diz o porquê — abrir a ficha errada é pior que não abrir.
+
+   ⚠️ ACHADO DO USO REAL (print do George de Melo Santos, 11/08): não bastava
+   buscar. O painel abre por padrão na lista "Prontos p/ ligar", cuja base exige
+   estagio==='lista_ta' — e cliente da carteira é estagio==='cliente'. Resultado:
+   "Nenhuma pessoa com esses filtros", com o nome certo na busca. Somava-se a isso
+   a trilha padrão 'seguro' e as faixas de idade/renda, que também escondem gente.
+   Então antes de abrir a ficha a gente LEVA O PAINEL até onde a pessoa está:
+   filtros zerados e a lista trocada pra uma que realmente contém ela. */
 function abrirFichaPorNome(q){
   const n=stripAccent(String(q||"")).toLowerCase().trim(); if(!n) return;
-  const lista=S.cont||[];
+  const base=S.cont||[];                                  // S.cont = base INTEIRA, não a lista ativa
   const nome=c=>stripAccent(String(c.nome||"")).toLowerCase().trim();
-  const exatos=lista.filter(c=>nome(c)===n);
+  const exatos=base.filter(c=>nome(c)===n);
   const cand=exatos.length?exatos
-    :(()=>{ const p=lista.filter(c=>nome(c).startsWith(n)); return p.length?p:lista.filter(c=>nome(c).includes(n)); })();
+    :(()=>{ const p=base.filter(c=>nome(c).startsWith(n)); return p.length?p:base.filter(c=>nome(c).includes(n)); })();
+  if(!cand.length){ toast("“"+q+"” não está no CRM ainda","warn"); return; }
+  irParaOndeEstA(cand[0], q);
   if(cand.length===1){ openFicha(cand[0].id); return; }
-  if(cand.length>1) toast(cand.length+" contatos com esse nome — escolha na lista","warn");
-  else toast("“"+q+"” não está no CRM ainda","warn");
+  toast(cand.length+" contatos com esse nome — escolha na lista","warn");
+}
+/* Deixa a pessoa VISÍVEL antes de qualquer coisa: zera o que filtra, abre a busca
+   pelo nome e escolhe a lista que contém ela (a específica na frente de "Toda a
+   base"; 'rec' fora, que é outra visão). Sem isso a ficha abriria por cima de uma
+   lista vazia — e ao fechar ele cairia num "nenhuma pessoa com esses filtros". */
+function irParaOndeEstA(c, q){
+  S.filters=defFilters();
+  S.filters.trilha='todos';                                // não presume trilha seguro
+  S.filters.idadeMin=0; S.filters.idadeMax=120;            // faixas padrão escondem quem está fora
+  S.filters.rendaMin=0; S.filters.rendaMax=99999999;
+  S.filters.q=q||c.nome||"";
+  const ordem=['cliente','oi','hoje','sitplan','todos','descartado'];
+  const alvo=ordem.find(k=>SMART[k]&&SMART[k].base(c))||'todos';
+  goList(alvo);
+  ['q','qMain'].forEach(id=>{const el=document.getElementById(id); if(el)el.value=S.filters.q;});
+  const clr=document.getElementById("qClear"); if(clr)clr.classList.remove("hide");
+  renderAll();
 }
 boot();
 </script>
