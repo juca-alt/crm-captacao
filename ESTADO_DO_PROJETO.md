@@ -4,6 +4,37 @@
 
 ---
 
+## 📸 Snapshot — 12–13/08/2026 · caderno pág.2 INTEIRO + funil com visão de negócio (v0.10.3 → v0.10.9)
+
+**Estado em 30 s:** `main` = `f6d2fba`, **tudo no ar** em `juca-alt.github.io/crm-captacao/vendas.html`. Sete versões em duas levas: a **página 2 do caderno** dele (PRs #62–#65) e o **upgrade de negócio do funil de vendas** (PRs #66–#68), com uma varredura QA no meio.
+
+### Caderno página 2 — entregue inteiro
+- **v0.10.3 (#62)** — coluna **MOTIVO** da Lista de Atraso mostra só a última mensagem (o relatório concatena todas as tentativas numa célula de 300+ chars), com o log inteiro no tooltip · **janela de 180d nos cards** da Substituição (dias corridos e quantos faltam) + data de emissão · **alerta honesto** quando não há pagamento vinculado · bloco "Sugestão de fluxo" removido a pedido dele · **cadastro puxando da Lista de Atraso** (nome → telefone + apólices com prêmio/vencimento oficial/LP/motivo) · **filtro por LP** nas Recomendações.
+- **v0.10.4 (#63)** — **seletor de funil no card do contato**: trocar de esteira sem apagar e recriar, com a etapa de destino escolhida na hora (o app não inventa equivalência), sem duplicata e com histórico preservado · **ordem das colunas** configurável (↑↓) no motor genérico, valendo pras 4 telas com colunas · **Data Grid nas Recomendações** (edição na célula, filtro por coluna, largura arrastável, lote, Tab entre células).
+- **v0.10.5 (#64)** — **colar células em massa** com preview linha a linha, opt-out por mudança e **desfazer**.
+- **v0.10.6 (#65)** — **varredura QA**, 4 achados: 🔴 colar em coluna de lista gravava valor inválido (`Cliente` virava `estagio="Cliente"`, badge certo na tela e ZERO em toda contagem) · "nenhum pagamento vinculado" era falso quando havia pagamento fora do período · ficha aberta pela tabela das Recomendações se fechava sozinha no primeiro `render()` · emissão futura mostrava "-293 de 180 dias". Nasceu aqui o **`lpSelfCheck()`** de boot.
+
+### Funil de vendas com visão de negócio
+- **v0.10.7 (#66)** — 🐞 **o prêmio não salvava**: digitar no card do funil e clicar fora perdia o valor (só Enter ou o botão gravavam) — e a nota logo abaixo, no mesmo painel, já salvava no blur. **Régua de negócio** nos dois funis: PA em jogo, ticket médio, **previsto fechar** × **previsto emitir** no mês, fechamento vencido. **Previsão de fechamento e de emissão** por negócio (datas diferentes de propósito: a venda fecha, a apólice emite depois, e a comissão anda com a segunda). De quebra, o chip "PA no funil" somava os **encerrados** — dois números pro mesmo conceito na mesma tela; removido.
+- **v0.10.8 (#67)** — **probabilidade de virar apólice**: padrão por etapa + override manual que sempre ganha · **PA ponderado** · **taxa de passagem foi pro topo de cada coluna** do board, com o gargalo como KPI. 🐞 Achado no PRINT: "120% passam" — a contagem não era monotônica; virou `nnMaxIdx` (ponto mais fundo alcançado).
+- **v0.10.9 (#68)** — ele perguntou **de que período** era a taxa e **como** a probabilidade era calculada. Eram: período nenhum e tabela minha. Agora: **seletor de período** (30/90/180/365/tudo) valendo só pra taxa e calibragem, com os excluídos declarados; **`entradaFunil()`** separando data de cadastro (fato) de estimada; **probabilidade calibrada no funil dele** (`alcançaram(fim)/alcançaram(E)`) com amostra mínima, e os **dois percentuais lado a lado, rotulados**, pra ele não ler errado.
+
+**`lpSelfCheck()` está em 34 invariantes** — um pra cada regra que quebrou nestas duas levas. Roda no boot em ~1ms e só reclama no console.
+
+### O que ficou aberto (para a próxima sessão)
+
+**Depende do Gustavo:**
+1. **PR #35 (Revisão de Apólices)** — estava em conflito desde 28/07 e **foi desencalhado nesta sessão** (merge da main, 6 hunks mecânicos, smoke test OK, `MERGEABLE`). **Não foi mergeado de propósito**: subir pede criar as tabelas de revisão no playground + publicar a Edge Function `importar-apolice`, e falta decidir se ele **duplica ou complementa** o `revisao-protecao.html` que já está no ar.
+2. **Print do item 3** do caderno — se era o *menu lateral arrastável* (estilo Central Financeira), só metade foi entregue (foi feita a ordem das colunas das planilhas).
+3. **Print da aba Oportunidades** (item 4 da pág.1) — o botão "Adicionar" não existe naquela tela.
+4. **Itens 6/7/9 da pág.1** — dependem dele definir a **trilha de follow-up do cliente** (quais etapas um cliente percorre depois de virar cliente). O seletor de funil da v0.10.4 já cobre parte do 7 e do 9.
+5. **Data de emissão das apólices-gatilho** no ✏️ do card da Substituição — sem ela a janela de 180 dias nunca fecha.
+6. **7 SQL** de `~/Downloads/leads-bkp-restore` e a **decisão de RLS** em `lp_key_contatos` / `lp_key_leads` / `lp_match_leads`.
+
+**Pode ser tocado sem ele:** Google Agenda reaproveitando o OAuth do Painel Central (item 14) · estudo GlobalCRM (avaliar e trazer as decisões). **Fora desta visão:** extensão WA 2.0 (outra base, e ele quer dividida em Captação × LP Vendas).
+
+---
+
 ## 📸 Snapshot — 11/08/2026 · 🔁 SUBSTITUIÇÃO nativa e OPERÁVEL (v0.10.2) + caderno de 8 ajustes + fix do "Ver no CRM"
 
 **Estado em 30 s:** `main` = `0513250`, **tudo no ar** em `juca-alt.github.io/crm-captacao/`. Quatro entregas hoje, nesta ordem: (1) **PR #58 / v0.10.0** — o módulo **Substituição de Apólice** deixou de ser um stub morto e virou módulo de verdade no `vendas.html`, gravando em `subst_clientes/subst_apolices/subst_pagamentos`; (2) **PR #59 / v0.10.1** — 8 dos 14 itens do caderno de ajustes dele; (3) **PR #60** — fix do "Ver no CRM", achado no uso real dele; (4) **PR #61 / v0.10.2** — a Lista de Atraso virou a porta de entrada do módulo (cria cliente+apólice) e a apólice virou editável.
