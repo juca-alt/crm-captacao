@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.6 · Substituição</title>
+<title>CRM Life Planner · v0.10.7 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -600,7 +600,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.6 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.7 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -614,7 +614,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.6 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.7 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1076,6 +1076,69 @@ function nnOrdenar(cs){
 }
 function nnOrdSelect(){ return `<select onchange="nnOrdSet(this.value)" title="Ordem dos cards dentro de cada coluna" style="max-width:170px">${NN_ORDS.map(([k,l])=>`<option value="${k}"${NN_ORD===k?' selected':''}>↕ ${l}</option>`).join('')}</select>`; }
 function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='nn-funil')); render(); }
+/* ══ VISÃO DE NEGÓCIO DO FUNIL ═══════════════════════════════════════════════
+   Contagem por etapa não responde o que o LP precisa saber: quanto tem em jogo,
+   o que fecha ESTE mês e onde o funil vaza. Três coisas novas:
+   1) previsão de FECHAMENTO e de EMISSÃO por negócio (são datas diferentes: a
+      venda fecha, a apólice emite depois — e a comissão anda com a segunda);
+   2) régua de negócio no topo do funil, com o previsto do mês;
+   3) taxa de passagem entre etapas. */
+function prevDe(c,k){ const v=c&&c[k==='emis'?'prev_emis':'prev_fech']; return v||null; }
+function prevSet(c,k,iso){ c[k==='emis'?'prev_emis':'prev_fech']=iso||null; }
+function mesDe(iso){ return String(iso||'').slice(0,7); }
+function mesAtual(){ return hojeISO().slice(0,7); }
+function prevVencida(iso){ return !!iso && iso<hojeISO(); }
+/* alcançou a etapa = está nela/além OU o histórico registra a entrada nela.
+   Contato encerrado (Não/cancelada) sai do índice do fluxo, então só o
+   histórico responde por ele — por isso a taxa é honesta sobre sua origem. */
+function nnAlcancou(c,e,fluxo){
+  const i=fluxo.indexOf(e); if(i<0) return false;
+  if(fluxo.indexOf(c.etapa)>=i) return true;
+  return (c.interacoes||[]).some(x=>x.k==='etapa'&&x.para===e);
+}
+function nnTaxas(lista,fluxo){
+  const alc=fluxo.map(e=>lista.filter(c=>nnAlcancou(c,e,fluxo)).length);
+  return fluxo.slice(0,-1).map((e,i)=>({de:e,para:fluxo[i+1],n1:alc[i],n2:alc[i+1],
+    pct:alc[i]?Math.round(alc[i+1]/alc[i]*100):null}));
+}
+function nnNegocioHtml(lista,fluxo,ns){
+  const vivos=lista.filter(c=>fluxo.includes(c.etapa));
+  const pa=somaPA(vivos), pm=somaPM(vivos);
+  const comValor=vivos.filter(c=>pmDe(c)>0).length;
+  const mes=mesAtual();
+  const fechMes=vivos.filter(c=>mesDe(prevDe(c,'fech'))===mes);
+  const emisMes=vivos.filter(c=>mesDe(prevDe(c,'emis'))===mes);
+  const atrasados=vivos.filter(c=>prevVencida(prevDe(c,'fech')));
+  const taxas=nnTaxas(lista,fluxo);
+  const validas=taxas.filter(t=>t.pct!=null&&t.n1>0);
+  const pior=validas.length?validas.slice().sort((a,b)=>a.pct-b.pct)[0]:null;
+  const kpi=(l,n,s,alerta)=>`<div class="kpi"${alerta?' style="border:1.5px solid var(--verm-borda,#f3c9c9)"':''}><div class="lbl">${l}</div><div class="num" style="font-size:19px">${n}</div>${s?`<div style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
+  return `<div class="kpis" style="margin-bottom:12px">
+      ${kpi('PA em jogo',brlCurto(pa),brlCurto(pm)+'/mês · '+vivos.length+' negócio(s)')}
+      ${kpi('Ticket médio (PA)',comValor?brlCurto(pa/comValor):'—',comValor<vivos.length?`${vivos.length-comValor} sem prêmio informado`:'todos com prêmio')}
+      ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?fechMes.length+' negócio(s)':'nenhuma previsão neste mês')}
+      ${kpi('Previsto emitir no mês',emisMes.length?brlCurto(somaPA(emisMes)):'—',emisMes.length?emisMes.length+' apólice(s)':'nenhuma previsão neste mês')}
+      ${kpi('Fechamento vencido',atrasados.length||'0',atrasados.length?'previsão passou — renegociar a data':'nenhuma previsão atrasada',atrasados.length>0)}
+    </div>
+    <div class="card" style="padding:10px 12px;margin-bottom:12px;overflow-x:auto">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap">
+        <b style="font-size:13px">Taxa de passagem</b>
+        <span style="font-size:11.5px;color:var(--muted)">quem alcançou cada etapa (posição atual + histórico registrado) — não é conversão do mês</span>
+        ${pior?`<span style="flex:1"></span><span class="badge b-verm" title="Menor passagem do funil">gargalo: ${esc(pior.de)} → ${esc(pior.para)} · ${pior.pct}%</span>`:''}
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:2px;min-width:520px">
+        ${fluxo.map((e,i)=>{ const n=lista.filter(c=>nnAlcancou(c,e,fluxo)).length;
+          const t=taxas[i], base=lista.filter(c=>nnAlcancou(c,fluxo[0],fluxo)).length||1;
+          const h=Math.max(6,Math.round(n/base*54));
+          return `<div style="flex:1;text-align:center;min-width:44px">
+            <div style="font-size:11px;font-weight:700">${n}</div>
+            <div style="height:${h}px;background:${etapaVar(e)};opacity:.75;border-radius:4px 4px 0 0"></div>
+            <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e)}</div>
+            ${t?`<div style="font-size:10.5px;font-weight:700;color:${t.pct==null?'var(--muted)':(t.pct<40?'var(--verm)':t.pct<70?'var(--amar)':'var(--verde)')}">${t.pct==null?'—':t.pct+'%'} ↓</div>`:'<div style="height:14px"></div>'}
+          </div>`; }).join('')}
+      </div>
+    </div>`;
+}
 function nnCard(c){
   /* Recomendações são métrica PRÓPRIA: pedir e colher não depende de fechar
      contrato, e sem isso no card o funil só conta dinheiro. Só aparece quando
@@ -1087,6 +1150,7 @@ function nnCard(c){
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
+    ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
     <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}${_recBadge}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
 }
@@ -1110,7 +1174,6 @@ function viewNnFunil(){
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}
     <span style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
-    ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
@@ -1140,7 +1203,7 @@ function viewNnFunil(){
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Novos Negócios</h1>
     <div class="sub">Processo completo (12 etapas): SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · encerramentos recolhíveis no fim.</div>
-    ${toolbar}${body}`;
+    ${nnNegocioHtml(lista,ETAPAS_FLUXO,'nn')}${toolbar}${body}`;
   if(NN_MODE==='kanban'){
     wireNnBoard();
     if(NN_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+NN_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
@@ -1197,7 +1260,6 @@ function viewBcFunil(){
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>${nnOrdSelect()}
     <span style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
-    ${somaPA(lista)? `<span class="vneg vneg-total" title="Soma do prêmio anual de todos os negócios do funil">PA no funil <b>${brlCurto(somaPA(lista))}</b></span>`:''}
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
   </div>`;
@@ -1227,7 +1289,7 @@ function viewBcFunil(){
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Negócios Base de Clientes</h1>
     <div class="sub">Processo da carteira (espelho do Kommo): Clientes Ativos → Pendência/Atraso → Contato Agenda/Revisita → Agendada Revisita → Novo Negócio/Resolução pós Revisita → N/Emissão → Emissão Final → Delivery · encerramentos (ganha/perdida) recolhíveis no fim.</div>
-    ${toolbar}${body}`;
+    ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc')}${toolbar}${body}`;
   if(BC_MODE==='kanban'){
     wireBcBoard();
     if(BC_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+BC_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
@@ -1572,11 +1634,18 @@ function renderDrawer(){
         <div class="linha-form" style="align-items:center">
           <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Prêmio mensal R$</span>
           <input id="drwPM" type="text" inputmode="decimal" placeholder="600" value="${pmDe(c)? String(pmDe(c)).replace('.',','):''}"
-                 style="flex:0 0 120px;min-width:100px" oninput="drwPMPreview()" onkeydown="if(event.key==='Enter')drwSalvarPM()">
+                 style="flex:0 0 120px;min-width:100px" oninput="drwPMPreview()" onblur="drwSalvarPM(true)" onkeydown="if(event.key==='Enter')drwSalvarPM()">
           <button class="btn btn-p btn-mini" onclick="drwSalvarPM()">Salvar</button>
           ${pmDe(c)? `<button class="btn btn-ghost btn-mini" onclick="drwLimparPM()">Limpar</button>`:''}
         </div>
         <div id="drwPApreview" class="pa-box">${pmDe(c)? `PA <b>${brl(totalDe(c))}</b> <span style="color:var(--muted)">${c.premio_total_manual?'(total ajustado à mão · 12× seria '+brl(paDe(c))+')':'('+brl(pmDe(c))+' × '+PA_MESES+')'}</span> <button class="btn btn-ghost btn-mini" onclick="drwAjustarTotal()">ajustar total</button>` : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`}</div>
+        <div class="linha-form" style="align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap">
+          <label style="font-size:12.5px;color:var(--muted)">🎯 Previsão de fechamento
+            <input id="drwPrevF" type="date" value="${esc(prevDe(c,'fech')||'')}" onchange="drwSalvarPrev('fech',this.value)" style="margin-left:5px"></label>
+          <label style="font-size:12.5px;color:var(--muted)">📄 Previsão de emissão
+            <input id="drwPrevE" type="date" value="${esc(prevDe(c,'emis')||'')}" onchange="drwSalvarPrev('emis',this.value)" style="margin-left:5px"></label>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:-4px">A venda fecha numa data e a apólice emite em outra — a comissão anda com a segunda. As duas alimentam o previsto do mês no topo do funil.</div>
         <div class="linha-form" style="align-items:center;margin-top:10px;gap:6px;flex-wrap:wrap">
           <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Temperatura</span>
           ${tempKeys().map(k=>{ const d=tempDic()[k], on=c.temperatura===k;
@@ -1705,16 +1774,27 @@ function drwPMPreview(){
     ? `PA <b>${brl(pm*PA_MESES)}</b> <span style="color:var(--muted)">(${brl(pm)} × ${PA_MESES})</span>`
     : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`;
 }
-function drwSalvarPM(){
+/* Digitar e clicar fora perdia o valor sem aviso — e a nota logo abaixo, no
+   MESMO painel, já salvava no blur. Campo que aceita digitação e descarta em
+   silêncio é pior que botão que não funciona: parece que funcionou.
+   `auto` = veio do blur: não repete toast quando nada mudou. */
+function drwSalvarPM(auto){
   const c=ct(), el=$('#drwPM'); if(!c||!el) return;
   const pm=parsePM(el.value);
   if(String(el.value).trim() && !pm){ toast('Valor inválido — use só números (ex.: 600 ou 1.200,50)'); return; }
+  if(auto && pm===pmDe(c)) return;
   c.pm = pm || null;                       // salvar() carimba o _upd do sync sozinho
   c.premio_mes = c.pm;                     // campos canônicos (regra_premio): espelham o pm
   if(c.pm) c.premio_total = c.premio_total_manual? c.premio_total : Math.round(c.pm*PA_MESES*100)/100;
   else { c.premio_total=null; c.premio_total_manual=false; }
   salvar(); render();
   toast(pm? `${brlCurto(pm)}/mês · PA ${brlCurto(pm*PA_MESES)}` : 'Valor do negócio removido', true);
+}
+function drwSalvarPrev(k,v){
+  const c=ct(); if(!c) return;
+  const antes=prevDe(c,k); if((antes||'')===(v||'')) return;
+  prevSet(c,k,v||null); salvar(); render();
+  toast(v? (k==='fech'?'Previsão de fechamento: ':'Previsão de emissão: ')+dataBR(v) : 'Previsão removida', true);
 }
 function drwLimparPM(){ const c=ct(); if(!c) return; c.pm=null; c.premio_mes=null; c.premio_total=null; c.premio_total_manual=false; salvar(); render(); toast('Valor do negócio removido',true); }
 function toggleAnce(k){ const c=ct(); if(!c) return; if(!c.ance) c.ance={a:false,n:false,c:false,e:false,avisado:false}; c.ance[k]=!c.ance[k]; salvar(); renderDrawer(); }
@@ -5854,6 +5934,18 @@ function lpSelfCheck(){
     ok('colunas: nome não sai da frente', fxColsMover(['nome','tel','cid'],'tel',-1,'nome')[0]==='nome');
     ok('colunas: ligar anexa no fim', fxColsSet(['nome','tel'],'cid',true,'nome').join()==='nome,tel,cid');
     ok('colunas: desligar não bagunça a ordem', fxColsSet(['nome','tel','cid'],'tel',false,'nome').join()==='nome,cid');
+    /* prêmio: o formato que ele digita de verdade tem que virar número */
+    ok('prêmio: 1.250,50 vira 1250.5', parsePM('1.250,50')===1250.5);
+    ok('prêmio: R$ 600 vira 600', parsePM('R$ 600')===600);
+    ok('prêmio: texto não vira valor', parsePM('abc')===0);
+    /* funil: negócio encerrado não conta como PA em jogo, mas o histórico dele
+       ainda conta na taxa de passagem (12/08: a régua e o chip antigo davam
+       números diferentes pro mesmo conceito na mesma tela) */
+    const _enc={etapa:'Não',interacoes:[{k:'etapa',para:'TA'}]};
+    ok('funil: encerrado fica fora do fluxo', !ETAPAS_FLUXO.includes(_enc.etapa));
+    ok('funil: encerrado ainda conta no histórico da taxa', nnAlcancou(_enc,'TA',ETAPAS_FLUXO)===true);
+    ok('funil: quem está além alcançou a anterior', nnAlcancou({etapa:'C2',interacoes:[]},'TA',ETAPAS_FLUXO)===true);
+    ok('funil: taxa com base zero não divide por zero', nnTaxas([],ETAPAS_FLUXO).every(t=>t.pct===null));
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
