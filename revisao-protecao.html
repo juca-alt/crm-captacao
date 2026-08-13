@@ -571,6 +571,7 @@ i.mix-t{background:var(--laranja)}
       </div>
     </div>
   </section>
+  <section class="pane" data-pane="produtos"><div id="produtosOut"></div></section>
 </div>
 
 <!-- ============ APRESENTAÇÃO ============ -->
@@ -1095,6 +1096,14 @@ function evItens(aps, idade){
   }));
   return out;
 }
+/* ── ponte protótipo ↔ port ──────────────────────────────────────────────
+   As features vindas do protótipo (família no doc, carteira de proteção) chamam
+   estes dois nomes; o motor do port chama diferente. Uma casca fina, pra não ter
+   duas implementações da mesma conta. `emVidaHTML` é sempre material do CLIENTE,
+   então respeita a regra do WL não confirmado. ── */
+function _consDe(aps){ const r = consDe(aps); return {c:r.c, custoMes:r.custo, itens:r.itens}; }
+function emVidaHTML(aps, idade, idpfx){ return evHTML(aps, idade, idpfx || 'evd', {cliente:true}); }
+
 /* ── FAMILIA ───────────────────────────────────────────────────────────── */
 function famMembros(){ return (state.familia && state.familia.membros) || []; }
 function famApolicesTit(){ return state.hoje.semNada ? [] : (state.hoje.apolices||[]); }
@@ -1237,8 +1246,6 @@ function renderHoje(){
   $('tblConsol').innerHTML = tabelaConsolidado(c, totalHoje());
   renderProposta();
   renderComo();
-  renderFamilia();
-  renderEmVida();
 }
 function renderTilesHoje(c){
   const tot = totalHoje();
@@ -1342,11 +1349,12 @@ function dgInfo(itens){
   return info;
 }
 function variantDG(itens){ const i = dgInfo(itens); return i ? i.key : null; }
-const ORDEM_SIT = ['MQC','DG','INVT','INV','DTERM','MA','INT','CIR','FRA','PA','RENDA','FUN'];
+const ORDEM_SIT = ['MQC','MA','INVT','INV','PA','RENDA','DTERM','DG','CIR','INT','FRA','FUN']; /* PRODUTOS_V3: ordem por gravidade */
 function cartasSituacao(cons, opts){
   opts = opts || {};
   const S = CONT.sit || {}, so = !!opts.soTenho, det = opts.det !== false;
-  const cards = ordemAtual().map(k => {
+  const ordem = opts.only ? opts.only : ordemAtual();
+  const cards = ordem.map(k => {
     let s = S[k]; const g = cons[k]; if (!s || !g) return null;
     if (k === 'FUN' && g.prod.length){
       const F = CONT.funvar || {};
@@ -1407,6 +1415,7 @@ function cartasSituacao(cons, opts){
       </div>
     </div>`;
   }).filter(Boolean).join('');
+  if (opts.bare) return '<div class="sitgrid">'+(cards||'<div class="callout">Nenhuma cobertura contratada ainda.</div>')+'</div>';
   const IN = CONT.intro || {};
   return `<div class="callout" style="margin-top:0">${IN.metafora || ''}</div>
     <div class="legenda"><span><i style="background:var(--verde)"></i>${esc(IN.legenda_voce||'')}</span>
@@ -2131,6 +2140,90 @@ function renderAnexoDG(){
   }
   $('anxDG').innerHTML = dgh;
 }
+/* ===== PRODUTOS_V1: ÁREA PRODUTOS (catálogo do portfólio, por grupo da carteira) ===== */
+const DRV='https://drive.google.com/drive/folders/';
+const GRUPOS_PROD = [
+  {cor:'var(--roxo,#7c3aed)', emoji:'🏛️', nome:'Ativo securitário', sub:'produtos vitalícios — o cliente compra patrimônio', itens:[
+    {nome:'Vida Inteira Mais', cod:'WD', regra:'Vitalício (não vence), forma valor de resgate; benefício em vida por idade em doença grave (40/50/60%).', fonte:'CG Vida Inteira Mais, cl. 2.1.1', link:DRV+'1EqkO0Lw6UmE1AX51dKjGyAXB_OYEk-Y-'},
+    {nome:'Vida Inteira', cod:'WL', regra:'Seguro de vida vitalício (base). Família de produtos com variações abaixo.', link:DRV+'1KpWF9mOFk86XX3aDMv-GvTMYc1CAKeFq', variantes:[
+      {nome:'Vida Inteira', cod:'WL', resumo:'Base vitalícia.'},
+      {nome:'Vida Inteira Modificado', cod:'WL Mod', resumo:'Prêmio modificado no início.'},
+      {nome:'Vida Inteira Modificado 30', cod:'WL Mod 30', resumo:'Variante modificado 30.'},
+      {nome:'Vida Inteira Idades Especiais', cod:'WL IE', resumo:'Para faixas etárias específicas.'},
+      {nome:'Vida Inteira até 65', cod:'WL65', resumo:'Quitação aos 65.', detalhe:'Benefício em vida assumido pela mesma CG do Vida Inteira Mais — confirmar.'}
+    ]},
+    {nome:'Vida e Saúde', cod:'WV', regra:'Vitalício. Benefício em vida só APÓS a quitação; depois antecipa 15/25/50% do capital (teto 50%).', fonte:'CG Vida e Saúde, cl. 4.3', link:DRV+'1lx0pOL14HsifibwfsQPspm9rBTToMWJ0'},
+    {nome:'Legado Protegido', cod:'—', regra:'Solução vitalícia voltada a sucessão / proteção de patrimônio.', link:DRV+'1CyQFLxeqOUdsfC0Vapni-VwLZmMm_6Rf'}
+  ]},
+  {cor:'var(--crit)', emoji:'🔴', nome:'Seguro puro · Gravíssimo', sub:'alto impacto — muda a vida por completo', itens:[
+    {nome:'Temporário', cod:'TP', regra:'Morte por risco puro com prazo. Família com 3 variantes.', link:DRV+'1U5xbbhn4n1i3EHO5NiHFXD1ZM9EOJ3hp', variantes:[
+      {nome:'Temporário', cod:'T', resumo:'Capital fixo por prazo.'},
+      {nome:'Temporário Preferencial', cod:'TP', resumo:'Capital alto, prêmio preferencial (UW).'},
+      {nome:'Temporário Decrescente', cod:'TD', resumo:'Capital decresce ao longo do prazo (ex.: financiamentos).'}
+    ]},
+    {nome:'Renda Familiar', cod:'RF', regra:'Mortalidade paga em RENDA mensal à família (inclui variantes Dotal Criança e Dotal Misto). Só muda o formato de pagamento.', link:DRV+'1U5xbbhn4n1i3EHO5NiHFXD1ZM9EOJ3hp'},
+    {nome:'Morte Acidental', cod:'MA', regra:'Adicional: se a morte for por acidente, soma ao capital de morte.', link:DRV+'1KpWF9mOFk86XX3aDMv-GvTMYc1CAKeFq'},
+    {nome:'Invalidez Acidental', cod:'INVA', regra:'Invalidez total ou parcial por acidente — capital ao próprio segurado, em vida (parcial por tabela).', link:DRV+'1f3W8LbMt4NoVS7GeIhSQ9JsVo6Eqkj1P'},
+    {nome:'Perda da Autonomia Pessoal', cod:'PAP', regra:'Quando o segurado passa a precisar de ajuda para atividades básicas do dia a dia.', link:DRV+'1cYbsDcGH_AwdM5PdOr8y7JUZwmdal1fH'}
+  ]},
+  {cor:'var(--laranja)', emoji:'🟡', nome:'Seguro puro · Despesas emergenciais', sub:'grave', itens:[
+    {nome:'Doenças Graves (DDR)', regra:'Adicional que paga ao próprio segurado, em vida, no diagnóstico. A variante vem do código da cobertura.', link:DRV+'1z-DmqIBJ1YSQZ82na5G8MFjmoNXvZRSt', variantes:[
+      {nome:'Doenças Graves (base)', cod:'DDR', resumo:'Cobertura base de doenças graves.'},
+      {nome:'DDR Plus', cod:'13 diagnósticos', resumo:'Portfólio ampliado.', detalhe:'Câncer, Infarto, AVC, Insuf. Renal, Transplantes, Paralisia, ByPass, Valvas, Aorta, Cegueira, Surdez, Esclerose Múltipla, Queimaduras graves. (existe versão Plus 2.0)'},
+      {nome:'DDR Modular (antigo)', cod:'modular v1', resumo:'Versão modular anterior.'},
+      {nome:'DDR Modular 2.0', cod:'34 diagnósticos · 4 módulos', resumo:'NOVO padrão — composável por módulos.', detalhe:'<b>Mód.1 Câncer</b> (câncer, transpl. medula, anemia aplástica) · <b>Mód.2 Cardiovascular</b> (infarto, AVE, bypass, valvas, aorta, transpl. coração/rim, insuf. renal, lúpus) · <b>Mód.3 Falência de órgãos</b> (transpl. fígado/pulmão/intestino/pâncreas/tecido, queimadura 3º grau, hepatite fulminante, pancreatite, doença hepática/pulmonar, cirrose, AIDS) · <b>Mód.4 Neurológicas</b> (esclerose múltipla, paralisia, cegueira, surdez, coma TCE, Parkinson, Alzheimer, ELA, tumor benigno, perda da fala).'}
+    ]},
+    {nome:'Doenças Ampliadas', cod:'—', regra:'Cobertura de doenças ampliadas (complementa o rol de doenças graves).', link:DRV+'1hUhE4J-IjGIfIFOJe8PbP_dOkMo4760j'},
+    {nome:'Cirurgia Ampliada', cod:'CIR+', regra:'Procedimentos cirúrgicos de maior porte — indeniza em dinheiro, independente do plano de saúde.', link:DRV+'12FlLYChSaagnzQLcYm4CvPMRe-7KTsfl'}
+  ]},
+  {cor:'var(--verde)', emoji:'🟢', nome:'Proteção de renda · Leve', sub:'renda e recuperação', itens:[
+    {nome:'Renda Hospitalar', cod:'INT', regra:'Diária por dia internado — repõe renda enquanto o segurado está fora do trabalho.', link:DRV+'1zlmBxkRZGF8c3iNoYls0voYawXefIX20'},
+    {nome:'Cirurgia', cod:'CIR', regra:'Procedimentos de menor porte (lista TUSS/ANS).', link:DRV+'12FlLYChSaagnzQLcYm4CvPMRe-7KTsfl'},
+    {nome:'Quebra de Ossos', cod:'FRA', regra:'33 tipos de fratura, cada um com percentual de indenização em tabela.', link:DRV+'12FlLYChSaagnzQLcYm4CvPMRe-7KTsfl'}
+  ]},
+  {cor:'var(--azul)', emoji:'🔵', nome:'Despesa vitalícia', sub:'assistência funeral', itens:[
+    {nome:'Assistência Funeral', cod:'AF', regra:'Assistência 24h (urna, papelada, cemitério) para a família não desembolsar. Modalidades I, II e III.', link:DRV+'1euK7r9BqS_g4fau_x4aVaUyb8yJoE8Go'}
+  ]},
+  {cor:'var(--ink2,#64748b)', emoji:'📦', nome:'Linhas específicas / outros', sub:'produtos que não entram na revisão individual padrão', itens:[
+    {nome:'Minha Primeira Proteção (MPP)', cod:'MPP', regra:'Produto de entrada / primeira apólice (campanhas pai-e-filho, avô-e-neto, família).', link:DRV+'1gKjFh7YmwoZgXiNYjoTEd2AxXfkaJ-Pj'},
+    {nome:'Prudential Proteção em Vida (PPV)', cod:'PPV', regra:'Doenças Graves standalone (Plus / Modular / 2.0), com assistências e Vitality.', link:DRV+'1Cw9WE0HWMCtoJZyclvM5RLRE4RtuLMIk'},
+    {nome:'Sucessão Empresarial', cod:'—', regra:'Planejamento sucessório empresarial (horizontal e vertical).', link:DRV+'1KaFVvFA673JzS3WqElFwf4B8dKu4BAA7'},
+    {nome:'Vida em Grupo', cod:'VG', regra:'Capital Global, VG Express, Corporate, Acidentes Pessoais, Prestamista — linha empresarial/coletiva.', link:DRV+'1R8JGGJ5XYp2kgdOruxAl5AKH2H-RbY4D'},
+    {nome:'Seguro Viagem Facultativo', cod:'—', regra:'Viagem Padrão e Anual Multiviagens.', link:DRV+'1BYUGtMzg-rDp4-HExhNmT--Vpz9NkSZt'}
+  ]}
+];
+function _prodLink(u){ return u?` <a href="${u}" target="_blank" rel="noopener" class="mini" style="color:var(--azul);text-decoration:none;white-space:nowrap">material ↗</a>`:''; }
+function _prodCard(it){
+  if(it.variantes){
+    let v=`<div class="card" style="border:1px solid var(--grid)"><div style="font-weight:800;font-size:1rem">${esc(it.nome)} <span class="mini" style="font-weight:500">· família</span>${_prodLink(it.link)}</div>`;
+    if(it.regra) v+=`<p class="sub" style="margin:4px 0 6px">${esc(it.regra)}</p>`;
+    v+=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:8px">`;
+    it.variantes.forEach(x=>{ v+=`<div class="tile" style="text-align:left;align-items:flex-start">
+      <div style="font-weight:700">${esc(x.nome)}${_prodLink(x.link)}</div>
+      ${x.cod?`<div class="mini" style="margin:2px 0 6px">${esc(x.cod)}</div>`:''}
+      ${x.resumo?`<div style="font-size:.82rem">${esc(x.resumo)}</div>`:''}
+      ${x.detalhe?`<div class="mini" style="margin-top:6px;color:var(--ink2)">${x.detalhe}</div>`:''}
+    </div>`; });
+    v+=`</div></div>`; return v;
+  }
+  return `<div class="card" style="border:1px solid var(--grid)">
+    <div style="font-weight:800;font-size:1rem">${esc(it.nome)}${it.cod?` <span class="mini" style="font-weight:500">· ${esc(it.cod)}</span>`:''}${_prodLink(it.link)}</div>
+    ${it.regra?`<p class="sub" style="margin:5px 0 0">${esc(it.regra)}</p>`:''}
+    ${it.fonte?`<div class="mini so-consultor" style="margin-top:6px">fonte: ${esc(it.fonte)}</div>`:''}
+  </div>`;
+}
+function renderProdutos(){
+  const box=$('produtosOut'); if(!box) return;
+  let h=`<div class="card"><h2 style="margin:0"><span class="ico">◆</span>Produtos & coberturas</h2>
+    <p class="sub">Catálogo do portfólio Prudential, organizado pela lógica da carteira — cada família agrupada, variantes separadas, com link do material no Drive. Referência do consultor; evolui aqui.</p></div>`;
+  GRUPOS_PROD.forEach(g=>{
+    h+=`<div class="card" style="border-left:5px solid ${g.cor};margin-top:12px">
+      <div style="font-weight:800;font-size:1.05rem">${g.emoji} ${esc(g.nome)} <span class="mini" style="font-weight:500">· ${esc(g.sub)}</span></div>
+      <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">${g.itens.map(_prodCard).join('')}</div>
+    </div>`;
+  });
+  box.innerHTML=h;
+}
 function renderAnexos(){
   $('glossario').innerHTML = Object.entries(CONT.glossario).map(([k,v]) =>
     `<div class="tile"><div class="k">${esc(k)}</div><div style="font-size:.79rem;color:var(--ink2);margin-top:5px">${esc(v)}</div></div>`).join('');
@@ -2152,6 +2245,213 @@ function desenhaCirurgias(q){
 /* ============================================================
    APRESENTAÇÃO, o documento que o cliente vê
    ============================================================ */
+
+/* ===== PRODUTOS_V2: Produtos accordion vendável + anexos fundidos ===== */
+window.prodTog = el => { if(el) el.classList.toggle('open'); };
+const CIR_ORDER=['Oncológicas (câncer)','Coração e vasos','Cérebro e sistema nervoso','Tórax e pulmão','Aparelho digestivo','Rins e vias urinárias','Órgãos femininos','Órgãos masculinos','Cabeça, pescoço e ouvido','Reconstrutivas e reimplantes','Transplantes','Outras'];
+const FRA_ORDER=['Crânio e face','Coluna','Tórax (costelas, clavícula)','Bacia (pelve)','Membros superiores','Membros inferiores','Outras'];
+function _catCir(nome,tuss){ const n=(nome||'').toLowerCase(), t=String(tuss||''), p=t.slice(0,3);
+  if(p==='315'||/transplante/.test(n)) return 'Transplantes';
+  if(/c[âa]ncer|tumor|oncol|carcinom|neoplas|debulking|metastas|mastectomia|linfadenectomia/.test(n)) return 'Oncológicas (câncer)';
+  if(p==='309') return 'Coração e vasos';
+  if(p==='314') return 'Cérebro e sistema nervoso';
+  if(p==='308'||p==='306') return 'Tórax e pulmão';
+  if(p==='310') return 'Aparelho digestivo';
+  if(p==='311') return 'Rins e vias urinárias';
+  if(p==='313') return 'Órgãos femininos';
+  if(p==='312') return 'Órgãos masculinos';
+  if(p==='302'||p==='304'||p==='305') return 'Cabeça, pescoço e ouvido';
+  if(p==='307') return 'Reconstrutivas e reimplantes';
+  return 'Outras'; }
+function _catFra(nome){ const n=(nome||'').toLowerCase();
+  if(/cr[âa]nio|face|zigom|maxilar|mand[íi]bula/.test(n)) return 'Crânio e face';
+  if(/v[ée]rtebra|c[óo]ccix|sacro/.test(n)) return 'Coluna';
+  if(/costela|esterno|clav[íi]cula|esc[áa]pula/.test(n)) return 'Tórax (costelas, clavícula)';
+  if(/pelve|[íi]lio|[íi]squio|p[úu]bis/.test(n)) return 'Bacia (pelve)';
+  if(/[úu]mero|ulna|r[áa]dio|carpo|metacarpo|antebra[çc]o|bra[çc]o|m[ãa]o/.test(n)) return 'Membros superiores';
+  if(/f[êe]mur|t[íi]bia|f[íi]bula|patela|tarso|metatarso|perna|p[ée]|coxa/.test(n)) return 'Membros inferiores';
+  return 'Outras'; }
+function cirurgiasAgrupadasHTML(q){ q=(q||'').toLowerCase(); const G={};
+  CONT.cirurgias.forEach(c=>{ if(q && !(c[1].toLowerCase().includes(q)||String(c[2]).includes(q))) return; const k=_catCir(c[1],c[2]); (G[k]=G[k]||[]).push(c); });
+  let tot=0; Object.values(G).forEach(a=>tot+=a.length);
+  let h=`<div class="mini" style="margin-bottom:8px">${tot} de ${CONT.cirurgias.length} procedimentos${q?` · filtro “${esc(q)}”`:''}</div>`;
+  CIR_ORDER.forEach(cat=>{ const arr=G[cat]; if(!arr||!arr.length) return;
+    h+=`<div class="acc ${q?'open':''}"><div class="acc-h" onclick="prodTog(this.parentNode)"><b>${esc(cat)}</b> <span class="mini" style="font-weight:500">· ${arr.length}</span><span class="chev">▸</span></div><div class="acc-b"><div class="scroll"><table><thead><tr><th style="width:32px">#</th><th>Procedimento</th><th style="width:94px">TUSS</th><th class="num" style="width:58px">Indeniza</th></tr></thead><tbody>${arr.map(c=>`<tr><td class="mini">${c[0]}</td><td>${esc(c[1])}</td><td class="mini" style="font-family:ui-monospace,monospace">${esc(c[2]||'')}</td><td class="num"><b>${Math.round(parseFloat(c[3])*100)}%</b></td></tr>`).join('')}</tbody></table></div></div></div>`;
+  });
+  return h||'<div class="mini">Nada encontrado.</div>'; }
+window.filtraCir = q => { const el=document.getElementById('cirGrupos'); if(el) el.innerHTML=cirurgiasAgrupadasHTML(q); };
+function cirurgiasEmbed(){ return `<input placeholder="Buscar procedimento ou TUSS…" oninput="filtraCir(this.value)" style="max-width:340px;margin:4px 0 10px"><div id="cirGrupos">${cirurgiasAgrupadasHTML('')}</div>`; }
+function fraturasAgrupadasHTML(){ const G={}; CONT.fraturas.forEach(f=>{ const k=_catFra(f[1]); (G[k]=G[k]||[]).push(f); });
+  let h=''; FRA_ORDER.forEach(cat=>{ const arr=G[cat]; if(!arr||!arr.length) return;
+    h+=`<div class="acc"><div class="acc-h" onclick="prodTog(this.parentNode)"><b>${esc(cat)}</b> <span class="mini" style="font-weight:500">· ${arr.length}</span><span class="chev">▸</span></div><div class="acc-b"><div class="scroll"><table><thead><tr><th style="width:32px">#</th><th>Fratura</th><th class="num" style="width:70px">Indeniza</th></tr></thead><tbody>${arr.map(f=>`<tr><td class="mini">${f[0]}</td><td>${esc(f[1])}</td><td class="num"><b>${esc(f[2])}</b></td></tr>`).join('')}</tbody></table></div></div></div>`;
+  }); return h; }
+function invBasicaEmbed(){ const sit=(CONT.invalidez&&CONT.invalidez.situacoes)||[];
+  return `<div class="mini" style="font-weight:700;margin-bottom:6px">8 situações cobertas · 100% do capital</div><div class="grid g2">${sit.map(x=>`<div class="callout" style="margin:0">${esc(x)}</div>`).join('')}</div>`
+    +`<div class="callout grn" style="margin-top:10px"><b>NOVO · 4 opções de recebimento</b> — o cliente define o % na abertura do sinistro:<br>• <b>0%, 15%, 25% ou 50%</b>: mantém a apólice ativa, com o CS remanescente e <b>dispensa de prêmio</b>.<br>• <b>100%</b>: recebe tudo e a apólice é cancelada.</div>`
+    +`<div class="mini" style="margin-top:8px">Disponível na cobertura principal de: Vida &amp; Saúde, Vida Inteira (e Único / Modificado / Modificado 30), Temporário, Temp. Preferencial, Temp. Decrescente e Renda Familiar. <b>Vida Inteira Mais não tem</b> (já possui antecipação por doença); Vida Inteira Único antecipa porém sem dispensa de prêmio. Válido de imediato para todos os segurados e apólices ativas.</div>`; }
+function invAcidentalEmbed(){
+  const T=['Perda total da visão de ambos os olhos','Perda total do uso de ambos os membros superiores','Perda total do uso de ambos os membros inferiores','Perda total do uso de ambas as mãos','Perda total do uso de um membro superior e de um inferior (simultâneo)','Perda total do uso de uma das mãos e de um dos pés (simultâneo)','Perda total do uso de ambos os pés','Alienação mental total e incurável'];
+  const M=['Perda total da visão de um olho','Perda total do uso de um membro superior','Perda total do uso de uma das mãos','Surdez total incurável de ambos os ouvidos','Mudez incurável','Imobilidade do segmento cervical da coluna','Imobilidade do segmento sacro-lombo-torácico','Perda da oposição do polegar (pinça) de uma das mãos','Perda total do uso de um membro inferior','Perda total do uso de um dos pés'];
+  return `<div class="acc"><div class="acc-h" onclick="prodTog(this.parentNode)"><b>Invalidez Total</b> <span class="mini" style="font-weight:500">· 100%</span><span class="chev">▸</span></div><div class="acc-b"><div class="grid g2">${T.map(x=>`<div class="callout" style="margin:0">${esc(x)}</div>`).join('')}</div></div></div>`
+   +`<div class="acc"><div class="acc-h" onclick="prodTog(this.parentNode)"><b>Invalidez Majorada</b> <span class="mini" style="font-weight:500">· passam a 100%</span><span class="chev">▸</span></div><div class="acc-b"><p class="sub" style="margin:.2rem 0">Situações antes parciais que agora indenizam 100% do CS.</p><div class="grid g2">${M.map(x=>`<div class="callout" style="margin:0">${esc(x)}</div>`).join('')}</div></div></div>`
+   +`<div class="acc"><div class="acc-h" onclick="prodTog(this.parentNode)"><b>Invalidez Parcial</b> <span class="mini" style="font-weight:500">· &lt; 100% por tabela</span><span class="chev">▸</span></div><div class="acc-b"><p class="sub" style="margin:.2rem 0">Dezenas de situações que indenizam parte do CS conforme tabela (ex.: perda de dedos e órgãos, fraturas consolidadas com encurtamento, otosclerose, epilepsia pós-traumática etc.). Tabela completa nas Condições Especiais.</p><div class="mini">Posso transcrever os percentuais item a item do PDF, se você quiser.</div></div></div>`; }
+function ddr34Embed(){ return (CONT.dg||[]).map(m=>`<div style="margin-top:8px"><div style="font-weight:700;font-size:.86rem">${esc(m.mod)}</div><div class="mini" style="color:var(--ink2)">${(m.itens||[]).map(esc).join(' · ')}</div></div>`).join(''); }
+function glossarioEmbed(){ return `<div class="grid g2">${Object.entries(CONT.glossario).map(([k,v])=>`<div class="tile" style="text-align:left;align-items:flex-start"><div class="k">${esc(k)}</div><div style="font-size:.78rem;color:var(--ink2);margin-top:4px">${esc(v)}</div></div>`).join('')}</div>`; }
+function _embed(k){ return k==='cirurgias'?cirurgiasEmbed():k==='fraturas'?fraturasAgrupadasHTML():k==='invBasica'?invBasicaEmbed():k==='invAcidental'?invAcidentalEmbed():k==='ddr34'?ddr34Embed():k==='glossario'?glossarioEmbed():''; }
+
+const PC = [
+ {cor:'var(--roxo,#7c3aed)', emoji:'🏛️', nome:'Ativo securitário', sub:'produtos vitalícios — o cliente compra patrimônio', topicos:[
+   {nome:'Vida Inteira Mais', tag:'WD', link:DRV+'1EqkO0Lw6UmE1AX51dKjGyAXB_OYEk-Y-', vendavel:'<b>Um seguro que não vence e ainda vira patrimônio.</b> Protege a vida toda, acumula valor de resgate e, num diagnóstico grave, antecipa parte do capital pra você usar em vida.', regra:'Vitalício; benefício em vida por idade em doença grave: 40% até 65 · 50% dos 66 aos 75 · 60% de 76+.', fonte:'CG Vida Inteira Mais, cl. 2.1.1'},
+   {nome:'Vida Inteira', tag:'WL · família', link:DRV+'1KpWF9mOFk86XX3aDMv-GvTMYc1CAKeFq', vendavel:'<b>A base do patrimônio protegido.</b> Proteção vitalícia que não vence e forma reserva — com versões para cada bolso e fase de vida.', regra:'Variações: Vida Inteira · Modificado · Modificado 30 · Idades Especiais · até 65 (WL65, benefício em vida como o Vida Inteira Mais — confirmar).'},
+   {nome:'Vida e Saúde', tag:'WV', link:DRV+'1lx0pOL14HsifibwfsQPspm9rBTToMWJ0', vendavel:'<b>Proteção vitalícia que devolve dinheiro em vida.</b> Depois de quitada, num diagnóstico grave você antecipa parte do capital — vira uma reserva de saúde além do seguro.', regra:'Benefício em vida só após a quitação; depois antecipa 15/25/50% do capital (teto 50%).', fonte:'CG Vida e Saúde, cl. 4.3'},
+   {nome:'Legado Protegido', link:DRV+'1CyQFLxeqOUdsfC0Vapni-VwLZmMm_6Rf', vendavel:'<b>Feito para blindar e transferir patrimônio.</b> Garante liquidez para os herdeiros sem o inventário travar o legado.'}
+ ]},
+ {cor:'var(--crit)', emoji:'🔴', nome:'Seguro puro · Gravíssimo', sub:'alto impacto — muda a vida por completo', topicos:[
+   {nome:'Temporário', tag:'família', link:DRV+'1U5xbbhn4n1i3EHO5NiHFXD1ZM9EOJ3hp', vendavel:'<b>Muita proteção por pouco.</b> Alto capital de vida por prêmio baixo — ideal para blindar a fase de maior responsabilidade (filhos pequenos, financiamento).', regra:'Variantes: Temporário (capital fixo) · Preferencial (prêmio preferencial/UW) · Decrescente (capital cai ao longo do prazo).'},
+   {nome:'Renda Familiar', tag:'RF', link:DRV+'1U5xbbhn4n1i3EHO5NiHFXD1ZM9EOJ3hp', vendavel:'<b>O salário que faltaria continua entrando.</b> Em vez de um cheque único, a família recebe uma renda mensal.', regra:'Mortalidade paga em renda (inclui Dotal Criança e Dotal Misto). Só muda o formato de pagamento.'},
+   {nome:'Morte Acidental', tag:'MA', link:DRV+'1KpWF9mOFk86XX3aDMv-GvTMYc1CAKeFq', vendavel:'<b>Dobra a proteção quando a causa é um acidente</b> — a parte mais imprevisível da vida.', regra:'Adicional: soma ao capital de morte se a causa for acidente.'},
+   {nome:'Invalidez Total · na cobertura principal', tag:'básica', vendavel:'<b>Já vem embutida na cobertura principal:</b> invalidez permanente e total antecipa o capital de morte em vida — e agora o cliente escolhe <b>como</b> receber, podendo manter a apólice ativa com dispensa de prêmio.', embed:'invBasica'},
+   {nome:'Invalidez Acidental · adicional', tag:'INVA · opcional', link:DRV+'1f3W8LbMt4NoVS7GeIhSQ9JsVo6Eqkj1P', vendavel:'<b>Amplia a proteção contra acidentes:</b> Total, Majorada e Parcial — cobre desde a perda de um dedo até a invalidez completa.', embed:'invAcidental'},
+   {nome:'Perda da Autonomia Pessoal', tag:'PAP', link:DRV+'1cYbsDcGH_AwdM5PdOr8y7JUZwmdal1fH', vendavel:'<b>Quando você precisar de ajuda para as tarefas básicas do dia a dia</b>, um capital garante cuidado sem pesar na família.'}
+ ]},
+ {cor:'var(--laranja)', emoji:'🟡', nome:'Seguro puro · Despesas emergenciais', sub:'grave', topicos:[
+   {nome:'Doenças Graves (base)', tag:'DDR', link:DRV+'1z-DmqIBJ1YSQZ82na5G8MFjmoNXvZRSt', vendavel:'<b>No diagnóstico, o dinheiro cai na sua conta.</b> Você trata do seu jeito, sem depender de boleto — pagamento único e integral.'},
+   {nome:'DDR Plus', tag:'13 diagnósticos', link:DRV+'1z-DmqIBJ1YSQZ82na5G8MFjmoNXvZRSt', vendavel:'<b>A versão mais completa do clássico:</b> 13 doenças e procedimentos, 100% do capital de uma vez.'},
+   {nome:'DDR Modular (antigo)', tag:'modular v1', link:DRV+'1z-DmqIBJ1YSQZ82na5G8MFjmoNXvZRSt', vendavel:'Versão modular anterior à 2.0 — mantida para apólices vigentes.'},
+   {nome:'DDR Modular 2.0', tag:'34 diagnósticos · 4 módulos', link:DRV+'1z-DmqIBJ1YSQZ82na5G8MFjmoNXvZRSt', vendavel:'<b>O novo padrão.</b> 34 doenças em 4 módulos que você monta conforme o perfil de risco de cada cliente.', embed:'ddr34'},
+   {nome:'Doenças Ampliadas', link:DRV+'1hUhE4J-IjGIfIFOJe8PbP_dOkMo4760j', vendavel:'<b>Muito além das graves: 61 doenças e procedimentos.</b> Lançada em nov/2025, cobre condições crônicas e não-crônicas, pagando 20%, 40% ou 100% do capital — e permite <b>múltiplas indenizações</b> na mesma vigência.', regra:'CS de R$55 mil a R$1 mi; contratação 14–75 anos (saída 80); vigência 5 anos renovável com reintegração; carência 60 dias e 12 meses entre sinistros. Não acumula com Doenças Graves / Cirurgia Ampliada — o cliente escolhe qual acionar.', fonte:'FAQ Doenças Ampliadas LP (18/11/2025)'},
+   {nome:'Cirurgia Ampliada', tag:'CIR+ · 200 procedimentos', link:DRV+'12FlLYChSaagnzQLcYm4CvPMRe-7KTsfl', vendavel:'<b>Precisou operar? Recebe dinheiro por procedimento da lista</b>, independente do plano de saúde cobrir — livre para usar como quiser.', embed:'cirurgias'}
+ ]},
+ {cor:'var(--verde)', emoji:'🟢', nome:'Proteção de renda · Leve', sub:'renda e recuperação', topicos:[
+   {nome:'Renda Hospitalar', tag:'INT', link:DRV+'1zlmBxkRZGF8c3iNoYls0voYawXefIX20', vendavel:'<b>A renda não para enquanto você se recupera.</b> Cada dia internado tem uma diária que cai na sua conta.'},
+   {nome:'Cirurgia', tag:'CIR', link:DRV+'12FlLYChSaagnzQLcYm4CvPMRe-7KTsfl', vendavel:'Cobre procedimentos de menor porte da lista TUSS/ANS.'},
+   {nome:'Quebra de Ossos', tag:'FRA · 33 tipos', link:DRV+'12FlLYChSaagnzQLcYm4CvPMRe-7KTsfl', vendavel:'<b>Fraturou? Indeniza conforme o osso, sem burocracia</b> — do dedo à coluna, cada fratura tem seu percentual.', embed:'fraturas'}
+ ]},
+ {cor:'var(--azul)', emoji:'🔵', nome:'Despesa vitalícia', sub:'assistência funeral', topicos:[
+   {nome:'Assistência Funeral', tag:'AF · I, II e III', link:DRV+'1euK7r9BqS_g4fau_x4aVaUyb8yJoE8Go', vendavel:'<b>Num dos piores dias, a família não desembolsa nada.</b> Uma ligação 24h resolve urna, papelada e cemitério.'}
+ ]},
+ {cor:'var(--ink2,#64748b)', emoji:'📦', nome:'Linhas específicas / outros', sub:'produtos fora da revisão individual padrão', topicos:[
+   {nome:'Minha Primeira Proteção (MPP)', tag:'MPP', link:DRV+'1gKjFh7YmwoZgXiNYjoTEd2AxXfkaJ-Pj', vendavel:'<b>A porta de entrada.</b> Primeira apólice acessível — campanhas pai-e-filho, avô-e-neto, família.'},
+   {nome:'Prudential Proteção em Vida (PPV)', tag:'PPV', link:DRV+'1Cw9WE0HWMCtoJZyclvM5RLRE4RtuLMIk', vendavel:'<b>Doenças graves em produto próprio</b> (Plus / Modular / 2.0), com assistências e Vitality.'},
+   {nome:'Sucessão Empresarial', link:DRV+'1KaFVvFA673JzS3WqElFwf4B8dKu4BAA7', vendavel:'<b>Continuidade do negócio garantida.</b> Planejamento sucessório empresarial (horizontal e vertical).'},
+   {nome:'Vida em Grupo', tag:'VG', link:DRV+'1R8JGGJ5XYp2kgdOruxAl5AKH2H-RbY4D', vendavel:'<b>Proteção coletiva para empresas:</b> Capital Global, VG Express, Corporate, Acidentes Pessoais, Prestamista.'},
+   {nome:'Seguro Viagem Facultativo', link:DRV+'1BYUGtMzg-rDp4-HExhNmT--Vpz9NkSZt', vendavel:'<b>Tranquilidade fora de casa:</b> Viagem Padrão e Anual Multiviagens.'}
+ ]},
+ {cor:'var(--ink2,#64748b)', emoji:'📖', nome:'Referências', sub:'apoio para a conversa com o cliente', topicos:[
+   {nome:'O que cada cobertura significa', vendavel:'Glossário em linguagem simples — para quando o cliente perguntar “mas isso paga o quê?”.', embed:'glossario'}
+ ]}
+];
+function _topAcc(t){
+  const body = `${t.vendavel?`<p style="font-size:.9rem;margin:.1rem 0 .6rem;line-height:1.5">${t.vendavel}</p>`:''}`
+    + `${t.regra?`<p class="sub" style="margin:0 0 .5rem">${esc(t.regra)}</p>`:''}`
+    + `${t.embed?_embed(t.embed):''}`
+    + `${t.fonte?`<div class="mini so-consultor" style="margin-top:6px">fonte: ${esc(t.fonte)}</div>`:''}`;
+  return `<div class="acc"><div class="acc-h" onclick="prodTog(this.parentNode)"><b>${esc(t.nome)}</b>${t.tag?` <span class="mini" style="font-weight:500">· ${esc(t.tag)}</span>`:''}${_prodLink(t.link)}<span class="chev">▸</span></div><div class="acc-b">${body}</div></div>`;
+}
+function renderProdutos(){
+  const box=$('produtosOut'); if(!box) return;
+  let h=`<style>
+  #produtosOut .acc{border:1px solid var(--grid);border-radius:10px;margin-top:8px;background:var(--surface)}
+  #produtosOut .acc>.acc-h{display:flex;align-items:center;gap:8px;padding:11px 14px;cursor:pointer;font-size:.94rem}
+  #produtosOut .acc>.acc-h .chev{margin-left:auto;transition:transform .2s;color:var(--ink2)}
+  #produtosOut .acc.open>.acc-h .chev{transform:rotate(90deg)}
+  #produtosOut .acc>.acc-b{display:none;padding:2px 14px 14px}
+  #produtosOut .acc.open>.acc-b{display:block}
+  #produtosOut .acc .acc{background:var(--bg,#fff)}
+  #produtosOut .card.acc>.acc-h{padding:14px 16px}
+  #produtosOut .card.acc>.acc-b{padding:0 16px 14px}
+  </style>`;
+  h+=`<div class="card"><h2 style="margin:0"><span class="ico">◆</span>Produtos &amp; coberturas</h2>
+    <p class="sub">Portfólio Prudential em tópicos expansíveis — clique para abrir. Cada um traz um resumo pronto para o cliente, o link do material e, onde couber, a lista completa agrupada. (Antigos “Anexos” agora vivem aqui.)</p></div>`;
+  PC.forEach(g=>{
+    h+=`<div class="card acc" style="border-left:5px solid ${g.cor};margin-top:12px">
+      <div class="acc-h" onclick="prodTog(this.parentNode)"><span style="font-weight:800;font-size:1.05rem">${g.emoji} ${esc(g.nome)}</span> <span class="mini" style="font-weight:500">· ${esc(g.sub)}</span><span class="chev">▸</span></div>
+      <div class="acc-b" style="padding:6px 0 0">${g.topicos.map(_topAcc).join('')}</div></div>`;
+  });
+  box.innerHTML=h;
+}
+/* ===== CARTEIRA_V1: visão CARTEIRA DE PROTEÇÃO (patrimônio + proteção por gravidade) ===== */
+const CARTEIRA_TIERS = [
+  {emoji:'🔴', nome:'Gravíssimo', sub:'Alto impacto — muda a vida por completo', cor:'var(--crit)', keys:['MQC','MA','INVT','INV','PA','RENDA','DTERM']},
+  {emoji:'🟡', nome:'Grave', sub:'Despesas emergenciais', cor:'var(--laranja)', keys:['DG','CIR']},
+  {emoji:'🟢', nome:'Leve', sub:'Proteção de renda e recuperação', cor:'var(--verde)', keys:['INT','FRA']},
+  {emoji:'🔵', nome:'Despesa vitalícia', sub:'Assistência funeral', cor:'var(--azul)', keys:['FUN']}
+];
+function carteiraProtecaoHTML(cons, aps, idade){
+  const vit = (cons.MQC_VIT?cons.MQC_VIT.cap:0);
+  const ev = emVidaHTML(aps, idade);
+  const dg = dgInfo(itensDe(aps));
+  let h = `<div class="callout" style="margin-top:0">Pense na sua proteção como uma <b>carteira</b>: de um lado o <b>patrimônio</b> que você constrói — os produtos vitalícios, que são ativos e pagam a você em vida; do outro, a <b>proteção de risco puro</b>, organizada pela gravidade de cada situação.</div>`;
+  h += `<div class="card" style="border-left:5px solid var(--roxo,#7c3aed);margin-top:14px">
+    <div class="row" style="justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap">
+      <div style="min-width:200px;flex:1"><h3 style="margin:0;font-size:1.05rem">🏛️ Patrimônio · ativos securitários</h3>
+      <p class="sub" style="margin:5px 0 0">Produtos vitalícios não vencem: além de proteger, formam patrimônio e pagam a você mesmo, em vida.</p></div>
+      <div class="tile h" style="min-width:190px"><div class="k">Capital vitalício (ativo)</div><div class="v">${vit?fmt0(vit):'—'}</div><div class="d">não vence · seu patrimônio</div></div>
+    </div>
+    ${ev?`<div style="margin-top:14px"><div class="mini" style="font-weight:700;margin-bottom:6px">O que cada ativo paga a você em vida</div>${ev}</div>`:''}
+  </div>`;
+  h += `<div class="row" style="align-items:baseline;gap:8px;margin:22px 0 2px"><h3 style="margin:0;font-size:1.05rem">🛡️ Proteção · risco puro</h3><span class="mini">por gravidade da situação</span></div>`;
+  CARTEIRA_TIERS.forEach(t=>{
+    const temAlgum = t.keys.some(k=>cons[k]&&cons[k].cap>0);
+    if(!temAlgum) return;
+    const cards = cartasSituacao(cons, {only:t.keys, bare:true, soTenho:true, dg:dg});
+    h += `<div class="card" style="border-left:5px solid ${t.cor};margin-top:12px">
+      <div style="font-weight:800;font-size:1rem">${t.emoji} ${esc(t.nome)} <span class="mini" style="font-weight:500">· ${esc(t.sub)}</span></div>
+      <div style="margin-top:10px">${cards}</div></div>`;
+  });
+  return h;
+}
+/* ===== FAM_APRESENTA_V1: família + pizzas + detalhe por segurado NO DOC DO CLIENTE (visual) ===== */
+function _pieVTc(c,nome){ return chartCard('Morte: vitalícia × temporária — '+nome, [{v:c.MQC_VIT.cap,cor:'#16a34a',label:'Vitalícia (não vence)'},{v:c.MQC_TEMP.cap,cor:'#f59e0b',label:'Temporária (tem prazo)'}]); }
+function _pieMDc(c,nome){ return chartCard('Proteção: morte × doenças graves — '+nome, [{v:c.MQC.cap,cor:'#2563eb',label:'Morte (família recebe)'},{v:(c.DG?c.DG.cap:0),cor:'#7c3aed',label:'Doenças graves (em vida)'}]); }
+function familiaApresentaHTML(){
+  const F=state.familia;
+  if(!F || !((F.membros||[]).length)) return '';
+  const cH=consolidar(itensHoje()), custoTit=totalHoje();
+  const nomeTit=(state.cliente.nome||'Titular').split(' ').slice(0,2).join(' ');
+  const primTit=nomeTit.split(' ')[0];
+  const CORP=['#2563eb','#7c3aed','#0891b2','#db2777','#16a34a'];
+  let morteFam=cH.MQC.cap, dgFam=(cH.DG?cH.DG.cap:0), custoFam=custoTit, vitFam=cH.MQC_VIT.cap, tempFam=cH.MQC_TEMP.cap;
+  const pessoas=[{nome:state.cliente.nome, curto:nomeTit, rel:'Titular · paga tudo', isTit:true, idade:(state.cliente.idade||idadeDe(state.cliente.nasc)), aps:state.hoje.apolices, c:cH}];
+  const blocos=[{nome:nomeTit, rel:'Titular · paga tudo', morte:cH.MQC.cap, dg:(cH.DG?cH.DG.cap:0), custo:custoTit, aps:(state.hoje.apolices||[]).length}];
+  F.membros.forEach(m=>{ const r=_consDe(m.apolices);
+    morteFam+=r.c.MQC.cap; dgFam+=(r.c.DG?r.c.DG.cap:0); custoFam+=r.custoMes; vitFam+=r.c.MQC_VIT.cap; tempFam+=r.c.MQC_TEMP.cap;
+    blocos.push({nome:m.nome, rel:(m.relacao||'')+' · coberta por '+primTit, morte:r.c.MQC.cap, dg:(r.c.DG?r.c.DG.cap:0), custo:r.custoMes, aps:(m.apolices||[]).length});
+    pessoas.push({nome:m.nome, curto:m.nome.split(' ').slice(0,2).join(' '), rel:(m.relacao||'')+' · coberta por '+primTit, isTit:false, idade:(m.idade||idadeDe(m.nasc)), aps:m.apolices, c:r.c});
+  });
+  let h=`<p class="sub">Você não protege só a si mesmo: ${esc(primTit)} é quem paga todas as apólices da família. Veja a proteção somada e como ela se divide entre cada pessoa.</p>`;
+  h+=`<div class="grid g4" style="margin-bottom:14px">
+    <div class="tile h"><div class="k">Proteção de morte da família</div><div class="v">${fmt0(morteFam)}</div><div class="d">${blocos.length} vidas seguradas</div></div>
+    <div class="tile"><div class="k">Doenças graves (família)</div><div class="v">${dgFam?fmt0(dgFam):'—'}</div></div>
+    <div class="tile"><div class="k">Custo total da família</div><div class="v">${fmt(custoFam)}<span style="font-size:.7rem;font-weight:500">/mês</span></div></div>
+    <div class="tile"><div class="k">Quem paga</div><div class="v" style="font-size:1rem">${esc(primTit)}</div><div class="d">responsável por todas</div></div>
+  </div>`;
+  if(F.obs) h+=`<div class="callout" style="margin-top:0">${esc(document.body.classList.contains('modo-cliente') ? F.obs.replace(/\s*\(cart[ãa]o final \d{4}\)/i,'') : F.obs)}</div>`;
+  h+=`<div class="scroll"><table><thead><tr><th>Pessoa</th><th>Papel</th><th class="num">Morte</th><th class="num">Doenças graves</th><th class="num">Apólices</th><th class="num">Custo/mês</th></tr></thead><tbody>`;
+  blocos.forEach(b=>{ h+=`<tr><td><b>${esc(b.nome)}</b></td><td>${esc(b.rel)}</td><td class="num">${fmt0(b.morte)}</td><td class="num">${b.dg?fmt0(b.dg):'—'}</td><td class="num">${b.aps}</td><td class="num">${fmt(b.custo)}</td></tr>`; });
+  h+=`<tr class="tot"><td>Família</td><td></td><td class="num">${fmt0(morteFam)}</td><td class="num">${fmt0(dgFam)}</td><td class="num">${blocos.reduce((s,b)=>s+b.aps,0)}</td><td class="num">${fmt(custoFam)}</td></tr></tbody></table></div>`;
+  const pieP=blocos.map((b,i)=>({v:b.morte, cor:CORP[i%CORP.length], label:b.nome.split(' ').slice(0,2).join(' ')}));
+  const pieT=[{v:vitFam,cor:'#16a34a',label:'Morte vitalícia'},{v:tempFam,cor:'#f59e0b',label:'Morte temporária'},{v:dgFam,cor:'#7c3aed',label:'Doenças graves'}];
+  h+=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:16px">${chartCard('Proteção de morte por pessoa',pieP)}${chartCard('Composição da proteção (família)',pieT)}</div>`;
+  pessoas.forEach(p=>{
+    const its=itensDe(p.aps); const dg=dgInfo(its); const c=p.c;
+    h+=`<div class="card" style="margin-top:18px;border:1px solid var(--azul)">`;
+    h+=`<div style="font-weight:800;font-size:1.05rem">${esc(p.nome)}</div>`;
+    h+=`<div class="mini" style="margin:2px 0 12px">${esc(p.rel)} · ${(p.aps||[]).length} apólice(s)${p.idade?' · '+p.idade+' anos':''} · proteção de morte ${fmt0(c.MQC.cap)}${(dg&&c.DG.cap)?' · doenças graves '+fmt0(c.DG.cap):''}</div>`;
+    h+=`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-bottom:8px">${_pieVTc(c,p.curto)}${_pieMDc(c,p.curto)}</div>`;
+    if(!p.isTit) h+=cartasSituacao(c,{soTenho:true, dg:dg});
+    const ev=emVidaHTML(p.aps, p.idade);
+    if(ev) h+=`<div style="margin-top:14px"><div style="font-weight:700;margin-bottom:6px">Benefício em vida (doença grave)</div>${ev}</div>`;
+    h+=`</div>`;
+  });
+  return h;
+}
+function emVidaApresentaHTML(){
+  const idc=state.cliente.idade||idadeDe(state.cliente.nasc);
+  const ev=emVidaHTML(state.hoje.apolices, idc);
+  if(!ev) return '';
+  return `<p class="sub">Além do que a família recebe na falta, suas apólices <b>vitalícias</b> pagam <b>a você mesmo, em vida</b>, em caso de doença grave — antecipando parte do capital de morte. Cada produto tem uma regra:</p>`+ev;
+}
 function renderApresenta(){
   const c = state.cliente, cH = consolidar(itensHoje()), tH = totalHoje();
   const N = calcNec(), hoje = new Date().toLocaleDateString('pt-BR', {day:'2-digit', month:'long', year:'numeric'});
@@ -2234,19 +2534,13 @@ function renderApresenta(){
   if (temHoje && mostra('como')){
     h += sec('Como funciona sua proteção atual') + `<div class="card">${cartasSituacao(cH, {})}</div>`;
   }
-  /* grupo familiar */
-  if (mostra('familia') && famMembros().length){
-    h += sec('A proteção da família') + `<div class="card">
-      <p class="sub">O contrato não protege só uma pessoa: é o conjunto que fica coberto, e o custo é um só.</p>
-      ${htmlFamiliaBloco({cliente:true})}</div>`;
-  }
-  /* beneficio em vida */
-  if (mostra('emvida')){
-    const evA = evHTML(famApolicesTit(), c.idade || idadeDe(c.nasc), 'eva', {cliente:true});
-    if (evA) h += sec('O que você recebe em vida') + `<div class="card">
-      <p class="sub">As apólices vitalícias antecipam parte do capital para o próprio segurado num diagnóstico de doença grave. Esse valor abate do que a família receberia depois.</p>
-      ${evA}</div>`;
-  }
+  /* CARTEIRA_V1: carteira de proteção (patrimônio + gravidade) no doc do cliente */
+  if (temHoje){ const _ct = carteiraProtecaoHTML(cH, state.hoje.apolices, (c.idade||idadeDe(c.nasc))); if (_ct) h += sec('Carteira de proteção') + `<div class="card">${_ct}</div>`; }
+  /* FAM_APRESENTA_V1: família (pizzas + detalhe por segurado) no doc do cliente */
+  if (mostra('familia')){ const _fh = familiaApresentaHTML(); if (_fh) h += sec('Sua família') + `<div class="card">${_fh}</div>`; }
+  if (mostra('emvida') && !(state.familia && (state.familia.membros||[]).length)){ const _ev = emVidaApresentaHTML(); if (_ev) h += sec('Benefício em vida (doença grave)') + `<div class="card">${_ev}</div>`; }
+  /* grupo familiar: a seção do doc do cliente é a `Sua família` (FAM_APRESENTA_V1), logo abaixo */
+  /* benefício em vida no doc do cliente: a seção é a do protótipo (emVidaApresentaHTML), logo acima */
   if (temHoje && mostra('apolices')){
     h += sec('As apólices em detalhe');
     { const na = state.hoje.apolices.filter(a=>perApol(a)==='ano').length, nm = state.hoje.apolices.length-na;
@@ -2519,7 +2813,7 @@ function mostra(k){ return !!state.show[k]; }
 /* ============================================================
    NAVEGAÇÃO / RENDER
    ============================================================ */
-const ABAS = [['cliente','Cliente','1'],['hoje','Hoje','2'],['nec','Necessidade','3'],['prop','Proposta','4'],['com','Comissão','%'],['anexos','Anexos','☰']];
+const ABAS = [['cliente','Cliente','1'],['hoje','Hoje','2'],['nec','Necessidade','3'],['prop','Proposta','4'],['com','Comissão','%'],['produtos','Produtos','◆']];
 function renderNav(){
   $('navSteps').innerHTML = ABAS.map(a => {
     if (a[0] === 'com' && state.ui.cliente) return '';
@@ -2530,7 +2824,8 @@ function renderNav(){
 }
 function render(){
   renderNav(); renderCliente(); renderHoje(); renderNec(); renderCenarios(); renderComissao();
-  renderMuda(); renderAnexoDG(); ligaBlocos();
+  renderMuda(); renderAnexoDG(); renderFamilia(); renderEmVida(); ligaBlocos();
+  if (typeof renderProdutos === 'function') renderProdutos();
   if (document.body.classList.contains('modo-apresenta')) renderApresenta();
 }
 
