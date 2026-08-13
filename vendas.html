@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.8 · Substituição</title>
+<title>CRM Life Planner · v0.10.9 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -601,7 +601,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.8 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.9 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -615,7 +615,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.8 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.9 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -713,6 +713,10 @@ function normContato(c){
   if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
   if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
   if(c.notas==null) c.notas='';
+  /* `criadoEm` já era gravado nos 2 caminhos de cadastro, mas num em ISO curto
+     e no outro em timestamp completo — e ninguém lia. Normaliza pra data pura,
+     que é a granularidade que interessa (entrada no funil). */
+  if(c.criadoEm) c.criadoEm=String(c.criadoEm).slice(0,10);
   if(c.pm!=null&&c.premio_mes==null){ const n=Number(c.pm); if(isFinite(n)&&n>0) c.premio_mes=n; } // espelho canônico (regra_premio)
   return c;
 }
@@ -1084,6 +1088,20 @@ function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.
       venda fecha, a apólice emite depois — e a comissão anda com a segunda);
    2) régua de negócio no topo do funil, com o previsto do mês;
    3) taxa de passagem entre etapas. */
+/* ── ENTRADA NO FUNIL ──────────────────────────────────────────────────────
+   Data que responde "desde quando esse negócio existe". `criadoEm` é FATO (o
+   app carimbou no cadastro); quem veio de importação/base antiga não tem, e aí
+   a interação mais antiga é a melhor pista — marcada como ESTIMADA, nunca
+   gravada por cima como se fosse fato (mesma regra do vencFonte da
+   Substituição). Sem nenhum dos dois, é null: fica FORA do recorte por período
+   em vez de entrar com data inventada. */
+function entradaFunil(c){
+  if(c&&c.criadoEm) return {iso:String(c.criadoEm).slice(0,10),fonte:'cadastro'};
+  const dias=((c&&c.interacoes)||[]).map(x=>x&&x.dia).filter(Boolean).sort();
+  if(dias.length) return {iso:dias[0],fonte:'estimada'};
+  if(c&&c.sitplan) return {iso:String(c.sitplan).slice(0,10),fonte:'estimada'};
+  return {iso:null,fonte:'sem data'};
+}
 /* ── PROBABILIDADE DE VIRAR APÓLICE ────────────────────────────────────────
    PA em jogo trata um SitPlan e uma proposta assinada como a mesma coisa. Com
    probabilidade sai o PA ponderado, que é o número em que dá pra confiar pra
@@ -1100,7 +1118,7 @@ const PROB_ETAPA={
 const PROB_OPTS=[0,10,25,50,75,90,100];
 function probEtapa(c){ const v=PROB_ETAPA[c&&c.etapa]; return v==null?10:v; }
 function probManual(c){ const n=Number(c&&c.prob); return (c&&c.prob!=null&&isFinite(n))?Math.max(0,Math.min(100,n)):null; }
-function probDe(c){ const m=probManual(c); return m==null?probEtapa(c):m; }
+function probDe(c){ const m=probManual(c); return m==null?probAuto(c):m; }
 function probCor(p){ return p>=90?'var(--verde)':p>=50?'var(--azul)':p>=25?'var(--amar)':'var(--muted)'; }
 function paPonderado(lista){ return (lista||[]).reduce((t,c)=>t+paDe(c)*probDe(c)/100,0); }
 function prevDe(c,k){ const v=c&&c[k==='emis'?'prev_emis':'prev_fech']; return v||null; }
@@ -1129,6 +1147,48 @@ function nnTaxas(lista,fluxo){
   return fluxo.slice(0,-1).map((e,i)=>({de:e,para:fluxo[i+1],n1:alc[i],n2:alc[i+1],
     pct:alc[i]?Math.round(alc[i+1]/alc[i]*100):null}));
 }
+/* Período e fonte da probabilidade: escolha por aparelho, como as colunas.
+   O período vale SÓ pra taxa de passagem e pra calibragem — PA em jogo e o
+   previsto do mês são fotografia do pipeline de HOJE e não podem ser filtrados
+   por data de entrada, senão o dinheiro na tela some sem explicação. */
+let FUNP={periodo:'tudo',probFonte:'tabela'};
+const FUN_PERIODOS=[['30','30 dias'],['90','90 dias'],['180','180 dias'],['365','12 meses'],['tudo','desde sempre']];
+function funPrefLer(){ try{ const r=localStorage.getItem('crmlp_funil_v1'); if(r) FUNP=Object.assign(FUNP,JSON.parse(r)); }catch(_){}
+  if(!FUN_PERIODOS.some(p=>p[0]===FUNP.periodo)) FUNP.periodo='tudo';
+  if(FUNP.probFonte!=='funil') FUNP.probFonte='tabela'; }
+function funPrefSalvar(){ localStorage.setItem('crmlp_funil_v1',JSON.stringify(FUNP)); }
+function funSet(k,v){ FUNP[k]=v; funPrefSalvar(); render(); }
+function funCorte(){ if(FUNP.periodo==='tudo') return null; return isoAddDias(hojeISO(),-Number(FUNP.periodo)); }
+/* recorte da taxa: quem entrou dentro da janela. Quem não tem data NENHUMA
+   fica de fora — e a tela DIZ quantos ficaram, em vez de sumir com eles. */
+function funRecorte(lista){
+  const corte=funCorte();
+  if(!corte) return {lista,fora:0,semData:0,corte:null};
+  let fora=0,semData=0;
+  const dentro=lista.filter(c=>{ const e=entradaFunil(c);
+    if(!e.iso){ semData++; fora++; return false; }
+    if(e.iso<corte){ fora++; return false; }
+    return true; });
+  return {lista:dentro,fora,semData,corte};
+}
+/* Probabilidade calibrada NO SEU FUNIL: da etapa até o fim, multiplicando as
+   taxas de passagem. Só vale com amostra — senão um funil sem ninguém em
+   Delivery devolveria 0% pra tudo e você planejaria o mês com um número falso.
+   Sem amostra, cai na tabela e a tela avisa qual está valendo. */
+const PROB_MIN_BASE=5, PROB_MIN_FIM=3;
+let _PROB_CAL=null;
+function probCalibrar(lista,fluxo){
+  const alc=fluxo.map(e=>lista.filter(c=>nnAlcancou(c,e,fluxo)).length);
+  const fim=alc[alc.length-1];
+  if(fim<PROB_MIN_FIM){ _PROB_CAL={mapa:null,motivo:`só ${fim} chegou${fim===1?'':'ram'} ao fim no período`,alc}; return _PROB_CAL; }
+  const mapa={};
+  fluxo.forEach((e,i)=>{ if(alc[i]>=PROB_MIN_BASE) mapa[e]=Math.round(fim/alc[i]*100); });
+  _PROB_CAL={mapa,motivo:'',alc};
+  return _PROB_CAL;
+}
+function probFunil(etapa){ return (_PROB_CAL&&_PROB_CAL.mapa&&_PROB_CAL.mapa[etapa]!=null)?_PROB_CAL.mapa[etapa]:null; }
+/* a que vale AGORA: manual > (funil, se você escolheu e há amostra) > tabela */
+function probAuto(c){ const f=(FUNP.probFonte==='funil')?probFunil(c&&c.etapa):null; return f==null?probEtapa(c):f; }
 function nnTaxaMapa(lista,fluxo){
   const m={}; nnTaxas(lista,fluxo).forEach(t=>{ m[t.de]=t; }); return m;
 }
@@ -1136,6 +1196,23 @@ function nnTaxaChip(t){
   if(!t||t.pct==null) return '';
   const cor=t.pct<40?'var(--verm)':t.pct<70?'var(--amar)':'var(--verde)';
   return `<div class="nncol-taxa" style="color:${cor}" title="${t.n1} alcançaram ${t.de} · ${t.n2} chegaram em ${t.para} (posição atual + histórico registrado)">${t.pct}% passam →</div>`;
+}
+function funControlesHtml(rec,fluxo){
+  const cal=_PROB_CAL||{}, temCal=!!(cal.mapa&&Object.keys(cal.mapa).length);
+  return `<div class="card" style="padding:9px 12px;margin-bottom:12px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12.5px">
+    <span><b>Taxa de passagem</b> conta quem ENTROU no funil
+      <select onchange="funSet('periodo',this.value)" style="margin-left:5px">${FUN_PERIODOS.map(p=>`<option value="${p[0]}" ${FUNP.periodo===p[0]?'selected':''}>${p[1]}</option>`).join('')}</select>
+    </span>
+    ${rec.corte?`<span style="color:var(--muted)">desde ${dataBR(rec.corte)} · ${rec.lista.length} no recorte${rec.fora?`, ${rec.fora} fora${rec.semData?` (${rec.semData} sem data de entrada)`:''}`:''}</span>`
+              :`<span style="color:var(--muted)">base inteira · ${rec.lista.length} negócio(s), inclusive os encerrados</span>`}
+    <span style="flex:1"></span>
+    <span>Ponderar por
+      <select onchange="funSet('probFonte',this.value)" style="margin-left:5px">
+        <option value="tabela" ${FUNP.probFonte==='tabela'?'selected':''}>tabela por etapa (padrão)</option>
+        <option value="funil" ${FUNP.probFonte==='funil'?'selected':''}>meu funil (histórico)</option>
+      </select></span>
+    ${FUNP.probFonte==='funil'&&!temCal?`<span class="badge b-amarelo" title="${esc(cal.motivo||'')}">sem amostra — usando a tabela</span>`:''}
+  </div>`;
 }
 function nnNegocioHtml(lista,fluxo,ns){
   const vivos=lista.filter(c=>fluxo.includes(c.etapa));
@@ -1151,7 +1228,7 @@ function nnNegocioHtml(lista,fluxo,ns){
   const kpi=(l,n,s,alerta)=>`<div class="kpi"${alerta?' style="border:1.5px solid var(--verm-borda,#f3c9c9)"':''}><div class="lbl">${l}</div><div class="num" style="font-size:19px">${n}</div>${s?`<div style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   return `<div class="kpis" style="margin-bottom:12px">
       ${kpi('PA em jogo',brlCurto(pa),brlCurto(pm)+'/mês · '+vivos.length+' negócio(s)')}
-      ${kpi('PA ponderado',brlCurto(pond),pa?'pela probabilidade · '+Math.round(pond/pa*100)+'% do total':'—')}
+      ${kpi('PA ponderado',brlCurto(pond),(pa?Math.round(pond/pa*100)+'% do total · ':'')+(FUNP.probFonte==='funil'&&_PROB_CAL&&_PROB_CAL.mapa?'pelo seu funil':'pela tabela por etapa'))}
       ${kpi('Ticket médio (PA)',comValor?brlCurto(pa/comValor):'—',comValor<vivos.length?`${vivos.length-comValor} sem prêmio informado`:'todos com prêmio')}
       ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?`${fechMes.length} negócio(s) · ponderado ${brlCurto(paPonderado(fechMes))}`:'nenhuma previsão neste mês')}
       ${kpi('Previsto emitir no mês',emisMes.length?brlCurto(somaPA(emisMes)):'—',emisMes.length?emisMes.length+' apólice(s)':'nenhuma previsão neste mês')}
@@ -1200,7 +1277,9 @@ function viewNnFunil(){
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
   let body;
-  const tx=nnTaxaMapa(lista,ETAPAS_FLUXO);
+  const rec=funRecorte(lista);
+  probCalibrar(rec.lista,ETAPAS_FLUXO);
+  const tx=nnTaxaMapa(rec.lista,ETAPAS_FLUXO);
   const colDe=e=>{
     const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
@@ -1226,7 +1305,7 @@ function viewNnFunil(){
     body='<div class="nnboard">'+ETAPAS_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Novos Negócios</h1>
-    ${nnNegocioHtml(lista,ETAPAS_FLUXO,'nn')}${toolbar}${body}`;
+    ${nnNegocioHtml(lista,ETAPAS_FLUXO,'nn')}${funControlesHtml(rec,ETAPAS_FLUXO)}${toolbar}${body}`;
   if(NN_MODE==='kanban'){
     wireNnBoard();
     if(NN_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+NN_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
@@ -1287,7 +1366,9 @@ function viewBcFunil(){
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
   </div>`;
   let body;
-  const tx=nnTaxaMapa(lista,ETAPAS_BC_FLUXO);
+  const rec=funRecorte(lista);
+  probCalibrar(rec.lista,ETAPAS_BC_FLUXO);
+  const tx=nnTaxaMapa(rec.lista,ETAPAS_BC_FLUXO);
   const colDe=e=>{
     const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
@@ -1313,7 +1394,7 @@ function viewBcFunil(){
     body='<div class="nnboard">'+ETAPAS_BC_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Negócios Base de Clientes</h1>
-        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc')}${toolbar}${body}`;
+        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc')}${funControlesHtml(rec,ETAPAS_BC_FLUXO)}${toolbar}${body}`;
   if(BC_MODE==='kanban'){
     wireBcBoard();
     if(BC_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+BC_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
@@ -1678,6 +1759,14 @@ function renderDrawer(){
           <b style="color:${probCor(probDe(c))}">${probDe(c)}%</b>
           ${pmDe(c)?`<span style="font-size:12px;color:var(--muted)">PA ponderado ${brl(paDe(c)*probDe(c)/100)}</span>`:''}
         </div>
+        <div style="font-size:11.5px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap">
+          <span>📋 tabela por etapa: <b>${probEtapa(c)}%</b></span>
+          <span>📈 seu funil: <b>${probFunil(c.etapa)==null?'sem amostra':probFunil(c.etapa)+'%'}</b></span>
+          <span>➡️ valendo agora: <b style="color:${probCor(probDe(c))}">${probDe(c)}%</b> ${probManual(c)!=null?'(sua escolha)':(FUNP.probFonte==='funil'&&probFunil(c.etapa)!=null?'(seu funil)':'(tabela)')}</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:6px">📆 No funil desde
+          <input type="date" value="${esc(entradaFunil(c).iso||'')}" onchange="drwSalvarEntrada(this.value)" style="font-size:11.5px;padding:2px 5px">
+          <span>${entradaFunil(c).fonte==='cadastro'?'· data do cadastro':(entradaFunil(c).iso?'· estimada pela interação mais antiga — confirme se souber a real':'· sem data: fica fora do recorte por período')}</span></div>
         <div style="font-size:11px;color:var(--muted);margin-top:-4px">A venda fecha numa data e a apólice emite em outra — a comissão anda com a segunda. As duas alimentam o previsto do mês no topo do funil. A probabilidade nasce da etapa; se você escolher um valor, ele manda — inclusive depois de mover o card.</div>
         <div class="linha-form" style="align-items:center;margin-top:10px;gap:6px;flex-wrap:wrap">
           <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Temperatura</span>
@@ -1822,6 +1911,13 @@ function drwSalvarPM(auto){
   else { c.premio_total=null; c.premio_total_manual=false; }
   salvar(); render();
   toast(pm? `${brlCurto(pm)}/mês · PA ${brlCurto(pm*PA_MESES)}` : 'Valor do negócio removido', true);
+}
+function drwSalvarEntrada(v){
+  const c=ct(); if(!c) return;
+  const antes=entradaFunil(c);
+  if((antes.iso||'')===(v||'')&&antes.fonte==='cadastro') return;
+  c.criadoEm=v||null; salvar(); renderDrawer(); render();
+  toast(v?('Entrada no funil: '+dataBR(v)):'Data de entrada removida',true);
 }
 function drwSalvarProb(v){
   const c=ct(); if(!c) return;
@@ -5003,7 +5099,7 @@ function bnPromover(id){
   const c={id:'bn'+Date.now(), lp:S.activeUser, funil:'nn', nome:b.nome, telefone:b.telefone||'',
     etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'',
     idade:b.idade||'', profissao:b.cargo||'', notas:[b.notas,b.contexto&&('ctx: '+b.contexto)].filter(Boolean).join(' | '),
-    criadoEm:new Date().toISOString(), sitplan:null};
+    criadoEm:hojeISO(), sitplan:null};
   S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id;
   salvar(); bnSalvar(); render(); toast(b.nome.split(' ')[0]+' agora é contato do funil ✓',true);
 }
@@ -5053,7 +5149,7 @@ function bnNovo(nome){ // nome opcional (⌘K passa pronto; o botão do Estoque 
   nome=nome||prompt('Nome do novo contato:'); if(!nome) return;
   const c={id:'N'+Date.now(),lp:S.activeUser,listas:[],nome:String(nome).trim(),telefone:null,email:null,empresa:null,cargo:null,
     trilha:'seguro',tipo:null,estagio:'estoque',recomendante:null,cidade:null,prioridade:null,
-    notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[]};
+    notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[],criadoEm:hojeISO()};
   BN.contatos.unshift(c); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
 }
 
@@ -5992,19 +6088,43 @@ function lpSelfCheck(){
         [{etapa:'C2',interacoes:[]},{etapa:'Não',interacoes:[{k:'etapa',para:'TA'},{k:'etapa',para:'OI/FF'}]},
          {etapa:'N',interacoes:[{k:'etapa',para:'FA'}]}],ETAPAS_FLUXO).every(t=>t.pct==null||t.pct<=100));
     ok('funil: histórico mais fundo que a etapa atual manda', nnMaxIdx({etapa:'TA',interacoes:[{k:'etapa',para:'FA'}]},ETAPAS_FLUXO)===ETAPAS_FLUXO.indexOf('FA'));
-    /* probabilidade: padrão vem da etapa, manual manda, encerrado é 0 */
-    ok('prob: segue a etapa quando não há manual', probDe({etapa:'C2'})===PROB_ETAPA['C2']);
+    /* probabilidade: manual manda sempre; o automático depende da FONTE ativa,
+       então os invariantes da tabela isolam a fonte (foi o self-check que
+       pegou isso quando a 2ª fonte entrou — invariante velho vira mentira). */
+    const _fonte=FUNP.probFonte, _cal=_PROB_CAL; FUNP.probFonte='tabela'; _PROB_CAL=null;
+    ok('prob(tabela): segue a etapa quando não há manual', probDe({etapa:'C2'})===PROB_ETAPA['C2']);
+    ok('prob(tabela): ponderado = PA × prob', Math.round(paPonderado([{pm:1000,etapa:'C2'}]))===Math.round(1000*PA_MESES*0.5));
     ok('prob: manual ganha da etapa', probDe({etapa:'SitPlan',prob:90})===90);
     ok('prob: manual 0 continua valendo (não cai no padrão)', probDe({etapa:'C2',prob:0})===0);
     ok('prob: encerrado é 0', probDe({etapa:'Não'})===0);
     ok('prob: entregue é 100', probDe({etapa:'DELIVERY'})===100);
-    ok('prob: ponderado = PA × prob', Math.round(paPonderado([{pm:1000,etapa:'C2'}]))===Math.round(1000*PA_MESES*0.5));
+    /* calibrada pelo funil: é alcançaram(fim)/alcançaram(E) — nunca passa de
+       100 (o funil é monotônico) e some quando não há amostra */
+    const _base=[]; for(let i=0;i<6;i++) _base.push({etapa:'DELIVERY',interacoes:[]});
+    for(let i=0;i<6;i++) _base.push({etapa:'C2',interacoes:[]});
+    probCalibrar(_base,ETAPAS_FLUXO);
+    ok('prob(funil): C2 = 6 de 12 = 50%', probFunil('C2')===50);
+    ok('prob(funil): nenhuma calibrada passa de 100', ETAPAS_FLUXO.every(e=>probFunil(e)==null||probFunil(e)<=100));
+    probCalibrar([{etapa:'C2',interacoes:[]}],ETAPAS_FLUXO);
+    ok('prob(funil): sem amostra não inventa número', probFunil('C2')===null);
+    FUNP.probFonte='funil'; _PROB_CAL=null;
+    ok('prob(funil): sem calibragem cai na tabela', probDe({etapa:'C2'})===PROB_ETAPA['C2']);
+    FUNP.probFonte=_fonte; _PROB_CAL=_cal;
+    /* recorte por período: quem não tem data de entrada fica FORA e é contado */
+    const _r=(()=>{ const p=FUNP.periodo; FUNP.periodo='30';
+      const r=funRecorte([{etapa:'C2',criadoEm:hojeISO(),interacoes:[]},{etapa:'C2',interacoes:[]}]);
+      FUNP.periodo=p; return r; })();
+    ok('recorte: sem data de entrada não entra na janela', _r.lista.length===1&&_r.semData===1);
+    ok('entrada: criadoEm é fato; interação mais antiga é estimada',
+       entradaFunil({criadoEm:'2026-01-02'}).fonte==='cadastro' &&
+       entradaFunil({interacoes:[{dia:'2026-03-05'},{dia:'2026-02-01'}]}).iso==='2026-02-01');
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
 }
+funPrefLer();
 lpSelfCheck();
 render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
 </script>
