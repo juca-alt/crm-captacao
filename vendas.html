@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.7 · Substituição</title>
+<title>CRM Life Planner · v0.10.8 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -247,6 +247,7 @@
   .vneg b{font-weight:800}
   .vneg-total{margin-top:0;font-size:12px;padding:5px 11px;border-radius:20px}
   .nnrec{font-size:10.5px;font-weight:700;color:#7c3aed;background:#f3ecff;border-radius:6px;padding:2px 6px;margin-left:6px;white-space:nowrap}
+  .nncol-taxa{font-size:10px;font-weight:700;text-align:center;margin:-4px 6px 8px;letter-spacing:.02em}
   .nncol-pa{font-size:10.5px;font-weight:700;color:#15803d;background:var(--verde-bg);border-radius:6px;padding:3px 7px;margin:-4px 6px 8px;text-align:center}
   .col-pa{text-align:right;white-space:nowrap}
   tfoot .col-pa{color:#15803d}
@@ -600,7 +601,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.7 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.8 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -614,7 +615,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.7 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.8 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1083,27 +1084,62 @@ function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.
       venda fecha, a apólice emite depois — e a comissão anda com a segunda);
    2) régua de negócio no topo do funil, com o previsto do mês;
    3) taxa de passagem entre etapas. */
+/* ── PROBABILIDADE DE VIRAR APÓLICE ────────────────────────────────────────
+   PA em jogo trata um SitPlan e uma proposta assinada como a mesma coisa. Com
+   probabilidade sai o PA ponderado, que é o número em que dá pra confiar pra
+   planejar o mês. Padrão vem da ETAPA (assim a base inteira já nasce estimada,
+   sem ele tocar em 800 negócios) e cada negócio aceita override manual — que
+   sempre ganha, inclusive quando a etapa muda depois. Encerrado é 0, entregue
+   é 100: esses dois não são chute. */
+const PROB_ETAPA={
+  'SitPlan':5,'TA':10,'OI/FF':20,'P/C':35,'C2':50,'N':70,'FA':85,'EMISSÃO':95,'DELIVERY':100,
+  'Não':0,'Prop. Cancelada':0,'Apól. Cancelada':0,
+  'Clientes Ativos':5,'Pendência/Atraso':10,'Contato Agenda/Revisita':15,'Agendada Revisita':30,
+  'Novo Negócio/Resolução pós Revisita':50,'N/Emissão':75,'Emissão Final':90,'Delivery':100,
+  'Venda ganha':100,'Venda perdida':0};
+const PROB_OPTS=[0,10,25,50,75,90,100];
+function probEtapa(c){ const v=PROB_ETAPA[c&&c.etapa]; return v==null?10:v; }
+function probManual(c){ const n=Number(c&&c.prob); return (c&&c.prob!=null&&isFinite(n))?Math.max(0,Math.min(100,n)):null; }
+function probDe(c){ const m=probManual(c); return m==null?probEtapa(c):m; }
+function probCor(p){ return p>=90?'var(--verde)':p>=50?'var(--azul)':p>=25?'var(--amar)':'var(--muted)'; }
+function paPonderado(lista){ return (lista||[]).reduce((t,c)=>t+paDe(c)*probDe(c)/100,0); }
 function prevDe(c,k){ const v=c&&c[k==='emis'?'prev_emis':'prev_fech']; return v||null; }
 function prevSet(c,k,iso){ c[k==='emis'?'prev_emis':'prev_fech']=iso||null; }
 function mesDe(iso){ return String(iso||'').slice(0,7); }
 function mesAtual(){ return hojeISO().slice(0,7); }
 function prevVencida(iso){ return !!iso && iso<hojeISO(); }
-/* alcançou a etapa = está nela/além OU o histórico registra a entrada nela.
-   Contato encerrado (Não/cancelada) sai do índice do fluxo, então só o
-   histórico responde por ele — por isso a taxa é honesta sobre sua origem. */
+/* Ponto MAIS FUNDO que o negócio alcançou = maior índice entre a etapa atual e
+   tudo que o histórico registra. Contato encerrado (Não/cancelada) sai do
+   índice do fluxo, então quem responde por ele é o histórico.
+   ⚠️ Tem que ser o MÁXIMO, não "está nela OU tem log dela": com o log parcial
+   (normal em base importada), um encerrado contava em TA e não em SitPlan e a
+   etapa seguinte ficava com base MAIOR que a anterior — a tela chegou a
+   mostrar "120% passam", que é impossível num funil. Funil é monotônico. */
+function nnMaxIdx(c,fluxo){
+  let m=fluxo.indexOf(c&&c.etapa);
+  ((c&&c.interacoes)||[]).forEach(x=>{ if(x&&x.k==='etapa'){ const i=fluxo.indexOf(x.para); if(i>m) m=i; } });
+  return m;
+}
 function nnAlcancou(c,e,fluxo){
   const i=fluxo.indexOf(e); if(i<0) return false;
-  if(fluxo.indexOf(c.etapa)>=i) return true;
-  return (c.interacoes||[]).some(x=>x.k==='etapa'&&x.para===e);
+  return nnMaxIdx(c,fluxo)>=i;
 }
 function nnTaxas(lista,fluxo){
   const alc=fluxo.map(e=>lista.filter(c=>nnAlcancou(c,e,fluxo)).length);
   return fluxo.slice(0,-1).map((e,i)=>({de:e,para:fluxo[i+1],n1:alc[i],n2:alc[i+1],
     pct:alc[i]?Math.round(alc[i+1]/alc[i]*100):null}));
 }
+function nnTaxaMapa(lista,fluxo){
+  const m={}; nnTaxas(lista,fluxo).forEach(t=>{ m[t.de]=t; }); return m;
+}
+function nnTaxaChip(t){
+  if(!t||t.pct==null) return '';
+  const cor=t.pct<40?'var(--verm)':t.pct<70?'var(--amar)':'var(--verde)';
+  return `<div class="nncol-taxa" style="color:${cor}" title="${t.n1} alcançaram ${t.de} · ${t.n2} chegaram em ${t.para} (posição atual + histórico registrado)">${t.pct}% passam →</div>`;
+}
 function nnNegocioHtml(lista,fluxo,ns){
   const vivos=lista.filter(c=>fluxo.includes(c.etapa));
-  const pa=somaPA(vivos), pm=somaPM(vivos);
+  const pa=somaPA(vivos), pm=somaPM(vivos), pond=paPonderado(vivos);
   const comValor=vivos.filter(c=>pmDe(c)>0).length;
   const mes=mesAtual();
   const fechMes=vivos.filter(c=>mesDe(prevDe(c,'fech'))===mes);
@@ -1115,29 +1151,14 @@ function nnNegocioHtml(lista,fluxo,ns){
   const kpi=(l,n,s,alerta)=>`<div class="kpi"${alerta?' style="border:1.5px solid var(--verm-borda,#f3c9c9)"':''}><div class="lbl">${l}</div><div class="num" style="font-size:19px">${n}</div>${s?`<div style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   return `<div class="kpis" style="margin-bottom:12px">
       ${kpi('PA em jogo',brlCurto(pa),brlCurto(pm)+'/mês · '+vivos.length+' negócio(s)')}
+      ${kpi('PA ponderado',brlCurto(pond),pa?'pela probabilidade · '+Math.round(pond/pa*100)+'% do total':'—')}
       ${kpi('Ticket médio (PA)',comValor?brlCurto(pa/comValor):'—',comValor<vivos.length?`${vivos.length-comValor} sem prêmio informado`:'todos com prêmio')}
-      ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?fechMes.length+' negócio(s)':'nenhuma previsão neste mês')}
+      ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?`${fechMes.length} negócio(s) · ponderado ${brlCurto(paPonderado(fechMes))}`:'nenhuma previsão neste mês')}
       ${kpi('Previsto emitir no mês',emisMes.length?brlCurto(somaPA(emisMes)):'—',emisMes.length?emisMes.length+' apólice(s)':'nenhuma previsão neste mês')}
       ${kpi('Fechamento vencido',atrasados.length||'0',atrasados.length?'previsão passou — renegociar a data':'nenhuma previsão atrasada',atrasados.length>0)}
+      ${pior?kpi('Gargalo',pior.pct+'%',esc(pior.de)+' → '+esc(pior.para),pior.pct<40):''}
     </div>
-    <div class="card" style="padding:10px 12px;margin-bottom:12px;overflow-x:auto">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap">
-        <b style="font-size:13px">Taxa de passagem</b>
-        <span style="font-size:11.5px;color:var(--muted)">quem alcançou cada etapa (posição atual + histórico registrado) — não é conversão do mês</span>
-        ${pior?`<span style="flex:1"></span><span class="badge b-verm" title="Menor passagem do funil">gargalo: ${esc(pior.de)} → ${esc(pior.para)} · ${pior.pct}%</span>`:''}
-      </div>
-      <div style="display:flex;align-items:flex-end;gap:2px;min-width:520px">
-        ${fluxo.map((e,i)=>{ const n=lista.filter(c=>nnAlcancou(c,e,fluxo)).length;
-          const t=taxas[i], base=lista.filter(c=>nnAlcancou(c,fluxo[0],fluxo)).length||1;
-          const h=Math.max(6,Math.round(n/base*54));
-          return `<div style="flex:1;text-align:center;min-width:44px">
-            <div style="font-size:11px;font-weight:700">${n}</div>
-            <div style="height:${h}px;background:${etapaVar(e)};opacity:.75;border-radius:4px 4px 0 0"></div>
-            <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e)}</div>
-            ${t?`<div style="font-size:10.5px;font-weight:700;color:${t.pct==null?'var(--muted)':(t.pct<40?'var(--verm)':t.pct<70?'var(--amar)':'var(--verde)')}">${t.pct==null?'—':t.pct+'%'} ↓</div>`:'<div style="height:14px"></div>'}
-          </div>`; }).join('')}
-      </div>
-    </div>`;
+`;
 }
 function nnCard(c){
   /* Recomendações são métrica PRÓPRIA: pedir e colher não depende de fechar
@@ -1150,6 +1171,7 @@ function nnCard(c){
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
+    ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
     ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
     <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}${_recBadge}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
@@ -1178,11 +1200,13 @@ function viewNnFunil(){
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
   let body;
+  const tx=nnTaxaMapa(lista,ETAPAS_FLUXO);
   const colDe=e=>{
     const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
-      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
+      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:''}
+      ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
   };
@@ -1202,7 +1226,6 @@ function viewNnFunil(){
     body='<div class="nnboard">'+ETAPAS_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Novos Negócios</h1>
-    <div class="sub">Processo completo (12 etapas): SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · encerramentos recolhíveis no fim.</div>
     ${nnNegocioHtml(lista,ETAPAS_FLUXO,'nn')}${toolbar}${body}`;
   if(NN_MODE==='kanban'){
     wireNnBoard();
@@ -1264,11 +1287,13 @@ function viewBcFunil(){
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
   </div>`;
   let body;
+  const tx=nnTaxaMapa(lista,ETAPAS_BC_FLUXO);
   const colDe=e=>{
     const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
-      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
+      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:''}
+      ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
   };
@@ -1288,8 +1313,7 @@ function viewBcFunil(){
     body='<div class="nnboard">'+ETAPAS_BC_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Funil Negócios Base de Clientes</h1>
-    <div class="sub">Processo da carteira (espelho do Kommo): Clientes Ativos → Pendência/Atraso → Contato Agenda/Revisita → Agendada Revisita → Novo Negócio/Resolução pós Revisita → N/Emissão → Emissão Final → Delivery · encerramentos (ganha/perdida) recolhíveis no fim.</div>
-    ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc')}${toolbar}${body}`;
+        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc')}${toolbar}${body}`;
   if(BC_MODE==='kanban'){
     wireBcBoard();
     if(BC_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+BC_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
@@ -1645,7 +1669,16 @@ function renderDrawer(){
           <label style="font-size:12.5px;color:var(--muted)">📄 Previsão de emissão
             <input id="drwPrevE" type="date" value="${esc(prevDe(c,'emis')||'')}" onchange="drwSalvarPrev('emis',this.value)" style="margin-left:5px"></label>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:-4px">A venda fecha numa data e a apólice emite em outra — a comissão anda com a segunda. As duas alimentam o previsto do mês no topo do funil.</div>
+        <div class="linha-form" style="align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12.5px;color:var(--muted)">🎲 Probabilidade de virar apólice</span>
+          <select id="drwProb" onchange="drwSalvarProb(this.value)">
+            <option value="">Pela etapa (${probEtapa(c)}%)</option>
+            ${PROB_OPTS.map(v=>`<option value="${v}" ${probManual(c)===v?'selected':''}>${v}%</option>`).join('')}
+          </select>
+          <b style="color:${probCor(probDe(c))}">${probDe(c)}%</b>
+          ${pmDe(c)?`<span style="font-size:12px;color:var(--muted)">PA ponderado ${brl(paDe(c)*probDe(c)/100)}</span>`:''}
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:-4px">A venda fecha numa data e a apólice emite em outra — a comissão anda com a segunda. As duas alimentam o previsto do mês no topo do funil. A probabilidade nasce da etapa; se você escolher um valor, ele manda — inclusive depois de mover o card.</div>
         <div class="linha-form" style="align-items:center;margin-top:10px;gap:6px;flex-wrap:wrap">
           <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Temperatura</span>
           ${tempKeys().map(k=>{ const d=tempDic()[k], on=c.temperatura===k;
@@ -1789,6 +1822,13 @@ function drwSalvarPM(auto){
   else { c.premio_total=null; c.premio_total_manual=false; }
   salvar(); render();
   toast(pm? `${brlCurto(pm)}/mês · PA ${brlCurto(pm*PA_MESES)}` : 'Valor do negócio removido', true);
+}
+function drwSalvarProb(v){
+  const c=ct(); if(!c) return;
+  const novo=(v===''||v==null)?null:Number(v);
+  if((c.prob==null?null:Number(c.prob))===novo) return;
+  c.prob=novo; salvar(); renderDrawer(); render();
+  toast(novo==null?`Probabilidade volta a seguir a etapa (${probEtapa(c)}%)`:`Probabilidade: ${novo}%`,true);
 }
 function drwSalvarPrev(k,v){
   const c=ct(); if(!c) return;
@@ -5946,6 +5986,19 @@ function lpSelfCheck(){
     ok('funil: encerrado ainda conta no histórico da taxa', nnAlcancou(_enc,'TA',ETAPAS_FLUXO)===true);
     ok('funil: quem está além alcançou a anterior', nnAlcancou({etapa:'C2',interacoes:[]},'TA',ETAPAS_FLUXO)===true);
     ok('funil: taxa com base zero não divide por zero', nnTaxas([],ETAPAS_FLUXO).every(t=>t.pct===null));
+    /* funil é monotônico: NUNCA pode passar mais gente do que chegou (12/08: a
+       tela mostrou "120% passam" com histórico parcial de um encerrado) */
+    ok('funil: taxa nunca passa de 100%', nnTaxas(
+        [{etapa:'C2',interacoes:[]},{etapa:'Não',interacoes:[{k:'etapa',para:'TA'},{k:'etapa',para:'OI/FF'}]},
+         {etapa:'N',interacoes:[{k:'etapa',para:'FA'}]}],ETAPAS_FLUXO).every(t=>t.pct==null||t.pct<=100));
+    ok('funil: histórico mais fundo que a etapa atual manda', nnMaxIdx({etapa:'TA',interacoes:[{k:'etapa',para:'FA'}]},ETAPAS_FLUXO)===ETAPAS_FLUXO.indexOf('FA'));
+    /* probabilidade: padrão vem da etapa, manual manda, encerrado é 0 */
+    ok('prob: segue a etapa quando não há manual', probDe({etapa:'C2'})===PROB_ETAPA['C2']);
+    ok('prob: manual ganha da etapa', probDe({etapa:'SitPlan',prob:90})===90);
+    ok('prob: manual 0 continua valendo (não cai no padrão)', probDe({etapa:'C2',prob:0})===0);
+    ok('prob: encerrado é 0', probDe({etapa:'Não'})===0);
+    ok('prob: entregue é 100', probDe({etapa:'DELIVERY'})===100);
+    ok('prob: ponderado = PA × prob', Math.round(paPonderado([{pm:1000,etapa:'C2'}]))===Math.round(1000*PA_MESES*0.5));
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
