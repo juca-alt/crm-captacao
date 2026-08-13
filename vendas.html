@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>CRM Life Planner · v0.10.9 · Substituição</title>
+<title>CRM Life Planner · v0.10.10 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -293,6 +293,14 @@
   .meta-in input{width:64px;border:1px solid var(--linha);border-radius:8px;padding:3px 6px;font-size:12px;text-align:center}
   .banner-homolog{background:var(--amarelo-bg);border-bottom:1px solid #e8d9b0;color:#7a5b07;font-size:12.5px;padding:7px 18px;display:flex;gap:10px;align-items:center}
   .banner-homolog button{margin-left:auto;border:1px solid #e0cf9f;background:#fff;border-radius:8px;padding:3px 10px;cursor:pointer;font-size:12px;color:#7a5b07}
+
+  /* ── menu retrátil (desktop): esconde a sidebar pra apresentar em tela cheia ── */
+  .side-tog{display:flex;align-items:center;justify-content:center;width:32px;height:32px;flex-shrink:0;
+    color:var(--cinza);font-size:15px;font-weight:700;border-radius:9px;background:var(--fundo);
+    border:1px solid var(--linha);cursor:pointer;line-height:1}
+  .side-tog:hover{border-color:#cbd5e1;color:var(--ink)}
+  body.side-off .sidebar{display:none}
+  @media print{ .side-tog{display:none} }
 
   /* ── 📱 MOBILE (≤980px): menu off-canvas + barra inferior + alvos de toque ── */
   .menu-btn,.sidebar-head-mob,.bnav,.nav-overlay{display:none}
@@ -591,6 +599,7 @@
   <main class="main">
     <header class="topbar">
       <button class="menu-btn" id="btnMenu" onclick="toggleMenu()" aria-label="Abrir menu">☰</button>
+      <button class="side-tog" id="btnSide" onclick="toggleSide()" title="Encolher o menu lateral (⌘\ ou Ctrl+\)" aria-label="Encolher o menu lateral">«</button>
       <h2 id="tbTitulo">Início</h2>
       <div class="spacer"></div>
       <div class="tb-busca">
@@ -601,7 +610,7 @@
         <div class="tb-drop" id="tbDrop"></div>
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
-      <span class="tag">ISLAND · v0.10.9 · Substituição</span>
+      <span class="tag">ISLAND · v0.10.10 · Substituição</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -615,7 +624,7 @@
     <div class="content" id="main"></div>
 
     <div class="rodape">
-      <span>CRM Life Planner v0.10.9 — Substituição operável · Island.</span>
+      <span>CRM Life Planner v0.10.10 — Substituição operável · Island.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -944,6 +953,20 @@ function toggleMenu(force){
   document.getElementById('navOverlay').classList.toggle('aberto',abrir);
   document.body.classList.toggle('trava-scroll',abrir);
 }
+/* ── menu retrátil no desktop: apresentar a Revisão de Proteção ao cliente sem o
+   menu do CRM na tela. Estado persiste por aparelho. ── */
+const SIDE_KEY='crmlp_side_off';
+function toggleSide(force){
+  const off = typeof force==='boolean' ? force : !document.body.classList.contains('side-off');
+  document.body.classList.toggle('side-off',off);
+  const b=document.getElementById('btnSide');
+  if(b){ b.textContent = off?'»':'«';
+         b.title = (off?'Mostrar':'Encolher')+' o menu lateral (⌘\\ ou Ctrl+\\)';
+         b.setAttribute('aria-label', b.title); }
+  try{ localStorage.setItem(SIDE_KEY, off?'1':'0'); }catch(e){}
+}
+function sideRestaurar(){ try{ if(localStorage.getItem(SIDE_KEY)==='1') toggleSide(true); }catch(e){} }
+
 // tocar num item de navegação fecha a gaveta (grupos colapsáveis ficam abertos)
 document.querySelector('.sidebar').addEventListener('click',e=>{ if(e.target.closest('.nav-btn,.nav-cta')) toggleMenu(false); });
 
@@ -1268,7 +1291,30 @@ function nnLista(lista){
     </tr>`).join('')||`<tr><td colspan="${isMaster()?7:6}" class="vazio">Sem contatos no funil.</td></tr>`}
     </tbody>${somaPA(lista)?`<tfoot><tr><td colspan="5" style="text-align:right;color:var(--muted);font-size:12px">Total no funil</td><td class="col-pa"><b>${brlCurto(somaPA(lista))}</b></td>${isMaster()?'<td></td>':''}</tr></tfoot>`:''}</table></div>`;
 }
+/* ── o board do funil é recriado inteiro a cada render. Sem guardar a posição,
+   QUALQUER clique num card (temperatura, prêmio, abrir a ficha, recolher os
+   Encerramentos, reordenar) jogava o funil de volta pra primeira coluna e pro
+   topo da página. Guardar/repor é o que mantém o lugar onde ele estava. ── */
+function funScrollDe(el){ return el ? {x:el.scrollLeft, y:el.scrollTop} : null; }
+function funScrollPara(el,p){ if(!el||!p) return; if(p.x!=null) el.scrollLeft=p.x; if(p.y!=null) el.scrollTop=p.y; }
+function funScrollSalvar(){
+  const b=document.querySelector('.nnboard');
+  if(!b) return null;                       // vindo de outra view: não há o que repor
+  const p=funScrollDe(b); p.py=window.scrollY; return p;
+}
+function funScrollRestaurar(p){
+  if(!p) return;
+  const b=document.querySelector('.nnboard');
+  funScrollPara(b,p);
+  /* o board acabou de nascer: repõe de novo no próximo frame, quando a largura
+     real das colunas já foi calculada (senão o scrollLeft é cortado no máximo) */
+  if(b) requestAnimationFrame(()=>funScrollPara(document.querySelector('.nnboard'),p));
+  if(p.py!=null && Math.abs(window.scrollY-p.py)>1) window.scrollTo(0,p.py);
+}
+
 function viewNnFunil(){
+  /* com etapa em foco o board deve ir pra coluna focada, n�o voltar pro lugar antigo */
+  const _pos = NN_FOCUS ? null : funScrollSalvar();
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}
@@ -1310,6 +1356,7 @@ function viewNnFunil(){
     wireNnBoard();
     if(NN_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+NN_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
   }
+  funScrollRestaurar(_pos);
 }
 function wireNnBoard(){
   let dragId=null;
@@ -1358,6 +1405,7 @@ function bcLista(lista){
     </tbody>${somaPA(lista)?`<tfoot><tr><td colspan="4" style="text-align:right;color:var(--muted);font-size:12px">Total no funil</td><td class="col-pa"><b>${brlCurto(somaPA(lista))}</b></td>${isMaster()?'<td></td>':''}</tr></tfoot>`:''}</table></div>`;
 }
 function viewBcFunil(){
+  const _pos = BC_FOCUS ? null : funScrollSalvar();
   const lista=meusContatosBC();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>${nnOrdSelect()}
@@ -1399,6 +1447,7 @@ function viewBcFunil(){
     wireBcBoard();
     if(BC_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+BC_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
   }
+  funScrollRestaurar(_pos);
 }
 function wireBcBoard(){
   let dragId=null;
@@ -6037,6 +6086,7 @@ function tbBuscaKey(e){
 document.addEventListener('click',e=>{ if(!e.target.closest('.tb-busca')) tbBuscaFechar(); });
 function lpkFechar(){ const bd=$('#lpk-bd'); if(bd) bd.remove(); }
 document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='\\'){ e.preventDefault(); toggleSide(); return; }
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#lpk-bd')?lpkFechar():lpkAbrir(); }
 });
 
@@ -6118,6 +6168,16 @@ function lpSelfCheck(){
     ok('entrada: criadoEm é fato; interação mais antiga é estimada',
        entradaFunil({criadoEm:'2026-01-02'}).fonte==='cadastro' &&
        entradaFunil({interacoes:[{dia:'2026-03-05'},{dia:'2026-02-01'}]}).iso==='2026-02-01');
+    /* funil: guardar e repor a posição do board (o que impede o "volta pro início") */
+    ok('funil: repõe a posição guardada do board',
+       (()=>{ const p=funScrollDe({scrollLeft:340, scrollTop:22}), alvo={scrollLeft:0, scrollTop:0};
+              funScrollPara(alvo,p); return alvo.scrollLeft===340 && alvo.scrollTop===22; })());
+    ok('funil: sem board não inventa posição', funScrollDe(null)===null);
+    ok('funil: repor sem posição não quebra', (funScrollRestaurar(null), true));
+    /* menu retrátil: o botão existe e o body reflete o que está no storage */
+    ok('menu: botão de encolher existe', !!document.getElementById('btnSide'));
+    ok('menu: classe do body bate com o storage',
+       document.body.classList.contains('side-off') === (localStorage.getItem(SIDE_KEY)==='1'));
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
@@ -6125,6 +6185,7 @@ function lpSelfCheck(){
   return falhas;
 }
 funPrefLer();
+sideRestaurar();
 lpSelfCheck();
 render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
 </script>
