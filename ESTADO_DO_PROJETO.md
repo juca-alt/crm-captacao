@@ -4,6 +4,66 @@
 
 ---
 
+## 📸 Snapshot — 13/08/2026 · Revisão de Proteção v14→v19, Tarefas & Agenda, menu retrátil e o funil que voltou a ficar no lugar (v0.10.10)
+
+**Estado em 30 s:** `main` = `d51552b`, **tudo no ar** (Pages ✅, conferido pelo CONTEÚDO servido, não pelo número da versão). Uma sessão só, [PR #69](https://github.com/juca-alt/crm-captacao/pull/69) com 4 commits, mergeado com autorização expressa dele. Cinco frentes entregues e uma exposição de dados fechada.
+
+### 1 · Revisão de Proteção — do v13 ao v19 numa sessão
+- **Motor por pessoa** (`itensDe/consDe/custoDe`): `itensHoje()` virou um caso particular deles. Uma verdade só.
+- **Benefício em vida** das vitalícias (≠ cobertura de Doenças Graves): WD/WL antecipam por idade (40/50/60%), WV só depois da quitação (até 50%), com a CG citada em cada carta.
+- **Grupo familiar**: `state.familia` com o **mesmo shape de apólice** do titular, então o mesmo motor roda por pessoa. O editor virou `htmlApolices(alvo, aps)` e o **⎘ Colar espelho ganhou "aplicar em"** — espelho de familiar entra só como apólice da pessoa e **nunca zera** a revisão do titular.
+- **Drill-down por segurado**: chips trocam as pizzas **e** o detalhe juntos.
+- **Gráficos SVG inline** (zero dependência: a peça é offline-first) e **cartas arrastáveis** — como `cartasSituacao` lê `ordemAtual()`, a ordem vale na tela, na apresentação, no PDF e no arquivo do cliente.
+- **v15→v19 do protótipo dele** aplicada com os patchers do `handoff-revisao-v19.zip`: família no doc do cliente, **Carteira de proteção** (patrimônio + 4 tiers de gravidade), **área Produtos** em sanfona com os embeds (200 cirurgias com busca, 33 fraturas por região, invalidez, DDR, glossário), grupos colapsados e `ORDEM_SIT` por gravidade.
+- **Regra dele, tarde da noite: "o benefício é característica do ativo, por isso fica DENTRO do ativo".** O Patrimônio virou **um card por ativo vitalício** com: o que paga em vida, **atualização do capital (IPCA + juros atuariais de até 3% a.a.)** e **curva de resgate** — fatores da planilha oficial dele (`REVISAO DE APOLICES 3.3.xlsm`, abas RESGATEWL10 e IPCA). **WD não está na planilha**: o card diz isso em vez de aproximar pela curva de outro produto. E **nenhuma projeção de valor** — o IPCA entra como histórico de 20 anos + média, porque o índice é mutável.
+- **Arrastar os BLOCOS**: a ordem que ele monta no console é a ordem do material do cliente (`ui.ordemBlocos`); a numeração das seções só é resolvida **depois** de aplicar a ordem, e bloco fora da lista fica onde estava.
+- 🎛️ O botão "Atualizar valor no funil (CRM)" **deixou de flutuar** sobre a peça (ele viu na visão cliente em tela cheia): virou item discreto do rodapé, escondido no modo cliente, na apresentação e no PDF.
+- **`selfTestFam()` = 35 invariantes** no boot, com números de fantasia de propósito (o repositório é público).
+
+### 2 · 🔒 Exposição de dados fechada
+O arquivo **carregava sozinho a revisão completa de uma cliente real** — gravando no `localStorage` de quem abrisse a página — e trazia **um segundo cliente real** no exemplo. Ambos viraram exemplos fictícios (identidade, nº de apólice, proposta, final de cartão), **preservando capitais, prêmios e códigos** para o exemplo continuar servindo de demonstração. De quebra, o exemplo **deixou de sobrescrever** a revisão já salva no aparelho. Conferido no ar: **0 ocorrência** dos dados antigos no arquivo servido.
+⚠️ **Sobra**: os dados reais continuam em **commits antigos** do repo público. Limpar o histórico é reescrita de commits — decisão dele, em momento sem ninguém mexendo no repo.
+
+### 3 · Tarefas & Agenda (frente que ele pediu duas vezes)
+Negócio sem **próxima atividade** marcada é negócio parado. As tarefas vivem no próprio contato (`c.tarefas`) e o sync manda o objeto inteiro no jsonb `dados` de `lp_contatos` → **zero migration**.
+- **Card do funil**: chip da próxima atividade (vermelho atrasada, âmbar hoje) e, sem nenhuma, um **"+ próxima atividade"**.
+- **Ficha**: bloco com marcar/concluir/remarcar (+1d/+7d), histórico e três atalhos.
+- **Agenda & Tarefas**: view nova no menu com contador, agrupada em atrasadas/hoje/amanhã/próximas, mais a lista de negócios **sem próxima atividade**.
+- **KPI "sem próxima atividade"** nos dois funis · **Google Agenda por link** (evento pré-preenchido, sem OAuth) — a sincronia de verdade é a fase 2.
+- A situação da tarefa é **derivada da data** (nada de status gravado que envelhece) e **remarcar tarefa vencida parte de hoje** — senão o atraso se acumularia, que foi exatamente o erro do vencimento estimado na Substituição.
+
+### 4 · Menu retrátil e o funil que voltava ao início
+- Botão **«** na topbar (⌘\) esconde a sidebar pra apresentar a Revisão ao cliente sem o menu do CRM. Persiste por aparelho, some no celular e no print.
+- 🐞 **"clico no card e volta pro início do funil"**: o `.nnboard` é recriado inteiro a cada `render()`, então o scroll horizontal (e a posição da página) voltava a zero em TODA ação. Resolvido **na origem** — guardar/repor a posição nos dois funis vale pra todo botão, atual e futuro. Provado: sem o fix 0, com o fix 400 nos 6 caminhos.
+- **`lpSelfCheck()` foi de 34 a 50 invariantes.**
+
+### 5 · Estudo GlobalCRM avaliado (item que estava parado desde julho)
+Conferido **contra o app de hoje**, não contra a foto de julho. Já coberto: funil por ação, ANCE, SitPlan datado, metas, atrasos, taxa de passagem e agora a agenda. **Sobraram 5**, por valor/esforço: (1) **relatório X218630** — resolve a lacuna de cobertura da Carteira e mata o join por nome; (2) Google Agenda de verdade (OAuth); (3) scripts de atraso por motivo; (4) valor em R$ em risco na Lista de Atraso; (5) Modo Foco no SitPlan.
+
+### Lições da sessão (custaram tempo)
+- **Marcador de idempotência tem que passar pelo `u()`** nos patches do `vendas.html`: com "ó" cru o marcador nunca casa e o bloco entra de novo a cada rodada. Mesmo motivo, marcador que também aparecia em `@media print` fez a regra do mobile **nunca entrar**.
+- **`io.open(P,'w')` trunca o arquivo antes de escrever**: um erro de encoding deixou o `vendas.html` com 0 byte. Recuperado com `git checkout` porque todo patch é idempotente. Agora é `open(P,'wb').write(s.encode(...))`.
+- **Self-check não pode tocar no estado real**: um invariante empurrou um contato de mentira em `S.contatos` e ele ficou salvo. Invariante testa função pura, ponto.
+- **A autorização de merge precisa vir na mensagem imediatamente anterior** — o classificador barrou na 1ª tentativa mesmo com o pedido dele algumas mensagens antes.
+
+### O que ficou aberto
+
+**Depende do Gustavo:**
+1. **CG do Vida Inteira até 65** — enquanto `EV_WL_CONFIRMADO = false`, as cartas WL* calculam e aparecem **só pra ele**, com aviso, e ficam fora do material do cliente. Confirmou? É trocar a constante pra `true`.
+2. **Validação de prêmios** (`validacao-premios-v19.md`) — o **WL Vida Inteira divergente** é a prioridade que o próprio doc dele marca; e as 26 da planilha precisam do de-para.
+3. **Simulação com a tabela de resgate do WD** (Vida Inteira Mais) — não está na planilha 3.3.
+4. **Drag/edição dos tópicos de Produtos** e os **toggles "na apresentação"** dos anexos (sumiram na fusão; retrago se ele usa).
+5. **Limpeza do histórico do repo** (PII em commits antigos).
+6. **PR #35 (Revisão de Apólices)** — segue `MERGEABLE` e sem OK: duplica ou complementa o `revisao-protecao.html`?
+7. **Usar LOGADO**: tarefas e agenda só gravam em `lp_contatos` com sessão.
+8. Continuam da lista velha: trilha de follow-up do cliente (destrava 3 itens do caderno), data de emissão das apólices-gatilho, 7 SQL de `~/Downloads/leads-bkp-restore` + decisão de RLS nas `lp_key_*`, prints do item 3 e da aba Oportunidades.
+
+**Pode ser tocado sem ele:** fase 2 da agenda (OAuth do Painel Central) · os 5 itens do GlobalCRM · cobertura da Carteira em lote quando ele exportar o X218630.
+
+**Fora desta visão:** extensão WA 2.0, dividida em Captação × LP Vendas.
+
+---
+
 ## 📸 Snapshot — 12–13/08/2026 · caderno pág.2 INTEIRO + funil com visão de negócio (v0.10.3 → v0.10.9)
 
 **Estado em 30 s:** `main` = `f6d2fba`, **tudo no ar** em `juca-alt.github.io/crm-captacao/vendas.html`. Sete versões em duas levas: a **página 2 do caderno** dele (PRs #62–#65) e o **upgrade de negócio do funil de vendas** (PRs #66–#68), com uma varredura QA no meio.
