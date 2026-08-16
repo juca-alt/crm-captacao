@@ -4,6 +4,44 @@
 
 ---
 
+## 📸 Snapshot — 16/08/2026 (2ª leva) · CRM SeguroComJucá v0.12.0 — cartões no celular, filtros recolhidos, OFFLINE e barra configurável
+
+**Estado em 30 s:** ✅ **NO AR** — `main` = `5323669`, **v0.12.0 · CRM SeguroComJucá**. Cinco commits no branch `claude/crm-lp-fluidity-v2`, merge com `--no-ff`, autorizado por ele depois de validar o demo. Produção conferida pelo CONTEÚDO servido (SHA idêntico ao commit) e o portão rodado de novo contra o arquivo baixado do Pages.
+
+### O que entrou
+- **`ed16c34` · tabela vira cartão no celular, em CAMADA ÚNICA.** O Estoque já tinha cartões, mas escritos à mão no HTML da view. Aqui o JS lê os `<th>` uma vez por tabela e o CSS reempilha a linha por posição — vale para Contatos, Lista de TA, Lista de Atraso, SitPlan, Recomendações e para a próxima tabela que nascer. Lista de Atraso tinha 589px e Lista de TA 718px numa tela de 390.
+  ⚠️ **Duas armadilhas de performance, medidas:** rotular célula a célula (`data-rot` em cada `<td>`) custava **+44ms** por repintura na tela de Clientes (4.400 nós); e `.card:has(> table.t-cards)` no CSS fez o **Funil, que nem tem tabela, sair de 160ms para 320ms** — `:has()` obriga o motor a reavaliar todos os `.card`. Custo final, medido INTERCALANDO com a v0.11.0 em produção para descontar ruído de máquina: **entre −5,5ms e +8ms**.
+- **`84f502c` · barra de filtros recolhe atrás de um botão no celular.** A lista da Lista de Atraso começava no y=1050 de uma tela de 844; agora começa no **y=435**. Quatro cuidados que só apareceram testando tela por tela: contar "controles" escondia o **navegador de data do SitPlan** atrás de "Buscar e filtrar" (botão mentindo sobre o que faz) → agora exige 2 filtros de verdade; Estoque e Lista de TA já têm folha própria (`.bn-mob`) e são pulados; barra que a view já esconde (`#bn-tb2`) fica fora; segunda barra vira "Mais filtros". O botão mostra **quantos filtros estão ativos**.
+- **`8044275` · service worker, barra inferior configurável e a marca nova.**
+  - **SW (`sw.js`)**: *online sempre a versão nova (network-first), offline a última que funcionou*. `index.html` (Captação) **passa direto, sem interceptação** — as visões são separadas por regra do repo. Supabase nunca é cacheado. CDN do supabase-js vai cache-first (URL versionada). **Nada é pré-cacheado no install** de propósito. O "⬆︎ Atualizar app" passou a mandar `postMessage('limpar')` para o worker esvaziar o cache dele junto.
+  - **Barra inferior configurável** (Configurações → Barra inferior): 10 destinos, escolhe 4, a folha impede passar disso. Padrão = o de hoje. Preferência inválida cai no padrão.
+  - **Marca**: só o que aparece na tela — título, logo **SJ**, gaveta, rodapé, nome no iPhone. **Repo e URL NÃO mudaram** (quebraria links salvos e o deploy do Pages).
+- **`2dd8553` · migration do sync incremental — VERSIONADA, NÃO APLICADA.** Ver "aberto".
+- **`cd2393a` · safe-area do topo.** 🐞 **Regressão minha**: ao marcar o app como instalável, ele passou a abrir em **standalone** e o conteúdo subiu por baixo da status bar — o ☰ colidindo com o relógio do iPhone (print dele às 12:22). O arquivo **não tinha uma única regra de `safe-area-inset-TOP`** (só bottom/left/right), porque até então a barra do Safari segurava. Junto: **o ☰ saiu do topo** (a barra inferior já tem "☰ Menu" — dois caminhos para a mesma gaveta) e **o `h1.pg` some no celular** (pedido original: o título já vive na barra). Os KPIs do Início sobem ~180px.
+  Antes de esconder o `h1`, auditei as **21 telas** comparando com o título da barra: em 17 é o mesmo texto ou equivalente; nas outras o `.sub` dá o contexto. Nada exclusivo se perde.
+
+### Verificação
+Portão (`gate.js`) verde nos **4 cenários** a cada commit e de novo contra o **arquivo baixado do Pages**. Voltar do Android, menu, filtro da Lista de Atraso, os 24 destinos e o **offline real** (rede desligada → app abre com os 260 contatos) conferidos. Console limpo, `lpSelfCheck()` com 10 invariantes novos. Guard do CI ok.
+
+### Lições da leva
+- **`:has()` é caro em lista viva.** Marcar o contêiner por JS custa zero; por `:has()` custou o dobro do tempo de render numa tela que nem tinha tabela.
+- **Marcação por TABELA, não por célula.** Trocar N×M `setAttribute` por M `setProperty` + `td:nth-child(n)::before{content:var(--rN)}` tirou os 44ms.
+- **Tornar o app instalável é meia entrega sem safe-area de topo.** `apple-mobile-web-app-capable` remove a barra do navegador; se não houver `env(safe-area-inset-top)`, o topo vai parar embaixo do relógio.
+- **Service worker exige MIME de JavaScript.** O servidor de teste mandava `application/octet-stream` e o registro falhava em silêncio — parecia bug do código.
+- **`Buffer.from(s,'latin1')` e literal JSON dentro de `<script>`**: HTML embutido tem `</script>` no meio e fecha o bloco. Base64 é ASCII puro e imune (usado no demo para embutir os 3 módulos).
+- **Heurística de UI se valida tela por tela.** "Barra com 3+ controles" parecia razoável e escondia o navegador de data do SitPlan.
+
+### O que ficou aberto
+
+**Depende do Gustavo:**
+1. **Rodar a migration `supabase/migrations/lp_contatos_atualizado_trigger.sql`** no SQL editor. Sem ela o sync incremental do Estoque não pode existir: `lp_contatos.atualizado` tem `DEFAULT now()` e **nenhum trigger** — DEFAULT só vale no INSERT, e o push faz upsert, então a coluna congela na data de criação. Um incremental por ela **não veria edições** (nome corrigido, telefone novo, estágio mudado noutro aparelho sumiriam em silêncio). Rodou? Ligo o incremental com carga completa como rede.
+2. **Revisão de Proteção no celular** — arquivo próprio de 703 KB, está quebrada lá (título quebrando letra a letra). Frente separada.
+3. **Toque longo com seleção em lote** — depende de decidir QUAIS ações em lote fazem sentido em cada tela.
+
+**Continuam da lista anterior:** CG do Vida Inteira até 65, validação de prêmios, PR #35, limpeza do histórico com PII, os 5 do GlobalCRM.
+
+---
+
 ## 📸 Snapshot — 16/08/2026 · FLUIDEZ: o celular volta a funcionar e trocar de tela custa 27ms (branch, sem deploy)
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `ae2a70d`, **v0.11.0 · Fluidez**, mergeado e deployado com autorização expressa dele. Oito commits no branch `claude/crm-lp-fluidity-mobile-fd9oi9`, merge com `--no-ff`. Sessão de UX + performance no `vendas.html`: **zero mudança de regra de negócio, zero mudança no banco**. Produção conferida pelo CONTEÚDO servido (SHA idêntico ao commit), não pelo número da versão.
