@@ -13,7 +13,12 @@ App single-file HTML + vanilla JS, backend **Supabase** (`kbiinfpjfmuidyzsfegp`)
 ## Regras fixas de trabalho
 - **UMA SESSÃO POR VISÃO:** Captação (`index.html`) e LP (`vendas.html`) em sessões separadas, nunca misturar. Arquivos/tabelas são disjuntos (`leads`/`app_users` vs `vendas_*`/`lp_*`/carteira).
 - **`git fetch` antes de editar** — costuma haver sessão paralela na outra visão com a main à frente.
-- Mobile e desktop = visões distintas: ancorar layout por device ao evoluir qualquer tela.
+- **MOBILE E DESKTOP SÃO DOIS USOS LEGÍTIMOS (regra permanente, 16/08/2026).** Toda evolução entrega os dois, ajustada às particularidades de cada um — nunca o desktop encolhido. Concretamente:
+  - **Pensar nos dois:** desktop (mouse, tela larga, hover, teclado, densidade) e celular (dedo, tela estreita, toque longo, safe-area, botão voltar do Android). Solução que só serve a um não está pronta.
+  - **Isolar por mídia, não remendar:** o que é de celular vive num `@media` próprio; o que é de desktop fica fora dele. Nada de "empurrar com margem" o que se resolve na origem (z-index, layout, posição).
+  - **Verificar nos dois ANTES de subir:** 390px e 1280px, screenshot dos dois, console limpo, zero estouro horizontal, alvo de toque ≥44px no celular.
+  - **Feature nova = feature nos dois.** O comportamento pode diferir (no celular vira folha inferior, no desktop vira modal); a CAPACIDADE, não.
+- **Portão de deploy:** antes de qualquer merge na main, os 4 cenários têm que estar verdes — celular × desktop, base CHEIA × base VAZIA (o caminho do estado inicial já quebrou este projeto antes). O harness vive em `scratchpad/pw/gate.js` da sessão de 16/08; o roteiro está no snapshot daquele dia no ESTADO.
 
 ## Release (sempre)
 Branch → preview LOCAL com dados reais → validar com o Gustavo → **merge na main só com autorização explícita dele no chat** (self-merge sem OK já foi barrado). O push na main é o deploy (Pages).

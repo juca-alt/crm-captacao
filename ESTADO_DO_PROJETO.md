@@ -4,6 +4,61 @@
 
 ---
 
+## 📸 Snapshot — 16/08/2026 · FLUIDEZ: o celular volta a funcionar e trocar de tela custa 27ms (branch, sem deploy)
+
+**Estado em 30 s:** `main` = `34c33f6`, **intacta** — nada foi para produção. Cinco commits no branch `claude/crm-lp-fluidity-mobile-fd9oi9`, já no GitHub, esperando o OK dele. Sessão de UX + performance no `vendas.html`: **zero mudança de regra de negócio, zero mudança no banco**.
+
+### O problema, medido antes de mexer
+Varredura das 22 telas em 390px e 1280px (Chromium real, CPU 4×, 1,6 Mbps, gzip como no Pages), com base sintética em volume realista e os tamanhos REAIS das tabelas lidos por SQL no playground (`lp_contatos` = 5.180 linhas / 2,9 MB de jsonb).
+
+1. **As 22 telas estouravam a horizontal no celular** (123–254px). Culpado único: os 3 botões da topbar (🔄 Sincronizar, ⬆︎ Atualizar app, ⇄ Captação), com `white-space:nowrap` e nenhuma regra de celular. Esticavam a barra para 513px numa tela de 390 — e, com a área de layout alargada, **tudo que é `position:fixed` passava a se medir por 513**: barra inferior com a aba ☰ Menu no x=406 (fora da tela), **ficha do contato abrindo em x=150** (fechar/WhatsApp/prêmio cortados — era o "praticamente inutilizável" dele) e FAB 🎨 invisível. Provado: escondendo os 3 botões, `scrollWidth` 513 → 390.
+2. **`cartRadarLista()` custava 174ms em TODO `render()`** — 92% do custo fixo de qualquer clique — só para pintar o contador do menu "Oportunidades". O(clientes × linhas) com `normKey()` por linha.
+3. **O boot esperava 3,12 MB** numa consulta só (`lp_contatos`), dos quais 3,09 MB é Base de Nomes que o Dashboard não usa, atrás de um `Promise.all([...8]).then(render)`.
+
+### O que foi entregue (5 commits)
+- **`adc0837` fase 1** — ações da topbar viram folha do ⋯ no celular; KPIs em **3 colunas** com apoio em 2 linhas e toque para expandir; `.btn-mini` 40→44px; caixas de seleção 22px; "Pbaixa" → "P · baixa"; contador do módulo na gaveta ganha a pílula.
+- **`390bc2e` fase 2** — índice por nome normalizado no lugar da varredura do radar; índice `ref → apólices` (o quadrático aparecia duas vezes na mesma tela); **boot sem barreira** (cada carga repinta ao chegar, coalescido em rAF).
+- **`59b8981` fase 3** — `lp_contatos` em **duas voltas** (funis primeiro, Estoque paginado em segundo plano) com fallback para a consulta única de hoje; esqueleto estático no `#main`. Paginação com **duas travas**: só continua enquanto a página traz id novo e teto de 60 páginas.
+- **`3a02b18` fase 4** — **botão voltar do Android** fecha camada por camada (folha → busca → modal → ficha → gaveta); favicon (dava 404) e metas de app instalável.
+- **acabamento** — FAB 🎨 sai do celular (tapava o "+ Novo contato"); número do KPI cabe em 1/3 de tela; **`vendas.html` volta a ser UTF-8 100% válido** (havia 1 byte latin-1 solto num comentário — é ele que obrigava `grep -a`).
+
+### Antes → depois (celular, CPU 4×)
+| | antes | depois |
+|---|---|---|
+| trocar de tela (mediana das 22) | 219 ms | **27 ms** (−88%) |
+| telas com estouro horizontal | 22 | **0** |
+| base na tela abrindo logado | 17,5 s | **2,0 s** (−89%) |
+| alvos de toque < 44px | 2.360 | **402** (−83%) |
+| pior tela (Clientes da Carteira) | 567 ms | **178 ms** |
+
+Desktop, Início: 45,7 → 4,6 ms por repintura. Console limpo e `lpSelfCheck()` verde (**60 invariantes**, 10 novos) nos dois tamanhos, em todas as telas.
+
+### Entregáveis para ele
+- **Demo navegável** (artifact): o CRM inteiro com as 4 fases, dados fictícios, sem cliente Supabase e com `localStorage` prefixado `DEMO::` — não lê nem escreve nada real.
+- **Dossiê antes/depois** (artifact) com os pares de screenshot em 390px.
+
+### Lições da sessão
+- **Marcador de idempotência tem que ser ASCII PURO.** Marcador com acento passa por `u()` e nunca casa na 2ª rodada: um bloco entrou duas vezes e derrubou o script inteiro com "Identifier already declared". O `patchlib.py` agora afirma `marca.isascii()`.
+- **`Patch` só grava no fim**: se o script morre no meio, as trocas já impressas NÃO foram salvas. Aconteceu com o FAB.
+- **Sincronizar histórico na hora não funciona.** Fechar uma camada e abrir outra no mesmo tick (o caminho real de "abrir a ficha pelo menu") faz o `history.back()` correr contra o `pushState` seguinte e o app é abandonado dois voltares depois. A sincronização precisa ser **coalescida num microtask**, decidindo uma vez sobre o estado final. O E2E em 390px pegou; o self-check não pegaria.
+- **Paginação otimista é perigosa**: sem trava, um servidor que ignore o recorte vira loop infinito de 3 MB na franquia de dados dele. A trava é "só continua enquanto trouxer id novo".
+- **`Buffer.from(s,'latin1')` trunca tudo acima de U+00FF** e corrompe JSON embutido. Seed embutida vai escapada em ASCII (`\uXXXX`).
+
+### O que ficou aberto
+
+**Depende do Gustavo:**
+1. **OK no demo** → merge na main (o push na main é o deploy).
+2. **Os 4 destinos da barra inferior** no celular (hoje: Início · SitPlan · Contatos · Funil · Menu).
+3. **Troca de nome para CRM SeguroComJucá** — ele pediu para o fim da sessão; falta definir o alcance (só a marca na tela, ou também repo e URL, que quebra links salvos).
+4. **Service worker** — deixado FORA de propósito: é a única peça capaz de prender o app numa versão antiga. Sem ele, não abre offline.
+5. **Cortar de vez os 3 MB do Estoque no boot** — mexe no merge/push dos 5.135 nomes reais.
+
+**Pode ser tocado sem ele:** toque longo com seleção em lote + folha inferior por linha (a maior mudança de UX que falta) · tabelas de 13 colunas virando cartões em Contatos, Lista de TA, Lista de Atraso e SitPlan (o Estoque já provou o padrão) · tópicos recolhíveis com ordem persistida · virtualização das listas longas.
+
+**Continuam da lista anterior:** todos os itens abertos do snapshot de 13/08 (CG do Vida Inteira até 65, validação de prêmios, PR #35, limpeza do histórico com PII, os 5 do GlobalCRM).
+
+---
+
 ## 📸 Snapshot — 13/08/2026 · Revisão de Proteção v14→v19, Tarefas & Agenda, menu retrátil e o funil que voltou a ficar no lugar (v0.10.10)
 
 **Estado em 30 s:** `main` = `d51552b`, **tudo no ar** (Pages ✅, conferido pelo CONTEÚDO servido, não pelo número da versão). Uma sessão só, [PR #69](https://github.com/juca-alt/crm-captacao/pull/69) com 4 commits, mergeado com autorização expressa dele. Cinco frentes entregues e uma exposição de dados fechada.
