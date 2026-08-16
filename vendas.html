@@ -546,6 +546,18 @@
   .mais-item .tx{min-width:0}
   .mais-item .ds{display:block;font-size:12px;font-weight:400;color:var(--muted);line-height:1.35}
   .sheet-tit{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:2px 12px 10px}
+
+  /* FLUIDEZ-V1:CSS-ESQUELETO — a casca pintava em 1,5s no celular e o miolo
+     ficava branco até o JS rodar. Isto ocupa o lugar com a forma certa. */
+  .esq{display:flex;flex-direction:column;gap:14px}
+  .esq-l,.esq-kpi,.esq-card{background:linear-gradient(90deg,#e9edf3 25%,#f4f7fa 50%,#e9edf3 75%);
+    background-size:400% 100%;border-radius:8px;animation:esq-brilho 1.4s ease-in-out infinite}
+  .esq-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+  .esq-kpi{height:62px;border-radius:var(--radius)}
+  .esq-card{height:210px;border-radius:var(--radius)}
+  @keyframes esq-brilho{0%{background-position:100% 0}100%{background-position:0 0}}
+  @media(prefers-reduced-motion:reduce){.esq-l,.esq-kpi,.esq-card{animation:none}}
+  @media(max-width:980px){ .esq-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px} .esq-kpi{height:54px} }
 </style>
 </head>
 <body>
@@ -670,7 +682,15 @@
       <button onclick="localStorage.setItem('crmlp_homolog_off','1');document.getElementById('bannerHomolog').style.display='none'">Entendi</button>
     </div>
 
-    <div class="content" id="main"></div>
+    <!-- FLUIDEZ-V1:ESQUELETO — pintado junto com a casca, sem custar JS.
+         O primeiro render() sobrescreve tudo isto. -->
+    <div class="content" id="main"><div class="esq" aria-hidden="true">
+      <div class="esq-l" style="width:58%;height:19px;margin-bottom:8px"></div>
+      <div class="esq-l" style="width:38%;height:13px;margin-bottom:18px"></div>
+      <div class="esq-kpis"><div class="esq-kpi"></div><div class="esq-kpi"></div><div class="esq-kpi"></div>
+        <div class="esq-kpi"></div><div class="esq-kpi"></div><div class="esq-kpi"></div></div>
+      <div class="esq-card"></div><div class="esq-card" style="height:150px"></div>
+    </div></div>
 
     <div class="rodape">
       <span>CRM Life Planner v0.10.10 — Substituição operável · Island.</span>
@@ -808,31 +828,86 @@ const LPC_T='lp_contatos';
 let LPC_REMOTE=false, _lpcTimer=null, _lpcPrev={};
 async function lpcRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
 function _lpcSnap(){ const m={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) m[String(c.id)]=JSON.stringify(c); }); return m; }
+/* FLUIDEZ-V1:LPC-2VOLTAS
+   O merge é EXATAMENTE o de antes — só saiu de dentro do carregador para poder
+   ser chamado nos dois caminhos. */
+function _lpcMergeBn(remotosBn){
+  // Base de Nomes (funil:'bn') vive em outro store: 5k+ nomes não podem inchar
+  // S.contatos nem aparecer nos funis NN/BC — rota pro merge próprio do módulo BN.
+  if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn);
+  _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
+}
+function _lpcMergeFunis(remotos){
+  if(remotos.length){
+    const porId=new Map(remotos.map(c=>[String(c.id),c]));
+    (S.contatos||[]).forEach(c=>{
+      const k=String(c.id), r=porId.get(k);
+      if(!r || String(c._upd||'')>String(r._upd||'')) porId.set(k,c); // local mais novo (ou só local) vence
+    });
+    S.contatos=[...porId.values()];
+    normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
+    salvar();
+  }
+  _lpcPrev=_lpcSnap();
+  lpcAgendarPush(); // sobe o resultado do merge (e o 1º sync de uma base só-local)
+}
 async function lpcCarregar(){
   LPC_REMOTE=await lpcRemoteOn();
   if(!LPC_REMOTE) return;
   try{
-    const {data,error}=await sb.from(LPC_T).select('id,dados');
-    if(error) throw error;
-    const todos=(data||[]).map(r=>r.dados).filter(Boolean);
-    // Base de Nomes (funil:'bn') vive em outro store: 5k+ nomes não podem inchar
-    // S.contatos nem aparecer nos funis NN/BC — rota pro merge próprio do módulo BN.
-    const remotosBn=todos.filter(c=>c.funil==='bn');
-    const remotos=todos.filter(c=>c.funil!=='bn');
-    if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn);
-    _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
-    if(remotos.length){
-      const porId=new Map(remotos.map(c=>[String(c.id),c]));
-      (S.contatos||[]).forEach(c=>{
-        const k=String(c.id), r=porId.get(k);
-        if(!r || String(c._upd||'')>String(r._upd||'')) porId.set(k,c); // local mais novo (ou só local) vence
-      });
-      S.contatos=[...porId.values()];
-      normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
-      salvar();
+    /* Duas voltas em vez de uma. Medido em 16/08: a query única traz 3,09 MB
+       (5.180 linhas), das quais 5.135 são Base de Nomes — que o Dashboard, os
+       funis e a Agenda não usam. Com a barreira do boot já removida, o que
+       sobrava era a espera pelo dado dos funis atrás dos megabytes do Estoque.
+         1ª volta: só os contatos dos funis (45 linhas hoje) → tela pronta;
+         2ª volta: a Base de Nomes, paginada, em segundo plano.
+       Se o filtro por campo do jsonb não estiver disponível, cai no caminho
+       antigo — uma query só, sem filtro, com o mesmo merge. */
+    let funis=null;
+    try{
+      const r=await sb.from(LPC_T).select('id,dados').or('dados->>funil.is.null,dados->>funil.neq.bn');
+      if(r.error) throw r.error;
+      funis=(r.data||[]).map(x=>x.dados).filter(Boolean);
+    }catch(e){ console.warn('lp_contatos: filtro por funil indisponível → carga única',e); funis=null; }
+
+    if(funis===null){
+      const {data,error}=await sb.from(LPC_T).select('id,dados');
+      if(error) throw error;
+      const todos=(data||[]).map(r=>r.dados).filter(Boolean);
+      _lpcMergeBn(todos.filter(c=>c.funil==='bn'));
+      _lpcMergeFunis(todos.filter(c=>c.funil!=='bn'));
+      return;
     }
-    _lpcPrev=_lpcSnap();
-    lpcAgendarPush(); // sobe o resultado do merge (e o 1º sync de uma base só-local)
+
+    _lpcMergeFunis(funis);
+    if(typeof agendarRender==='function') agendarRender();
+    /* Estoque em segundo plano, em páginas de 1000 e com ordem estável.
+       Sem .range() o PostgREST corta em db_max_rows (10.000 neste projeto) e o
+       Estoque passaria a perder nomes EM SILÊNCIO quando a base passar disso —
+       hoje são 5.180. Falhou? Não marca _bnRemoteLoaded: o push continua
+       esperando uma baseline real, exatamente como quando a carga falha hoje. */
+    (async function(){
+      try{
+        /* Trava: a página só continua enquanto trouxer id NOVO. Se por qualquer
+           motivo o recorte for ignorado e a mesma página voltar, o laço para em
+           vez de baixar 3 MB para sempre — a franquia de dados dele não é
+           lugar para um loop otimista. O teto de páginas é a segunda rede. */
+        const bn=[], PAG=1000, MAX_PAG=60, vistos=new Set();
+        for(let pag=0; pag<MAX_PAG; pag++){
+          const de=pag*PAG;
+          const r=await sb.from(LPC_T).select('id,dados').eq('dados->>funil','bn').order('id').range(de,de+PAG-1);
+          if(r.error) throw r.error;
+          const linhas=(r.data||[]);
+          let novos=0;
+          linhas.forEach(x=>{ const k=String(x.id); if(vistos.has(k)) return; vistos.add(k); if(x.dados){ bn.push(x.dados); novos++; } });
+          if(linhas.length<PAG) break;
+          if(!novos){ console.warn('Base de Nomes: o servidor devolveu a mesma página — paginação interrompida em',bn.length,'nomes'); break; }
+          if(pag===MAX_PAG-1) console.warn('Base de Nomes: teto de',MAX_PAG*PAG,'nomes atingido — o restante entra no próximo sync');
+        }
+        _lpcMergeBn(bn);
+        if(typeof agendarRender==='function') agendarRender();
+      }catch(e){ console.warn('Base de Nomes remota falhou → segue com o cache local do aparelho',e); }
+    })();
   }catch(e){ console.warn('lp_contatos: load remoto falhou → segue local',e); LPC_REMOTE=false; }
 }
 function lpcAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_lpcTimer); _lpcTimer=setTimeout(lpcPush,1500); }
@@ -6539,6 +6614,24 @@ function lpSelfCheck(){
     ok('índice: uma linha nunca entra duas vezes no mesmo cliente', (()=>{
       const r=cartRadar((CART.clientes[0]||{}).ref||'__nada__');
       return new Set(r.atrasos.map(x=>x.apolice)).size===r.atrasos.length; })());
+    /* FLUIDEZ-V1:SELFCHECK-BOOT — o merge foi extraído para duas funções;
+       os invariantes garantem que continuam existindo e preservando a regra
+       "local mais novo vence". */
+    ok('boot: merge dos funis existe e é função', typeof _lpcMergeFunis==='function'&&typeof _lpcMergeBn==='function');
+    ok('boot: local mais novo vence o remoto', (()=>{
+      const guardaS=S.contatos, guardaPrev=_lpcPrev;
+      S.contatos=[{id:'__t1',nome:'local',_upd:'2026-08-16T10:00:00Z',funil:'nn'}];
+      _lpcMergeFunis([{id:'__t1',nome:'remoto',_upd:'2026-01-01T00:00:00Z',funil:'nn'}]);
+      const venceu=S.contatos.find(c=>c.id==='__t1').nome==='local';
+      S.contatos=guardaS; _lpcPrev=guardaPrev; salvar();   // não deixa lixo no aparelho
+      return venceu; })());
+    /* o esqueleto é HTML estático dentro do #main; quem o remove é o innerHTML
+       do 1º render. O que o invariante pode afirmar em qualquer momento é que
+       ele nunca sobra JUNTO com o conteúdo pintado. */
+    ok('boot: esqueleto e conteúdo nunca convivem no miolo', (()=>{
+      const m=document.getElementById('main'); if(!m) return false;
+      const temEsq=!!m.querySelector('.esq');
+      return !temEsq || m.children.length===1; })());
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
