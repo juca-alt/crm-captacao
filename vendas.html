@@ -3,6 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Ctext x='32' y='45' font-family='system-ui,sans-serif' font-size='30' font-weight='700' fill='white' text-anchor='middle'%3ELP%3C/text%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%232563eb'/%3E%3Ctext x='90' y='124' font-family='system-ui,sans-serif' font-size='84' font-weight='700' fill='white' text-anchor='middle'%3ELP%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CRM LP">
+<!-- FLUIDEZ-V1:MANIFEST — favicon e manifest embutidos, sem arquivo novo no
+     repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
+     Service worker ficou de fora de propósito: é a única peça capaz de
+     prender o app numa versão antiga, e essa decisão é do Gustavo. -->
 <title>CRM Life Planner · v0.10.10 · Substituição</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -6632,6 +6641,13 @@ function lpSelfCheck(){
       const m=document.getElementById('main'); if(!m) return false;
       const temEsq=!!m.querySelector('.esq');
       return !temEsq || m.children.length===1; })());
+    /* FLUIDEZ-V1:SELFCHECK-VOLTAR */
+    ok('voltar: ordem das camadas é folha > busca > modal > ficha > gaveta',
+       CAM_ORDEM.map(c=>c.n).join('>')==='folha>busca>modal>ficha>gaveta');
+    ok('voltar: profundidade acompanha as camadas realmente abertas', (()=>{
+      const n0=camProfundidade(); toggleMenu(true); const subiu=camProfundidade()===n0+1;
+      toggleMenu(false); return subiu && camProfundidade()===n0; })());
+    ok('voltar: camAbertas() nunca quebra com camada ausente', Array.isArray(camAbertas()));
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
@@ -6683,6 +6699,74 @@ function agendarRender(){
   ['salvar','cartSalvar','atSalvarLocal','lpSalvarLocal','subSalvarLocal','bnSalvar'].forEach(function(n){
     var f=window[n]; if(typeof f!=='function') return;
     window[n]=function(){ cartIdxInvalidar(); return f.apply(this,arguments); };
+  });
+})();
+
+/* FLUIDEZ-V1:VOLTAR
+   Medido em 16/08: abrir a gaveta, a ficha ou um modal NÃO empilhava histórico
+   (history.length não mudava) — o voltar do Android saía do app em vez de
+   fechar a camada de cima.
+
+   Desenho: UMA sentinela no histórico enquanto houver qualquer camada aberta.
+   Cada "voltar" fecha a camada do topo e, se ainda sobrar camada, recoloca a
+   sentinela para o próximo voltar também ser capturado.
+
+   A sincronização é COALESCIDA num microtask de propósito. A primeira versão
+   sincronizava na hora e o teste de ponta a ponta pegou o furo: fechar uma
+   camada e abrir outra no mesmo tick (toggleMenu(false) seguido de
+   abrirContato()) disparava um history.back() assíncrono que corria contra o
+   pushState seguinte — duas idas depois, o app era abandonado. Coalescendo,
+   o mesmo tick produz uma decisão só, sobre o estado final.
+
+   Nada foi reescrito: as funções que abrem e fecham continuam as mesmas, só
+   passaram a ser envelopadas. */
+const CAM_ORDEM=[
+  {n:'folha',  aberta:()=>!!document.querySelector('.sheet-bd'),  fechar:()=>document.querySelectorAll('.sheet-bd').forEach(e=>e.remove())},
+  {n:'busca',  aberta:()=>!!document.getElementById('lpk-bd'),    fechar:()=>{ if(typeof lpkFechar==='function') lpkFechar(); }},
+  {n:'modal',  aberta:()=>!!document.getElementById('at-ov'),     fechar:()=>{ if(typeof atClose==='function') atClose(); }},
+  {n:'ficha',  aberta:()=>{ const d=document.getElementById('drawer'); return !!d&&d.classList.contains('aberto'); }, fechar:()=>fecharDrawer()},
+  {n:'gaveta', aberta:()=>!!document.querySelector('.sidebar.aberta'), fechar:()=>toggleMenu(false)},
+];
+let _camSentinela=false, _camSuprimir=false, _camAgendado=false, _camNoPop=false;
+function camAbertas(){ return CAM_ORDEM.filter(c=>{ try{ return c.aberta(); }catch(e){ return false; } }); }
+function camProfundidade(){ return camAbertas().length; }   /* usado pelo self-check e pelo teste E2E */
+function camSentinelaAtiva(){ return _camSentinela; }
+function _camPor(){
+  try{ history.pushState({crmlpCamada:1},''); _camSentinela=true; }catch(e){}
+}
+function _camTirar(){
+  _camSentinela=false;
+  if(history.state&&history.state.crmlpCamada){
+    _camSuprimir=true;
+    setTimeout(function(){ _camSuprimir=false; },500);   /* back que não gera popstate não pode travar o próximo */
+    try{ history.back(); }catch(e){ _camSuprimir=false; }
+  }
+}
+function camSincronizar(){
+  if(_camNoPop||_camAgendado) return;
+  _camAgendado=true;
+  Promise.resolve().then(function(){
+    _camAgendado=false;
+    const tem=camAbertas().length>0;
+    if(tem&&!_camSentinela) _camPor();
+    else if(!tem&&_camSentinela) _camTirar();
+  });
+}
+window.addEventListener('popstate',function(){
+  if(_camSuprimir){ _camSuprimir=false; return; }
+  const abertas=camAbertas();
+  if(!abertas.length){ _camSentinela=false; return; }   /* nada aberto: o voltar segue seu caminho */
+  _camSentinela=false;
+  _camNoPop=true;
+  try{ abertas[0].fechar(); }catch(e){ console.warn('voltar: falhou ao fechar',abertas[0].n,e); }
+  _camNoPop=false;
+  if(camAbertas().length) _camPor();                    /* ainda sobrou camada: recoloca a sentinela */
+});
+(function(){
+  ['toggleMenu','abrirContato','abrirContatoPM','abrirContatoTarefa','fecharDrawer',
+   'tbMais','tbMaisFechar','lpkAbrir','lpkFechar','lpkGo','atModal','atClose'].forEach(function(nome){
+    const f=window[nome]; if(typeof f!=='function') return;
+    window[nome]=function(){ const r=f.apply(this,arguments); camSincronizar(); return r; };
   });
 })();
 funPrefLer();
