@@ -4545,7 +4545,7 @@ async function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartParseTa
   if(!CART_REMOTE) return {sync:'local'};
   try{ await cartPersistRemoto(); return {sync:'remoto'}; }
   catch(e){ console.error('CART sync remoto falhou',e); return {sync:'falhou'}; } }
-function cartApolicesDoCliente(ref){ return CART.apolices.filter(a=>a.ref===ref); }
+function cartApolicesDoCliente(ref){ const a=cartIdx().apo.get(ref); return a?a.slice():[]; }   /* era um filter sobre TODAS as apólices dentro do laço de clientes */
 function cartResumo(){ const C=CART.clientes,A=CART.apolices;
   return { clientes:C.length, apolices:A.length, pmMes:C.reduce((s,c)=>s+(c.cob.pm||0),0), csTot:C.reduce((s,c)=>s+(c.cob.cs||0),0),
     multi:C.filter(c=>cartApolicesDoCliente(c.ref).length>1).length,
@@ -4563,12 +4563,40 @@ function cartBtnsContato(c,msg){ const out=[]; const wa=cartWaUrl(cartTel(c),msg
 
 /* ---- radar: cruza o cliente com o relatório semanal (LPDB) por nome normalizado (ref).
    Só itens NÃO resolvidos. Se nenhum relatório foi importado, tudo volta vazio (honesto). ---- */
-function cartRadar(ref){ const hit=(r,ks)=>ks.some(k=>r[k]&&normKey(r[k])===ref);
-  return { atrasos:AT.itens.filter(r=>!r.resolvido_em&&hit(r,['segurado','resp_pagto'])).map(r=>Object.assign({},r,{dias_atraso:atDiasAtraso(r.vencido_em)})),
-    statust:lpAtivos('statust').filter(r=>hit(r,['segurado','pagador'])),
-    pendencias:lpAtivos('pendencias').filter(r=>hit(r,['cliente'])),
-    aniversario:lpAtivos('aniversario').filter(r=>hit(r,['cliente'])),
-    datas:lpAtivos('datas').filter(r=>hit(r,['cliente'])) }; }
+/* FLUIDEZ-V1:IDX-RADAR
+   Antes: para CADA cliente da carteira o radar varria a lista de atraso e as 4
+   listas do relatório chamando normKey() linha por linha — e isso rodava a cada
+   render(), só para escrever o contador do menu "Oportunidades". Medido em
+   16/08: 174 ms no celular, 92% do custo fixo de QUALQUER clique.
+   Agora: um índice nome-normalizado → linhas, montado uma vez por versão dos
+   dados. Saída idêntica — mesmos campos, mesma ordem (o bucket preserva a
+   ordem de inserção) e mesmo dedupe: as chaves de uma linha passam por um Set,
+   então segurado e pagador que normalizam igual não duplicam a linha. */
+let _CIX=null, _CIX_SELO='', _CIX_SEQ=0;
+function cartIdxInvalidar(){ _CIX=null; _CIX_SEQ++; }
+function _cixSelo(){
+  return [_CIX_SEQ,(CART.clientes||[]).length,(CART.apolices||[]).length,(AT.itens||[]).length,
+          LP.statust.length,LP.pendencias.length,LP.aniversario.length,LP.datas.length].join('|');
+}
+function cartIdx(){
+  const selo=_cixSelo();
+  if(_CIX&&_CIX_SELO===selo) return _CIX;
+  const push=(m,k,v)=>{ if(!k) return; const a=m.get(k); if(a) a.push(v); else m.set(k,[v]); };
+  const porCampos=(lista,campos)=>{ const m=new Map();
+    lista.forEach(r=>{ const ks=new Set(); campos.forEach(k=>{ if(r[k]) ks.add(normKey(r[k])); }); ks.forEach(k=>push(m,k,r)); });
+    return m; };
+  const ix={ at:porCampos((AT.itens||[]).filter(r=>!r.resolvido_em),['segurado','resp_pagto']),
+             st:porCampos(lpAtivos('statust'),['segurado','pagador']),
+             pe:porCampos(lpAtivos('pendencias'),['cliente']),
+             an:porCampos(lpAtivos('aniversario'),['cliente']),
+             da:porCampos(lpAtivos('datas'),['cliente']),
+             apo:new Map() };
+  (CART.apolices||[]).forEach(a=>push(ix.apo,a.ref,a));
+  _CIX_SELO=selo; return (_CIX=ix);
+}
+function cartRadar(ref){ const ix=cartIdx(), g=m=>{ const a=m.get(ref); return a?a.slice():[]; };
+  return { atrasos:g(ix.at).map(r=>Object.assign({},r,{dias_atraso:atDiasAtraso(r.vencido_em)})),
+    statust:g(ix.st), pendencias:g(ix.pe), aniversario:g(ix.an), datas:g(ix.da) }; }
 function cartRadarTemAcao(rad){ return rad.atrasos.length+rad.statust.length+rad.pendencias.length; }
 
 /* ---- gaps de cobertura: o que o cliente NÃO tem (valor zerado na carteira) ---- */
@@ -6491,6 +6519,26 @@ function lpSelfCheck(){
     ok('menu: botão de encolher existe', !!document.getElementById('btnSide'));
     ok('menu: classe do body bate com o storage',
        document.body.classList.contains('side-off') === (localStorage.getItem(SIDE_KEY)==='1'));
+    /* FLUIDEZ-V1:SELFCHECK — o índice só vale se der EXATAMENTE o mesmo
+       resultado da varredura que ele substituiu. Compara os dois na base real
+       que estiver carregada (amostra de 60 clientes para o boot seguir em ~1ms). */
+    ok('índice: radar bate com a varredura antiga', (()=>{
+      const varre=(ref)=>{ const hit=(r,ks)=>ks.some(k=>r[k]&&normKey(r[k])===ref);
+        return { at:(AT.itens||[]).filter(r=>!r.resolvido_em&&hit(r,['segurado','resp_pagto'])).length,
+                 st:lpAtivos('statust').filter(r=>hit(r,['segurado','pagador'])).length,
+                 pe:lpAtivos('pendencias').filter(r=>hit(r,['cliente'])).length,
+                 an:lpAtivos('aniversario').filter(r=>hit(r,['cliente'])).length,
+                 da:lpAtivos('datas').filter(r=>hit(r,['cliente'])).length }; };
+      return (CART.clientes||[]).slice(0,60).every(c=>{ const a=varre(c.ref), b=cartRadar(c.ref);
+        return a.at===b.atrasos.length&&a.st===b.statust.length&&a.pe===b.pendencias.length
+            && a.an===b.aniversario.length&&a.da===b.datas.length; });
+    })());
+    ok('índice: apólices por cliente batem com o filter', (CART.clientes||[]).slice(0,60).every(c=>
+        cartApolicesDoCliente(c.ref).length===(CART.apolices||[]).filter(a=>a.ref===c.ref).length));
+    ok('índice: gravar derruba o cache', (()=>{ cartIdx(); const tinha=!!_CIX; cartIdxInvalidar(); return tinha&&_CIX===null; })());
+    ok('índice: uma linha nunca entra duas vezes no mesmo cliente', (()=>{
+      const r=cartRadar((CART.clientes[0]||{}).ref||'__nada__');
+      return new Set(r.atrasos.map(x=>x.apolice)).size===r.atrasos.length; })());
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
@@ -6524,10 +6572,39 @@ document.addEventListener('click',function(e){
   if(!window.matchMedia('(max-width:980px)').matches) return;
   k.classList.toggle('kpi-aberto');
 });
+
+/* FLUIDEZ-V1:RAF
+   Repintura coalescida: várias cargas terminando juntas não viram vários
+   render(). Toda repintura agendada derruba o índice antes — quem chama isto
+   é justamente quem acabou de trazer dado novo. */
+let _rafRender=0;
+function agendarRender(){
+  cartIdxInvalidar();
+  if(_rafRender) return;
+  _rafRender=requestAnimationFrame(function(){ _rafRender=0; render(); });
+}
+/* Envelopa (não reescreve) os pontos de gravação: qualquer save derruba o
+   índice. O selo de _cixSelo() é a segunda rede — pega mudança de tamanho das
+   listas mesmo se um caminho novo esquecer de salvar. */
+(function(){
+  ['salvar','cartSalvar','atSalvarLocal','lpSalvarLocal','subSalvarLocal','bnSalvar'].forEach(function(n){
+    var f=window[n]; if(typeof f!=='function') return;
+    window[n]=function(){ cartIdxInvalidar(); return f.apply(this,arguments); };
+  });
+})();
 funPrefLer();
 sideRestaurar();
 lpSelfCheck();
-render(); Promise.all([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar()]).then(render);   // render base já; LP, Carteira, Contatos, Perfil e Dicionários (remoto/local) populam e re-renderizam
+render();
+/* FLUIDEZ-V1:BOOT — antes era Promise.all([...8 cargas]).then(render): a tela
+   só era repintada quando a ÚLTIMA resposta chegava, e a última é a lp_contatos
+   (3,09 MB na base de hoje). Agora cada carga repinta quando o dado DELA chega,
+   coalescido em rAF. As 8 continuam saindo em paralelo, como antes. */
+[lpCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar]
+  .forEach(function(f){
+    try{ Promise.resolve(f()).then(agendarRender,function(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); agendarRender(); }); }
+    catch(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); }
+  });
 </script>
 
 <!-- ========== 🎨 AJUSTES DE VISUAL (mesma chave da Captação) ========== -->
