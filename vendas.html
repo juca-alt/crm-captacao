@@ -627,6 +627,23 @@
        nem tem tabela, saiu de 160ms para 320ms. */
     .card.t-cards-host{overflow-x:visible}
   }
+
+  /* FLUIDEZ-V2:CSS-FILTROS */
+  .t-filtros-btn{display:none}
+  @media(max-width:980px){
+    #main .toolbar.t-filtros{display:none}
+    #main .toolbar.t-filtros.aberto{display:flex}
+    .t-filtros-btn{display:flex;align-items:center;gap:9px;width:100%;min-height:48px;
+      padding:11px 14px;margin-bottom:12px;border:1px solid var(--linha);border-radius:11px;
+      background:var(--card);color:var(--ink);font-size:14.5px;font-weight:600;text-align:left}
+    .t-filtros-btn .ic{font-size:16px;flex-shrink:0}
+    .t-filtros-btn .n{margin-left:auto;font-size:11.5px;font-weight:700;background:var(--primary);
+      color:#fff;padding:2px 9px;border-radius:20px;flex-shrink:0}
+    .t-filtros-btn .n:empty{display:none}
+    .t-filtros-btn .ca{margin-left:auto;color:var(--muted);font-size:11px;flex-shrink:0}
+    .t-filtros-btn .n+.ca{margin-left:8px}
+    .t-filtros-btn.aberto{border-color:var(--primary);color:var(--primary)}
+  }
 </style>
 </head>
 <body>
@@ -4107,7 +4124,7 @@ function viewLpAtrasos(){
       ${sumiu?kpi('Sumiram',sumiu,'verificar'):''}
       ${lps.map(p=>kpi('LP '+p.k,p.n,brl(p.v))).join('')}
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input id="at-q" placeholder="Buscar segurado, responsável ou apólice…" value="${esc(FAT.q)}" oninput="FAT.q=this.value;viewLpAtrasos();atFocus('at-q')" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
       <select onchange="FAT.qcampo=this.value;viewLpAtrasos()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">
         <option value="segurado"${FAT.qcampo!=='resp'?' selected':''}>Segurado</option>
@@ -4812,7 +4829,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
   $('#main').innerHTML=`<h1 class="pg">Clientes</h1>
     <div class="sub">${CART.clientes.length} cliente(s) na carteira${CART.importadoEm?' · importado em '+CART.importadoEm:''}. Clique num cliente pra ver apólices e coberturas.</div>
     ${CART.clientes.length?`<input id="cart-q" placeholder="Buscar por nome ou e-mail…" value="${esc(CART_Q)}" oninput="CART_Q=this.value;viewCartClientes()" style="width:100%;max-width:420px;margin:6px 0 8px;padding:9px 12px;border:1px solid var(--linha);border-radius:9px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;align-items:center">
+    <div class="toolbar" style="gap:6px;flex-wrap:wrap;margin:0 0 12px;align-items:center">
       ${fchip('atraso','⏰ Atraso','em atraso no relatório')}${fchip('statust','⏳ Status T','proposta no Status T')}${fchip('pendencia','📋 Pendência','pendência de emissão')}${fchip('niver','🎂 Aniversário','aniversário nos próximos '+JANELA_DIAS+' dias')}
       <span style="width:1px;height:20px;background:var(--linha)"></span>
       ${achip('1','1 apólice')}${achip('2+','2+ apólices')}
@@ -6751,6 +6768,21 @@ function lpSelfCheck(){
        T_CARTOES_PULAR.includes('bn-tabela'));
     ok('cartões: o rótulo vai na tabela, não célula a célula',
        !document.querySelector('#main table.t-cards td[data-rot]'));
+    /* FLUIDEZ-V2:SELFCHECK-FILTROS */
+    ok('filtros: a camada existe e é por view', typeof filtrosRecolhidos==='function' && typeof T_FILTROS_ABERTOS==='object');
+    ok('filtros: contador enxerga select, campo e chip aceso', (()=>{
+      const d=document.createElement('div');
+      d.innerHTML='<select><option>a</option><option selected>b</option></select>'+
+                  '<input type="search" value="x"><button class="on">c</button><button>d</button>';
+      return _tFiltrosAtivos(d)===3; })());
+    ok('filtros: navegador de data não é confundido com filtro', (()=>{
+      const d=document.createElement('div');
+      d.innerHTML='<button>‹</button><input type="date"><button>›</button><span>HOJE</span>';
+      return d.querySelectorAll('select,details,input[type=search],input[type=text],input[type=number]').length<2; })());
+    ok('filtros: barra com 2 filtros de verdade é recolhida', (()=>{
+      const d=document.createElement('div');
+      d.innerHTML='<input type="search"><select><option>a</option></select>';
+      return d.querySelectorAll('select,details,input[type=search],input[type=text],input[type=number]').length>=2; })());
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
@@ -6917,6 +6949,72 @@ function tabelasEmCartoes(){
 (function(){
   const f=window.render; if(typeof f!=='function') return;
   window.render=function(){ const r=f.apply(this,arguments); try{ tabelasEmCartoes(); }catch(e){ console.warn('cartões:',e); } return r; };
+})();
+
+/* FLUIDEZ-V2:JS-FILTROS
+   O botão nasce como irmão da .toolbar, nunca dentro dela: mover os campos
+   para uma folha exigiria recriar os handlers a cada repintura, e o render()
+   redesenha a barra inteira o tempo todo. Assim o interior da toolbar
+   continua sendo exatamente o que a view escreveu.
+
+   O estado aberto/fechado é por VIEW e sobrevive à repintura — filtrar,
+   olhar o resultado e filtrar de novo não pode fechar a barra na sua cara.
+
+   O contador diz quantos filtros estão ativos: filtro escondido que muda o
+   resultado sem avisar é como o app mentir sobre o que está mostrando. */
+const T_FILTROS_ABERTOS = {};
+function _tFiltrosAtivos(tb){
+  let n = 0;
+  tb.querySelectorAll('select').forEach(s => { if (s.selectedIndex > 0) n++; });
+  tb.querySelectorAll('input[type=search],input[type=text],input[type=number]').forEach(i => { if (i.value.trim()) n++; });
+  tb.querySelectorAll('.chip.on,.sheet-chip.on,button.on').forEach(() => n++);
+  return n;
+}
+function filtrosRecolhidos(){
+  if(!window.matchMedia('(max-width:980px)').matches) return;
+  const raiz=document.getElementById('main'); if(!raiz) return;
+  let ordem=0;
+  raiz.querySelectorAll('.toolbar').forEach(function(tb,i){
+    if(tb.classList.contains('t-filtros')) return;
+    /* Só recolhe barra que é MESMO de filtro. Contar "controles" era grosseiro
+       demais: no SitPlan a primeira .toolbar é o navegador de data (‹ [data] ›
+       · HOJE) e ela estava sendo escondida atrás de "Buscar e filtrar", que é
+       mentira sobre o que o botão faz. Filtro de verdade é select, campo de
+       busca/texto/número ou o popover de multi-seleção — um input[type=date]
+       sozinho não conta. */
+    const filtros = tb.querySelectorAll('select,details,input[type=search],input[type=text],input[type=number]').length;
+    if(filtros < 2) return;
+    /* o Estoque e a Lista de TA já têm o botão 🎛️ Filtros, que abre a folha
+       própria deles no celular — dois caminhos para a mesma coisa é pior que
+       um */
+    if(tb.querySelector('.bn-mob')) return;
+    /* e nem barra que a própria view já esconde no celular (o Estoque manda os
+       filtros avançados para a folha dele e deixa #bn-tb2 em display:none) —
+       dar um botão para reabrir o que a view escondeu de propósito é desfazer
+       a decisão dela */
+    if(getComputedStyle(tb).display === 'none') return;
+    tb.classList.add('t-filtros');
+    const chave=VIEW+'#'+i, aberto=!!T_FILTROS_ABERTOS[chave];
+    const rotulo = (ordem++ === 0) ? 'Buscar e filtrar' : 'Mais filtros';
+    const n=_tFiltrosAtivos(tb);
+    const b=document.createElement('button');
+    b.type='button'; b.className='t-filtros-btn'+(aberto?' aberto':'');
+    b.innerHTML='<span class="ic">⚙︎</span><span>'+rotulo+'</span>'+
+                '<span class="n">'+(n||'')+'</span><span class="ca">'+(aberto?'▲':'▼')+'</span>';
+    b.onclick=function(){
+      T_FILTROS_ABERTOS[chave]=!T_FILTROS_ABERTOS[chave];
+      const on=T_FILTROS_ABERTOS[chave];
+      tb.classList.toggle('aberto',on); b.classList.toggle('aberto',on);
+      b.querySelector('.ca').textContent=on?'▲':'▼';
+      if(on){ const f=tb.querySelector('input[type=search],input'); if(f) setTimeout(()=>f.focus(),60); }
+    };
+    tb.classList.toggle('aberto',aberto);
+    tb.parentNode.insertBefore(b,tb);
+  });
+}
+(function(){
+  const f=window.render; if(typeof f!=='function') return;
+  window.render=function(){ const r=f.apply(this,arguments); try{ filtrosRecolhidos(); }catch(e){ console.warn('filtros:',e); } return r; };
 })();
 funPrefLer();
 sideRestaurar();
