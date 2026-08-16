@@ -571,6 +571,62 @@
   @keyframes esq-brilho{0%{background-position:100% 0}100%{background-position:0 0}}
   @media(prefers-reduced-motion:reduce){.esq-l,.esq-kpi,.esq-card{animation:none}}
   @media(max-width:980px){ .esq-kpis{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px} .esq-kpi{height:54px} }
+
+  /* FLUIDEZ-V2:CSS-CARTOES
+     Tabela de 8-13 colunas num celular vira lupa: rola pro lado, o cabeçalho
+     some e ninguém sabe o que é cada número. Medido em 16/08: a Lista de TA
+     tinha 718px de largura numa tela de 390.
+     Aqui a linha vira cartão e cada célula carrega o próprio rótulo, tirado do
+     <th> pelo JS. Vale para qualquer tabela do app — inclusive as que ainda
+     não existem. No desktop a regra inteira fica fora. */
+  @media(max-width:980px){
+    table.t-cards{display:block;width:100%}
+    table.t-cards thead{display:none}
+    table.t-cards tbody{display:flex;flex-direction:column;gap:8px}
+    table.t-cards tr{display:block;background:var(--card);border:1px solid var(--linha);
+      border-radius:12px;padding:11px 13px;box-shadow:var(--sombra)}
+    table.t-cards tr.clicavel:active{background:var(--fundo)}
+    table.t-cards td{display:flex;gap:10px;align-items:baseline;border:0;padding:3px 0;
+      font-size:13px;text-align:left!important;white-space:normal}
+    /* O rótulo vem de uma variável posta UMA VEZ na tabela, não de um
+       atributo por célula. A primeira versão escrevia data-rot em cada <td>:
+       na tela de Clientes da Carteira, com 4.400 nós, isso custava +44ms por
+       repintura. Aqui o JS toca só a tabela e o CSS distribui por posição. */
+    table.t-cards td::before{flex:0 0 40%;max-width:40%;font-size:10px;font-weight:700;
+      text-transform:uppercase;letter-spacing:.04em;color:var(--muted);line-height:1.4}
+    table.t-cards td:nth-child(1)::before{content:var(--r1,"")}
+    table.t-cards td:nth-child(2)::before{content:var(--r2,"")}
+    table.t-cards td:nth-child(3)::before{content:var(--r3,"")}
+    table.t-cards td:nth-child(4)::before{content:var(--r4,"")}
+    table.t-cards td:nth-child(5)::before{content:var(--r5,"")}
+    table.t-cards td:nth-child(6)::before{content:var(--r6,"")}
+    table.t-cards td:nth-child(7)::before{content:var(--r7,"")}
+    table.t-cards td:nth-child(8)::before{content:var(--r8,"")}
+    table.t-cards td:nth-child(9)::before{content:var(--r9,"")}
+    table.t-cards td:nth-child(10)::before{content:var(--r10,"")}
+    table.t-cards td:nth-child(11)::before{content:var(--r11,"")}
+    table.t-cards td:nth-child(12)::before{content:var(--r12,"")}
+    table.t-cards td:nth-child(13)::before{content:var(--r13,"")}
+    table.t-cards td:nth-child(n+14)::before{content:""}
+    table.t-cards td:empty{display:none}
+    /* a 1ª coluna é o nome do registro: vira o título do cartão */
+    table.t-cards td:first-child{display:block;font-size:15.5px;font-weight:700;
+      padding:0 0 7px;line-height:1.3}
+    table.t-cards td:first-child::before{display:none}
+    /* quando a última coluna é a régua de ações, ela ganha a linha inteira */
+    table.t-cards.t-acoes-fim td:last-child{display:flex;flex-wrap:wrap;gap:6px;
+      padding-top:9px;margin-top:7px;border-top:1px solid var(--linha)}
+    table.t-cards.t-acoes-fim td:last-child::before{display:none}
+    table.t-cards.t-acoes-fim td:last-child .btn{flex:1 1 auto;justify-content:center}
+    /* linha de "nenhum resultado" continua sendo uma linha só */
+    table.t-cards td[colspan]{display:block;text-align:center!important;padding:10px 0}
+    table.t-cards td[colspan]::before{display:none}
+    /* o cartão manda: o contêiner não precisa mais rolar pro lado.
+       A classe vem do JS de propósito — usar .card:has(> table.t-cards) fez o
+       motor reavaliar todos os .card da tela a cada repintura e o Funil, que
+       nem tem tabela, saiu de 160ms para 320ms. */
+    .card.t-cards-host{overflow-x:visible}
+  }
 </style>
 </head>
 <body>
@@ -6687,6 +6743,14 @@ function lpSelfCheck(){
     ok('menu: nenhum destino órfão', [...document.querySelectorAll('.sidebar .nav-btn[data-view]')]
         .every(b=>VIEWS_CONHECIDAS.includes(b.dataset.view)));
     ok('atraso: filtro tem 2 escopos e o padrão é o segurado', FAT.qcampo!=='todos');
+    /* FLUIDEZ-V2:SELFCHECK-CARTOES */
+    ok('cartões: a camada existe e não roda no desktop',
+       typeof tabelasEmCartoes==='function' &&
+       (window.matchMedia('(max-width:980px)').matches || !document.querySelector('#main table.t-cards')));
+    ok('cartões: o Estoque continua com os cartões próprios dele',
+       T_CARTOES_PULAR.includes('bn-tabela'));
+    ok('cartões: o rótulo vai na tabela, não célula a célula',
+       !document.querySelector('#main table.t-cards td[data-rot]'));
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
   }catch(e){ falhas.push('exceção: '+e.message); }
@@ -6824,6 +6888,36 @@ function abrirAjustesVisual(){
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','agenda','contatos','planos','subst','lp-atrasos','lp-pendencias','lp-statust',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-sitplan','bn-ta','bn-dups','bn-recs','lp-adm','principios'];
+
+/* FLUIDEZ-V2:JS-CARTOES
+   Copia o texto do <th> para cada <td> e marca título/ações. Roda depois do
+   render, só no celular, e só em tabela que tenha cabeçalho — assim tabela
+   de layout (as que existem para alinhar campo, não para listar dado) fica
+   de fora. O Estoque tem cartões escritos à mão e é pulado.
+
+   Custo: uma passada pelas TABELAS, não pelas células. A primeira versão
+   escrevia data-rot em cada <td> e custava até +44ms por repintura na tela
+   de Clientes da Carteira; assim fica no ruído. */
+const T_CARTOES_PULAR = ['bn-tabela'];
+function tabelasEmCartoes(){
+  if(!window.matchMedia('(max-width:980px)').matches) return;
+  const raiz=document.getElementById('main'); if(!raiz) return;
+  raiz.querySelectorAll('table').forEach(function(t){
+    if(T_CARTOES_PULAR.some(c=>t.classList.contains(c))) return;
+    const ths=[].map.call(t.querySelectorAll('thead th'), th=>th.textContent.replace(/\s+/g,' ').trim());
+    if(ths.length<3) return;                       /* 2 colunas já cabem na tela */
+    if(!t.querySelector('tbody tr')) return;
+    t.classList.add('t-cards');
+    const host=t.closest('.card'); if(host) host.classList.add('t-cards-host');
+    ths.forEach(function(r,i){ if(i<13) t.style.setProperty('--r'+(i+1), JSON.stringify(r)); });
+    const ultimo=ths[ths.length-1]||'';
+    if(/a[çc][õo]es|contato|^—?$/i.test(ultimo.trim())) t.classList.add('t-acoes-fim');
+  });
+}
+(function(){
+  const f=window.render; if(typeof f!=='function') return;
+  window.render=function(){ const r=f.apply(this,arguments); try{ tabelasEmCartoes(); }catch(e){ console.warn('cartões:',e); } return r; };
+})();
 funPrefLer();
 sideRestaurar();
 lpSelfCheck();
