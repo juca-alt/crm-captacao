@@ -6,7 +6,11 @@
 
 ## 📸 Snapshot — 16/08/2026 · FLUIDEZ: o celular volta a funcionar e trocar de tela custa 27ms (branch, sem deploy)
 
-**Estado em 30 s:** `main` = `34c33f6`, **intacta** — nada foi para produção. Cinco commits no branch `claude/crm-lp-fluidity-mobile-fd9oi9`, já no GitHub, esperando o OK dele. Sessão de UX + performance no `vendas.html`: **zero mudança de regra de negócio, zero mudança no banco**.
+**Estado em 30 s:** ✅ **NO AR** — `main` = `ae2a70d`, **v0.11.0 · Fluidez**, mergeado e deployado com autorização expressa dele. Oito commits no branch `claude/crm-lp-fluidity-mobile-fd9oi9`, merge com `--no-ff`. Sessão de UX + performance no `vendas.html`: **zero mudança de regra de negócio, zero mudança no banco**. Produção conferida pelo CONTEÚDO servido (SHA idêntico ao commit), não pelo número da versão.
+
+### Portão de deploy — a prática que ficou
+Antes do merge rodou o `gate.js`: **4 cenários** (celular 390 × desktop 1280) × (base CHEIA × base VAZIA), cada um com 9 verificações — boot pinta a tela, `lpSelfCheck()` verde, 25 views sem exceção, nenhuma view em branco, zero estouro, criar/salvar/apagar contato, índice da Carteira idêntico à varredura, ficha dentro da tela, barra inferior inteira, console limpo. **Tudo verde nos 4 cenários, e repetido contra o arquivo BAIXADO DE PRODUÇÃO.** A base vazia entrou na lista porque o caminho do estado inicial já inutilizou um módulo inteiro neste projeto (Substituição, 11/08).
+⚠️ **Lição do próprio portão:** medir a gaveta no mesmo tick de `abrirContato()` acusa falso positivo — ela desliza com `transition:right .22s`. Esperar a transição antes de medir.
 
 ### O problema, medido antes de mexer
 Varredura das 22 telas em 390px e 1280px (Chromium real, CPU 4×, 1,6 Mbps, gzip como no Pages), com base sintética em volume realista e os tamanhos REAIS das tabelas lidos por SQL no playground (`lp_contatos` = 5.180 linhas / 2,9 MB de jsonb).
