@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.12.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.12.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -792,7 +792,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.12.2 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.12.3 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -814,7 +814,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.12.2 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.12.3 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2747,6 +2747,169 @@ function subLimitesAntigas(cliRef,hoje){
   return subApsDe(cliRef).filter(a=>a.papel!=='gatilho')
     .map(a=>({numero:a.numero,iso:subISO(subLimiteDt(subEref(a)))}));
 }
+/*SUBCL-DOC*/
+/* ── DOCUMENTO PARA O CLIENTE ────────────────────────────────────────────────
+   O que ele manda pro cliente não é a tela de trabalho: aqui não entra fôlego,
+   limite de cancelamento nem motivo de recusa da cobrança — isso é operação
+   dele. O cliente precisa ver o que ganha e até quando a transição corre.
+   Ele escolhe bloco a bloco antes de gerar, e sai em 3 formatos: HTML (abre em
+   qualquer celular), PDF (via impressão) e PNG (o que de fato se manda no
+   WhatsApp). Tudo self-contained: sem CDN, sem fonte externa, sem dependência —
+   o mesmo princípio da Revisão de Proteção. */
+let SUB_DOC={cli:null,blocos:{janela:true,vantagem:true,mensal:true,apolices:true,historico:false,final:false}};
+const SUB_DOC_BLOCOS=[
+  ['janela','Prazo da transição','até quando a transição corre'],
+  ['vantagem','Vantagem para você','custo normal × o que está pagando'],
+  ['mensal','Valor pago em cada mês','mês atual e os 3 anteriores'],
+  ['apolices','Apólices em transição','número, prêmio e situação'],
+  ['historico','Histórico de pagamentos','a lista completa do período'],
+  ['final','Valor final após a transição','só se você já definiu']];
+function subDocAbrir(cliRef){
+  SUB_DOC.cli=cliRef;
+  atModal(`<h3 style="margin:0 0 4px">Enviar ao cliente</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Escolha o que vai no documento. O que é da sua operação — fôlego, limite de cancelamento e motivo da recusa — nunca entra.</div>
+    <div id="sub_doc_opts">${SUB_DOC_BLOCOS.map(([k,l,h])=>`
+      <label style="display:flex;gap:9px;align-items:flex-start;border:1px solid var(--linha);border-radius:8px;padding:9px;margin-bottom:7px;cursor:pointer">
+        <input type="checkbox" data-docb="${k}" ${SUB_DOC.blocos[k]?'checked':''} onchange="subDocSet('${k}',this.checked)" style="margin-top:3px">
+        <span><b style="font-size:12.5px">${esc(l)}</b><div style="font-size:11.5px;color:var(--muted)">${esc(h)}</div></span></label>`).join('')}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin:10px 0 6px">Pré-visualização</div>
+    <div id="sub_doc_prev" style="max-height:34vh;overflow:auto;border:1px solid var(--linha);border-radius:8px;background:#f8fafc;padding:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-s" onclick="subDocBaixar('html')">🌐 HTML</button>
+      <button class="btn btn-s" onclick="subDocBaixar('pdf')">📄 PDF</button>
+      <button class="btn btn-p" onclick="subDocBaixar('png')">🖼️ Imagem</button>
+    </div>`);
+  subDocPreview();
+}
+function subDocSet(k,v){ SUB_DOC.blocos[k]=!!v; subDocPreview(); }
+function subDocPreview(){ const el=$('#sub_doc_prev'); if(el) el.innerHTML=subDocCorpo(SUB_DOC.cli); }
+/* recebe o NOME, não o cliRef: assim é função pura e o self-check pode testar
+   sem encostar no SUB real (invariante que mexe em estado já quebrou dado aqui) */
+function subDocNomeArq(nome,ext){
+  return 'transicao-'+String(nome||'cliente').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.'+ext;
+}
+function subDocNomeDe(cliRef,ext){ return subDocNomeArq((subCliDe(cliRef)||{}).nome,ext); }
+/* o corpo é o MESMO nos 3 formatos — uma verdade só, sem versão que diverge */
+function subDocCorpo(cliRef){
+  const c=subCliDe(cliRef); if(!c) return '';
+  const hoje=atHojeLocal(), aps=subApsDe(cliRef), j=subJanela(cliRef);
+  const jc=j?subJanelaCalc(j.inicio,subISO(hoje),[]):null;
+  const antigas=aps.filter(a=>a.papel!=='gatilho');
+  const baseAntigas=antigas.reduce((s,a)=>s+(a.premio||0),0);
+  const conf=SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado'&&!p.primeiro&&(!j||String(p.confirmado||p.venc)>=j.inicio));
+  const premioDoPag=p=>{ const a=aps.find(x=>x.ref===p.apo); return a?(a.premio||0):0; };
+  const des=subDesembolso(conf,premioDoPag,j?j.inicio:null,subISO(hoje));
+  const economia=des.mediaMes!==null?Math.max(0,baseAntigas*des.meses-des.total):null;
+  const porMes=subPagosPorMes(conf.map(p=>({quando:p.confirmado||p.venc,valor:p.valor})),subISO(hoje),4);
+  const tl=subTimeline(cliRef,hoje);
+  const B=SUB_DOC.blocos, out=[];
+  const box=(t,corpo)=>`<div class="dcard"><div class="dtit">${t}</div>${corpo}</div>`;
+  const num=(l,v,s)=>`<div class="dnum"><div class="dnl">${l}</div><div class="dnv">${v}</div>${s?`<div class="dns">${s}</div>`:''}</div>`;
+  if(B.janela&&jc){
+    out.push(box('Prazo da transição',
+      `<div class="dgrid">${num('Início',atFmtBR(jc.inicio),'emissão do novo plano')}${num('Conclusão',atFmtBR(jc.fim),jc.fechada?'concluída':'faltam '+jc.faltam+' dias')}</div>
+       <div class="dbar"><div class="dbarf" style="width:${Math.max(2,Math.min(100,jc.pct))}%"></div></div>
+       <p class="dp">Durante esse período os seguros anteriores precisam continuar ativos. Por isso os pagamentos são organizados por boleto até ${atFmtBR(jc.fim)}.</p>`));
+  }
+  if(B.vantagem&&des.mediaMes!==null){
+    out.push(box('Vantagem para você',
+      `<div class="dgrid">${num('Custo normal / mês',brl(baseAntigas))}${num('Está pagando / mês',brl(des.mediaMes))}${num('Economia acumulada',brl(economia),'no período da transição')}</div>
+       <p class="dp">O valor médio considera tudo o que foi pago no período, já incluídos os custos de juros e multa de atraso.</p>`));
+  }
+  if(B.mensal&&porMes.length){
+    out.push(box('Valor pago em cada mês',
+      `<div class="dgrid">${porMes.map(m=>num(m.label.toUpperCase(),m.total>0?brl(m.total):'—')).join('')}</div>`));
+  }
+  if(B.apolices&&aps.length){
+    out.push(box('Seguros em transição',
+      `<table class="dtb"><tr><th>Apólice</th><th>Situação</th><th style="text-align:right">Prêmio</th></tr>
+       ${aps.map(a=>`<tr><td>${esc(a.numero)}</td><td>${a.papel==='gatilho'?'Novo plano':'Plano anterior'}</td><td style="text-align:right">${brl(a.premio)}</td></tr>`).join('')}</table>`));
+  }
+  if(B.historico&&tl.rows.length){
+    out.push(box('Histórico de pagamentos',
+      `<table class="dtb"><tr><th>Apólice</th><th>Vencimento</th><th>Pago em</th><th style="text-align:right">Valor</th></tr>
+       ${tl.rows.map(r=>`<tr><td>${esc(r.a?r.a.numero:'—')}</td><td>${atFmtBR(r.venc)}</td><td>${r.pago?atFmtBR(r.pago):'—'}</td><td style="text-align:right">${r.pago?brl(r.valor):'em aberto'}</td></tr>`).join('')}</table>`));
+  }
+  if(B.final&&c.final!=null){
+    out.push(box('Valor final após a transição',`<div class="dgrid">${num('A partir da conclusão',brl(c.final))}</div>`));
+  }
+  return `<div class="dhead"><div class="dnome">${esc(atTitleC(c.nome||''))}</div>
+    <div class="dsub">Acompanhamento da transição de seguro · ${atFmtBR(atHojeISO())}</div></div>${out.join('')}`;
+}
+function subDocCss(){
+  return `*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f1f5f9;color:#0f172a;padding:18px;line-height:1.45}
+.doc{max-width:640px;margin:0 auto}
+.dhead{margin-bottom:14px}
+.dnome{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.dsub{font-size:12.5px;color:#64748b;margin-top:2px}
+.dcard{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.dtit{font-size:13px;font-weight:700;margin-bottom:10px}
+.dgrid{display:flex;flex-wrap:wrap;gap:10px}
+.dnum{flex:1 1 120px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:9px 11px}
+.dnl{font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:.04em}
+.dnv{font-size:17px;font-weight:800;margin-top:2px}
+.dns{font-size:10.5px;color:#64748b;margin-top:1px}
+.dbar{height:8px;background:#e2e8f0;border-radius:99px;margin:12px 0 4px;overflow:hidden}
+.dbarf{height:100%;background:#2563eb;border-radius:99px}
+.dp{font-size:12px;color:#475569;margin-top:10px}
+.dtb{width:100%;border-collapse:collapse;font-size:12px}
+.dtb th{text-align:left;color:#64748b;font-weight:600;font-size:11px;padding:4px 6px;border-bottom:1px solid #e2e8f0}
+.dtb td{padding:5px 6px;border-bottom:1px solid #f1f5f9}
+.drod{font-size:11px;color:#94a3b8;text-align:center;margin-top:14px}`;
+}
+function subDocHtml(cliRef){
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transição de seguro</title><style>${subDocCss()}</style></head>
+<body><div class="doc">${subDocCorpo(cliRef)}<div class="drod">Documento gerado pelo seu Life Planner · não é cobrança</div></div></body></html>`;
+}
+function subDocSalvar(blob,nome){
+  const u=URL.createObjectURL(blob), a=document.createElement('a');
+  a.href=u; a.download=nome; a.click(); setTimeout(()=>URL.revokeObjectURL(u),1500);
+}
+/* PNG sem biblioteca: o mesmo HTML entra num <foreignObject> de SVG e vai pro
+   canvas. Serializa com XMLSerializer porque foreignObject exige XHTML bem
+   formado — innerHTML cru quebra em qualquer tag sem fechamento. */
+async function subDocPng(cliRef){
+  const larg=640;
+  const palco=document.createElement('div');
+  palco.setAttribute('style','position:fixed;left:-9999px;top:0;width:'+larg+'px');
+  palco.innerHTML=`<div xmlns="http://www.w3.org/1999/xhtml" class="doc-png"><style>${subDocCss()}</style><div class="doc" style="padding:18px;background:#f1f5f9">${subDocCorpo(cliRef)}</div></div>`;
+  document.body.appendChild(palco);
+  const alvo=palco.firstChild, alt=Math.ceil(alvo.getBoundingClientRect().height)+8;
+  const xml=new XMLSerializer().serializeToString(alvo);
+  document.body.removeChild(palco);
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+larg+'" height="'+alt+'"><foreignObject width="100%" height="100%">'+xml+'</foreignObject></svg>';
+  const img=new Image();
+  img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  await new Promise((ok,err)=>{ img.onload=ok; img.onerror=()=>err(new Error('svg')); });
+  const esc2=2, cv=document.createElement('canvas');
+  cv.width=larg*esc2; cv.height=alt*esc2;
+  const cx=cv.getContext('2d'); cx.scale(esc2,esc2);
+  cx.fillStyle='#f1f5f9'; cx.fillRect(0,0,larg,alt); cx.drawImage(img,0,0);
+  return new Promise(ok=>cv.toBlob(b=>ok(b),'image/png'));
+}
+async function subDocBaixar(fmt){
+  const cliRef=SUB_DOC.cli; if(!cliRef) return;
+  if(!SUB_DOC_BLOCOS.some(([k])=>SUB_DOC.blocos[k])){ toast('Escolha pelo menos um bloco'); return; }
+  if(fmt==='html'){ subDocSalvar(new Blob([subDocHtml(cliRef)],{type:'text/html;charset=utf-8'}),subDocNomeDe(cliRef,'html')); atClose(); return; }
+  if(fmt==='pdf'){
+    /* impressão do documento isolado: a tela do CRM não pode ir junto */
+    const w=window.open('','_blank');
+    if(!w){ toast('O navegador bloqueou a janela — libere o pop-up pra gerar o PDF'); return; }
+    w.document.write(subDocHtml(cliRef)); w.document.close();
+    setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },250);
+    atClose(); return;
+  }
+  try{
+    const b=await subDocPng(cliRef);
+    if(!b) throw new Error('canvas vazio');
+    subDocSalvar(b,subDocNomeDe(cliRef,'png')); atClose();
+  }catch(e){ console.warn('PNG falhou',e); toast('Não consegui gerar a imagem — use o HTML ou o PDF'); }
+}
 /*SUBFX-MOTOR*/
 /* ── O QUE O CLIENTE PAGA DE FATO ────────────────────────────────────────────
    A transição só faz sentido pro cliente porque, enquanto ela corre, ele deixa
@@ -3085,16 +3248,7 @@ function viewSubstCliente(cliRef){
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
         <span style="font-weight:700;font-size:13.5px">${a.papel==='gatilho'?'Nova':'Antiga'} · ${esc(a.numero)}</span>
         <span style="display:flex;align-items:center;gap:6px">${badge}<button class="btn btn-ghost" style="font-size:11px;padding:2px 7px" title="Editar dados desta apólice" onclick="event.stopPropagation();subEditarApolice('${esc(a.ref)}')">✏️</button></span></div>
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">${a.lp?'LP '+esc(String(a.lp).split(' ')[0])+' · ':''}${a.dia?'vence dia '+a.dia+' · ':''}${esc(a.forma||'')}</div>
-      ${/*SUBJAN-CARD*/(()=>{
-        // a tarja da janela é do cliente, não de cada apólice: repetida em 4 cards virava ruído
-        if(a.papel==='gatilho'||!jc) return jTxt;
-        const lim=subISO(subLimiteDt(er)), antes=subDDiff(atParseISO(lim),atParseISO(jc.fim));
-        return antes>0
-          ? `<div style="font-size:11px;color:var(--verm);margin:-4px 0 8px">🗓️ cancela em ${atFmtBR(lim)} · ${antes}d antes da liberação — segurar</div>`
-          : `<div style="font-size:11px;color:var(--verde);margin:-4px 0 8px">🗓️ aguenta até ${atFmtBR(lim)} · depois da liberação (${atFmtBR(jc.fim)})</div>`;
-      })()}
-      ${a.motivo?`<div title="${esc(atTitleC(a.motivo))}" style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:6px;padding:4px 8px;margin-bottom:8px;cursor:help">⚠ Cobrança: ${esc(atMotivoUltimo(atTitleC(a.motivo)))}</div>`:''}
+      ${/*SUBCL-CARD*/''}<!-- LP/forma/janela/motivo saíram do card a pedido dele: o que decide ação é prêmio, atraso, fôlego e limite -->
       ${kv('Prêmio',brl(a.premio))}
       ${kv('Emissão',a.emissao?atFmtBR(a.emissao):'—')}
       ${kv('Venc. em aberto',atFmtBR(a.venc))}
@@ -3132,7 +3286,7 @@ function viewSubstCliente(cliRef){
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px"><div style="background:var(--azul-claro);color:var(--azul);font-weight:700;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center">${subIni(c.nome)}</div>
         <div><div style="font-weight:700;font-size:15px">${esc(atTitleC(c.nome))}</div><div style="font-size:12px;color:var(--muted)">${c.cpf?'CPF '+esc(c.cpf):''}${c.tel?' · '+esc(c.tel):''}</div></div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button>${/*SUBFX-BTN*/''}<button class="btn btn-s" onclick="subColarEspelho()" title="Cole o espelho de uma ou de várias apólices — cada uma é identificada pelo número">📋 Colar espelho</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button>${/*SUBFX-BTN*/''}<button class="btn btn-s" onclick="subColarEspelho()" title="Cole o espelho de uma ou de várias apólices — cada uma é identificada pelo número">📋 Colar espelho</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button><button class="btn btn-p" onclick="subDocAbrir('${esc(cliRef)}')" title="Monta o documento do cliente e gera em HTML, PDF ou imagem">📤 Enviar ao cliente</button>${/*SUBCL-BTN*/''}</div></div>
     <div class="card" style="margin-top:12px">
       ${/*SUBJAN-UI*/(()=>{
         if(!jc) return `<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700;color:var(--amar)">${subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho'}</span></div>
@@ -3149,7 +3303,7 @@ function viewSubstCliente(cliRef){
             <span style="white-space:nowrap">Emissão da nova · ${atFmtBR(jc.inicio)}</span>
             <span style="white-space:nowrap">Hoje · ${atFmtBR(atHojeISO())} (${jc.corridos}d corridos)</span>
             <span style="white-space:nowrap;font-weight:600;color:var(--ink)">Liberado · ${atFmtBR(jc.fim)}</span></div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px">Até <b>${atFmtBR(jc.fim)}</b> nenhuma das antigas pode ser alterada ou cancelada — é por isso que o fluxo de boletos segura os pagamentos até essa data passar.</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px">Até <b>${atFmtBR(jc.fim)}</b> nenhuma das antigas pode ser alterada ou cancelada, é por isso que o fluxo de boletos segura os pagamentos até essa data passar.</div>${/*SUBCL-REGRA*/''}
           ${/*SUBFX-SEMRISCO*/''}`;   /* o risco continua marcado na régua e no card de cada antiga — a caixa repetia a mesma informação */
       })()}
       ${(!jc&&subGatilho(cliRef))?`<div style="margin-top:8px"><button class="btn btn-s" style="font-size:12px" onclick="subEditarApolice('${esc(subGatilho(cliRef).ref)}')">Informar emissão</button></div>`:''}</div>
@@ -3161,18 +3315,17 @@ function viewSubstCliente(cliRef){
       ${kpi('Paga de fato / mês',pagoMes!==null?brl(pagoMes):'—',pagoMes!==null?('média de '+meses.toFixed(1).replace('.',',')+' meses de transição'):'')}
       ${kpi('Economia acumulada',economia!==null?brl(economia):'—','desde a emissão da nova')}
     </div>
-    ${/*SUBFX-VANT*/pagoMes!==null?`<div style="font-size:11.5px;color:var(--muted);margin-top:8px">A média divide <b>tudo que foi pago no período</b> (as antigas que ele foi segurando <b>e</b> a nova) pelos meses corridos desde a emissão — por isso fica bem abaixo do custo nominal: nos meses em que ele deixa parcela em aberto, não entra dinheiro nenhum na conta.${des.juros>0?` Já inclui <b>${brl(des.juros)}</b> de juros/multa de atraso pagos no período.`:' Juros de atraso, quando houver, entram automaticamente — o valor considerado é o que a seguradora registrou como pago.'}</div>`:''}
+    ${/*SUBCL-MEDIA*/pagoMes!==null?`<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.55">A média divide tudo que foi pago no período (as antigas que ele foi segurando e a nova) pelos meses corridos desde a emissão, por isso fica abaixo do custo nominal.<br>*Já incluídos todos os custos de juros/multa de atraso pagos no período.</div>`:''}
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
       <div><div style="font-size:12.5px">🔒 Valor final após a transição</div><div style="font-size:11px;color:var(--muted)">formato definitivo do plano — você define ao fechar</div></div>
       <div style="display:flex;align-items:center;gap:10px"><span style="font-weight:700${c.final?'':';color:var(--muted)'}">${c.final?brl(c.final):'a definir'}</span><button class="btn btn-ghost" onclick="subDefinirFinal('${esc(cliRef)}')">${c.final?'Editar':'Definir'}</button></div></div>
     <h2 class="sec" style="margin-top:18px;font-size:14px">Histórico e fluxo de pagamentos <span style="font-weight:400;color:var(--muted);font-size:12px">— ${/*SUBFX-TIT*/tl.start&&tl.start!=='0000-00-00'?('de '+atFmtBR(tl.start)+' ('+tl.startFonte+') até hoje'):tl.startFonte}</span></h2>
     <div class="kpis">
-      ${/*SUBFX-KPIS*/kpi('Último pagamento',tl.ultimo?atFmtBR(tl.ultimo):'—')}
-      ${kpi('Em aberto hoje',tl.emAberto+' dias',tl.emAberto>SUB_FMAX?'acima da faixa':'')}
+      ${/*SUBCL-KPI*/kpi('Último pagamento',tl.ultimo?atFmtBR(tl.ultimo):'—')}
+      ${jc?kpi('Janela liberada em',atFmtBR(jc.fim),jc.fechada?'transição concluída':'faltam '+jc.faltam+' dias'):''}
     </div>
     <div class="card" style="margin-top:10px">
-      <div style="font-size:12.5px;font-weight:600;margin-bottom:2px">Quanto entrou por mês</div>
-      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">mês atual e os 3 anteriores — mês zerado é mês em que ele segurou tudo</div>
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:10px">Valor pago em cada mês</div><!--SUBCL-TIT-->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px">
         ${porMes.map(m=>`<div style="border:1px solid var(--linha);border-radius:9px;padding:9px 10px${m.atual?';background:var(--azul-claro)':''}">
           <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${m.label}${m.atual?' · atual':''}</div>
@@ -7015,6 +7168,14 @@ function lpSelfCheck(){
       return !b || getComputedStyle(b).display==='none'; })());
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
+    /*SUBCL-INV*/
+    /* documento do cliente: nunca pode vazar dado de operação */
+    ok('documento: nome de arquivo sai limpo de acento e espaço',
+       subDocNomeArq('JOÃO DA SILVA','png')==='transicao-joao-da-silva.png');
+    ok('documento: cliente sem nome ainda gera arquivo', subDocNomeArq('','pdf')==='transicao-cliente.pdf');
+    ok('documento: o CSS não puxa nada de fora', !/https?:|@import|url\(/.test(subDocCss()));
+    ok('documento: sem cliente não gera corpo', subDocCorpo('nao-existe')==='');
+    ok('documento: os 6 blocos selecionáveis existem', SUB_DOC_BLOCOS.length===6&&SUB_DOC_BLOCOS.every(b=>b[0] in SUB_DOC.blocos));
     /*SUBFX-INV*/
     /* desembolso: a média é o que ENTROU dividido pelos meses corridos — e os
        juros do atraso (pago acima do prêmio) já estão dentro do total */
