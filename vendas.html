@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.12.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.12.2 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -792,7 +792,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.12.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.12.2 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -814,7 +814,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.12.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.12.2 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2747,6 +2747,53 @@ function subLimitesAntigas(cliRef,hoje){
   return subApsDe(cliRef).filter(a=>a.papel!=='gatilho')
     .map(a=>({numero:a.numero,iso:subISO(subLimiteDt(subEref(a)))}));
 }
+/*SUBFX-MOTOR*/
+/* ── O QUE O CLIENTE PAGA DE FATO ────────────────────────────────────────────
+   A transição só faz sentido pro cliente porque, enquanto ela corre, ele deixa
+   parcelas em aberto e paga outras — então o desembolso médio no período fica
+   BEM abaixo do custo nominal das antigas. Duas coisas que a conta precisa
+   respeitar pra não virar promessa: (a) meses EXATOS, não arredondados (140
+   dias são 4,7 meses, não 5 — arredondar pra cima diluía o total e mostrava uma
+   média menor do que a real); (b) o cliente paga JUROS no atraso, e esse valor
+   já vem embutido no que o espelho registra (parcela de 247,77 paga a 257,93).
+   Como a conta soma o valor PAGO, o juro já está lá dentro — o que faltava era
+   dizer isso na tela. Função pura: o self-check testa sem tocar no estado. */
+function subDesembolso(pagos,premioDe,inicioISO,hojeISO){
+  const total=(pagos||[]).reduce((s,p)=>s+(p.valor||0),0);
+  const juros=(pagos||[]).reduce((s,p)=>{ const pr=premioDe?premioDe(p):0; return s+Math.max(0,(p.valor||0)-(pr||0)); },0);
+  const dias=(inicioISO&&hojeISO)?Math.max(1,subDDiff(atParseISO(inicioISO),atParseISO(hojeISO))):30;
+  const meses=Math.max(1,dias/30);
+  return {total,juros,meses,mediaMes:(pagos&&pagos.length)?total/meses:null};
+}
+/* Os últimos N meses de pagamento (mês atual + N-1 anteriores). Mês sem
+   pagamento aparece zerado de propósito: é o mês em que ele segurou tudo, e é
+   isso que explica a média baixa. Pura. */
+const SUB_MESES_BR=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function subPagosPorMes(pagos,hojeISO,n){
+  n=n||4; const base=atParseISO(hojeISO); if(!base) return [];
+  const out=[];
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(base.getFullYear(),base.getMonth()-i,1);
+    const ym=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
+    const doMes=(pagos||[]).filter(p=>String(p.quando||'').slice(0,7)===ym);
+    out.push({ym,label:SUB_MESES_BR[d.getMonth()]+'/'+String(d.getFullYear()).slice(2),
+      total:doMes.reduce((s,p)=>s+(p.valor||0),0),qtd:doMes.length,atual:i===0});
+  }
+  return out;
+}
+/* De quando começa o fluxo: quem inicia a transição é o PAGAMENTO da nova, não
+   a emissão (e muito menos "3 meses antes da emissão", que trazia parcela de
+   antes da história). Sem pagamento da nova ainda, vale a emissão dela. */
+function subInicioFluxo(cliRef){
+  const g=subGatilho(cliRef);
+  if(g){
+    const pg=SUB.pagamentos.filter(p=>p.apo===g.ref&&p.status==='confirmado'&&!p.primeiro)
+      .map(p=>p.confirmado||p.venc).filter(Boolean).sort();
+    if(pg.length) return {iso:pg[0],fonte:'do 1º pagamento da nova'};
+    if(g.emissao) return {iso:g.emissao,fonte:'da emissão da nova (ainda sem pagamento nela)'};
+  }
+  return {iso:'0000-00-00',fonte:'todo o histórico registrado'};
+}
 /*SUBJAN-RECENTE*/ /* sem gatilho marcado, a candidata natural é a de emissão
    mais recente — a tela sugere, mas quem decide o papel é ele. */
 function subMaisRecente(cliRef){
@@ -2761,7 +2808,7 @@ function subCliDe(ref){ return SUB.clientes.find(c=>c.ref===ref); }
 function subTimeline(cliRef,hoje){
   hoje=hoje||atHojeLocal(); const hojeS=subISO(hoje);
   const aps=subApsDe(cliRef), j=subJanela(cliRef);
-  const start=j?subAddMonths(j.inicio,-3):'0000-00-00';
+  /*SUBFX-START*/ const ini=subInicioFluxo(cliRef), start=ini.iso;
   const rows=[];
   SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado').forEach(p=>{
     if(p.venc<start&&!p.primeiro) return;
@@ -2789,7 +2836,7 @@ function subTimeline(cliRef,hoje){
   let prev=null;
   rows.filter(r=>r.pago).slice().sort((x,y)=>x.pago.localeCompare(y.pago))
     .forEach(r=>{ r.intervalo=(prev!=null)?subDDiff(atParseISO(prev),atParseISO(r.pago)):null; prev=r.pago; });
-  return {rows,venc,ultimo,maiorIntervalo:Math.max(maxGap,emAberto),emAberto,start};
+  return {rows,venc,ultimo,maiorIntervalo:Math.max(maxGap,emAberto),emAberto,start,startFonte:ini.fonte};   /*SUBFX-FONTE*/
 }
 
 /* ═══ ESPELHO DA PRUDENTIAL (Detalhes da Apólice, texto colado) ═══════════════
@@ -2989,11 +3036,16 @@ function viewSubstCliente(cliRef){
   const prog=j?Math.max(0,Math.min(100,Math.round(subDDiff(atParseISO(j.inicio),hoje)/Math.max(1,subDDiff(atParseISO(j.inicio),atParseISO(j.fim)))*100))):0;
   const antigas=aps.filter(a=>a.papel==='proteger');
   const baseAntigas=antigas.reduce((s,a)=>s+(a.premio||0),0);
-  const conf=SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado'&&!p.primeiro);
-  const totalPago=conf.reduce((s,p)=>s+(p.valor||0),0);
-  const meses=j?Math.max(1,Math.round(subDDiff(atParseISO(j.inicio),hoje)/30)):1;
-  const pagoMes=conf.length?totalPago/meses:null;
+  /* SÓ o que foi pago DEPOIS que a nova saiu: a média divide pelos meses
+     contados da emissão, então pagamento anterior à transição no numerador
+     inflava o "paga de fato" e comia a economia que é real. */
+  const conf=SUB.pagamentos.filter(p=>aps.some(a=>a.ref===p.apo)&&p.status==='confirmado'&&!p.primeiro
+    &&(!j||String(p.confirmado||p.venc)>=j.inicio));   /*SUBFX-DEPOIS*/
+  /*SUBFX-CALC*/ const premioDoPag=p=>{ const a=aps.find(x=>x.ref===p.apo); return a?(a.premio||0):0; };
+  const des=subDesembolso(conf,premioDoPag,j?j.inicio:null,subISO(hoje));
+  const totalPago=des.total, meses=des.meses, pagoMes=des.mediaMes;
   const economia=pagoMes!==null?Math.max(0,baseAntigas*meses-totalPago):null;
+  const porMes=subPagosPorMes(conf.map(p=>({quando:p.confirmado||p.venc,valor:p.valor})),subISO(hoje),4);
   const tl=subTimeline(cliRef,hoje);
   /* KPIs zerados por AUSENCIA de dado leem como "cliente nunca pagou". Marcar
      isso muda a leitura da tela e diz o que fazer pra resolver. */
@@ -3080,7 +3132,7 @@ function viewSubstCliente(cliRef){
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <div style="display:flex;align-items:center;gap:10px"><div style="background:var(--azul-claro);color:var(--azul);font-weight:700;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center">${subIni(c.nome)}</div>
         <div><div style="font-weight:700;font-size:15px">${esc(atTitleC(c.nome))}</div><div style="font-size:12px;color:var(--muted)">${c.cpf?'CPF '+esc(c.cpf):''}${c.tel?' · '+esc(c.tel):''}</div></div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button>${/*SUBFX-BTN*/''}<button class="btn btn-s" onclick="subColarEspelho()" title="Cole o espelho de uma ou de várias apólices — cada uma é identificada pelo número">📋 Colar espelho</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
     <div class="card" style="margin-top:12px">
       ${/*SUBJAN-UI*/(()=>{
         if(!jc) return `<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700;color:var(--amar)">${subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho'}</span></div>
@@ -3098,7 +3150,7 @@ function viewSubstCliente(cliRef){
             <span style="white-space:nowrap">Hoje · ${atFmtBR(atHojeISO())} (${jc.corridos}d corridos)</span>
             <span style="white-space:nowrap;font-weight:600;color:var(--ink)">Liberado · ${atFmtBR(jc.fim)}</span></div>
           <div style="font-size:12px;color:var(--muted);margin-top:8px">Até <b>${atFmtBR(jc.fim)}</b> nenhuma das antigas pode ser alterada ou cancelada — é por isso que o fluxo de boletos segura os pagamentos até essa data passar.</div>
-          ${jc.risco?`<div style="margin-top:8px;font-size:12px;color:var(--verm);background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:7px 10px">⚠ A antiga <b>${esc(jc.risco.numero)}</b> cancela por falta de pagamento em <b>${atFmtBR(jc.risco.iso)}</b> — <b>${jc.risco.antes} dias ANTES</b> da liberação. Ela precisa de pagamento (ou boleto registrado) antes disso, senão a transição vira substituição.</div>`:''}`;
+          ${/*SUBFX-SEMRISCO*/''}`;   /* o risco continua marcado na régua e no card de cada antiga — a caixa repetia a mesma informação */
       })()}
       ${(!jc&&subGatilho(cliRef))?`<div style="margin-top:8px"><button class="btn btn-s" style="font-size:12px" onclick="subEditarApolice('${esc(subGatilho(cliRef).ref)}')">Informar emissão</button></div>`:''}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px">${cards}</div>
@@ -3106,17 +3158,28 @@ function viewSubstCliente(cliRef){
     <h2 class="sec" style="margin-top:18px;font-size:14px">Vantagem para o cliente <span style="font-weight:400;color:var(--muted);font-size:12px">— custo normal das antigas × o que paga de fato no fluxo</span></h2>
     <div class="kpis">
       ${kpi('Custo das antigas / mês',brl(baseAntigas))}
-      ${kpi('Paga de fato / mês',pagoMes!==null?brl(pagoMes):'—')}
+      ${kpi('Paga de fato / mês',pagoMes!==null?brl(pagoMes):'—',pagoMes!==null?('média de '+meses.toFixed(1).replace('.',',')+' meses de transição'):'')}
       ${kpi('Economia acumulada',economia!==null?brl(economia):'—','desde a emissão da nova')}
     </div>
+    ${/*SUBFX-VANT*/pagoMes!==null?`<div style="font-size:11.5px;color:var(--muted);margin-top:8px">A média divide <b>tudo que foi pago no período</b> (as antigas que ele foi segurando <b>e</b> a nova) pelos meses corridos desde a emissão — por isso fica bem abaixo do custo nominal: nos meses em que ele deixa parcela em aberto, não entra dinheiro nenhum na conta.${des.juros>0?` Já inclui <b>${brl(des.juros)}</b> de juros/multa de atraso pagos no período.`:' Juros de atraso, quando houver, entram automaticamente — o valor considerado é o que a seguradora registrou como pago.'}</div>`:''}
     <div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px">
       <div><div style="font-size:12.5px">🔒 Valor final após a transição</div><div style="font-size:11px;color:var(--muted)">formato definitivo do plano — você define ao fechar</div></div>
       <div style="display:flex;align-items:center;gap:10px"><span style="font-weight:700${c.final?'':';color:var(--muted)'}">${c.final?brl(c.final):'a definir'}</span><button class="btn btn-ghost" onclick="subDefinirFinal('${esc(cliRef)}')">${c.final?'Editar':'Definir'}</button></div></div>
-    <h2 class="sec" style="margin-top:18px;font-size:14px">Histórico e fluxo de pagamentos <span style="font-weight:400;color:var(--muted);font-size:12px">— ${j?('de '+atFmtBR(tl.start)+' (3 meses antes da nova) até hoje'):'todo o histórico registrado'}</span></h2>
+    <h2 class="sec" style="margin-top:18px;font-size:14px">Histórico e fluxo de pagamentos <span style="font-weight:400;color:var(--muted);font-size:12px">— ${/*SUBFX-TIT*/tl.start&&tl.start!=='0000-00-00'?('de '+atFmtBR(tl.start)+' ('+tl.startFonte+') até hoje'):tl.startFonte}</span></h2>
     <div class="kpis">
-      ${kpi('Último pagamento',tl.ultimo?atFmtBR(tl.ultimo):'—')}
-      ${kpi('Maior intervalo',tl.maiorIntervalo+' dias')}
+      ${/*SUBFX-KPIS*/kpi('Último pagamento',tl.ultimo?atFmtBR(tl.ultimo):'—')}
       ${kpi('Em aberto hoje',tl.emAberto+' dias',tl.emAberto>SUB_FMAX?'acima da faixa':'')}
+    </div>
+    <div class="card" style="margin-top:10px">
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:2px">Quanto entrou por mês</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px">mês atual e os 3 anteriores — mês zerado é mês em que ele segurou tudo</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:10px">
+        ${porMes.map(m=>`<div style="border:1px solid var(--linha);border-radius:9px;padding:9px 10px${m.atual?';background:var(--azul-claro)':''}">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em">${m.label}${m.atual?' · atual':''}</div>
+          <div style="font-size:16px;font-weight:700;color:${m.total>0?'var(--ink)':'var(--muted)'}">${m.total>0?brl(m.total):'—'}</div>
+          <div style="font-size:11px;color:var(--muted)">${m.qtd?m.qtd+' pagamento'+(m.qtd>1?'s':''):'nada pago'}</div>
+        </div>`).join('')}
+      </div>
     </div>
     ${semPagos?`<div class="card" style="margin-top:10px;border:1px solid #eddcc0;background:var(--amar-claro,#fff8e6)">
       <div style="font-size:12.5px;font-weight:600;color:var(--amar)">⚠ Ação necessária: nenhum pagamento vinculado às ${aps.length} apólice${aps.length>1?'s':''} deste cliente.</div>
@@ -6952,6 +7015,22 @@ function lpSelfCheck(){
       return !b || getComputedStyle(b).display==='none'; })());
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
+    /*SUBFX-INV*/
+    /* desembolso: a média é o que ENTROU dividido pelos meses corridos — e os
+       juros do atraso (pago acima do prêmio) já estão dentro do total */
+    const _pg=[{apo:'a',valor:247.77},{apo:'a',valor:257.93}];
+    const _des=subDesembolso(_pg,()=>247.77,'2026-03-30','2026-08-17');
+    ok('desembolso: soma o que foi pago', Math.abs(_des.total-505.70)<0.01);
+    ok('desembolso: juros = o que passou do prêmio', Math.abs(_des.juros-10.16)<0.01);
+    ok('desembolso: meses são exatos, não arredondados', Math.abs(_des.meses-140/30)<0.01);
+    ok('desembolso: sem pagamento não inventa média', subDesembolso([],()=>0,'2026-03-30','2026-08-17').mediaMes===null);
+    ok('desembolso: mês nenhum fechado ainda não divide por zero', subDesembolso(_pg,()=>0,'2026-08-17','2026-08-17').meses===1);
+    /* por mês: mês sem pagamento aparece zerado (é o mês em que ele segurou) */
+    const _pm=subPagosPorMes([{quando:'2026-08-07',valor:257.93},{quando:'2026-07-03',valor:247.77},{quando:'2026-05-18',valor:247.77}],'2026-08-17',4);
+    ok('por mês: devolve 4 meses (atual + 3)', _pm.length===4);
+    ok('por mês: o último é o mês atual', _pm[3].atual===true&&_pm[3].ym==='2026-08');
+    ok('por mês: soma só o que caiu naquele mês', Math.abs(_pm[3].total-257.93)<0.01);
+    ok('por mês: mês sem pagamento fica zerado', _pm[1].total===0&&_pm[1].qtd===0);
     /*SUBJAN-INV*/
     /* janela: linha do tempo da transição (180d corridos da emissão da nova) */
     const _jc=subJanelaCalc('2026-03-10','2026-05-09',[{numero:'A',iso:'2026-08-01'},{numero:'B',iso:'2026-09-20'}]);
