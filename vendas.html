@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.12.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.12.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -792,7 +792,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.12.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.12.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -814,7 +814,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.12.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.12.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2716,6 +2716,42 @@ function subGatilho(cliRef){ return subApsDe(cliRef).find(a=>a.papel==='gatilho'
 const SUB_JANELA_DIAS=180;
 function subJanela(cliRef){ const g=subGatilho(cliRef); if(!g||!g.emissao) return null;
   return {inicio:g.emissao, fim:subISO(subAddDays(atParseISO(g.emissao),SUB_JANELA_DIAS))}; }
+/*SUBJAN-CALC*/
+/* ── LINHA DO TEMPO DA JANELA ────────────────────────────────────────────────
+   A regra que manda na transição: por 180 dias corridos a partir da emissão da
+   NOVA, nenhuma das antigas pode ser alterada ou cancelada — senão a venda é
+   classificada como substituição. O rodízio de boletos existe pra segurar as
+   antigas VIVAS até essa data passar. Então o que a tela precisa responder é:
+   até quando eu tenho que segurar, e alguma antiga cancela antes disso?
+   Função pura (recebe datas, devolve números) — o self-check testa sem tocar
+   no estado real. */
+function subJanelaCalc(inicioISO,hojeISO,limites){
+  if(!inicioISO) return null;
+  const ini=atParseISO(inicioISO), hoje=atParseISO(hojeISO);
+  const fim=subISO(subAddDays(ini,SUB_JANELA_DIAS));
+  const corridos=subDDiff(ini,hoje), faltam=Math.max(0,subDDiff(hoje,atParseISO(fim)));
+  const pct=Math.max(0,Math.min(100,Math.round(corridos/SUB_JANELA_DIAS*100)));
+  const pos=iso=>{ if(!iso) return null; const d=subDDiff(ini,atParseISO(iso)); return Math.max(0,Math.min(100,d/SUB_JANELA_DIAS*100)); };
+  /* risco = antiga que estoura o limite de cancelamento ANTES da liberação */
+  let risco=null;
+  (limites||[]).forEach(l=>{
+    if(!l||!l.iso) return;
+    const antes=subDDiff(atParseISO(l.iso),atParseISO(fim));   // dias entre cancelar e liberar
+    if(antes>0&&(!risco||l.iso<risco.iso)) risco={iso:l.iso,numero:l.numero,antes};
+  });
+  return {inicio:inicioISO,fim,corridos,faltam,pct,futuro:corridos<0,fechada:faltam===0&&corridos>=SUB_JANELA_DIAS,
+          pos,risco,limites:(limites||[]).filter(l=>l&&l.iso).map(l=>({...l,pct:pos(l.iso)}))};
+}
+/* os limites de cancelamento de cada ANTIGA (a nova não corre esse risco) */
+function subLimitesAntigas(cliRef,hoje){
+  return subApsDe(cliRef).filter(a=>a.papel!=='gatilho')
+    .map(a=>({numero:a.numero,iso:subISO(subLimiteDt(subEref(a)))}));
+}
+/*SUBJAN-RECENTE*/ /* sem gatilho marcado, a candidata natural é a de emissão
+   mais recente — a tela sugere, mas quem decide o papel é ele. */
+function subMaisRecente(cliRef){
+  return subApsDe(cliRef).filter(a=>a.emissao).sort((x,y)=>y.emissao.localeCompare(x.emissao))[0]||null;
+}
 function subPiorFolego(cliRef,hoje){ const aps=subApsDe(cliRef); if(!aps.length) return SUB_LIMITE; return Math.min(...aps.map(a=>subFolego(subEref(a),hoje))); }
 function subPagsDe(apoRef){ return SUB.pagamentos.filter(p=>p.apo===apoRef); }
 function subNome2(a){ return a?((a.papel==='gatilho'?'Nova':'Antiga')+' '+a.numero):'—'; }
@@ -2812,12 +2848,21 @@ function subParsePags(t){
    Vale pro espelho (Impresso em) e pra lista de atraso (origem_relatorio). */
 function subDiffEspelho(txt){
   const blocos=subSplitEspelhos(txt), updates=[], naoCad=[];
+  /*SUBJAN-NAOCAD*/ /* Segurado/CPF aparecem no CABEÇALHO do documento, antes do
+     primeiro "Apólice:" — então do 2º bloco em diante o nome vinha vazio e a
+     apólice não tinha como virar cliente. O cabeçalho do texto inteiro é o
+     fallback (mesmo segurado, mesmo documento). */
+  const cab=subExtrai(txt)||{};
   blocos.forEach(b=>{
     const r=subExtrai(b.txt); if(!r||!r.numero) return;
+    ['nome','cpf','tel','email'].forEach(k=>{ if(!r[k]&&cab[k]) r[k]=cab[k]; });
     const a=SUB.apolices.find(x=>atNormApolice(x.numero)===atNormApolice(r.numero));
-    if(!a){ naoCad.push(r); return; }
+    if(!a){ r.novos=subParsePags(b.txt); naoCad.push(r); return; }
     const stale=!!(a.impresso&&r.impresso&&r.impresso<a.impresso);
     const ch=[];
+    /*SUBJAN-EMI*/ /* a emissão vinha sendo LIDA e descartada — e é ela que abre a
+       janela dos 180 dias. Sem isto, colar o espelho não acendia a contagem. */
+    if(r.emissao&&a.emissao!==r.emissao) ch.push(['emissao','Emissão',a.emissao,r.emissao]);
     if(r.premio!=null&&Math.abs((a.premio||0)-r.premio)>0.001) ch.push(['premio','Prêmio',a.premio,r.premio]);
     if(r.dia!=null&&a.dia!=r.dia) ch.push(['dia','Dia',a.dia,r.dia]);
     if(r.venc&&a.venc!==r.venc) ch.push(['venc','Venc. em aberto',a.venc,r.venc]);
@@ -2966,6 +3011,7 @@ function viewSubstCliente(cliRef){
      dias · faltam 473" com cara de número real — a janela simplesmente ainda
      não começou, e é isso que a tela deve dizer */
   const jFuturo=j&&jCorridos<0;
+  /*SUBJAN-JC*/ const jc=j?subJanelaCalc(j.inicio,subISO(hoje),subLimitesAntigas(cliRef,hoje)):null;
   const jTxt=!j?`<div style="font-size:11px;color:var(--amar);margin:-4px 0 8px">🗓️ Janela não iniciada — falta a data de emissão da nova</div>`
     :jFuturo?`<div style="font-size:11px;color:var(--amar);margin:-4px 0 8px">🗓️ Janela ainda não começou — a nova é emitida em ${atFmtBR(j.inicio)} (confira a data)</div>`
     :`<div style="font-size:11px;color:var(--muted);margin:-4px 0 8px">🗓️ Janela ${SUB_JANELA_DIAS}d · ${jCorridos}d corridos · faltam ${jFaltam}d (até ${atFmtBR(j.fim)})</div>`;
@@ -2988,7 +3034,14 @@ function viewSubstCliente(cliRef){
         <span style="font-weight:700;font-size:13.5px">${a.papel==='gatilho'?'Nova':'Antiga'} · ${esc(a.numero)}</span>
         <span style="display:flex;align-items:center;gap:6px">${badge}<button class="btn btn-ghost" style="font-size:11px;padding:2px 7px" title="Editar dados desta apólice" onclick="event.stopPropagation();subEditarApolice('${esc(a.ref)}')">✏️</button></span></div>
       <div style="font-size:11.5px;color:var(--muted);margin-bottom:8px">${a.lp?'LP '+esc(String(a.lp).split(' ')[0])+' · ':''}${a.dia?'vence dia '+a.dia+' · ':''}${esc(a.forma||'')}</div>
-      ${jTxt}
+      ${/*SUBJAN-CARD*/(()=>{
+        // a tarja da janela é do cliente, não de cada apólice: repetida em 4 cards virava ruído
+        if(a.papel==='gatilho'||!jc) return jTxt;
+        const lim=subISO(subLimiteDt(er)), antes=subDDiff(atParseISO(lim),atParseISO(jc.fim));
+        return antes>0
+          ? `<div style="font-size:11px;color:var(--verm);margin:-4px 0 8px">🗓️ cancela em ${atFmtBR(lim)} · ${antes}d antes da liberação — segurar</div>`
+          : `<div style="font-size:11px;color:var(--verde);margin:-4px 0 8px">🗓️ aguenta até ${atFmtBR(lim)} · depois da liberação (${atFmtBR(jc.fim)})</div>`;
+      })()}
       ${a.motivo?`<div title="${esc(atTitleC(a.motivo))}" style="font-size:11.5px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:6px;padding:4px 8px;margin-bottom:8px;cursor:help">⚠ Cobrança: ${esc(atMotivoUltimo(atTitleC(a.motivo)))}</div>`:''}
       ${kv('Prêmio',brl(a.premio))}
       ${kv('Emissão',a.emissao?atFmtBR(a.emissao):'—')}
@@ -3029,12 +3082,25 @@ function viewSubstCliente(cliRef){
         <div><div style="font-weight:700;font-size:15px">${esc(atTitleC(c.nome))}</div><div style="font-size:12px;color:var(--muted)">${c.cpf?'CPF '+esc(c.cpf):''}${c.tel?' · '+esc(c.tel):''}</div></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="subEditarCliente('${esc(cliRef)}')">Editar</button><button class="btn btn-s" onclick="subNovaApolice('${esc(cliRef)}')">＋ Apólice</button></div></div>
     <div class="card" style="margin-top:12px">
-      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700">${j?(jFuturo?('começa em '+atFmtBR(j.inicio)):(jCorridos+' de '+SUB_JANELA_DIAS+' dias · faltam '+jFaltam)):(subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho')}</span></div>
-      <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${prog}%;background:var(--azul)"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px"><span>Emissão nova · ${j?atFmtBR(j.inicio):'—'}</span><span>Hoje · ${atFmtBR(atHojeISO())}</span><span>Liberado · ${j?atFmtBR(j.fim):'—'}</span></div>
-      ${(!j&&subGatilho(cliRef))?`<div style="margin-top:8px;font-size:12px;color:var(--amar);background:var(--amar-claro,#fff8e6);border:1px solid #eddcc0;border-radius:8px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-        <span>A janela de ${SUB_JANELA_DIAS} dias conta da emissão da nova — e essa data não veio no relatório de atraso.</span>
-        <button class="btn btn-s" style="font-size:12px" onclick="subEditarApolice('${esc(subGatilho(cliRef).ref)}')">Informar emissão</button></div>`:''}</div>
+      ${/*SUBJAN-UI*/(()=>{
+        if(!jc) return `<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span style="color:var(--muted)">Janela de substituição</span><span style="font-weight:700;color:var(--amar)">${subGatilho(cliRef)?'falta a data de emissão da nova':'sem apólice gatilho'}</span></div>
+          <div style="font-size:12px;color:var(--muted)">Sem a emissão da nova não dá pra dizer até quando as antigas precisam ficar de pé. ${subMaisRecente(cliRef)?'A mais recente aqui é a <b>'+esc(subMaisRecente(cliRef).numero)+'</b>, emitida em '+atFmtBR(subMaisRecente(cliRef).emissao)+' — se for ela a nova, marque o papel na apólice.':'O espelho da apólice traz essa data: cole em 📋 Colar espelho.'}</div>`;
+        const marcos=jc.limites.map(l=>`<div title="Antiga ${esc(l.numero)} cancela em ${atFmtBR(l.iso)}" style="position:absolute;left:${l.pct}%;top:-3px;width:2px;height:13px;background:var(--verm);opacity:.85"></div>`).join('');
+        const hojePct=Math.max(0,Math.min(100,jc.pct));
+        return `<div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px">
+            <span style="color:var(--muted)">Janela de substituição · ${SUB_JANELA_DIAS} dias</span>
+            <span style="font-weight:700;color:${jc.fechada?'var(--verde)':'var(--ink)'}">${jc.futuro?('começa em '+atFmtBR(jc.inicio)):(jc.fechada?'liberado — transição concluída':'faltam '+jc.faltam+' dias')}</span></div>
+          <div style="position:relative;height:7px;background:var(--fundo);border-radius:99px;margin:9px 0 6px">
+            <div style="height:100%;width:${hojePct}%;background:${jc.fechada?'var(--verde)':'var(--azul)'};border-radius:99px"></div>${marcos}
+            <div style="position:absolute;left:${hojePct}%;top:-4px;width:3px;height:15px;background:var(--ink);border-radius:2px"></div></div>
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--muted)">
+            <span style="white-space:nowrap">Emissão da nova · ${atFmtBR(jc.inicio)}</span>
+            <span style="white-space:nowrap">Hoje · ${atFmtBR(atHojeISO())} (${jc.corridos}d corridos)</span>
+            <span style="white-space:nowrap;font-weight:600;color:var(--ink)">Liberado · ${atFmtBR(jc.fim)}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:8px">Até <b>${atFmtBR(jc.fim)}</b> nenhuma das antigas pode ser alterada ou cancelada — é por isso que o fluxo de boletos segura os pagamentos até essa data passar.</div>
+          ${jc.risco?`<div style="margin-top:8px;font-size:12px;color:var(--verm);background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:7px 10px">⚠ A antiga <b>${esc(jc.risco.numero)}</b> cancela por falta de pagamento em <b>${atFmtBR(jc.risco.iso)}</b> — <b>${jc.risco.antes} dias ANTES</b> da liberação. Ela precisa de pagamento (ou boleto registrado) antes disso, senão a transição vira substituição.</div>`:''}`;
+      })()}
+      ${(!jc&&subGatilho(cliRef))?`<div style="margin-top:8px"><button class="btn btn-s" style="font-size:12px" onclick="subEditarApolice('${esc(subGatilho(cliRef).ref)}')">Informar emissão</button></div>`:''}</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px">${cards}</div>
     ${tracker}
     <h2 class="sec" style="margin-top:18px;font-size:14px">Vantagem para o cliente <span style="font-weight:400;color:var(--muted);font-size:12px">— custo normal das antigas × o que paga de fato no fluxo</span></h2>
@@ -3380,9 +3446,9 @@ async function subConfirmarAtraso(){
 
 /* ═══ PREVIEW ÚNICO (as duas entradas confirmam pelo mesmo caminho) ══════════ */
 function subPreview(origem,updates,naoCad){
-  _subPend={origem,updates};
+  _subPend={origem,updates,naoCad:naoCad||[]};   /*SUBJAN-FMT*/ // naoCad passa a ser aplicável, não só listado
   const validos=updates.filter(u=>!u.stale), velhos=updates.filter(u=>u.stale);
-  const fmtV=(campo,v)=>campo==='premio'?brl(v):(campo==='venc'?atFmtBR(v):(v==null||v===''?'—':esc(String(v))));
+  const fmtV=(campo,v)=>campo==='premio'?brl(v):((campo==='venc'||campo==='emissao')?(v?atFmtBR(v):'—'):(v==null||v===''?'—':esc(String(v))));
   const blocos=updates.map(u=>{
     const c=subCliDe(u.apo.cli);
     return `<div style="border:1px solid var(--linha);border-radius:8px;padding:10px;margin-bottom:8px;font-size:12.5px${u.stale?';opacity:.5':''}">
@@ -3392,15 +3458,29 @@ function subPreview(origem,updates,naoCad){
       ${u.novos&&u.novos.length?`<div style="margin-top:5px;color:var(--verde)">＋ ${u.novos.length} pagamento(s) do histórico: ${u.novos.map(p=>atFmtBR(p.pago)+' '+brl(p.valor)).join(' · ')}</div>`:''}
     </div>`;
   }).join('');
-  const naoCadHtml=(naoCad&&naoCad.length)?`<div style="margin-top:10px;font-size:12px;color:var(--muted)">Não cadastradas (crie o cliente/apólice pra trazer): ${naoCad.map(r=>esc(r.numero||r)).join(', ')}</div>`:'';
+  /*SUBJAN-TRAZER*/ /* antes isto era um texto cinza "não cadastradas" e acabava
+     aí: quem tinha 4 apólices no espelho conseguia trazer 1. Agora é o mesmo
+     fluxo do Puxar da Lista de Atraso — marca, escolhe o papel e vem, com o
+     histórico de pagamentos daquele bloco junto. */
+  const naoCadHtml=(naoCad&&naoCad.length)?`
+    <div style="font-weight:600;font-size:12.5px;margin:12px 0 4px">Trazer pra cá</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">Apólices do espelho que ainda não estão no módulo. O cliente é criado só se não existir (casa por CPF e, sem CPF, pelo nome).</div>
+    ${naoCad.map((r,i)=>`<div style="border:1px solid var(--linha);border-radius:8px;padding:9px;margin-bottom:7px;font-size:12.5px">
+      <label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer">
+        <input type="checkbox" id="subesp_${i}" checked style="margin-top:3px">
+        <span><b>${esc(r.nome?atTitleC(r.nome):'(sem nome no documento)')}</b> · Apólice ${esc(r.numero)}${r.premio!=null?' · '+brl(r.premio):''}
+        <div style="font-size:11.5px;color:var(--muted)">${r.emissao?'emitida em '+atFmtBR(r.emissao):'sem data de emissão'}${r.venc?' · vence '+atFmtBR(r.venc):''}${(r.novos&&r.novos.length)?' · '+r.novos.length+' pagamento(s) no histórico':''}</div></span></label>
+      <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11.5px;color:var(--muted)">papel:</span>
+        <select id="subespp_${i}" style="font-size:12px"><option value="proteger">Antiga (proteger)</option><option value="gatilho">Nova (gatilho — abre a janela)</option></select></div></div>`).join('')}`:'';
   atModal(`<h3 style="margin:0 0 4px">Confira antes de aplicar</h3>
     <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">${validos.length} apólice(s) a atualizar${velhos.length?' · '+velhos.length+' ignorada(s) por serem de documento mais antigo':''}. Pagamentos já lançados não se repetem.</div>
     <div style="max-height:46vh;overflow:auto">${blocos}${naoCadHtml}</div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subConfirmarPreview()"${validos.length?'':' disabled'}>Aplicar ${validos.length}</button></div>`);
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button>${/*SUBJAN-BTN*/(naoCad&&naoCad.length>1)?`<button class="btn btn-s" onclick="subEspMarcarTodas()">Marcar todas</button>`:''}<button class="btn btn-p" onclick="subConfirmarPreview()"${(validos.length||(naoCad&&naoCad.length))?'':' disabled'}>Aplicar ${validos.length}</button></div>`);
 }
 async function subConfirmarPreview(){
   const p=_subPend; if(!p) return;
-  const aps=[], pags=[];
+  const aps=[], pags=[], clis=[];
   p.updates.filter(u=>!u.stale).forEach(u=>{
     u.ch.forEach(ch=>{ u.apo[ch[0]]=ch[3]; if(ch[0]==='venc') u.apo.vencFonte='oficial'; });   // documento da seguradora manda: zera o desvio acumulado do lançamento local
     if(u.rec.impresso) u.apo.impresso=u.rec.impresso;   // carimba a VERSÃO aplicada
@@ -3411,12 +3491,44 @@ async function subConfirmarPreview(){
       SUB.pagamentos.push(pg); pags.push(pg);
     });
   });
+  /*SUBJAN-CRIA*/ /* as que ainda não existiam: cliente (CPF > nome) + apólice +
+     o histórico de pagamentos daquele mesmo bloco do espelho. */
+  let nNovas=0;
+  (p.naoCad||[]).forEach((r,i)=>{
+    const cb=$('#subesp_'+i); if(!cb||!cb.checked) return;
+    const cpfD=subDigitos(r.cpf), nome=r.nome||'';
+    let c=cpfD?SUB.clientes.find(x=>subDigitos(x.cpf)===cpfD):null;
+    if(!c&&nome) c=SUB.clientes.find(x=>normKey(x.nome)===normKey(nome));
+    if(!c){
+      if(!nome){ return; }   // sem nome não dá pra abrir cliente — o documento não trouxe
+      c={ref:subRef(nome),nome,cpf:r.cpf||'',tel:r.tel||'',email:r.email||'',final:null};
+      SUB.clientes.push(c); clis.push(c);
+    }else if(!c.cpf&&r.cpf){ c.cpf=r.cpf; clis.push(c); }   // completa o cadastro que veio do relatório de atraso
+    const a={ref:subRef('a'),cli:c.ref,numero:atNormApolice(r.numero),
+      papel:(($('#subespp_'+i)||{}).value)||'proteger',
+      emissao:r.emissao||null,premio:r.premio!=null?Number(r.premio):0,
+      dia:r.dia!=null?Number(r.dia):null,
+      venc:r.venc||atHojeISO(),vencFonte:'oficial',
+      lp:'',forma:'',podePostergar:null,dataPostergada:null,
+      impresso:r.impresso||null,motivo:''};
+    SUB.apolices.push(a); aps.push(a); nNovas++;
+    (r.novos||[]).forEach(n=>{
+      const pg={ref:subRef('p'),apo:a.ref,venc:n.pago,valor:n.valor,status:'confirmado',
+        enviado:null,comprovante:null,confirmado:n.pago,primeiro:false,obs:'Importado do espelho'};
+      SUB.pagamentos.push(pg); pags.push(pg);
+    });
+  });
   atClose(); _subPend=null;
-  const ok=await subPush({apolices:aps,pagamentos:pags});
+  const ok=await subPush({clientes:clis,apolices:aps,pagamentos:pags});
   viewSubst();
-  toast(aps.length+' apólice(s) atualizada(s)'+(pags.length?' · '+pags.length+' pagamento(s)':'')+(ok?' · sincronizado':' · só neste aparelho'),true);
+  const partes=[];
+  if(aps.length-nNovas>0) partes.push((aps.length-nNovas)+' apólice(s) atualizada(s)');
+  if(nNovas) partes.push(nNovas+' apólice(s) trazida(s)');
+  if(clis.length) partes.push(clis.length+' cliente(s)');
+  if(pags.length) partes.push(pags.length+' pagamento(s)');
+  toast((partes.join(' · ')||'Nada aplicado')+(ok?' · sincronizado':' · só neste aparelho'),true);
 }
-
+function subEspMarcarTodas(){ const p=_subPend; if(!p) return; (p.naoCad||[]).forEach((_,i)=>{ const cb=$('#subesp_'+i); if(cb) cb.checked=true; }); }
 /* ═══ BACKUP: traz o controle antigo pra dentro do CRM ═══════════════════════ */
 function subImportarArquivo(inp){
   const f=inp.files&&inp.files[0]; if(!f) return;
@@ -6840,6 +6952,27 @@ function lpSelfCheck(){
       return !b || getComputedStyle(b).display==='none'; })());
     /* janela da substituição: 180 dias CORRIDOS, não 6 meses de calendário */
     ok('janela: 10/03 fecha em 06/09', subISO(subAddDays(atParseISO('2026-03-10'),SUB_JANELA_DIAS))==='2026-09-06');
+    /*SUBJAN-INV*/
+    /* janela: linha do tempo da transição (180d corridos da emissão da nova) */
+    const _jc=subJanelaCalc('2026-03-10','2026-05-09',[{numero:'A',iso:'2026-08-01'},{numero:'B',iso:'2026-09-20'}]);
+    ok('janela: fecha 180 dias corridos depois da emissão', _jc.fim==='2026-09-06');
+    ok('janela: conta os dias corridos até hoje', _jc.corridos===60);
+    ok('janela: faltam é o que sobra até a liberação', _jc.faltam===120);
+    ok('janela: a antiga que cancela ANTES da liberação vira risco', _jc.risco&&_jc.risco.numero==='A'&&_jc.risco.antes===36);
+    ok('janela: antiga que aguenta além da liberação não é risco',
+       subJanelaCalc('2026-03-10','2026-05-09',[{numero:'B',iso:'2026-09-20'}]).risco===null);
+    ok('janela: emissão no futuro não inventa progresso', subJanelaCalc('2026-12-01','2026-05-09',[]).futuro===true);
+    ok('janela: sem emissão não há linha do tempo', subJanelaCalc(null,'2026-05-09',[])===null);
+    ok('janela: marco fica dentro da régua (0–100%)',
+       _jc.limites.every(l=>l.pct>=0&&l.pct<=100));
+    /* espelho: o documento com VÁRIAS apólices tem que virar várias apólices */
+    const _esp='Segurado: FULANA DE TAL CPF: 031.788.184-13\nApólice: 001505343 Data da Emissão: 10/03/2026 Prêmio Total: 365,69\nApólice: 001680570 Data da Emissão: 04/02/2026 Prêmio Total: 247,77';
+    ok('espelho: separa uma apólice por bloco', subSplitEspelhos(_esp).length===2);
+    ok('espelho: cada bloco fica com o próprio número',
+       subSplitEspelhos(_esp).map(b=>b.numero).join()==='001505343,001680570');
+    ok('espelho: lê a data de emissão de cada apólice',
+       subExtrai(subSplitEspelhos(_esp)[1].txt).emissao==='2026-02-04');
+    ok('espelho: o cabeçalho do documento identifica o segurado', (subExtrai(_esp)||{}).cpf==='031.788.184-13');
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
