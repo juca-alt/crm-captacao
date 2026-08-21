@@ -224,6 +224,10 @@
   .timer{font-variant-numeric:tabular-nums;font-size:15px;font-weight:800;background:var(--timerbg);border:1px solid var(--line);
     padding:7px 13px;border-radius:10px;letter-spacing:.5px}
   .timer b{color:var(--ta)}
+  .timer.over{border-color:#e5484d}
+  .timer.over b{color:#e5484d}
+  .fdur{font:inherit;font-size:13px;font-weight:700;color:var(--mut);background:var(--timerbg);border:1px solid var(--line);border-radius:10px;padding:7px 9px;cursor:pointer}
+  .fdur:focus{outline:none;border-color:var(--ta)}
   .fcount{font-size:13px;color:var(--mut);font-weight:700}
   .fbody{flex:1;display:grid;place-items:center;padding:20px;overflow:auto}
   .fcard{width:100%;max-width:560px;background:var(--fcard);border:1px solid var(--fcardln);
@@ -571,7 +575,14 @@
     <div class="fcount" id="fCount"></div>
     <div class="prog"><i id="fProg"></i></div>
     <div class="grow"></div>
-    <div class="timer">Sessão <b id="fTimer">00:00</b></div>
+    <select id="fDur" class="fdur" onchange="setFocusDur(this.value)" title="Timer da sessão de foco">
+      <option value="0">⏱ Livre</option>
+      <option value="900">15 min</option>
+      <option value="1500">25 min</option>
+      <option value="2700">45 min</option>
+      <option value="3600">60 min</option>
+    </select>
+    <div class="timer" id="fTimerWrap"><span id="fTimerLbl">Sessão</span> <b id="fTimer">00:00</b></div>
   </div>
   <div class="fbody" id="fBody"></div>
   <div class="fnav" id="fNav">
@@ -606,7 +617,7 @@ const S = {
     com:"Oi {primeiro}! Aqui é o Gustavo Jucá 👋 {recomendante} comentou comigo sobre você e sugeriu que a gente se falasse. Faço um trabalho de planejamento de proteção financeira aqui em Recife e queria te apresentar rapidinho — você tem uns 15 min essa semana?",
     sem:"Oi {primeiro}! Aqui é o Gustavo Jucá 👋 Trabalho com planejamento de proteção financeira aqui em Recife e queria te apresentar uma ideia que pode fazer sentido pra você. Consegue uns 15 min essa semana pra gente conversar?"
   },
-  focus:{open:false, queue:[], idx:0, start:0, tick:null, results:{}, promoted:0}
+  focus:{open:false, queue:[], idx:0, start:0, tick:null, results:{}, promoted:0, dur:0, durAlert:false}
 };
 
 /* SMART LISTS — base filters */
@@ -1450,14 +1461,27 @@ function startFocus(startId){
   if(S.sel.size)q=q.filter(c=>S.sel.has(c.id));
   if(!q.length){toast("A lista está vazia — ajuste os filtros","err");return;}
   if(startId){const i=q.findIndex(c=>c.id===startId);if(i>0)q=q.slice(i).concat(q.slice(0,i));}
-  S.focus={open:true,queue:q,idx:0,start:Date.now(),tick:null,results:{},promoted:0};
+  let _dur=0; try{_dur=+localStorage.getItem("painel_focus_dur")||0;}catch(_){}
+  S.focus={open:true,queue:q,idx:0,start:Date.now(),tick:null,results:{},promoted:0,dur:_dur,durAlert:false};
   document.getElementById("focus").classList.remove("hide");
+  const _ds=document.getElementById("fDur"); if(_ds)_ds.value=String(_dur);
   S.focus.tick=setInterval(tickTimer,1000);tickTimer();
   renderFocus();
 }
-function tickTimer(){const s=Math.floor((Date.now()-S.focus.start)/1000);
-  const m=String(Math.floor(s/60)).padStart(2,"0"),ss=String(s%60).padStart(2,"0");
-  document.getElementById("fTimer").textContent=m+":"+ss;}
+/* Timer da sessão: "Livre" conta pra cima (como era); com duração escolhida, conta
+   regressivo e avisa no fim. A escolha fica salva por aparelho. */
+function tickTimer(){const F=S.focus; if(!F||!F.open)return;
+  const el=document.getElementById("fTimer"); if(!el)return;
+  const elapsed=Math.floor((Date.now()-F.start)/1000);
+  let secs, over=false;
+  if(F.dur>0){ secs=F.dur-elapsed; if(secs<=0){ secs=0; over=true; } } else { secs=elapsed; }
+  el.textContent=String(Math.floor(secs/60)).padStart(2,"0")+":"+String(secs%60).padStart(2,"0");
+  const wrap=document.getElementById("fTimerWrap"); if(wrap)wrap.classList.toggle("over",over);
+  const lbl=document.getElementById("fTimerLbl"); if(lbl)lbl.textContent=F.dur>0?(over?"Fim":"Resta"):"Sessão";
+  if(over&&!F.durAlert){ F.durAlert=true; toast("⏱️ Tempo esgotado — encerre a sessão quando quiser","err"); }
+}
+function setFocusDur(v){ v=+v||0; try{localStorage.setItem("painel_focus_dur",v);}catch(_){}
+  if(S.focus&&S.focus.open){ S.focus.dur=v; S.focus.start=Date.now(); S.focus.durAlert=false; tickTimer(); } }
 function exitFocus(){clearInterval(S.focus.tick);
   const worked=Object.keys(S.focus.results).length;
   if(worked&&S.live){sbInsertSitplan(worked,S.focus.promoted,"Sessão de foco pelo painel").catch(()=>{});}
