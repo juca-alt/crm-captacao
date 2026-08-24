@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.13.4 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.13.5 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -818,7 +818,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.13.4 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.13.5 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -840,7 +840,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.13.4 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.13.5 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3272,10 +3272,12 @@ function viewSubstCliente(cliRef){
     const ganho=postergada?subDDiff(atParseISO(a.venc),atParseISO(a.dataPostergada)):0;
     const badge=a.papel==='gatilho'?`<span class="badge b-azul">Nova (gatilho)</span>`
       :(ag?`<span class="badge b-azul">Boleto enviado</span>`:`<span class="badge ${subBadge(col)}">${at===0?'Em dia':(at<=SUB_FMAX?'Na faixa':'Proteger')}</span>`);
+    const pc=subPostec(a);
     let pstg;
     if(a.podePostergar===true&&a.dataPostergada) pstg=`<span class="badge b-roxo">Postergada p/ ${subFmtCurto(a.dataPostergada)}${ganho>0?' (+'+ganho+'d)':''}</span>`;
     else if(a.podePostergar===false) pstg=`<span style="color:var(--muted);font-size:12px">Não pode postergar</span>`;
-    else pstg=`<span style="color:var(--muted);font-size:12px">Postergação não avaliada</span>`;
+    else if(pc) pstg=`<span style="font-size:12px">${pc.pgto==='postecipado'?'🟢 <b>Postecipado</b>':'🔴 <b>Antecipado</b>'} · pos ${pc.pos}/16 · melhor dia <b>${pc.melhor}</b></span>`;
+    else pstg=`<span style="color:var(--muted);font-size:12px">Postergação — falta emissão/dia</span>`;
     const kv=(k,v,cor)=>`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px"><span style="color:var(--muted)">${k}</span><span style="font-weight:600${cor?';color:'+cor:''}">${v}</span></div>`;
     return `<div class="card" style="padding:14px 16px">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
@@ -3292,7 +3294,7 @@ function viewSubstCliente(cliRef){
         <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px"><span style="color:var(--muted)">Fôlego até cancelar (${SUB_LIMITE}d)</span><span style="font-weight:700;color:${subCorVar(col)}">${f<0?'vencido':f+' dias'}</span></div>
         <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${subCorVar(col)}"></div></div>
         <div style="font-size:11px;color:${col==='red'?subCorVar(col):'var(--muted)'};margin-top:3px">Limite: ${atFmtBR(subISO(subLimiteDt(er)))}</div></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">${pstg}<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="subPostergar('${esc(a.ref)}')">Postergação</button></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">${pstg}<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="subPostergar('${esc(a.ref)}')">${(pc&&a.podePostergar==null)?('Postergar → dia '+pc.melhor):'Postergação'}</button></div>
       <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-s" style="flex:1;font-size:12px" onclick="subBoleto('${esc(a.ref)}')">Registrar boleto</button><button class="btn btn-p" style="flex:1;font-size:12px" onclick="subPagarRapido('${esc(a.ref)}')">Marcar pago</button></div></div>`;
   }).join('');
 
@@ -3380,16 +3382,30 @@ function viewSubstCliente(cliRef){
 /* ═══ AÇÕES (modais reaproveitam o overlay do módulo de Atraso) ═══════════════ */
 function subApo(ref){ return SUB.apolices.find(a=>a.ref===ref); }
 function subPag(ref){ return SUB.pagamentos.find(p=>p.ref===ref); }
+/* Postecipação (regra Prudential): dia de venc dentro de 16 posições a partir da emissão = postecipado;
+   melhor dia = posição 16 (float máximo) = dia da emissão + 15. Valida com o Simulador oficial (emissão 29 -> dia 13). */
+function subPostec(a){
+  if(!a||!a.emissao) return null;
+  const em=atParseISO(a.emissao).getDate();
+  const dia=(a.dia!=null&&a.dia>=1&&a.dia<=31)?a.dia:(a.venc?atParseISO(a.venc).getDate():null);
+  if(dia==null) return null;
+  const off=(((dia-em)%31)+31)%31, pos=off+1, melhor=(((em+14)%31)+1);
+  return {dia,pos,melhor,pgto:pos<=16?'postecipado':'antecipado'};
+}
+/* próxima data (após `fromISO`) cujo dia-do-mês seja `dia` — respeita meses de 28/29/30/31 sozinho */
+function subProxData(fromISO,dia){ if(!fromISO) return ''; const d=atParseISO(fromISO); for(let i=0;i<62;i++){ d.setDate(d.getDate()+1); if(d.getDate()===dia) return subISO(d); } return ''; }
 
 function subPostergar(apoRef){
   const a=subApo(apoRef); if(!a) return; _subCtx=apoRef; _subPg=undefined;
+  const pc=subPostec(a); const sug=pc?subProxData(a.venc,pc.melhor):'';
   const bt=(v,l,on)=>`<button class="btn ${on?'btn-p':'btn-ghost'}" id="subpg_${v}" onclick="subSetPg(${v==='sim'?'true':v==='nao'?'false':'null'})" style="font-size:12.5px">${l}</button>`;
   atModal(`<h3 style="margin:0 0 4px">Postergação — ${esc(a.numero)}</h3>
-    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Informação que você pega com a assistente da Prudential.</div>
+    ${pc?`<div style="font-size:12px;background:var(--azul-claro);border:1px solid var(--linha);border-radius:8px;padding:8px 10px;margin-bottom:10px">${pc.pgto==='postecipado'?'🟢 Hoje <b>postecipado</b>':'🔴 Hoje <b>antecipado</b>'} · posição ${pc.pos}/16 · vence dia ${pc.dia}.<br>Melhor dia postecipado: <b>dia ${pc.melhor}</b>${sug?` (próximo em <b>${atFmtBR(sug)}</b>)`:''}.</div>`:''}
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Confirme com a assistente da Prudential se pode postergar.</div>
     <label style="font-size:12.5px;font-weight:600">Pode postergar?</label>
     <div style="display:flex;gap:6px;margin:6px 0 12px">${bt('sim','Pode',a.podePostergar===true)}${bt('nao','Não pode',a.podePostergar===false)}${bt('na','Não avaliei',a.podePostergar==null)}</div>
     <label style="font-size:12.5px;font-weight:600">Nova data de vencimento (se postergar)</label>
-    <input id="subpg_data" type="date" value="${a.dataPostergada||''}" style="width:100%;margin-top:5px">
+    <input id="subpg_data" type="date" value="${a.dataPostergada||sug||''}" style="width:100%;margin-top:5px">
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarPostergar()">Salvar</button></div>`);
 }
 function subSetPg(v){ _subPg=v; ['sim','nao','na'].forEach(k=>{ const el=document.getElementById('subpg_'+k); if(el){ el.className='btn btn-ghost'; } });
