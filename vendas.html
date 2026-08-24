@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.13.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.13.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -818,7 +818,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.13.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.13.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -840,7 +840,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.13.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.13.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3907,19 +3907,104 @@ function gcalBlocoHTML(){
   const evs=(GCAL.eventos||[]).slice().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date))));
   const hojeEv=evs.filter(e=>gcalDiaISO(e)===hoje), prox=evs.filter(e=>gcalDiaISO(e)>hoje);
   const linhaEv=e=>`<div class="tarlin"><span>📅</span>
-    <span class="tt"><b>${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''}
-      <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees?e.attendees.length+' convidado(s)':''))}</div></span>
+    <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalEditar('${esc(e.id)}')" title="Editar evento">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''}
+      <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees&&e.attendees.length?e.attendees.length+' convidado(s)':''))}</div></span>
     <span class="qd" style="background:transparent;padding:0">${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}</span>
-    <span class="ac"><a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener">abrir</a></span></div>`;
-  const lista=[...hojeEv,...prox.slice(0,12)];
+    <span class="ac">
+      <button class="btn btn-s btn-mini" onclick="gcalEditar('${esc(e.id)}')" title="Editar">✏️</button>
+      <button class="btn btn-s btn-mini" onclick="gcalAdiar('${esc(e.id)}',1)" title="Adiar 1 dia">+1d</button>
+      <button class="btn btn-s btn-mini" onclick="gcalAdiar('${esc(e.id)}',7)" title="Adiar 7 dias">+7d</button>
+      <button class="btn btn-s btn-mini" onclick="gcalExcluir('${esc(e.id)}')" title="Excluir">🗑️</button>
+      <a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener" title="Abrir no Google">↗</a>
+    </span></div>`;
+  const lista=[...hojeEv,...prox.slice(0,14)];
   return `<div class="tar-grp">📅 Sua Agenda Google
       <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${GCAL.carregando?'atualizando…':hojeEv.length+' hoje · próximos 7 dias'}</span>
-      <button class="btn btn-s btn-mini" style="margin-left:8px" onclick="gcalCarregar()" title="Atualizar">🔄</button>
+      <button class="btn btn-p btn-mini" style="margin-left:8px" onclick="gcalNovo()" title="Criar evento">＋ Novo evento</button>
+      <button class="btn btn-s btn-mini" onclick="gcalCarregar()" title="Atualizar">🔄</button>
       <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>
-    <div class="card" style="padding:6px 14px">${lista.length?lista.map(linhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. 🎉</div>'}</div>`;
+    <div class="card" style="padding:6px 14px">${lista.length?lista.map(linhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. Crie um em <b>＋ Novo evento</b>. 🎉</div>'}</div>`;
+}
+/* ── CRUD da Agenda Google (Fase 2): criar / editar / adiar / excluir pelo CRM ── */
+const GCAL_TZ='America/Recife';
+async function gcalApi(method,path,body,params){
+  const tok=await gcalToken(false).catch(()=>gcalToken(true));
+  const qs=Object.assign({},params||{}); const q=Object.keys(qs).map(k=>k+'='+encodeURIComponent(qs[k])).join('&');
+  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events'+path+(q?('?'+q):''),
+    {method,headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(!r.ok){ let m='HTTP '+r.status; try{ const j=await r.json(); if(j.error&&j.error.message) m=j.error.message; }catch(_){}; throw new Error(m); }
+  return method==='DELETE'? true : r.json();
+}
+function gcalEvPorId(id){ return (GCAL.eventos||[]).find(e=>e.id===id); }
+function gcalDT(ev,qual){ const o=ev&&ev[qual]; if(!o) return {d:'',t:''}; if(o.date) return {d:o.date,t:''}; const s=o.dateTime; return {d:s.slice(0,10),t:s.slice(11,16)}; }
+function gcalNovo(preNome,preDesc){
+  const d=hojeISO(); gcalModalEvento({novo:true,summary:preNome||'',description:preDesc||'',dia:d,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
+function gcalEditar(id){ const e=gcalEvPorId(id); if(!e){ toast('Evento não encontrado — atualize',false); return; }
+  const s=gcalDT(e,'start'), f=gcalDT(e,'end');
+  gcalModalEvento({id,summary:e.summary||'',description:e.description||'',dia:s.d,ini:s.t||'09:00',fim:f.t||'10:00',local:e.location||'',
+    convidado:(e.attendees&&e.attendees.map(a=>a.email).filter(x=>x).join(', '))||'',meet:!!e.hangoutLink,diaTodo:!s.t}); }
+function gcalModalEvento(m){
+  gcalFecharModal();
+  const ov=document.createElement('div'); ov.className='overlay aberto'; ov.id='ev-ov'; ov.style.zIndex='120'; ov.onclick=e=>{ if(e.target===ov) gcalFecharModal(); };
+  ov.innerHTML=`<div style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(520px,94vw);max-height:92vh;overflow:auto;background:var(--fundo);border-radius:16px;box-shadow:0 24px 60px rgba(16,30,54,.3);padding:20px 22px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <b style="font-size:17px">${m.id?'Editar evento':'Novo evento'}</b>
+      <span onclick="gcalFecharModal()" style="cursor:pointer;font-size:20px;color:var(--muted)">✕</span></div>
+    <label style="font-size:12px;font-weight:600">Título<input id="ev-tit" value="${esc(m.summary)}" placeholder="Ex.: OI com João" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin-top:10px">
+      <label style="font-size:12px;font-weight:600">Dia<input id="ev-dia" type="date" value="${esc(m.dia)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+      <label style="font-size:12px;font-weight:600">Início<input id="ev-ini" type="time" value="${esc(m.ini)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+      <label style="font-size:12px;font-weight:600">Fim<input id="ev-fim" type="time" value="${esc(m.fim)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+    </div>
+    <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Local<input id="ev-loc" value="${esc(m.local)}" placeholder="endereço, sala, ou vazio" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+    <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Convidado (e-mail do cliente)<input id="ev-conv" value="${esc(m.convidado)}" placeholder="cliente@email.com — recebe o convite" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+    <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Anotação<textarea id="ev-desc" rows="2" placeholder="detalhes do compromisso" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;resize:vertical">${esc(m.description)}</textarea></label>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer"><input type="checkbox" id="ev-meet" ${m.meet?'checked':''}> Criar link do Google Meet</label>
+    <div id="ev-err" style="color:var(--verm,#dc2626);font-size:12.5px;min-height:1em;margin-top:8px"></div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="gcalSalvar(${m.id?("'"+m.id+"'"):'null'})">${m.id?'Salvar alterações':'Criar evento'}</button>
+      <button class="btn btn-s" onclick="gcalFecharModal()">Cancelar</button>
+      ${m.id?`<span style="flex:1"></span><button class="btn btn-s" style="color:var(--verm,#dc2626)" onclick="gcalExcluir('${esc(m.id)}')">🗑️ Excluir</button>`:''}
+    </div></div>`;
+  document.body.appendChild(ov);
+  setTimeout(()=>{ const t=document.getElementById('ev-tit'); if(t)t.focus(); },50);
+}
+function gcalFecharModal(){ const o=document.getElementById('ev-ov'); if(o) o.remove(); }
+async function gcalSalvar(id){
+  const g=x=>{ const el=document.getElementById(x); return el?el.value.trim():''; };
+  const tit=g('ev-tit'), dia=g('ev-dia'), ini=g('ev-ini'), fim=g('ev-fim'), loc=g('ev-loc'), conv=g('ev-conv'), desc=g('ev-desc');
+  const meet=document.getElementById('ev-meet') && document.getElementById('ev-meet').checked;
+  const err=document.getElementById('ev-err'); const setErr=t=>{ if(err)err.textContent=t; };
+  if(!tit){ setErr('Dá um título ao evento.'); return; }
+  if(!dia){ setErr('Escolhe o dia.'); return; }
+  if(ini && fim && fim<=ini){ setErr('O fim tem que ser depois do início.'); return; }
+  const body={summary:tit, location:loc||undefined, description:desc||undefined,
+    start: ini? {dateTime:dia+'T'+ini+':00', timeZone:GCAL_TZ} : {date:dia},
+    end:   ini? {dateTime:dia+'T'+(fim||ini)+':00', timeZone:GCAL_TZ} : {date:dia} };
+  const emails=conv.split(/[,;\s]+/).filter(x=>/@/.test(x));
+  if(emails.length) body.attendees=emails.map(e=>({email:e}));
+  const params={sendUpdates:'all', conferenceDataVersion:1};
+  if(meet && !id){ body.conferenceData={createRequest:{requestId:'crm'+Date.now(), conferenceSolutionKey:{type:'hangoutsMeet'}}}; }
+  const btn=err&&err.parentElement&&err.parentElement.querySelector('.btn-p'); if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
+  try{
+    if(id) await gcalApi('PATCH','/'+encodeURIComponent(id),body,params);
+    else   await gcalApi('POST','',body,params);
+    gcalFecharModal(); toast(id?'Evento atualizado ✓':'Evento criado ✓ (convite enviado)',true); gcalCarregar();
+  }catch(e){ setErr('Não deu: '+(e.message||e)); if(btn){ btn.disabled=false; btn.textContent=id?'Salvar alterações':'Criar evento'; } }
+}
+async function gcalExcluir(id){
+  const e=gcalEvPorId(id); if(!confirm('Excluir "'+((e&&e.summary)||'este evento')+'" da sua Agenda Google?'+((e&&e.attendees&&e.attendees.length)?' Os convidados são avisados.':''))) return;
+  try{ await gcalApi('DELETE','/'+encodeURIComponent(id),null,{sendUpdates:'all'}); gcalFecharModal(); toast('Evento excluído',true); gcalCarregar(); }
+  catch(err){ toast('Não consegui excluir: '+(err.message||err),false); }
+}
+async function gcalAdiar(id,dias){
+  const e=gcalEvPorId(id); if(!e) return;
+  const shift=o=>{ if(!o) return o; if(o.date){ return {date:isoAddDias(o.date,dias)}; } const dt=new Date(o.dateTime); dt.setDate(dt.getDate()+dias); return {dateTime:dt.toISOString(), timeZone:o.timeZone||GCAL_TZ}; };
+  try{ await gcalApi('PATCH','/'+encodeURIComponent(id),{start:shift(e.start),end:shift(e.end)},{sendUpdates:'all'}); toast('Adiado '+dias+'d ✓',true); gcalCarregar(); }
+  catch(err){ toast('Não consegui adiar: '+(err.message||err),false); }
 }
 function viewAgenda(){
-  if(!GCAL.tentouSilencioso&&sb){ GCAL.tentouSilencioso=true; setTimeout(()=>gcalCarregar(false),60); } // tenta reaproveitar sessão Google já autorizada
+  if(!GCAL.tentouSilencioso&&sb){ GCAL.tentouSilencioso=true; gcalGisReady(()=>gcalCarregar(false)); } // reaproveita a sessão Google já autorizada (silencioso, após o SDK carregar)
   const itens=agendaItens(), h4=hojeISO();
   const grupos=[
     ['atrasada','⚠️ Atrasadas','o que venceu e continua em aberto'],
