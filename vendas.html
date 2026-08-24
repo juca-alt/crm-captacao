@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.13.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.13.2 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -818,7 +818,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.13.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.13.2 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -840,7 +840,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.13.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.13.2 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3865,7 +3865,30 @@ function revImprimir(){
    juca-alt.github.io; Calendar API já ativa). Fase 2 (próxima) = criar evento + Meet + convite. */
 const GCAL_CLIENT_ID="63708753663-92us3rgem9s1j6rapi86b8uerc5440fr.apps.googleusercontent.com";
 const GCAL_SCOPE="https://www.googleapis.com/auth/calendar";
-let GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:false,eventos:[],erro:null};
+let GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:false,eventos:[],erro:null,vista:'lista',recolhido:false};
+try{ const _u=JSON.parse(localStorage.getItem('crmlp_gcal_ui')||'{}'); if(_u.vista)GCAL.vista=_u.vista; if(typeof _u.recolhido==='boolean')GCAL.recolhido=_u.recolhido; }catch(_){}
+function gcalUiSalvar(){ try{ localStorage.setItem('crmlp_gcal_ui',JSON.stringify({vista:GCAL.vista,recolhido:GCAL.recolhido})); }catch(_){} }
+function gcalSetVista(v){ GCAL.vista=v; gcalUiSalvar(); if(VIEW==='agenda') viewAgenda(); }
+function gcalRecolher(){ GCAL.recolhido=!GCAL.recolhido; gcalUiSalvar(); if(VIEW==='agenda') viewAgenda(); }
+(function gcalCss(){ if(document.getElementById('gcal-css'))return; const s=document.createElement('style'); s.id='gcal-css'; s.textContent=`
+  .gcal-hd{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:16px 0 8px}
+  .gcal-hd .tit{font-weight:800;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--cinza,#5b6770)}
+  .gcal-hd .sub{color:var(--muted);font-weight:600;font-size:12px}
+  .gcal-seg{display:inline-flex;border:1px solid var(--linha);border-radius:8px;overflow:hidden}
+  .gcal-seg button{border:0;background:transparent;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
+  .gcal-seg button.on{background:var(--azul,#2563eb);color:#fff}
+  .gcal-wk{display:grid;grid-template-columns:repeat(7,minmax(126px,1fr));gap:8px;overflow-x:auto;padding-bottom:6px}
+  .gcal-day{background:var(--fundo,#fff);border:1px solid var(--linha);border-radius:10px;min-height:96px;display:flex;flex-direction:column}
+  .gcal-day.hoje{border-color:var(--azul,#2563eb);box-shadow:0 0 0 1px var(--azul,#2563eb) inset}
+  .gcal-day .dh{padding:6px 8px;border-bottom:1px solid var(--linha);font-size:11px;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:4px}
+  .gcal-day .dh .dn{color:var(--muted);text-transform:capitalize;font-weight:600}
+  .gcal-day .dh .add{cursor:pointer;color:var(--azul,#2563eb);font-weight:800;font-size:14px;line-height:1}
+  .gcal-day .evs{flex:1;display:flex;flex-direction:column;gap:4px;padding:6px}
+  .gcal-chip{background:var(--azul-claro,#eef4ff);border-left:3px solid var(--azul,#2563eb);border-radius:6px;padding:4px 6px;font-size:11.5px;cursor:pointer;line-height:1.25;overflow:hidden}
+  .gcal-chip .h{font-weight:700;color:var(--azul,#2563eb)}
+  .gcal-chip .s{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gcal-chip.allday{border-left-color:#8b5cf6;background:#f3ecff}
+  .gcal-day .vaziod{color:var(--muted);font-size:11px;padding:8px 6px;text-align:center}`; document.head.appendChild(s); })();
 let _gcalTC=null,_gcalPending=null;
 function gcalGisReady(cb){ if(window.google&&google.accounts&&google.accounts.oauth2){cb();return;}
   const ex=document.getElementById('gis-sdk'); if(ex){ ex.addEventListener('load',cb); return; }
@@ -3905,8 +3928,24 @@ function gcalBlocoHTML(){
   }
   const hoje=hojeISO();
   const evs=(GCAL.eventos||[]).slice().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date))));
-  const hojeEv=evs.filter(e=>gcalDiaISO(e)===hoje), prox=evs.filter(e=>gcalDiaISO(e)>hoje);
-  const linhaEv=e=>`<div class="tarlin"><span>📅</span>
+  const hojeEv=evs.filter(e=>gcalDiaISO(e)===hoje);
+  const seg=`<span class="gcal-seg"><button class="${GCAL.vista==='lista'?'on':''}" onclick="gcalSetVista('lista')">📋 Lista</button><button class="${GCAL.vista==='semana'?'on':''}" onclick="gcalSetVista('semana')">🗓️ Semana</button></span>`;
+  const header=`<div class="gcal-hd">
+      <button class="btn btn-s btn-mini" onclick="gcalRecolher()" title="${GCAL.recolhido?'Expandir':'Recolher'}">${GCAL.recolhido?'▸':'▾'}</button>
+      <span class="tit">📅 Sua Agenda Google</span>
+      <span class="sub">${GCAL.carregando?'atualizando…':hojeEv.length+' hoje'}</span>
+      <span style="flex:1"></span>
+      ${GCAL.recolhido?'':seg}
+      <button class="btn btn-p btn-mini" onclick="gcalNovo()" title="Criar evento">＋ Novo</button>
+      <button class="btn btn-s btn-mini" onclick="gcalCarregar()" title="Atualizar">🔄</button>
+      <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>`;
+  if(GCAL.recolhido) return header;
+  if(GCAL.vista==='semana') return header+gcalSemanaHTML(evs,hoje);
+  const prox=evs.filter(e=>gcalDiaISO(e)>hoje);
+  const lista=[...hojeEv,...prox.slice(0,14)];
+  return header+`<div class="card" style="padding:6px 14px">${lista.length?lista.map(gcalLinhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. Crie um em <b>＋ Novo</b>. 🎉</div>'}</div>`;
+}
+function gcalLinhaEv(e){ const hoje=hojeISO(); return `<div class="tarlin"><span>📅</span>
     <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalEditar('${esc(e.id)}')" title="Editar evento">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''}
       <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees&&e.attendees.length?e.attendees.length+' convidado(s)':''))}</div></span>
     <span class="qd" style="background:transparent;padding:0">${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}</span>
@@ -3916,15 +3955,17 @@ function gcalBlocoHTML(){
       <button class="btn btn-s btn-mini" onclick="gcalAdiar('${esc(e.id)}',7)" title="Adiar 7 dias">+7d</button>
       <button class="btn btn-s btn-mini" onclick="gcalExcluir('${esc(e.id)}')" title="Excluir">🗑️</button>
       <a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener" title="Abrir no Google">↗</a>
-    </span></div>`;
-  const lista=[...hojeEv,...prox.slice(0,14)];
-  return `<div class="tar-grp">📅 Sua Agenda Google
-      <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${GCAL.carregando?'atualizando…':hojeEv.length+' hoje · próximos 7 dias'}</span>
-      <button class="btn btn-p btn-mini" style="margin-left:8px" onclick="gcalNovo()" title="Criar evento">＋ Novo evento</button>
-      <button class="btn btn-s btn-mini" onclick="gcalCarregar()" title="Atualizar">🔄</button>
-      <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>
-    <div class="card" style="padding:6px 14px">${lista.length?lista.map(linhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. Crie um em <b>＋ Novo evento</b>. 🎉</div>'}</div>`;
+    </span></div>`; }
+function gcalSemanaHTML(evs,hoje){
+  const SEM=['dom','seg','ter','qua','qui','sex','sáb']; const dias=[]; for(let i=0;i<7;i++) dias.push(isoAddDias(hoje,i));
+  const chip=e=>{ const ad=e.start&&e.start.date&&!e.start.dateTime; return `<div class="gcal-chip${ad?' allday':''}" onclick="gcalEditar('${esc(e.id)}')" title="${esc(e.summary||'')}"><span class="h">${ad?'dia todo':gcalHora(e)}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
+  const col=dISO=>{ const p=dISO.split('-').map(Number); const dow=new Date(p[0],p[1]-1,p[2]).getDay();
+    const evD=evs.filter(e=>gcalDiaISO(e)===dISO);
+    return `<div class="gcal-day${dISO===hoje?' hoje':''}"><div class="dh"><span>${SEM[dow]} ${p[2]}<span class="dn">${dISO===hoje?' · hoje':''}</span></span><span class="add" onclick="gcalNovoDia('${dISO}')" title="Novo evento neste dia">＋</span></div>
+      <div class="evs">${evD.length?evD.map(chip).join(''):'<div class="vaziod">—</div>'}</div></div>`; };
+  return `<div class="gcal-wk">${dias.map(col).join('')}</div>`;
 }
+function gcalNovoDia(dia){ gcalModalEvento({novo:true,summary:'',description:'',dia:dia,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
 /* ── CRUD da Agenda Google (Fase 2): criar / editar / adiar / excluir pelo CRM ── */
 const GCAL_TZ='America/Recife';
 async function gcalApi(method,path,body,params){
