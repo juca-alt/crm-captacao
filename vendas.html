@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.12.8 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.13.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -818,7 +818,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.12.8 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.13.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -840,7 +840,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.12.8 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.13.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3859,7 +3859,67 @@ function revImprimir(){
    Uma agenda só para os dois funis: o que venceu, o que é de hoje e o que vem.
    Sem calendário próprio de propósito — a agenda dele é o Google, e cada linha
    leva pra lá com um clique. */
+/* ═══════════════ GOOGLE AGENDA no CRM (por LP) — Fase 1: conectar + ver eventos reais ═══════════════
+   Módulo por usuário: cada LP (Gustavo, Daniel...) conecta a SUA conta Google e vê a SUA agenda
+   aqui dentro, sem pular de tela. Reaproveita o client OAuth do ecossistema (mesmo domínio
+   juca-alt.github.io; Calendar API já ativa). Fase 2 (próxima) = criar evento + Meet + convite. */
+const GCAL_CLIENT_ID="63708753663-92us3rgem9s1j6rapi86b8uerc5440fr.apps.googleusercontent.com";
+const GCAL_SCOPE="https://www.googleapis.com/auth/calendar";
+let GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:false,eventos:[],erro:null};
+let _gcalTC=null,_gcalPending=null;
+function gcalGisReady(cb){ if(window.google&&google.accounts&&google.accounts.oauth2){cb();return;}
+  const ex=document.getElementById('gis-sdk'); if(ex){ ex.addEventListener('load',cb); return; }
+  const s=document.createElement('script'); s.id='gis-sdk'; s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=cb; document.head.appendChild(s); }
+function gcalToken(interactive){ return new Promise((res,rej)=>{
+  if(GCAL.tok&&Date.now()<GCAL.exp-60000) return res(GCAL.tok);
+  gcalGisReady(()=>{ try{
+    if(!_gcalTC){ _gcalTC=google.accounts.oauth2.initTokenClient({client_id:GCAL_CLIENT_ID,scope:GCAL_SCOPE,
+      callback:r=>{ if(r&&r.access_token){ GCAL.tok=r.access_token; GCAL.exp=Date.now()+(Number(r.expires_in||3600)*1000); GCAL.conectado=true; if(_gcalPending){_gcalPending.res(GCAL.tok);_gcalPending=null;} } else if(_gcalPending){_gcalPending.rej(new Error('sem token'));_gcalPending=null;} },
+      error_callback:e=>{ if(_gcalPending){_gcalPending.rej(e||new Error('oauth'));_gcalPending=null;} } }); }
+    _gcalPending={res,rej}; _gcalTC.requestAccessToken(interactive?{prompt:'consent'}:{prompt:''});
+  }catch(e){ rej(e); } }); }); }
+async function gcalCarregar(interactive){ if(GCAL.carregando) return; GCAL.carregando=true; if(interactive) GCAL.erro=null;
+  try{
+    const tok=await gcalToken(!!interactive);
+    const ini=new Date(); ini.setHours(0,0,0,0);
+    const fim=new Date(ini); fim.setDate(fim.getDate()+8);
+    const u='https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=50'
+      +'&timeMin='+encodeURIComponent(ini.toISOString())+'&timeMax='+encodeURIComponent(fim.toISOString());
+    const r=await fetch(u,{headers:{Authorization:'Bearer '+tok}}); if(!r.ok) throw new Error('HTTP '+r.status+(r.status===403?' — confira se a Google Calendar API está ativa':''));
+    const j=await r.json(); GCAL.eventos=(j.items||[]).filter(e=>e.status!=='cancelled'); GCAL.conectado=true; GCAL.erro=null;
+  }catch(e){ if(interactive){ GCAL.erro=String(e&&e.message||e||'erro'); } /* silencioso que falhou = só "não conectado", sem alarde */ GCAL.conectado=!!GCAL.tok; }
+  finally{ GCAL.carregando=false; if(VIEW==='agenda') viewAgenda(); }
+}
+function gcalConectar(){ gcalCarregar(true); }
+function gcalDesconectar(){ try{ if(GCAL.tok&&window.google&&google.accounts&&google.accounts.oauth2) google.accounts.oauth2.revoke(GCAL.tok,function(){}); }catch(e){} GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:true,eventos:[],erro:null}; if(VIEW==='agenda') viewAgenda(); toast('Google Agenda desconectado'); }
+function gcalDiaISO(ev){ const s=ev.start&&(ev.start.dateTime||ev.start.date); return s? s.slice(0,10):''; }
+function gcalHora(ev){ if(ev.start&&ev.start.date&&!ev.start.dateTime) return 'dia todo'; const s=ev.start&&ev.start.dateTime; if(!s) return ''; try{ return new Date(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return ''; } }
+function gcalBlocoHTML(){
+  if(!GCAL.conectado){
+    return `<div class="card" style="padding:14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:22px">📅</span>
+      <div style="flex:1;min-width:200px"><b>Sua Agenda Google no CRM</b>
+        <div style="font-size:12px;color:var(--muted)">Conecte a sua conta pra ver seus compromissos aqui — e, na próxima fase, criar evento com Google Meet + convite pro cliente sem sair do CRM.</div>
+        ${GCAL.erro?`<div style="font-size:11.5px;color:var(--verm,#dc2626);margin-top:5px">Não consegui conectar: ${esc(GCAL.erro)}</div>`:''}</div>
+      <button class="btn btn-p" onclick="gcalConectar()">🔗 Conectar Google Agenda</button></div>`;
+  }
+  const hoje=hojeISO();
+  const evs=(GCAL.eventos||[]).slice().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date))));
+  const hojeEv=evs.filter(e=>gcalDiaISO(e)===hoje), prox=evs.filter(e=>gcalDiaISO(e)>hoje);
+  const linhaEv=e=>`<div class="tarlin"><span>📅</span>
+    <span class="tt"><b>${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''}
+      <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees?e.attendees.length+' convidado(s)':''))}</div></span>
+    <span class="qd" style="background:transparent;padding:0">${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}</span>
+    <span class="ac"><a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener">abrir</a></span></div>`;
+  const lista=[...hojeEv,...prox.slice(0,12)];
+  return `<div class="tar-grp">📅 Sua Agenda Google
+      <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${GCAL.carregando?'atualizando…':hojeEv.length+' hoje · próximos 7 dias'}</span>
+      <button class="btn btn-s btn-mini" style="margin-left:8px" onclick="gcalCarregar()" title="Atualizar">🔄</button>
+      <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>
+    <div class="card" style="padding:6px 14px">${lista.length?lista.map(linhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. 🎉</div>'}</div>`;
+}
 function viewAgenda(){
+  if(!GCAL.tentouSilencioso&&sb){ GCAL.tentouSilencioso=true; setTimeout(()=>gcalCarregar(false),60); } // tenta reaproveitar sessão Google já autorizada
   const itens=agendaItens(), h4=hojeISO();
   const grupos=[
     ['atrasada','⚠️ Atrasadas','o que venceu e continua em aberto'],
@@ -3896,7 +3956,8 @@ function viewAgenda(){
   if(!itens.length) corpo=`<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
       Nenhuma atividade marcada ainda.<br><span style="font-size:12.5px">Abra um negócio no funil e marque a próxima — o card passa a mostrar o combinado.</span></div>`;
   $('#main').innerHTML=`<h1 class="pg">Agenda &amp; Tarefas</h1>
-    <div class="sub">O que está combinado com cada pessoa, dos dois funis. Cada linha abre a ficha, o WhatsApp ou o Google Agenda.</div>
+    <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
+    ${gcalBlocoHTML()}
     <div class="kpis" style="margin-bottom:12px">
       <div class="kpi"${cont.atrasadas?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Atrasadas</div><div class="num" style="font-size:19px">${cont.atrasadas}</div><div style="font-size:11px;color:var(--muted)">venceram e seguem abertas</div></div>
       <div class="kpi"><div class="lbl">Hoje</div><div class="num" style="font-size:19px">${cont.hoje}</div><div style="font-size:11px;color:var(--muted)">combinado para hoje</div></div>
