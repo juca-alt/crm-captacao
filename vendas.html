@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.13.7 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.14.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -793,6 +793,7 @@
     <button class="nav-grp modulo nav-grp-btn fechado" id="cfg-toggle" onclick="toggleGrp('cfg')"><span class="ic">⚙️</span><span class="lbl">Configurações</span><span class="caret" id="cfg-caret">▾</span></button>
     <div class="nav-grp-wrap fechado" id="cfg-group">
       <button class="nav-btn sub" data-view="metas" onclick="irPara('metas')"><span class="ic">🎯</span><span class="lbl">Metas</span></button>
+      <button class="nav-btn sub" data-view="config-funil" onclick="irPara('config-funil')"><span class="ic">🛠️</span><span class="lbl">Funil &amp; Etapas</span></button>
       <button class="nav-btn sub" onclick="abrirAjustesVisual()"><span class="ic">🎨</span><span class="lbl">Ajustes de visual</span></button>
       <button class="nav-btn sub so-celular" onclick="toggleMenu(false);bnavConfigurar()"><span class="ic">📱</span><span class="lbl">Barra inferior</span></button>
       <button class="nav-btn sub" data-view="lp-adm" id="nav-lpadm" style="display:none" onclick="irPara('lp-adm')"><span class="ic">🛡️</span><span class="lbl">Acessos (adm)</span></button>
@@ -818,7 +819,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.13.7 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.14.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -840,7 +841,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.13.7 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.14.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -867,17 +868,41 @@ const CHAVE='crmlp_v03_state'; // v03 (23/07): base zerada pro uso REAL — esta
    fluxo P/C → C2 → N (N = entrada da PROPOSTA/análise de saúde; depois vira apólice);
    FA = Formulário de Avaliação (rota paralela ao N p/ risco de saúde — não impacta indicador);
    encerramentos (Não / cancelamentos) ficam RECOLHIDOS no kanban pra não poluir. */
-const ETAPAS=['SitPlan','TA','OI/FF','P/C','C2','N','FA','EMISSÃO','DELIVERY','Não','Prop. Cancelada','Apól. Cancelada'];
-const ETAPAS_ENCERR=['Não','Prop. Cancelada','Apól. Cancelada'];
-const ETAPAS_FLUXO=ETAPAS.filter(e=>!ETAPAS_ENCERR.includes(e));
+/* ── FUNIL EDITÁVEL (motor) — FUNIL-CFG:MOTOR ──────────────────────────────
+   Fábrica IMUTÁVEL (id) + FUNIL_CFG (rótulo/cor/prob/ordem editáveis). Os arrays
+   que antes eram `const` viram `let` reconstruídos por rebuildFunilLp() a partir
+   da cfg. Modelo A: c.etapa guarda o ID DE FÁBRICA (nunca muda ao renomear); só o
+   rótulo exibido muda. Automação que compara c.etapa==='P/C' segue válida — nenhum
+   negócio fica num id apagado (excluir-com-destino move todos). Ver crm-lp-configuracoes-funil. */
+const FUNIL_FAB={
+  lp:[['SitPlan','cinza',5],['TA','azul',10],['OI/FF','amarelo',20],['P/C','roxo',35],['C2','azul',50],['N','amarelo',70],['FA','azul',85],['EMISSÃO','roxo',95],['DELIVERY','verde',100],['Não','verm',0,1],['Prop. Cancelada','verm',0,1],['Apól. Cancelada','verm',0,1]],
+  bc:[['Clientes Ativos','verde',5],['Pendência/Atraso','verm',10],['Contato Agenda/Revisita','amarelo',15],['Agendada Revisita','azul',30],['Novo Negócio/Resolução pós Revisita','roxo',50],['N/Emissão','amarelo',75],['Emissão Final','roxo',90],['Delivery','verde',100],['Venda ganha','verde',100,1],['Venda perdida','verm',0,1]]
+};
+const FUN_PAL=['cinza','azul','amarelo','roxo','verde','verm'];
+const FUN_BADGE={cinza:'b-cinza',azul:'b-azul',amarelo:'b-amarelo',roxo:'b-roxo',verde:'b-verde',verm:'b-verm'};
+const FUN_COR={cinza:'#5b6770',azul:'var(--azul)',amarelo:'var(--amarelo)',roxo:'var(--roxo)',verde:'var(--verde)',verm:'var(--verm)'};
+function funFabMat(){ const m={}; for(const f of ['lp','bc']) m[f]=FUNIL_FAB[f].map(x=>({id:x[0],label:x[0],cor:x[1],prob:x[2],enc:!!x[3]})); return m; }
+function funCfgValida(c){ return c&&Array.isArray(c.lp)&&Array.isArray(c.bc)&&c.lp.every(e=>e&&e.id)&&c.bc.every(e=>e&&e.id); }
+let FUNIL_CFG=funFabMat();
+try{ const _r=localStorage.getItem('crmlp_funil_cfg_v1'); if(_r){ const _c=JSON.parse(_r); if(funCfgValida(_c)) FUNIL_CFG=_c; } }catch(_){}
+let ETAPAS=[],ETAPAS_ENCERR=[],ETAPAS_FLUXO=[],ETAPAS_BC=[],ETAPAS_BC_ENCERR=[],ETAPAS_BC_FLUXO=[];
+let ET_LABEL={},ET_COR={},ET_BADGE={},PROB_ETAPA={};
+function rebuildFunilLp(){
+  ET_LABEL={};ET_COR={};ET_BADGE={};PROB_ETAPA={};
+  const build=f=>{ const arr=(FUNIL_CFG[f]||[]);
+    arr.forEach(e=>{ ET_LABEL[e.id]=e.label||e.id; ET_COR[e.id]=FUN_COR[e.cor]||FUN_COR.cinza; ET_BADGE[e.id]=FUN_BADGE[e.cor]||'b-cinza'; PROB_ETAPA[e.id]=(e.prob==null?10:e.prob); });
+    return {ids:arr.map(e=>e.id), enc:arr.filter(e=>e.enc).map(e=>e.id)}; };
+  const L=build('lp'), B=build('bc');
+  ETAPAS=L.ids; ETAPAS_ENCERR=L.enc; ETAPAS_FLUXO=ETAPAS.filter(e=>!ETAPAS_ENCERR.includes(e));
+  ETAPAS_BC=B.ids; ETAPAS_BC_ENCERR=B.enc; ETAPAS_BC_FLUXO=ETAPAS_BC.filter(e=>!ETAPAS_BC_ENCERR.includes(e));
+}
+rebuildFunilLp();
 /* Funil Negócios BASE DE CLIENTES — espelho do funil "CLIENTES CARTEIRA" do Kommo
    (conta jucasegurocomjucacom, pipeline 12543239, capturado 23/07/2026).
    Fica de fora a "Etapa de leads de entrada" (etapa de sistema do Kommo); nomes
    saneados: "Pendência/Atrasot" → Pendência/Atraso, "Delivery.1" → Delivery.
    Contato com funil:'bc' vive SÓ neste funil (não entra em SitPlan/KPIs de NN). */
-const ETAPAS_BC=['Clientes Ativos','Pendência/Atraso','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Delivery','Venda ganha','Venda perdida'];
-const ETAPAS_BC_ENCERR=['Venda ganha','Venda perdida'];
-const ETAPAS_BC_FLUXO=ETAPAS_BC.filter(e=>!ETAPAS_BC_ENCERR.includes(e));
+/* ETAPAS_BC/_ENCERR/_FLUXO agora vêm de rebuildFunilLp() (funil editável). */
 const TA_STATUS=['—','Não respondeu','Retornar contato','Sucesso','Declinado'];
 
 /* Resultado de contato (SitPlan/TA) — 1 dropdown, 3 efeitos: loga a tentativa,
@@ -1178,11 +1203,7 @@ function diaSemanaBR(iso){ const p=String(iso).split('-').map(Number); return ['
 function waHref(tel){ const d=String(tel||'').replace(/\D/g,''); return d? 'https://wa.me/'+(d.length<=11?'55':'')+d : ''; }
 function uid(){ return 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function interacoesDe(c){ if(!Array.isArray(c.interacoes)) c.interacoes=[]; return c.interacoes; }
-function badgeEtapa(e){
-  const m={'SitPlan':'b-cinza','TA':'b-azul','OI/FF':'b-amarelo','P/C':'b-roxo','C2':'b-azul','N':'b-amarelo','FA':'b-azul','EMISSÃO':'b-roxo','DELIVERY':'b-verde','Não':'b-verm','Prop. Cancelada':'b-verm','Apól. Cancelada':'b-verm',
-    'Clientes Ativos':'b-verde','Pendência/Atraso':'b-verm','Contato Agenda/Revisita':'b-amarelo','Agendada Revisita':'b-azul','Novo Negócio/Resolução pós Revisita':'b-roxo','N/Emissão':'b-amarelo','Emissão Final':'b-roxo','Delivery':'b-verde','Venda ganha':'b-verde','Venda perdida':'b-verm'};
-  return `<span class="badge ${m[e]||'b-cinza'}">${e}</span>`;
-}
+function badgeEtapa(e){ return `<span class="badge ${ET_BADGE[e]||'b-cinza'}">${esc(ET_LABEL[e]||e)}</span>`; }
 function toast(msg,ok){ const t=document.createElement('div'); t.className='toast'+(ok?' ok':''); t.textContent=msg; $('#toasts').appendChild(t); setTimeout(()=>t.remove(),2600); }
 
 /* ═══════════════════ PERFIL ═══════════════════ */
@@ -1352,17 +1373,16 @@ function toggleGrp(key){
   // abrir o grupo da base já navega pro Estoque — mesmo destino do card do Início
   if(key==='sp'&&!fechado&&!String(VIEW).startsWith('bn-')&&VIEW!=='sitplan') irPara('bn-estoque');
 }
-function etapaVar(e){ return {'SitPlan':'#5b6770','TA':'var(--azul)','OI/FF':'var(--amarelo)','P/C':'var(--roxo)','C2':'var(--azul)','N':'var(--amarelo)','FA':'var(--azul)','EMISSÃO':'var(--roxo)','DELIVERY':'var(--verde)','Não':'var(--verm)','Prop. Cancelada':'var(--verm)','Apól. Cancelada':'var(--verm)',
-  'Clientes Ativos':'var(--verde)','Pendência/Atraso':'var(--verm)','Contato Agenda/Revisita':'var(--amarelo)','Agendada Revisita':'var(--azul)','Novo Negócio/Resolução pós Revisita':'var(--roxo)','N/Emissão':'var(--amarelo)','Emissão Final':'var(--roxo)','Delivery':'var(--verde)','Venda ganha':'var(--verde)','Venda perdida':'var(--verm)'}[e]||'#5b6770'; }
+function etapaVar(e){ return ET_COR[e]||'#5b6770'; }
 function renderNnEtapas(){
   const el=document.getElementById('nn-etapas'); if(!el) return;
   const por=contagens(meusContatos());
-  el.innerHTML=ETAPAS.map(e=>`<button class="nav-btn sub sub2" onclick="nnGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
+  el.innerHTML=ETAPAS.map(e=>`<button class="nav-btn sub sub2" onclick="nnGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(ET_LABEL[e]||e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
 }
 function renderBcEtapas(){
   const el=document.getElementById('bc-etapas'); if(!el) return;
   const por=contagens(meusContatosBC(),ETAPAS_BC);
-  el.innerHTML=ETAPAS_BC.map(e=>`<button class="nav-btn sub sub2" onclick="bcGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
+  el.innerHTML=ETAPAS_BC.map(e=>`<button class="nav-btn sub sub2" onclick="bcGoEtapa('${esc(e)}')"><span class="ic" style="font-size:8px;color:${etapaVar(e)}">●</span><span class="lbl">${esc(ET_LABEL[e]||e)}</span><span class="cnt">${por[e]||''}</span></button>`).join('');
 }
 let NN_MODE='kanban', NN_FOCUS='', NN_ENC=false; // NN_ENC = grupo Encerramentos aberto no kanban
 /* ── Ordenação dos cards dentro da coluna (vale pros dois funis) ──
@@ -1411,12 +1431,7 @@ function entradaFunil(c){
    sem ele tocar em 800 negócios) e cada negócio aceita override manual — que
    sempre ganha, inclusive quando a etapa muda depois. Encerrado é 0, entregue
    é 100: esses dois não são chute. */
-const PROB_ETAPA={
-  'SitPlan':5,'TA':10,'OI/FF':20,'P/C':35,'C2':50,'N':70,'FA':85,'EMISSÃO':95,'DELIVERY':100,
-  'Não':0,'Prop. Cancelada':0,'Apól. Cancelada':0,
-  'Clientes Ativos':5,'Pendência/Atraso':10,'Contato Agenda/Revisita':15,'Agendada Revisita':30,
-  'Novo Negócio/Resolução pós Revisita':50,'N/Emissão':75,'Emissão Final':90,'Delivery':100,
-  'Venda ganha':100,'Venda perdida':0};
+/* PROB_ETAPA agora vem de rebuildFunilLp() (funil editável). */
 const PROB_OPTS=[0,10,25,50,75,90,100];
 function probEtapa(c){ const v=PROB_ETAPA[c&&c.etapa]; return v==null?10:v; }
 function probManual(c){ const n=Number(c&&c.prob); return (c&&c.prob!=null&&isFinite(n))?Math.max(0,Math.min(100,n)):null; }
@@ -1745,7 +1760,7 @@ function viewNnFunil(){
   const colDe=e=>{
     const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
-      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
+      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
       ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:''}
       ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
@@ -1836,7 +1851,7 @@ function viewBcFunil(){
   const colDe=e=>{
     const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
-      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(e)}</span><span class="qt">${cs.length}</span></div>
+      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
       ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:''}
       ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
@@ -2113,7 +2128,7 @@ function ctCelHtml(c,k){
 /* spec do sheet de filtros dos Contatos (celular) */
 fxSheetReg('ct',()=>({titulo:'Filtros dos Contatos',
   grupos:[
-    {k:'etapa',t:'Etapa',opts:ETAPAS.map(e=>({v:e,l:e}))},
+    {k:'etapa',t:'Etapa',opts:ETAPAS.map(e=>({v:e,l:ET_LABEL[e]||e}))},
     {k:'temp',t:'Temperatura',opts:tempKeys().map(k=>({v:k,l:tempEmoji(k)+' '+(tempDic()[k].label||k)})).concat([{v:'sem',l:'○ sem temp.'}])},
     {k:'estrelas',t:'Classificação (ANCE)',opts:[0,1,2,3,4,5].map(n=>({v:String(n),l:n+'★'}))},
     {k:'tastatus',t:'Status de TA',opts:ctTaStatus().map(s=>({v:s,l:s}))},
@@ -2131,7 +2146,7 @@ function viewContatos(){
     <div class="toolbar" style="flex-wrap:wrap">
       <input type="search" placeholder="Buscar nome, telefone ou profissão…" value="${esc(FILTRO.busca)}" oninput="FILTRO.busca=this.value;viewContatos()">
       <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('ct')">🎛️ Filtros${ctFiltrosAtivos()?' ('+ctFiltrosAtivos()+')':''}</button>
-      ${fxMultiHtml('ct','etapa','Etapas',ETAPAS.map(e=>({v:e,l:e})))}
+      ${fxMultiHtml('ct','etapa','Etapas',ETAPAS.map(e=>({v:e,l:ET_LABEL[e]||e})))}
       ${fxMultiHtml('ct','temp','Temperatura',tempKeys().map(k=>({v:k,l:tempEmoji(k)+' '+(tempDic()[k].label||k)})).concat([{v:'sem',l:'○ sem temp.'}]))}
       ${fxMultiHtml('ct','estrelas','Classificação',[0,1,2,3,4,5].map(n=>({v:String(n),l:n+'★'})))}
       ${fxMultiHtml('ct','origem','Origem',ctOrigens().map(o=>({v:o,l:o})))}
@@ -2234,7 +2249,7 @@ function renderDrawer(){
           ${etapasDe(c).map((e,i)=>{
             const atualIdx=etapasDe(c).indexOf(c.etapa);
             const cls=e===c.etapa?'atual':(i<atualIdx?'feita':'');
-            return `<button class="step ${cls}" onclick="mudarEtapa('${e}')">${e}</button>`;
+            return `<button class="step ${cls}" onclick="mudarEtapa('${e}')">${esc(ET_LABEL[e]||e)}</button>`;
           }).join('')}
         </div>
         <div style="font-size:11px;color:var(--muted);margin-top:8px">Clique pra mover. Nada muda sozinho — toda alteração é sua e fica registrada na hora.</div>
@@ -5642,10 +5657,11 @@ function dicCacheLer(){ try{ const r=localStorage.getItem('crmlp_dic_v1'); if(r)
 async function dicCarregar(){
   if(!sb) return; try{
     const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return;
-    const {data,error}=await sb.from('app_settings').select('chave,valor').in('chave',['dicionario_civil_cod','dicionario_temperatura']);
+    const {data,error}=await sb.from('app_settings').select('chave,valor').in('chave',['dicionario_civil_cod','dicionario_temperatura','lp_funil_cfg']);
     if(error) throw error;
     (data||[]).forEach(r=>{ const v=typeof r.valor==='string'?JSON.parse(r.valor):r.valor;
-      if(r.chave==='dicionario_civil_cod') DIC.civil=v; else if(r.chave==='dicionario_temperatura') DIC.temp=v; });
+      if(r.chave==='dicionario_civil_cod') DIC.civil=v; else if(r.chave==='dicionario_temperatura') DIC.temp=v;
+      else if(r.chave==='lp_funil_cfg'){ if(typeof funCfgValida==='function'&&funCfgValida(v)){ FUNIL_CFG=v; try{localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(v));}catch(_){}; rebuildFunilLp(); if(typeof VIEW!=='undefined'&&(VIEW==='config-funil'||VIEW==='nn-funil'||VIEW==='bc-funil')) render(); } } });
     localStorage.setItem('crmlp_dic_v1',JSON.stringify(DIC));
   }catch(e){ console.warn('dicionarios: app_settings indisponível → cache local',e); }
 }
@@ -6979,7 +6995,7 @@ function render(){
     if(BO.includes(VIEW)){ abrir(['outros-toggle','outros-group'],'outros-caret'); abrir(['bo-toggle','bo-group'],'bo-caret'); }
     else if(VIEW==='nn-funil'||VIEW==='bc-funil') abrir(['pipe-toggle','pipe-group'],'pipe-caret');
     else if(VIEW==='revisao'||VIEW==='principios') abrir(['outros-toggle','outros-group'],'outros-caret');
-    else if(VIEW==='metas'||VIEW==='lp-adm') abrir(['cfg-toggle','cfg-group'],'cfg-caret'); }
+    else if(VIEW==='metas'||VIEW==='lp-adm'||VIEW==='config-funil') abrir(['cfg-toggle','cfg-group'],'cfg-caret'); }
   { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length; cbo.textContent=n||''; } }
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
     const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
@@ -6990,6 +7006,7 @@ function render(){
   if(VIEW==='inicio') viewInicio();
   else if(VIEW==='sitplan') viewSitplan();
   else if(VIEW==='metas') viewMetas();
+  else if(VIEW==='config-funil') viewFunilCfg();
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
   else if(VIEW==='cart-oportunidades') viewCartOportunidades();
@@ -7162,6 +7179,188 @@ if(!localStorage.getItem('crmlp_homolog_off')){ const bh=document.getElementById
    Cada invariante aqui nasceu de um bug que passou no teste feliz. Roda em
    ~1ms, só reclama no console e nunca derruba a tela — a graça é o erro
    aparecer no dia em que alguém reintroduzir a regra quebrada. */
+/* ═══════════════ FUNIL EDITÁVEL — TELA + PERSISTÊNCIA — FUNIL-CFG:TELA ═══════════════ */
+let FUN_edit='lp';
+function funNeg(id){ return (S.contatos||[]).filter(c=>c.etapa===id).length; }
+function funCfgSalvar(){
+  try{ localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); }catch(_){}
+  try{ if(sb&&typeof logado==='function'&&logado()) sb.from('app_settings').upsert({chave:'lp_funil_cfg',valor:FUNIL_CFG},{onConflict:'chave'}).then(({error})=>{ if(error) console.warn('funil cfg: app_settings',error); }); }catch(e){ console.warn('funil cfg salvar remoto',e); }
+}
+function funApply(){ rebuildFunilLp(); funCfgSalvar(); }
+function funEditado(f,i){ const e=FUNIL_CFG[f][i], fab=(FUNIL_FAB[f]||[])[i];
+  if(!fab) return true; if(fab[0]!==e.id) return true;
+  return e.label!==e.id || e.cor!==fab[1] || (e.prob||0)!==(fab[2]||0) || (!!e.enc)!==(!!fab[3]); }
+
+function viewFunilCfg(){
+  $('#main').innerHTML=`
+  <style>
+    .fc-wrap{max-width:1120px}
+    .fc-callout{display:flex;gap:11px;align-items:flex-start;background:var(--azul-claro);border:1px solid var(--azul-borda);border-radius:10px;padding:10px 13px;margin:2px 0 16px}
+    .fc-callout p{margin:0;font-size:12.5px;color:var(--ink)}
+    .fc-idchip{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);background:#fff;border:1px solid var(--linha);border-radius:6px;padding:1px 6px}
+    .fc-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+    .fc-tab{border:1px solid var(--linha);background:#fff;color:var(--muted);font:inherit;font-weight:650;font-size:13px;padding:8px 14px;border-radius:999px;cursor:pointer;display:flex;align-items:center;gap:7px}
+    .fc-tab[aria-selected="true"]{background:var(--azul-claro);border-color:var(--azul-borda);color:var(--azul)}
+    .fc-tab .n{font-family:ui-monospace,Menlo,monospace;font-size:11px;opacity:.75}
+    .fc-grid{display:grid;grid-template-columns:1.12fr .88fr;gap:16px;align-items:start}
+    .fc-grid>*{min-width:0}
+    @media(max-width:900px){.fc-grid{grid-template-columns:1fr}}
+    .fc-panel{background:#fff;border:1px solid var(--linha);border-radius:12px;overflow:hidden}
+    .fc-ph{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;border-bottom:1px solid var(--linha);background:#f8fafc}
+    .fc-ph h3{margin:0;font-size:11.5px;font-weight:750;letter-spacing:.05em;text-transform:uppercase;color:var(--cinza)}
+    .fc-ph .hint{font-size:11px;color:var(--muted)}
+    .fc-pb{padding:13px 14px}
+    .fc-rows{display:flex;flex-direction:column;gap:9px}
+    .fc-row{border:1px solid var(--linha);border-radius:9px;background:#f8fafc;padding:9px 10px;display:grid;grid-template-columns:auto 1fr auto;gap:9px;align-items:center}
+    .fc-row.enc{background:repeating-linear-gradient(135deg,#f1f5f9,#f1f5f9 8px,#f8fafc 8px,#f8fafc 16px)}
+    .fc-row.ed{border-left:3px solid var(--amarelo)}
+    .fc-k{display:flex;flex-direction:column;gap:2px}
+    .fc-arrow{width:23px;height:18px;border:1px solid var(--linha);background:#fff;border-radius:5px;cursor:pointer;color:var(--muted);font-size:10px;line-height:1;padding:0}
+    .fc-arrow:hover:not(:disabled){border-color:var(--azul);color:var(--azul)}
+    .fc-arrow:disabled{opacity:.3;cursor:default}
+    .fc-mid{min-width:0;display:flex;flex-direction:column;gap:6px}
+    .fc-lr{display:flex;align-items:center;gap:8px}
+    .fc-swl{width:11px;height:11px;border-radius:50%;flex:none}
+    .fc-lbl{flex:1;min-width:0;font:inherit;font-weight:650;font-size:13.5px;color:var(--ink);background:#fff;border:1px solid var(--linha);border-radius:7px;padding:5px 8px}
+    .fc-lbl:focus{outline:2px solid var(--azul);border-color:var(--azul)}
+    .fc-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .fc-idtag{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted);background:#eef2f7;border:1px solid var(--linha);border-radius:6px;padding:1px 6px;white-space:nowrap}
+    .fc-sws{display:flex;gap:4px}
+    .fc-sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+    .fc-sw[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px #fff,0 0 0 3px currentColor}
+    .fc-prob{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+    .fc-prob input{width:48px;font:inherit;font-size:11.5px;text-align:right;border:1px solid var(--linha);background:#fff;border-radius:6px;padding:3px 5px;color:var(--ink)}
+    .fc-enc{font-size:11px;font-weight:600;color:var(--muted);background:#fff;border:1px solid var(--linha);border-radius:999px;padding:3px 9px;cursor:pointer}
+    .fc-enc[aria-pressed="true"]{color:var(--verm);border-color:#fecaca}
+    .fc-rr{display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+    .fc-del{width:27px;height:27px;border:1px solid var(--linha);background:#fff;border-radius:7px;cursor:pointer;color:var(--muted);font-size:12px}
+    .fc-del:hover{color:var(--verm);border-color:#fecaca}
+    .fc-cnt{font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted)}
+    .fc-add{width:100%;margin-top:10px;border:1.5px dashed var(--linha);background:transparent;color:var(--muted);font:inherit;font-weight:650;font-size:13px;padding:9px;border-radius:9px;cursor:pointer}
+    .fc-add:hover{border-color:var(--azul);color:var(--azul);background:var(--azul-claro)}
+    .fc-sec{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:2px 0 8px}
+    .fc-kanban{display:flex;gap:8px;overflow-x:auto;padding-bottom:5px}
+    .fc-kcol{flex:0 0 122px;background:#f8fafc;border:1px solid var(--linha);border-radius:9px;padding:8px}
+    .fc-ktit{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--cinza);line-height:1.2}
+    .fc-kd{width:7px;height:7px;border-radius:50%;flex:none}
+    .fc-ktt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .fc-kmeta{display:flex;justify-content:space-between;font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--muted);margin-top:4px}
+    .fc-kbar{height:3px;border-radius:2px;background:var(--linha);overflow:hidden;margin-top:4px}
+    .fc-kbar>i{display:block;height:100%}
+    .fc-encstrip{display:flex;flex-wrap:wrap;gap:6px}
+    .fc-encchip{font-size:11px;font-weight:600;color:var(--muted);background:#fff;border:1px dashed var(--linha);border-radius:999px;padding:3px 9px;display:flex;gap:5px;align-items:center}
+    .fc-badges{display:flex;flex-wrap:wrap;gap:6px}
+    .fc-inv{display:flex;flex-direction:column;gap:6px}
+    .fc-iv{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--cinza)}
+    .fc-iv .mk{width:16px;height:16px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff}
+    .fc-iv.ok .mk{background:var(--verde)} .fc-iv.no .mk{background:var(--verm)} .fc-iv.no{color:var(--verm);font-weight:600}
+    .fc-scrim{position:fixed;inset:0;background:rgba(8,15,30,.5);display:none;align-items:center;justify-content:center;padding:20px;z-index:9000}
+    .fc-scrim.on{display:flex}
+    .fc-modal{background:#fff;border-radius:14px;max-width:420px;width:100%;overflow:hidden;box-shadow:0 20px 60px -20px rgba(0,0,0,.5)}
+    .fc-mh{padding:15px 18px 4px} .fc-mh h3{margin:0 0 4px;font-size:16px} .fc-mh p{margin:0;font-size:12.5px;color:var(--muted)}
+    .fc-mb{padding:8px 18px 16px;display:flex;flex-direction:column;gap:6px}
+    .fc-dest{display:flex;align-items:center;gap:8px;border:1px solid var(--linha);border-radius:9px;padding:9px 11px;cursor:pointer;font-size:13px;font-weight:600;background:#f8fafc}
+    .fc-dest:hover{border-color:var(--azul);background:var(--azul-claro)}
+    .fc-dest .id{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted)}
+    .fc-mf{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--linha);background:#f8fafc}
+  </style>
+  <div class="fc-wrap">
+    <h1 class="pg">Funil &amp; Etapas</h1>
+    <div class="sub">Edite as etapas de cada funil — renomear, cor, probabilidade padrão, encerramento, ordem, adicionar e excluir. O funil, os cartões e os badges do app inteiro passam a usar o que você definir aqui.</div>
+    <div class="fc-callout"><span style="font-size:17px">🔒</span><p><b>Id imutável, rótulo editável.</b> Você edita o <b>rótulo</b>; o <span class="fc-idchip">id</span> de fábrica nunca muda — por isso renomear não quebra automação, KPI, taxa de passagem nem histórico. Só <b>excluir</b> uma etapa com negócios pede o destino.</p></div>
+    <div class="fc-tabs" id="funcfg-tabs"></div>
+    <div class="fc-grid">
+      <div class="fc-panel">
+        <div class="fc-ph"><h3>Etapas</h3><span class="hint">rótulo · cor · prob · encerramento · ordem</span></div>
+        <div class="fc-pb"><div class="fc-rows" id="funcfg-rows"></div><button class="fc-add" onclick="funAdd()">＋ Adicionar etapa</button></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="fc-panel">
+          <div class="fc-ph"><h3>Como aparece</h3><span class="hint" id="funcfg-hint"></span></div>
+          <div class="fc-pb">
+            <div class="fc-sec">Kanban (fluxo)</div><div class="fc-kanban" id="funcfg-kanban"></div>
+            <div id="funcfg-encwrap" style="margin-top:11px"></div>
+            <div class="fc-sec" style="margin-top:14px">Etiquetas</div><div class="fc-badges" id="funcfg-badges"></div>
+          </div>
+        </div>
+        <div class="fc-panel">
+          <div class="fc-ph"><h3>Rede de segurança</h3><span class="hint">invariantes</span></div>
+          <div class="fc-pb"><div class="fc-inv" id="funcfg-inv"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv();
+}
+function funRenderTabs(){ const el=$('#funcfg-tabs'); if(!el)return;
+  el.innerHTML=[['lp','🎯 Funil LP (Vendas)'],['bc','💼 Base de Clientes']].map(([f,nm])=>`<button class="fc-tab" role="tab" aria-selected="${f===FUN_edit}" onclick="funSetFunnel('${f}')">${nm}<span class="n">${FUNIL_CFG[f].length}</span></button>`).join(''); }
+function funSetFunnel(f){ FUN_edit=f; funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); }
+function funRowHtml(e,i,arr){ const last=i===arr.length-1, n=funNeg(e.id);
+  const sws=FUN_PAL.map(c=>`<button class="fc-sw" style="background:${FUN_COR[c]};color:${FUN_COR[c]}" aria-pressed="${c===e.cor}" title="${c}" onclick="funSetCor(${i},'${c}')"></button>`).join('');
+  return `<div class="fc-row ${e.enc?'enc':''} ${funEditado(FUN_edit,i)?'ed':''}">
+    <div class="fc-k"><button class="fc-arrow" ${i===0?'disabled':''} onclick="funMove(${i},-1)">▲</button><button class="fc-arrow" ${last?'disabled':''} onclick="funMove(${i},1)">▼</button></div>
+    <div class="fc-mid">
+      <div class="fc-lr"><span class="fc-swl" style="background:${FUN_COR[e.cor]}"></span><input class="fc-lbl" value="${esc(e.label)}" aria-label="Rótulo" oninput="funSetLabel(${i},this.value)"></div>
+      <div class="fc-meta"><span class="fc-idtag">🔒 ${esc(e.id)}</span><span class="fc-sws">${sws}</span><span class="fc-prob">prob <input type="number" min="0" max="100" step="5" value="${e.prob}" oninput="funSetProb(${i},this.value)">%</span><button class="fc-enc" aria-pressed="${!!e.enc}" onclick="funToggleEnc(${i})">${e.enc?'⬤ encerramento':'○ no fluxo'}</button></div>
+    </div>
+    <div class="fc-rr"><button class="fc-del" title="Excluir" onclick="funAskDel(${i})">🗑</button><span class="fc-cnt">${n} neg.</span></div>
+  </div>`; }
+function funRenderRows(){ const arr=FUNIL_CFG[FUN_edit]; const el=$('#funcfg-rows'); if(el) el.innerHTML=arr.map((e,i)=>funRowHtml(e,i,arr)).join(''); }
+function funRenderPreview(){ const arr=FUNIL_CFG[FUN_edit], fluxo=arr.filter(e=>!e.enc), enc=arr.filter(e=>e.enc);
+  const maxN=Math.max(1,...fluxo.map(e=>funNeg(e.id)));
+  const k=$('#funcfg-kanban'); if(k) k.innerHTML=fluxo.map(e=>{ const n=funNeg(e.id);
+    return `<div class="fc-kcol"><div class="fc-ktit"><span class="fc-kd" style="background:${FUN_COR[e.cor]}"></span><span class="fc-ktt" title="${esc(e.label)}">${esc(e.label)}</span></div><div class="fc-kmeta"><span>${n} neg.</span><span>${e.prob}%</span></div><div class="fc-kbar"><i style="width:${Math.round(n/maxN*100)}%;background:${FUN_COR[e.cor]}"></i></div></div>`;
+  }).join('')||'<div class="fc-cnt">Sem etapas no fluxo</div>';
+  const ew=$('#funcfg-encwrap'); if(ew) ew.innerHTML=enc.length?`<div class="fc-sec">Encerramentos (recolhidos)</div><div class="fc-encstrip">${enc.map(e=>`<span class="fc-encchip"><span class="fc-kd" style="background:${FUN_COR[e.cor]}"></span>${esc(e.label)}</span>`).join('')}</div>`:'';
+  const b=$('#funcfg-badges'); if(b) b.innerHTML=arr.map(e=>`<span class="badge ${FUN_BADGE[e.cor]||'b-cinza'}">${esc(e.label)}</span>`).join('');
+  const h=$('#funcfg-hint'); if(h) h.textContent=`${fluxo.length} no fluxo · ${enc.length} encerramento${enc.length===1?'':'s'}`; }
+function funRenderInv(){ const arr=FUNIL_CFG[FUN_edit], fluxo=arr.filter(e=>!e.enc), ids=arr.map(e=>e.id), lbs=arr.map(e=>String(e.label||'').trim());
+  const cks=[['Ids únicos (id imutável não colide)',new Set(ids).size===ids.length],['Rótulos não ficam em branco',lbs.every(l=>l.length>0)],['Rótulos não se repetem',new Set(lbs.map(l=>l.toLowerCase())).size===lbs.length],['Pelo menos 1 etapa no fluxo',fluxo.length>0],['Encerramentos fora do fluxo (funil monotônico)',arr.filter(e=>e.enc).every(e=>!fluxo.includes(e))],['Probabilidade entre 0 e 100',arr.every(e=>e.prob>=0&&e.prob<=100)]];
+  const el=$('#funcfg-inv'); if(el) el.innerHTML=cks.map(([t,ok])=>`<div class="fc-iv ${ok?'ok':'no'}"><span class="mk">${ok?'✓':'!'}</span>${t}</div>`).join(''); }
+
+function funSetLabel(i,v){ FUNIL_CFG[FUN_edit][i].label=v; funApply(); funRenderPreview(); funRenderInv();
+  const r=document.querySelectorAll('#funcfg-rows .fc-row')[i]; if(r) r.classList.toggle('ed',funEditado(FUN_edit,i)); }
+function funSetCor(i,c){ FUNIL_CFG[FUN_edit][i].cor=c; funApply(); funRenderRows(); funRenderPreview(); }
+function funSetProb(i,v){ let n=Math.max(0,Math.min(100,parseInt(v||'0',10)||0)); FUNIL_CFG[FUN_edit][i].prob=n; funApply(); funRenderPreview(); funRenderInv();
+  const r=document.querySelectorAll('#funcfg-rows .fc-row')[i]; if(r) r.classList.toggle('ed',funEditado(FUN_edit,i)); }
+function funToggleEnc(i){ FUNIL_CFG[FUN_edit][i].enc=!FUNIL_CFG[FUN_edit][i].enc; funApply(); funRenderRows(); funRenderPreview(); funRenderInv(); }
+function funMove(i,d){ const a=FUNIL_CFG[FUN_edit], j=i+d; if(j<0||j>=a.length)return; const t=a[i];a[i]=a[j];a[j]=t; funApply(); funRenderRows(); funRenderPreview(); funRenderInv(); }
+function funAdd(){ let s=0; for(const f of ['lp','bc']) FUNIL_CFG[f].forEach(e=>{const m=/^cst_(\d+)$/.exec(e.id); if(m)s=Math.max(s,+m[1]);});
+  const nova={id:'cst_'+(s+1),label:'Nova etapa',cor:'cinza',prob:10,enc:false}; const enc=FUNIL_CFG[FUN_edit].findIndex(e=>e.enc);
+  if(enc<0) FUNIL_CFG[FUN_edit].push(nova); else FUNIL_CFG[FUN_edit].splice(enc,0,nova); funApply(); funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); toast('Etapa criada',true); }
+
+let _funDel=-1,_funDest=null;
+function funAskDel(i){ const arr=FUNIL_CFG[FUN_edit], e=arr[i], n=funNeg(e.id);
+  if(arr.length<=1){ toast('O funil precisa de ao menos 1 etapa'); return; }
+  if(n===0){ funRemove(i,null); toast('Etapa excluída',true); return; }
+  _funDel=i; _funDest=null; funEnsureScrim();
+  $('#fcm-title').textContent='Excluir "'+e.label+'"';
+  $('#fcm-desc').innerHTML=`Há <b>${n} negócio${n===1?'':'s'}</b> nesta etapa. Escolha pra onde mover antes de excluir — nenhum some.`;
+  $('#fcm-dests').innerHTML=arr.filter((_,k)=>k!==i).map(o=>`<button class="fc-dest" onclick="funPickDest('${esc(o.id)}',this)"><span class="fc-kd" style="background:${FUN_COR[o.cor]}"></span>${esc(o.label)}<span class="id">${esc(o.id)}</span></button>`).join('');
+  $('#fcm-ok').disabled=true; $('#fcm-ok').style.opacity=.5; $('#funDelScrim').classList.add('on'); }
+function funPickDest(id,btn){ _funDest=id; document.querySelectorAll('#fcm-dests .fc-dest').forEach(b=>b.style.borderColor=''); if(btn) btn.style.borderColor='var(--azul)'; $('#fcm-ok').disabled=false; $('#fcm-ok').style.opacity=1; }
+function funRemove(i,dest){ const arr=FUNIL_CFG[FUN_edit], e=arr[i], n=funNeg(e.id);
+  if(dest&&n){ (S.contatos||[]).forEach(c=>{ if(c.etapa===e.id) c.etapa=dest; }); salvar(); }
+  arr.splice(i,1); funApply(); funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); }
+function funEnsureScrim(){ if($('#funDelScrim'))return; const d=document.createElement('div'); d.id='funDelScrim'; d.className='fc-scrim';
+  d.innerHTML=`<div class="fc-modal" role="dialog" aria-modal="true"><div class="fc-mh"><h3 id="fcm-title"></h3><p id="fcm-desc"></p></div><div class="fc-mb" id="fcm-dests"></div><div class="fc-mf"><button class="btn btn-ghost" onclick="funDelClose()">Cancelar</button><button class="btn btn-p" id="fcm-ok" onclick="funDelDo()">Excluir</button></div></div>`;
+  d.addEventListener('click',ev=>{ if(ev.target===d) funDelClose(); }); document.body.appendChild(d); }
+function funDelClose(){ const s=$('#funDelScrim'); if(s)s.classList.remove('on'); _funDel=-1; }
+function funDelDo(){ if(_funDel<0)return; const arr=FUNIL_CFG[FUN_edit]; if(funNeg(arr[_funDel].id)>0&&!_funDest)return; const nm=arr[_funDel].label; funRemove(_funDel,_funDest); funDelClose(); toast('"'+nm+'" excluída · negócios movidos',true); }
+function funReset(){ if(!confirm('Restaurar os dois funis ao padrão de fábrica? As personalizações serão descartadas.'))return; FUNIL_CFG=funFabMat(); funApply(); funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); toast('Funis restaurados',true); }
+
+/* invariantes do funil no portão (silencioso no sucesso, erro no console se quebrar) */
+function funSelfCheck(){ try{ let fail=[]; for(const f of ['lp','bc']){ const arr=FUNIL_CFG[f]||[]; const ids=arr.map(e=>e.id);
+  if(new Set(ids).size!==ids.length) fail.push(f+': ids duplicados');
+  if(!arr.some(e=>!e.enc)) fail.push(f+': sem etapa no fluxo');
+  if(!arr.every(e=>e.label&&String(e.label).trim())) fail.push(f+': rótulo vazio');
+  if(!arr.every(e=>e.prob>=0&&e.prob<=100)) fail.push(f+': prob fora de 0-100'); }
+  // derivados coerentes
+  if(ETAPAS_FLUXO.some(e=>ETAPAS_ENCERR.includes(e))) fail.push('lp: encerrado no fluxo');
+  if(ETAPAS_BC_FLUXO.some(e=>ETAPAS_BC_ENCERR.includes(e))) fail.push('bc: encerrado no fluxo');
+  if(fail.length) console.error('[funil selfcheck] FALHA:',fail.join(' · '));
+  }catch(e){ console.error('[funil selfcheck] exceção',e); } }
+
 function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
@@ -7720,6 +7919,7 @@ function bnavRestaurar(){ bnavSalvar(BNAV_PADRAO.slice()); const bd=document.get
 funPrefLer();
 sideRestaurar();
 lpSelfCheck();
+funSelfCheck();
 render();
 /* FLUIDEZ-V1:BOOT — antes era Promise.all([...8 cargas]).then(render): a tela
    só era repintada quando a ÚLTIMA resposta chegava, e a última é a lp_contatos
