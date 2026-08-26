@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.15.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.15.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -819,7 +819,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.15.2 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.15.3 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -841,7 +841,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.15.2 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.15.3 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2823,6 +2823,32 @@ function subFolego(ref,hoje){ return SUB_LIMITE-subAtraso(ref,hoje); }
 function subLimiteDt(ref){ return subAddDays(atParseISO(ref),SUB_LIMITE); }
 function subCor(f){ if(f<=7) return 'red'; if(f<=25) return 'amber'; return 'green'; }
 function subCorVar(c){ return c==='red'?'var(--verm)':c==='amber'?'var(--amar)':'var(--verde)'; }
+/* ═══ HISTÓRICO VIVO: trilha do "Dias Atraso" (autoridade) por apólice ════════
+   Cada import oficial (espelho OU Lista de Atraso) carimba {d:data do relatório,
+   v:dias em atraso reportado}. Dedupe por data (um relatório = uma leitura);
+   poda nas últimas SUB_HIST_MAX. Mora em apolice.hist → dados.hist (JSONB) e
+   sincroniza junto com a apólice, sem tabela/coluna nova. */
+const SUB_HIST_MAX=12;
+function subHistPush(a,d,v){
+  if(!a||!d||v==null||!isFinite(v)) return;
+  v=Math.max(0,Math.round(v));
+  if(!Array.isArray(a.hist)) a.hist=[];
+  const i=a.hist.findIndex(x=>x.d===d);
+  if(i>=0){ if(a.hist[i].v===v) return; a.hist[i].v=v; }
+  else a.hist.push({d,v});
+  a.hist.sort((x,y)=>x.d<y.d?-1:x.d>y.d?1:0);
+  if(a.hist.length>SUB_HIST_MAX) a.hist=a.hist.slice(a.hist.length-SUB_HIST_MAX);
+}
+function subHistTrail(a){
+  const h=Array.isArray(a&&a.hist)?a.hist:[];
+  if(h.length<2) return '';
+  const pts=h.slice(-5), seq=pts.map(x=>x.v).join(' → ');
+  const delta=pts[pts.length-1].v-pts[0].v;
+  const cor=delta<0?'var(--verde)':delta>0?subCorVar('red'):'var(--muted)';
+  const rot=delta<0?('↓ melhorou '+Math.abs(delta)+'d'):delta>0?('↑ piorou '+delta+'d'):'→ estável';
+  const tt=pts.map(x=>atFmtBR(x.d)+': '+x.v+'d').join('  ·  ');
+  return `<div style="font-size:11.5px;color:var(--muted);margin:-2px 0 6px" title="Dias em atraso reportado em cada relatório oficial&#10;${esc(tt)}">📉 Atraso nos relatórios: <b style="color:${cor}">${seq}</b> · <span style="color:${cor};font-weight:600">${rot}</span></div>`;
+}
 function subBadge(c){ return c==='red'?'b-verm':c==='amber'?'b-amarelo':'b-verde'; }
 
 /* ── consultas ── */
@@ -3235,10 +3261,10 @@ function subDiffAtraso(itens){
 /* ═══ PERSISTÊNCIA (Supabase → sync entre aparelhos; localStorage = fallback) ═══ */
 async function subRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ SUB_EMAIL=(data.session.user&&data.session.user.email)||''; return true; } }catch(e){} return false; }
 function subCliRow(c){ return {lp_email:SUB_EMAIL,ref:c.ref,nome:c.nome||'',cpf:c.cpf||null,tel:c.tel||null,email:c.email||null,valor_final:c.final!=null?c.final:null}; }
-function subApoRow(a){ return {lp_email:SUB_EMAIL,ref:a.ref,cli_ref:a.cli,numero:String(a.numero||''),papel:a.papel||'proteger',emissao:a.emissao||null,premio:a.premio!=null?a.premio:0,dia:a.dia!=null?a.dia:null,venc_aberto:a.venc||null,lp:a.lp||null,forma:a.forma||null,pode_postergar:a.podePostergar===undefined?null:a.podePostergar,data_postergada:a.dataPostergada||null,impresso:a.impresso||null,motivo:a.motivo||null,dados:{vencFonte:subVencFonte(a)}}; }
+function subApoRow(a){ return {lp_email:SUB_EMAIL,ref:a.ref,cli_ref:a.cli,numero:String(a.numero||''),papel:a.papel||'proteger',emissao:a.emissao||null,premio:a.premio!=null?a.premio:0,dia:a.dia!=null?a.dia:null,venc_aberto:a.venc||null,lp:a.lp||null,forma:a.forma||null,pode_postergar:a.podePostergar===undefined?null:a.podePostergar,data_postergada:a.dataPostergada||null,impresso:a.impresso||null,motivo:a.motivo||null,dados:{vencFonte:subVencFonte(a),hist:Array.isArray(a.hist)?a.hist:[]}}; }
 function subPagRow(p){ return {lp_email:SUB_EMAIL,ref:p.ref,apo_ref:p.apo,venc:p.venc||null,valor:p.valor!=null?p.valor:0,status:p.status||'confirmado',enviado:p.enviado||null,comprovante:p.comprovante||null,confirmado:p.confirmado||null,primeiro:!!p.primeiro,obs:p.obs||null}; }
 function subCliDeRow(r){ return {ref:r.ref,nome:r.nome||'',cpf:r.cpf||'',tel:r.tel||'',email:r.email||'',final:r.valor_final!=null?Number(r.valor_final):null}; }
-function subApoDeRow(r){ return {ref:r.ref,cli:r.cli_ref,numero:String(r.numero||''),papel:r.papel||'proteger',emissao:r.emissao||null,premio:r.premio!=null?Number(r.premio):0,dia:r.dia!=null?Number(r.dia):null,venc:r.venc_aberto||null,lp:r.lp||'',forma:r.forma||'Boleto',podePostergar:r.pode_postergar,dataPostergada:r.data_postergada||null,impresso:r.impresso||null,motivo:r.motivo||'',vencFonte:(r.dados&&r.dados.vencFonte)||'oficial'}; }
+function subApoDeRow(r){ return {ref:r.ref,cli:r.cli_ref,numero:String(r.numero||''),papel:r.papel||'proteger',emissao:r.emissao||null,premio:r.premio!=null?Number(r.premio):0,dia:r.dia!=null?Number(r.dia):null,venc:r.venc_aberto||null,lp:r.lp||'',forma:r.forma||'Boleto',podePostergar:r.pode_postergar,dataPostergada:r.data_postergada||null,impresso:r.impresso||null,motivo:r.motivo||'',vencFonte:(r.dados&&r.dados.vencFonte)||'oficial',hist:(r.dados&&Array.isArray(r.dados.hist))?r.dados.hist:[]}; }
 function subPagDeRow(r){ return {ref:r.ref,apo:r.apo_ref,venc:r.venc||null,valor:r.valor!=null?Number(r.valor):0,status:r.status||'confirmado',enviado:r.enviado||null,comprovante:r.comprovante||null,confirmado:r.confirmado||null,primeiro:!!r.primeiro,obs:r.obs||''}; }
 
 function subSalvarLocal(){ try{ localStorage.setItem(SUB_LS,JSON.stringify(SUB)); }catch(e){} }
@@ -3383,6 +3409,7 @@ function viewSubstCliente(cliRef){
       ${kv('Venc. em aberto',atFmtBR(a.venc))}
       ${postergada?kv('Vencimento postergado',atFmtBR(a.dataPostergada),'var(--roxo,#7c3aed)'):''}
       ${kv('Dias em atraso',at+' dias',at>0?subCorVar(col):'var(--verde)')}
+      ${subHistTrail(a)}
       ${subVencFonte(a)==='estimado'?`<div style="font-size:11px;color:var(--muted);margin:-2px 0 4px">↺ vencimento estimado pelo lançamento local — o próximo relatório oficial confirma</div>`:''}
       <div style="margin-top:8px">
         <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px"><span style="color:var(--muted)">Fôlego até cancelar (${SUB_LIMITE}d)</span><span style="font-weight:700;color:${subCorVar(col)}">${f<0?'vencido':f+' dias'}</span></div>
@@ -3778,6 +3805,7 @@ async function subConfirmarAtraso(){
   p.updates.filter(u=>!u.stale).forEach(u=>{
     u.ch.forEach(ch=>{ u.apo[ch[0]]=ch[3]; if(ch[0]==='venc') u.apo.vencFonte='oficial'; });
     if(u.rec.impresso) u.apo.impresso=u.rec.impresso;
+    if(u.rec.impresso&&u.apo.venc) subHistPush(u.apo, u.rec.impresso, subDDiff(atParseISO(u.apo.venc), atParseISO(u.rec.impresso)));   // histórico vivo: atraso derivado (venc × data do relatório)
     aps.push(u.apo);
   });
   /* 2) novas: cria o cliente se não houver (casa pelo nome normalizado) e a apólice */
@@ -3795,6 +3823,7 @@ async function subConfirmarAtraso(){
       podePostergar:null,dataPostergada:null,
       impresso:it.origem_relatorio||null,motivo:it.motivo_recusa||''};
     SUB.apolices.push(a); aps.push(a); nNovas++;
+    if(a.impresso&&a.venc) subHistPush(a, a.impresso, subDDiff(atParseISO(a.venc), atParseISO(a.impresso)));   // histórico vivo: 1º ponto (atraso derivado)
   });
   atClose(); _subPend=null;
   const ok=await subPush({clientes:clis,apolices:aps});
@@ -3846,6 +3875,7 @@ async function subConfirmarPreview(){
   p.updates.filter(u=>!u.stale).forEach(u=>{
     u.ch.forEach(ch=>{ u.apo[ch[0]]=ch[3]; if(ch[0]==='venc') u.apo.vencFonte='oficial'; });   // documento da seguradora manda: zera o desvio acumulado do lançamento local
     if(u.rec.impresso) u.apo.impresso=u.rec.impresso;   // carimba a VERSÃO aplicada
+    subHistPush(u.apo, u.rec.impresso||atHojeISO(), u.rec.diasRel);   // histórico vivo: Dias Atraso (autoridade) desta leitura
     aps.push(u.apo);
     (u.novos||[]).forEach(n=>{
       const pg={ref:subRef('p'),apo:u.apo.ref,venc:n.pago,valor:n.valor,status:'confirmado',
@@ -3874,6 +3904,7 @@ async function subConfirmarPreview(){
       lp:'',forma:'',podePostergar:null,dataPostergada:null,
       impresso:r.impresso||null,motivo:''};
     SUB.apolices.push(a); aps.push(a); nNovas++;
+    subHistPush(a, a.impresso||atHojeISO(), r.diasRel);   // histórico vivo: 1º ponto da apólice recém-trazida
     (r.novos||[]).forEach(n=>{
       const pg={ref:subRef('p'),apo:a.ref,venc:n.pago,valor:n.valor,status:'confirmado',
         enviado:null,comprovante:null,confirmado:n.pago,primeiro:false,obs:'Importado do espelho'};
@@ -7747,6 +7778,13 @@ function lpSelfCheck(){
     ok('reunião: etapa mudou → substitui o prefixo, não concatena', (()=>{ const r=reuniaoResolveTitulo({nome:'X',funil:'nn',etapa:'P/C'},'🟡 [OI/FF] X'); return r.acao==='aplicar' && r.titulo==='🟢 [PC] X'; })());
     ok('reunião: título ajustado à mão (prefixo não-canônico) é respeitado', reuniaoResolveTitulo({nome:'X',funil:'bc',etapa:'Agendada Revisita'},'[RCP/REC] X').acao==='manual');
     ok('reunião: strip do prefixo limpa emoji + [ETAPA]', reuniaoTiraPrefixo('🟡 [RCP/FF] Fulano')==='Fulano');
+    /* histórico vivo: dedupe por data, ordenação, poda e trilha (funções puras) */
+    const _h={}; subHistPush(_h,'2026-06-01',60); subHistPush(_h,'2026-06-01',50); subHistPush(_h,'2026-05-01',70);
+    ok('histórico: dedupe por data mantém a última leitura', _h.hist.length===2 && _h.hist.find(x=>x.d==='2026-06-01').v===50);
+    ok('histórico: fica ordenado por data', _h.hist[0].d==='2026-05-01');
+    const _hp={}; for(let _i=0;_i<20;_i++) subHistPush(_hp,'2026-01-'+String((_i%28)+1).padStart(2,'0'),_i);
+    ok('histórico: poda nas últimas '+SUB_HIST_MAX, _hp.hist.length<=SUB_HIST_MAX);
+    ok('histórico: trilha só aparece com 2+ pontos', subHistTrail({hist:[{d:'2026-01-01',v:9}]})==='' && subHistTrail({hist:[{d:'2026-01-01',v:9},{d:'2026-02-01',v:3}]})!=='');
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
