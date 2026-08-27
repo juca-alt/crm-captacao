@@ -4,6 +4,36 @@
 
 ---
 
+## 📸 Snapshot — 27/08/2026 · v0.15.0 — reunião de venda na Agenda Google com etapa no TÍTULO + cor Pavão
+
+**Estado em 30 s:** ✅ **NO AR** — `main` = `8c89e2f`, **v0.15.0**. Fast-forward de `origin/main` (`e696249`), push = deploy Pages, autorizado por ele depois de validar logado. Frente pedida por um prompt do **projeto Juca 3.7** (visão holística única dos projetos dele): a etapa do funil parou de morrer na descrição do evento e passou a viver no **título + cor** — dá pra bater o olho na semana da agenda e ler se abre (🟡), fecha (🟢) ou entrega (📦) negócio.
+
+### O que entrou (commit `8c89e2f`, só `vendas.html`)
+- **Constante `REUNIAO_PREFIXO`** no topo (de-para etapa→prefixo por funil, fácil de editar). Reunião (`tipo:'reuniao'`) ganha **botão 1-toque** que cria/atualiza o evento no Google **via API** já com `<emoji> [ETAPA] <nome>` + `colorId:'7'` (Pavão). **colorId só existe pela API** — o link-template do Google (`action=TEMPLATE`) aceita `text`+`details` mas IGNORA cor; por isso virou botão, não só link.
+- **De-para aprovado:** `nn`(prospect) OI/FF→🟡[OI/FF]; P/C,**C2,N,FA,EMISSÃO**→🟢[PC] (ressalva dele: esses 4 ficam mapeados); DELIVERY→📦[DELIVERY]. `bc`(base) Agendada Revisita→🟡[RCP/FF]; Novo Negócio/Resolução pós Revisita→🟢[RCP/PC]; Delivery→📦[DELIVERY]. **Fora por decisão:** bc N/Emissão e Emissão Final (viram aviso). Etapa fora do mapa: título cru, sem cor, `console.warn`.
+- **Idempotente** (regex `^(\S+\s+)?\[[A-Z/]+\]\s*` substitui sem concatenar), **respeita título ajustado à mão** (prefixo não-canônico → não toca), guarda `t.gcalId` pra não duplicar. Só reunião entra — WhatsApp/ligar seguem no link-template.
+
+### Descoberta (Passo 1 — lido do banco ANTES de codar)
+Etapa vive em `lp_contatos.dados->>'etapa'` (ID de fábrica). **4 valores de funil em produção** (o código só define `lp`/`bc`): `nn` (usa etapas do funil lp), `bc` (espelho Kommo), `bn` (5.130 leads **sem etapa**), `prospects` (1 legado). **Reuniões reais só em 2 etapas hoje:** `nn`/OI/FF (1) e `bc`/Agendada Revisita (3). Os valores "Agendada Revisita"/"Contato Agenda/Revisita" que o prompt citou são etapas do funil `bc`, não do prospect — por isso não assumir.
+
+### Verificação
+Sem `node`/`deno`/`bun` na máquina (só python3): servi o arquivo com `python3 -m http.server` e validei no browser — o `<script>` inline parseia (sem erro de sintaxe), funções definidas, casos reais certos, **10 invariantes novos de reunião verdes** no self-check de boot. **Guard de CI limpo** (0 `from('leads').insert` no vendas.html). As 2 falhas de self-check `menu:…` são **ambientais** (app servido estático, sem Supabase, não bootou o menu) — não é regressão (não toquei em menu).
+
+### Backfill aplicado (via MCP Google Calendar, dry-run mostrado antes de escrever)
+2 eventos reais viraram **`🟡 [RCP/FF] Daniel Ricardo…`** (id `2pgjvs5j…`, 25/08) e **`🟡 [RCP/FF] Roberto Jose…`** (id `73d11rd2…`, 01/09), colorId 7, **local/descrição/horário preservados**. Os 2 `WhatsApp ·` (Ricardo, Herica) NÃO foram tocados (Regra 3). Verissimo/Felipe não tinham evento no Google.
+
+### Lições da leva
+- **Link-template do Google Calendar ignora `colorId`** — cor exige a API. Metade do pedido ("ler o funil na agenda") só fecha criando o evento pela API.
+- **Ler o banco antes de escrever o de-para** evitou assumir etapa errada: o funil `bc` (base de clientes) tem nomes de etapa próprios, distintos do prospect.
+- **App single-file sem node valida bem** por `http.server` do python + self-check no console do browser.
+
+### O que ficou aberto
+- **Ritual:** sincronizar este ESTADO no Drive (pasta "CAPTACAO LIFE PLANNER") — **Cowork** na próxima passada.
+- `bc` N/Emissão e Emissão Final seguem **sem prefixo por decisão**; mapear pra 🟢 [RCP/PC] é 2 linhas no `REUNIAO_PREFIXO` se ele quiser.
+- **PR #91** (`feat/lp-conectar-claude`, botão Conectar Claude) segue **aberto e independente** — esta frente saiu de `origin/main`, não dele. PRs #88–#90 e a 🔴 RLS dos backups `bkp_movimentos_dup_*` da Central Financeira seguem em aberto (sessão à parte).
+
+---
+
 ## 📸 Snapshot — 16/08/2026 (2ª leva) · CRM SeguroComJucá v0.12.0 — cartões no celular, filtros recolhidos, OFFLINE e barra configurável
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `5323669`, **v0.12.0 · CRM SeguroComJucá**. Cinco commits no branch `claude/crm-lp-fluidity-v2`, merge com `--no-ff`, autorizado por ele depois de validar o demo. Produção conferida pelo CONTEÚDO servido (SHA idêntico ao commit) e o portão rodado de novo contra o arquivo baixado do Pages.
