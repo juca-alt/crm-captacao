@@ -20,8 +20,8 @@
 
 ### Próximo / aberto
 - **Mudança de Seguro** — frente NOVA que o Gustavo está montando no chat de Projetos; entra em **outra sessão, SOBRE esta base R22** (Revisão de Apólices → mudança de seguro).
-- **Revisão de Proteção no celular** ("título quebra letra a letra"): **reavaliar sobre o R22** — na tela padrão não reproduziu e não há `break-all` no CSS; precisa do ponto exato (qual tela/modo) do Gustavo.
-- `bc` N/Emissão + Emissão Final → 🟢 [RCP/PC] no `REUNIAO_PREFIXO` (2 linhas, opcional).
+- **Revisão de Proteção no celular** ("título quebra letra a letra"): **verificado sobre o R22 — NÃO reproduz.** Scan por line-boxes reais em 375px = 0 títulos quebrando letra a letra; não há `break-all` no CSS. Provável já resolvido pelo rework do R22. Se o Gustavo ainda vir, precisa a tela/modo/dado exatos. *Achado lateral (opcional):* a tabela de cobertura ("Se acontecer…") rola horizontal no celular, cortando as colunas Custo/mês + Natureza.
+- `bc` N/Emissão + Emissão Final → 🟢 [RCP/PC]: **✅ feito** (v0.15.2, `470be1f`) — de-para da agenda fechado, +1 invariante.
 
 ---
 
