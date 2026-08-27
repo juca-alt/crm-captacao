@@ -4,6 +4,27 @@
 
 ---
 
+## 📸 Snapshot — 27/08/2026 (2ª leva) · v0.15.1 + R22 na Revisão de Proteção
+
+**Estado em 30 s:** ✅ **NO AR** — `main` = `87c1958`. Duas entregas sobre a 1ª leva (agenda etapa+cor): (1) **v0.15.1** tirou o "pos X/16" do card da Substituição; (2) **R22** atualizou a Revisão de Proteção (`revisao-protecao.html`), que estava defasada no app (era R21 + Agenda). Merge autorizado pelo Gustavo ("já validei no uso do artefato; se tiver erro, ajusta depois").
+
+### O que entrou
+- **`e7b60c0` · v0.15.1 · Substituição:** removido o "· pos X/16 ·" do rótulo do card (jargão interno que confundia). A condição `pc.pos===16` do Fix A ("✓ já na melhor data") ficou intacta.
+- **`87c1958` · R22 · Revisão de Proteção** (só `revisao-protecao.html`, **+174/−60**):
+  - **patch44** (linha do tempo / raio-X): sai o nº de apólice das linhas; sai a lista "O que muda no caminho"; cada linha da linha do tempo e do raio-X vira **arrastável (⠿)** e **ocultável (✕)**; os 3 contadores do raio-X **recontam** com o visível; as duas visões viram **selecionáveis** (desligando as duas, a seção sai do documento do cliente).
+  - **patch45** (comissão / proposta): a aba **Comissão sai do nav → gaveta na Proposta** (fechada por padrão; some por completo no modo cliente, no PDF e na apresentação); a **Proposta vira editável no modo cliente** (só a apresentação trava). Marcador `COMISSAO_GAVETA_V1` adicionado.
+
+### Verificação
+- R22 por **Caminho A** (patchers idempotentes): base md5 `ef3b10d5…` → resultado md5 **`a6f216bc…`**, **byte a byte** igual ao artefato validado headless na sessão Cowork (vtl/vcomo/vmelh3 + 13 validadores, 0 erro JS, selfTest 6/6). Diff exato **174/60**. No app servido: **selfTest 6/6, selfTestFam []**, guard de CI limpo; marcadores `COMISSAO_GAVETA_V1` + gaveta/`mesmo-cliente` confirmados na fonte.
+- ⚠️ **Browser pane local travou em render de largura 0** → o portão visual dos 4 cenários NÃO rodou aqui. Aceite pela **identidade md5** com o artefato já validado + self-tests + Gustavo ter validado o comportamento no uso do artefato. Sem bump de versão (R22 não toca `vendas.html`; main segue **v0.15.1**).
+
+### Próximo / aberto
+- **Mudança de Seguro** — frente NOVA que o Gustavo está montando no chat de Projetos; entra em **outra sessão, SOBRE esta base R22** (Revisão de Apólices → mudança de seguro).
+- **Revisão de Proteção no celular** ("título quebra letra a letra"): **reavaliar sobre o R22** — na tela padrão não reproduziu e não há `break-all` no CSS; precisa do ponto exato (qual tela/modo) do Gustavo.
+- `bc` N/Emissão + Emissão Final → 🟢 [RCP/PC] no `REUNIAO_PREFIXO` (2 linhas, opcional).
+
+---
+
 ## 📸 Snapshot — 27/08/2026 · v0.15.0 — reunião de venda na Agenda Google com etapa no TÍTULO + cor Pavão
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `8c89e2f`, **v0.15.0**. Fast-forward de `origin/main` (`e696249`), push = deploy Pages, autorizado por ele depois de validar logado. Frente pedida por um prompt do **projeto Juca 3.7** (visão holística única dos projetos dele): a etapa do funil parou de morrer na descrição do evento e passou a viver no **título + cor** — dá pra bater o olho na semana da agenda e ler se abre (🟡), fecha (🟢) ou entrega (📦) negócio.
