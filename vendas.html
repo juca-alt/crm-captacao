@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.14.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.15.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -819,7 +819,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.14.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.15.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -841,7 +841,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.14.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.15.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -903,6 +903,57 @@ rebuildFunilLp();
    saneados: "Pendência/Atrasot" → Pendência/Atraso, "Delivery.1" → Delivery.
    Contato com funil:'bc' vive SÓ neste funil (não entra em SitPlan/KPIs de NN). */
 /* ETAPAS_BC/_ENCERR/_FLUXO agora vêm de rebuildFunilLp() (funil editável). */
+
+/* ── REUNIÃO DE VENDA → GOOGLE AGENDA: prefixo de etapa + cor (Pavão) ─────────
+   Só tarefas tipo:'reuniao'. Título alvo = "<emoji> [ETAPA] <nome>" e o evento
+   sai com colorId '7'. Mapa CANÔNICO (5 prefixos — não inventar outros). Chave:
+   funil ('bc' = cliente da base; qualquer outro = prospect novo) + c.etapa (ID
+   de fábrica). Etapa fora do mapa: título cru, SEM prefixo e SEM cor + aviso.
+   De-para aprovado 27/08 (C2/N/FA/EMISSÃO→[PC]; bc N/Emissão e Emissão Final
+   ficaram de fora, por decisão). 🟡 abre/levanta · 🟢 fecha/emite · 📦 entrega. */
+const REUNIAO_COLOR_ID='7'; // Google Calendar colorId 7 = Pavão
+const REUNIAO_PREFIXO={
+  nn:{ // prospect novo (funil !== 'bc')
+    'OI/FF'   :{pfx:'[OI/FF]',    emoji:'🟡'}, // abertura / fact find
+    'P/C'     :{pfx:'[PC]',       emoji:'🟢'}, // proposta / closing
+    'C2'      :{pfx:'[PC]',       emoji:'🟢'},
+    'N'       :{pfx:'[PC]',       emoji:'🟢'},
+    'FA'      :{pfx:'[PC]',       emoji:'🟢'},
+    'EMISSÃO' :{pfx:'[PC]',       emoji:'🟢'},
+    'DELIVERY':{pfx:'[DELIVERY]', emoji:'📦'}, // entrega de apólice
+  },
+  bc:{ // cliente da base (funil === 'bc')
+    'Agendada Revisita'                   :{pfx:'[RCP/FF]',  emoji:'🟡'}, // revisita de abertura
+    'Novo Negócio/Resolução pós Revisita' :{pfx:'[RCP/PC]',  emoji:'🟢'}, // revisita de fechamento
+    'Delivery'                            :{pfx:'[DELIVERY]', emoji:'📦'}, // entrega de apólice
+  },
+};
+const REUNIAO_PREFIXOS_CANON=new Set(['[OI/FF]','[PC]','[RCP/FF]','[RCP/PC]','[DELIVERY]']);
+/* idempotência (regex do prompt): emoji opcional + [ETAPA] no começo do título */
+const RE_PREFIXO_REUNIAO=/^\s*(?:\S+\s+)?\[[A-Z/]+\]\s*/;
+function reuniaoPrefixoDe(c){ if(!c) return null;
+  const bucket=(c.funil==='bc')?'bc':'nn';
+  return (REUNIAO_PREFIXO[bucket]||{})[c.etapa] || null; }
+function reuniaoExtraiPrefixo(s){ const m=String(s||'').match(/\[[A-Z/]+\]/); return m?m[0]:null; }
+function reuniaoTiraPrefixo(s){ return String(s||'').replace(RE_PREFIXO_REUNIAO,'').trim(); }
+/* título alvo do evento: "<emoji> [ETAPA] <nome>". Sem mapa → null (título cru). */
+function reuniaoTituloAlvo(c){ const p=reuniaoPrefixoDe(c); if(!p) return null;
+  return p.emoji+' '+p.pfx+' '+String(c&&c.nome||'').trim(); }
+/* o que fazer com um título que já existe (idempotência + respeito ao manual):
+   'semmapa' etapa não mapeada · 'skip' já tem o prefixo certo · 'manual' tem
+   prefixo NÃO-canônico (ajuste à mão) · 'aplicar' sem prefixo ou canônico de
+   outra etapa → usa o alvo (substitui, nunca concatena). */
+function reuniaoResolveTitulo(c, tituloAtual){
+  const alvo=reuniaoTituloAlvo(c);
+  if(!alvo) return {acao:'semmapa', titulo:tituloAtual};
+  const alvoPfx=reuniaoExtraiPrefixo(alvo);
+  const atualPfx=reuniaoExtraiPrefixo(tituloAtual);
+  if(atualPfx){
+    if(atualPfx===alvoPfx) return {acao:'skip', titulo:tituloAtual};
+    if(!REUNIAO_PREFIXOS_CANON.has(atualPfx)) return {acao:'manual', titulo:tituloAtual};
+  }
+  return {acao:'aplicar', titulo:alvo};
+}
 const TA_STATUS=['—','Não respondeu','Retornar contato','Sucesso','Declinado'];
 
 /* Resultado de contato (SitPlan/TA) — 1 dropdown, 3 efeitos: loga a tentativa,
@@ -1624,10 +1675,27 @@ function tarGcalUrl(c,t){
   const fimH=(Number(hh[0])+1)%24;
   const fim=dia+'T'+String(fimH).padStart(2,'0')+String(hh[1]||'00').padStart(2,'0')+'00';
   const tit=tarNomeTipo(t.tipo)+' · '+(c?c.nome:'');
-  const det=[t.tit||'', c&&c.telefone?('Telefone: '+c.telefone):'', c&&c.etapa?('Etapa: '+c.etapa):'',
-             t.notas||'', 'CRM Life Planner'].filter(Boolean).join('\n');
+  const det=tarEventoDescricao(c,t);
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(tit)+
          '&dates='+ini+'/'+fim+'&details='+encodeURIComponent(det);
+}
+/* descrição do evento (reaproveitada pelo link-template e pela criação via API):
+   título livre / telefone / Etapa: <id de fábrica> / notas / assinatura. */
+function tarEventoDescricao(c,t){
+  return [t&&t.tit||'', c&&c.telefone?('Telefone: '+c.telefone):'',
+          c&&c.etapa?('Etapa: '+c.etapa):'', t&&t.notas||'',
+          'CRM Life Planner'].filter(Boolean).join('\n');
+}
+/* botão de calendário da tarefa: REUNIÃO ganha o 1-toque (cria/atualiza no
+   Google já com etapa no título + cor Pavão); os outros tipos seguem com o
+   link-template de sempre (sem prefixo, sem cor). */
+function tarGcalAcaoHTML(c,t){
+  if(t&&t.tipo==='reuniao'){
+    const jaTem=!!(t&&t.gcalId);
+    return `<button class="btn btn-s btn-mini" onclick="gcalCriarReuniaoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (etapa + cor)':'Criar na sua Agenda Google com a etapa no título + cor'}">📅${jaTem?'↻':'＋'}</button>`;
+  }
+  const gc=tarGcalUrl(c,t);
+  return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido">📅</a>`:'';
 }
 /* ── mutadores ── */
 function tarContato(cid){ return (S.contatos||[]).find(c=>String(c.id)===String(cid)); }
@@ -2185,7 +2253,7 @@ function ct(){ return S.contatos.find(c=>c.id===CONTATO); }
 function tarBlocoDrawer(c){
   const abertas=tarAbertas(c), feitas=tarFeitas(c);
   const linha=t=>{
-    const sit=tarSituacao(t), gc=tarGcalUrl(c,t);
+    const sit=tarSituacao(t);
     return `<div class="tarlin">
       <span title="${esc(tarNomeTipo(t.tipo))}">${tarIco(t.tipo)}</span>
       <span class="tt">${esc(t.tit||tarNomeTipo(t.tipo))}</span>
@@ -2194,7 +2262,7 @@ function tarBlocoDrawer(c){
         <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')" title="Marcar como feita">✓ feita</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',1)" title="Remarcar para o dia seguinte">+1d</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)" title="Remarcar para daqui a uma semana">+7d</button>
-        ${gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido">📅</a>`:''}
+        ${tarGcalAcaoHTML(c,t)}
         <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(c.id)}','${esc(t.id)}')" title="Remover">✕</button>
       </span></div>`;
   };
@@ -4090,6 +4158,55 @@ function gcalEvPorId(id){ return (GCAL.eventos||[]).find(e=>e.id===id); }
 function gcalDT(ev,qual){ const o=ev&&ev[qual]; if(!o) return {d:'',t:''}; if(o.date) return {d:o.date,t:''}; const s=o.dateTime; return {d:s.slice(0,10),t:s.slice(11,16)}; }
 function gcalNovo(preNome,preDesc){
   const d=hojeISO(); gcalModalEvento({novo:true,summary:preNome||'',description:preDesc||'',dia:d,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
+/* ── Reunião de venda em 1 toque (Fase 2, via API) ──────────────────────────
+   Cria o evento no Google já com "<emoji> [ETAPA] <nome>" + cor Pavão, ou, se a
+   tarefa já tem evento (t.gcalId), SINCRONIZA título+cor em vez de duplicar.
+   Só tipo:'reuniao'. Etapa fora do mapa: cria com título cru, sem cor, e loga.
+   Respeita evento com título ajustado à mão (prefixo não-canônico). */
+const _gcalReuniaoBusy={};
+function tarReuniaoInterval(t){ // início/fim ISO local a partir de quando+hora (1h padrão)
+  const dia=(t&&t.quando)||hojeISO();
+  const hh=String((t&&t.hora)||'09:00').split(':');
+  const h=Number(hh[0])||9, m=Number(hh[1])||0, p2=n=>String(n).padStart(2,'0');
+  return { ini:dia+'T'+p2(h)+':'+p2(m)+':00', fim:dia+'T'+p2((h+1)%24)+':'+p2(m)+':00' };
+}
+async function gcalCriarReuniaoDaTarefa(cid,tid){
+  const c=tarContato(cid); if(!c){ toast('Contato não encontrado — atualize',false); return; }
+  const t=tarefasDe(c).find(x=>x.id===tid); if(!t){ toast('Tarefa não encontrada — atualize',false); return; }
+  if(t.tipo!=='reuniao'){ toast('Só reunião entra na agenda com etapa e cor',false); return; }
+  const chave=cid+'/'+tid; if(_gcalReuniaoBusy[chave]) return; _gcalReuniaoBusy[chave]=true;
+  try{
+    const alvo=reuniaoTituloAlvo(c);                      // "🟡 [RCP/FF] Nome" ou null
+    const tituloCru=tarNomeTipo(t.tipo)+' · '+(c.nome||''); // fallback quando a etapa não está no mapa
+    if(!alvo) console.warn('[reunião→agenda] etapa não mapeada (sem prefixo/cor):',(c.funil==='bc'?'bc':'nn')+' / '+(c.etapa||'(sem etapa)'));
+    // ── tarefa já tem evento? então SINCRONIZA (não duplica) ──
+    if(t.gcalId){
+      const ev=gcalEvPorId(t.gcalId);
+      if(alvo){
+        if(ev){ const r=reuniaoResolveTitulo(c, ev.summary||'');
+          if(r.acao==='skip'){ toast('Já está com a etapa certa na agenda',true); return; }
+          if(r.acao==='manual'){ toast('Evento com título ajustado à mão — não mexi',true); return; } }
+        await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),{summary:alvo, colorId:REUNIAO_COLOR_ID},{sendUpdates:'none'});
+        toast('Agenda atualizada: '+alvo,true);
+      }else{
+        await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),{summary:tituloCru},{sendUpdates:'none'});
+        toast('Agenda atualizada (etapa não mapeada)',true);
+      }
+      await gcalCarregar(); return;
+    }
+    // ── criar novo ──
+    const {ini,fim}=tarReuniaoInterval(t);
+    const body={ summary: alvo||tituloCru, description: tarEventoDescricao(c,t),
+      start:{dateTime:ini, timeZone:GCAL_TZ}, end:{dateTime:fim, timeZone:GCAL_TZ} };
+    if(alvo) body.colorId=REUNIAO_COLOR_ID;
+    const ev=await gcalApi('POST','',body,{sendUpdates:'none'});
+    if(ev&&ev.id){ t.gcalId=ev.id; salvar(); }
+    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Reunião na agenda: '+(alvo||tituloCru),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    toast('Reunião criada na sua agenda: '+(alvo||tituloCru),true);
+    await gcalCarregar();
+  }catch(e){ toast('Não consegui criar na agenda: '+(e&&e.message||e),false); }
+  finally{ delete _gcalReuniaoBusy[chave]; }
+}
 function gcalEditar(id){ const e=gcalEvPorId(id); if(!e){ toast('Evento não encontrado — atualize',false); return; }
   const s=gcalDT(e,'start'), f=gcalDT(e,'end');
   gcalModalEvento({id,summary:e.summary||'',description:e.description||'',dia:s.d,ini:s.t||'09:00',fim:f.t||'10:00',local:e.location||'',
@@ -4167,7 +4284,7 @@ function viewAgenda(){
   const cont=agendaContagem();
   const semAtiv=contatosDoLp().filter(c=>!ETAPAS_ENCERR.includes(c.etapa)&&!ETAPAS_BC_ENCERR.includes(c.etapa)&&semProxAtividade(c));
   const linha=x=>{
-    const t=x.t, c=x.c, sit=tarSituacao(t), gc=tarGcalUrl(c,t), wa=waHref(c.telefone);
+    const t=x.t, c=x.c, sit=tarSituacao(t), wa=waHref(c.telefone);
     return `<div class="tarlin">
       <span title="${esc(tarNomeTipo(t.tipo))}">${tarIco(t.tipo)}</span>
       <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(c.id)}')">${esc(c.nome)}</b>
@@ -4179,7 +4296,7 @@ function viewAgenda(){
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',1)">+1d</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)">+7d</button>
         ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener">💬</a>`:''}
-        ${gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda">📅</a>`:''}
+        ${tarGcalAcaoHTML(c,t)}
       </span></div>`;
   };
   let corpo='';
@@ -7616,6 +7733,17 @@ function lpSelfCheck(){
     ok('espelho: lê a data de emissão de cada apólice',
        subExtrai(subSplitEspelhos(_esp)[1].txt).emissao==='2026-02-04');
     ok('espelho: o cabeçalho do documento identifica o segurado', (subExtrai(_esp)||{}).cpf==='031.788.184-13');
+    /*REUNIAO-AGENDA-INV — prefixo de etapa + cor no Google Agenda (27/08)*/
+    ok('reunião: prospect OI/FF vira 🟡 [OI/FF]', reuniaoTituloAlvo({nome:'X',funil:'nn',etapa:'OI/FF'})==='🟡 [OI/FF] X');
+    ok('reunião: base Agendada Revisita vira 🟡 [RCP/FF]', reuniaoTituloAlvo({nome:'Y',funil:'bc',etapa:'Agendada Revisita'})==='🟡 [RCP/FF] Y');
+    ok('reunião: fechamento do prospect (C2/N/FA/EMISSÃO) cai em 🟢 [PC]', reuniaoTituloAlvo({nome:'Z',funil:'nn',etapa:'C2'})==='🟢 [PC] Z' && reuniaoTituloAlvo({nome:'Z',funil:'nn',etapa:'EMISSÃO'})==='🟢 [PC] Z');
+    ok('reunião: entrega vira 📦 [DELIVERY] nos dois funis', reuniaoTituloAlvo({nome:'Q',funil:'nn',etapa:'DELIVERY'})==='📦 [DELIVERY] Q' && reuniaoTituloAlvo({nome:'Q',funil:'bc',etapa:'Delivery'})==='📦 [DELIVERY] Q');
+    ok('reunião: etapa fora do mapa não ganha prefixo', reuniaoTituloAlvo({nome:'W',funil:'bc',etapa:'Clientes Ativos'})===null && reuniaoTituloAlvo({nome:'W',funil:'nn',etapa:'SitPlan'})===null);
+    ok('reunião: base de nomes sem etapa nunca vira prefixo', reuniaoTituloAlvo({nome:'W',funil:'bn',etapa:null})===null);
+    ok('reunião: rodar 2x não empilha prefixo (idempotente)', (()=>{ const c={nome:'X',funil:'nn',etapa:'OI/FF'}; return reuniaoResolveTitulo(c, reuniaoTituloAlvo(c)).acao==='skip'; })());
+    ok('reunião: etapa mudou → substitui o prefixo, não concatena', (()=>{ const r=reuniaoResolveTitulo({nome:'X',funil:'nn',etapa:'P/C'},'🟡 [OI/FF] X'); return r.acao==='aplicar' && r.titulo==='🟢 [PC] X'; })());
+    ok('reunião: título ajustado à mão (prefixo não-canônico) é respeitado', reuniaoResolveTitulo({nome:'X',funil:'bc',etapa:'Agendada Revisita'},'[RCP/REC] X').acao==='manual');
+    ok('reunião: strip do prefixo limpa emoji + [ETAPA]', reuniaoTiraPrefixo('🟡 [RCP/FF] Fulano')==='Fulano');
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
