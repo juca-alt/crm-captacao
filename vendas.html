@@ -795,6 +795,7 @@
       <button class="nav-btn sub" data-view="metas" onclick="irPara('metas')"><span class="ic">🎯</span><span class="lbl">Metas</span></button>
       <button class="nav-btn sub" data-view="config-funil" onclick="irPara('config-funil')"><span class="ic">🛠️</span><span class="lbl">Funil &amp; Etapas</span></button>
       <button class="nav-btn sub" onclick="abrirAjustesVisual()"><span class="ic">🎨</span><span class="lbl">Ajustes de visual</span></button>
+      <button class="nav-btn sub" onclick="lpConectarClaude()" title="Gera o conector do seu Claude (MCP), isolado só na sua base"><span class="ic">🔌</span><span class="lbl">Conectar meu Claude</span></button>
       <button class="nav-btn sub so-celular" onclick="toggleMenu(false);bnavConfigurar()"><span class="ic">📱</span><span class="lbl">Barra inferior</span></button>
       <button class="nav-btn sub" data-view="lp-adm" id="nav-lpadm" style="display:none" onclick="irPara('lp-adm')"><span class="ic">🛡️</span><span class="lbl">Acessos (adm)</span></button>
     </div>
@@ -4245,6 +4246,48 @@ function viewPrincipios(){
 const SB_URL='https://cjieobmdpqcupzdpckef.supabase.co';
 const SB_KEY='sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR';
 let sb=null; try{ if(window.supabase) sb=window.supabase.createClient(SB_URL,SB_KEY); }catch(e){ console.warn('Supabase client indisponível (preview offline):',e); }
+
+/* ═══ CONECTAR MEU CLAUDE — gera o conector MCP isolado do PRÓPRIO usuário ══════
+   Lê a sessão de quem está LOGADO e registra no Edge Function `crm-mcp`, que passa
+   a guardar só o refresh token DELE. A URL gerada é a credencial — isolada pela
+   identidade dele + RLS. Nenhum service-role no cliente. Cada um gera o seu. */
+async function lpConectarClaude(){
+  if(!sb){ toast('Disponível só logado (Supabase indisponível no preview)'); return; }
+  let sess=null;
+  try{ const {data}=await sb.auth.getSession(); sess=data&&data.session; }catch(e){}
+  if(!sess){ toast('Entre com sua conta Google primeiro'); return; }
+  toast('Gerando seu conector…');
+  try{
+    const r=await fetch(SB_URL+'/functions/v1/crm-mcp/register',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+sess.access_token,'apikey':SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({refresh_token:sess.refresh_token,label:'Meu Claude'})
+    });
+    const out=await r.json().catch(()=>({}));
+    if(!r.ok||!out.connector_url){ toast('Não deu: '+(out.error||('HTTP '+r.status))); return; }
+    lpConectarModal(out.connector_url,out.dono);
+  }catch(e){ toast('Erro: '+(e.message||e)); }
+}
+function lpConectarModal(url,dono){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const close=()=>ov.remove();
+  ov.addEventListener('click',e=>{ if(e.target===ov) close(); });
+  const box=document.createElement('div');
+  box.style.cssText='background:var(--card,#fff);color:var(--ink,#111);max-width:560px;width:100%;border-radius:14px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.4)';
+  box.innerHTML=
+    '<h3 style="margin:0 0 6px">🔌 Conectar meu Claude</h3>'+
+    '<div style="font-size:13px;color:var(--muted,#666);line-height:1.5;margin-bottom:12px">Este é o SEU conector, isolado só na sua base'+(dono?(' (<b>'+esc(dono)+'</b>)'):'')+'. No <b>claude.ai (Pro)</b> → Configurações → Conectores → <b>Adicionar conector personalizado</b> → cole a URL abaixo. Só você enxerga os seus dados.</div>'+
+    '<input id="lpcm-url" readonly value="'+esc(url)+'" style="width:100%;padding:10px;border:1px solid var(--linha,#ddd);border-radius:8px;font-size:12px;font-family:monospace" onclick="this.select()">'+
+    '<div style="font-size:11.5px;color:var(--muted,#999);margin-top:10px;line-height:1.5">⚠️ Trate como senha: quem tiver esta URL acessa a sua base (e só a sua). Se vazar, gere outra aqui e me avise pra revogar a antiga.</div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">'+
+      '<button class="btn btn-ghost" id="lpcm-x">Fechar</button>'+
+      '<button class="btn btn-p" id="lpcm-c">Copiar URL</button>'+
+    '</div>';
+  ov.appendChild(box); document.body.appendChild(ov);
+  box.querySelector('#lpcm-x').onclick=close;
+  box.querySelector('#lpcm-c').onclick=()=>{ try{ navigator.clipboard.writeText(url); }catch(e){ const i=box.querySelector('#lpcm-url'); i.select(); try{document.execCommand('copy');}catch(_){} } toast('URL copiada!',true); };
+}
 
 /* ---- Modelo das 5 entidades: chave de upsert + campo de status (estado do app) ---- */
 // keys = ordem de fallback p/ a chave de upsert (1ª não-vazia vence). Pendência
