@@ -883,6 +883,40 @@ body:not(.modo-apresenta):not(.modo-cliente) .comp-grade .comp-row.sublinha .k{p
 .ab-lado .pr{margin-top:8px;padding-top:6px;border-top:1px solid var(--ring);font-size:.74rem;color:var(--ink2)}
 .ab-lado .pr b{color:var(--ink);font-size:.9rem}
 </style>
+<style id="tl-css">
+/* linha do tempo e raio-x: arrastar e esconder por linha */
+.tl-l,.rx-l{position:relative}
+.tl-l.cur-off,.rx-l.cur-off{opacity:.38}
+.tl-l .lx,.rx-l .lx{position:absolute;left:-26px;top:50%;margin-top:-11px;z-index:3;
+  border:1px solid var(--ring);background:var(--surface2);color:var(--ink2);
+  width:22px;height:22px;border-radius:7px;font:800 .72rem/1 system-ui;cursor:pointer}
+.tl-l .lx:hover,.rx-l .lx:hover{background:var(--crit);border-color:var(--crit);color:#fff}
+.tl-l.cur-off .lx:hover,.rx-l.cur-off .lx:hover{background:var(--verde);border-color:var(--verde)}
+.tl-l .lg,.rx-l .lg{position:absolute;left:-48px;top:50%;margin-top:-9px;z-index:3;
+  color:var(--axis);font-size:.95rem;letter-spacing:-1px;cursor:grab;user-select:none}
+body:not(.modo-apresenta):not(.modo-cliente) .tl,
+body:not(.modo-apresenta):not(.modo-cliente) .rx-wrap{padding-left:52px}
+.tl-l.lin-drag,.rx-l.lin-drag{opacity:.35}
+.tl-n small{display:block;color:var(--ink2);font-size:.7rem;margin-top:1px}
+.novas-tt{display:flex;align-items:center;gap:9px;font-weight:800;font-size:1rem;position:relative}
+.novas-tt.cur-off{opacity:.4}
+</style>
+<style id="com-css">
+/* gaveta da comissão, dentro da Proposta */
+.com-gav{margin:18px 0 4px}
+.com-bt{border:1px dashed var(--axis);background:transparent;color:var(--muted);
+  border-radius:10px;padding:6px 12px;font:700 .74rem/1 system-ui;cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px}
+.com-bt:hover{color:var(--ink2);border-color:var(--ink2)}
+.com-bt .cx{font-size:.7rem;transition:transform .15s}
+.com-gav.open .com-bt .cx{transform:rotate(180deg)}
+.com-cx{display:none;margin-top:10px}
+.com-gav.open .com-cx{display:block}
+/* a proposta continua editável no modo cliente; só a apresentação trava */
+body.modo-cliente .so-consultor.mesmo-cliente{display:revert!important}
+body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
+@media print{ .com-gav{display:none!important} }
+</style>
 </head>
 <body>
 <header class="top no-print">
@@ -1113,19 +1147,30 @@ body:not(.modo-apresenta):not(.modo-cliente) .comp-grade .comp-row.sublinha .k{p
         <label class="blk-sw"><input type="checkbox" data-sw="recado"> na apresentação</label><span class="blk-cx">▾</span></div>
       <div class="blk-b"><textarea id="cRecado" style="min-height:120px" placeholder="O ponto central desta revisão é…"></textarea></div>
     </div>
+
+    <!-- COMISSAO_GAVETA_V1: discreta, fechada por padrao, invisivel no modo cliente -->
+    <div class="com-gav no-print so-consultor" id="comGav">
+      <button class="com-bt" onclick="togComGav()" title="só você vê isto">
+        <span>%</span> ver comissões <span class="cx">▾</span></button>
+      <div class="com-cx">
+        <div class="card blk" data-blk="com">
+          <div class="blk-h"><span class="ico">%</span><div class="tt"><h2>Comissão do responsável técnico</h2>
+            <p class="sub">Nunca aparece na apresentação, no PDF nem no modo cliente. Incide sobre o prêmio líquido, sem IOF.</p></div><span class="blk-cx">▾</span></div>
+          <div class="blk-b"><div id="comOut2"></div></div>
+        </div>
+        <div class="card blk" data-blk="val">
+          <div class="blk-h"><span class="ico">✓</span><div class="tt"><h2>O que foi validado no app</h2></div><span class="blk-cx">▾</span></div>
+          <div class="blk-b"><div id="valOut2"></div></div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ============ 5 COMISSÃO ============ -->
-  <section class="pane so-consultor" data-pane="com">
-    <div class="card blk" data-blk="com">
-      <div class="blk-h"><span class="ico">%</span><div class="tt"><h2>Comissão do responsável técnico</h2>
-        <p class="sub">Nunca aparece na apresentação nem no PDF do cliente. Incide sobre o prêmio líquido, sem IOF.</p></div><span class="blk-cx">▾</span></div>
-      <div class="blk-b"><div id="comOut"></div></div>
-    </div>
-    <div class="card blk" data-blk="val">
-      <div class="blk-h"><span class="ico">✓</span><div class="tt"><h2>O que foi validado no app</h2></div><span class="blk-cx">▾</span></div>
-      <div class="blk-b"><div id="valOut"></div></div>
-    </div>
+  <!-- a comissão virou gaveta no fim da aba Proposta (patch45); esta section fica
+       vazia e fora de uso, mas o markup dos alvos de render continua existindo -->
+  <section class="pane so-consultor hide" data-pane="com">
+    <div id="comOut"></div><div id="valOut"></div>
   </section>
 
   <!-- ============ ANEXOS ============ -->
@@ -1531,8 +1576,9 @@ const VAZIO = () => ({
         carteira:true, produtos:false, ab:true, novas:false, anxipca:false, assin:true},
   fechado:{},
   ui:{periodo:'mes', cliente:false, aba:'cliente', somar:false, soTenho:false, famFoco:null, ordemCartas:null,
-      ocultasCartas:[], ocultasBlocos:[], ordemAtivos:null, ocultasAtivos:[], ordemProd:null, prodSel:[], capIni:{},
-      simIpca:null, simJuros:null, abCen:null, abDet:true, cmpVisao:'barras', cmpEscala:'global',
+      ocultasCartas:[], ocultasBlocos:[], ordemTL:null, ordemRX:null,
+      ordemAtivos:null, ocultasAtivos:[], ordemProd:null, prodSel:[], capIni:{},
+      simIpca:null, simJuros:null, abCen:null, abDet:true, comAberta:false, cmpVisao:'barras', cmpEscala:'global',
       abApol:{}, abVisao:'global', cmpModo:'planos', comoDens:'compacto', cmpCen:{}, cartGrupos:{}}
 });
 let state = VAZIO();
@@ -1575,6 +1621,8 @@ function normEstado(){
   if (!state.ui.cmpCen || typeof state.ui.cmpCen !== 'object') state.ui.cmpCen = {};
   if (!state.ui.cartGrupos || typeof state.ui.cartGrupos !== 'object') state.ui.cartGrupos = {};
   if (!Array.isArray(state.ui.ocultasBlocos)) state.ui.ocultasBlocos = [];
+  if (state.ui.ordemTL === undefined) state.ui.ordemTL = null;
+  if (state.ui.ordemRX === undefined) state.ui.ordemRX = null;
   ['ocultasCartas','ocultasAtivos','prodSel'].forEach(k => { if (!Array.isArray(state.ui[k])) state.ui[k] = []; });
   if (state.ui.ordemAtivos === undefined) state.ui.ordemAtivos = null;
   if (state.ui.ordemProd === undefined) state.ui.ordemProd = null;
@@ -3015,18 +3063,18 @@ function renderCenarios(){
         <div class="lr">
           <div><div class="nm">${esc(p.nome)} <span class="selo s-${p.selo}">${p.selo}</span></div>
                <div class="cd">${esc(r && r.code ? r.code : p.id)} · ${esc(p.risco||'')}</div></div>
-          <div class="so-consultor"><label class="lbl">Prazo</label>
+          <div class="so-consultor mesmo-cliente"><label class="lbl">Prazo</label>
             <select onchange="setL(${ci},${li},'prazo',+this.value)">${(p.prazos||[]).map(z => `<option value="${z}" ${l.prazo === z ? 'selected':''}>${z >= 60 ? 'até '+z : z+' anos'}</option>`).join('')}</select></div>
-          <div class="so-consultor"><label class="lbl">Classe</label>
+          <div class="so-consultor mesmo-cliente"><label class="lbl">Classe</label>
             <select onchange="setL(${ci},${li},'classe',this.value)" ${classes.length < 2 ? 'disabled' : ''}>${classes.map(c => `<option value="${c}" ${l.classe === c ? 'selected':''}>${CL_LABEL[c]||c}</option>`).join('') || '<option>—</option>'}</select>
             ${p.fumante ? `<label class="chk" style="margin-top:5px"><input type="checkbox" ${l.fumante ? 'checked':''} onchange="setL(${ci},${li},'fumante',this.checked)"> fumante</label>` : ''}</div>
           <div><label class="lbl">${p.mult_dia ? 'Diária' : p.divisor === 10 ? 'Renda mensal' : 'Capital'}</label>
             <input value="${l.capital ? moneyMask(Math.round(l.capital)) : ''}" inputmode="numeric" style="text-align:right" oninput="setCap(${ci},${li},this.value)"></div>
           <div class="prem" id="pr-${ci}-${li}"><div class="m">${val != null ? fmt(val) : '—'}</div>
             <div class="y">${r && r.ok ? (per === 'ano' ? fmt(r.mensal)+'/mês' : fmt(r.anual)+'/ano') : (r && r.appOnly ? 'cotar no app' : 'sem tarifa')}</div>
-            <label class="chk so-consultor" style="justify-content:flex-end;margin-top:4px"><input type="checkbox" ${l.manual ? 'checked':''} onchange="setL(${ci},${li},'manual',this.checked)"> R$ manual</label>
+            <label class="chk so-consultor mesmo-cliente" style="justify-content:flex-end;margin-top:4px"><input type="checkbox" ${l.manual ? 'checked':''} onchange="setL(${ci},${li},'manual',this.checked)"> R$ manual</label>
             ${l.manual ? `<input value="${l.premioManual ? l.premioManual.toLocaleString('pt-BR',{minimumFractionDigits:2}) : ''}" style="text-align:right;margin-top:4px" oninput="setPM(${ci},${li},this.value)">` : ''}</div>
-          <button class="xbtn so-consultor" onclick="delL(${ci},${li})">✕</button>
+          <button class="xbtn so-consultor mesmo-cliente" onclick="delL(${ci},${li})">✕</button>
         </div>
         <div id="av-${ci}-${li}">${av.map(a => `<div class="aviso a-${a.t}">${esc(a.m)}</div>`).join('')}</div>
         ${p.nota ? `<div class="mini" style="margin-top:5px">${esc(p.nota)}</div>` : ''}
@@ -3037,11 +3085,11 @@ function renderCenarios(){
       <div class="row" style="margin-bottom:4px">
         <input value="${esc(cen.nome)}" style="max-width:280px;font-weight:800;background:transparent;border-color:transparent" oninput="setCenNome(${ci},this.value)">
         <span class="pill" style="border-color:${CORCEN[ci % CORCEN.length]};color:${CORCEN[ci % CORCEN.length]};background:${SOFTCEN[ci % SOFTCEN.length]}">plano ${String.fromCharCode(65+ci)}</span>
-        <button class="btn sm so-consultor" onclick="dupCen(${ci})" title="criar uma cópia deste plano para editar">⧉ duplicar</button>
-        <button class="xbtn right so-consultor" onclick="delCen(${ci})" title="remover cenário">✕</button>
+        <button class="btn sm so-consultor mesmo-cliente" onclick="dupCen(${ci})" title="criar uma cópia deste plano para editar">⧉ duplicar</button>
+        <button class="xbtn right so-consultor mesmo-cliente" onclick="delCen(${ci})" title="remover cenário">✕</button>
       </div>
       ${linhas || '<div class="callout">Sem coberturas. Adicione abaixo, ou volte à etapa 3 e use um dos botões de "levar para a proposta".</div>'}
-      <div class="addbar so-consultor">
+      <div class="addbar so-consultor mesmo-cliente">
         <select id="selB${ci}">${D.products.filter(p => p.tipo === 'base').map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
         <button class="btn sm" onclick="addL(${ci},'selB${ci}')">+ básica</button>
         <select id="selO${ci}">${D.products.filter(p => p.tipo !== 'base').map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
@@ -3529,6 +3577,13 @@ function extrasNarrativa(cen){
 /* ============================================================
    5 · COMISSÃO + VALIDAÇÃO
    ============================================================ */
+
+/* ═══════ COMISSAO_GAVETA_V1 · a comissão mora na Proposta, fechada ═══════ */
+window.togComGav = () => {
+  const g = document.getElementById('comGav'); if (!g) return;
+  const ab = g.classList.toggle('open');
+  state.ui.comAberta = ab; save();
+};
 function renderComissao(){
   const cli = state.cliente; let rows = '', tot = 0, notas = new Set();
   state.cen.forEach((cen, ci) => {
@@ -3543,17 +3598,21 @@ function renderComissao(){
         <td class="num">${cm.renovMensal != null ? fmt(cm.renovMensal) : '—'}</td><td class="mini">${esc(cm.curvaTxt||'—')}</td></tr>`;
     });
   });
-  $('comOut').innerHTML = rows
+  /* a gaveta restaura o estado aberto/fechado e recebe o mesmo conteúdo */
+  const _g = $('comGav');
+  if (_g) _g.classList.toggle('open', !!(state.ui && state.ui.comAberta));
+  const _dup = (id, html) => { const a = $(id), b = $(id+'2'); if (a) a.innerHTML = html; if (b) b.innerHTML = html; };
+  _dup('comOut', rows
     ? `<div class="scroll"><table><thead><tr><th>Cenário</th><th>Produto</th><th class="num">% 1º ano</th><th class="num">1º ano/mês</th><th class="num">1º ano anualizado</th><th class="num">2º ano/mês</th><th>Curva</th></tr></thead><tbody>${rows}
        <tr class="tot"><td colspan="4">Total anualizado, cenário A</td><td class="num">${fmt(tot)}</td><td colspan="2"></td></tr></tbody></table></div>
        ${[...notas].map(n => `<div class="aviso a-info">${esc(n)}</div>`).join('')}`
-    : `<div class="callout">Monte um cenário na etapa 4 para ver a comissão.</div>`;
+    : `<div class="callout">Monte um cenário na etapa 4 para ver a comissão.</div>`);
   const V = D.validacao || {};
-  $('valOut').innerHTML = `<div class="grid g3">
+  _dup('valOut', `<div class="grid g3">
     <div class="tile good"><div class="k">Validado no app (${esc(V.data||'')})</div><ul style="margin:7px 0 0;padding-left:16px;font-size:.76rem">${(V.validado||[]).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
     <div class="tile crit"><div class="k">Divergente, confirme antes de fechar</div><ul style="margin:7px 0 0;padding-left:16px;font-size:.76rem">${(V.divergente||[]).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
     <div class="tile a"><div class="k">Só existe no app</div><ul style="margin:7px 0 0;padding-left:16px;font-size:.76rem">${(V.apponly||[]).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
-  </div>`;
+  </div>`);
 }
 
 /* ============================================================
@@ -4778,7 +4837,9 @@ function renderApresenta(){
     <div class="callout"><b>A conta, aberta.</b> Emergenciais (3× despesas) ${fmt0(N.emerg)} · Restabelecimento (6×) ${fmt0(N.restab)} · Inventário (${state.nec.inv}%) ${fmt0(N.invent)} · Educação (${state.nec.eduA} anos) ${fmt0(N.eduTot)} · Dívidas (${state.nec.divA} anos) ${fmt0(N.divTot)}.</div></div>`;
   }
 
-  if (mostra('novas') && temHoje){ h += sec('Linha do tempo e lacunas','novas') + `<div class="card">${novasVisoesHTML()}</div>`; }
+  /* com as duas visões desligadas a seção não tem o que mostrar: sai inteira */
+  if (mostra('novas') && temHoje && (!blocoOculto('novas-tl') || !blocoOculto('novas-rx'))){
+    h += sec('Linha do tempo e lacunas','novas') + `<div class="card">${novasVisoesHTML()}</div>`; }
   if (mostra('ab')){ const _ab = abHTML(); if (_ab) h += sec('Como é hoje e como fica','ab') + `<div class="card">${_ab}</div>`; }
 
   /* planos: cada um vira uma seção com as cartas */
@@ -5096,10 +5157,56 @@ function itensLinhaTempo(){
   }));
   return out.sort((a,b) => (b.vit - a.vit) || ((b.fimId||999) - (a.fimId||999)));
 }
+
+/* ═══════ NOVAS_V2 · a linha do tempo e o raio-x na mão do consultor ═══════
+   Ordem e visibilidade por LINHA. A chave da linha do tempo é o código + a apólice
+   (uma pessoa pode ter o mesmo produto em duas apólices); a do raio-x é a cobertura. */
+function _tlK(x){ return 'tl|' + (x.num||'?') + '|' + (x.cod||x.nome||'?'); }
+function _rxK(x){ return 'rx|' + x.k; }
+function _ordenaPor(lista, chave, ordem){
+  if (!ordem || !ordem.length) return lista;
+  const rank = k => { const i = ordem.indexOf(k); return i < 0 ? 1e6 : i; };
+  return lista.slice().sort((a,b) => rank(chave(a)) - rank(chave(b)));
+}
+window.salvarOrdemLinhas = (sel, campo) => {
+  const box = document.querySelector(sel); if (!box) return;
+  state.ui[campo] = [].slice.call(box.querySelectorAll('[data-lk]')).map(x => x.dataset.lk);
+  save(); render();
+};
+let _dragLin = null;
+function ligaDragLinhas(sel, campo){
+  const box = document.querySelector(sel); if (!box) return;
+  [].slice.call(box.querySelectorAll('[data-lk]')).forEach(el => {
+    if (el.dataset.dnd) return; el.dataset.dnd = '1';
+    el.setAttribute('draggable','true');
+    el.addEventListener('dragstart', e => { _dragLin = el; el.classList.add('lin-drag');
+      try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', el.dataset.lk||''); }catch(_){} });
+    el.addEventListener('dragend', () => { el.classList.remove('lin-drag'); _dragLin = null; });
+    el.addEventListener('dragover', e => {
+      const d = _dragLin; if (!d || d === el || d.parentElement !== el.parentElement) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      el.parentElement.insertBefore(d, ((e.clientY - r.top)/(r.height||1) > 0.5) ? el.nextSibling : el);
+    });
+    el.addEventListener('drop', e => { e.preventDefault(); salvarOrdemLinhas(sel, campo); });
+  });
+}
+/* controles de uma linha (só no console) */
+function _linCtl(k){
+  if (!_edit()) return '';
+  const off = blocoOculto(k);
+  return `<span class="lg no-print so-consultor" title="arraste para mudar a ordem">⠿</span>
+    <button class="lx no-print so-consultor" title="${off?'trazer de volta para o cliente':'tirar esta linha do material do cliente'}"
+      onclick="togBloco('${esc(k)}',event)">${off?'↩':'✕'}</button>`;
+}
 function linhaTempoHTML(){
-  const L = itensLinhaTempo(); if (!L.length) return '<p class="sub">Cole o espelho para montar a linha do tempo.</p>';
+  let L = itensLinhaTempo(); if (!L.length) return '<p class="sub">Cole o espelho para montar a linha do tempo.</p>';
+  L = _ordenaPor(L, _tlK, state.ui && state.ui.ordemTL);
+  const _ed = _edit();
+  const _vis = L.filter(x => _ed || !blocoOculto(_tlK(x)));
+  if (!_vis.length) return _ed ? '' : '';
   const idade = _idadeCli();
-  const fins = L.filter(x => !x.vit && x.fimId).map(x => x.fimId);
+  const fins = _vis.filter(x => !x.vit && x.fimId).map(x => x.fimId);
   const fimMax = Math.max(idade + 10, fins.length ? Math.max.apply(null, fins) + 5 : idade + 25, 90);
   const larg = fimMax - idade;
   const pos = id => Math.max(0, Math.min(100, (id - idade) / larg * 100));
@@ -5107,10 +5214,12 @@ function linhaTempoHTML(){
   for (let k = 0; k <= 4; k++) marcas.push(Math.round(idade + larg*k/4));
   let h = `<div class="tl"><div class="tl-reg"><span style="flex:0 0 190px;text-align:left">Cobertura</span>
     ${marcas.map(m => `<span>${m} anos</span>`).join('')}<span style="flex:0 0 96px"></span></div>`;
-  L.forEach(x => {
+  _vis.forEach(x => {
     const fim = x.vit ? 100 : (x.fimId ? pos(x.fimId) : 100);
-    h += `<div class="tl-l">
-      <div class="tl-n">${esc(x.nome)}<small>${fmt0(x.cap)} · apólice ${esc(x.num||'')}</small></div>
+    const _k = _tlK(x), _off = _ed && blocoOculto(_k);
+    /* sem o número da apólice: fica só o capital, alinhado com o nome */
+    h += `<div class="tl-l${_off?' cur-off':''}" data-lk="${esc(_k)}">${_linCtl(_k)}
+      <div class="tl-n">${esc(x.nome)}<small>${fmt0(x.cap)}</small></div>
       <div class="tl-t"><div class="tl-b${x.vit?' vit':''}" style="left:0;width:${fim.toFixed(1)}%"></div>
         ${x.quitId ? `<div class="tl-quit" style="left:${pos(x.quitId).toFixed(1)}%" title="pagamento quitado aos ${x.quitId}"></div>` : ''}</div>
       <div class="tl-fim${x.vit?' vit':''}">${x.vit ? 'a vida toda' : (x.fimId ? 'até os '+x.fimId : '—')}</div>
@@ -5120,23 +5229,8 @@ function linhaTempoHTML(){
     <span><i style="background:var(--verde)"></i>vitalício — não acaba</span>
     <span><i style="background:var(--laranja)"></i>temporário — tem data para acabar</span>
     <span><i style="background:var(--roxo);width:3px;height:12px;border-radius:1px"></i>quitação do pagamento</span></div>`;
-  /* degraus de perda */
-  const porIdade = {};
-  L.forEach(x => { if (!x.vit && x.fimId){ porIdade[x.fimId] = (porIdade[x.fimId]||0) + x.cap; } });
-  const chaves = Object.keys(porIdade).map(Number).sort((a,b) => a-b);
-  if (chaves.length){
-    let resta = L.reduce((s,x) => s + x.cap, 0);
-    h += `<div class="tl-deg"><div class="mini" style="font-weight:700;margin-bottom:4px">O que muda no caminho</div>`;
-    chaves.forEach(id => {
-      resta -= porIdade[id];
-      h += `<div class="d"><span class="di">${id} anos</span>
-        <span>a proteção cai <b>${fmt0(porIdade[id])}</b> — resta ${fmt0(resta)}${resta<=0?' (nada)':''}</span></div>`;
-    });
-    const vitTot = L.filter(x => x.vit).reduce((s,x) => s + x.cap, 0);
-    h += `<div class="d" style="background:var(--verde-soft);border-color:transparent">
-      <span class="di" style="color:var(--verde)">sempre</span>
-      <span>${vitTot>0?`<b style="color:var(--verde)">${fmt0(vitTot)}</b> continua para a vida toda, sem data para acabar.`:'<b>Nada</b> permanece depois dessas datas — hoje não há capital vitalício.'}</span></div></div>`;
-  }
+  /* "O que muda no caminho" saiu a pedido do Gustavo: a informação já está nas barras
+     e no "até os X" de cada linha; repetida em lista virava parede de número. */
   return h;
 }
 /* -- raio-x de lacunas -- */
@@ -5186,33 +5280,51 @@ function raioXLinhas(){
   }).filter(Boolean);
 }
 function raioXHTML(){
-  const L = raioXLinhas(); if (!L.length) return '';
-  const nOk = L.filter(x => x.st === 'ok').length, nPz = L.filter(x => x.st === 'pz').length, nNo = L.filter(x => x.st === 'no').length;
+  let L = raioXLinhas(); if (!L.length) return '';
+  L = _ordenaPor(L, _rxK, state.ui && state.ui.ordemRX);
+  const _ed = _edit();
+  const _vis = L.filter(x => _ed || !blocoOculto(_rxK(x)));
+  if (!_vis.length) return '';
+  /* os contadores contam o que o cliente VAI ver, senão o número não bate com a lista */
+  const _cta = L.filter(x => !blocoOculto(_rxK(x)));
+  const nOk = _cta.filter(x => x.st === 'ok').length, nPz = _cta.filter(x => x.st === 'pz').length, nNo = _cta.filter(x => x.st === 'no').length;
   let h = `<div class="rx-topo">
     <div class="rx-tile ok"><div class="n">${nOk}</div><div class="t">protegidas para sempre</div></div>
     <div class="rx-tile pz"><div class="n">${nPz}</div><div class="t">protegidas, mas com prazo</div></div>
     <div class="rx-tile no"><div class="n">${nNo}</div><div class="t">sem proteção hoje</div></div>
   </div>`;
-  h += L.map(x => `<div class="rx-l ${x.st}">
+  h += `<div class="rx-wrap">` + _vis.map(x => `<div class="rx-l ${x.st}${(_ed && blocoOculto(_rxK(x)))?' cur-off':''}" data-lk="${esc(_rxK(x))}">${_linCtl(_rxK(x))}
     ${_icoSit(x.k).replace('cmp-ico','ic')}
     <div class="nm">${esc(x.nome)}<small>${esc(x.sub)}</small></div>
     <div class="st">${x.st==='ok'?'✓ ':(x.st==='pz'?'⏳ ':'✕ ')}${esc(x.det)}</div>
     <div class="vl">${x.cap?fmt0(x.cap)+x.suf:'—'}</div>
-  </div>`).join('');
+  </div>`).join('') + `</div>`;
   h += `<p class="mini" style="margin-top:10px">Leitura direta do que está em vigor hoje. <b>Com prazo</b> não é problema — é desenho: o temporário protege forte a fase de maior responsabilidade. O ponto é <b>saber a data</b> e decidir o que fica depois dela.</p>`;
   return h;
 }
 function novasVisoesHTML(){
-  return `<div class="sub" style="margin-bottom:10px">Duas leituras da mesma apólice: <b>quando</b> cada proteção acaba, e <b>onde</b> existe lacuna hoje.</div>
-    <div style="font-weight:800;font-size:1rem;margin:14px 0 6px">📅 Linha do tempo da sua proteção</div>
-    ${linhaTempoHTML()}
-    <div style="font-weight:800;font-size:1rem;margin:22px 0 6px">🔎 Raio-x das lacunas</div>
-    ${raioXHTML()}`;
+  const ed = _edit();
+  const vTL = sbVai('novas-tl'), vRX = sbVai('novas-rx');
+  const cab = (vTL && vRX)
+    ? `Duas leituras da mesma apólice: <b>quando</b> cada proteção acaba, e <b>onde</b> existe lacuna hoje.`
+    : (vTL ? `<b>Quando</b> cada proteção acaba.` : `<b>Onde</b> existe lacuna hoje.`);
+  /* o aviso tem que aparecer no CONSOLE: sbVai() é sempre true ali (é o que mantém o
+     bloco visível e esmaecido), então a checagem do aviso olha o estado direto. */
+  const offTL = blocoOculto('novas-tl'), offRX = blocoOculto('novas-rx');
+  let h = `<div class="sub" style="margin-bottom:10px">${cab}</div>`;
+  if (ed && offTL && offRX) h += `<div class="callout">As duas visões estão desligadas: esta seção não vai para o cliente.</div>`;
+  if (vTL) h += `<div class="novas-tt ${_sbCls('novas-tl')}" style="margin:14px 0 6px">📅 Linha do tempo da sua proteção${_sbX('novas-tl','a linha do tempo')}</div>
+    <div class="${_sbCls('novas-tl')}">${linhaTempoHTML()}</div>`;
+  if (vRX) h += `<div class="novas-tt ${_sbCls('novas-rx')}" style="margin:22px 0 6px">🔎 Raio-x das lacunas${_sbX('novas-rx','o raio-x das lacunas')}</div>
+    <div class="${_sbCls('novas-rx')}">${raioXHTML()}</div>`;
+  return h;
 }
 function renderNovas(){
   const box = $('novasOut'); if (!box) return;
   const tem = !(state.hoje.semNada || !itensHoje().length);
   box.innerHTML = tem ? novasVisoesHTML() : '<p class="sub">Cole o espelho de uma apólice para ver estas visões.</p>';
+  ligaDragLinhas('#novasOut .tl', 'ordemTL');
+  ligaDragLinhas('#novasOut .rx-wrap', 'ordemRX');
 }
 function renderCarteira(){
   const box = $('carteiraOut'); if (!box) return;
@@ -5483,12 +5595,14 @@ function mostra(k){ return !!state.show[k]; }
 /* ============================================================
    NAVEGAÇÃO / RENDER
    ============================================================ */
-const ABAS = [['cliente','Cliente','1'],['hoje','Hoje','2'],['nec','Necessidade','3'],['prop','Proposta','4'],['com','Comissão','%'],['produtos','Produtos','◆']];
+/* a Comissão saiu da barra: virou gaveta dentro da Proposta (patch45) */
+const ABAS = [['cliente','Cliente','1'],['hoje','Hoje','2'],['nec','Necessidade','3'],['prop','Proposta','4'],['produtos','Produtos','◆']];
 function renderNav(){
-  $('navSteps').innerHTML = ABAS.map(a => {
-    if (a[0] === 'com' && state.ui.cliente) return '';
-    return `<button class="step ${state.ui.aba === a[0] ? 'on' : ''}" data-go="${a[0]}"><span class="n">${a[2]}</span>${a[1]}</button>`;
-  }).join('');
+  $('navSteps').innerHTML = ABAS.map(a =>
+    `<button class="step ${state.ui.aba === a[0] ? 'on' : ''}" data-go="${a[0]}"><span class="n">${a[2]}</span>${a[1]}</button>`
+  ).join('');
+  /* quem tinha a aba 'com' salva no estado cai na Proposta, onde a comissão passou a viver */
+  if (state.ui.aba === 'com') state.ui.aba = 'prop';
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { state.ui.aba = b.dataset.go; save(); render(); });
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === state.ui.aba));
 }
