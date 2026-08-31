@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.18.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.19.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -99,6 +99,17 @@
   /* FOCO-VENDAS-V1 — KPI que é caminho, não só número. Parece botão porque é
      botão: quem passa o mouse vê que dá pra clicar, e quando a lente está
      ligada o cartão fica aceso para não esquecer que o quadro está filtrado. */
+  /* AVANCAR-NO-TOQUE-V1: no desktop o arrasto já resolve, então o botão fica
+     discreto e só acende no hover do card; no celular ele é o caminho ÚNICO,
+     então lá vira alvo cheio (regra dos 44px de toque). */
+  .nc-avancar{display:block;width:100%;margin-top:6px;font:inherit;font-size:11.5px;font-weight:600;
+    color:var(--azul);background:transparent;border:1px dashed var(--linha);border-radius:8px;
+    padding:5px 8px;cursor:pointer;text-align:center;opacity:.55;transition:opacity .12s,border-color .12s,background .12s}
+  .nncard:hover .nc-avancar{opacity:1;border-color:var(--azul)}
+  .nc-avancar:hover{background:var(--azul-claro,#eef4ff)}
+  .nc-avancar:focus-visible{outline:2px solid var(--azul);outline-offset:2px;opacity:1}
+  .toast-undo{font:inherit;font-size:12px;font-weight:700;margin-left:10px;background:transparent;
+    border:0;border-bottom:1px solid currentColor;color:inherit;cursor:pointer;padding:0}
   .kpi-lente{font:inherit;text-align:left;cursor:pointer;transition:border-color .12s,box-shadow .12s,background .12s}
   .kpi-lente:hover{border-color:var(--azul);box-shadow:0 2px 8px rgba(37,99,235,.14)}
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
@@ -391,6 +402,8 @@
        não pra explicá-lo — as sub-linhas custavam mais altura que o primeiro
        card. Elas voltam em "mais números" e continuam na lente ligada (ali a
        sub-linha é o "✕ vendo só estes", que é o caminho de volta). */
+    /* no celular não há arrasto: o botão é o único caminho, então é alvo cheio */
+    .nc-avancar{opacity:1;padding:9px 8px;font-size:12.5px;min-height:38px;border-style:solid}
     .kpis-funil{grid-template-columns:repeat(2,minmax(0,1fr))}
     /* especificidade de propósito: existe um `.kpi > div:not(.num):not(.lbl)`
        logo abaixo que já trunca a sub-linha em 2 linhas no celular. Ele ganha de
@@ -849,7 +862,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.18.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.19.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -871,7 +884,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.18.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.19.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1846,6 +1859,53 @@ function tarChipCard(c){
   return `<span class="tarchip ${tarClasse(sit)}" onclick="event.stopPropagation();abrirContatoTarefa('${esc(c.id)}')" title="${esc(tarNomeTipo(t.tipo)+': '+(t.tit||''))}">${tarIco(t.tipo)} ${esc(tarQuandoTxt(t))}</span>`;
 }
 function abrirContatoTarefa(id){ abrirContato(id); setTimeout(()=>{ const el=$('#tarBox'); if(el) el.scrollIntoView({block:'center'}); const i=$('#tarTit'); if(i) i.focus(); },90); }
+/* ═══ AVANCAR-NO-TOQUE-V1 (31/08) ═══════════════════════════════════════════
+   O quadro só movia card por drag HTML5 — que NÃO existe em toque. A própria
+   toolbar admitia: "no celular: toque no card e mude a etapa no perfil". Ou
+   seja, no telefone avançar uma etapa custava abrir a ficha, achar as fichas de
+   etapa e tocar. Para quem trabalha o funil do celular, esse era o atrito que
+   sobrou depois do cabeçalho.
+   Agora o card tem UM toque: "→ <próxima etapa>". Com desfazer, porque toque
+   errado no bolso não pode mover negócio sem volta. */
+function funFluxoDe(c){ return (c&&c.funil==='bc')?ETAPAS_BC_FLUXO:ETAPAS_FLUXO; }
+function funProxEtapa(c){
+  if(!c) return null;
+  const fx=funFluxoDe(c), i=fx.indexOf(c.etapa);
+  if(i<0||i>=fx.length-1) return null;   // fora do fluxo (encerrado) ou já na última
+  return fx[i+1];
+}
+function funAvancar(id,ev){
+  if(ev){ ev.stopPropagation(); ev.preventDefault(); }
+  const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
+  const prox=funProxEtapa(c); if(!prox) return;
+  const de=c.etapa;
+  c.etapa=prox; logEtapa(c,de,prox);
+  const marca=interacoesDe(c).slice(-1)[0];   /* guarda QUAL registro foi este */
+  salvar();
+  toastDesfazer(`${c.nome.split(' ')[0]}: ${LBLE(de)} → ${LBLE(prox)}`, ()=>{
+    const v=S.contatos.find(x=>String(x.id)===String(id)); if(!v) return;
+    v.etapa=de;
+    /* APAGA o registro em vez de empilhar a volta. A taxa de passagem conta
+       quem ALCANÇOU cada etapa lendo o histórico — se o toque errado ficasse
+       gravado, o negócio contaria como tendo chegado numa etapa onde nunca
+       esteve, e a taxa subiria sozinha. Toque desfeito em segundos não é
+       história do negócio, é erro de dedo. */
+    if(marca&&marca.id){ const li=interacoesDe(v); const i=li.findIndex(x=>x.id===marca.id); if(i>=0) li.splice(i,1); }
+    salvar(); render(); toast('Desfeito',true);
+  });
+  render();
+}
+function LBLE(e){ return (typeof ET_LABEL==='object'&&ET_LABEL[e])||e; }
+/* toast com ação: o desfazer só vale enquanto o aviso está na tela — depois
+   disso a mudança é histórico, e histórico se corrige na ficha, não por atalho. */
+function toastDesfazer(msg,fn){
+  const t=document.createElement('div'); t.className='toast ok';
+  t.innerHTML=`<span></span> <button class="toast-undo">desfazer</button>`;
+  t.firstChild.textContent=msg;
+  t.querySelector('button').onclick=()=>{ t.remove(); fn(); };
+  $('#toasts').appendChild(t); setTimeout(()=>t.remove(),6000);
+}
+
 function nnCard(c){
   /* Recomendações são métrica PRÓPRIA: pedir e colher não depende de fechar
      contrato, e sem isso no card o funil só conta dinheiro. Só aparece quando
@@ -1861,6 +1921,8 @@ function nnCard(c){
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
     ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
     ${_tar}
+    ${(()=>{ const px=funProxEtapa(c); return px?`<button class="nc-avancar" onclick="funAvancar('${esc(c.id)}',event)"
+        title="Avançar para ${esc(LBLE(px))} — dá pra desfazer">→ ${esc(LBLE(px))}</button>`:''; })()}
     <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}${_recBadge}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
 }
@@ -7868,6 +7930,27 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+    /* AVANCAR-NO-TOQUE-V1:SELFCHECK */
+    ok('avançar: a próxima etapa é a seguinte no fluxo do funil certo', (()=>{
+      const a=funProxEtapa({funil:'nn',etapa:ETAPAS_FLUXO[0]})===ETAPAS_FLUXO[1];
+      const b=funProxEtapa({funil:'bc',etapa:ETAPAS_BC_FLUXO[0]})===ETAPAS_BC_FLUXO[1];
+      return a&&b; })());
+    ok('avançar: a última etapa do fluxo não oferece avanço',
+       funProxEtapa({funil:'nn',etapa:ETAPAS_FLUXO[ETAPAS_FLUXO.length-1]})===null);
+    ok('avançar: negócio encerrado não oferece avanço',
+       ETAPAS_ENCERR.every(e=>funProxEtapa({funil:'nn',etapa:e})===null));
+    ok('avançar: etapa inexistente não inventa destino',
+       funProxEtapa({funil:'nn',etapa:'ETAPA QUE NAO EXISTE'})===null);
+    ok('avançar: o funil bc não usa o fluxo do nn', (()=>{
+      const p=funProxEtapa({funil:'bc',etapa:ETAPAS_BC_FLUXO[0]});
+      return p!==null && ETAPAS_BC_FLUXO.includes(p); })());
+    ok('avançar: desfazer APAGA o registro, não empilha a volta (senão a taxa infla)', (()=>{
+      const c={id:'zz-teste',nome:'Teste Undo',funil:'nn',etapa:ETAPAS_FLUXO[0],interacoes:[]};
+      const antes=c.interacoes.length;
+      logEtapa(c,ETAPAS_FLUXO[0],ETAPAS_FLUXO[1]);
+      const marca=c.interacoes.slice(-1)[0];
+      const i=c.interacoes.findIndex(x=>x.id===marca.id); if(i>=0) c.interacoes.splice(i,1);
+      return c.interacoes.length===antes && !c.interacoes.some(x=>x.para===ETAPAS_FLUXO[1]); })());
     /* DINHEIRO-A-VISTA-V1:SELFCHECK — script de cobrança por motivo */
     ok('script: cartão recusado não cai no genérico', atScript({motivo_recusa:'CARTAO RECUSADO PELA OPERADORA'}).id==='cartao_recusado');
     ok('script: cartão VENCIDO ganha do cartão recusado (mais específico primeiro)',
