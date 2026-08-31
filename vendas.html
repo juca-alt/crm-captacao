@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.26.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.27.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -117,6 +117,13 @@
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
   .kpi-lente.on{background:#eef4ff;border:1.5px solid var(--azul)}
   .kpi-lente.on .lbl,.kpi-lente.on .num{color:var(--azul)}
+  .ct-estados{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+  .ct-est{font:inherit;font-size:12.5px;background:#fff;color:var(--muted);border:1px solid var(--linha);
+    border-radius:999px;padding:5px 12px;cursor:pointer;transition:border-color .12s,background .12s,color .12s}
+  .ct-est b{color:var(--txt);font-size:13.5px}
+  .ct-est:hover{border-color:var(--azul)}
+  .ct-est.on{background:var(--azul-claro,#eef4ff);border-color:var(--azul);color:var(--azul)}
+  .ct-est.on b{color:var(--azul)}
   .reun-op{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--linha);border-radius:9px;
     padding:9px 11px;cursor:pointer;font-size:13.5px}
   .reun-op:hover{border-color:var(--azul)}
@@ -869,7 +876,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.26.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.27.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -891,7 +898,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.26.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.27.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2424,11 +2431,12 @@ function fxSheetRender(){
 }
 
 
-let FILTRO={busca:'',etapa:'',lp:'',temp:'',estrelas:'',tastatus:'',origem:'',prof:'',idmin:'',idmax:'',pmmin:'',sort:'',dir:1,pop:''};
+let FILTRO={busca:'',etapa:'',lp:'',temp:'',estrelas:'',tastatus:'',origem:'',prof:'',idmin:'',idmax:'',pmmin:'',estado:'',sort:'',dir:1,pop:''};
 /* Filtros 2.0 na tela Contatos: era busca + etapa única. Agora o mesmo motor
    do Estoque (multi-seleção, ordenar por coluna, sheet no celular) sobre o
    funil de Novos Negócios. `origem` vira multi derivada dos valores reais. */
 const CT_COLS={
+  estado:{label:'Estado'},
   nome:{label:'Nome'},
   classificacao:{label:'Classificação'},
   perfil:{label:'Perfil'},
@@ -2441,7 +2449,7 @@ const CT_COLS={
   profissao:{label:'Profissão'},
   telefone:{label:'Telefone'}
 };
-const CT_COLS_DEF=['nome','classificacao','perfil','etapa','ta','origem'];
+const CT_COLS_DEF=['nome','estado','classificacao','perfil','etapa','ta','origem'];
 let CTP={cols:null};
 function ctPrefLer(){ try{ const r=localStorage.getItem('crmlp_ct_cols_v1'); if(r) CTP=Object.assign(CTP,JSON.parse(r)); }catch(_){}
   if(!Array.isArray(CTP.cols)||!CTP.cols.length) CTP.cols=null; }
@@ -2457,8 +2465,58 @@ function ctFiltroLimpar(){ CT_CAMPOS.forEach(k=>FILTRO[k]=''); viewContatos(); }
 function ctFiltrosAtivos(){ return CT_CAMPOS.filter(k=>k!=='busca'&&FILTRO[k]).length; }
 function ctOrigens(){ return [...new Set(meusContatos().map(c=>(c.origem||'—')))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
 function ctTaStatus(){ return [...new Set(meusContatos().map(c=>(c.taStatus||'—')))].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+/* ═══ ESTADO DO CONTATO V1 (31/08) ══════════════════════════════════════════
+   Do estudo do LP Business: a base dele é contada por ESTADO — Novo, Abordado,
+   Em andamento, Cliente — e esses contadores servem de filtro. É melhor que o
+   binário prospect × cliente, porque "nunca abordei" e "já falei e não andou"
+   pedem ações opostas: um é discagem, o outro é retomada.
+
+   Aqui o estado é DERIVADO, nunca digitado: sai de dados que você já produz
+   usando o app. Campo de status que a pessoa preenche à mão envelhece — vira
+   mentira no primeiro dia corrido.
+
+   A ordem de teste importa e é do mais forte para o mais fraco: quem tem
+   apólice é cliente mesmo que também tenha negócio em aberto. */
+const CT_ESTADOS=[
+  {k:'cliente',  l:'Clientes',     cor:'b-verde',   ajuda:'tem apólice na carteira'},
+  {k:'andamento',l:'Em andamento', cor:'b-azul',    ajuda:'negócio vivo além da abordagem'},
+  {k:'abordado', l:'Abordados',    cor:'b-amarelo', ajuda:'já falei, ainda não andou'},
+  {k:'novo',     l:'Novos',        cor:'b-cinza',   ajuda:'cadastrado e nunca abordado'}
+];
+const CT_EST_BY_K=Object.fromEntries(CT_ESTADOS.map(e=>[e.k,e]));
+/* "Abordado" = houve tentativa REAL de contato. Conta tentativa de TA, status
+   de TA diferente do vazio, ou qualquer interação registrada que não seja o
+   próprio log de mudança de etapa (mover card não é falar com a pessoa). */
+function ctFoiAbordado(c){
+  if(!c) return false;
+  if(Number(c.taTentativas)>0) return true;
+  if(c.taStatus && c.taStatus!=='—') return true;
+  return (c.interacoes||[]).some(i=>i && i.k && i.k!=='etapa');
+}
+function ctEstado(c){
+  if(!c) return 'novo';
+  /* cliente: a carteira é a autoridade — apólice viva casada por nome ou
+     telefone. O funil Base de Clientes também conta: é a esteira de quem já é. */
+  const aps=(typeof cartApolicesDoCliente==='function')
+    ? cartApolicesDoCliente({nome:c.nome, celular:c.telefone, telefone:c.telefone})
+        .filter(a=>!/cancel/i.test(a.status||''))
+    : [];
+  if(aps.length || funilDe(c)==='bc') return 'cliente';
+  /* em andamento: negócio vivo que já passou da abordagem. Encerrado não conta
+     como andamento — mas quem foi abordado e encerrou continua "abordado". */
+  const fx=funFluxoDe(c), i=fx.indexOf(c.etapa);
+  if(i>1) return 'andamento';                 /* além de SitPlan e TA */
+  return ctFoiAbordado(c) ? 'abordado' : 'novo';
+}
+function ctContagemEstados(lista){
+  const m={cliente:0,andamento:0,abordado:0,novo:0};
+  (lista||[]).forEach(c=>{ const k=ctEstado(c); if(m[k]!=null) m[k]++; });
+  return m;
+}
+
 function ctFiltrados(){
   let l=meusContatos();
+  if(FILTRO.estado) l=l.filter(c=>ctEstado(c)===FILTRO.estado);
   if(FILTRO.busca){ const q=FILTRO.busca.toLowerCase();
     l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.profissao||'').toLowerCase().includes(q)); }
   if(FILTRO.etapa){ const s=csvSet(FILTRO.etapa); l=l.filter(c=>s.has(csvKey(c.etapa))); }   // CSV = multi (compat: etapa única é CSV de 1)
@@ -2485,6 +2543,7 @@ function ctCelHtml(c,k){
     case 'classificacao': return `${estrelasHtml(estrelasDe(c))}${quenteChip(c)} ${tempChipHtml(c,true)}`;
     case 'perfil': return `<span style="font-size:12px;color:var(--muted)">${esc(c.sexo)} · ${esc(c.idade)} anos<br>${esc(c.profissao)}</span>`;
     case 'etapa': return badgeEtapa(c.etapa);
+    case 'estado': { const e=CT_EST_BY_K[ctEstado(c)]; return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`; }
     case 'ta': return `<span style="font-size:12px">${esc(c.taStatus)}<br><span style="color:var(--muted)">${esc(c.taTentativas)} tent.</span></span>`;
     case 'origem': return `<span style="font-size:12px">${esc(c.origem)}</span>`;
     case 'valor': return valorTag(c)||'<span style="color:var(--muted)">—</span>';
@@ -2513,6 +2572,14 @@ function viewContatos(){
   $('#main').innerHTML=`
     <h1 class="pg">Contatos</h1>
     <div class="sub">Resultado (${lista.length}${lista.length!==tot? ' de '+tot:''}) — clique no contato pra abrir o perfil completo.</div>
+    ${(()=>{ /* ESTADO DO CONTATO V1: contadores que também são filtro. */
+      const m=ctContagemEstados(meusContatos());
+      const bt=e=>`<button class="ct-est${FILTRO.estado===e.k?' on':''}" onclick="FILTRO.estado=FILTRO.estado==='${e.k}'?'':'${e.k}';viewContatos()"
+          title="${esc(e.ajuda)}${FILTRO.estado===e.k?' · clique para ver todos':''}">
+          <b>${m[e.k]}</b> ${esc(e.l)}</button>`;
+      return `<div class="ct-estados">${CT_ESTADOS.map(bt).join('')}
+        ${FILTRO.estado?`<span style="font-size:12px;color:var(--muted)">vendo só ${esc(CT_EST_BY_K[FILTRO.estado].l.toLowerCase())} — ${esc(CT_EST_BY_K[FILTRO.estado].ajuda)}</span>`:''}</div>`;
+    })()}
     <div class="toolbar" style="flex-wrap:wrap">
       <input type="search" placeholder="Buscar nome, telefone ou profissão…" value="${esc(FILTRO.busca)}" oninput="FILTRO.busca=this.value;viewContatos()">
       <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('ct')">🎛️ Filtros${ctFiltrosAtivos()?' ('+ctFiltrosAtivos()+')':''}</button>
@@ -2941,7 +3008,7 @@ function renderDrawer(){
       <button class="fechar" onclick="fecharDrawer()">✕</button>
       <div class="nome">${esc(c.nome)}</div>
       <div class="meta">${esc(c.sexo)} · ${esc(c.idade)} anos · ${esc(c.profissao)} · ${esc(c.telefone)} · Origem: ${esc(c.origem)}${isMaster()? ' · LP: '+esc(lpNome(c.lp)):''}</div>
-      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${badgeEtapa(c.etapa)}${quenteChip(c)}
+      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${(()=>{const e=CT_EST_BY_K[ctEstado(c)];return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`;})()} ${badgeEtapa(c.etapa)}${quenteChip(c)}
         ${waHref(c.telefone)? `<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
       </div>
     </div>
@@ -8523,6 +8590,42 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c=agendaContagem();
       const brutas=agendaItens().filter(x=>tarSituacao(x.t)==='atrasada').length;
       return c.atrasadas + c.aFinalizar === brutas; })());
+    /* ESTADO DO CONTATO V1:SELFCHECK — estado DERIVADO: se ele mentir, mente
+       em silêncio, porque ninguém digita para conferir. */
+    ok('estado: quem tem apólice viva na carteira é cliente', (()=>{
+      const g=CART.apolices;
+      CART.apolices=[{apolice:'E1',segurado:'Zeca Estado',ref:normKey('Zeca Estado'),celular:'',status:'Ativa',premio:100}];
+      cartIdxInvalidar();
+      const r=ctEstado({nome:'Zeca Estado',telefone:'',funil:'nn',etapa:'SitPlan'});
+      CART.apolices=g; cartIdxInvalidar(); return r==='cliente'; })());
+    ok('estado: apólice CANCELADA não faz ninguém virar cliente', (()=>{
+      const g=CART.apolices;
+      CART.apolices=[{apolice:'E2',segurado:'Zeca Cancelado',ref:normKey('Zeca Cancelado'),celular:'',status:'Cancelada',premio:100}];
+      cartIdxInvalidar();
+      const r=ctEstado({nome:'Zeca Cancelado',telefone:'',funil:'nn',etapa:'SitPlan',taTentativas:0,interacoes:[]});
+      CART.apolices=g; cartIdxInvalidar(); return r==='novo'; })());
+    ok('estado: o funil Base de Clientes é sempre cliente',
+       ctEstado({nome:'Alguem Bc',telefone:'',funil:'bc',etapa:ETAPAS_BC_FLUXO[0]})==='cliente');
+    ok('estado: negócio além da abordagem é "em andamento"',
+       ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_FLUXO[2],interacoes:[]})==='andamento');
+    ok('estado: SitPlan e TA ainda NÃO são andamento', (()=>{
+      const a=ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_FLUXO[0],interacoes:[]});
+      const b=ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[]});
+      return a!=='andamento' && b!=='andamento'; })());
+    ok('estado: mover o card NÃO conta como ter falado com a pessoa', (()=>{
+      /* log de etapa é gesto seu, não conversa — senão todo mundo vira abordado */
+      return ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_FLUXO[0],taTentativas:0,
+                       interacoes:[{k:'etapa',de:'SitPlan',para:'TA'}]})==='novo'; })());
+    ok('estado: tentativa de TA ou interação real torna abordado', (()=>{
+      const a=ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_FLUXO[0],taTentativas:2,interacoes:[]});
+      const b=ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_FLUXO[0],taTentativas:0,interacoes:[{k:'lig_atendida'}]});
+      return a==='abordado' && b==='abordado'; })());
+    ok('estado: negócio encerrado que foi abordado continua abordado, não novo',
+       ctEstado({nome:'X',telefone:'',funil:'nn',etapa:ETAPAS_ENCERR[0],taTentativas:1,interacoes:[]})==='abordado');
+    ok('estado: todo contato cai em exatamente um estado', (()=>{
+      const l=meusContatos(); if(!l.length) return true;
+      const m=ctContagemEstados(l);
+      return (m.cliente+m.andamento+m.abordado+m.novo)===l.length; })());
     /* REUNIÃO A FINALIZAR V1:SELFCHECK — finalizar mexe em ETAPA, que é o dado
        que a taxa de passagem lê. Errar aqui contamina a métrica. */
     ok('reunião: só reunião com data passada e sem desfecho entra na fila', (()=>{
