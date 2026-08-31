@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.27.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.28.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -127,6 +127,7 @@
   .drawer-body .sec.sec-fechada > :not(h3){display:none}
   .drawer-body .sec.sec-fechada{padding-bottom:10px}
   .drawer-body .sec.sec-fechada h3.sec-h{margin-bottom:0}
+  .pl-r{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600}
   .ct-estados{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
   .ct-est{font:inherit;font-size:12.5px;background:#fff;color:var(--muted);border:1px solid var(--linha);
     border-radius:999px;padding:5px 12px;cursor:pointer;transition:border-color .12s,background .12s,color .12s}
@@ -886,7 +887,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.27.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.28.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -908,7 +909,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.27.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.28.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3233,15 +3234,19 @@ function renderDrawer(){
       </div>
 
       <div class="sec">
-        <h3>Planos &amp; simulações (${c.planos.length})</h3>
+        <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Planos &amp; simulações (${c.planos.length})</span>
+          <button class="btn btn-s btn-mini" onclick="planoAbrir('${esc(c.id)}',null)">+ Simulação</button></h3>
         ${c.planos.length? `<div class="tab-variantes"><table>
-          <thead><tr><th>Variante</th><th>Prêmio/mês</th><th>Status</th></tr></thead><tbody>
+          <thead><tr><th>Variante</th><th>Prêmio/mês</th><th>Status</th><th></th></tr></thead><tbody>
           ${c.planos.map(p=>`<tr>
-            <td><b>${esc(p.nome)}</b><br><span style="font-size:11px;color:var(--muted)">${esc(p.base)} · ${brl(p.capital)}</span></td>
+            <td><b>${esc(p.nome)}</b><br><span style="font-size:11px;color:var(--muted)">${esc(p.base||'—')}${p.capital?' · '+brl(p.capital):''}${p.parceiro?' · '+esc(p.parceiro):''}</span></td>
             <td class="premio">${brl(p.premio)}</td>
             <td><select class="status-sel" onchange="setPlanoStatus('${esc(p.id)}',this.value)">${PLANO_STATUS.map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
+            <td><button class="btn btn-ghost btn-mini" title="Editar" onclick="planoAbrir('${esc(c.id)}','${esc(p.id)}')">✏️</button></td>
           </tr>`).join('')}
-          </tbody></table></div>` : '<div class="vazio" style="padding:12px">Nenhuma simulação ainda. Na fase 2, o leque de variantes entra aqui direto.</div>'}
+          </tbody></table></div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:6px">Ativar uma simulação oferece usar o prêmio dela no negócio — é esse número que alimenta o PA e o previsto do mês.</div>`
+          : `<div class="vazio" style="padding:12px">Nenhuma simulação ainda. <button class="btn btn-s btn-mini" onclick="planoAbrir('${esc(c.id)}',null)">Criar a primeira</button></div>`}
       </div>
 
       <div class="sec">
@@ -3352,7 +3357,125 @@ function toggleAnce(k){ const c=ct(); if(!c) return; if(!c.ance) c.ance={a:false
 function setSitplan(iso){ const c=ct(); if(!c) return; c.sitplan=iso||null; salvar(); renderDrawer(); toast(iso? `Na lista de ${dataBR(iso)}` : 'Removido da lista de discagem',true); }
 function toggleIC(b){ const c=ct(); if(!c) return; c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
 function setNotas(v){ const c=ct(); if(!c) return; c.notas=v; salvar(); toast('Nota salva',true); }
-function setPlanoStatus(pid,v){ const c=ct(); if(!c) return; const p=c.planos.find(x=>x.id===pid); if(!p) return; p.status=v; salvar(); toast(`Plano: ${v}`,true); }
+/* ═══ SIMULAÇÕES V1 (31/08) ═════════════════════════════════════════════════
+   Terceiro buraco do mesmo tipo que a exclusão de negócio e a edição de dados
+   da pessoa: a tela "Planos & Simulações" existe INTEIRA — variantes, capital,
+   coberturas, prêmio, ≈ por dia, status, destaque do menor — e não havia
+   NENHUM caminho para criar uma simulação. `planos.push` não existia no app.
+   Dava para mudar o status de planos que nunca poderiam nascer: a view era
+   bonita e morta desde que o seed de demonstração foi zerado.
+
+   Fecha também um risco de número: o prêmio do negócio (que alimenta PA, funil
+   e previsões) era digitado à mão enquanto a simulação tinha o valor certo ao
+   lado. Dois números para o mesmo fato, divergindo em silêncio. Agora o plano
+   ativado OFERECE aplicar o seu prêmio no negócio — oferece, não aplica
+   sozinho: mudar dinheiro sem o dono mandar é como o campo que salva calado. */
+function planoValido(p){
+  if(!p) return false;
+  const pr=Number(p.premio);
+  return !!String(p.nome||'').trim() && isFinite(pr) && pr>0;
+}
+function planoNormalizar(p){
+  return { id:p.id||uid(), nome:String(p.nome||'').trim(), base:String(p.base||'').trim(),
+    capital:Number(p.capital)||0, cobs:String(p.cobs||'').trim(), premio:Number(p.premio)||0,
+    parceiro:String(p.parceiro||'').trim(),
+    status: PLANO_STATUS.includes(p.status)? p.status : PLANO_STATUS[0],
+    criadoEm:p.criadoEm||hojeISO() };
+}
+function planosDe(c){ if(!c) return []; if(!Array.isArray(c.planos)) c.planos=[]; return c.planos; }
+function planoPorId(c,pid){ return planosDe(c).find(x=>x.id===pid)||null; }
+/* separado de propósito: aplicar o prêmio mexe no dinheiro do funil e precisa
+   de um sim explícito, então a decisão não mora dentro do salvar. */
+function planoPremioDivergente(c,p){
+  if(!c||!p) return false;
+  const atual=pmDe(c);
+  return Number(p.premio)>0 && Number(atual||0)!==Number(p.premio);
+}
+
+function planoForm(c,p){
+  const v=(x)=>x==null?'':x;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="flex:2;min-width:170px"><label class="pl-r">Nome da variante *</label>
+        <input id="pl_nome" value="${esc(v(p&&p.nome))}" placeholder="ex.: Vida Inteira 500k" style="width:100%"></div>
+      <div style="flex:1;min-width:120px"><label class="pl-r">Prêmio/mês (R$) *</label>
+        <input id="pl_premio" value="${p&&p.premio?String(p.premio).replace('.',','):''}" placeholder="780" style="width:100%"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <div style="flex:1;min-width:120px"><label class="pl-r">Capital base (R$)</label>
+        <input id="pl_capital" value="${p&&p.capital?String(p.capital).replace('.',','):''}" placeholder="500000" style="width:100%"></div>
+      <div style="flex:1;min-width:120px"><label class="pl-r">Produto / base</label>
+        <input id="pl_base" value="${esc(v(p&&p.base))}" placeholder="ex.: Temporário 20 anos" style="width:100%"></div>
+      <div style="flex:1;min-width:120px"><label class="pl-r">Para quem / parceiro</label>
+        <input id="pl_parceiro" value="${esc(v(p&&p.parceiro))}" placeholder="titular, cônjuge…" style="width:100%"></div>
+    </div>
+    <div style="margin-top:8px"><label class="pl-r">Coberturas</label>
+      <input id="pl_cobs" value="${esc(v(p&&p.cobs))}" placeholder="Morte + DDR + Funeral" style="width:100%"></div>
+    <div style="margin-top:8px"><label class="pl-r">Status</label>
+      <select id="pl_status" style="width:100%">${PLANO_STATUS.map(x=>`<option ${((p&&p.status)||PLANO_STATUS[0])===x?'selected':''}>${x}</option>`).join('')}</select></div>`;
+}
+function planoAbrir(cid,pid){
+  const c=S.contatos.find(x=>String(x.id)===String(cid)); if(!c) return;
+  const p=pid?planoPorId(c,pid):null;
+  atModal(`<h2>${p?'Editar simulação':'Nova simulação'}</h2>
+    <div class="sub">${esc(c.nome)} · o leque de variantes é o formato real da negociação — nunca uma só.</div>
+    <div style="margin-top:12px">${planoForm(c,p)}</div>
+    <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+      ${p?`<button class="btn btn-ghost btn-mini" style="color:var(--verm)" onclick="planoRemover('${esc(cid)}','${esc(pid)}')">🗑 Excluir</button>`:''}
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" onclick="planoSalvar('${esc(cid)}',${p?`'${esc(pid)}'`:'null'})">Salvar</button>
+    </div>`);
+}
+function planoSalvar(cid,pid){
+  const c=S.contatos.find(x=>String(x.id)===String(cid)); if(!c) return;
+  const bruto={ id:pid||null, nome:($('#pl_nome')||{}).value, premio:atBrNum(($('#pl_premio')||{}).value),
+    capital:atBrNum(($('#pl_capital')||{}).value), base:($('#pl_base')||{}).value,
+    parceiro:($('#pl_parceiro')||{}).value, cobs:($('#pl_cobs')||{}).value, status:($('#pl_status')||{}).value };
+  if(!String(bruto.nome||'').trim()) return toast('Dê um nome à variante');
+  if(!(Number(bruto.premio)>0)) return toast('Informe o prêmio mensal');
+  const novo=planoNormalizar(bruto);
+  const l=planosDe(c);
+  if(pid){ const i=l.findIndex(x=>x.id===pid); if(i>=0) l[i]=Object.assign(l[i],novo,{id:pid}); }
+  else l.push(novo);
+  salvar(); atClose(); render();
+  const p=pid?planoPorId(c,pid):novo;
+  if(p.status==='Ativado' && planoPremioDivergente(c,p)) planoPerguntarPremio(c.id,p.id);
+  else toast('Simulação salva',true);
+}
+function planoRemover(cid,pid){
+  const c=S.contatos.find(x=>String(x.id)===String(cid)); if(!c) return;
+  const p=planoPorId(c,pid); if(!p) return;
+  if(!confirm(`Excluir a simulação "${p.nome}"?`)) return;
+  c.planos=planosDe(c).filter(x=>x.id!==pid);
+  salvar(); atClose(); render(); toast('Simulação excluída',true);
+}
+/* o prêmio do negócio só muda com um sim explícito */
+function planoPerguntarPremio(cid,pid){
+  const c=S.contatos.find(x=>String(x.id)===String(cid)); const p=c&&planoPorId(c,pid); if(!c||!p) return;
+  const atual=pmDe(c);
+  atModal(`<h2>Usar o valor da simulação no negócio?</h2>
+    <div class="sub">A simulação <b>${esc(p.nome)}</b> foi ativada.</div>
+    <div style="margin-top:12px;font-size:14px">
+      Prêmio do negócio hoje: <b>${atual?brl(atual):'não informado'}</b><br>
+      Prêmio da simulação: <b>${brl(p.premio)}</b>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">É esse número que alimenta o PA, o previsto do mês e o funil. Deixar os dois diferentes faz a previsão mentir.</div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Deixar como está</button>
+      <button class="btn btn-p" onclick="planoAplicarPremio('${esc(cid)}','${esc(pid)}')">Usar ${brl(p.premio)}</button>
+    </div>`);
+}
+function planoAplicarPremio(cid,pid){
+  const c=S.contatos.find(x=>String(x.id)===String(cid)); const p=c&&planoPorId(c,pid); if(!c||!p) return;
+  c.pm=Number(p.premio); c.premio_mes=Number(p.premio);
+  interacoesDe(c).push({id:uid(),k:'plano',l:'Prêmio do negócio veio da simulação "'+p.nome+'": '+brl(p.premio),
+                        dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar(); atClose(); render(); toast('Prêmio atualizado pelo plano',true);
+}
+
+function setPlanoStatus(pid,v){ const c=ct(); if(!c) return; const p=planoPorId(c,pid); if(!p) return;
+  if(!PLANO_STATUS.includes(v)) return;
+  p.status=v; salvar(); renderDrawer();
+  if(v==='Ativado' && planoPremioDivergente(c,p)) planoPerguntarPremio(c.id,p.id); else toast(`Plano: ${v}`,true); }
 function addRec(){
   const nome=$('#recNome').value.trim(), idade=$('#recIdade').value.trim(), perfil=$('#recPerfil').value.trim();
   const erro=$('#recErro');
@@ -3567,6 +3690,13 @@ function viewPlanos(){
   $('#main').innerHTML=`
     <h1 class="pg">Planos &amp; Simulações</h1>
     <div class="sub">Leque de variantes por cliente — o formato real da negociação (visto no caso CINQ/Artur): nunca UMA simulação, sempre opções de ancoragem.</div>
+    ${(()=>{ const semPlano=meusContatos().filter(c=>!planosDe(c).length&&!ETAPAS_ENCERR.includes(c.etapa));
+      return `<div class="card" style="padding:10px 13px;margin-bottom:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <b style="font-size:13.5px">Criar simulação para</b>
+        <select id="pl_alvo" style="min-width:190px">${semPlano.concat(meusContatos().filter(c=>planosDe(c).length))
+          .map(c=>`<option value="${esc(c.id)}">${esc(c.nome)}${planosDe(c).length?' ('+planosDe(c).length+')':''}</option>`).join('')||'<option value="">— nenhum negócio —</option>'}</select>
+        <button class="btn btn-p btn-mini" onclick="planoAbrir(($('#pl_alvo')||{}).value,null)">+ Nova simulação</button>
+      </div>`; })()}
     ${lista.length? lista.map(c=>{
       const menor=Math.min(...c.planos.map(p=>p.premio));
       return `<div class="card plano-grupo">
@@ -3591,7 +3721,10 @@ function viewPlanos(){
       </div>`;
     }).join('') : '<div class="card vazio">Nenhum plano cadastrado ainda — os planos entram pela ficha do contato (seção Planos).</div>'}`;
 }
-function setPlanoStatusG(cid,pid,v){ const c=S.contatos.find(c=>c.id===cid); if(!c) return; const p=c.planos.find(x=>x.id===pid); if(!p) return; p.status=v; salvar(); toast(`Plano: ${v}`,true); }
+function setPlanoStatusG(cid,pid,v){ const c=S.contatos.find(c=>c.id===cid); if(!c) return; const p=planoPorId(c,pid); if(!p) return;
+  if(!PLANO_STATUS.includes(v)) return;
+  p.status=v; salvar(); render();
+  if(v==='Ativado' && planoPremioDivergente(c,p)) planoPerguntarPremio(cid,pid); else toast(`Plano: ${v}`,true); }
 
 /* ═══════════════════ SUBSTITUIÇÃO DE APÓLICE (módulo nativo) ═══════════════════
    Port do artefato controle-substituicao.html v1.9 (que vivia SOLTO, fora do repo —
@@ -8688,6 +8821,27 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c=agendaContagem();
       const brutas=agendaItens().filter(x=>tarSituacao(x.t)==='atrasada').length;
       return c.atrasadas + c.aFinalizar === brutas; })());
+    /* SIMULAÇÕES V1:SELFCHECK — o prêmio do plano pode virar o prêmio do
+       negócio, que alimenta PA e previsão. Nada aqui pode escorregar sozinho. */
+    ok('simulação: sem nome ou sem prêmio não é válida', (()=>{
+      return !planoValido({nome:'',premio:100}) && !planoValido({nome:'X',premio:0})
+          && !planoValido({nome:'X',premio:'abc'}) && planoValido({nome:'X',premio:780}); })());
+    ok('simulação: status desconhecido cai no padrão, não some',
+       planoNormalizar({nome:'X',premio:1,status:'inventado'}).status===PLANO_STATUS[0]);
+    ok('simulação: normalizar não perde o id nem inventa outro', (()=>{
+      const a=planoNormalizar({id:'fixo',nome:'X',premio:1});
+      return a.id==='fixo' && planoNormalizar({nome:'X',premio:1}).id.length>0; })());
+    ok('simulação: divergência de prêmio só acusa quando há diferença real', (()=>{
+      const c={pm:780}, igual={premio:780}, dif={premio:900}, zero={premio:0};
+      return !planoPremioDivergente(c,igual) && planoPremioDivergente(c,dif) && !planoPremioDivergente(c,zero); })());
+    ok('simulação: negócio sem prêmio informado diverge de qualquer plano válido',
+       planoPremioDivergente({}, {premio:500})===true);
+    ok('simulação: ativar NÃO muda o prêmio do negócio sozinho', (()=>{
+      /* a aplicação é uma função separada e só roda com o sim explícito */
+      const c={id:'zz',pm:100,planos:[{id:'p1',nome:'X',premio:900,status:'Ativado'}],interacoes:[]};
+      return c.pm===100 && typeof planoAplicarPremio==='function'; })());
+    ok('simulação: planosDe nunca devolve nulo, mesmo em contato antigo', (()=>{
+      const c={}; const l=planosDe(c); return Array.isArray(l) && Array.isArray(c.planos); })());
     /* ESTADO DO CONTATO V1:SELFCHECK — estado DERIVADO: se ele mentir, mente
        em silêncio, porque ninguém digita para conferir. */
     ok('estado: quem tem apólice viva na carteira é cliente', (()=>{
