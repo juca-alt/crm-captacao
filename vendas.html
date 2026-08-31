@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.25.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.26.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -117,6 +117,10 @@
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
   .kpi-lente.on{background:#eef4ff;border:1.5px solid var(--azul)}
   .kpi-lente.on .lbl,.kpi-lente.on .num{color:var(--azul)}
+  .reun-op{display:flex;gap:9px;align-items:flex-start;border:1px solid var(--linha);border-radius:9px;
+    padding:9px 11px;cursor:pointer;font-size:13.5px}
+  .reun-op:hover{border-color:var(--azul)}
+  .reun-op input{margin-top:3px}
   .fun-cab-rodape{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
   .fun-dup-chip{color:var(--amar-escuro,#8a5a00);border-color:var(--amarelo,#e8b34a);background:#fdf6e6}
   .fun-lente-chip{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--azul);
@@ -865,7 +869,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.25.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.26.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -887,7 +891,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.25.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.26.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1764,6 +1768,140 @@ function diasEntreISO(a,b){
 }
 /* todos os contatos do LP (os DOIS funis: a agenda é uma só) */
 function contatosDoLp(){ return (S.contatos||[]).filter(c=>isMaster()||logado()||c.lp===S.activeUser); }
+/* ═══ REUNIÃO A FINALIZAR V1 (31/08) ════════════════════════════════════════
+   Trazido do estudo do LP Business, que separa "pendente de finalização" de
+   "próximos" — e na base dele havia reunião pendente acumulada desde março.
+
+   Mas o buraco aqui é mais fino que uma lista: "atrasada" e "a finalizar" NÃO
+   são a mesma coisa. Uma ligação atrasada é algo que você não fez — a ação é
+   fazer ou adiar. Uma REUNIÃO cuja data passou provavelmente ACONTECEU: o que
+   falta não é fazer, é dizer o que saiu dela.
+
+   E hoje "✓ feita" só apaga a linha e grava "Tarefa concluída". O funil não
+   aprende nada: a etapa não anda, a taxa de passagem não vê, e o negócio fica
+   sem próxima atividade — exatamente o estado que o KPI "sem próxima atividade"
+   depois acusa. O vocabulário de RESULTADOS que existia é de LIGAÇÃO (discagem
+   e TA); não havia desfecho de reunião.
+
+   Regra de fechamento do laço: finalizar uma reunião tem que PRODUZIR o próximo
+   passo (avanço de etapa, remarcação ou encerramento). Sem isso a fila só troca
+   de nome. */
+function reunEhReuniao(t){ return t && t.tipo==='reuniao'; }
+function reunPendente(t){
+  if(!reunEhReuniao(t) || t.feito || !t.quando) return false;
+  return t.quando < hojeISO();          /* a data passou e ninguém disse o que houve */
+}
+function reunPendentes(){
+  const out=[];
+  contatosDoLp().forEach(c=>tarefasDe(c).forEach(t=>{ if(reunPendente(t)) out.push({c,t}); }));
+  /* mais antiga primeiro: é a que está apodrecendo há mais tempo */
+  return out.sort((a,b)=>String(a.t.quando).localeCompare(String(b.t.quando)));
+}
+function reunDiasParada(t){ return t&&t.quando ? diasEntreISO(t.quando, hojeISO()) : 0; }
+
+/* Os desfechos. Cada um diz o que fazer com a ETAPA e o que exigir depois —
+   `proxima:true` significa "não deixa fechar sem combinar o próximo passo". */
+const REUN_DESFECHOS=[
+  {k:'avancou',   l:'Aconteceu e avançou',        ico:'✅', etapa:'proxima', proxima:true,
+   ajuda:'Move o negócio para a próxima etapa do funil e pede a próxima atividade.'},
+  {k:'sem_avanco',l:'Aconteceu, sem avanço',      ico:'➖', etapa:null,      proxima:true,
+   ajuda:'Mantém a etapa. O negócio continua vivo, então precisa de próximo passo.'},
+  {k:'remarcada', l:'Foi remarcada',              ico:'🗓️', etapa:null,      remarca:true,
+   ajuda:'Cria a reunião na data nova. A antiga fica no histórico como remarcada.'},
+  {k:'faltou',    l:'Cliente não compareceu',     ico:'🚫', etapa:null,      remarca:true,
+   ajuda:'Registra a falta e já marca a nova tentativa.'},
+  {k:'nao_rolou', l:'Não aconteceu / cancelada',  ico:'✖️', etapa:null,      proxima:true,
+   ajuda:'Nem você nem ele. Registra e pede o próximo passo.'}
+];
+const REUN_BY_K=Object.fromEntries(REUN_DESFECHOS.map(d=>[d.k,d]));
+
+/* Aplicação PURA da parte que mexe no negócio, para o self-check conseguir
+   afirmar a regra sem abrir modal nenhum. */
+function reunAplicar(c,t,k,novaData){
+  const d=REUN_BY_K[k]; if(!c||!t||!d) return null;
+  /* guarda de idempotência: tarefa já finalizada não é finalizada de novo.
+     Sem isso, um duplo-clique ou um caminho que chame duas vezes moveria a
+     etapa duas vezes — e etapa é o dado que a taxa de passagem lê. */
+  if(t.feito) return null;
+  const de=c.etapa;
+  let para=de;
+  if(d.etapa==='proxima'){ const px=funProxEtapa(c); if(px) para=px; }
+  const marca={desfecho:k, de, para, remarcadaPara:null};
+  t.feito=new Date().toISOString();
+  t.desfecho=k;
+  if(para!==de){ c.etapa=para; logEtapa(c,de,para); }
+  if(d.remarca && novaData){
+    const nova={id:uid(),tipo:'reuniao',tit:(t.tit||'Reunião')+' (remarcada)',quando:novaData,hora:t.hora||'',
+                feito:null,notas:'',criadoEm:hojeISO(),por:S.activeUser};
+    tarefasDe(c).push(nova);
+    marca.remarcadaPara=novaData;
+  }
+  interacoesDe(c).push({id:uid(),k:'reuniao',l:'Reunião '+d.l.toLowerCase()+(marca.remarcadaPara?(' para '+dataBR(marca.remarcadaPara)):''),
+                        dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  return marca;
+}
+
+function reunFinalizar(cid,tid){
+  const c=tarContato(cid); if(!c) return;
+  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
+  const px=funProxEtapa(c), dias=reunDiasParada(t);
+  const op=d=>`<label class="reun-op">
+    <input type="radio" name="reun_d" value="${d.k}" ${d.k==='avancou'?'checked':''} onchange="reunTrocou()">
+    <span><b>${d.ico} ${esc(d.l)}</b>${d.k==='avancou'&&px?` <span class="badge b-azul">→ ${esc(LBLE(px))}</span>`:''}
+      <span style="display:block;font-size:11.5px;color:var(--muted)">${esc(d.ajuda)}</span></span></label>`;
+  atModal(`<h2>Como terminou a reunião?</h2>
+    <div class="sub">${esc(c.nome)} · ${esc(t.tit||'Reunião')} · marcada para ${dataBR(t.quando)}${dias>0?` · <b style="color:var(--verm)">${dias} dia(s) sem desfecho</b>`:''}</div>
+    <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px">${REUN_DESFECHOS.map(op).join('')}</div>
+    <div id="reun_extra" style="margin-top:12px"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" onclick="reunSalvar('${esc(cid)}','${esc(tid)}')">Registrar</button>
+    </div>`);
+  reunTrocou();
+}
+/* O campo que aparece depende do desfecho — e ele não é opcional: é o que
+   impede a reunião de virar negócio parado logo depois de "finalizada". */
+function reunTrocou(){
+  const box=$('#reun_extra'); if(!box) return;
+  const k=(document.querySelector('input[name=reun_d]:checked')||{}).value;
+  const d=REUN_BY_K[k]||{};
+  if(d.remarca){
+    box.innerHTML=`<label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px">Nova data da reunião</label>
+      <input id="reun_data" type="date" value="${isoAddDias(hojeISO(),7)}" style="width:100%">`;
+  } else if(d.proxima){
+    box.innerHTML=`<label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px">Próximo passo com essa pessoa</label>
+      <div style="display:flex;gap:7px;flex-wrap:wrap">
+        <select id="reun_ptipo" style="flex:0 0 auto">${TAR_TIPOS.map(t=>`<option value="${t[0]}">${t[1]} ${t[2]}</option>`).join('')}</select>
+        <input id="reun_ptit" placeholder="O que fazer" style="flex:1;min-width:130px">
+        <input id="reun_pdata" type="date" value="${isoAddDias(hojeISO(),2)}">
+      </div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:5px">Sem isso o negócio sai da reunião parado — que é o que o KPI "sem próxima atividade" acusa depois.</div>`;
+  } else box.innerHTML='';
+}
+function reunSalvar(cid,tid){
+  const c=tarContato(cid); if(!c) return;
+  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
+  const k=(document.querySelector('input[name=reun_d]:checked')||{}).value;
+  const d=REUN_BY_K[k]; if(!d) return;
+  /* VALIDA TUDO ANTES DE APLICAR QUALQUER COISA. Na 1ª versão o reunAplicar
+     rodava antes da checagem do próximo passo: a tentativa recusada já movia a
+     etapa e fechava a tarefa, e a 2ª tentativa movia DE NOVO — o negócio pulava
+     duas etapas em vez de uma. Regra: nada de escrita antes da última recusa
+     possível. */
+  let novaData=null, prox=null;
+  if(d.remarca){ novaData=($('#reun_data')||{}).value||''; if(!novaData) return toast('Escolha a data nova'); }
+  if(d.proxima){
+    const quando=($('#reun_pdata')||{}).value||'';
+    if(!quando) return toast('Marque a data do próximo passo');
+    const tipo=($('#reun_ptipo')||{}).value||'ligar';
+    prox={tipo, tit:(($('#reun_ptit')||{}).value||'').trim()||tarNomeTipo(tipo), quando};
+  }
+  const m=reunAplicar(c,t,k,novaData);
+  if(prox) tarefasDe(c).push({id:uid(),tipo:prox.tipo,tit:prox.tit,quando:prox.quando,hora:'',feito:null,notas:'',criadoEm:hojeISO(),por:S.activeUser});
+  salvar(); atClose(); render();
+  toast(m&&m.para!==m.de ? `${c.nome.split(' ')[0]}: ${LBLE(m.de)} → ${LBLE(m.para)}` : 'Reunião finalizada', true);
+}
+
 function agendaItens(){
   const out=[];
   contatosDoLp().forEach(c=>tarAbertas(c).forEach(t=>out.push({c,t})));
@@ -1771,8 +1909,12 @@ function agendaItens(){
 }
 function agendaContagem(){
   let atrasadas=0, hoje=0;
-  agendaItens().forEach(x=>{ const s=tarSituacao(x.t); if(s==='atrasada') atrasadas++; else if(s==='hoje') hoje++; });
-  return {atrasadas, hoje, total:atrasadas+hoje};
+  /* a reunião a finalizar SAI de "atrasadas": ela já é contada na fila própria,
+     e o mesmo fato aparecendo em dois números é o erro que mais confunde numa
+     tela — foi assim que o chip de "PA no funil" somava encerrado. */
+  agendaItens().forEach(x=>{ if(reunPendente(x.t)) return;
+    const s=tarSituacao(x.t); if(s==='atrasada') atrasadas++; else if(s==='hoje') hoje++; });
+  return {atrasadas, hoje, aFinalizar:reunPendentes().length, total:atrasadas+hoje};
 }
 /* link do Google Agenda com o evento pré-preenchido — não pede OAuth nem
    guarda nada: abre o Agenda dele já com título, data, hora e contexto.
@@ -4819,6 +4961,7 @@ async function gcalAdiar(id,dias){
 function viewAgenda(){
   if(!GCAL.tentouSilencioso&&sb){ GCAL.tentouSilencioso=true; gcalGisReady(()=>gcalCarregar(false)); } // reaproveita a sessão Google já autorizada (silencioso, após o SDK carregar)
   const itens=agendaItens(), h4=hojeISO();
+  const pend=reunPendentes();
   const grupos=[
     ['atrasada','⚠️ Atrasadas','o que venceu e continua em aberto'],
     ['hoje','📌 Hoje','o combinado para hoje'],
@@ -4844,9 +4987,22 @@ function viewAgenda(){
         ${tarGcalAcaoHTML(c,t)}
       </span></div>`;
   };
-  let corpo='';
+  /* REUNIÃO A FINALIZAR V1: vem ANTES das atrasadas porque é dívida de outra
+     natureza — não é algo que você deixou de fazer, é algo que aconteceu e
+     ninguém contou o resultado. */
+  let corpo = pend.length ? `<div class="tar-grp">🤝 Reuniões a finalizar <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${pend.length} · aconteceram e ninguém registrou o que saiu delas</span></div>
+    <div class="card" style="padding:6px 14px">${pend.map(x=>{
+      const dias=reunDiasParada(x.t);
+      return `<div class="tarlin">
+        <span title="Reunião">🤝</span>
+        <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(x.c.id)}')">${esc(x.c.nome)}</b>
+          <span style="color:var(--muted)"> · ${esc(x.t.tit||'Reunião')}</span>
+          <div style="font-size:11px;color:var(--muted)">${badgeEtapa(x.c.etapa)} ${esc(x.c.telefone||'')}</div></span>
+        <span class="qd tar-atrasada" style="background:transparent;padding:0">${dataBR(x.t.quando)}${dias>0?` · ${dias}d sem desfecho`:''}</span>
+        <span class="ac"><button class="btn btn-p btn-mini" onclick="reunFinalizar('${esc(x.c.id)}','${esc(x.t.id)}')">Finalizar</button></span>
+      </div>`; }).join('')}</div>` : '';
   grupos.forEach(g=>{
-    const l=itens.filter(x=>tarSituacao(x.t)===g[0]);
+    const l=itens.filter(x=>tarSituacao(x.t)===g[0] && !reunPendente(x.t));   /* já listada acima, não repetir */
     if(!l.length) return;
     corpo+=`<div class="tar-grp">${g[1]} <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${l.length}${g[2]?' · '+g[2]:''}</span></div>
       <div class="card" style="padding:6px 14px">${l.map(linha).join('')}</div>`;
@@ -4857,7 +5013,8 @@ function viewAgenda(){
     <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
     ${gcalBlocoHTML()}
     <div class="kpis" style="margin-bottom:12px">
-      <div class="kpi"${cont.atrasadas?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Atrasadas</div><div class="num" style="font-size:19px">${cont.atrasadas}</div><div style="font-size:11px;color:var(--muted)">venceram e seguem abertas</div></div>
+      ${cont.aFinalizar?`<div class="kpi" style="border:1.5px solid #f3c9c9"><div class="lbl">A finalizar</div><div class="num" style="font-size:19px">${cont.aFinalizar}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">reuniões sem desfecho</div></div>`:''}
+      <div class="kpi"${cont.atrasadas?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Atrasadas</div><div class="num" style="font-size:19px">${cont.atrasadas}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">venceram e seguem abertas</div></div>
       <div class="kpi"><div class="lbl">Hoje</div><div class="num" style="font-size:19px">${cont.hoje}</div><div style="font-size:11px;color:var(--muted)">combinado para hoje</div></div>
       <div class="kpi"><div class="lbl">Em aberto</div><div class="num" style="font-size:19px">${itens.length}</div><div style="font-size:11px;color:var(--muted)">no total</div></div>
       <div class="kpi"${semAtiv.length?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Negócios sem atividade</div><div class="num" style="font-size:19px">${semAtiv.length}</div><div style="font-size:11px;color:var(--muted)">${semAtiv.length?'parados por falta de próximo passo':'nenhum parado'}</div></div>
@@ -8355,6 +8512,58 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
+      const c={id:'z7',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[],tarefas:[]};
+      const t={id:'t7',tipo:'reuniao',quando:'2026-01-01',feito:null}; c.tarefas.push(t);
+      reunAplicar(c,t,'avancou',null);
+      const depoisDaPrimeira=c.etapa;
+      reunAplicar(c,t,'avancou',null);   /* a 2ª só pode ser inócua: a tarefa já foi finalizada */
+      return depoisDaPrimeira===ETAPAS_FLUXO[2] && c.etapa===ETAPAS_FLUXO[2]; })());
+        ok('agenda: reunião a finalizar não é contada TAMBÉM como atrasada', (()=>{
+      const c=agendaContagem();
+      const brutas=agendaItens().filter(x=>tarSituacao(x.t)==='atrasada').length;
+      return c.atrasadas + c.aFinalizar === brutas; })());
+    /* REUNIÃO A FINALIZAR V1:SELFCHECK — finalizar mexe em ETAPA, que é o dado
+       que a taxa de passagem lê. Errar aqui contamina a métrica. */
+    ok('reunião: só reunião com data passada e sem desfecho entra na fila', (()=>{
+      const ontem=isoAddDias(hojeISO(),-1), amanha=isoAddDias(hojeISO(),1);
+      return reunPendente({tipo:'reuniao',quando:ontem,feito:null})===true
+          && reunPendente({tipo:'reuniao',quando:amanha,feito:null})===false
+          && reunPendente({tipo:'reuniao',quando:ontem,feito:'2026-01-01'})===false
+          && reunPendente({tipo:'ligar',quando:ontem,feito:null})===false; })());
+    ok('reunião: "aconteceu e avançou" move UMA etapa, não mais', (()=>{
+      const c={id:'z1',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[],tarefas:[]};
+      const t={id:'t1',tipo:'reuniao',quando:'2026-01-01',feito:null};
+      const m=reunAplicar(c,t,'avancou',null);
+      return c.etapa===ETAPAS_FLUXO[2] && m.de===ETAPAS_FLUXO[1] && m.para===ETAPAS_FLUXO[2]; })());
+    ok('reunião: "sem avanço" NÃO mexe na etapa', (()=>{
+      const c={id:'z2',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[3],interacoes:[],tarefas:[]};
+      const t={id:'t2',tipo:'reuniao',quando:'2026-01-01',feito:null};
+      reunAplicar(c,t,'sem_avanco',null);
+      return c.etapa===ETAPAS_FLUXO[3]; })());
+    ok('reunião: na última etapa, "avançou" não inventa destino', (()=>{
+      const ult=ETAPAS_FLUXO[ETAPAS_FLUXO.length-1];
+      const c={id:'z3',nome:'T',funil:'nn',etapa:ult,interacoes:[],tarefas:[]};
+      const t={id:'t3',tipo:'reuniao',quando:'2026-01-01',feito:null};
+      reunAplicar(c,t,'avancou',null);
+      return c.etapa===ult; })());
+    ok('reunião: remarcar cria a nova e fecha a antiga (sem duplicar na fila)', (()=>{
+      const c={id:'z4',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[],tarefas:[]};
+      const t={id:'t4',tipo:'reuniao',quando:'2026-01-01',feito:null}; c.tarefas.push(t);
+      reunAplicar(c,t,'remarcada','2099-01-01');
+      const novas=c.tarefas.filter(x=>x!==t);
+      return !!t.feito && novas.length===1 && novas[0].quando==='2099-01-01' && !reunPendente(novas[0]); })());
+    ok('reunião: todo desfecho vira linha no histórico', (()=>{
+      const c={id:'z5',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[],tarefas:[]};
+      const t={id:'t5',tipo:'reuniao',quando:'2026-01-01',feito:null};
+      const antes=c.interacoes.length; reunAplicar(c,t,'faltou','2099-02-02');
+      return c.interacoes.length>antes && c.interacoes.some(i=>i.k==='reuniao'); })());
+    ok('reunião: desfecho desconhecido não faz nada', (()=>{
+      const c={id:'z6',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[],tarefas:[]};
+      const t={id:'t6',tipo:'reuniao',quando:'2026-01-01',feito:null};
+      return reunAplicar(c,t,'inventado',null)===null && !t.feito && c.etapa===ETAPAS_FLUXO[1]; })());
+    ok('reunião: todo desfecho exige um próximo passo ou uma remarcação',
+       REUN_DESFECHOS.every(d=>d.proxima||d.remarca));
     /* DADOS DA PESSOA V1:SELFCHECK — propagar no campo errado espalha erro
        em vez de corrigir, então cada limite aqui é proposital. */
     ok('dados: mudar telefone vale para as outras oportunidades da pessoa', (()=>{
