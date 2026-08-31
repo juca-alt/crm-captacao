@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.15.3 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.16.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -819,10 +819,10 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.15.3 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.16.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
-      <button class="tb-link" onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
+      <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
     </header>
 
     <div class="banner-homolog" id="bannerHomolog" style="display:none">
@@ -841,7 +841,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.15.3 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.16.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -862,6 +862,12 @@
 
 <script>
 /* ═══════════════════ DADOS ═══════════════════ */
+/* CAPTACAO-OCULTA-V1 — 31/08/2026: o Gustavo parou de usar a visão Captação e
+   ela só atrapalhava a navegação de quem vive na LP. Está ESCONDIDA, não removida:
+   virar esta constante para true devolve as duas portas (o botão do topo e o item
+   do menu ⋯) exatamente como eram. O app da Captação (index.html) segue no repo,
+   funcionando, acessível por URL direta para quem souber. */
+const CAPTACAO_VISIVEL=false;
 const CHAVE='crmlp_v03_state'; // v03 (23/07): base zerada pro uso REAL — estado demo do v02 fica abandonado no aparelho
 /* Processo Novos Negócios (LP) — fonte única das etapas do funil.
    12 etapas = processo completo Prudential (decisão Gustavo 10/07/2026):
@@ -5409,7 +5415,7 @@ function openLpImport(){
       else if(mot==='sobrecarga' || /demanda|\b429\b|\b503\b|resource.?exhaust|overload|unavailable/i.test(m)){ setMsg('A IA está congestionada (free tier). Dica: use "📋 Colar texto" pra ler SEM IA. Botão liberado em instantes.','var(--amarelo)'); startCooldown(45); }
       else { go.disabled=false; setMsg(/Failed to (fetch|send)|FunctionsFetchError|NetworkError|not found|\b404\b/i.test(m)
         ? 'Não consegui falar com a função (rede/origem) — veja DEPLOY-VISAO-LP.html.'
-        : (/JWT|auth|\b401\b|\b403\b|not logged/i.test(m) ? 'Faça login no CRM (index.html) primeiro — a IA exige sessão.' : ('Não consegui ler: '+m))); }
+        : (/JWT|auth|\b401\b|\b403\b|not logged/i.test(m) ? 'Faça login no CRM primeiro — a IA exige sessão.' : ('Não consegui ler: '+m))); }
     }
   };
 }
@@ -7665,10 +7671,20 @@ function lpSelfCheck(){
     /* FLUIDEZ-V1:SELFCHECK-MENU — a reorganização de 16/08 não pode ter deixado
        nenhum destino órfão: todo botão data-view do menu tem que apontar para
        uma view que o render() conhece. */
-    ok('menu: Painel, Carteira, Revisão e BackOffice moram em Outros módulos', (()=>{
+    ok('menu: Carteira, Revisão e BackOffice moram em Outros módulos', (()=>{
       const g=document.getElementById('outros-group'); if(!g) return false;
       const t=g.textContent;
-      return t.includes('Painel de TA')&&t.includes('Carteira')&&t.includes('Revisão')&&!!document.getElementById('bo-group');
+      return t.includes('Carteira')&&t.includes('Revisão')&&!!document.getElementById('bo-group');
+    })());
+    ok('menu: Painel de TA 2.0 mora no módulo SitPlan & TA', (()=>{
+      const g=document.getElementById('sp-group');
+      return !!g && g.textContent.includes('Painel de TA');
+    })());
+    /* CAPTACAO-OCULTA-V1 */
+    ok('captação escondida não deixa porta aberta na tela', (()=>{
+      if(CAPTACAO_VISIVEL) return true;
+      const tbc=document.getElementById('tb-captacao');
+      return (!tbc || tbc.hidden) && !tbMaisHtml().includes("index.html");
     })());
     ok('menu: Metas mora em Configurações', (()=>{
       const g=document.getElementById('cfg-group');
@@ -7794,19 +7810,24 @@ function lpSelfCheck(){
    No celular as ações de manutenção moram numa folha em vez de esticar a
    topbar. Mesmas funções de sempre — mudou só onde o botão vive. */
 function tbMaisFechar(){ const b=document.getElementById('mais-bd'); if(b) b.remove(); }
-function tbMais(){
-  if(document.getElementById('mais-bd')) return tbMaisFechar();
+/* O HTML da folha "Ações" mora aqui para que o self-check possa conferir o que
+   ela oferece sem precisar abrir a folha na cara do usuário. */
+function tbMaisHtml(){
   const item=(ic,tt,ds,fn)=>`<button class="mais-item" onclick="tbMaisFechar();${fn}">
     <span class="ic">${ic}</span><span class="tx">${tt}<span class="ds">${ds}</span></span></button>`;
-  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd" id="mais-bd" onclick="if(event.target===this)tbMaisFechar()">
+  return `<div class="sheet-bd" id="mais-bd" onclick="if(event.target===this)tbMaisFechar()">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-tit">Ações</div>
       ${item('🔄','Sincronizar','Busca dados novos do servidor sem recarregar a tela','sincronizarDados()')}
       ${item('⬆︎','Atualizar app','Baixa a versão nova do app e recarrega','atualizarApp()')}
-      ${item('⇄','Ir para Captação','Abre o CRM de Captação',"location.href='index.html'")}
+      ${CAPTACAO_VISIVEL?item('⇄','Ir para Captação','Abre o CRM de Captação',"location.href='index.html'"):''}
       ${item('🎨','Ajustes de visual','Cor de destaque, densidade e barra lateral',"document.getElementById('tw-panel').classList.remove('hidden')")}
       <button class="btn btn-s" style="width:100%;justify-content:center;margin-top:8px;min-height:48px" onclick="tbMaisFechar()">Fechar</button>
-    </div></div>`);
+    </div></div>`;
+}
+function tbMais(){
+  if(document.getElementById('mais-bd')) return tbMaisFechar();
+  document.body.insertAdjacentHTML('beforeend',tbMaisHtml());
 }
 /* Apoio do KPI em 2 linhas no celular; toque abre o resto.
    KPI que já tem onclick (navega) não é sequestrado. */
@@ -7919,7 +7940,7 @@ function abrirAjustesVisual(){
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','agenda','contatos','planos','subst','lp-atrasos','lp-pendencias','lp-statust',
-  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','principios'];
+  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','principios','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
    Copia o texto do <th> para cada <td> e marca título/ações. Roda depois do
@@ -8096,6 +8117,8 @@ function bnavRestaurar(){ bnavSalvar(BNAV_PADRAO.slice()); const bd=document.get
 })();
 funPrefLer();
 sideRestaurar();
+/* CAPTACAO-OCULTA-V1: a porta do topo só existe se o interruptor estiver ligado. */
+if(CAPTACAO_VISIVEL){ const _tbc=document.getElementById('tb-captacao'); if(_tbc) _tbc.hidden=false; }
 lpSelfCheck();
 funSelfCheck();
 render();
