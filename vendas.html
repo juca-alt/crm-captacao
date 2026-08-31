@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.22.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.24.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -102,6 +102,8 @@
   /* AVANCAR-NO-TOQUE-V1: no desktop o arrasto já resolve, então o botão fica
      discreto e só acende no hover do card; no celular ele é o caminho ÚNICO,
      então lá vira alvo cheio (regra dos 44px de toque). */
+  .nc-pessoa{margin-top:5px;font-size:10.5px;color:var(--azul);background:var(--azul-claro,#eef4ff);
+    border-radius:6px;padding:2px 7px;display:inline-block}
   .nc-avancar{display:block;width:100%;margin-top:6px;font:inherit;font-size:11.5px;font-weight:600;
     color:var(--azul);background:transparent;border:1px dashed var(--linha);border-radius:8px;
     padding:5px 8px;cursor:pointer;text-align:center;opacity:.55;transition:opacity .12s,border-color .12s,background .12s}
@@ -863,7 +865,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.22.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.24.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -885,7 +887,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.22.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.24.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1927,6 +1929,7 @@ function nnCard(c){
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
     ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
     ${_tar}
+    ${(()=>{ const n=pessoaIrmaos(c).length; return n?`<div class="nc-pessoa" title="Esta pessoa tem ${n+1} oportunidades no funil">👤 1 de ${n+1} desta pessoa</div>`:''; })()}
     ${(()=>{ const px=funProxEtapa(c); return px?`<button class="nc-avancar" onclick="funAvancar('${esc(c.id)}',event)"
         title="Avançar para ${esc(LBLE(px))} — dá pra desfazer">→ ${esc(LBLE(px))}</button>`:''; })()}
     <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}${_recBadge}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
@@ -2489,6 +2492,56 @@ function drwCarteiraHtml(c){
   </div>`;
 }
 
+/* ═══ PESSOA ↔ OPORTUNIDADES V1 (31/08) ═════════════════════════════════════
+   Regra que ele declarou olhando o funil: "sempre as oportunidades vão estar
+   ligadas a um contato". Hoje o card do funil é as DUAS coisas ao mesmo tempo —
+   pessoa e negócio — e é por isso que a mesma pessoa com dois negócios vira
+   duas pessoas.
+
+   A extração é ao contrário do que parece: o card CONTINUA sendo o negócio (é
+   essa a função do funil, mostrar negócio em etapa); quem sai de dentro dele é
+   a PESSOA.
+
+   E a pessoa é DERIVADA, não uma tabela nova: o negócio ganha `pessoaId` — uma
+   string que viaja no jsonb que já sincroniza — e a pessoa é o conjunto de
+   negócios que compartilham esse id. Zero migration, zero coluna, e a extensão
+   do WhatsApp vai poder carimbar o mesmo id sem tabela nenhuma.
+
+   O vínculo nasce de duas formas, e nenhuma delas adivinha:
+   1) automático SÓ quando nome E telefone batem — aí não há dúvida;
+   2) pela decisão humana na fila de duplicadas, que é onde os casos de nome
+      escrito diferente aparecem.
+   Telefone igual com nome diferente NÃO vincula sozinho: marido e mulher
+   dividem telefone, e um vínculo errado faria a ficha de um mostrar o negócio
+   do outro. */
+function pessoaIdNovo(){ return 'p-'+uid(); }
+function pessoaDe(c){ return (c&&c.pessoaId)||null; }
+/* Os outros negócios da MESMA pessoa. Sem pessoaId, ninguém é irmão de ninguém
+   — silêncio é melhor que palpite. */
+function pessoaIrmaos(c,todos){
+  const pid=pessoaDe(c); if(!pid) return [];
+  return (todos||S.contatos||[]).filter(x=>x!==c&&x.id!==c.id&&pessoaDe(x)===pid);
+}
+function pessoaVincular(lista){
+  const l=(lista||[]).filter(Boolean); if(l.length<2) return null;
+  const pid=l.map(pessoaDe).find(Boolean) || pessoaIdNovo();   /* reaproveita id existente */
+  l.forEach(c=>{ c.pessoaId=pid; });
+  return pid;
+}
+function pessoaDesvincular(c){ if(c) delete c.pessoaId; }
+/* Backfill idempotente, roda no boot. Só junta o que é indiscutível: mesmo
+   telefone E mesmo nome normalizado, no mesmo funil. Quem já tem pessoaId é
+   deixado em paz — decisão humana anterior não se reescreve sozinha. */
+function pessoasBackfill(lista){
+  const alvo=(lista||S.contatos||[]).filter(c=>!pessoaDe(c));
+  const m=new Map(); let vinculados=0;
+  alvo.forEach(c=>{ const t=telKey(c.telefone); if(!t) return;
+    const k=(c.funil||'nn')+'|'+t+'|'+normKey(c.nome); if(!k) return;
+    const a=m.get(k); if(a) a.push(c); else m.set(k,[c]); });
+  m.forEach(g=>{ if(g.length>1){ pessoaVincular(g); vinculados+=g.length; } });
+  return vinculados;
+}
+
 /* ═══ DUPLICATAS NO FUNIL V1 (31/08) ════════════════════════════════════════
    Pedido dele olhando o funil real: dois cards "Rogerio De Holanda Med - Rec
    Fabio Granja", mesmo telefone, na mesma etapa — um com prêmio, outro sem.
@@ -2587,8 +2640,9 @@ function dupAbrir(ns){
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">${g.map(c=>card(c,g)).join('')}</div>
     <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
-      <button class="btn btn-p btn-mini" onclick="dupUnir(${gi})">🔗 Unir em um só</button>
-      <button class="btn btn-s btn-mini" onclick="dupSeparar(${gi})">São negócios diferentes</button>
+      <button class="btn btn-p btn-mini" onclick="dupUnir(${gi})" title="É o mesmo negócio cadastrado duas vezes">🔗 É duplicata — unir</button>
+      <button class="btn btn-s btn-mini" onclick="dupMesmaPessoa(${gi})" title="Mesma pessoa, negócios diferentes — passam a viver ligados">👤 Mesma pessoa, negócios diferentes</button>
+      <button class="btn btn-ghost btn-mini" onclick="dupSeparar(${gi})" title="Xará ou telefone compartilhado — não vincular">Não é a mesma pessoa</button>
     </div>
   </div>`;
   _DUP_GRUPOS=grupos;
@@ -2609,27 +2663,66 @@ function dupUnir(gi){
   salvar(); atClose(); render();
   toastDesfazer(`${acc.nome.split(' ')[0]}: ${g.length} cards viraram 1`, dupDesfazer);
 }
+/* As duas respostas que NÃO são "unir" são coisas diferentes, e confundi-las
+   estraga dado: "mesma pessoa" VINCULA (a ficha de um passa a mostrar o outro);
+   "não é a mesma pessoa" apenas cala o aviso (xará, ou telefone de casa que o
+   casal divide). Antes existia só uma opção e ela fazia o segundo caso. */
+function dupSilenciar(g){
+  g.forEach(c=>{ const l=new Set(dupDispensados(c)); g.forEach(o=>{ if(o!==c) l.add(o.id); }); c.dupOk=[...l]; });
+}
+function dupMesmaPessoa(gi){
+  const g=_DUP_GRUPOS[gi]; if(!g||g.length<2) return;
+  _DUP_UNDO={contatos:JSON.parse(JSON.stringify(S.contatos))};
+  pessoaVincular(g); dupSilenciar(g);
+  salvar(); atClose(); render();
+  toastDesfazer(`${g[0].nome.split(' ')[0]}: ${g.length} oportunidades ligadas à mesma pessoa`, dupDesfazer);
+}
 function dupSeparar(gi){
   const g=_DUP_GRUPOS[gi]; if(!g||g.length<2) return;
-  /* marca TODOS os pares do grupo como decididos: são negócios distintos da
-     mesma pessoa — que é exatamente o caso que o modelo pessoa↔oportunidades
-     vai representar direito depois. */
-  g.forEach(c=>{ const l=new Set(dupDispensados(c)); g.forEach(o=>{ if(o!==c) l.add(o.id); }); c.dupOk=[...l]; });
+  dupSilenciar(g);
   salvar(); atClose(); render();
-  toast('Marcados como negócios diferentes — não aviso mais',true);
+  toast('Não aviso mais sobre este par',true);
 }
-function dupExcluir(id){
-  const c=S.contatos.find(x=>x.id===id); if(!c) return;
-  if(!confirm(`Excluir "${c.nome}" do funil?\n\nO histórico deste card (${(c.interacoes||[]).length} interações, ${(c.tarefas||[]).length} tarefas) vai junto. Dá pra desfazer logo em seguida.`)) return;
+/* Exclusão de UM negócio — a que faltava no app inteiro. A confirmação diz o
+   que vai junto (histórico não volta sozinho) e o que NÃO vai (as outras
+   oportunidades da mesma pessoa). Desfazer restaura o estado anterior. */
+function negExcluir(id){
+  const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
+  const irmaos=pessoaIrmaos(c).length;
+  const msg=`Excluir "${c.nome}" do funil?\n\n`
+    +`Vai junto: ${(c.interacoes||[]).length} interação(ões), ${(c.tarefas||[]).length} tarefa(s), ${(c.recs||[]).length} recomendação(ões).\n`
+    +(irmaos?`Continua: as outras ${irmaos} oportunidade(s) desta mesma pessoa.\n`:'')
+    +`\nDá pra desfazer logo em seguida.`;
+  if(!confirm(msg)) return;
   _DUP_UNDO={contatos:JSON.parse(JSON.stringify(S.contatos))};
-  S.contatos=S.contatos.filter(x=>x.id!==id);
-  salvar(); atClose(); render();
+  S.contatos=S.contatos.filter(x=>String(x.id)!==String(id));
+  salvar(); if(typeof atClose==='function') atClose(); if(typeof fecharDrawer==='function') fecharDrawer(); render();
   toastDesfazer(`${c.nome.split(' ')[0]} excluído do funil`, dupDesfazer);
 }
+/* declarada como função (não `const`): os handlers inline do modal resolvem
+   pelo escopo global e função é hoisted — alias por const dependeria da ordem. */
+function dupExcluir(id){ return negExcluir(id); }
 function dupDesfazer(){
   if(!_DUP_UNDO) return toast('Não tem o que desfazer');
   S.contatos=_DUP_UNDO.contatos; _DUP_UNDO=null;
   salvar(); render(); toast('Desfeito',true);
+}
+
+/* As outras oportunidades da MESMA pessoa. Aparece só quando existe vínculo —
+   sem pessoaId o app não chuta parentesco. */
+function drwIrmaosHtml(c){
+  const irmaos=pessoaIrmaos(c); if(!irmaos.length) return '';
+  const linha=o=>`<button class="btn btn-ghost btn-mini" style="text-align:left;display:block;width:100%"
+      onclick="abrirContato('${esc(o.id)}')" title="Abrir esta oportunidade">
+      ${badgeEtapa(o.etapa)} <b>${pmDe(o)?brl(pmDe(o))+'/mês':'sem prêmio'}</b>
+      <span style="color:var(--muted)">· entrou ${o.criadoEm?dataBR(o.criadoEm):'—'}</span></button>`;
+  return `<div class="sec">
+    <h3>Outras oportunidades desta pessoa <span class="badge b-azul">${irmaos.length+1} no total</span></h3>
+    <div style="display:flex;flex-direction:column;gap:5px">${irmaos.map(linha).join('')}</div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:7px">
+      Mesma pessoa, negócios diferentes. Se na verdade for duplicata, use a fila de duplicadas do funil para unir.
+    </div>
+  </div>`;
 }
 
 function renderDrawer(){
@@ -2650,6 +2743,7 @@ function renderDrawer(){
     </div>
     <div class="drawer-body">
 
+      ${drwIrmaosHtml(c)}
       ${drwCarteiraHtml(c)}
       <div class="sec">
         <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>Etapa de comercialização</span>
@@ -2794,6 +2888,19 @@ function renderDrawer(){
         <h3>Notas</h3>
         <textarea class="notas" onblur="setNotas(this.value)">${esc(c.notas||'')}</textarea>
         <div style="font-size:11px;color:var(--muted);margin-top:5px">Salva ao sair do campo — sem botão, sem modal.</div>
+      </div>
+
+      <!-- EXCLUIR-NEGOCIO-V1 (31/08): até aqui o app NÃO tinha como apagar um
+           negócio. A única exclusão existente era "Começar do zero", que apaga
+           a base inteira — então tirar uma duplicata do funil era impossível
+           sem perder tudo. Fica no fim, discreto e com desfazer. -->
+      <div class="sec">
+        <h3 style="color:var(--verm)">Excluir esta oportunidade</h3>
+        <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
+          Some do funil com todo o histórico dela${pessoaIrmaos(c).length?` — as outras ${pessoaIrmaos(c).length} oportunidade(s) desta pessoa continuam`:''}. Dá pra desfazer logo em seguida.
+        </div>
+        <button class="btn btn-s btn-mini" style="color:var(--verm);border-color:var(--verm)"
+          onclick="negExcluir('${esc(c.id)}')">🗑 Excluir</button>
       </div>
 
     </div>`;
@@ -7834,6 +7941,9 @@ document.addEventListener('keydown',e=>{
 });
 
 carregar(); bnCarregarLocal(); bnPrefLer(); taPrefLer(); recPrefLer(); ctPrefLer(); dicCacheLer();
+/* PESSOA↔OPORTUNIDADES V1: liga o que é indiscutível (mesmo nome E mesmo
+   telefone) uma vez só. Só grava se mudou algo — boot não escreve à toa. */
+if(pessoasBackfill()>0) salvar();
 document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique fora fecha
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
   if(fechou) FBN.pop=''; });
@@ -8182,6 +8292,43 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+    /* PESSOA↔OPORTUNIDADES V1:SELFCHECK — vínculo errado é pior que vínculo
+       nenhum: faz a ficha de um mostrar o negócio de outro. */
+    ok('pessoa: sem pessoaId ninguém é irmão de ninguém', (()=>{
+      const a={id:'1',nome:'A',telefone:'8199990001'}, b={id:'2',nome:'A',telefone:'8199990001'};
+      return pessoaIrmaos(a,[a,b]).length===0; })());
+    ok('pessoa: vincular junta os dois sob o mesmo id', (()=>{
+      const a={id:'1',nome:'A'}, b={id:'2',nome:'A'};
+      const pid=pessoaVincular([a,b]);
+      return pid && a.pessoaId===pid && b.pessoaId===pid && pessoaIrmaos(a,[a,b]).length===1; })());
+    ok('pessoa: vincular reaproveita o id que já existe (não cria um terceiro)', (()=>{
+      const a={id:'1',nome:'A',pessoaId:'p-antigo'}, b={id:'2',nome:'A'};
+      return pessoaVincular([a,b])==='p-antigo' && b.pessoaId==='p-antigo'; })());
+    ok('pessoa: o backfill só junta quem tem nome E telefone iguais', (()=>{
+      const l=[{id:'1',nome:'Rogerio De Holanda',telefone:'(81) 8822-0964',funil:'nn'},
+               {id:'2',nome:'Rogerio De Holanda',telefone:'+55 81 8822-0964',funil:'nn'},
+               {id:'3',nome:'Outra Pessoa',telefone:'8188220964',funil:'nn'}];
+      pessoasBackfill(l);
+      return l[0].pessoaId && l[0].pessoaId===l[1].pessoaId && !l[2].pessoaId; })());
+    ok('pessoa: telefone igual com nome diferente NÃO vincula sozinho (casal divide telefone)', (()=>{
+      const l=[{id:'1',nome:'Joao Souza',telefone:'8133334444',funil:'nn'},
+               {id:'2',nome:'Maria Souza',telefone:'8133334444',funil:'nn'}];
+      pessoasBackfill(l); return !l[0].pessoaId && !l[1].pessoaId; })());
+    ok('pessoa: o backfill não reescreve vínculo já decidido', (()=>{
+      const l=[{id:'1',nome:'A',telefone:'8199990001',funil:'nn',pessoaId:'p-humano'},
+               {id:'2',nome:'A',telefone:'8199990001',funil:'nn',pessoaId:'p-humano'}];
+      pessoasBackfill(l); return l[0].pessoaId==='p-humano'&&l[1].pessoaId==='p-humano'; })());
+    ok('pessoa: rodar o backfill duas vezes não muda nada (idempotente)', (()=>{
+      const l=[{id:'1',nome:'A',telefone:'8199990001',funil:'nn'},{id:'2',nome:'A',telefone:'8199990001',funil:'nn'}];
+      pessoasBackfill(l); const p1=l[0].pessoaId;
+      return pessoasBackfill(l)===0 && l[0].pessoaId===p1; })());
+    ok('pessoa: funis diferentes não viram a mesma pessoa no backfill', (()=>{
+      const l=[{id:'1',nome:'A',telefone:'8199990001',funil:'nn'},{id:'2',nome:'A',telefone:'8199990001',funil:'bc'}];
+      pessoasBackfill(l); return !l[0].pessoaId&&!l[1].pessoaId; })());
+    ok('pessoa: unir duplicata preserva o vínculo do grupo', (()=>{
+      const a={id:'1',nome:'A',criadoEm:'2026-01-01',funil:'nn',pessoaId:'p-x'};
+      const b={id:'2',nome:'A',criadoEm:'2026-06-01',funil:'nn',pessoaId:'p-x'};
+      return dupFundir(a,b).pessoaId==='p-x'; })());
     /* DUPLICATAS NO FUNIL V1:SELFCHECK — unir é destrutivo; cada regra aqui
        protege um dado que não dá pra recuperar depois. */
     ok('duplicata: mesmo telefone com nomes diferentes forma grupo', (()=>{
