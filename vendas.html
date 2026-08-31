@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.21.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.22.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -116,6 +116,7 @@
   .kpi-lente.on{background:#eef4ff;border:1.5px solid var(--azul)}
   .kpi-lente.on .lbl,.kpi-lente.on .num{color:var(--azul)}
   .fun-cab-rodape{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .fun-dup-chip{color:var(--amar-escuro,#8a5a00);border-color:var(--amarelo,#e8b34a);background:#fdf6e6}
   .fun-lente-chip{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--azul);
     background:#eef4ff;border:1px solid #cddbfb;border-radius:999px;padding:4px 6px 4px 12px}
 
@@ -862,7 +863,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.21.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.22.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -884,7 +885,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.21.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.22.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1707,7 +1708,12 @@ function nnNegocioHtml(lista,fluxo,ns,rec){
   const botao=`<button class="btn btn-s btn-mini fun-cab-btn" onclick="funCabAlternar()"
       title="${aberto?'Deixa só os números que mandam no dia':'Mostra ponderado, ticket, emissão, gargalo e a régua de taxa'}">
       ${aberto?'▴ menos números':'▾ mais números'}</button>`;
-  return faixa+resto+`<div class="fun-cab-rodape">${botao}${funLenteChip(vivos,ns)}</div>`;
+  /* DUPLICATAS NO FUNIL V1: aviso discreto, ao lado do "mais números". Não é
+     alarme — é um caminho. Só aparece quando existe par não decidido. */
+  const nDup=dupQtd(lista);
+  const dupChip=nDup?`<button class="btn btn-s btn-mini fun-dup-chip" onclick="dupAbrir('${ns}')"
+      title="Mesma pessoa em mais de um card — revisar e unir ou separar">⚠️ ${nDup} possível duplicada${nDup===1?'':'s'}</button>`:'';
+  return faixa+resto+`<div class="fun-cab-rodape">${botao}${dupChip}${funLenteChip(vivos,ns)}</div>`;
 }
 /* ═══════════════════ TAREFAS & AGENDA ═══════════════════
    Negócio sem PRÓXIMA ATIVIDADE marcada é negócio parado — é isso que faz o
@@ -2481,6 +2487,149 @@ function drwCarteiraHtml(c){
     }${atras>3?` +${atras-3}`:''} — resolver antes de oferecer coisa nova.</div>`:''}
     ${d.via==='telefone'?`<div style="font-size:11.5px;color:var(--muted);margin-top:6px">O nome está escrito diferente na carteira — o encontro foi pelo telefone. Se não for a mesma pessoa, corrija o telefone no cadastro.</div>`:''}
   </div>`;
+}
+
+/* ═══ DUPLICATAS NO FUNIL V1 (31/08) ════════════════════════════════════════
+   Pedido dele olhando o funil real: dois cards "Rogerio De Holanda Med - Rec
+   Fabio Granja", mesmo telefone, na mesma etapa — um com prêmio, outro sem.
+   Hoje CADA CARD DO FUNIL É UMA PESSOA, então a mesma pessoa com dois negócios
+   vira duas pessoas. O destino é pessoa ↔ N oportunidades; enquanto esse modelo
+   não chega, o mínimo é enxergar o par e poder resolver em dois cliques.
+
+   Regra herdada do resto do app e mantida aqui: DUPLICATA SÓ O HUMANO DECIDE.
+   Nada funde sozinho — o app aponta, o LP decide, e dá pra desfazer. */
+function dupChave(c){ return telKey(c&&c.telefone) || ('n:'+normKey(c&&c.nome)); }
+function dupDispensados(c){ return Array.isArray(c&&c.dupOk)?c.dupOk:[]; }
+function dupParDispensado(a,b){ return dupDispensados(a).includes(b.id)||dupDispensados(b).includes(a.id); }
+/* Agrupa dentro do MESMO funil: a mesma pessoa em Novos Negócios e na Base de
+   Clientes não é duplicata, são esteiras diferentes de propósito. */
+function dupGrupos(lista){
+  const m=new Map();
+  (lista||[]).forEach(c=>{ const k=dupChave(c); if(!k||k==='n:') return;
+    const kk=(c.funil||'nn')+'|'+k; const a=m.get(kk); if(a) a.push(c); else m.set(kk,[c]); });
+  const out=[];
+  m.forEach(g=>{ if(g.length<2) return;
+    /* se TODOS os pares do grupo já foram dispensados, o grupo some do alerta */
+    let algumVivo=false;
+    for(let i=0;i<g.length&&!algumVivo;i++) for(let j=i+1;j<g.length;j++) if(!dupParDispensado(g[i],g[j])){ algumVivo=true; break; }
+    if(algumVivo) out.push(g);
+  });
+  return out;
+}
+function dupQtd(lista){ return dupGrupos(lista).reduce((a,g)=>a+g.length-1,0); }
+
+/* Fusão PURA (sem tocar no estado) — devolve o contato resultante.
+   Base = o MAIS ANTIGO por criadoEm: é ele que carrega a entrada no funil, e a
+   taxa de passagem se calibra por essa data. Perder isso mexeria na métrica. */
+function dupFundir(a,b){
+  const base=((a.criadoEm||'9999')<=(b.criadoEm||'9999'))?a:b;
+  const outro=(base===a)?b:a;
+  const r=Object.assign({},outro,base);      /* base ganha nos escalares */
+  r.id=base.id; r.criadoEm=base.criadoEm||outro.criadoEm;
+  /* vazio na base é preenchido pelo outro — ninguém perde dado por ser o mais novo */
+  ['telefone','profissao','origem','sexo','notas','prev_fech','prev_emis','pm','premio_mes','idade','ance','taStatus'].forEach(k=>{
+    const vb=base[k], vo=outro[k];
+    const vazio=(v)=>v==null||v===''||v==='—'||(k==='taTentativas'&&v===0);
+    if(vazio(vb)&&!vazio(vo)) r[k]=vo;
+  });
+  /* etapa: a MAIS AVANÇADA do fluxo — unir não pode fazer negócio andar pra trás */
+  const fx=funFluxoDe(base), ia=fx.indexOf(a.etapa), ib=fx.indexOf(b.etapa);
+  r.etapa = (ia<0&&ib<0) ? base.etapa : (ia>=ib ? a.etapa : b.etapa);
+  /* listas: união com dedupe por id — histórico não se perde nem se duplica */
+  ['interacoes','tarefas','recs','eventos','planos'].forEach(k=>{
+    const vistos=new Set(), out=[];
+    [].concat(Array.isArray(base[k])?base[k]:[], Array.isArray(outro[k])?outro[k]:[])
+      .forEach(x=>{ const id=x&&x.id; if(id&&vistos.has(id)) return; if(id) vistos.add(id); out.push(x); });
+    r[k]=out;
+  });
+  r.estrelas=Math.max(Number(base.estrelas)||0, Number(outro.estrelas)||0);
+  r.taTentativas=(Number(base.taTentativas)||0)+(Number(outro.taTentativas)||0);
+  r.infoclient={}; ['pessoais','familiar','financeiro','saude'].forEach(k=>{
+    r.infoclient[k]=!!((base.infoclient&&base.infoclient[k])||(outro.infoclient&&outro.infoclient[k])); });
+  /* nada de escolha silenciosa: valor diferente dos dois lados vira nota */
+  const conflitos=[];
+  ['pm','premio_mes','prev_fech','prev_emis','origem','profissao'].forEach(k=>{
+    const vb=base[k], vo=outro[k];
+    if(vb!=null&&vb!==''&&vb!=='—'&&vo!=null&&vo!==''&&vo!=='—'&&String(vb)!==String(vo)) conflitos.push(`${k}: ficou ${vb}, o outro card tinha ${vo}`);
+  });
+  const notas=[base.notas,outro.notas].filter(x=>x&&String(x).trim()).join('\n— — —\n');
+  r.notas=[notas, conflitos.length?('Unido em '+hojeISO()+' — '+conflitos.join(' · ')):''].filter(Boolean).join('\n');
+  r.dupOk=[...new Set(dupDispensados(base).concat(dupDispensados(outro)))];
+  return r;
+}
+
+/* ── ações (tocam o estado; todas com desfazer ou confirmação) ───────────── */
+let _DUP_UNDO=null;
+function dupLista(ns){ return ns==='bc' ? meusContatosBC() : meusContatos(); }
+function dupAbrir(ns){
+  const grupos=dupGrupos(dupLista(ns));
+  if(!grupos.length) return toast('Nenhuma duplicata aparente no funil',true);
+  const card=(c,g)=>{
+    const outros=g.filter(x=>x!==c);
+    return `<div class="card" style="flex:1;min-width:230px;padding:12px">
+      <div style="font-weight:700">${esc(c.nome)}</div>
+      <div style="font-size:12px;color:var(--muted)">${esc(c.telefone||'sem telefone')}</div>
+      <div style="font-size:12px;color:var(--muted);margin:6px 0">
+        ${badgeEtapa(c.etapa)} ${pmDe(c)?('· '+brl(pmDe(c))+'/mês'):'· sem prêmio'}
+      </div>
+      <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 8px;font-size:12px;margin:0">
+        <dt style="color:var(--muted)">entrou</dt><dd style="margin:0">${c.criadoEm?dataBR(c.criadoEm):'—'}</dd>
+        <dt style="color:var(--muted)">interações</dt><dd style="margin:0">${(c.interacoes||[]).length}</dd>
+        <dt style="color:var(--muted)">tarefas</dt><dd style="margin:0">${(c.tarefas||[]).length}</dd>
+        <dt style="color:var(--muted)">recomendações</dt><dd style="margin:0">${(c.recs||[]).length}</dd>
+      </dl>
+      <button class="btn btn-ghost btn-mini" style="margin-top:9px;color:var(--verm)"
+        onclick="dupExcluir('${esc(c.id)}')">🗑 excluir este</button>
+    </div>`; };
+  const grupoHtml=(g,gi)=>`<div style="border:1px solid var(--linha);border-radius:12px;padding:12px;margin-bottom:14px">
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">
+      ${g.length} cards com ${telKey(g[0].telefone)?'o mesmo telefone':'o mesmo nome'} no funil ${esc(funilDe(g[0])==='bc'?'Base de Clientes':'Novos Negócios')}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">${g.map(c=>card(c,g)).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap">
+      <button class="btn btn-p btn-mini" onclick="dupUnir(${gi})">🔗 Unir em um só</button>
+      <button class="btn btn-s btn-mini" onclick="dupSeparar(${gi})">São negócios diferentes</button>
+    </div>
+  </div>`;
+  _DUP_GRUPOS=grupos;
+  atModal(`<h2>Possíveis duplicadas no funil</h2>
+    <div class="sub">Mesma pessoa aparecendo em mais de um card. Nada muda sozinho — você decide, e dá pra desfazer.</div>
+    <div style="margin-top:12px;max-height:62vh;overflow:auto">${grupos.map(grupoHtml).join('')}</div>
+    <div style="display:flex;margin-top:14px"><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Fechar</button></div>`);
+}
+let _DUP_GRUPOS=[];
+function dupUnir(gi){
+  const g=_DUP_GRUPOS[gi]; if(!g||g.length<2) return;
+  _DUP_UNDO={contatos:JSON.parse(JSON.stringify(S.contatos))};   /* rede: desfazer volta o estado inteiro */
+  let acc=g[0];
+  for(let i=1;i<g.length;i++) acc=dupFundir(acc,g[i]);
+  const ids=new Set(g.map(x=>x.id));
+  S.contatos=S.contatos.filter(x=>!ids.has(x.id));
+  S.contatos.push(normContato(acc));
+  salvar(); atClose(); render();
+  toastDesfazer(`${acc.nome.split(' ')[0]}: ${g.length} cards viraram 1`, dupDesfazer);
+}
+function dupSeparar(gi){
+  const g=_DUP_GRUPOS[gi]; if(!g||g.length<2) return;
+  /* marca TODOS os pares do grupo como decididos: são negócios distintos da
+     mesma pessoa — que é exatamente o caso que o modelo pessoa↔oportunidades
+     vai representar direito depois. */
+  g.forEach(c=>{ const l=new Set(dupDispensados(c)); g.forEach(o=>{ if(o!==c) l.add(o.id); }); c.dupOk=[...l]; });
+  salvar(); atClose(); render();
+  toast('Marcados como negócios diferentes — não aviso mais',true);
+}
+function dupExcluir(id){
+  const c=S.contatos.find(x=>x.id===id); if(!c) return;
+  if(!confirm(`Excluir "${c.nome}" do funil?\n\nO histórico deste card (${(c.interacoes||[]).length} interações, ${(c.tarefas||[]).length} tarefas) vai junto. Dá pra desfazer logo em seguida.`)) return;
+  _DUP_UNDO={contatos:JSON.parse(JSON.stringify(S.contatos))};
+  S.contatos=S.contatos.filter(x=>x.id!==id);
+  salvar(); atClose(); render();
+  toastDesfazer(`${c.nome.split(' ')[0]} excluído do funil`, dupDesfazer);
+}
+function dupDesfazer(){
+  if(!_DUP_UNDO) return toast('Não tem o que desfazer');
+  S.contatos=_DUP_UNDO.contatos; _DUP_UNDO=null;
+  salvar(); render(); toast('Desfeito',true);
 }
 
 function renderDrawer(){
@@ -8033,6 +8182,44 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+    /* DUPLICATAS NO FUNIL V1:SELFCHECK — unir é destrutivo; cada regra aqui
+       protege um dado que não dá pra recuperar depois. */
+    ok('duplicata: mesmo telefone com nomes diferentes forma grupo', (()=>{
+      const g=dupGrupos([{id:'1',nome:'Rogerio De Holanda',telefone:'(81) 8822-0964',funil:'nn'},
+                         {id:'2',nome:'Rogerio Holanda Med',telefone:'+55 81 8822-0964',funil:'nn'}]);
+      return g.length===1 && g[0].length===2; })());
+    ok('duplicata: funis diferentes NÃO são duplicata (são esteiras de propósito)', (()=>{
+      const g=dupGrupos([{id:'1',nome:'Ana',telefone:'8199990001',funil:'nn'},
+                         {id:'2',nome:'Ana',telefone:'8199990001',funil:'bc'}]);
+      return g.length===0; })());
+    ok('duplicata: par dispensado some do alerta', (()=>{
+      const a={id:'1',nome:'X',telefone:'8199990001',funil:'nn',dupOk:['2']}, b={id:'2',nome:'X',telefone:'8199990001',funil:'nn'};
+      return dupGrupos([a,b]).length===0; })());
+    ok('unir: fica o card MAIS ANTIGO (é ele que carrega a entrada no funil)', (()=>{
+      const a={id:'novo',nome:'A',criadoEm:'2026-08-20',etapa:'TA',funil:'nn'};
+      const b={id:'velho',nome:'A',criadoEm:'2026-01-05',etapa:'SitPlan',funil:'nn'};
+      const r=dupFundir(a,b); return r.id==='velho' && r.criadoEm==='2026-01-05'; })());
+    ok('unir: a etapa é a MAIS AVANÇADA — ninguém anda pra trás', (()=>{
+      const a={id:'1',nome:'A',criadoEm:'2026-01-01',etapa:ETAPAS_FLUXO[1],funil:'nn'};
+      const b={id:'2',nome:'A',criadoEm:'2026-06-01',etapa:ETAPAS_FLUXO[4],funil:'nn'};
+      return dupFundir(a,b).etapa===ETAPAS_FLUXO[4]; })());
+    ok('unir: nenhuma interação se perde e nenhuma duplica', (()=>{
+      const a={id:'1',nome:'A',criadoEm:'2026-01-01',funil:'nn',interacoes:[{id:'i1'},{id:'i2'}]};
+      const b={id:'2',nome:'A',criadoEm:'2026-06-01',funil:'nn',interacoes:[{id:'i2'},{id:'i3'}]};
+      const r=dupFundir(a,b);
+      return r.interacoes.length===3 && new Set(r.interacoes.map(x=>x.id)).size===3; })());
+    ok('unir: campo vazio na base é preenchido pelo outro card', (()=>{
+      const a={id:'1',nome:'A',criadoEm:'2026-01-01',funil:'nn',pm:null,telefone:''};
+      const b={id:'2',nome:'A',criadoEm:'2026-06-01',funil:'nn',pm:2900,telefone:'8188220964'};
+      const r=dupFundir(a,b); return r.pm===2900 && r.telefone==='8188220964'; })());
+    ok('unir: valor conflitante NÃO some em silêncio — vira nota', (()=>{
+      const a={id:'1',nome:'A',criadoEm:'2026-01-01',funil:'nn',pm:2900,notas:''};
+      const b={id:'2',nome:'A',criadoEm:'2026-06-01',funil:'nn',pm:600,notas:''};
+      const r=dupFundir(a,b); return /600/.test(r.notas)&&/2900/.test(r.notas); })());
+    ok('unir: tarefas e recomendações também se somam sem duplicar', (()=>{
+      const a={id:'1',nome:'A',criadoEm:'2026-01-01',funil:'nn',tarefas:[{id:'t1'}],recs:[{id:'r1'}]};
+      const b={id:'2',nome:'A',criadoEm:'2026-06-01',funil:'nn',tarefas:[{id:'t1'},{id:'t2'}],recs:[]};
+      const r=dupFundir(a,b); return r.tarefas.length===2 && r.recs.length===1; })());
     /* CLIENTE-NO-FUNIL-V1:SELFCHECK */
     ok('cliente no funil: quem não está na carteira não ganha bloco nenhum',
        drwCarteira({nome:'Ninguém Que Existe Zzz',telefone:'(81) 90000-9999'})===null);
