@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.19.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.20.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -862,7 +862,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.19.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.20.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -884,7 +884,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.19.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.20.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -4604,6 +4604,42 @@ async function lpPersistRemoto(){
 }
 function nowISO(){ return new Date().toISOString().slice(0,10); }
 function normKey(s){ return (s==null?'':String(s)).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' '); }
+/* ═══ IDENTIDADE-TELEFONE-V1 (31/08) ═══════════════════════════════════════
+   A mesma pessoa vive em 5 depósitos (Base de Nomes, funil, carteira, atraso,
+   substituição) e NENHUM guarda o id do outro: o único elo é normKey(nome).
+   normKey resolve caixa, acento e espaço duplo — não resolve "Everton da Silva"
+   × "Everton S.", nome de casada, abreviação nem erro de digitação. Quando o
+   nome muda de forma o elo arrebenta EM SILÊNCIO: nada dá erro, os registros
+   só passam a viver separados.
+
+   O telefone é a segunda chave mais barata que existe aqui: já está gravado em
+   quase todos os depósitos, muda muito menos que o nome, e é a única chave que
+   a extensão do WhatsApp vai ter de graça.
+
+   telKey normaliza para DDD + últimos 8 dígitos, de propósito:
+   - tira o DDI 55 só quando sobra número demais (senão comeria o DDD 55, que é
+     Santa Maria/RS e existe de verdade);
+   - tira o 0 de operadora;
+   - IGNORA o 9º dígito, que foi acrescentado aos celulares depois — é o que faz
+     um cadastro antigo (10 dígitos) casar com o novo (11).
+   Sem DDD devolve vazio: casar por 8 dígitos soltos juntaria gente de estados
+   diferentes, e um falso positivo aqui é pior que um encontro perdido. */
+function telKey(v){
+  let d=String(v==null?'':v).replace(/\D/g,'');
+  if(!d) return '';
+  if(d.length>11 && d.slice(0,2)==='55') d=d.slice(2);
+  d=d.replace(/^0+/,'');
+  if(d.length<10) return '';
+  return d.slice(0,2)+d.slice(2).slice(-8);
+}
+/* Todas as chaves pelas quais uma pessoa pode ser reconhecida. Nome e telefone
+   convivem: quem casa por qualquer uma das duas é a mesma pessoa. */
+function pessoaChaves(o,camposNome,camposTel){
+  const ks=new Set();
+  (camposNome||[]).forEach(k=>{ const v=normKey(o&&o[k]); if(v) ks.add('n:'+v); });
+  (camposTel||[]).forEach(k=>{ const v=telKey(o&&o[k]); if(v) ks.add('t:'+v); });
+  return ks;
+}
 function recKey(rec,keys){ for(const k of keys){ const v=normKey(rec[k]); if(v) return v; } return ''; }
 
 /* ════ INGESTÃO SNAPSHOT POR LP — preserva status_* por chave (P0, inegociável) ════
@@ -5811,10 +5847,13 @@ async function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartParseTa
   if(!CART_REMOTE) return {sync:'local'};
   try{ await cartPersistRemoto(); return {sync:'remoto'}; }
   catch(e){ console.error('CART sync remoto falhou',e); return {sync:'falhou'}; } }
-function cartApolicesDoCliente(ref){ const a=cartIdx().apo.get(ref); return a?a.slice():[]; }   /* era um filter sobre TODAS as apólices dentro do laço de clientes */
+function cartApolicesDoCliente(ref){   /* era um filter sobre TODAS as apólices dentro do laço de clientes */
+  const m=cartIdx().apo, vistos=new Set(), out=[];
+  cartChaves(ref).forEach(k=>{ const a=m.get(k); if(a) a.forEach(x=>{ if(!vistos.has(x)){ vistos.add(x); out.push(x); } }); });
+  return out; }
 function cartResumo(){ const C=CART.clientes,A=CART.apolices;
   return { clientes:C.length, apolices:A.length, pmMes:C.reduce((s,c)=>s+(c.cob.pm||0),0), csTot:C.reduce((s,c)=>s+(c.cob.cs||0),0),
-    multi:C.filter(c=>cartApolicesDoCliente(c.ref).length>1).length,
+    multi:C.filter(c=>cartApolicesDoCliente(c).length>1).length,
     segNeqPag:A.filter(a=>a.respPagto&&normKey(a.segurado)!==normKey(a.respPagto)).length }; }
 
 /* ---- contato: WhatsApp (wa.me) / e-mail (mailto) a partir dos dados da carteira ---- */
@@ -5848,19 +5887,35 @@ function cartIdx(){
   const selo=_cixSelo();
   if(_CIX&&_CIX_SELO===selo) return _CIX;
   const push=(m,k,v)=>{ if(!k) return; const a=m.get(k); if(a) a.push(v); else m.set(k,[v]); };
-  const porCampos=(lista,campos)=>{ const m=new Map();
-    lista.forEach(r=>{ const ks=new Set(); campos.forEach(k=>{ if(r[k]) ks.add(normKey(r[k])); }); ks.forEach(k=>push(m,k,r)); });
+  /* IDENTIDADE-TELEFONE-V1: o índice passa a guardar a linha sob TODAS as
+     chaves da pessoa — nomes e telefones. O Set continua deduplicando, então
+     segurado e pagador que normalizam igual seguem sem duplicar a linha. */
+  const porCampos=(lista,campos,camposTel)=>{ const m=new Map();
+    lista.forEach(r=>{ pessoaChaves(r,campos,camposTel).forEach(k=>push(m,k,r)); });
     return m; };
-  const ix={ at:porCampos((AT.itens||[]).filter(r=>!r.resolvido_em),['segurado','resp_pagto']),
-             st:porCampos(lpAtivos('statust'),['segurado','pagador']),
-             pe:porCampos(lpAtivos('pendencias'),['cliente']),
-             an:porCampos(lpAtivos('aniversario'),['cliente']),
-             da:porCampos(lpAtivos('datas'),['cliente']),
+  const ix={ at:porCampos((AT.itens||[]).filter(r=>!r.resolvido_em),['segurado','resp_pagto'],['celular']),
+             st:porCampos(lpAtivos('statust'),['segurado','pagador'],['celular','telefone']),
+             pe:porCampos(lpAtivos('pendencias'),['cliente'],['celular','telefone']),
+             an:porCampos(lpAtivos('aniversario'),['cliente'],['celular','telefone']),
+             da:porCampos(lpAtivos('datas'),['cliente'],['celular','telefone']),
              apo:new Map() };
-  (CART.apolices||[]).forEach(a=>push(ix.apo,a.ref,a));
+  (CART.apolices||[]).forEach(a=>pessoaChaves(a,['segurado'],['celular','telefone']).forEach(k=>push(ix.apo,k,a)));
   _CIX_SELO=selo; return (_CIX=ix);
 }
-function cartRadar(ref){ const ix=cartIdx(), g=m=>{ const a=m.get(ref); return a?a.slice():[]; };
+/* Aceita a chave antiga (ref = nome normalizado) OU um objeto/Set de chaves.
+   Assim toda chamada que já existia continua funcionando, e quem tiver telefone
+   passa a casar também por ele. O dedupe é por identidade do objeto: a mesma
+   linha achada pelo nome E pelo telefone entra uma vez só. */
+function cartChaves(ref){
+  if(ref instanceof Set) return ref;
+  if(ref&&typeof ref==='object') return pessoaChaves(ref,['nome','segurado','cliente'],['celular','telefone','telComercial']);
+  const k=normKey(ref); return new Set(k?['n:'+k]:[]);
+}
+function cartRadar(ref){
+  const ix=cartIdx(), chaves=cartChaves(ref);
+  const g=m=>{ const vistos=new Set(), out=[];
+    chaves.forEach(k=>{ const a=m.get(k); if(a) a.forEach(r=>{ if(!vistos.has(r)){ vistos.add(r); out.push(r); } }); });
+    return out; };
   return { atrasos:g(ix.at).map(r=>Object.assign({},r,{dias_atraso:atDiasAtraso(r.vencido_em)})),
     statust:g(ix.st), pendencias:g(ix.pe), aniversario:g(ix.an), datas:g(ix.da) }; }
 function cartRadarTemAcao(rad){ return rad.atrasos.length+rad.statust.length+rad.pendencias.length; }
@@ -5890,7 +5945,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
   fxReg('cart',FCART,'viewCartClientes');
   const _af=document.activeElement?document.activeElement.id:'';  // devolve o foco pro campo certo após o re-render
   const fset=bnCsvSet(FCART.flags), gset=bnCsvSet(FCART.gaps);
-  const enr=CART.clientes.map(c=>({c,n:cartApolicesDoCliente(c.ref).length,rd:cartRadar(c.ref),dN:lpDiasAte(c.nascimento)}));
+  const enr=CART.clientes.map(c=>({c,n:cartApolicesDoCliente(c).length,rd:cartRadar(c),dN:lpDiasAte(c.nascimento)}));
   const filtrada=enr.filter(({c,n,rd,dN})=>{
     if(q && !(c.ref.indexOf(q)>=0||normKey(c.nome).indexOf(q)>=0||(c.email&&normKey(c.email).indexOf(q)>=0))) return false;
     if(FCART.idmin && !(c.idade!=null&&c.idade>=+FCART.idmin)) return false;
@@ -5949,14 +6004,14 @@ function viewCartClientes(){ const q=normKey(CART_Q);
    cobertura e radar da semana — tudo derivado, nada digitado. ---- */
 let CART_GAP='';
 function cartNiverProx(dias){ return CART.clientes.map(c=>({c,d:lpDiasAte(c.nascimento)})).filter(x=>x.d!=null&&x.d<=dias).sort((a,b)=>a.d-b.d); }
-function cartRadarLista(){ return CART.clientes.map(c=>({c,rad:cartRadar(c.ref)})).filter(x=>cartRadarTemAcao(x.rad)); }
+function cartRadarLista(){ return CART.clientes.map(c=>({c,rad:cartRadar(c)})).filter(x=>cartRadarTemAcao(x.rad)); }
 function viewCartOportunidades(){
   if(!CART.clientes.length){ $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1><div class="sub">Ganchos de contato e venda extraídos da carteira.</div>`+cartVazio(); return; }
   const nivers=cartNiverProx(30), radar=cartRadarLista();
   const card=(t,v,s)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:14px 16px">
     <div style="font-size:12px;color:var(--muted)">${t}</div><div style="font-size:22px;font-weight:800;margin-top:4px">${v}</div>${s?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div>`:''}</div>`;
   const comGap=CART.clientes.filter(c=>cartGaps(c).length).length;
-  const mono=CART.clientes.filter(c=>cartApolicesDoCliente(c.ref).length===1).length;
+  const mono=CART.clientes.filter(c=>cartApolicesDoCliente(c).length===1).length;
   const rowCliente=(c,extra,acoes)=>`<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
     <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}</td>${extra}
     <td style="padding:8px 10px">${esc(cartTel(c)||'—')}</td>
@@ -5993,11 +6048,11 @@ function viewCartOportunidades(){
     <h3 style="margin:18px 0 8px">💡 Gaps de cobertura <span style="font-weight:400;font-size:12px;color:var(--muted)">— clique num gap pra ver quem está sem (maiores CS primeiro)</span></h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div>${gapHTML}`; }
 
-function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) return; const aps=cartApolicesDoCliente(ref);
+function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) return; const aps=cartApolicesDoCliente(c);
   const linha=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0"><span style="color:var(--muted)">${l}</span><span style="font-weight:600;text-align:right">${v}</span></div>`:'';
   const cob=c.cob;
   const dNiver=lpDiasAte(c.nascimento);
-  const rad=cartRadar(ref); const radItens=[];
+  const rad=cartRadar(c); const radItens=[];
   rad.atrasos.forEach(r=>radItens.push({cls:'fx-critico',t:'⏰ Atraso'+(r.dias_atraso!=null?' '+r.dias_atraso+'d':''),s:'apólice '+(r.apolice||'—'),v:'lp-atrasos'}));
   rad.statust.forEach(r=>{ const f=lpFaixa(r); radItens.push({cls:'fx-'+f.faixa,t:'⏳ Status T · '+FAIXA_LABEL[f.faixa]+(f.dias!=null?(f.dias<0?' ('+Math.abs(f.dias)+'d atrás)':' (em '+f.dias+'d)'):''),s:'apólice '+(r.apolice||r.proposta||'—'),v:'lp-statust'}); });
   rad.pendencias.forEach(r=>radItens.push({cls:'fx-alerta',t:'📋 Pendência de emissão',s:r.pendencia||('proposta '+(r.proposta||'—')),v:'lp-pendencias'}));
@@ -7883,12 +7938,16 @@ function lpSelfCheck(){
                  pe:lpAtivos('pendencias').filter(r=>hit(r,['cliente'])).length,
                  an:lpAtivos('aniversario').filter(r=>hit(r,['cliente'])).length,
                  da:lpAtivos('datas').filter(r=>hit(r,['cliente'])).length }; };
-      return (CART.clientes||[]).slice(0,60).every(c=>{ const a=varre(c.ref), b=cartRadar(c.ref);
-        return a.at===b.atrasos.length&&a.st===b.statust.length&&a.pe===b.pendencias.length
-            && a.an===b.aniversario.length&&a.da===b.datas.length; });
+      /* IDENTIDADE-TELEFONE-V1: a varredura antiga só olhava NOME. O índice
+         agora casa por nome OU telefone, então ele deve achar SEMPRE PELO MENOS
+         o que ela achava — nunca menos. Igualdade viraria mentira no primeiro
+         telefone que casasse. */
+      return (CART.clientes||[]).slice(0,60).every(c=>{ const a=varre(c.ref), b=cartRadar(c);
+        return b.atrasos.length>=a.at&&b.statust.length>=a.st&&b.pendencias.length>=a.pe
+            && b.aniversario.length>=a.an&&b.datas.length>=a.da; });
     })());
-    ok('índice: apólices por cliente batem com o filter', (CART.clientes||[]).slice(0,60).every(c=>
-        cartApolicesDoCliente(c.ref).length===(CART.apolices||[]).filter(a=>a.ref===c.ref).length));
+    ok('índice: apólices por cliente nunca perdem o que o filter por nome achava', (CART.clientes||[]).slice(0,60).every(c=>
+        cartApolicesDoCliente(c).length>=(CART.apolices||[]).filter(a=>a.ref===c.ref).length));
     ok('índice: gravar derruba o cache', (()=>{ cartIdx(); const tinha=!!_CIX; cartIdxInvalidar(); return tinha&&_CIX===null; })());
     ok('índice: uma linha nunca entra duas vezes no mesmo cliente', (()=>{
       const r=cartRadar((CART.clientes[0]||{}).ref||'__nada__');
@@ -7930,6 +7989,30 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+    /* IDENTIDADE-TELEFONE-V1:SELFCHECK — falso positivo aqui junta DUAS PESSOAS
+       diferentes num cadastro só, que é bem pior que um encontro perdido. */
+    ok('telefone: celular novo (11 díg.) e antigo (10 díg.) são a mesma pessoa',
+       telKey('(81) 99999-0001')===telKey('(81) 9999-0001') && telKey('81999990001')!=='' );
+    ok('telefone: com e sem DDI 55 casam', telKey('+55 81 99999-0001')===telKey('81999990001'));
+    ok('telefone: o 0 de operadora não atrapalha', telKey('081 99999-0001')===telKey('8199990001'));
+    ok('telefone: DDD 55 (Santa Maria) NÃO é confundido com o DDI 55', (()=>{
+      const k=telKey('55 99999-1234');            /* 11 dígitos: 55 é DDD, não DDI */
+      return k.slice(0,2)==='55' && k.length===10; })());
+    ok('telefone: DDDs diferentes nunca casam', telKey('8199990001')!==telKey('1199990001'));
+    ok('telefone: número sem DDD é recusado (juntaria gente de outro estado)',
+       telKey('99990001')==='' && telKey('')==='' && telKey(null)==='');
+    ok('telefone: lixo não vira chave', telKey('não tem')==='' && telKey('---')==='');
+    ok('identidade: nome e telefone convivem como chaves da mesma pessoa', (()=>{
+      const ks=pessoaChaves({nome:'Ana Lúcia',celular:'(81) 99999-0001'},['nome'],['celular']);
+      return ks.has('n:ana lucia') && ks.has('t:8199990001') && ks.size===2; })());
+    ok('identidade: chave de nome e de telefone nunca se cruzam (prefixo)', (()=>{
+      const a=pessoaChaves({nome:'8199990001'},['nome'],[]);
+      const b=pessoaChaves({tel:'8199990001'},[],['tel']);
+      return [...a][0]!==[...b][0]; })());
+    ok('radar: a mesma linha achada por nome E por telefone entra uma vez só', (()=>{
+      const p={nome:'Fulano Teste',celular:'(81) 90000-0000'};
+      const r=cartRadar(p);
+      return new Set(r.atrasos).size===r.atrasos.length && new Set(r.statust).size===r.statust.length; })());
     /* AVANCAR-NO-TOQUE-V1:SELFCHECK */
     ok('avançar: a próxima etapa é a seguinte no fluxo do funil certo', (()=>{
       const a=funProxEtapa({funil:'nn',etapa:ETAPAS_FLUXO[0]})===ETAPAS_FLUXO[1];
