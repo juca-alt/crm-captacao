@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.24.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.25.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -865,7 +865,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.24.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.25.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -887,7 +887,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.24.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.25.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2515,6 +2515,28 @@ function drwCarteiraHtml(c){
    dividem telefone, e um vínculo errado faria a ficha de um mostrar o negócio
    do outro. */
 function pessoaIdNovo(){ return 'p-'+uid(); }
+/* ═══ DADOS DA PESSOA V1 (31/08) — Fase 2 do modelo ════════════════════════
+   Descoberta ao construir: a ficha do funil NUNCA teve edição dos dados da
+   pessoa. Nome, telefone e profissão só podiam ser digitados na CRIAÇÃO do
+   contato — depois disso viravam texto morto no cabeçalho. Errou o telefone?
+   Só criando outro card. (É irmão do buraco da exclusão: as duas metades do
+   CRUD que faltavam.)
+
+   Estes campos são da PESSOA, não do negócio: mudar o telefone numa
+   oportunidade tem que valer nas outras dela.
+
+   Escolha de engenharia: propaga na ESCRITA, não resolve na leitura. Resolver
+   na leitura seria mais elegante, mas obrigaria a tocar as ~100 leituras de
+   c.nome/c.telefone espalhadas pelo app — risco alto num app em uso diário
+   todo dia. Propagar na escrita mantém cada card com sua cópia (como já era) e
+   só garante que elas ficam iguais. O `salvar()` carimba `_upd` em todo contato
+   que mudou, então os irmãos sincronizam junto sem nada a mais. */
+const PESSOA_CAMPOS=['nome','telefone','email','sexo','idade','profissao'];
+function pessoaPropagar(c,todos){
+  const irmaos=pessoaIrmaos(c,todos); if(!irmaos.length) return 0;
+  irmaos.forEach(o=>{ PESSOA_CAMPOS.forEach(k=>{ if(c[k]!==undefined) o[k]=c[k]; }); });
+  return irmaos.length;
+}
 function pessoaDe(c){ return (c&&c.pessoaId)||null; }
 /* Os outros negócios da MESMA pessoa. Sem pessoaId, ninguém é irmão de ninguém
    — silêncio é melhor que palpite. */
@@ -2710,6 +2732,46 @@ function dupDesfazer(){
 
 /* As outras oportunidades da MESMA pessoa. Aparece só quando existe vínculo —
    sem pessoaId o app não chuta parentesco. */
+/* Recolhida por padrão: é dado que se mexe de vez em quando, não todo dia. */
+function drwPessoaHtml(c){
+  const n=pessoaIrmaos(c).length;
+  const campo=(id,rot,val,tipo)=>`<div style="flex:1;min-width:130px">
+    <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">${rot}</label>
+    <input id="${id}" type="${tipo||'text'}" value="${esc(val==null||val==='—'?'':val)}" style="width:100%"></div>`;
+  return `<div class="sec">
+    <details>
+      <summary style="cursor:pointer;font-weight:700;font-size:14px">Dados da pessoa${n?` <span class="badge b-azul" style="font-weight:400">vale para ${n+1} oportunidades</span>`:''}</summary>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        ${campo('pes_nome','Nome',c.nome)}
+        ${campo('pes_tel','Telefone',c.telefone)}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        ${campo('pes_mail','E-mail',c.email,'email')}
+        ${campo('pes_prof','Profissão',c.profissao)}
+        ${campo('pes_idade','Idade',c.idade,'number')}
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+        <button class="btn btn-p btn-mini" onclick="pessoaSalvarDados('${esc(c.id)}')">Salvar</button>
+        <span style="font-size:11.5px;color:var(--muted)">${n?`O que você mudar aqui vale para as ${n+1} oportunidades desta pessoa.`:'Esta pessoa tem só esta oportunidade.'}</span>
+      </div>
+    </details>
+  </div>`;
+}
+function pessoaSalvarDados(id){
+  const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
+  const v=i=>{ const e=$('#'+i); return e?e.value.trim():undefined; };
+  const nome=v('pes_nome');
+  if(nome!==undefined && !nome) return toast('O nome não pode ficar vazio');
+  if(nome!==undefined) c.nome=nome;
+  const tel=v('pes_tel');   if(tel!==undefined) c.telefone=tel;
+  const mail=v('pes_mail'); if(mail!==undefined) c.email=mail;
+  const prof=v('pes_prof'); if(prof!==undefined) c.profissao=prof||'—';
+  const idade=v('pes_idade'); if(idade!==undefined) c.idade=idade?Number(idade):null;
+  const n=pessoaPropagar(c);
+  salvar(); renderDrawer(); render();
+  toast(n?`Salvo — vale para as ${n+1} oportunidades desta pessoa`:'Salvo',true);
+}
+
 function drwIrmaosHtml(c){
   const irmaos=pessoaIrmaos(c); if(!irmaos.length) return '';
   const linha=o=>`<button class="btn btn-ghost btn-mini" style="text-align:left;display:block;width:100%"
@@ -2745,6 +2807,7 @@ function renderDrawer(){
 
       ${drwIrmaosHtml(c)}
       ${drwCarteiraHtml(c)}
+      ${drwPessoaHtml(c)}
       <div class="sec">
         <h3 style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap"><span>Etapa de comercialização</span>
           <select id="drwFunil" title="Esteira em que este contato é trabalhado" style="font-size:12px;font-weight:400;max-width:230px" onchange="drwPedirFunil(this.value)">
@@ -8292,6 +8355,27 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+    /* DADOS DA PESSOA V1:SELFCHECK — propagar no campo errado espalha erro
+       em vez de corrigir, então cada limite aqui é proposital. */
+    ok('dados: mudar telefone vale para as outras oportunidades da pessoa', (()=>{
+      const a={id:'1',nome:'A',telefone:'8199990001',pessoaId:'p-1'};
+      const b={id:'2',nome:'A',telefone:'8199990001',pessoaId:'p-1'};
+      a.telefone='8188887777'; pessoaPropagar(a,[a,b]);
+      return b.telefone==='8188887777'; })());
+    ok('dados: sem vínculo, a edição fica só no card editado', (()=>{
+      const a={id:'1',nome:'A',telefone:'x'}, b={id:'2',nome:'A',telefone:'y'};
+      a.telefone='z'; pessoaPropagar(a,[a,b]);
+      return b.telefone==='y'; })());
+    ok('dados: propagação NÃO leva campo de negócio junto (etapa, prêmio, tarefas)', (()=>{
+      const a={id:'1',nome:'A',pessoaId:'p-1',etapa:'FA',pm:5000,tarefas:[{id:'t'}],interacoes:[{id:'i'}]};
+      const b={id:'2',nome:'A',pessoaId:'p-1',etapa:'TA',pm:100,tarefas:[],interacoes:[]};
+      pessoaPropagar(a,[a,b]);
+      return b.etapa==='TA' && b.pm===100 && b.tarefas.length===0 && b.interacoes.length===0; })());
+    ok('dados: os campos de pessoa são exatamente os declarados', (()=>{
+      const a={id:'1',pessoaId:'p-1'}, b={id:'2',pessoaId:'p-1'};
+      PESSOA_CAMPOS.forEach((k,i)=>{ a[k]='v'+i; });
+      pessoaPropagar(a,[a,b]);
+      return PESSOA_CAMPOS.every((k,i)=>b[k]==='v'+i); })());
     /* PESSOA↔OPORTUNIDADES V1:SELFCHECK — vínculo errado é pior que vínculo
        nenhum: faz a ficha de um mostrar o negócio de outro. */
     ok('pessoa: sem pessoaId ninguém é irmão de ninguém', (()=>{
