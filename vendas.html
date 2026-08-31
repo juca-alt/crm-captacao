@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.17.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.18.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -849,7 +849,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.17.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.18.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -871,7 +871,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.17.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.18.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -4874,7 +4874,65 @@ function atModal(html){ atClose(); const ov=document.createElement('div'); ov.cl
 function atClose(){ const o=document.getElementById('at-ov'); if(o) o.remove(); }
 function atStatusCor(st){ if(st===AT_STATUS.RESOLV) return 'b-verde'; if(st===AT_STATUS.SEM) return 'b-verm'; if(st===AT_STATUS.SUMIU) return 'b-roxo'; if(st==='Boleto pago cliente'||st==='Aguardando baixa sistema') return 'b-azul'; return 'b-amarelo'; }
 function atFocus(id){ const e=document.getElementById(id); if(e){ e.focus(); try{ const v=e.value; e.setSelectionRange(v.length,v.length); }catch(_){} } }
-function atWaMsg(r){ const nome=(r.segurado||'').split(' ')[0]; return 'Olá'+(nome?' '+atTitleC(nome):'')+'! Sobre sua apólice '+r.apolice+' — identificamos o prêmio em atraso. Podemos ajudar a regularizar?'; }
+/* ═══ DINHEIRO À VISTA V1 (31/08) — script de cobrança POR MOTIVO ══════════
+   O motivo da recusa já vinha do relatório e já aparecia na tela, mas a
+   mensagem de WhatsApp era UMA SÓ para todo mundo: "identificamos o prêmio em
+   atraso, podemos ajudar?". Isso joga no cliente o trabalho de descobrir o que
+   houve — e é justamente o que o LP já sabe. Cartão recusado, saldo
+   insuficiente e conta encerrada pedem AÇÕES DIFERENTES, então pedem textos
+   diferentes.
+
+   O motivo vem como texto livre da Prudential, então o reconhecimento é por
+   PALAVRA-CHAVE, não por igualdade — e o que não casar cai no genérico (nunca
+   fica sem mensagem) e é LISTADO na tela, para virar script novo depois.
+   A ordem importa: o mais específico primeiro (cartão vencido antes de cartão).  */
+const AT_SCRIPTS=[
+  {id:'cartao_vencido', rot:'Cartão vencido', re:/cart[aã]o.*(vencid|expirad|validade)|validade.*cart/i,
+   acao:'atualizar a validade do cartão'},
+  {id:'cartao_recusado', rot:'Cartão recusado', re:/cart[aã]o|transa[cç][aã]o negada|n[aã]o autorizad/i,
+   acao:'confirmar os dados do cartão ou trocar por outro'},
+  {id:'saldo', rot:'Saldo insuficiente', re:/saldo|fundos|insufici/i,
+   acao:'deixar o saldo disponível para a próxima tentativa'},
+  {id:'limite', rot:'Limite excedido', re:/limite/i,
+   acao:'liberar limite ou trocar a forma de pagamento'},
+  {id:'conta', rot:'Conta encerrada', re:/conta (encerrad|inexistent|inv[aá]lid|bloquead)|encerrament/i,
+   acao:'informar a conta nova para o débito'},
+  {id:'autorizacao', rot:'Débito não autorizado', re:/n[aã]o autorizad|sem autoriza|autoriza[cç][aã]o|sustad|cancelad[oa] pelo cliente/i,
+   acao:'reativar a autorização de débito no seu banco'},
+  {id:'dados', rot:'Dados divergentes', re:/divergen|cadastr|cpf|titularidade|nome do titular/i,
+   acao:'conferir os dados de cobrança'},
+  {id:'boleto', rot:'Boleto em aberto', re:/boleto|compensa|aguardando pagamento/i,
+   acao:'fazer o pagamento do boleto'},
+  {id:'generico', rot:'Sem motivo informado', re:/.^/, acao:'regularizar o pagamento'}
+];
+function atScript(r){
+  const m=String((r&&r.motivo_recusa)||'').trim();
+  if(m) { const achado=AT_SCRIPTS.find(sc=>sc.id!=='generico'&&sc.re.test(m)); if(achado) return achado; }
+  return AT_SCRIPTS[AT_SCRIPTS.length-1];
+}
+function atScriptReconhecido(r){ return atScript(r).id!=='generico'; }
+/* O rótulo tem que dizer QUAL dos dois casos é: relatório sem motivo (nada a
+   fazer) ou motivo que existe e ainda não tem script meu (isso é trabalho). */
+function atScriptRot(r){
+  if(atScriptReconhecido(r)) return atScript(r).rot;
+  return String((r&&r.motivo_recusa)||'').trim() ? 'Motivo ainda sem script' : 'Sem motivo informado';
+}
+/* A mensagem: diz o QUE houve, o que resolve e oferece ajuda. Curta — é
+   WhatsApp, não carta de cobrança — e sem nenhuma ameaça de cancelamento:
+   fôlego e limite são informação da operação, não do cliente. */
+function atWaMsg(r){
+  const nome=atTitleC(String((r&&r.segurado)||'').split(' ')[0]||'');
+  const sc=atScript(r);
+  const valor=(r&&r.premio!=null)?brl(r.premio):null;
+  const venc=(r&&r.vencido_em)?atFmtBR(r.vencido_em):null;
+  const abre='Olá'+(nome?' '+nome:'')+'! Tudo bem?';
+  const oque = sc.id==='generico'
+    ? 'Passando para avisar que o prêmio da sua apólice '+(r&&r.apolice||'')+' está em aberto'
+    : 'A cobrança do prêmio da sua apólice '+(r&&r.apolice||'')+' não passou — o retorno do banco foi: '+sc.rot.toLowerCase();
+  const det=[venc?'venceu em '+venc:null, valor?'valor '+valor:null].filter(Boolean).join(' · ');
+  return abre+' '+oque+(det?' ('+det+')':'')+'. Para resolver, basta '+sc.acao+
+         '. Qualquer dúvida me chama por aqui que eu resolvo com você — não quero que sua proteção fique descoberta.';
+}
 
 function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apolice===id); if(!r) return; const d=atDiasAtraso(r.vencido_em); const wa=cartWaUrl(r.celular,atWaMsg(r)); const stAtual=atDerivarStatus(r);
   const opts=AT_STATUS_OPTS.slice(); if(stAtual===AT_STATUS.SUMIU) opts.push(AT_STATUS.SUMIU);
@@ -4883,6 +4941,21 @@ function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apol
    <div style="font-size:13px;margin-top:8px">${r.resp_pagto&&normKey(r.resp_pagto)!==normKey(r.segurado)?'Resp. pagamento: <b>'+esc(atTitleC(r.resp_pagto))+'</b> · ':''}${d!=null?'<b>'+d+' dias</b> em atraso':'—'} · vence ${atFmtBR(r.vencido_em)}${r.pago_ate?' · pago até '+atFmtBR(r.pago_ate):''} · <b>${r.premio!=null?brl(r.premio):'—'}</b></div>
    ${r.motivo_recusa?`<div style="font-size:12px;color:var(--muted);margin-top:4px">${esc(r.motivo_recusa)}</div>`:''}
    <div style="font-size:13px;margin-top:6px">${esc(r.celular||'')}${wa?` · <a href="${wa}" target="_blank" rel="noopener" style="color:var(--verde);font-weight:600">💬 WhatsApp</a>`:''}</div>
+   <!-- DINHEIRO-A-VISTA-V1: o texto vem pronto pelo motivo, mas EDITÁVEL — mensagem
+        engessada que não dá pra ajustar é mensagem que ninguém manda. -->
+   <div class="card" style="padding:10px 12px;margin-top:12px;background:var(--azul-claro,#f2f6ff)">
+     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);font-weight:600">
+       💬 Mensagem pronta
+       <span class="badge ${atScriptReconhecido(r)?'b-verde':'b-cinza'}">${esc(atScriptRot(r))}</span>
+       ${atScriptReconhecido(r)?'':'<span style="font-weight:400">texto genérico — me mande o motivo que eu escrevo o específico</span>'}
+     </div>
+     <textarea id="at_msg" rows="4" style="width:100%;margin-top:6px;font-size:13px">${esc(atWaMsg(r))}</textarea>
+     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+       ${r.celular?`<button class="btn btn-s btn-mini" onclick="atMandarWa('${esc(r.celular)}')">💬 Mandar no WhatsApp</button>`
+                  :'<span style="font-size:11.5px;color:var(--muted)">sem celular cadastrado — dá pra copiar o texto</span>'}
+       <button class="btn btn-ghost btn-mini" onclick="atCopiarMsg()">📋 Copiar</button>
+     </div>
+   </div>
    <label style="display:block;font-size:12px;color:var(--muted);margin-top:12px;font-weight:600">Status</label>
    <select id="at_st" style="width:100%;margin-top:3px">${opts.map(s=>`<option${stAtual===s?' selected':''}>${esc(s)}</option>`).join('')}</select>
    <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">Tratativa (nota de cobrança)</label>
@@ -4899,6 +4972,15 @@ function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apol
      <button class="btn btn-p" onclick="atSalvarFicha('${esc(r.apolice)}')">Salvar</button>
    </div>`);
 }
+/* Lê o texto NA HORA do clique: se ele ajustou a mensagem, vai a ajustada. */
+function atMsgAtual(){ const e=$('#at_msg'); return e?(e.value||'').trim():''; }
+function atMandarWa(tel){ const m=atMsgAtual(); if(!m) return toast('A mensagem está vazia');
+  const u=cartWaUrl(tel,m); if(!u) return toast('Celular inválido');
+  window.open(u,'_blank','noopener'); }
+function atCopiarMsg(){ const m=atMsgAtual(); if(!m) return toast('A mensagem está vazia');
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(m).then(()=>toast('Mensagem copiada',true),()=>toast('Não consegui copiar')); }
+  else { const e=$('#at_msg'); if(e){ e.select(); document.execCommand('copy'); toast('Mensagem copiada',true); } } }
+
 async function atSalvarFicha(ap){
   const ex=AT.itens.find(x=>x.apolice===ap)||{};
   const st=($('#at_st')||{}).value||AT_STATUS.SEM;
@@ -5033,22 +5115,47 @@ function viewLpAtrasos(){
   const ativos=AT.itens.filter(r=>!r.resolvido_em);
   const totV=ativos.reduce((s,r)=>s+(r.premio||0),0);
   const crit=ativos.filter(r=>(atDiasAtraso(r.vencido_em,hoje)||0)>=50); const critV=crit.reduce((s,r)=>s+(r.premio||0),0);
-  const semT=ativos.filter(r=>atDerivarStatus(r,hoje)===AT_STATUS.SEM).length;
+  const semTL=ativos.filter(r=>atDerivarStatus(r,hoje)===AT_STATUS.SEM);
+  const semT=semTL.length, semTV=semTL.reduce((a,r)=>a+(r.premio||0),0);
+  /* DINHEIRO-A-VISTA-V1: quantas apólices o script de cobrança reconheceu pelo
+     motivo. O que não casa não fica sem mensagem (cai no genérico) — mas fica
+     VISÍVEL aqui, senão o buraco nunca vira script novo. */
+  const semScript=ativos.filter(r=>!atScriptReconhecido(r));
+  /* dois buracos DIFERENTES, e misturá-los esconde o que dá pra consertar:
+     "sem motivo informado" é dado que o relatório não trouxe; "motivo não
+     reconhecido" é script meu faltando — só o segundo vira trabalho. */
+  const semMotivo=semScript.filter(r=>!String(r.motivo_recusa||'').trim()).length;
+  const motivosOrfaos=[...new Set(semScript.map(r=>String(r.motivo_recusa||'').trim()).filter(Boolean))];
+  const naoReconhecidas=semScript.length-semMotivo;
   const sumiu=ativos.filter(r=>r.status===AT_STATUS.SUMIU).length;
   const lps=['Daniel','Gustavo','Rebeca'].map(k=>{ const l=ativos.filter(r=>r.lp_servico===k); return {k,n:l.length,v:l.reduce((s,r)=>s+(r.premio||0),0)}; });
   const rows=atFiltrados(); const resolvidos=AT.itens.filter(r=>r.resolvido_em);
-  const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
+  const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
+  /* Mesma ideia da lente do funil: o número que pede ação vira o caminho até
+     ela. Aqui a lente NÃO cria filtro novo — ela liga os filtros que a tela já
+     tem (faixa e status), pra não existirem duas verdades sobre o que está
+     filtrado. */
+  const kpiLente=(on,liga,l,n,sb)=>`<button class="kpi kpi-lente${on?' on':''}" onclick="${liga}"
+      title="${on?'Clique para ver todas de novo':'Clique para ver só estas na lista'}">
+      <div class="lbl">${l}</div><div class="num">${n}</div>
+      <div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estas':sb}</div></button>`;
   const chip=(v,l)=>`<button class="sheet-chip${FAT.faixa===v?' on':''}" onclick="FAT.faixa='${v}';viewLpAtrasos()">${l}</button>`;
   $('#main').innerHTML=`<h1 class="pg">Lista de Atraso</h1>
     <div class="sub">${AT.carregadoEm?'Último relatório: '+atFmtBR(AT.carregadoEm)+' · ':''}${AT_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias recalculam pela data de hoje.</div>
     <div class="kpis" style="margin-top:10px">
       ${kpi('💰 Prêmio em risco',brl(totV),ativos.length+' apólice'+(ativos.length===1?'':'s')+(critV?' · '+brl(critV)+' crítico':''))}
       ${kpi('Total em atraso',ativos.length,brl(totV))}
-      ${kpi('Críticas ≥50d',crit.length,brl(critV))}
-      ${kpi('Sem tratativa',semT,'precisam de ação')}
+      ${kpiLente(FAT.faixa==='50',"FAT.faixa=FAT.faixa==='50'?'':'50';viewLpAtrasos()",'Críticas ≥50d',crit.length,brl(critV))}
+      ${kpiLente(FAT.status===AT_STATUS.SEM,"FAT.status=FAT.status==='"+"Sem tratativa"+"'?'':'"+"Sem tratativa"+"';viewLpAtrasos()",'Sem tratativa',semT,brl(semTV)+' parado')}
       ${sumiu?kpi('Sumiram',sumiu,'verificar'):''}
       ${lps.map(p=>kpi('LP '+p.k,p.n,brl(p.v))).join('')}
     </div>
+    ${semScript.length?`<div class="card" style="padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--muted)">
+      💬 Script de cobrança: <b>${ativos.length-semScript.length} de ${ativos.length}</b> com motivo reconhecido.
+      ${naoReconhecidas?`${naoReconhecidas} com motivo que ainda não tem script: ${motivosOrfaos.slice(0,6).map(m=>`<b>${esc(m)}</b>`).join(' · ')}${motivosOrfaos.length>6?` e mais ${motivosOrfaos.length-6}`:''}.`:''}
+      ${semMotivo?`${semMotivo} sem motivo informado no relatório.`:''}
+      ${naoReconhecidas?'Me mande esses motivos que eu escrevo o texto certo pra cada um.':''}
+    </div>`:''}
     <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input id="at-q" placeholder="Buscar segurado, responsável ou apólice…" value="${esc(FAT.q)}" oninput="FAT.q=this.value;viewLpAtrasos();atFocus('at-q')" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
       <select onchange="FAT.qcampo=this.value;viewLpAtrasos()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">
@@ -7761,6 +7868,27 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && g.textContent.includes('Painel de TA');
     })());
+    /* DINHEIRO-A-VISTA-V1:SELFCHECK — script de cobrança por motivo */
+    ok('script: cartão recusado não cai no genérico', atScript({motivo_recusa:'CARTAO RECUSADO PELA OPERADORA'}).id==='cartao_recusado');
+    ok('script: cartão VENCIDO ganha do cartão recusado (mais específico primeiro)',
+       atScript({motivo_recusa:'Cartao de credito vencido'}).id==='cartao_vencido');
+    ok('script: saldo insuficiente é reconhecido', atScript({motivo_recusa:'Saldo insuficiente em conta'}).id==='saldo');
+    ok('script: conta encerrada é reconhecida', atScript({motivo_recusa:'CONTA ENCERRADA'}).id==='conta');
+    ok('script: motivo desconhecido cai no genérico, nunca fica sem mensagem', (()=>{
+      const sc=atScript({motivo_recusa:'xyz motivo que nunca vi'});
+      return sc.id==='generico' && atWaMsg({segurado:'Ana Lima',apolice:'001',motivo_recusa:'xyz'}).length>40; })());
+    ok('script: sem motivo nenhum também tem mensagem', (()=>{
+      const m=atWaMsg({segurado:'Joao Silva',apolice:'002'}); return m.includes('Joao') && m.includes('002'); })());
+    ok('script: a mensagem nunca ameaça cancelar (fôlego e limite são da operação)', (()=>{
+      const casos=[{motivo_recusa:'saldo insuficiente'},{motivo_recusa:''},{motivo_recusa:'cartao recusado'}];
+      return casos.every(c=>!/cancel|suspens|perder|jur[oi]s|multa/i.test(atWaMsg(Object.assign({segurado:'X',apolice:'1'},c)))); })());
+    ok('script: o valor e o vencimento entram quando existem', (()=>{
+      const m=atWaMsg({segurado:'Ana',apolice:'003',premio:250,vencido_em:'2026-06-10',motivo_recusa:'saldo insuficiente'});
+      return m.includes('250') && m.includes('10/06/2026'); })());
+    ok('script: todo motivo mapeado tem rótulo e ação escritos', AT_SCRIPTS.every(sc=>sc.id&&sc.rot&&sc.acao));
+    ok('script: rótulo separa "sem motivo" de "motivo sem script"', (()=>{
+      const a=atScriptRot({motivo_recusa:''}), b=atScriptRot({motivo_recusa:'erro 733 sei la'});
+      return a==='Sem motivo informado' && b==='Motivo ainda sem script' && a!==b; })());
     /* FOCO-VENDAS-V1:SELFCHECK — o cabeçalho e a lente do funil */
     ok('cabeçalho: preferência inválida cai no compacto', (()=>{
       const g=localStorage.getItem(FUN_CAB_CHAVE);
