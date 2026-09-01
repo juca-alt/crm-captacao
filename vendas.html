@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.30.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.31.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -144,6 +144,7 @@
   /* atalho de etapa: escondido no desktop, onde o quadro já cabe */
   .fun-etapas{display:none}
   .so-celular-flex{display:none}
+  .ini-b .so-desktop{display:block}
   @media(max-width:980px){
     .fun-etapas{display:flex;gap:6px;overflow-x:auto;padding:0 0 8px;margin:0 0 4px;
       -webkit-overflow-scrolling:touch;scrollbar-width:none}
@@ -260,6 +261,19 @@
   .etapa-col .nm{font-size:11px;color:var(--muted);font-weight:700}
   .seta-conv{align-self:center;text-align:center;color:var(--muted);font-size:10.5px;font-weight:700;padding-bottom:38px;min-width:34px}
   .seta-conv .pct{color:var(--azul);font-size:11.5px}
+  .etapa-col .aqui{font-size:10px;color:var(--muted);font-weight:600;min-height:13px;margin-top:2px}
+  /* blocos dobraveis do Inicio (INICIO-BLOCOS-V1) */
+  .ini-bl{background:var(--card);border:1px solid var(--linha);border-radius:14px;margin-top:14px;overflow:hidden}
+  .ini-h{display:flex;align-items:center;gap:9px;width:100%;background:none;border:0;padding:13px 14px;cursor:pointer;font:inherit;color:inherit;text-align:left}
+  .ini-h:hover{background:rgba(0,0,0,.025)}
+  .ini-h .ini-car{font-size:11px;color:var(--muted);flex:0 0 11px}
+  .ini-h .ini-t{font-size:13px;font-weight:800;flex:0 0 auto}
+  .ini-h .ini-res{font-size:11.5px;color:var(--muted);font-weight:600;flex:1 1 auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ini-bl:not(.fechado) .ini-res{display:none}
+  .ini-b{padding:0 14px 14px}
+  .ini-bl.fechado .ini-b{display:none}
+  .ini-tudo{display:flex;justify-content:flex-end;margin-top:16px;margin-bottom:-8px}
+  .ini-nota{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6}
 
   /* ── tabela (cabeçalho cinza-claro + zebra de hover, igual Captação) ── */
   table{width:100%;border-collapse:collapse}
@@ -549,6 +563,7 @@
     /* A dica de arrastar é tutorial: quem abre o funil todo dia já sabe, e ela
        custava uma linha inteira em cima do quadro. Fica no desktop. */
     .nn-dica{display:none}
+    .ini-b .so-desktop{display:none}
     .funil{overflow-x:auto;padding-bottom:8px}
     .etapa-col{flex:1 0 48px}
     .seta-conv{flex:0 0 30px;min-width:30px}
@@ -993,7 +1008,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.30.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.31.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1015,7 +1030,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.30.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.31.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1508,21 +1523,44 @@ function contagens(lista,etapas=ETAPAS){
   lista.forEach(c=>{ if(por[c.etapa]==null) por[c.etapa]=0; por[c.etapa]++; });
   return por;
 }
-function funilHtml(lista){
-  const por=contagens(lista);
-  const ordem=ETAPAS_FLUXO; // funil = fluxo vivo; encerramentos ficam no resumo abaixo
-  const max=Math.max(...ordem.map(e=>por[e]),1);
+/* == FUNIL DO INICIO: a MESMA taxa de passagem do quadro (01/09) ==========
+   Antes esta funcao dividia "quantos estao parados AQUI" por "quantos estao
+   parados na PROXIMA". Isso nao e taxa de passagem: e a razao entre duas
+   fotografias. No funil real do Gustavo a conta mentia feio -- P/C, C2 e N
+   apareciam zerados porque o negocio JA PASSOU por eles, e a tela anunciava
+   0% em cinco etapas seguidas num funil que tinha gente em FA.
+
+   Agora usa nnTaxas(), o mesmo "alcancou" (posicao atual + historico
+   registrado, monotonico) que pinta o "% passam" no topo de cada coluna do
+   quadro. Duas consequencias boas: o funil so desce (funil e monotonico) e o
+   numero em cima da seta e verdade contra a barra logo ao lado.
+
+   A barra passa a ser quem ALCANCOU a etapa; quantos estao parados nela hoje
+   fica na linha de baixo -- os dois fatos, sem escolher um e esconder o outro. */
+function funilHtml(lista,fluxo){
+  fluxo=fluxo||ETAPAS_FLUXO;
+  const por=contagens(lista,fluxo);
+  const taxas=nnTaxas(lista,fluxo);
+  /* alc derivado do PROPRIO nnTaxas: recalcular por fora abriria a porta pra
+     as duas contas divergirem com o tempo -- que e exatamente o bug daqui. */
+  const alc = taxas.length ? taxas.map(t=>t.n1).concat([taxas[taxas.length-1].n2])
+                           : fluxo.map(e=>lista.filter(c=>nnAlcancou(c,e,fluxo)).length);
+  const max=Math.max(...alc,1);
   let h='<div class="funil">';
-  ordem.forEach((e,i)=>{
-    const q=por[e];
-    h+=`<div class="etapa-col ${q===0?'zerada':''}">
-          <div class="barra-wrap"><div class="barra" style="height:${Math.max(4,Math.round(q/max*120))}px"></div></div>
-          <div class="qt">${q}</div><div class="nm">${e}</div>
+  fluxo.forEach((e,i)=>{
+    const n=alc[i], aqui=por[e]||0;
+    h+=`<div class="etapa-col ${n===0?'zerada':''}">
+          <div class="barra-wrap"><div class="barra" style="height:${Math.max(4,Math.round(n/max*120))}px" title="${n} alcancaram esta etapa"></div></div>
+          <div class="qt">${n}</div><div class="nm">${esc(ET_LABEL[e]||e)}</div>
+          <div class="aqui">${aqui?aqui+' aqui':''}</div>
         </div>`;
-    if(i<ordem.length-1){
-      const prox=por[ordem[i+1]];
-      const pct=q>0? Math.round(prox/q*100) : 0;
-      h+=`<div class="seta-conv">→<br><span class="pct">${pct}%</span></div>`;
+    if(i<fluxo.length-1){
+      const t=taxas[i], pct=(t&&t.pct!=null)?t.pct:null;
+      /* mesmas faixas de cor do chip da coluna (nnTaxaChip) */
+      const cor=pct==null?'var(--muted)':(pct<40?'var(--verm)':pct<70?'var(--amar)':'var(--verde)');
+      const tit=pct==null?'sem ninguem nesta etapa pra medir passagem'
+        :`${t.n1} alcancaram ${ET_LABEL[t.de]||t.de} - ${t.n2} chegaram em ${ET_LABEL[t.para]||t.para}`;
+      h+=`<div class="seta-conv" title="${esc(tit)}">&rarr;<br><span class="pct" style="color:${cor}">${pct==null?'--':pct+'%'}</span></div>`;
     }
   });
   return h+'</div>';
@@ -1592,8 +1630,88 @@ function inicioAgoraHtml(){
   </div>`;
 }
 
+/* == INICIO EM TOPICOS DOBRAVEIS (INICIO-BLOCOS-V1, 01/09) ================
+   Pedido dele: a mesma dinamica que ja usamos na ficha do negocio e nos blocos
+   da Revisao de Protecao -- topico que encolhe e estende, com a escolha
+   lembrada. Aqui vale ainda mais: no celular a tela de abrir rolava varias
+   telas de painel antes de qualquer coisa acionavel.
+
+   Duas regras que fazem isso nao virar esconderijo:
+   1) o bloco FECHADO mostra um resumo no cabecalho, entao encolher nunca
+      apaga o numero -- so troca a tabela pela manchete;
+   2) o bloco AGORA fica de fora do sistema e nunca fecha. Ele e a resposta a
+      "o que eu faco agora"; deixar a resposta fechavel derrotaria o proposito. */
+const INI_CHAVE='crmlp_inicio_secs_v1';
+const INI_PADRAO={numeros:1,'funil-nn':1,'funil-bc':0,ta:0,eventos:0,lp:0};
+function iniLer(){ try{ return JSON.parse(localStorage.getItem(INI_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
+function iniGravar(o){ try{ localStorage.setItem(INI_CHAVE,JSON.stringify(o)); }catch(_){} }
+function iniAberto(k){ const st=iniLer(); return (k in st)? !!st[k] : !!INI_PADRAO[k]; }
+function iniToggle(k){
+  const st=iniLer(); const novo=!iniAberto(k); st[k]=novo?1:0; iniGravar(st);
+  const bl=document.querySelector('.ini-bl[data-ini="'+k+'"]');
+  if(bl){
+    bl.classList.toggle('fechado',!novo);
+    const c=bl.querySelector('.ini-car'); if(c) c.textContent=novo?'▾':'▸';
+    const h=bl.querySelector('.ini-h'); if(h) h.setAttribute('aria-expanded',novo?'true':'false');
+  }
+  iniBotaoPinta();
+}
+function iniPresentes(){ return [...document.querySelectorAll('.ini-bl[data-ini]')].map(b=>b.dataset.ini); }
+function iniTudo(abrir){
+  const st=iniLer(); iniPresentes().forEach(k=>st[k]=abrir?1:0); iniGravar(st);
+  document.querySelectorAll('.ini-bl[data-ini]').forEach(bl=>{
+    bl.classList.toggle('fechado',!abrir);
+    const c=bl.querySelector('.ini-car'); if(c) c.textContent=abrir?'▾':'▸';
+    const h=bl.querySelector('.ini-h'); if(h) h.setAttribute('aria-expanded',abrir?'true':'false');
+  });
+  iniBotaoPinta();
+}
+function iniBotaoPinta(){
+  const b=document.getElementById('iniTudoBtn'); if(!b) return;
+  const ks=iniPresentes(); const abertos=ks.filter(iniAberto).length;
+  const fechar=abertos>ks.length/2;
+  b.textContent=fechar?'⌃ fechar tudo':'⌄ abrir tudo';
+  b.setAttribute('onclick','iniTudo('+(fechar?'false':'true')+')');
+}
+function iniBloco(k,titulo,resumo,corpo){
+  const ab=iniAberto(k);
+  return `<div class="ini-bl${ab?'':' fechado'}" data-ini="${esc(k)}">
+    <button class="ini-h" onclick="iniToggle('${esc(jsq(k))}')" aria-expanded="${ab?'true':'false'}">
+      <span class="ini-car">${ab?'▾':'▸'}</span><span class="ini-t">${titulo}</span><span class="ini-res">${resumo}</span>
+    </button>
+    <div class="ini-b">${corpo}</div>
+  </div>`;
+}
+/* Bloco de funil pronto: grafico + rodape do processo + de onde vem a taxa.
+   Recebe a lista CRUA (com encerrados) porque "alcancou" se le no historico,
+   e aplica o mesmo funRecorte() do quadro -- e isso que faz os numeros das
+   duas telas baterem em vez de quase baterem. */
+function iniFunilBloco(k,titulo,lista,fluxo,encerr,view){
+  const rec=funRecorte(lista);
+  const taxas=nnTaxas(rec.lista,fluxo);
+  const validas=taxas.filter(t=>t.pct!=null&&t.n1>0);
+  const pior=validas.length?validas.slice().sort((a,b)=>a.pct-b.pct)[0]:null;
+  const por=contagens(lista,encerr);
+  const ent=taxas.length?taxas[0].n1:rec.lista.length;
+  const fim=taxas.length?taxas[taxas.length-1].n2:0;
+  const per=(FUN_PERIODOS.find(p=>p[0]===FUNP.periodo)||['','o periodo'])[1];
+  const resumo=`${ent} entraram · ${fim} no fim${pior?` · pior passagem ${esc(ET_LABEL[pior.de]||pior.de)}→${esc(ET_LABEL[pior.para]||pior.para)} ${pior.pct}%`:''}`;
+  const enc=encerr.map(e=>`${esc(ET_LABEL[e]||e)} ${por[e]||0}`).join(' · ');
+  const barraLbl='Quantos alcançaram';
+  /* a nota longa e o "Processo: A -> B -> C" ficam so no desktop: no celular
+     o grafico logo acima ja e a sequencia, e a parede de texto empurrava o
+     proximo bloco pra fora da tela -- o oposto do que o dobravel veio resolver.
+     No celular sobra a linha curta, que e a que responde "de onde vem esse %". */
+  const corpo=`${funilHtml(rec.lista,fluxo)}
+    <div class="ini-nota"><b>${esc(barraLbl)}</b> na barra · <b>quantos estão parados</b> embaixo · <b>% que passou</b> na seta — ${esc(per)}${rec.corte?`, desde ${dataBR(rec.corte)}`:''}
+      <button class="btn btn-s btn-mini" style="margin-left:6px" onclick="irPara('${esc(jsq(view))}')">abrir o quadro</button></div>
+    <div class="ini-nota so-desktop">Processo: ${fluxo.map(e=>esc(ET_LABEL[e]||e)).join(' → ')}${enc?` · Encerrados: ${enc}`:''} · a taxa é a mesma do quadro: quem <b>alcançou</b> a etapa (posição atual + histórico registrado)${rec.fora?`, com ${rec.fora} fora do recorte`:''}.</div>`;
+  return iniBloco(k,titulo,resumo,corpo);
+}
+
 function viewInicio(){
   const lista=meusContatos();
+  const listaBC=meusContatosBC();
   const por=contagens(lista);
   const novos=por['SitPlan'], clientes=por['DELIVERY'];
   const abordados=lista.filter(c=>c.taTentativas>0).length;
@@ -1601,55 +1719,59 @@ function viewInicio(){
   const ta=taStats(lista);
   const eventos=lista.flatMap(c=>c.eventos.filter(e=>e.status==='Pendente').map(e=>({...e,contato:c.nome}))).sort((a,b)=>(a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')));
 
-  let porLP='';
+  const bNumeros=iniBloco('numeros','Números',
+    `SitPlan ${novos} · andamento ${andamento} · Delivery ${clientes}`,
+    `<div class="kpis" style="margin:0">
+      <div class="kpi"><div class="num">${novos}</div><div class="lbl">SitPlan</div></div>
+      <div class="kpi"><div class="num">${andamento}</div><div class="lbl">Em andamento</div></div>
+      <div class="kpi"><div class="num">${abordados}</div><div class="lbl">Abordados</div></div>
+      <div class="kpi"><div class="num">${clientes}</div><div class="lbl">Delivery</div></div>
+    </div>`);
+
+  const bNn=iniFunilBloco('funil-nn','Funil · Novos Negócios',lista,ETAPAS_FLUXO,ETAPAS_ENCERR,'nn-funil');
+  /* o segundo funil so aparece quando existe: bloco vazio na tela de abrir
+     ensina a ignorar a tela inteira. */
+  const bBc=listaBC.length? iniFunilBloco('funil-bc','Funil · Base de Clientes',listaBC,ETAPAS_BC_FLUXO,ETAPAS_BC_ENCERR,'bc-funil') : '';
+
+  const bTa=iniBloco('ta','Telephone Approach',
+    `${ta.lig} ligação(ões) · ${ta['Sucesso']} sucesso`,
+    `<div class="kpis" style="margin:0 0 8px">
+      <div class="kpi" style="min-width:100px"><div class="num">${ta.lig}</div><div class="lbl">Ligações</div></div>
+      <div class="kpi" style="min-width:100px"><div class="num">${ta['Sucesso']}</div><div class="lbl">Sucesso</div></div>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.9">
+      <span class="badge b-verde">Sucesso ${ta['Sucesso']}</span>
+      <span class="badge b-amarelo">Retornar ${ta['Retornar contato']}</span>
+      <span class="badge b-cinza">Não respondeu ${ta['Não respondeu']}</span>
+      <span class="badge b-verm">Declinado ${ta['Declinado']}</span>
+    </div>`);
+
+  const bEv=iniBloco('eventos','Para acompanhar',
+    eventos.length?`${eventos.length} pendente(s)`:'nada pendente',
+    eventos.length? eventos.map(e=>`<div class="evento"><span class="dt">${esc(e.data.split('-').reverse().join('/'))} ${esc(e.hora||'')}</span><span><b>${esc(e.tipo)}</b> · ${esc(e.contato)} <span class="badge b-amarelo">${esc(e.status)}</span></span></div>`).join('')
+                  : '<div class="vazio" style="padding:14px">Sem eventos pendentes.</div>');
+
+  let bLp='';
   if(isMaster()){
-    porLP=`<div class="card" style="margin-top:14px"><h3 style="font-size:13px;margin-bottom:10px">Funil por Life Planner</h3>
-      ${S.users.map(u=>{
+    bLp=iniBloco('lp','Funil por Life Planner',`${S.users.length} LP(s)`,
+      S.users.map(u=>{
         const l=S.contatos.filter(c=>c.lp===u.id&&c.funil!=='bc'); const p=contagens(l);
         return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed var(--linha)">
           <span class="avatar" style="background:${esc(u.cor)};width:26px;height:26px;font-size:10px">${esc(iniciais(u.nome))}</span>
           <b style="min-width:90px">${esc(u.nome.split(' ')[0])}</b>
           <span style="font-size:12px;color:var(--muted)">TA <b>${p['TA']}</b> · OI/FF <b>${p['OI/FF']}</b> · P/C <b>${p['P/C']}</b> · Delivery <b>${p['DELIVERY']}</b> · total ${l.length}</span>
         </div>`;
-      }).join('')}
-    </div>`;
+      }).join(''));
   }
 
   $('#main').innerHTML=`
     <h1 class="pg">Seja bem-vindo(a), ${esc(user().nome)}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
     ${inicioAgoraHtml()}
-    <div class="kpis">
-      <div class="kpi"><div class="num">${novos}</div><div class="lbl">SitPlan</div></div>
-      <div class="kpi"><div class="num">${andamento}</div><div class="lbl">Em andamento</div></div>
-      <div class="kpi"><div class="num">${abordados}</div><div class="lbl">Abordados</div></div>
-      <div class="kpi"><div class="num">${clientes}</div><div class="lbl">Delivery</div></div>
-    </div>
-    <div class="grid g2 g-funil">
-      <div class="card">
-        <h3 style="font-size:13px">Funil de vendas</h3>
-        ${funilHtml(lista)}
-        <div style="font-size:11px;color:var(--muted);margin-top:8px">Processo: SitPlan → TA → OI/FF → P/C → C2 → N (proposta) → FA → Emissão → Delivery · Encerrados: Não ${contagens(lista)['Não']||0} · Prop. canc. ${contagens(lista)['Prop. Cancelada']||0} · Apól. canc. ${contagens(lista)['Apól. Cancelada']||0}</div>
-      </div>
-      <div class="card">
-        <h3 style="font-size:13px;margin-bottom:8px">Telephone Approach</h3>
-        <div class="kpis" style="margin-bottom:8px">
-          <div class="kpi" style="min-width:100px"><div class="num">${ta.lig}</div><div class="lbl">Ligações</div></div>
-          <div class="kpi" style="min-width:100px"><div class="num">${ta['Sucesso']}</div><div class="lbl">Sucesso</div></div>
-        </div>
-        <div style="font-size:12.5px;color:var(--muted);line-height:1.9">
-          <span class="badge b-verde">Sucesso ${ta['Sucesso']}</span>
-          <span class="badge b-amarelo">Retornar ${ta['Retornar contato']}</span>
-          <span class="badge b-cinza">Não respondeu ${ta['Não respondeu']}</span>
-          <span class="badge b-verm">Declinado ${ta['Declinado']}</span>
-        </div>
-        <h3 style="font-size:13px;margin:16px 0 4px">Para acompanhar</h3>
-        ${eventos.length? eventos.map(e=>`<div class="evento"><span class="dt">${esc(e.data.split('-').reverse().join('/'))} ${esc(e.hora)}</span><span><b>${esc(e.tipo)}</b> · ${esc(e.contato)} <span class="badge b-amarelo">${esc(e.status)}</span></span></div>`).join('') : '<div class="vazio" style="padding:14px">Sem eventos pendentes.</div>'}
-      </div>
-    </div>
-    ${porLP}`;
+    <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)">⌄ abrir tudo</button></div>
+    ${bNumeros}${bNn}${bBc}${bTa}${bEv}${bLp}`;
+  iniBotaoPinta();
 }
-
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
 /* Espelha o padrão da Captação: módulo (colapsável) → submódulo Funil → lista de Etapas.
    Sidebar colapsável + lista de etapas com contagem + Kanban arrastável. */
@@ -1890,7 +2012,10 @@ function nnNegocioHtml(lista,fluxo,ns,rec){
   const fechMes=vivos.filter(c=>mesDe(prevDe(c,'fech'))===mes);
   const emisMes=vivos.filter(c=>mesDe(prevDe(c,'emis'))===mes);
   const atrasados=vivos.filter(c=>prevVencida(prevDe(c,'fech')));
-  const taxas=nnTaxas(lista,fluxo);
+  /* rec.lista e nao lista: o chip "% passam" de cada coluna le o RECORTE.
+     Com um periodo escolhido, ler a lista crua aqui fazia o KPI do topo
+     discordar dos chips logo abaixo dele. */
+  const taxas=nnTaxas((rec&&rec.lista)||lista,fluxo);
   const validas=taxas.filter(t=>t.pct!=null&&t.n1>0);
   const pior=validas.length?validas.slice().sort((a,b)=>a.pct-b.pct)[0]:null;
   const semAtiv=vivos.filter(semProxAtividade);
@@ -8632,22 +8757,12 @@ function render(){
   else if(VIEW==='bn-recs') viewBnRecs();
   else if(VIEW==='lp-adm') viewLpAdm();
   else viewPrincipios();
-  if(VIEW==='inicio'&&typeof bnVivos==='function'&&bnVivos().length){
-    const v=bnVivos(), tel=v.filter(c=>c.telefone).length, hoje=hojeISO();
-    const ta=v.filter(c=>c.ta_dia===hoje).length, dp=BN.dups.filter(d=>!d.decisao).length;
-    const emL=bnEmListaTa().length;
-    const _pc=$('#main .card'); (_pc?_pc:{insertAdjacentHTML:(p,h)=>$('#main').insertAdjacentHTML('beforeend',h)}).insertAdjacentHTML('beforebegin', `
-    <div class="card" style="margin-top:14px">
-      <h3 style="font-size:13px;margin-bottom:10px">📦 Base de Nomes</h3>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
-        <div class="clicavel" onclick="irPara('bn-estoque')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${v.length.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">NOMES VIVOS</div></div>
-        <div class="clicavel" onclick="FBN.tel='com';irPara('bn-estoque')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${tel.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">COM TELEFONE</div></div>
-        <div class="clicavel" onclick="irPara('bn-ta')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${ta}</div><div style="font-size:11px;color:var(--muted)">TA DE HOJE</div></div>
-        <div class="clicavel" onclick="irPara('bn-ta')" style="cursor:pointer"><div style="font-size:24px;font-weight:800">${emL.toLocaleString('pt-BR')}</div><div style="font-size:11px;color:var(--muted)">EM LISTAS DE TA</div></div>
-        <div class="clicavel" onclick="irPara('bn-dups')" style="cursor:pointer"><div style="font-size:24px;font-weight:800;color:${dp?'var(--verm,#dc2626)':'inherit'}">${dp}</div><div style="font-size:11px;color:var(--muted)">DUPLICATAS</div></div>
-      </div>
-    </div>`);
-  }
+  /* O card "Base de Nomes" saiu daqui em 01/09 a pedido dele: a tela de abrir
+     e pra decidir o que fazer agora, e cinco numeros de estoque empurravam o
+     funil pra baixo sem pedir acao nenhuma. Os numeros continuam inteiros no
+     modulo Base de Nomes (bn-estoque / bn-ta / bn-dups). Se as DUPLICATAS
+     voltarem a doer, o lugar delas e uma linha no bloco AGORA -- que leva a
+     fila -- e nao um painel de estoque na tela de abrir. */
   ocultarTituloDuplicado();
   if(CONTATO) renderDrawer();
 }
