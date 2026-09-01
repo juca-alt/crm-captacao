@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.31.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.32.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1008,7 +1008,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.31.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.32.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1030,7 +1030,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.31.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.32.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1579,11 +1579,55 @@ function funilHtml(lista,fluxo){
   });
   return h+'</div>';
 }
-function taStats(lista){
-  const s={'Sucesso':0,'Não respondeu':0,'Retornar contato':0,'Declinado':0}; let lig=0;
-  lista.forEach(c=>{ lig+=c.taTentativas; if(s[c.taStatus]!==undefined && c.taTentativas>0) s[c.taStatus]++; });
-  return {lig,...s};
+/* == TA-FUNIL-LIGACAO-V1 (01/09) ==============================================
+   O bloco Telephone Approach somava PESSOAS, nao LIGACOES. "Ligacoes" era a
+   soma de `taTentativas` -- contador vitalicio, sem data -- e "Sucesso" era
+   quantos contatos estao HOJE com esse status. Dois significados no mesmo
+   cartao, e nenhum dos dois responde a pergunta do metodo: das discagens que
+   eu fiz, quantas eu FALEI e quantas viraram AGENDA?
+
+   O dado sempre existiu. Todo resultado registrado vira uma interacao com dia
+   e desfecho (RESULTADOS, com as marcas lig/atend/agenda). O que faltava era
+   somar as INTERACOES em vez dos contatos -- nenhum campo novo, nenhuma
+   migracao. Foi o buraco que o estudo do LP Business apontou: "dado que ja e
+   gerado e ninguem soma".
+
+   Duas taxas, e a ordem importa: atendimento = falei / disquei (mede a lista e
+   a hora); agendamento = agendei / falei (mede a conversa). Misturar as duas
+   numa taxa so esconde qual das duas esta ruim. */
+const TA_PERIODOS=[['hoje','hoje'],['7','7 dias'],['30','30 dias'],['tudo','desde sempre']];
+const TA_PER_CHAVE='crmlp_ta_periodo_v1';
+function taPeriodo(){ try{ const v=localStorage.getItem(TA_PER_CHAVE); return TA_PERIODOS.some(p=>p[0]===v)?v:'7'; }catch(_){ return '7'; } }
+function taSetPeriodo(v){ try{ localStorage.setItem(TA_PER_CHAVE,v); }catch(_){} render(); }
+function taCorte(p){
+  p=p||taPeriodo();
+  if(p==='tudo') return null;
+  if(p==='hoje') return hojeISO();
+  return isoAddDias(hojeISO(), -Number(p));
 }
+/* corte explicito no 2o argumento = funcao pura, testavel pelo self-check */
+function taFunil(lista, corte){
+  if(corte===undefined) corte=taCorte();
+  const porK={}, pessoas=new Set();
+  let ligacoes=0, atendidas=0, agenda=0, wpp=0;
+  (lista||[]).forEach(c=>{
+    ((c&&c.interacoes)||[]).forEach(i=>{
+      const r=i&&RES_BY_K[i.k]; if(!r) return;
+      if(corte && !(i.dia && i.dia>=corte)) return;   /* sem dia fica de fora do recorte, nao entra escondido */
+      porK[i.k]=(porK[i.k]||0)+1;
+      pessoas.add(c.id);
+      if(r.lig){ ligacoes++; if(r.atend) atendidas++; if(r.agenda) agenda++; }
+      else wpp++;
+    });
+  });
+  return {ligacoes, atendidas, agenda, wpp, porK, pessoas:pessoas.size,
+          txAtend: ligacoes? atendidas/ligacoes : null,
+          txAgenda: atendidas? agenda/atendidas : null};
+}
+function taPct(v){ return v==null?'—':Math.round(v*100)+'%'; }
+/* o rótulo do <select> ("7 dias") não cabe em prosa ("tocadas 7 dias"). */
+function taPerFrase(p){ p=p||taPeriodo();
+  return p==='hoje'?'hoje' : p==='tudo'?'desde sempre' : 'nos últimos '+p+' dias'; }
 /* ═══ AGORA · o que fazer, na tela de abrir (01/09) ═════════════════════════
    Medido: a tela inicial tinha ZERO ações clicáveis. Era um painel — você
    olhava os números e depois navegava para outro lugar para fazer alguma
@@ -1741,7 +1785,7 @@ function viewInicio(){
   const novos=por['SitPlan'], clientes=por['DELIVERY'];
   const abordados=lista.filter(c=>c.taTentativas>0).length;
   const andamento=lista.length-novos-clientes;
-  const ta=taStats(lista);
+  const ta=taFunil(lista);
   const eventos=lista.flatMap(c=>c.eventos.filter(e=>e.status==='Pendente').map(e=>({...e,contato:c.nome}))).sort((a,b)=>(a.data+(a.hora||'')).localeCompare(b.data+(b.hora||'')));
 
   const bNumeros=iniBloco('numeros','Números',
@@ -1758,18 +1802,33 @@ function viewInicio(){
      ensina a ignorar a tela inteira. */
   const bBc=listaBC.length? iniFunilBloco('funil-bc','Funil · Base de Clientes',listaBC,ETAPAS_BC_FLUXO,ETAPAS_BC_ENCERR,'bc-funil') : '';
 
+  /* desfechos com contagem > 0, na ordem do catalogo. Zero nao aparece: linha
+     zerada e ruido e ensina a ignorar o bloco (mesma regra do Agora). */
+  const taDesf=RESULTADOS.filter(r=>ta.porK[r.k]).map(r=>{
+    const cor = r.agenda ? 'b-verde' : r.k==='sem_interesse' ? 'b-verm'
+              : r.k==='pediu_retornar' ? 'b-amarelo' : r.atend ? 'b-azul' : 'b-cinza';
+    return `<span class="badge ${cor}">${esc(r.l)} ${ta.porK[r.k]}</span>`;
+  }).join(' ');
+  const perNome=(TA_PERIODOS.find(p=>p[0]===taPeriodo())||['','o período'])[1];
   const bTa=iniBloco('ta','Telephone Approach',
-    `${ta.lig} ligação(ões) · ${ta['Sucesso']} sucesso`,
-    `<div class="kpis" style="margin:0 0 8px">
-      <div class="kpi" style="min-width:100px"><div class="num">${ta.lig}</div><div class="lbl">Ligações</div></div>
-      <div class="kpi" style="min-width:100px"><div class="num">${ta['Sucesso']}</div><div class="lbl">Sucesso</div></div>
+    ta.ligacoes?`${ta.ligacoes} disquei · ${ta.atendidas} falei · ${ta.agenda} agendei · ${perNome}`
+               :`nenhuma ligação ${taPerFrase()}`,
+    `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-size:12px;color:var(--muted)">contando</span>
+      <select onchange="taSetPeriodo(this.value)" style="max-width:150px">
+        ${TA_PERIODOS.map(p=>`<option value="${p[0]}"${taPeriodo()===p[0]?' selected':''}>${p[1]}</option>`).join('')}</select>
     </div>
-    <div style="font-size:12.5px;color:var(--muted);line-height:1.9">
-      <span class="badge b-verde">Sucesso ${ta['Sucesso']}</span>
-      <span class="badge b-amarelo">Retornar ${ta['Retornar contato']}</span>
-      <span class="badge b-cinza">Não respondeu ${ta['Não respondeu']}</span>
-      <span class="badge b-verm">Declinado ${ta['Declinado']}</span>
-    </div>`);
+    ${ta.ligacoes||ta.wpp ? `
+    <div class="kpis" style="margin:0 0 10px">
+      <div class="kpi" style="min-width:92px"><div class="num">${ta.ligacoes}</div><div class="lbl">Disquei</div></div>
+      <div class="kpi" style="min-width:92px"><div class="num">${ta.atendidas}</div><div class="lbl">Falei</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${taPct(ta.txAtend)} de atendimento</div></div>
+      <div class="kpi" style="min-width:92px"><div class="num">${ta.agenda}</div><div class="lbl">Agendei</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${taPct(ta.txAgenda)} de quem falei</div></div>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.95">${taDesf}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:9px;line-height:1.6">
+      <b>${ta.pessoas}</b> ${ta.pessoas===1?'pessoa tocada':'pessoas tocadas'} ${esc(taPerFrase())}. Atendimento mede a lista e a hora de ligar; agendamento mede a conversa.
+      <button class="btn btn-s btn-mini" style="margin-left:6px" onclick="irPara('sitplan')">abrir a discagem</button></div>`
+    : `<div class="vazio" style="padding:14px">Nenhuma ligação registrada ${esc(taPerFrase())}. Os desfechos entram sozinhos quando você registra o resultado no Modo Foco ou na ficha.</div>`}`);
 
   const bEv=iniBloco('eventos','Para acompanhar',
     eventos.length?`${eventos.length} pendente(s)`:'nada pendente',
@@ -9785,6 +9844,27 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     const _hp={}; for(let _i=0;_i<20;_i++) subHistPush(_hp,'2026-01-'+String((_i%28)+1).padStart(2,'0'),_i);
     ok('histórico: poda nas últimas '+SUB_HIST_MAX, _hp.hist.length<=SUB_HIST_MAX);
     ok('histórico: trilha só aparece com 2+ pontos', subHistTrail({hist:[{d:'2026-01-01',v:9}]})==='' && subHistTrail({hist:[{d:'2026-01-01',v:9},{d:'2026-02-01',v:3}]})!=='');
+    /* funil da ligação: soma INTERAÇÕES, não contatos. Arrays novos por contato
+       de propósito — reaproveitar um literal fazia todos dividirem a mesma
+       lista e o teste mentia (erro meu, já pago). Corte explícito = função pura. */
+    const _mk=(id,ks,dia)=>({id, interacoes:ks.map((k,n)=>({id:id+n, k, dia}))});
+    const _l=[_mk('a',['lig_atendida','lig_nao_atendida'],'2026-09-01'),
+              _mk('b',['agendou_oi'],'2026-09-01'),
+              _mk('c',['whatsapp'],'2026-09-01'),
+              _mk('d',['lig_atendida'],'2026-01-01')];
+    const _f=taFunil(_l,'2026-08-01');
+    ok('TA: conta ligação, não contato', _f.ligacoes===3);
+    ok('TA: atendida inclui quem agendou', _f.atendidas===2);
+    ok('TA: agendamento é subconjunto de atendida', _f.agenda===1 && _f.agenda<=_f.atendidas);
+    ok('TA: WhatsApp não é ligação', _f.wpp===1 && _f.ligacoes===3);
+    ok('TA: recorte por data exclui o que é velho', _f.porK['lig_atendida']===1);
+    ok('TA: pessoas tocadas são únicas', _f.pessoas===3);
+    ok('TA: taxa de atendimento = falei/disquei', Math.abs(_f.txAtend-2/3)<1e-9);
+    ok('TA: taxa de agendamento = agendei/falei', Math.abs(_f.txAgenda-1/2)<1e-9);
+    const _v=taFunil([],null);
+    ok('TA: base vazia não divide por zero', _v.ligacoes===0 && _v.txAtend===null && _v.txAgenda===null);
+    ok('TA: sem corte, o antigo entra', taFunil(_l,null).ligacoes===4);
+    ok('TA: interação sem dia fica fora do recorte', taFunil([_mk('e',['lig_atendida'],null)],'2026-08-01').ligacoes===0);
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
