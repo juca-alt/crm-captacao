@@ -1447,6 +1447,27 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
    Revisão de Proteção, Prudential do Brasil
    Console único do Life Planner (diagnóstico + necessidade + cotação + apresentação)
    ============================================================ */
+/* == QA-CAMPOS-MORTOS-V1 (01/09) · parte 1 de 2: o carimbo ====================
+   Cinco vezes o mesmo bug neste projeto: um campo que a tela DESENHA e ninguem
+   LE. O ultimo custou a Mudanca de Seguro inteira -- capital do vitalicio,
+   premio, produto e apolice de origem eram quatro controles decorativos, e a
+   tela respondia zero para tudo.
+
+   Para varrer isso sozinho o detector precisa enxergar OS DOIS jeitos de ligar
+   que este arquivo usa: `el.onchange = fn` (propriedade, visivel de fora) e
+   `on(id,'input',fn)` (addEventListener, INVISIVEL de fora). Sem enxergar o
+   segundo, a varredura acusa ~30 falsos positivos e vira ruido -- que e pior
+   do que nao ter varredura nenhuma.
+
+   Por isso o envelope abaixo: roda antes de tudo e anota, em cada elemento,
+   quais eventos ele passou a escutar. Nao muda comportamento nenhum. */
+(function(){
+  const orig = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function(tipo, fn, op){
+    try{ if(this && this.nodeType===1) (this.__qaEv || (this.__qaEv = new Set())).add(String(tipo)); }catch(_){}
+    return orig.call(this, tipo, fn, op);
+  };
+})();
 const D = JSON.parse(document.getElementById('DATA').textContent);
 const LEG = JSON.parse(document.getElementById('LEGADO').textContent);
 const CONT = JSON.parse(document.getElementById('CONTEUDO').textContent);
@@ -1612,6 +1633,40 @@ function classePorIMC(imc, idade, fumante){
   else if (i === 50) cl = a <= 39 ? 'G' : a <= 59 ? 'E2' : a <= 69 ? 'D2' : (a === 70 ? 'C' : 'REJ');
   else cl = 'REJ';
   return {cl, txt: cl === 'REJ' ? 'Fora dos critérios de aceitação' : (CL_LABEL[cl] || cl)};
+}
+/* == QA-CAMPOS-MORTOS-V1 · parte 2 de 2: a varredura ======================
+   Campo VIVO = alguem le o que ele recebe. Tres provas valem: atributo on* no
+   HTML, propriedade .on* atribuida, ou listener carimbado na parte 1.
+
+   `data-so-leitura="motivo"` e a saida explicita para o campo que e lido em
+   outro momento (num submit, por exemplo). Exigir o motivo POR ESCRITO e o que
+   impede a excecao de virar tapete -- sem isso, o primeiro falso positivo
+   convida a desligar a varredura inteira.
+
+   So varre o que esta VISIVEL: campo de aba fechada ainda nao foi ligado, e
+   acusa-lo seria mentira. Por isso a chamada mora no renderNav(), que roda a
+   cada troca de aba. */
+const QA_EVS = ['change','input','click','blur','keyup','keydown'];
+function qaVivo(el){
+  if(el.dataset && el.dataset.soLeitura) return true;
+  if(QA_EVS.some(e => el.hasAttribute('on'+e) || typeof el['on'+e] === 'function')) return true;
+  return !!(el.__qaEv && QA_EVS.some(e => el.__qaEv.has(e)));
+}
+function qaCamposMortos(){
+  return [...document.querySelectorAll('input,select,textarea')]
+    .filter(el => !['hidden','file','button','submit','reset','image'].includes(el.type))
+    .filter(el => el.offsetParent !== null)
+    .filter(el => !qaVivo(el))
+    .map(el => ({ id: el.id || '(sem id)', tag: el.tagName.toLowerCase(), tipo: el.type || '',
+      aba: ((el.closest('[data-pane]')||{}).dataset||{}).pane || '?',
+      rotulo: ((el.closest('div,td,label')||{}).textContent || '').trim().replace(/\s+/g,' ').slice(0,44) }));
+}
+const QA_VISTOS = new Set();
+function qaAvisar(){
+  const novos = qaCamposMortos().filter(m => !QA_VISTOS.has(m.aba+'|'+m.id));
+  novos.forEach(m => QA_VISTOS.add(m.aba+'|'+m.id));
+  if(novos.length) console.warn('[QA campo morto] a tela DESENHA e ninguem LE — digitar aqui nao muda nada:', novos);
+  return novos;
 }
 function selfTest(){
   let ok = 0, bad = [];
@@ -3231,9 +3286,9 @@ function renderCenarios(){
       </div>
       ${linhas || '<div class="callout">Sem coberturas. Adicione abaixo, ou volte à etapa 3 e use um dos botões de "levar para a proposta".</div>'}
       <div class="addbar so-consultor mesmo-cliente">
-        <select id="selB${ci}">${D.products.filter(p => p.tipo === 'base').map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
+        <select id="selB${ci}" data-so-leitura="lido no clique do + básica (addL)">${D.products.filter(p => p.tipo === 'base').map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
         <button class="btn sm" onclick="addL(${ci},'selB${ci}')">+ básica</button>
-        <select id="selO${ci}">${D.products.filter(p => p.tipo !== 'base').map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
+        <select id="selO${ci}" data-so-leitura="lido no clique do + opcional (addL)">${D.products.filter(p => p.tipo !== 'base').map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('')}</select>
         <button class="btn sm" onclick="addL(${ci},'selO${ci}')">+ opcional</button>
       </div>
       <div class="totrow"><span>Investimento ${per === 'ano' ? 'anual' : 'mensal'}</span><span class="v" id="tt-${ci}">${fmt(per === 'ano' ? totAno : tot)}</span></div>
@@ -5752,6 +5807,8 @@ function renderNav(){
   if (state.ui.aba === 'com') state.ui.aba = 'prop';
   document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { state.ui.aba = b.dataset.go; save(); render(); });
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.dataset.pane === state.ui.aba));
+  /* depois do pane trocar e do render da aba assentar */
+  setTimeout(qaAvisar, 350);
 }
 /* ══════════════════════════════════════════════════════════════════════════
    ETAPA 5 · MUDANÇA DE SEGURO
@@ -6167,7 +6224,7 @@ function msRenderSims(R){
   const capNova=msCapitalNova(R);
   box.innerHTML=`
     <div class="row" style="margin-bottom:10px">
-      <input id="msSimNome" placeholder="nome desta simulação (ex.: migra tudo · QO 300k)" style="flex:1;min-width:200px">
+      <input id="msSimNome" data-so-leitura="lido no clique de salvar simulação / mandar para os cenários" placeholder="nome desta simulação (ex.: migra tudo · QO 300k)" style="flex:1;min-width:200px">
       <button class="btn sm" onclick="msSalvarSim(($('msSimNome')||{}).value)">＋ salvar simulação</button>
       <button class="btn sm pri" onclick="msParaCenario(($('msSimNome')||{}).value)">→ mandar para os cenários</button>
     </div>

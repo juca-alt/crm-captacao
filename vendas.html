@@ -1050,6 +1050,20 @@
 <div id="toasts"></div>
 
 <script>
+/* == QA-CAMPOS-MORTOS-V1 (01/09) · parte 1 de 2: o carimbo ====================
+   Cinco vezes o mesmo bug neste projeto: um campo que a tela DESENHA e ninguem
+   LE. O ultimo (Mudanca de Seguro) tinha QUATRO controles decorativos de uma
+   vez. Para varrer isso sozinho, o detector precisa enxergar os dois jeitos de
+   ligar: `el.onchange = fn` (propriedade) e addEventListener (invisivel de
+   fora). O envelope abaixo roda antes de tudo e anota em cada elemento os
+   eventos que ele passou a escutar. Nao muda comportamento nenhum. */
+(function(){
+  const orig = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function(tipo, fn, op){
+    try{ if(this && this.nodeType===1) (this.__qaEv || (this.__qaEv = new Set())).add(String(tipo)); }catch(_){}
+    return orig.call(this, tipo, fn, op);
+  };
+})();
 /* ═══════════════════ DADOS ═══════════════════ */
 /* CAPTACAO-OCULTA-V1 — 31/08/2026: o Gustavo parou de usar a visão Captação e
    ela só atrapalhava a navegação de quem vive na LP. Está ESCONDIDA, não removida:
@@ -4145,7 +4159,7 @@ function viewPlanos(){
     ${(()=>{ const semPlano=meusContatos().filter(c=>!planosDe(c).length&&!ETAPAS_ENCERR.includes(c.etapa));
       return `<div class="card" style="padding:10px 13px;margin-bottom:12px;display:flex;gap:9px;align-items:center;flex-wrap:wrap">
         <b style="font-size:13.5px">Criar simulação para</b>
-        <select id="pl_alvo" style="min-width:190px">${semPlano.concat(meusContatos().filter(c=>planosDe(c).length))
+        <select id="pl_alvo" data-so-leitura="lido no clique de + Nova simulação (planoAbrir)" style="min-width:190px">${semPlano.concat(meusContatos().filter(c=>planosDe(c).length))
           .map(c=>`<option value="${esc(c.id)}">${esc(c.nome)}${planosDe(c).length?' ('+planosDe(c).length+')':''}</option>`).join('')||'<option value="">— nenhum negócio —</option>'}</select>
         <button class="btn btn-p btn-mini" onclick="planoAbrir(($('#pl_alvo')||{}).value,null)">+ Nova simulação</button>
       </div>`; })()}
@@ -8291,7 +8305,7 @@ function viewBnTa(){
       <input type="number" style="max-width:110px" placeholder="Renda ≥" step="1000" value="${esc(FTA.rmin)}" oninput="FTA.rmin=this.value;viewBnTa()">
     </div>
     <div class="toolbar">
-      <input id="bnta-add" list="bnta-cand" style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'à lista de hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)">
+      <input id="bnta-add" data-so-leitura="lido no clique de Adicionar (bnTaAddPorNome)" list="bnta-cand" style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'à lista de hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)">
       <datalist id="bnta-cand">${cand.map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}" data-id="${esc(c.id)}"></option>`).join('')}</datalist>
       <button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
       <span style="font-size:12px;color:var(--muted)">Em massa: selecione no Estoque → 📋 Adicionar à lista…</span>
@@ -8719,6 +8733,36 @@ function ocultarTituloDuplicado(){
   h1.style.display=igual?'none':'';
 }
 
+/* == QA-CAMPOS-MORTOS-V1 · parte 2 de 2: a varredura ======================
+   Campo VIVO = alguem le o que ele recebe. Valem tres provas: atributo on* no
+   HTML, propriedade .on* atribuida, ou listener carimbado na parte 1.
+   `data-so-leitura="motivo"` e a saida explicita do campo lido em outro
+   momento (num botao ao lado, por exemplo) -- exigir o motivo POR ESCRITO e o
+   que impede a excecao de virar tapete.
+   So varre o VISIVEL: campo de view fechada ainda nao foi ligado. */
+const QA_EVS = ['change','input','click','blur','keyup','keydown'];
+function qaVivo(el){
+  if(el.dataset && el.dataset.soLeitura) return true;
+  if(QA_EVS.some(e => el.hasAttribute('on'+e) || typeof el['on'+e] === 'function')) return true;
+  return !!(el.__qaEv && QA_EVS.some(e => el.__qaEv.has(e)));
+}
+function qaCamposMortos(){
+  return [...document.querySelectorAll('#main input,#main select,#main textarea,#drawer input,#drawer select,#drawer textarea')]
+    .filter(el => !['hidden','file','button','submit','reset','image'].includes(el.type))
+    .filter(el => el.offsetParent !== null)
+    .filter(el => !qaVivo(el))
+    .map(el => ({ id: el.id || '(sem id)', tag: el.tagName.toLowerCase(), tipo: el.type || '',
+      view: (typeof VIEW!=='undefined'? VIEW : '?'),
+      dataset: Object.keys(el.dataset).join(',') || '-',
+      rotulo: ((el.closest('div,td,label')||{}).textContent || '').trim().replace(/\s+/g,' ').slice(0,44) }));
+}
+const QA_VISTOS = new Set();
+function qaAvisar(){
+  const novos = qaCamposMortos().filter(m => !QA_VISTOS.has(m.view+'|'+m.id+'|'+m.dataset));
+  novos.forEach(m => QA_VISTOS.add(m.view+'|'+m.id+'|'+m.dataset));
+  if(novos.length) console.warn('[QA campo morto] a tela DESENHA e ninguem LE — digitar aqui nao muda nada:', novos);
+  return novos;
+}
 function render(){
   renderTopo(); lpCounts(); renderNnEtapas(); renderBcEtapas(); renderTituloTopo();
   { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
@@ -8775,6 +8819,7 @@ function render(){
      voltarem a doer, o lugar delas e uma linha no bloco AGORA -- que leva a
      fila -- e nao um painel de estoque na tela de abrir. */
   ocultarTituloDuplicado();
+  setTimeout(qaAvisar, 350);   /* depois do layout assentar */
   if(CONTATO) renderDrawer();
 }
 /* ── B3: busca global ⌘K com escopo (padrão da Captação) ─────────────────
