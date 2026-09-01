@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.27.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.27.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -117,6 +117,16 @@
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
   .kpi-lente.on{background:#eef4ff;border:1.5px solid var(--azul)}
   .kpi-lente.on .lbl,.kpi-lente.on .num{color:var(--azul)}
+  /* FICHA RECOLHÍVEL V1 */
+  .drawer-body .sec h3.sec-h{cursor:pointer;user-select:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .drawer-body .sec h3.sec-h:hover{color:var(--azul)}
+  .sec-caret{font-size:11px;color:var(--muted);width:11px;flex:0 0 auto}
+  /* o atributo [hidden] do navegador tem especificidade baixíssima e perdia
+     para as regras de display:flex dos <label> e blocos internos — a seção
+     "fechava" e continuava ocupando 390px. Fechar pela CLASSE resolve no mérito. */
+  .drawer-body .sec.sec-fechada > :not(h3){display:none}
+  .drawer-body .sec.sec-fechada{padding-bottom:10px}
+  .drawer-body .sec.sec-fechada h3.sec-h{margin-bottom:0}
   .ct-estados{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
   .ct-est{font:inherit;font-size:12.5px;background:#fff;color:var(--muted);border:1px solid var(--linha);
     border-radius:999px;padding:5px 12px;cursor:pointer;transition:border-color .12s,background .12s,color .12s}
@@ -876,7 +886,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.27.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.27.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -898,7 +908,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.27.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.27.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2996,6 +3006,88 @@ function drwIrmaosHtml(c){
   </div>`;
 }
 
+/* ═══ FICHA RECOLHÍVEL V1 (31/08) ══════════════════════════════════════════
+   Pedido dele olhando a ficha: "todo esse card quero poder encolher os tópicos
+   ou expandir". A ficha do negócio tem 14 seções empilhadas — etapa, tarefas,
+   valor, registrar contato, ANCE, SitPlan, InfoClient, recomendações, planos,
+   jornada, notas — e você rola todas para chegar em qualquer uma. É o mesmo
+   problema do cabeçalho do funil, agora dentro da gaveta.
+
+   As seções não têm id no HTML, então a chave vem do próprio título, sem os
+   números que variam ("(3)", "0%"). Assim nada precisa ser reescrito bloco a
+   bloco e o estado sobrevive a mudanças de contagem.
+
+   O padrão abre só o que se usa todo dia; o resto começa fechado e lembra a
+   escolha por aparelho. */
+const DRW_SEC_CHAVE='crmlp_ficha_secs_v1';
+const DRW_SEC_PADRAO=['etapa de comercializacao','tarefas & atividades','valor do negocio','registrar contato'];
+/* A chave sai só do PRIMEIRO pedaço do título, não do textContent inteiro: o
+   h3 carrega dentro dele o <select> de funil, o aviso "sem próxima atividade" e
+   botões, e isso ia junto — foi assim que "Etapa" e "Tarefas" deixaram de casar
+   com o padrão de seções abertas. */
+function drwSecTitulo(h){
+  for(const n of h.childNodes){
+    if(n.nodeType===3){ if(n.textContent.trim()) return n.textContent; continue; }
+    if(n.nodeType===1){
+      if(n.classList&&n.classList.contains('sec-caret')) continue;
+      if(/^(SELECT|BUTTON|INPUT|A|TEXTAREA|LABEL)$/.test(n.tagName)) continue;
+      if(n.textContent.trim()) return n.textContent;
+    }
+  }
+  return h.textContent||'';
+}
+function drwSecKey(h){
+  const txt=drwSecTitulo(h).replace(/\(\s*\d+\s*\)/g,'').replace(/\d+%/g,'').replace(/\d+/g,'');
+  return normKey(txt).replace(/[+✏️🗑✕⌄⌃▾▸]/g,'').trim();
+}
+function drwSecsLer(){ try{ return JSON.parse(localStorage.getItem(DRW_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
+function drwSecsGravar(o){ try{ localStorage.setItem(DRW_SEC_CHAVE,JSON.stringify(o)); }catch(_){} }
+function drwSecAberta(k,st){ return (k in st) ? !!st[k] : DRW_SEC_PADRAO.includes(k); }
+function drwSecAplicar(sec,aberto){
+  sec.classList.toggle('sec-fechada',!aberto);
+  [...sec.children].forEach(el=>{ if(el.tagName!=='H3') el.hidden=!aberto; });
+  const car=sec.querySelector('.sec-caret'); if(car) car.textContent=aberto?'▾':'▸';
+}
+function drwSecToggle(k){
+  const st=drwSecsLer();
+  const sec=[...document.querySelectorAll('#drawer .sec[data-sec]')].find(x=>x.dataset.sec===k);
+  const novo=!drwSecAberta(k,st); st[k]=novo; drwSecsGravar(st);
+  if(sec) drwSecAplicar(sec,novo);
+  drwSecsBotao();
+}
+function drwSecsTodas(abrir){
+  const st=drwSecsLer();
+  document.querySelectorAll('#drawer .sec[data-sec]').forEach(sec=>{ st[sec.dataset.sec]=abrir; drwSecAplicar(sec,abrir); });
+  drwSecsGravar(st); drwSecsBotao();
+}
+function drwSecsBotao(){
+  const b=document.getElementById('drw-todas'); if(!b) return;
+  const secs=[...document.querySelectorAll('#drawer .sec[data-sec]')];
+  const abertas=secs.filter(x=>!x.classList.contains('sec-fechada')).length;
+  b.textContent=(secs.length&&abertas>=secs.length/2)?'⌃ Recolher tudo':'⌄ Expandir tudo';
+  b.dataset.abrir=(abertas>=secs.length/2)?'0':'1';
+}
+/* roda depois de cada render da gaveta — o innerHTML é refeito toda vez */
+function drwSecsWire(){
+  const st=drwSecsLer();
+  document.querySelectorAll('#drawer .drawer-body .sec').forEach(sec=>{
+    const h=sec.querySelector('h3'); if(!h) return;
+    const k=drwSecKey(h); if(!k) return;
+    sec.dataset.sec=k; h.classList.add('sec-h');
+    if(!h.querySelector('.sec-caret')){
+      const car=document.createElement('span'); car.className='sec-caret'; car.textContent='▾';
+      h.insertBefore(car,h.firstChild);
+      h.addEventListener('click',e=>{
+        /* clique em controle dentro do título não recolhe a seção */
+        if(e.target.closest('button,select,input,a,textarea,label')) return;
+        drwSecToggle(k);
+      });
+    }
+    drwSecAplicar(sec,drwSecAberta(k,st));
+  });
+  drwSecsBotao();
+}
+
 function renderDrawer(){
   const c=ct(); if(!c) return;
   normContato(c);                 // cinto e suspensório: contato vindo por outro caminho não derruba o drawer
@@ -3014,6 +3106,11 @@ function renderDrawer(){
     </div>
     <div class="drawer-body">
 
+      <div style="display:flex;justify-content:flex-end;margin-bottom:-4px">
+        <button class="btn btn-ghost btn-mini" id="drw-todas"
+          onclick="drwSecsTodas(this.dataset.abrir==='1')"
+          title="Abre ou fecha todos os tópicos desta ficha">⌄ Expandir tudo</button>
+      </div>
       ${drwIrmaosHtml(c)}
       ${drwCarteiraHtml(c)}
       ${drwPessoaHtml(c)}
@@ -3176,6 +3273,7 @@ function renderDrawer(){
       </div>
 
     </div>`;
+  drwSecsWire();
 }
 function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true); }
 function drwPedirFunil(dest){
