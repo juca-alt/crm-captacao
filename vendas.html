@@ -117,6 +117,23 @@
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
   .kpi-lente.on{background:#eef4ff;border:1.5px solid var(--azul)}
   .kpi-lente.on .lbl,.kpi-lente.on .num{color:var(--azul)}
+  /* atalho de etapa: escondido no desktop, onde o quadro já cabe */
+  .fun-etapas{display:none}
+  .so-celular-flex{display:none}
+  @media(max-width:980px){
+    .fun-etapas{display:flex;gap:6px;overflow-x:auto;padding:0 0 8px;margin:0 0 4px;
+      -webkit-overflow-scrolling:touch;scrollbar-width:none}
+    .fun-etapas::-webkit-scrollbar{display:none}
+    .fun-et{flex:0 0 auto;min-height:38px;display:flex;align-items:center;gap:6px;
+      padding:7px 12px;border:1px solid var(--linha);border-radius:999px;background:var(--card);
+      color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer}
+    .fun-et span{background:var(--fundo);border-radius:999px;padding:1px 7px;font-size:11px;
+      font-weight:700;color:var(--txt)}
+    .fun-et.on{background:var(--azul);border-color:var(--azul);color:#fff}
+    .fun-et.on span{background:rgba(255,255,255,.24);color:#fff}
+    .fun-et.lim{color:var(--verm);border-color:var(--linha);padding:7px 11px}
+  }
+
   /* ═══ MODO FOCO · sessão de discagem ═══════════════════════════════════
      Tela inteira, um nome por vez. Tudo aqui é feito para o polegar: alvos de
      48px+, ações principais na metade de baixo, e o nome grande o bastante
@@ -1594,6 +1611,27 @@ function nnOrdenar(cs){
   return a;   // livre: não mexe
 }
 function nnOrdSelect(){ return `<select onchange="nnOrdSet(this.value)" title="Ordem dos cards dentro de cada coluna" style="max-width:170px">${NN_ORDS.map(([k,l])=>`<option value="${k}"${NN_ORD===k?' selected':''}>↕ ${l}</option>`).join('')}</select>`; }
+/* ═══ ATALHO DE ETAPA NO CELULAR (01/09) ═══════════════════════════════════
+   Medido a 375px: o quadro tem 2.438px de largura — 6,5 telas de arrasto —
+   mostrando 1,6 coluna por vez. Para chegar em EMISSÃO você arrasta seis
+   telas, e no meio do caminho perde a noção de onde está.
+
+   A barra abaixo é densa de propósito: os chips cabem em duas telas em vez de
+   seis, e um toque leva o quadro direto para a etapa (reusa o nnGoEtapa e o
+   scrollIntoView que já existiam para o menu lateral — nada novo por baixo).
+   Só aparece no celular: no desktop o quadro inteiro já cabe na tela. */
+function funEtapasBarHtml(lista,fluxo,ns){
+  const foco = ns==='bc' ? BC_FOCUS : NN_FOCUS;
+  const ir   = ns==='bc' ? 'bcGoEtapa' : 'nnGoEtapa';
+  const chip = e => {
+    const n = lista.filter(c=>c.etapa===e).length;
+    return `<button class="fun-et${foco===e?' on':''}" onclick="${ir}('${esc(jsq(e))}')"
+      title="Ir para ${esc(ET_LABEL[e]||e)}">${esc(ET_LABEL[e]||e)}<span>${n}</span></button>`;
+  };
+  return `<div class="fun-etapas so-celular-flex">
+    ${foco?`<button class="fun-et lim" onclick="${ir}('')" title="Ver o funil inteiro">✕</button>`:''}
+    ${fluxo.map(chip).join('')}</div>`;
+}
 function nnGoEtapa(e){ NN_FOCUS=e; VIEW='nn-funil'; document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('ativo',b.dataset.view==='nn-funil')); render(); }
 /* ══ VISÃO DE NEGÓCIO DO FUNIL ═══════════════════════════════════════════════
    Contagem por etapa não responde o que o LP precisa saber: quanto tem em jogo,
@@ -2186,6 +2224,32 @@ function funScrollSalvar(){
   if(!b) return null;                       // vindo de outra view: não há o que repor
   const p=funScrollDe(b); p.py=window.scrollY; return p;
 }
+/* ⚠️ BUG PRÉ-EXISTENTE: levar o quadro até uma etapa nunca funcionou.
+   O `col.scrollIntoView(...)` rodava logo depois do innerHTML, quando as
+   colunas ainda não tinham posição — todas valiam 0, então o "scroll" ia para
+   o começo. Medido: NN_FOCUS='EMISSÃO' com a coluna em offsetLeft 1776 e o
+   board parado em scrollLeft 0. Isso afetava também os atalhos de etapa do
+   menu lateral, que existiam e não levavam a lugar nenhum.
+   É a MESMA lição que o restaurador de scroll aqui embaixo já tinha aprendido:
+   esperar o frame seguinte, quando a largura real das colunas existe. */
+function funIrParaEtapa(etapa){
+  if(!etapa) return;
+  const ir = () => {
+    const b=document.querySelector('.nnboard'); if(!b) return;
+    const col=b.querySelector('.nncol[data-etapa="'+(window.CSS&&CSS.escape?CSS.escape(etapa):etapa)+'"]');
+    if(!col) return;
+    /* centraliza quando cabe; senão encosta à esquerda com uma folga */
+    const alvo = col.offsetLeft - Math.max(0,(b.clientWidth-col.offsetWidth)/2);
+    b.scrollLeft = Math.max(0, Math.min(alvo, b.scrollWidth-b.clientWidth));
+  };
+  /* roda já, e repete depois do layout. Não depende só de requestAnimationFrame:
+     em aba em segundo plano o rAF não dispara, e o atalho simplesmente não
+     acontecia — foi assim que este bug se escondeu de mim no teste headless. */
+  ir();
+  setTimeout(ir,0);
+  setTimeout(ir,80);
+  if(typeof requestAnimationFrame==='function') requestAnimationFrame(ir);
+}
 function funScrollRestaurar(p){
   if(!p) return;
   const b=document.querySelector('.nnboard');
@@ -2235,10 +2299,10 @@ function viewNnFunil(){
     body='<div class="nnboard">'+ETAPAS_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Novos Negócios</h1>
-    ${nnNegocioHtml(lista,ETAPAS_FLUXO,'nn',rec)}${toolbar}${body}`;
+    ${nnNegocioHtml(lista,ETAPAS_FLUXO,'nn',rec)}${toolbar}${funEtapasBarHtml(lista,ETAPAS_FLUXO,'nn')}${body}`;
   if(NN_MODE==='kanban'){
     wireNnBoard();
-    if(NN_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+NN_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+    if(NN_FOCUS) funIrParaEtapa(NN_FOCUS);
   }
   funScrollRestaurar(_pos);
 }
@@ -2326,10 +2390,10 @@ function viewBcFunil(){
     body='<div class="nnboard">'+ETAPAS_BC_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
   $('#main').innerHTML=`<h1 class="pg">Negócios na Base</h1>
-        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc',rec)}${toolbar}${body}`;
+        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc',rec)}${toolbar}${funEtapasBarHtml(lista,ETAPAS_BC_FLUXO,'bc')}${body}`;
   if(BC_MODE==='kanban'){
     wireBcBoard();
-    if(BC_FOCUS){ const col=document.querySelector('.nncol[data-etapa="'+BC_FOCUS+'"]'); if(col) col.scrollIntoView({behavior:'smooth',inline:'center',block:'nearest'}); }
+    if(BC_FOCUS) funIrParaEtapa(BC_FOCUS);
   }
   funScrollRestaurar(_pos);
 }
@@ -9045,6 +9109,22 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const l=meusContatos(); if(!l.length) return true;
       const m=ctContagemEstados(l);
       return (m.cliente+m.andamento+m.abordado+m.novo)===l.length; })());
+    /* ATALHO DE ETAPA:SELFCHECK */
+    ok('atalho de etapa: existe e ignora etapa vazia', (()=>{
+      if(typeof funIrParaEtapa!=='function') return false;
+      funIrParaEtapa(''); funIrParaEtapa(null);   /* não pode estourar */
+      return true; })());
+    ok('atalho de etapa: a barra lista exatamente as etapas do fluxo', (()=>{
+      const h=funEtapasBarHtml([], ETAPAS_FLUXO, 'nn');
+      return ETAPAS_FLUXO.every(e=>h.includes(esc(ET_LABEL[e]||e))); })());
+    ok('atalho de etapa: o número do chip é a contagem real da etapa', (()=>{
+      const l=[{etapa:ETAPAS_FLUXO[0]},{etapa:ETAPAS_FLUXO[0]},{etapa:ETAPAS_FLUXO[1]}];
+      const h=funEtapasBarHtml(l, ETAPAS_FLUXO, 'nn');
+      return h.includes('<span>2</span>') && h.includes('<span>1</span>'); })());
+    ok('atalho de etapa: com foco aparece o caminho de volta', (()=>{
+      const g=NN_FOCUS; NN_FOCUS=ETAPAS_FLUXO[1];
+      const h=funEtapasBarHtml([], ETAPAS_FLUXO, 'nn'); NN_FOCUS=g;
+      return h.includes('fun-et lim'); })());
     /* MODO FOCO:SELFCHECK — a fila é a sessão de discagem; errar aqui faz
        pular gente ou registrar na pessoa errada. */
     ok('foco: a fila é quem AINDA não tem resultado no dia', (()=>{
