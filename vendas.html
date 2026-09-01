@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.29.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.30.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -117,6 +117,30 @@
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
   .kpi-lente.on{background:#eef4ff;border:1.5px solid var(--azul)}
   .kpi-lente.on .lbl,.kpi-lente.on .num{color:var(--azul)}
+  /* ═══ AGORA · a primeira coisa da tela de abrir ═══════════════════════ */
+  .agora{background:var(--card);border:1px solid var(--linha);border-radius:14px;
+    padding:6px 6px 8px;margin:0 0 16px;box-shadow:0 1px 3px rgba(16,30,54,.05)}
+  .ag-tit{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);padding:10px 12px 8px}
+  .ag-l{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:10px 12px;
+    border:0;border-top:1px solid var(--linha);background:transparent;cursor:pointer;text-align:left;
+    font:inherit;color:var(--txt)}
+  .ag-l:first-of-type{border-top:0}
+  .ag-l:hover{background:var(--azul-claro,#eef4ff)}
+  .ag-l:focus-visible{outline:2px solid var(--azul);outline-offset:-2px}
+  .ag-ic{font-size:19px;flex:0 0 auto;width:26px;text-align:center}
+  .ag-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .ag-tx b{font-size:15px;font-weight:700;line-height:1.25}
+  .ag-tx span{font-size:12px;color:var(--muted);line-height:1.3}
+  .ag-seta{color:var(--muted);font-size:19px;flex:0 0 auto}
+  .ag-u1 .ag-tx b{color:var(--verm)}
+  .ag-u2 .ag-tx b{color:var(--txt)}
+  .agora-ok{display:flex;align-items:center;gap:12px;padding:16px 14px;
+    background:var(--verde-claro,#e8f6ee);border-color:var(--verde,#9fd9b8)}
+  .agora-ok .ag-ic{color:var(--verde,#0f7a52);font-size:21px}
+  .agora-ok b{display:block;font-size:15px}
+  .agora-ok span{font-size:12.5px;color:var(--muted)}
+
   /* atalho de etapa: escondido no desktop, onde o quadro já cabe */
   .fun-etapas{display:none}
   .so-celular-flex{display:none}
@@ -969,7 +993,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.29.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.30.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -991,7 +1015,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.29.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.30.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1508,6 +1532,66 @@ function taStats(lista){
   lista.forEach(c=>{ lig+=c.taTentativas; if(s[c.taStatus]!==undefined && c.taTentativas>0) s[c.taStatus]++; });
   return {lig,...s};
 }
+/* ═══ AGORA · o que fazer, na tela de abrir (01/09) ═════════════════════════
+   Medido: a tela inicial tinha ZERO ações clicáveis. Era um painel — você
+   olhava os números e depois navegava para outro lugar para fazer alguma
+   coisa. Num celular, abrir o app tem que responder uma pergunta: o que eu
+   faço agora?
+
+   Nada aqui é dado novo. Tudo já existe e estava espalhado em cinco telas:
+   reunião sem desfecho, tarefa atrasada, o combinado de hoje, a lista de
+   discagem, negócio parado, fechamento vencido e prêmio em atraso. O bloco só
+   junta, ordena por urgência e leva direto ao lugar certo — inclusive ligando
+   a lente do funil quando é o caso, para você cair já filtrado.
+
+   Linha com zero não aparece: lista de pendência que mostra zero vira ruído e
+   ensina a ignorar o bloco inteiro. */
+function inicioAgora(){
+  const itens=[];
+  const vivos=meusContatos().filter(c=>!ETAPAS_ENCERR.includes(c.etapa));
+  const cont=(typeof agendaContagem==='function')?agendaContagem():{atrasadas:0,hoje:0,aFinalizar:0};
+  /* plural escrito à mão: em português o "s" não vai no fim da frase — o
+     jeito ingênuo produzia "discagem de hojes" e "sem próxima atividades". */
+  const push=(k,ico,n,sing,plur,sub,acao,urg)=>{ if(!n) return;
+    itens.push({k,ico,n,txt:(n===1?sing:plur),sub,acao,urg}); };
+
+  push('reun','🤝',cont.aFinalizar||0,'reunião sem desfecho','reuniões sem desfecho',
+       'aconteceu e ninguém registrou o que saiu',"irPara('agenda')",1);
+  push('atras','⚠️',cont.atrasadas||0,'tarefa atrasada','tarefas atrasadas',
+       'venceu e continua em aberto',"irPara('agenda')",1);
+  const atr=(typeof AT!=='undefined'&&AT.itens)?AT.itens.filter(r=>!r.resolvido_em):[];
+  const atrV=atr.reduce((a,r)=>a+(r.premio||0),0);
+  push('cob','💸',atr.length,'apólice em atraso','apólices em atraso',
+       atrV?brl(atrV)+' em risco':'prêmio não pago',"irPara('lp-atrasos')",1);
+  const venc=vivos.filter(c=>prevVencida(prevDe(c,'fech')));
+  push('venc','🎯',venc.length,'fechamento vencido','fechamentos vencidos',
+       'a previsão passou — renegociar a data',"FUN_LENTE.nn='vencido';irPara('nn-funil')",2);
+  const disc=meusContatos().filter(c=>c.sitplan===hojeISO() && !ultimoResultado(c,hojeISO()));
+  push('disc','📞',disc.length,'na lista de discagem de hoje','na lista de discagem de hoje',
+       'entre no Modo Foco e resolva de uma vez',
+       "irPara('sitplan');setTimeout(()=>{try{spFocoAbrir()}catch(e){}},250)",2);
+  push('hoje','📌',cont.hoje||0,'tarefa combinada para hoje','tarefas combinadas para hoje',
+       'o que você marcou para hoje',"irPara('agenda')",2);
+  const parados=vivos.filter(semProxAtividade);
+  push('parado','💤',parados.length,'negócio sem próxima atividade','negócios sem próxima atividade',
+       'negócio parado não anda',"FUN_LENTE.nn='semativ';irPara('nn-funil')",3);
+  return itens.sort((a,b)=>a.urg-b.urg || b.n-a.n);
+}
+function inicioAgoraHtml(){
+  const l=inicioAgora();
+  if(!l.length) return `<div class="agora agora-ok">
+      <span class="ag-ic">✓</span>
+      <div><b>Nada pendente agora.</b>
+      <span>Sem reunião sem desfecho, sem tarefa atrasada e nenhum negócio parado.</span></div></div>`;
+  return `<div class="agora">
+    <div class="ag-tit">Agora</div>
+    ${l.map(i=>`<button class="ag-l ag-u${i.urg}" onclick="${i.acao}">
+      <span class="ag-ic">${i.ico}</span>
+      <span class="ag-tx"><b>${i.n} ${esc(i.txt)}</b><span>${esc(i.sub)}</span></span>
+      <span class="ag-seta">›</span></button>`).join('')}
+  </div>`;
+}
+
 function viewInicio(){
   const lista=meusContatos();
   const por=contagens(lista);
@@ -1534,6 +1618,7 @@ function viewInicio(){
   $('#main').innerHTML=`
     <h1 class="pg">Seja bem-vindo(a), ${esc(user().nome)}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
+    ${inicioAgoraHtml()}
     <div class="kpis">
       <div class="kpi"><div class="num">${novos}</div><div class="lbl">SitPlan</div></div>
       <div class="kpi"><div class="num">${andamento}</div><div class="lbl">Em andamento</div></div>
@@ -9109,6 +9194,18 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const l=meusContatos(); if(!l.length) return true;
       const m=ctContagemEstados(l);
       return (m.cliente+m.andamento+m.abordado+m.novo)===l.length; })());
+    /* AGORA:SELFCHECK — linha com zero vira ruído e ensina a ignorar o bloco. */
+    ok('agora: linha com zero nunca aparece', inicioAgora().every(i=>i.n>0));
+    ok('agora: cada linha leva a algum lugar', inicioAgora().every(i=>typeof i.acao==='string' && i.acao.length>4));
+    ok('agora: o plural é escrito, não é "+s" no fim da frase', (()=>{
+      const h=inicioAgoraHtml();
+      return !/hojes|atividades<|desfechos/.test(h); })());
+    ok('agora: sem nada pendente mostra o estado limpo, não uma lista vazia', (()=>{
+      const h=inicioAgoraHtml();
+      return inicioAgora().length ? h.includes('ag-l') : h.includes('agora-ok'); })());
+    ok('agora: as linhas vêm ordenadas por urgência', (()=>{
+      const l=inicioAgora();
+      return l.every((x,i)=>i===0 || l[i-1].urg<=x.urg); })());
     /* ATALHO DE ETAPA:SELFCHECK */
     ok('atalho de etapa: existe e ignora etapa vazia', (()=>{
       if(typeof funIrParaEtapa!=='function') return false;
