@@ -333,6 +333,15 @@ i.mix-t{background:var(--laranja)}
 .secx .cx{transition:transform .18s;color:var(--axis);font-size:.85rem}
 .secx.sec-dobrado .cx{transform:rotate(-90deg)}
 @media print{ .secx .cx{display:none} }
+
+/* CHECKOUT: lista de seleção do que vai para o cliente */
+.ck-g{display:grid;gap:2px}
+.ck-l{display:flex;align-items:center;gap:11px;padding:9px 4px;border-bottom:1px solid var(--grid);cursor:pointer}
+.ck-l:last-child{border-bottom:0}
+.ck-l:hover{background:color-mix(in srgb,var(--azul) 4%,transparent)}
+.ck-t{flex:1;font-size:.86rem;font-weight:600}
+.ck-s{font-size:.68rem;color:var(--muted);white-space:nowrap}
+.ck-l:has(input:checked) .ck-s{color:var(--good-text)}
 </style>
 <style id="curadoria-css">
 /* curadoria: controles só no console, nunca no material do cliente */
@@ -932,6 +941,7 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
       <button class="tbtn" id="btPeriodo">Mensal</button>
       <button class="tbtn so-consultor" id="btAgenda" title="Abre o Google Agenda com a reunião de revisão pré-preenchida">📅 Agendar</button>
       <button class="tbtn" id="btCliente">👁 Modo cliente</button>
+      <button class="tbtn so-consultor" data-go="produtos" title="Catálogo de produtos — consulta, não é passo da conversa">◆ Produtos</button>
       <button class="tbtn" id="btApresenta">▶ Apresentar</button>
       <button class="tbtn" id="btPrint">🖨 PDF</button>
       <button class="tbtn" id="btEnviar">↗ Gerar para o cliente</button>
@@ -1225,6 +1235,30 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
       </div>
     </div>
   </section>
+  <!-- ══════════ CHECKOUT · o que vai para o cliente ══════════ -->
+  <section class="pane so-consultor" data-pane="checkout">
+    <div class="card">
+      <h2><span class="ico">✓</span>Checkout</h2>
+      <p class="sub">O último passo antes de mostrar. Aqui você escolhe <b>o que entra no material do cliente</b> — cada linha é um bloco do console, e o que estiver desligado simplesmente não aparece para ele.</p>
+      <div class="row" style="margin-bottom:4px">
+        <button class="btn sm" data-ckpreset="essencial">só o essencial</button>
+        <button class="btn sm" data-ckpreset="tudo">marcar tudo</button>
+        <button class="btn sm" data-ckpreset="nada">desmarcar tudo</button>
+        <span class="right mini" id="ckResumo"></span>
+      </div>
+    </div>
+    <div id="ckLista"></div>
+    <div class="card">
+      <h2><span class="ico">↗</span>Gerar</h2>
+      <p class="sub">Sai um arquivo só, sem nada do consultor: comissão, travas, eficiência e caixa ficam de fora por construção.</p>
+      <div class="row">
+        <button class="btn pri" id="ckGerar">↗ Gerar para o cliente</button>
+        <button class="btn" id="ckApresentar">▶ Apresentar agora</button>
+        <button class="btn" id="ckPdf">🖨 PDF</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ══════════ ETAPA 5 · MUDANÇA DE SEGURO ══════════ -->
   <section class="pane" data-pane="ms">
 
@@ -5703,7 +5737,13 @@ function mostra(k){ return !!state.show[k]; }
    NAVEGAÇÃO / RENDER
    ============================================================ */
 /* a Comissão saiu da barra: virou gaveta dentro da Proposta (patch45) */
-const ABAS = [['cliente','Cliente','1'],['hoje','Hoje','2'],['nec','Necessidade','3'],['prop','Proposta','4'],['ms','Mudança de Seguro','5'],['produtos','Produtos','◆']];
+/* Ordem definida por ele (01/09): a conversa começa na pessoa, passa pela
+   necessidade ANTES de olhar o que existe, aí compara com a carteira de hoje,
+   decide a Mudança de Seguro, monta a proposta nova — e termina no Checkout,
+   que é onde se escolhe o que vai para o cliente. Produtos saiu das etapas:
+   é consulta, não passo da conversa, então virou botão da barra de cima. */
+const ABAS = [['cliente','Cliente','1'],['nec','Necessidade','2'],['hoje','Carteira de Proteção Hoje','3'],
+              ['ms','Mudança de Seguro','4'],['prop','Nova proposta','5'],['checkout','Checkout','6']];
 function renderNav(){
   $('navSteps').innerHTML = ABAS.map(a =>
     `<button class="step ${state.ui.aba === a[0] ? 'on' : ''}" data-go="${a[0]}"><span class="n">${a[2]}</span>${a[1]}</button>`
@@ -6164,9 +6204,67 @@ function msLiga(){
   });
 }
 
+/* ═══ CHECKOUT ═══════════════════════════════════════════════════════════════
+   A escolha do que vai para o cliente já existia, só que ESPALHADA: um switch
+   "na apresentação" dentro de cada bloco, em cinco abas diferentes. Dava para
+   apresentar sem perceber que um bloco importante estava desligado três telas
+   atrás. O Checkout junta todos num lugar só, na ordem em que o cliente vai
+   ver, e nada aqui é estado novo: são os mesmos `state.show[...]`.
+
+   Os rótulos vêm dos PRÓPRIOS blocos (o h2 dentro do .blk-h). Se um bloco for
+   renomeado, o Checkout acompanha sozinho — duplicar nome aqui seria criar
+   duas verdades. */
+const CK_GRUPOS = [
+  ['Abertura',              ['alerta','risco']],
+  ['Necessidade',           ['nec']],
+  ['Carteira de hoje',      ['apolices','familia','novas','carteira','como','consol','emvida','prop']],
+  ['Mudança de Seguro',     ['msmigra','mspaga','mscomp']],
+  ['Nova proposta',         ['planos','ab','comp','muda','recado']],
+  ['Anexos e fechamento',   ['anxipca','assin','glos','anxdg','anxinv','anxfra','anxcir','produtos']]
+];
+const CK_ESSENCIAL = ['alerta','nec','apolices','consol','como','planos','comp','muda','recado','assin'];
+function ckRotulo(sh){
+  const el = document.querySelector(`[data-show="${sh}"] .blk-h h2`) || document.querySelector(`[data-show="${sh}"] h2`);
+  const t = el ? (el.childNodes[0] && el.childNodes[0].nodeValue || el.textContent) : '';
+  return String(t||sh).replace(/·.*$/,'').trim() || sh;
+}
+function ckExiste(sh){ return !!document.querySelector(`[data-show="${sh}"]`); }
+function ckSet(sh,on){ state.show[sh]=!!on; save(); pintaBlocos(); renderCheckout(); }
+function ckPreset(p){
+  CK_GRUPOS.forEach(g=>g[1].forEach(sh=>{
+    if(!ckExiste(sh)) return;
+    state.show[sh] = p==='tudo' ? true : p==='nada' ? false : CK_ESSENCIAL.includes(sh);
+  }));
+  save(); pintaBlocos(); renderCheckout();
+}
+function renderCheckout(){
+  const box=$('ckLista'); if(!box) return;
+  let ligados=0, total=0;
+  box.innerHTML = CK_GRUPOS.map(([nome,chaves])=>{
+    const itens=chaves.filter(ckExiste);
+    if(!itens.length) return '';
+    const linhas=itens.map(sh=>{
+      const on=!!state.show[sh]; total++; if(on) ligados++;
+      return `<label class="ck-l">
+        <span class="sw"><input type="checkbox" data-ck="${sh}" ${on?'checked':''}><i></i></span>
+        <span class="ck-t">${esc(ckRotulo(sh))}</span>
+        <span class="ck-s">${on?'vai para o cliente':'fica só com você'}</span></label>`;
+    }).join('');
+    return `<div class="card"><h2 style="font-size:.86rem">${esc(nome)}</h2><div class="ck-g">${linhas}</div></div>`;
+  }).join('');
+  const r=$('ckResumo');
+  if(r) r.innerHTML = `<b>${ligados}</b> de ${total} blocos vão para o cliente`;
+  box.querySelectorAll('[data-ck]').forEach(el=>el.onchange=()=>ckSet(el.dataset.ck, el.checked));
+  document.querySelectorAll('[data-ckpreset]').forEach(b=>b.onclick=()=>ckPreset(b.dataset.ckpreset));
+  const g=$('ckGerar'); if(g) g.onclick=()=>{ const b=$('btEnviar'); if(b) b.click(); };
+  const a=$('ckApresentar'); if(a) a.onclick=()=>{ const b=$('btApresenta'); if(b) b.click(); };
+  const pd=$('ckPdf'); if(pd) pd.onclick=()=>{ const b=$('btPrint'); if(b) b.click(); };
+}
+
 function render(){
   renderNav(); renderCliente(); renderHoje(); renderNec(); renderCenarios(); renderComissao(); renderMS();
   renderMuda(); renderAnexoDG(); renderFamilia(); renderEmVida(); ligaBlocos();
+  renderCheckout();
   renderCarteira(); /* curadoria: preview da carteira no console */
   renderAB();
   renderNovas();
