@@ -1293,6 +1293,13 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
         <label class="blk-sw"><input type="checkbox" data-sw="mscomp"> na apresentação</label><span class="blk-cx">▾</span></div>
       <div class="blk-b"><div class="cmp" id="msComparador"></div></div>
     </div>
+
+    <div class="card blk so-consultor" data-blk="ms-sims">
+      <div class="blk-h"><span class="ico">⎘</span><div class="tt"><h2>Simulações e cenários</h2>
+        <p class="sub">Guarde variações desta composição e mande a escolhida para os cenários da etapa 4 — aí a MS entra no comparador ao lado dos outros planos.</p></div>
+        <span class="blk-cx">▾</span></div>
+      <div class="blk-b"><div id="msSims"></div></div>
+    </div>
     </div>
 
     <h2 class="sec secx so-consultor" data-sec="s4"><span class="cx">▾</span>4 · Travas e regras do processo</h2>
@@ -5732,11 +5739,11 @@ const MS_IOF = 0.0038, MS_RENOV = 0.09;
 /* escada de comissão validada na tela "Plano e comissões" do LP Business:
    FYC no ano 1 · 8% no ano 2 · 9% nos anos 3–4 · 1% nos 5–10 · 2% do 11º */
 const MS_PRODS = {
-  WH10:{n:'Vida e Saúde 360 · 10 anos', fyc:.30, prazo:10},
-  WV10:{n:'Vida e Saúde · 10 anos',     fyc:.30, prazo:10, desc:true},
-  WV20:{n:'Vida e Saúde · 20 anos',     fyc:.40, prazo:20},
-  WV30:{n:'Vida e Saúde · 30 anos',     fyc:.50, prazo:30},
-  MO30:{n:'Vida Inteira Modificado 30', fyc:.50, prazo:30, escalonado:true}
+  WH10:{n:'Vida e Saúde 360 · 10 anos', fyc:.30, prazo:10, fam:'WV'},
+  WV10:{n:'Vida e Saúde · 10 anos',     fyc:.30, prazo:10, fam:'WV', desc:true},
+  WV20:{n:'Vida e Saúde · 20 anos',     fyc:.40, prazo:20, fam:'WV'},
+  WV30:{n:'Vida e Saúde · 30 anos',     fyc:.50, prazo:30, fam:'WV'},
+  MO30:{n:'Vida Inteira Modificado 30', fyc:.50, prazo:30, fam:'MO', escalonado:true}
 };
 /* FYC por cobertura — validado no SISTEMA, não na tabela (Funeral paga 35%,
    a tabela diz 50%). A chave é o prefixo do código da cobertura. */
@@ -6029,7 +6036,7 @@ function renderMS(){
   if(pr) pr.value=state.ms.prod;
   const cv=$('msCsVit'); if(cv && document.activeElement!==cv) cv.value=msBRL(R.csVit);
   const pv=$('msPreVit'); if(pv && document.activeElement!==pv) pv.value=msBRL(R.preVit);
-  msRenderTriagem(R); msRenderMig(R); msRenderResultado(R); msRenderRegras(R); msRenderFech(R);
+  msRenderTriagem(R); msRenderMig(R); msRenderResultado(R); msRenderSims(R); msRenderRegras(R); msRenderFech(R);
   msLiga(); msLigaSecoes();
 }
 /* as seções (h2.sec) dobram levando os blocos junto — mesma mecânica do
@@ -6050,6 +6057,88 @@ function msLigaSecoes(){
       save();
     });
   });
+}
+/* ═══ SIMULAÇÕES E VÍNCULO COM OS CENÁRIOS ═════════════════════════════════
+   Pedido dele: "quero nesse formato editável, isso facilita eu simular e
+   vincular com cenários". Duas coisas, então:
+
+   1) SIMULAR — cada combinação (produto, capital do vitalício, o que migra,
+      prêmios da prévia) vira uma simulação salva com o resultado congelado.
+      Dá para guardar várias e voltar em qualquer uma.
+
+   2) VINCULAR — a MS gera UMA apólice nova, então ela vira UMA linha de
+      cenário: capital = vitalício + as opcionais que migraram, prêmio = o
+      bruto da apólice nova, marcada como `manual` para o app não tentar
+      tarifar por cima (calcLinha respeita premioManual e devolve na hora).
+      A partir daí a MS aparece ao lado do Plano A no comparador da Proposta,
+      sem nenhum caminho especial. */
+function msSims(){ if(!Array.isArray(state.ms.sims)) state.ms.sims=[]; return state.ms.sims; }
+function msSnap(){ return JSON.parse(JSON.stringify({prod:state.ms.prod, origem:state.ms.origem,
+  csVit:+state.ms.csVit||0, preVit:+state.ms.preVit||0,
+  alvos:state.ms.alvos||{}, mig:state.ms.mig||{}, taxaNv:state.ms.taxaNv||{}})); }
+function msSalvarSim(nome){
+  const R=msCalc(); if(!R) return;
+  const l=msSims();
+  const n=String(nome||'').trim() || ('Simulação '+String.fromCharCode(65+l.length));
+  l.push({id:uid(), nome:n, criadoEm:new Date().toISOString().slice(0,10), snap:msSnap(),
+          res:{bruto:R.bruto, capital:R.capital, caixa:R.caixa12, nova:R.nova}});
+  save(); renderMS();
+}
+function msCarregarSim(id){
+  const s0=msSims().find(x=>x.id===id); if(!s0) return;
+  Object.assign(state.ms, JSON.parse(JSON.stringify(s0.snap)));
+  save(); renderMS();
+}
+function msExcluirSim(id){
+  const s0=msSims().find(x=>x.id===id); if(!s0) return;
+  if(!confirm(`Excluir a simulação "${s0.nome}"?`)) return;
+  state.ms.sims=msSims().filter(x=>x.id!==id); save(); renderMS();
+}
+/* capital total da apólice NOVA — vitalício + o que de fato migrou */
+function msCapitalNova(R){ return (+R.csVit||0) + R.linhas.reduce((a,l)=>a+Math.max(l.csNova,0),0); }
+function msParaCenario(nome){
+  const R=msCalc(); if(!R) return;
+  const P=R.P, fam=P.fam||'WV';
+  if(typeof PRODS==='undefined' || !PRODS[fam]){ alert('Produto '+fam+' não está no catálogo — não dá para montar a linha do cenário.'); return; }
+  const capNova=msCapitalNova(R), preBruto=R.nova*(1+MS_IOF);
+  if(!(preBruto>0)){ alert('Monte a apólice nova antes: sem prêmio não há cenário para comparar.'); return; }
+  const nm=String(nome||'').trim()||'Mudança de Seguro';
+  const cls=(PRODS[fam].classes||['ST']);
+  const linha={id:uid(), pid:fam, prazo:P.prazo, classe:cls[0]||'ST',
+    fumante:!!state.cliente.fumante && !!PRODS[fam].fumante,
+    capital:Math.round(capNova), manual:true, premioManual:Math.round(preBruto*100)/100};
+  let cen=state.cen.find(c=>c.nome===nm);
+  if(cen) cen.linhas=[linha]; else { cen={id:uid(), nome:nm, linhas:[linha]}; state.cen.push(cen); }
+  save(); render();
+  alert(`Cenário "${nm}" atualizado com a Mudança de Seguro:\ncapital ${msBRL0(capNova)} · prêmio ${msBRL(preBruto)}/mês.\n\nEle já aparece na etapa 4, ao lado dos outros planos.`);
+}
+window.msSalvarSim=msSalvarSim; window.msCarregarSim=msCarregarSim;
+window.msExcluirSim=msExcluirSim; window.msParaCenario=msParaCenario;
+function msRenderSims(R){
+  const box=$('msSims'); if(!box) return;
+  const l=msSims();
+  const capNova=msCapitalNova(R);
+  box.innerHTML=`
+    <div class="row" style="margin-bottom:10px">
+      <input id="msSimNome" placeholder="nome desta simulação (ex.: migra tudo · QO 300k)" style="flex:1;min-width:200px">
+      <button class="btn sm" onclick="msSalvarSim(($('msSimNome')||{}).value)">＋ salvar simulação</button>
+      <button class="btn sm pri" onclick="msParaCenario(($('msSimNome')||{}).value)">→ mandar para os cenários</button>
+    </div>
+    <div class="nota" style="margin-top:0">A MS gera <b>uma</b> apólice nova — capital ${msBRL0(capNova)}, prêmio ${msBRL(R.nova*(1+MS_IOF))}/mês.
+      É essa linha que vai para o cenário, marcada como prêmio informado, para o app não tentar tarifar por cima. Daí ela entra no comparador da etapa 4 ao lado do Plano A.</div>
+    ${l.length?`<div class="scroll" style="margin-top:10px"><table>
+      <thead><tr><th>simulação</th><th class="num">cliente paga</th><th class="num">capital</th><th class="num so-consultor">caixa 1º ano</th><th></th></tr></thead>
+      <tbody>${l.map(x=>`<tr>
+        <td><b>${esc(x.nome)}</b><div class="cd">${esc(x.criadoEm)} · ${esc(x.snap.prod)}</div></td>
+        <td class="num">${msBRL(x.res.bruto)}</td>
+        <td class="num">${msBRL0(x.res.capital)}</td>
+        <td class="num so-consultor">${msBRL0(x.res.caixa)}</td>
+        <td class="num" style="white-space:nowrap">
+          <button class="btn sm" onclick="msCarregarSim('${esc(x.id)}')">abrir</button>
+          <button class="btn sm" onclick="msParaCenario('${esc(x.nome)}')">→ cenário</button>
+          <button class="btn sm" style="color:var(--crit)" onclick="msExcluirSim('${esc(x.id)}')">✕</button>
+        </td></tr>`).join('')}</tbody></table></div>`
+     :`<div class="mini" style="margin-top:8px">Nenhuma simulação salva ainda. Monte uma composição acima e salve — dá para guardar várias e comparar.</div>`}`;
 }
 function msLiga(){
   document.querySelectorAll('[data-mson]').forEach(el=>el.onchange=()=>{
