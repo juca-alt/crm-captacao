@@ -4,6 +4,58 @@
 
 ---
 
+## 📸 Snapshot — 31/08 e 01/09/2026 · v0.15.2 → **v0.30.0** (13 versões)
+
+**Estado em 30 s:** ✅ **NO AR** — `main` = `79bcc72`, `vendas.html` **v0.30.0**, e `revisao-protecao.html` com a **etapa 5 (Mudança de Seguro)** e o **Checkout**. Foram duas sessões longas: a primeira de fluidez e modelo de dados, a segunda (noturna) de UX no celular. Restou **1 PR aberto**: o **#35**, travado numa decisão de escopo do Gustavo desde julho.
+
+### O que entrou, por frente
+
+**Fluidez e funil**
+- **v0.16.0** — Captação **escondida** atrás do interruptor `CAPTACAO_VISIVEL` (ele parou de usar; `index.html` intacto). E o `lpSelfCheck`, que estava **vermelho em produção desde a v0.14.0**, voltou a 0 falhas: eram duas *mentiras* (o `config-funil` nunca entrou em `VIEWS_CONHECIDAS`; o invariante do menu ainda exigia "Painel de TA" em Outros módulos).
+- **v0.17.0** — cabeçalho do funil que **cabe na tela**: 4 números na faixa, o resto em "mais números". Desktop 44%→32%, celular **105%→43%**. E os KPIs "fechamento vencido" e "sem próxima atividade" viraram **lente** do quadro.
+- **v0.19.0** — **avançar etapa em um toque** no card, com desfazer. O desfazer **apaga o registro** em vez de empilhar a volta, porque a taxa de passagem lê o histórico.
+- **v0.29.0** — **atalho de etapa** no celular (o quadro tem 6,5 telas de arrasto) **+ conserto de um bug antigo**: levar o quadro até uma etapa *nunca funcionou* (`scrollIntoView` rodava antes do layout). Afetava também os atalhos do menu lateral.
+
+**Dinheiro e cobrança**
+- **v0.18.0** — **script de cobrança por motivo** (8 + genérico, por palavra-chave), editável antes de enviar, com cobertura visível na tela. "Sem tratativa" passou a mostrar **R$**, não só contagem. *(O "💰 Prêmio em risco" já existia — a nota do estudo GlobalCRM estava desatualizada.)*
+- **v0.28.0** — **criar/editar/excluir simulação**. A tela existia inteira e **não havia como criar uma** (`planos.push` não existia). Ativar uma simulação **oferece** usar o prêmio dela no negócio — oferece, não aplica.
+
+**Modelo de identidade** (ver `crm-lp-modelo-identidade` na memória)
+- **v0.20.0** — **telefone como 2ª chave** (`telKey`: DDD + últimos 8 dígitos, ignora o 9º, recusa sem DDD). A mesma pessoa vivia em 5 depósitos ligados só por `normKey(nome)`.
+- **v0.21.0** — a ficha do negócio **avisa quando a pessoa já é cliente**, dizendo se casou por nome ou por telefone.
+- **v0.22.0** — **fila de duplicadas** no funil: unir · excluir · separar.
+- **v0.23.0 / v0.24.0** — **pessoa ↔ oportunidades** (`pessoaId` derivado, zero migration) e **excluir um negócio** — que o app **não tinha**: a única exclusão era "Começar do zero".
+- **v0.25.0** — **editar os dados da pessoa**, valendo para todas as oportunidades dela. Também não existia: nome e telefone só na criação.
+- **v0.27.0** — **quatro estados do contato** (Novo · Abordado · Em andamento · Cliente), **derivados**, nunca digitados.
+
+**Agenda e produtividade**
+- **v0.26.1** — **fila de reuniões a finalizar**, com desfecho que move o funil. "Atrasada" e "a finalizar" não são a mesma coisa: a reunião provavelmente *aconteceu*, e o que falta é dizer o que saiu dela.
+- **v0.27.1** — os **tópicos da ficha dobram** (7.799px → 1.912px).
+- **v0.29.0** — **Modo Foco** na discagem: tela cheia, um nome por vez, registrar avança sozinho.
+- **v0.30.0** — bloco **"Agora"** na tela de abrir, que antes tinha **zero ações clicáveis**.
+
+**Revisão de Proteção**
+- **Etapa 5 · Mudança de Seguro** com 5 blocos, simulações salvas e vínculo com os cenários da etapa 4.
+- **Nova linha de etapas** (Cliente · Necessidade · Carteira de Proteção Hoje · Mudança de Seguro · Nova proposta · **Checkout**), Produtos movido para a barra de cima.
+
+### ⚠️ Aberto / depende do Gustavo
+1. **PR #35** — Revisão de Apólices duplica ou complementa o `revisao-protecao.html`? É **pré-requisito da Mudança de Seguro**.
+2. **`ms-calc.html`** — sem o motor de tarifa (1.038 séries) o prêmio da apólice nova é digitado da prévia. A tela avisa que o custo fica **subestimado**. E o **caso Marcus** para rodar os critérios de aceite.
+3. **Usar o app logado** — 13 versões subiram verificadas *deslogado*. Só a sessão real exercita o upsert no Supabase.
+4. **X218630** · **motivos de recusa órfãos** · **CG do WL65** · **emissão das apólices-gatilho** · decisões de **CPF como identidade** e **extensão cria ou anexa**.
+
+### 🔑 Lições desta rodada (para não repetir)
+- **Medir antes de mexer.** O script que percorre as 24 views a 375px apontou o SitPlan (69% de cabeçalho) — não o palpite.
+- **O app sabe MOSTRAR muito mais do que sabe RECEBER.** Três buracos do mesmo tipo: excluir negócio, editar pessoa, criar simulação. Ao achar tela bonita, perguntar antes: *existe como criar isso?*
+- **Nada de escrita antes da última recusa possível** (o desfecho de reunião movia a etapa antes de validar, e pulava duas).
+- **Normalizar dinheiro pela periodicidade** com o helper do próprio app (`divApol`) — somar anual como mensal deu um total 6× maior.
+- Neste `vendas.html` o **`$` é querySelector** (pede `#`); no `revisao-protecao.html` os formatadores são `fmt`/`fmt0`.
+- **rAF não dispara em aba em segundo plano** — não dá para verificar assim.
+- **Plural em português não é "+s" no fim da frase.**
+- **Falso alarme recorrente:** `scrollWidth > clientWidth` acusa rolagem lateral quando o painel do browser está oculto (largura 0). Medir em 375/1440 reais.
+
+---
+
 ## 📸 Snapshot — 27/08/2026 (2ª leva) · v0.15.1 + R22 na Revisão de Proteção
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `87c1958`. Duas entregas sobre a 1ª leva (agenda etapa+cor): (1) **v0.15.1** tirou o "pos X/16" do card da Substituição; (2) **R22** atualizou a Revisão de Proteção (`revisao-protecao.html`), que estava defasada no app (era R21 + Agenda). Merge autorizado pelo Gustavo ("já validei no uso do artefato; se tiver erro, ajusta depois").
