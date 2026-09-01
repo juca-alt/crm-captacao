@@ -5867,10 +5867,70 @@ function msTaxaNova(c){
   const t=state.ms.taxaNv[c.id];
   return (t!=null && isFinite(t) && t>0) ? t/ (c.cap||1) : msTaxa(c);   /* guardo o PRÊMIO novo, derivo a taxa */
 }
-function msPreNovo(c,cs){
+function msPreNovo(c,cs){ return msPreNovoInfo(c,cs).liq; }
+/* == MS-TARIFA-LOCAL-V1 (01/09) ==============================================
+   Ele: "voce ja tem as calculadoras, logo se ta indo pra la voce consegue
+   calcular mesmo sendo produto novo". Certo -- e eu tinha errado ao dizer que
+   so o ms-calc resolveria. O app carrega 566 series de tarifa e o motor
+   calcLinha() que a Proposta usa; o que faltava era a MS CHAMAR esse motor.
+
+   Tres cuidados que fazem a diferenca entre calcular e chutar:
+
+   1. CLASSE DE AJUSTE. O espelho traz "Standard", nao "ST". E se a classe da
+      origem nao tiver serie no produto novo, eu NAO caio em ST calado -- isso
+      subestimaria um cliente agravado. Devolvo o motivo e a tela pede a previa.
+   2. SELO DO PRODUTO. O catalogo distingue `validado` (conferido contra o app),
+      `planilha` (so da tabela) e `divergente`. Numero de selo diferente nao
+      pode aparecer com a mesma cara.
+   3. IDADE DE HOJE. E o ponto do calculo: a tarifa da origem e da idade da
+      emissao e SUBESTIMA. O motor usa a idade de agora.
+
+   Precedencia, sempre nesta ordem: previa digitada > motor local > tarifa da
+   origem (marcada como subestimada). */
+function msClasseCod(txt){
+  const t=String(txt||'').trim();
+  if(!t || /^(standard|padr[aã]o|st)$/i.test(t)) return 'ST';
+  return t.toUpperCase().replace(/\s+/g,'');
+}
+function msPrazoDoCod(cod, p){
+  const m=String(cod||'').match(/^[A-Z]+(\d+)/);
+  const pz=m?+m[1]:null, lista=(p&&p.prazos)||[];
+  if(pz!=null && lista.includes(pz)) return {prazo:pz, caiu:false};
+  if(pz!=null && lista.length){                       /* prazo mais proximo, e a tela diz que caiu */
+    const perto=lista.slice().sort((x,y)=>Math.abs(x-pz)-Math.abs(y-pz))[0];
+    return {prazo:perto, caiu:true, pedido:pz};
+  }
+  return {prazo:lista[0]!=null?lista[0]:null, caiu:false};
+}
+function msTarifar(fam, cod, classeTxt, capital, prazoForcado){
+  if(typeof PRODS==='undefined' || !fam || !PRODS[fam]) return {erro:'produto '+(fam||'?')+' não está no catálogo local'};
+  if(!(capital>0)) return {erro:'sem capital'};
+  const p=PRODS[fam];
+  if(p.selo==='app') return {erro:esc(p.nome||fam)+' não tem tarifa local — cotar no LP Business'};
+  const cli=state.cliente||{};
+  if(!cli.idade || !cli.sexo) return {erro:'defina idade e sexo do cliente na etapa 1'};
+  const pz = prazoForcado!=null ? {prazo:prazoForcado, caiu:false} : msPrazoDoCod(cod,p);
+  if(pz.prazo==null) return {erro:'prazo não identificado em '+esc(cod||fam)};
+  const fum=!!cli.fumante && !!p.fumante;
+  const quer=msClasseCod(classeTxt);
+  const disp=(typeof classesDisponiveis==='function')?classesDisponiveis(p,pz.prazo,cli.sexo,fum):[quer];
+  if(!disp.includes(quer)) return {erro:'a classe '+esc(quer)+' da origem não tem série em '+esc(p.nome||fam)+' — digite o prêmio da prévia'};
+  const r=calcLinha({pid:fam, prazo:pz.prazo, classe:quer, fumante:fum, capital}, cli);
+  if(!r || !r.ok) return {erro:((r&&r.avisos&&r.avisos[0]&&r.avisos[0].m)||'sem tarifa para esta combinação')};
+  return {liq:r.mensalLiq, bruto:r.mensal, code:r.code, fator:r.fator, selo:p.selo,
+          prazo:pz.prazo, prazoCaiu:!!pz.caiu, prazoPedido:pz.pedido, classe:quer,
+          capAjustado: Math.abs((r.cs||capital)-capital)>0.5 ? r.cs : null};
+}
+/* fam da cobertura: o espelho nao carimba, entao vem do NOME (tabela do app) */
+function msFamDe(c){ return (c && c.fam) || (typeof famDeNome==='function' ? famDeNome(String((c&&c.nome)||'')) : null); }
+/* PREMIO NOVO de uma opcional, na ordem de confianca */
+function msPreNovoInfo(c, cs){
+  if(!(cs>0)) return {liq:0, fonte:'zero'};
   const t=state.ms.taxaNv[c.id];
-  if(t!=null && isFinite(t) && t>0 && c.cap>0) return cs * (t/c.cap);   /* prêmio da prévia, proporcional ao CS */
-  return cs * msTaxa(c);
+  if(t!=null && isFinite(t) && t>0 && c.cap>0) return {liq: cs*(t/c.cap), fonte:'prévia'};
+  const m=msTarifar(msFamDe(c), c.cod, c.classe, cs);
+  if(m && m.liq!=null) return {liq:m.liq, fonte:'motor', selo:m.selo, code:m.code, prazoCaiu:m.prazoCaiu, prazoPedido:m.prazoPedido, capAjustado:m.capAjustado};
+  return {liq: cs*msTaxa(c), fonte:'origem', motivo:(m&&m.erro)||''};
 }
 function msMeses(iso){
   if(!iso) return null;
@@ -5889,12 +5949,21 @@ function msCalc(){
   const principal=cobs.find(msEhTemporario)||null;
   const opcionais=cobs.filter(c=>c!==principal);
   const csVit=+state.ms.csVit||0;
-  const preVit=+state.ms.preVit||0;
+  /* classe de ajuste que a MS PRESERVA: e a do temporario que esta virando
+     vitalicio. Sem principal, cai na classe unica da apolice. */
+  const classeOrig=(principal&&principal.classe)||[...new Set(cobs.map(c=>String(c.classe||'').trim()).filter(Boolean))][0]||'ST';
+  const vitM = csVit>0 ? msTarifar(P.fam, null, classeOrig, csVit, P.prazo) : {erro:'defina o capital do vitalício'};
+  const preVitDig=+state.ms.preVit||0;
+  const preVit = preVitDig>0 ? preVitDig : ((vitM&&vitM.liq!=null)?vitM.liq:0);
+  const preVitInfo = preVitDig>0 ? {fonte:'prévia'}
+                   : (vitM&&vitM.liq!=null) ? Object.assign({fonte:'motor'},vitM)
+                   : {fonte:'faltando', motivo:(vitM&&vitM.erro)||''};
   const linhas=opcionais.map(c=>{
     const migCS=Math.min(Math.max(+state.ms.mig[c.id]||0,0), c.cap||0);
     const alvo=+state.ms.alvos[c.id]||0;
     const csNova=migCS>0 ? Math.max(alvo,migCS) : 0;
-    const preNv=msPreNovo(c,csNova);
+    const preNvI=msPreNovoInfo(c,csNova);
+    const preNv=preNvI.liq;
     const preOrFica=((c.cap||0)-migCS)*msTaxa(c);
     const preOrMig=migCS*msTaxa(c);
     const extra=Math.max(0,csNova-migCS)*(csNova?preNv/csNova:0);   /* aumento de capital não é migração */
@@ -5904,7 +5973,7 @@ function msCalc(){
     const f=msFyc(c.cod);
     const caixa=preMigNv*f*12 + preMigNv - preOrMig*MS_RENOV*12;
     const ef=Math.abs(dMig)<0.005 ? Infinity : caixa/dMig;
-    return {c,migCS,csNova,preNv,preOrFica,preOrMig,extra,dCli,dMig,caixa,ef,fyc:f,on:migCS>0};
+    return {c,migCS,csNova,preNv,preNvI,preOrFica,preOrMig,extra,dCli,dMig,caixa,ef,fyc:f,on:migCS>0};
   });
   const preOrigPrincipal = principal ? Math.max(0,(principal.cap||0)-csVit)*msTaxa(principal) : 0;
   const nova = preVit + linhas.reduce((a,l)=>a+l.preNv,0);
@@ -5920,7 +5989,7 @@ function msCalc(){
                 + linhas.reduce((a,l)=>a+Math.max(l.csNova,0)+((l.c.cap||0)-l.migCS),0)
                 + outrasAp.reduce((a,x)=>a+(x.cob||[]).reduce((y,c)=>y+(c.cap||0),0),0);
   const hoje = msApolices().reduce((a,x)=>{const d=divApol(x); return a+(x.cob||[]).reduce((y,c)=>y+(c.pre||0)/d,0);},0);
-  return {or,P,principal,linhas,preVit,csVit,preOrigPrincipal,nova,orig,outras,outrasAp,liq,
+  return {or,P,principal,linhas,preVit,preVitInfo,classeOrig,csVit,preOrigPrincipal,nova,orig,outras,outrasAp,liq,
           bruto:liq*(1+MS_IOF),comNova,renov,agen,caixa12,capital,hoje,
           restante:principal?Math.max(0,(principal.cap||0)-csVit):0};
 }
@@ -5961,6 +6030,18 @@ function msRenderTriagem(R){
 }
 
 /* ---------- 2 · cobertura a cobertura ---------- */
+/* De onde veio o numero — nao pode ter a mesma cara vindo de lugares
+   diferentes. Selo do catalogo: validado (conferido contra o app) x planilha /
+   divergente (so da tabela). */
+function msFonteTag(i){
+  if(!i || i.fonte==='prévia' || i.fonte==='zero') return '';
+  if(i.fonte==='motor'){
+    const ok = i.selo==='validado';
+    return ` <span class="mini" title="${esc((i.code||'')+(i.selo?' · selo '+i.selo:'')+(i.prazoCaiu?' · prazo '+i.prazoPedido+'→'+i.prazo:''))}" style="color:${ok?'var(--good-text)':'var(--laranja)'}">motor${ok?'':' · '+esc(i.selo||'')}</span>`;
+  }
+  if(i.fonte==='origem') return ` <span class="mini" style="color:var(--crit)" title="${esc(i.motivo||'')}">tarifa da origem · subestima</span>`;
+  return '';
+}
 function msRenderMig(R){
   const fin=R.linhas.filter(l=>isFinite(l.ef)&&l.ef>0).map(l=>l.ef);
   const maxEf=fin.length?Math.max(...fin):1;
@@ -5969,7 +6050,7 @@ function msRenderMig(R){
     const c=l.c, free=l.ef===Infinity, plana=msPlana(c.cod);
     const bar=free?100:Math.max(3,Math.min(100,l.ef/maxEf*100));
     const cor=free?'var(--good)':l.ef>=40?'var(--verde)':l.ef>=15?'var(--azul)':'var(--laranja)';
-    const preNvTxt=state.ms.taxaNv[c.id]!=null?msBRL(l.preNv):`<span class="mini">da prévia</span>`;
+    const preNvTxt = l.csNova>0 ? msBRL(l.preNv)+msFonteTag(l.preNvI) : `<span class="mini">—</span>`;
     return `<tr class="${l.on?'':'off'}">
       <td><b>${esc(c.nome||c.cod)}</b>${plana?' <span class="pill p-free">tarifa plana</span>':''}
           <div class="cd">${esc(c.cod||'')}</div></td>
@@ -5996,8 +6077,8 @@ function msRenderMig(R){
         <td class="num">${msBRL(R.principal.cap)}</td><td class="so-consultor mini">converte</td>
         <td class="so-consultor"><input class="csin" data-msvitcs="1" value="${msBRL(R.csVit)}" title="Quanto do ${esc(R.principal.cod||'temporário')} vira vitalício"></td>
         <td class="num">${msBRL(preOrVit)}</td>
-        <td class="so-consultor"><input class="csin" data-msvitpre="1" value="${R.preVit>0?msBRL(R.preVit):''}" placeholder="prêmio novo" title="Prêmio mensal do vitalício, digitado da prévia"></td>
-        <td class="num">${R.preVit>0?msBRL(R.preVit):'<span class="mini">falta a prévia</span>'}</td>
+        <td class="so-consultor"><input class="csin" data-msvitpre="1" value="${(+state.ms.preVit||0)>0?msBRL(state.ms.preVit):''}" placeholder="${R.preVit>0?msBRL(R.preVit):'prêmio novo'}" title="Prêmio mensal do vitalício. Vazio = o motor calcula; digite para usar o valor da prévia."></td>
+        <td class="num">${R.preVit>0?msBRL(R.preVit)+msFonteTag(R.preVitInfo):`<span class="mini" title="${esc((R.preVitInfo||{}).motivo||'')}">sem tarifa</span>`}</td>
         <td class="num" style="color:${R.preVit-preOrVit>0.005?'var(--crit)':'var(--good-text)'}">${R.preVit>0?(R.preVit-preOrVit>0?'+':'')+msBRL(R.preVit-preOrVit):'—'}</td>
         <td class="num so-consultor">${(R.P.fyc*100).toFixed(0)}%</td>
         <td class="num so-consultor">${R.preVit>0?msBRL(R.preVit*R.P.fyc*12+R.preVit*(1+MS_IOF)):'—'}</td>
@@ -6014,12 +6095,15 @@ function msRenderMig(R){
     : 'Nada aqui é caro de migrar.';
   /* avisos de produto */
   const av=[];
-  const semPrev=R.linhas.filter(l=>l.on&&state.ms.taxaNv[l.c.id]==null).length;
+  const semTar=R.linhas.filter(l=>l.on && l.preNvI && l.preNvI.fonte==='origem');
+  const naoVal=R.linhas.filter(l=>l.on && l.preNvI && l.preNvI.fonte==='motor' && l.preNvI.selo!=='validado');
   /* os dois buracos que zeram a comparacao inteira. Vem antes de tudo porque
      sem eles nenhum outro aviso importa: a apolice nova custa R$ 0. */
   if(R.principal && !(R.csVit>0)) av.push(['a-crit','!',`<b>Nenhum capital indo para o vitalício.</b> A MS existe para converter parte do <b>${esc(R.principal.cod||'temporário')}</b> em vitalício — preencha o <b>CS que migra</b> na primeira linha da tabela (ou o campo "Vitalício novo (capital)").`]);
-  if(R.principal && !(R.preVit>0)) av.push(['a-crit','!',`<b>Falta o prêmio do vitalício novo.</b> Sem ele a apólice nova custa R$ 0 e a comparação fica zerada. Digite o valor da <b>prévia</b> — não dá para tarifar um vitalício pela tarifa do temporário, seriam produtos diferentes.`]);
-  if(semPrev) av.push(['a-info','i',`<b>${semPrev} cobertura(s) sem o prêmio da apólice nova.</b> Enquanto o motor de tarifa (ms-calc) não entra, eu uso a tarifa da origem — o que <b>subestima</b> o custo, porque a idade de hoje é maior. Digite o prêmio da prévia na coluna "prêmio novo".`]);
+  if(R.principal && !(R.preVit>0)) av.push(['a-crit','!',`<b>Sem prêmio para o vitalício novo.</b> ${esc((R.preVitInfo||{}).motivo||'')} — digite o valor da prévia no campo da primeira linha.`]);
+  if((R.preVitInfo||{}).fonte==='motor') av.push(['a-good','✓',`<b>Vitalício tarifado aqui mesmo:</b> ${esc(R.preVitInfo.code||'')} · classe <b>${esc(R.classeOrig)}</b> preservada da origem · idade de hoje · <b>${msBRL(R.preVit)}/mês</b> líquido${R.preVitInfo.selo==='validado'?' <i>(série conferida contra o app)</i>':' <i>(selo '+esc(R.preVitInfo.selo||'')+' — confirme na prévia)</i>'}${R.preVitInfo.capAjustado?` · capital elevado para ${msBRL0(R.preVitInfo.capAjustado)} pelo mínimo do produto`:''}. Digitar o prêmio da prévia sobrescreve.`]);
+  if(semTar.length) av.push(['a-crit','!',`<b>${semTar.length} cobertura(s) o motor local não tarifa</b> (${esc(semTar.map(l=>l.c.cod||l.c.nome).join(' · '))}) — nelas eu caio na tarifa da ORIGEM, que <b>subestima</b> porque é da idade da emissão. Digite o prêmio da prévia na coluna "prêmio novo".${semTar[0]&&semTar[0].preNvI.motivo?` <i>Motivo do primeiro: ${esc(semTar[0].preNvI.motivo)}.</i>`:''}`]);
+  if(naoVal.length) av.push(['a-warn','▲',`<b>${naoVal.length} cobertura(s) tarifada(s) por série ainda não conferida contra o app</b> (selo <i>planilha</i>/<i>divergente</i>): ${esc(naoVal.map(l=>l.c.cod||l.c.nome).join(' · '))}. Serve para decidir; confirme na prévia antes de assinar.`]);
   if(R.P.escalonado) av.push(['a-crit','!',`<b>${esc(R.P.n)} tem prêmio escalonado.</b> O valor sobe em degraus ao longo do prazo — o formulário e a fala com o cliente precisam mostrar os três patamares, não só o primeiro.`]);
   if(R.P.desc) av.push(['a-warn','▲','<b>WV10 está descontinuado.</b> Confirme a disponibilidade antes de montar a prévia.']);
   const idade=state.cliente.idade;
