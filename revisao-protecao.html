@@ -1715,7 +1715,7 @@ const VAZIO = () => ({
         carteira:true, produtos:false, ab:true, novas:false, anxipca:false, assin:true},
   fechado:{},
   /* MS-ETAPA5: leitura da etapa 2 + decisões. Nada aqui é redigitado. */
-  ms:{origem:'', prod:'WV20', csVit:0, alvos:{}, mig:{}, taxaNv:{}},
+  ms:{origem:'', prod:'WV20', csVit:0, preVit:0, alvos:{}, mig:{}, taxaNv:{}, sims:[]},
   ui:{periodo:'mes', cliente:false, aba:'cliente', secMS:{}, somar:false, soTenho:false, famFoco:null, ordemCartas:null,
       ocultasCartas:[], ocultasBlocos:[], ordemTL:null, ordemRX:null,
       ordemAtivos:null, ocultasAtivos:[], ordemProd:null, prodSel:[], capIni:{},
@@ -5936,11 +5936,14 @@ function msRenderMig(R){
     <th class="num so-consultor">FYC</th><th class="num so-consultor">caixa 1º ano</th><th class="num so-consultor">eficiência</th></tr></thead>
     <tbody>
       ${R.principal?`<tr class="dest"><td><b>${esc(R.P.n)}</b> <span class="pill p-vit">vitalício novo</span><div class="cd">sai do ${esc(R.principal.cod||'temporário')}</div></td>
-        <td class="num">${msBRL(R.csVit)}</td><td class="so-consultor">—</td><td class="mini so-consultor">do temporário</td>
-        <td class="num">${msBRL(preOrVit)}</td><td class="so-consultor">—</td><td class="num">${msBRL(R.preVit)}</td>
-        <td class="num" style="color:var(--crit)">${R.preVit-preOrVit>0?'+':''}${msBRL(R.preVit-preOrVit)}</td>
+        <td class="num">${msBRL(R.principal.cap)}</td><td class="so-consultor mini">converte</td>
+        <td class="so-consultor"><input class="csin" data-msvitcs="1" value="${msBRL(R.csVit)}" title="Quanto do ${esc(R.principal.cod||'temporário')} vira vitalício"></td>
+        <td class="num">${msBRL(preOrVit)}</td>
+        <td class="so-consultor"><input class="csin" data-msvitpre="1" value="${R.preVit>0?msBRL(R.preVit):''}" placeholder="prêmio novo" title="Prêmio mensal do vitalício, digitado da prévia"></td>
+        <td class="num">${R.preVit>0?msBRL(R.preVit):'<span class="mini">falta a prévia</span>'}</td>
+        <td class="num" style="color:${R.preVit-preOrVit>0.005?'var(--crit)':'var(--good-text)'}">${R.preVit>0?(R.preVit-preOrVit>0?'+':'')+msBRL(R.preVit-preOrVit):'—'}</td>
         <td class="num so-consultor">${(R.P.fyc*100).toFixed(0)}%</td>
-        <td class="num so-consultor">${msBRL(R.preVit*R.P.fyc*12+R.preVit*(1+MS_IOF))}</td>
+        <td class="num so-consultor">${R.preVit>0?msBRL(R.preVit*R.P.fyc*12+R.preVit*(1+MS_IOF)):'—'}</td>
         <td class="num mini so-consultor">é a razão de existir da MS</td></tr>`:''}
       ${rows}
       <tr class="tot"><td>total das opcionais</td><td class="so-consultor"></td><td class="so-consultor"></td><td class="so-consultor"></td>
@@ -5955,6 +5958,10 @@ function msRenderMig(R){
   /* avisos de produto */
   const av=[];
   const semPrev=R.linhas.filter(l=>l.on&&state.ms.taxaNv[l.c.id]==null).length;
+  /* os dois buracos que zeram a comparacao inteira. Vem antes de tudo porque
+     sem eles nenhum outro aviso importa: a apolice nova custa R$ 0. */
+  if(R.principal && !(R.csVit>0)) av.push(['a-crit','!',`<b>Nenhum capital indo para o vitalício.</b> A MS existe para converter parte do <b>${esc(R.principal.cod||'temporário')}</b> em vitalício — preencha o <b>CS que migra</b> na primeira linha da tabela (ou o campo "Vitalício novo (capital)").`]);
+  if(R.principal && !(R.preVit>0)) av.push(['a-crit','!',`<b>Falta o prêmio do vitalício novo.</b> Sem ele a apólice nova custa R$ 0 e a comparação fica zerada. Digite o valor da <b>prévia</b> — não dá para tarifar um vitalício pela tarifa do temporário, seriam produtos diferentes.`]);
   if(semPrev) av.push(['a-info','i',`<b>${semPrev} cobertura(s) sem o prêmio da apólice nova.</b> Enquanto o motor de tarifa (ms-calc) não entra, eu uso a tarifa da origem — o que <b>subestima</b> o custo, porque a idade de hoje é maior. Digite o prêmio da prévia na coluna "prêmio novo".`]);
   if(R.P.escalonado) av.push(['a-crit','!',`<b>${esc(R.P.n)} tem prêmio escalonado.</b> O valor sobe em degraus ao longo do prazo — o formulário e a fala com o cliente precisam mostrar os três patamares, não só o primeiro.`]);
   if(R.P.desc) av.push(['a-warn','▲','<b>WV10 está descontinuado.</b> Confirme a disponibilidade antes de montar a prévia.']);
@@ -6195,6 +6202,34 @@ function msLiga(){
     save(); renderMS();
   });
   const al=$('msAlvo'); if(al) al.onchange=()=>{ state.ms.alvos[al.dataset.alvo]=moneyParse(al.value); save(); renderMS(); };
+  /* == MS-CONTROLES-VIVOS-V1 (01/09) ====================================
+     Quatro controles eram DESENHADOS e nunca LIDOS. renderMS() escrevia o
+     valor DENTRO deles (cv.value = msBRL(R.csVit)) e ninguem escutava a volta:
+     nao existia uma unica atribuicao a state.ms.csVit / preVit / prod, e o
+     select de origem so era preenchido. Resultado: digitar o capital do
+     vitalicio, digitar o premio, trocar o produto ou trocar a apolice de
+     origem nao mexia em NADA -- a tela inteira ficava zerada e a simulacao
+     salvava zeros.
+
+     E o mesmo padrao ja visto quatro vezes neste app: sabe MOSTRAR e nao sabe
+     RECEBER. Aqui doia mais porque o csVit tambem alimenta o "remanescente" da
+     triagem -- ou seja, o semaforo de elegibilidade respondia sempre sobre a
+     apolice inteira, nunca sobre a conversao real.
+
+     onchange (nao input) de proposito: e a convencao dos outros campos deste
+     arquivo e evita re-renderizar o painel a cada tecla. */
+  const lig=(el,fn)=>{ if(el) el.onchange=()=>{ fn(el); save(); renderMS(); }; };
+  lig($('msOrigem'), el=>{ state.ms.origem=el.value; });
+  lig($('msProd'),   el=>{ state.ms.prod=MS_PRODS[el.value]?el.value:'WV20'; });
+  const setCsVit=v=>{ const R0=msCalc(), teto=(R0&&R0.principal)?(R0.principal.cap||0):Infinity;
+                      state.ms.csVit=Math.max(0,Math.min(v,teto)); };   /* nao da pra converter mais do que existe no temporario */
+  lig($('msCsVit'),  el=>setCsVit(moneyParse(el.value)));
+  lig($('msPreVit'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); });
+  /* os mesmos dois campos, agora tambem dentro da linha do vitalicio — e ali
+     que ele procura ("eu boto o CS novo a ser migrado"), ao lado das outras
+     coberturas. Mesmo estado, duas portas. */
+  lig(document.querySelector('[data-msvitcs]'),  el=>setCsVit(moneyParse(el.value)));
+  lig(document.querySelector('[data-msvitpre]'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); });
   document.querySelectorAll('[data-mspreset]').forEach(b=>b.onclick=()=>{
     const R=msCalc(); if(!R) return; const p=b.dataset.mspreset;
     (R.or.cob||[]).filter(c=>c!==R.principal).forEach(c=>{
