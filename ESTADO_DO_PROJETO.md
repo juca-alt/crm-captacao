@@ -4,6 +4,41 @@
 
 ---
 
+## 📸 Snapshot — 01/09/2026, tarde · **v0.31.0** — o Início
+
+**Estado em 30 s:** ✅ **NO AR** — `main` = `ca3de78`, `vendas.html` **v0.31.0**. O pedido era cosmético ("atualiza esses gráficos, bota tópicos encolhíveis"); o achado não era.
+
+### O gráfico do funil estava com a conta errada
+
+`funilHtml()` dividia *quantos estão parados AQUI* por *quantos estão parados na PRÓXIMA*. Isso não é taxa de passagem — é a razão entre duas fotografias. No funil real dele, P/C, C2 e N estavam zerados **porque o negócio já tinha passado por eles**, e a tela anunciava **0% em cinco etapas seguidas** num funil com gente em FA. As barras (12, 9, 2, 0, 0, 0, **1**, 0, 0) subiam de novo no FA, o que num funil é impossível.
+
+Agora chama **`nnTaxas()`** — a mesma função que pinta o `% passam` no topo de cada coluna do quadro — sobre o **mesmo `funRecorte()`**. Não são duas contas parecidas: é uma conta só, lida em dois lugares. Reproduzido numa base de teste igual ao print dele, **75/22/0/0/0/0/0/0 virou 50/25/33/100/100/100/0/—**.
+
+A barra passou a ser **quem alcançou** a etapa (por isso o funil só desce) e quantos estão parados nela hoje ficou na linha de baixo. Onde não há ninguém para medir, escreve `—` em vez de fingir 0%. `alc` é derivado do próprio `nnTaxas` **de propósito**: recalcular por fora reabriria a porta para as duas contas divergirem.
+
+**O mesmo erro ao contrário:** o KPI "pior passagem" no cabeçalho do quadro lia a lista crua enquanto os chips das colunas liam o recorte — com um período escolhido, os dois discordavam. Passou a ler `rec.lista`.
+
+### Início em tópicos dobráveis
+
+Pedido dele, e agora **norte declarado de UX**: tela longa vira lista de tópicos que encolhem e estendem, com a escolha lembrada por aparelho (`crmlp_inicio_secs_v1`) e um abrir/fechar tudo. Blocos: Números · Funil Novos Negócios · Funil Base de Clientes · Telephone Approach · Para acompanhar · Funil por LP.
+
+Duas regras que impedem isso de virar esconderijo: **bloco fechado mostra o resumo no cabeçalho** (encolher troca a tabela pela manchete, nunca apaga o número) e **o bloco `Agora` fica de fora e nunca fecha** — ele é a resposta a "o que eu faço agora".
+
+### O resto
+
+- **Cada funil no seu bloco**, com a taxa dele. Base de Clientes só aparece quando existe negócio lá.
+- **Nomes das etapas saem de `ET_LABEL`** (o rótulo editável), não mais do id de fábrica.
+- **Card "Base de Nomes" saiu** da tela de abrir — era estoque, não ação. Os cinco números seguem no módulo.
+- **Duplicatas viraram linha do `Agora`**, em **urgência 4**: dentro da mesma urgência a ordem é por tamanho, e 107 pares empurrariam 24 negócios parados para baixo. Higiene de base não passa na frente de venda.
+
+**Medido a 375px:** 1.038 → **1.016px** no padrão, **608px** com tudo fechado, sem rolagem lateral. `lpSelfCheck()` e `funSelfCheck()` passando. Deploy conferido pelo **conteúdo servido** do Pages.
+
+**Validação:** https://claude.ai/code/artifact/b9015211-8730-4faa-bc14-aec98444748c
+
+**Ficou em aberto:** a combinação de blocos que abre por padrão (hoje Números + Funil Novos Negócios) — ele pode pedir outra.
+
+---
+
 ## 📸 Snapshot — 31/08 e 01/09/2026 · v0.15.2 → **v0.30.0** (13 versões)
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `79bcc72`, `vendas.html` **v0.30.0**, e `revisao-protecao.html` com a **etapa 5 (Mudança de Seguro)** e o **Checkout**. Foram duas sessões longas: a primeira de fluidez e modelo de dados, a segunda (noturna) de UX no celular. Restou **1 PR aberto**: o **#35**, travado numa decisão de escopo do Gustavo desde julho.
