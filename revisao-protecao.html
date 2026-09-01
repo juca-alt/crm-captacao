@@ -1770,7 +1770,7 @@ const VAZIO = () => ({
         carteira:true, produtos:false, ab:true, novas:false, anxipca:false, assin:true},
   fechado:{},
   /* MS-ETAPA5: leitura da etapa 2 + decisões. Nada aqui é redigitado. */
-  ms:{origem:'', prod:'WV20', csVit:0, preVit:0, alvos:{}, mig:{}, taxaNv:{}, sims:[]},
+  ms:{origem:'', prod:'WV20', csVit:0, preVit:0, alvos:{}, mig:{}, taxaNv:{}, novas:[], sims:[]},
   ui:{periodo:'mes', cliente:false, aba:'cliente', secMS:{}, somar:false, soTenho:false, famFoco:null, ordemCartas:null,
       ocultasCartas:[], ocultasBlocos:[], ordemTL:null, ordemRX:null,
       ordemAtivos:null, ocultasAtivos:[], ordemProd:null, prodSel:[], capIni:{},
@@ -5849,6 +5849,42 @@ function msFyc(cod){ const h=MS_FYC.find(x=>x[0].test(String(cod||''))); return 
 /* coberturas de tarifa plana por idade: migram sem custo nenhum */
 const MS_PLANAS = /^(PI|PD|CIB|BRB)/;
 function msPlana(cod){ return MS_PLANAS.test(String(cod||'')); }
+/* == MS-SIMULAR-NOVA-V1 (01/09) ===========================================
+   Ele: "ja tem o que migra, mas quando eu ADD coberturas ou AUMENTO CS, ex do
+   Marcus que quebra de ossos vai para 300k, como vou simular isso?"
+
+   A tela sabia montar a apolice nova so com o que vinha da origem. Faltavam as
+   duas outras pontas da simulacao: aumentar o capital de uma cobertura que
+   migra, e acrescentar uma cobertura que a origem NAO tem.
+
+   Regras do playbook que entram junto:
+   - Doencas Graves NAO entra como cobertura nova numa MS (so por transferencia)
+     e nao pode AUMENTAR de capital -- por isso a familia nem aparece na lista.
+   - Temporario na apolice nova de MS esta PENDENTE com o Ponto de Apoio: entra
+     na lista, mas com aviso.
+   - "Migrar vem antes de aumentar": migrar as opcionais rendeu ~R$ 485/ano por
+     R$ 19,36/mes; aumentar a Quebra de Ossos rendeu ~R$ 354 por R$ 61,08. Por
+     isso o rodape separa quanto do premio e MIGRACAO e quanto e AUMENTO. */
+const MS_FAM_VIT = new Set(['WV','WL','WR','WS','MO','WH']);   /* papel de basica/vitalicio */
+const MS_FAM_DG  = new Set(['DDR','DDP','DIMR','DD3M','DDPSH','DDPPH','DDMSH','DDMPH']);
+const MS_FAM_TEMP= new Set(['TP','TM','DT','TF','TR','DR','FI','FR']);
+function msFamsAdicionaveis(){
+  if(typeof PRODS==='undefined') return [];
+  return Object.values(PRODS)
+    .filter(p=>p.selo!=='app' && !MS_FAM_VIT.has(p.fam) && !MS_FAM_DG.has(p.fam))
+    .sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||'')));
+}
+function msAddNova(fam, prazo, cap){
+  const p=(typeof PRODS!=='undefined')&&PRODS[fam]; if(!p) return;
+  const pz=(p.prazos||[]).includes(+prazo)?+prazo:(p.prazos||[])[0];
+  if(!Array.isArray(state.ms.novas)) state.ms.novas=[];
+  state.ms.novas.push({id:'nv'+uid(), fam, prazo:pz, cap:Math.max(0,+cap||0)});
+  save(); renderMS();
+}
+function msRemoverNova(id){
+  state.ms.novas=(state.ms.novas||[]).filter(n=>n.id!==id); save(); renderMS();
+}
+window.msAddNova=msAddNova; window.msRemoverNova=msRemoverNova;
 /* o produto principal temporário é o que a MS converte */
 function msEhTemporario(c){ return /TEMP/.test(String(c&&c.grupo||'')) || /^T[PB]/.test(String(c&&c.cod||'')); }
 
@@ -5930,6 +5966,9 @@ function msPreNovoInfo(c, cs){
   if(t!=null && isFinite(t) && t>0 && c.cap>0) return {liq: cs*(t/c.cap), fonte:'prévia'};
   const m=msTarifar(msFamDe(c), c.cod, c.classe, cs);
   if(m && m.liq!=null) return {liq:m.liq, fonte:'motor', selo:m.selo, code:m.code, prazoCaiu:m.prazoCaiu, prazoPedido:m.prazoPedido, capAjustado:m.capAjustado};
+  /* cobertura NOVA nao tem tarifa de origem pra herdar: melhor dizer que nao
+     sabe do que devolver 0,00 e o total mentir. */
+  if(!(c.cap>0)) return {liq:0, fonte:'sem', motivo:(m&&m.erro)||''};
   return {liq: cs*msTaxa(c), fonte:'origem', motivo:(m&&m.erro)||''};
 }
 function msMeses(iso){
@@ -5958,10 +5997,20 @@ function msCalc(){
   const preVitInfo = preVitDig>0 ? {fonte:'prévia'}
                    : (vitM&&vitM.liq!=null) ? Object.assign({fonte:'motor'},vitM)
                    : {fonte:'faltando', motivo:(vitM&&vitM.erro)||''};
-  const linhas=opcionais.map(c=>{
-    const migCS=Math.min(Math.max(+state.ms.mig[c.id]||0,0), c.cap||0);
-    const alvo=+state.ms.alvos[c.id]||0;
-    const csNova=migCS>0 ? Math.max(alvo,migCS) : 0;
+  /* cobertura acrescentada vira uma cobertura SINTETICA com cap 0 e pre 0 na
+     origem. Assim msTaxa()=0, preOrMig=0 e extra=tudo saem certos sem nenhum
+     caso especial: aumento nao e migracao, e o Delta cliente e o preco cheio. */
+  const novasCob=(state.ms.novas||[]).map(n=>{
+    const p=(typeof PRODS!=='undefined'&&PRODS[n.fam])||{};
+    return {id:n.id, cod:String(n.fam||'')+String(n.prazo||''), fam:n.fam, prazo:n.prazo,
+            nome:(p.nome||n.fam)+(n.prazo?' · '+n.prazo+(n.prazo>4?' anos':''):''),
+            classe:classeOrig, cap:0, pre:0, _nova:true, _cap:Math.max(0,+n.cap||0)};
+  });
+  const linhas=opcionais.concat(novasCob).map(c=>{
+    const ehNova=!!c._nova;
+    const migCS=ehNova?0:Math.min(Math.max(+state.ms.mig[c.id]||0,0), c.cap||0);
+    const alvo=ehNova?c._cap:(+state.ms.alvos[c.id]||0);
+    const csNova=ehNova ? alvo : (migCS>0 ? Math.max(alvo,migCS) : 0);
     const preNvI=msPreNovoInfo(c,csNova);
     const preNv=preNvI.liq;
     const preOrFica=((c.cap||0)-migCS)*msTaxa(c);
@@ -5969,11 +6018,22 @@ function msCalc(){
     const extra=Math.max(0,csNova-migCS)*(csNova?preNv/csNova:0);   /* aumento de capital não é migração */
     const dCli=preNv-preOrMig;
     const dMig=dCli-extra;
-    const preMigNv=preNv-extra;
     const f=msFyc(c.cod);
-    const caixa=preMigNv*f*12 + preMigNv - preOrMig*MS_RENOV*12;
-    const ef=Math.abs(dMig)<0.005 ? Infinity : caixa/dMig;
-    return {c,migCS,csNova,preNv,preNvI,preOrFica,preOrMig,extra,dCli,dMig,caixa,ef,fyc:f,on:migCS>0};
+    /* CAIXA DA LINHA INTEIRA no 1o ano. O FYC e pago sobre o premio novo TODO,
+       inclusive a parte que e aumento de capital -- por isso o `extra` nao se
+       desconta aqui. Descontar era o que fazia uma cobertura ACRESCENTADA sair
+       com caixa 0,00 e o selo "de graca", quando na verdade ela custa ao
+       cliente e rende comissao (Quebra de Ossos a 300k: R$ 96,34/mes e ~R$ 558
+       no ano, nao zero).
+       Confere com o playbook: FYC*12+1 da 5,80 para 40% (Quebra de Ossos /
+       Cirurgia) e 8,20 para 60% (Invalidez) -- os numeros medidos em campo.
+       Para linha 100% migrada (extra=0) o resultado e identico ao de antes. */
+    const caixa=preNv*f*12 + preNv - preOrMig*MS_RENOV*12;
+    /* eficiencia = caixa gerada / cada R$ 1 a mais que o CLIENTE passa a pagar.
+       Uma definicao so, valendo para migrar, aumentar e acrescentar. */
+    const ef=Math.abs(dCli)<0.005 ? Infinity : caixa/dCli;
+    return {c,ehNova,migCS,csNova,preNv,preNvI,preOrFica,preOrMig,extra,dCli,dMig,caixa,ef,fyc:f,
+            on: ehNova ? csNova>0 : migCS>0};
   });
   const preOrigPrincipal = principal ? Math.max(0,(principal.cap||0)-csVit)*msTaxa(principal) : 0;
   const nova = preVit + linhas.reduce((a,l)=>a+l.preNv,0);
@@ -6051,12 +6111,14 @@ function msRenderMig(R){
     const bar=free?100:Math.max(3,Math.min(100,l.ef/maxEf*100));
     const cor=free?'var(--good)':l.ef>=40?'var(--verde)':l.ef>=15?'var(--azul)':'var(--laranja)';
     const preNvTxt = l.csNova>0 ? msBRL(l.preNv)+msFonteTag(l.preNvI) : `<span class="mini">—</span>`;
-    return `<tr class="${l.on?'':'off'}">
-      <td><b>${esc(c.nome||c.cod)}</b>${plana?' <span class="pill p-free">tarifa plana</span>':''}
-          <div class="cd">${esc(c.cod||'')}</div></td>
-      <td class="num">${msBRL(c.cap)}</td>
-      <td class="so-consultor"><label class="sw"><input type="checkbox" data-mson="${esc(c.id)}" ${l.on?'checked':''}><i></i></label></td>
-      <td class="so-consultor"><input class="csin" data-mscs="${esc(c.id)}" value="${msBRL(l.migCS)}"></td>
+    const aum = Math.max(0, l.csNova - l.migCS);
+    return `<tr class="${l.on?'':'off'}${l.ehNova?' nova-cob':''}">
+      <td><b>${esc(c.nome||c.cod)}</b>${plana?' <span class="pill p-free">tarifa plana</span>':''}${l.ehNova?' <span class="pill p-vit">cobertura nova</span>':''}${(!l.ehNova&&aum>0.5)?' <span class="pill p-vit">+ aumento</span>':''}
+          <div class="cd">${esc(c.cod||'')}${l.ehNova?` · <a href="#" onclick="msRemoverNova('${esc(c.id)}');return false" style="color:var(--crit)">remover</a>`:''}</div></td>
+      <td class="num">${l.ehNova?'<span class="mini">—</span>':msBRL(c.cap)}</td>
+      <td class="so-consultor">${l.ehNova?'<span class="mini">nova</span>':`<label class="sw"><input type="checkbox" data-mson="${esc(c.id)}" ${l.on?'checked':''}><i></i></label>`}</td>
+      <td class="so-consultor">${l.ehNova?'<span class="mini">—</span>':`<input class="csin" data-mscs="${esc(c.id)}" value="${msBRL(l.migCS)}">`}</td>
+      <td class="so-consultor"><input class="csin" data-${l.ehNova?'msnovacap':'msalvo'}="${esc(c.id)}" value="${l.csNova>0?msBRL(l.csNova):''}" placeholder="${l.migCS>0?msBRL(l.migCS):'0,00'}" title="Capital desta cobertura NA APÓLICE NOVA. Acima do que migra, a diferença é aumento de capital."></td>
       <td class="num">${msBRL(l.preOrMig)}</td>
       <td class="so-consultor"><input class="csin" data-msnv="${esc(c.id)}" value="${state.ms.taxaNv[c.id]!=null?msBRL(state.ms.taxaNv[c.id]):''}" placeholder="prêmio novo"></td>
       <td class="num">${preNvTxt}</td>
@@ -6069,13 +6131,14 @@ function msRenderMig(R){
   const somaNv=R.linhas.reduce((a,l)=>a+l.preNv,0), somaOr=R.linhas.reduce((a,l)=>a+l.preOrMig,0);
   const preOrVit = R.principal ? R.csVit*msTaxa(R.principal) : 0;
   $('msTabMig').innerHTML =
-   `<thead><tr><th>cobertura</th><th class="num">CS na origem</th><th class="so-consultor">migra</th><th class="so-consultor">CS que migra</th>
+   `<thead><tr><th>cobertura</th><th class="num">CS na origem</th><th class="so-consultor">migra</th><th class="so-consultor">CS que migra</th><th class="so-consultor">CS na nova</th>
     <th class="num">custa hoje</th><th class="so-consultor">prêmio novo</th><th class="num">na nova</th><th class="num">Δ cliente</th>
     <th class="num so-consultor">FYC</th><th class="num so-consultor">caixa 1º ano</th><th class="num so-consultor">eficiência</th></tr></thead>
     <tbody>
       ${R.principal?`<tr class="dest"><td><b>${esc(R.P.n)}</b> <span class="pill p-vit">vitalício novo</span><div class="cd">sai do ${esc(R.principal.cod||'temporário')}</div></td>
         <td class="num">${msBRL(R.principal.cap)}</td><td class="so-consultor mini">converte</td>
         <td class="so-consultor"><input class="csin" data-msvitcs="1" value="${msBRL(R.csVit)}" title="Quanto do ${esc(R.principal.cod||'temporário')} vira vitalício"></td>
+        <td class="so-consultor num">${msBRL(R.csVit)}</td>
         <td class="num">${msBRL(preOrVit)}</td>
         <td class="so-consultor"><input class="csin" data-msvitpre="1" value="${(+state.ms.preVit||0)>0?msBRL(state.ms.preVit):''}" placeholder="${R.preVit>0?msBRL(R.preVit):'prêmio novo'}" title="Prêmio mensal do vitalício. Vazio = o motor calcula; digite para usar o valor da prévia."></td>
         <td class="num">${R.preVit>0?msBRL(R.preVit)+msFonteTag(R.preVitInfo):`<span class="mini" title="${esc((R.preVitInfo||{}).motivo||'')}">sem tarifa</span>`}</td>
@@ -6084,12 +6147,12 @@ function msRenderMig(R){
         <td class="num so-consultor">${R.preVit>0?msBRL(R.preVit*R.P.fyc*12+R.preVit*(1+MS_IOF)):'—'}</td>
         <td class="num mini so-consultor">é a razão de existir da MS</td></tr>`:''}
       ${rows}
-      <tr class="tot"><td>total das opcionais</td><td class="so-consultor"></td><td class="so-consultor"></td><td class="so-consultor"></td>
+      <tr class="tot"><td>total das opcionais</td><td class="so-consultor"></td><td class="so-consultor"></td><td class="so-consultor"></td><td class="so-consultor num">${msBRL(R.linhas.reduce((a,l)=>a+l.csNova,0))}</td>
         <td class="num">${msBRL(somaOr)}</td><td class="so-consultor"></td><td class="num">${msBRL(somaNv)}</td>
         <td class="num">${somaNv-somaOr>0?'+':''}${msBRL(somaNv-somaOr)}</td><td class="so-consultor"></td>
         <td class="num so-consultor">${msBRL(R.linhas.reduce((a,l)=>a+(l.on?l.caixa:0),0))}</td><td class="so-consultor"></td></tr>
     </tbody>`;
-  const cort=R.linhas.filter(l=>l.on&&isFinite(l.ef)&&l.dMig>0.005).sort((a,b)=>a.ef-b.ef);
+  const cort=R.linhas.filter(l=>l.on&&isFinite(l.ef)&&l.dCli>0.005).sort((a,b)=>a.ef-b.ef);
   $('msHintCorte').innerHTML = cort.length
     ? `Se precisar baixar o preço, o corte mais barato é <b>${esc(cort[0].c.nome||cort[0].c.cod)}</b> (${cort[0].ef.toFixed(1)} R$/R$).`
     : 'Nada aqui é caro de migrar.';
@@ -6108,18 +6171,42 @@ function msRenderMig(R){
   if(R.P.desc) av.push(['a-warn','▲','<b>WV10 está descontinuado.</b> Confirme a disponibilidade antes de montar a prévia.']);
   const idade=state.cliente.idade;
   if(R.P.prazo>=30&&idade) av.push(['a-warn','▲',`Prazo de ${R.P.prazo} anos: o cliente paga até os <b>${idade+R.P.prazo} anos</b>. Mensal menor, total pago muito maior.`]);
+  /* "migrar vem antes de aumentar": o playbook mediu que migrar as opcionais
+     rendeu ~R$ 485/ano por R$ 19,36/mes, e aumentar a Quebra de Ossos rendeu
+     ~R$ 354 por R$ 61,08. A tela mostra a divisao pra decisao ficar visivel. */
+  const somaExtra=R.linhas.reduce((a,l)=>a+(l.on?l.extra:0),0);
+  const somaMig=R.linhas.reduce((a,l)=>a+(l.on?(l.preNv-l.extra):0),0);
+  if(somaExtra>0.005) av.push(['a-info','i',`<b>Do prêmio das opcionais, ${msBRL(somaMig)} é migração e ${msBRL(somaExtra)} é aumento de capital.</b> Migrar rende mais por real que aumentar — se precisar cortar preço, corte primeiro o aumento.`]);
+  const novasTemp=R.linhas.filter(l=>l.ehNova && MS_FAM_TEMP.has(String(l.c.fam||'')));
+  if(novasTemp.length) av.push(['a-warn','▲',`<b>Cobertura temporária na apólice nova de MS está pendente</b> de confirmação com o Ponto de Apoio (${esc(novasTemp.map(l=>l.c.cod).join(' · '))}). Simule à vontade, mas confirme antes de fechar preço.`]);
+  const semTarNova=R.linhas.filter(l=>l.on&&l.ehNova&&l.preNvI&&l.preNvI.fonte==='sem');
+  if(semTarNova.length) av.push(['a-crit','!',`<b>${semTarNova.length} cobertura(s) nova(s) sem tarifa local</b> (${esc(semTarNova.map(l=>l.c.cod).join(' · '))}) — e cobertura nova não tem tarifa de origem para herdar. Digite o prêmio da prévia na coluna "prêmio novo".`]);
   const dg=R.linhas.find(l=>/^DD/.test(String(l.c.cod||'')));
   if(String(state.ms.prod).startsWith('W')&&(!dg||!dg.on)) av.push(['a-crit','!','Vida e Saúde como cobertura básica <b>exige Doenças Graves Plus ou Modular na apólice nova</b>. Presença, não valor: basta constar na prévia.']);
-  if(dg&&(+state.ms.alvos[dg.c.id]||0)>dg.c.cap+0.01) av.push(['a-crit','!','Não é permitido <b>aumentar</b> capital de Doenças Graves na MS. Migre igual ou menos.']);
+  const dgAum=R.linhas.filter(l=>/^DD/.test(String(l.c.cod||'')) && l.csNova>l.migCS+0.5);
+  if(dgAum.length) av.push(['a-crit','!',`<b>Não é permitido aumentar capital de Doenças Graves na MS</b> (${esc(dgAum.map(l=>l.c.cod).join(' · '))}). Migre igual ou menos — e Doenças Graves também não entra como cobertura nova, só por transferência. Por isso ela nem aparece na lista de acrescentar.`]);
   const pd=R.linhas.find(l=>/^PD/.test(String(l.c.cod||''))&&l.on);
   if(pd) av.push(['a-warn','▲','A página 3 do DOC0013133 <b>não tem campo PD</b>. A Invalidez Acidental entra como <b>PI (Total e Parcial)</b>, o que encarece. <i>Conferir com o Ponto de Apoio se dá para manter PD.</i>']);
   if(R.nova>0&&R.nova<250) av.push(['a-crit','!',`A apólice nova precisa de prêmio mínimo de <b>R$ 250</b> (R$ 200 para cliente da base). Está em ${msBRL(R.nova)}.`]);
   $('msAvisos').innerHTML=av.map(a=>`<div class="aviso ${a[0]}"><span class="ic">${a[1]}</span><span>${a[2]}</span></div>`).join('');
   /* campo de capital alvo da 1ª cobertura com aumento possível */
-  const alvoC=R.linhas.find(l=>l.on&&!/^DD/.test(String(l.c.cod||'')));
-  $('msAlvoBox').innerHTML = alvoC
-    ? `<span class="lbl">${esc(alvoC.c.nome||alvoC.c.cod)} — capital alvo</span><input id="msAlvo" data-alvo="${esc(alvoC.c.id)}" type="text" value="${msBRL(+state.ms.alvos[alvoC.c.id]||alvoC.migCS)}">`
-    : `<span class="lbl">Capital alvo</span><input type="text" value="" disabled placeholder="ligue uma cobertura">`;
+  /* Aqui vivia UM campo de "capital alvo" que so servia pra primeira cobertura
+     ligada -- nao dava pra fazer o caso Marcus (Quebra de Ossos a 300k) se ela
+     nao fosse a primeira. O alvo virou coluna, por linha, e este espaco passou
+     a ser o que faltava: acrescentar cobertura que a origem nao tem. */
+  const fams=msFamsAdicionaveis();
+  $('msAlvoBox').innerHTML = fams.length
+    ? `<span class="lbl">＋ cobertura na apólice nova</span>
+       <div style="display:flex;gap:6px;flex-wrap:wrap">
+         <select id="msNvFam" style="flex:2 1 130px">${fams.map(p=>`<option value="${esc(p.id)}">${esc(p.nome)}</option>`).join('')}</select>
+         <select id="msNvPz" data-so-leitura="lido no clique do botão ＋ (msAddNova)" style="flex:0 1 74px"></select>
+         <input id="msNvCap" class="csin" data-so-leitura="lido no clique do botão ＋ (msAddNova)" style="flex:1 1 96px" placeholder="capital">
+         <button class="btn sm pri" onclick="msAddNova(($('msNvFam')||{}).value,($('msNvPz')||{}).value,moneyParse((($('msNvCap')||{}).value)||0))">＋</button>
+       </div>`
+    : `<span class="lbl">＋ cobertura na apólice nova</span><input type="text" disabled placeholder="catálogo indisponível">`;
+  const pzSel=()=>{ const f=$('msNvFam'), z=$('msNvPz'); if(!f||!z) return;
+    const p=PRODS[f.value]||{}; z.innerHTML=(p.prazos||[]).map(x=>`<option value="${x}">${x}${x>4?' anos':''}</option>`).join(''); };
+  pzSel(); const fSel=$('msNvFam'); if(fSel) fSel.onchange=pzSel;
 }
 
 /* ---------- 3 · resultado ---------- */
@@ -6342,7 +6429,16 @@ function msLiga(){
     if(v>0) state.ms.taxaNv[el.dataset.msnv]=v; else delete state.ms.taxaNv[el.dataset.msnv];
     save(); renderMS();
   });
-  const al=$('msAlvo'); if(al) al.onchange=()=>{ state.ms.alvos[al.dataset.alvo]=moneyParse(al.value); save(); renderMS(); };
+  /* capital NA APOLICE NOVA, por linha. Acima do que migra vira aumento. */
+  document.querySelectorAll('[data-msalvo]').forEach(el=>el.onchange=()=>{
+    const v=moneyParse(el.value);
+    if(v>0) state.ms.alvos[el.dataset.msalvo]=v; else delete state.ms.alvos[el.dataset.msalvo];
+    save(); renderMS();
+  });
+  document.querySelectorAll('[data-msnovacap]').forEach(el=>el.onchange=()=>{
+    const n=(state.ms.novas||[]).find(x=>x.id===el.dataset.msnovacap); if(!n) return;
+    n.cap=Math.max(0,moneyParse(el.value)); save(); renderMS();
+  });
   /* == MS-CONTROLES-VIVOS-V1 (01/09) ====================================
      Quatro controles eram DESENHADOS e nunca LIDOS. renderMS() escrevia o
      valor DENTRO deles (cv.value = msBRL(R.csVit)) e ninguem escutava a volta:
