@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.35.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.36.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1014,7 +1014,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.35.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.36.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1036,7 +1036,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.35.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.36.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -6838,6 +6838,7 @@ function viewLpAtrasos(){
       ${chip('','Todas')}${chip('50','🔴 ≥50d')}${chip('30','🟠 30–49')}${chip('15','🔵 15–29')}${chip('0','< 15d')}
       <span style="flex:1"></span>
       <button class="btn btn-p btn-mini" onclick="atColarRelatorio()">📋 Colar relatório</button>
+      <button class="btn btn-s btn-mini" onclick="atExportar()" title="Baixa em CSV exatamente o que está filtrado nesta tela — abre no Excel e no Google Sheets">⬇︎ Exportar</button>
       <button class="btn btn-s btn-mini" onclick="atNovo()">＋ Adicionar</button>
     </div>
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
@@ -6860,6 +6861,70 @@ function viewLpAtrasos(){
       <td style="padding:8px;color:var(--verde);font-weight:800">✓</td><td><b>${esc(r.apolice)}</b></td><td>${esc(atTitleC(r.segurado)||'—')}</td><td style="font-size:12px">resolvido ${atFmtBR(r.resolvido_em)}</td><td style="font-weight:700">${r.premio!=null?brl(r.premio):''}</td></tr>`).join('')}
     </tbody></table></div>`:''}`;
 }
+/* == AT-EXPORTAR-V1 (02/09) ==============================================
+   Pedido dele: "no relatorio de atraso preciso de opcao de exportar, ex quero
+   exportar lista do Daniel".
+
+   A decisao que importa: exporta EXATAMENTE o que esta na tela, passando pelo
+   mesmo atFiltrados() que desenha a tabela. Um export que ignora o filtro e o
+   comeco de duas verdades -- ele filtra por Daniel, exporta, e recebe os 41 em
+   vez dos 17. O nome do arquivo carrega o filtro junto, pra planilha baixada
+   nao virar anonima na pasta de Downloads.
+
+   Detalhes de planilha brasileira, que sao o que faz o arquivo abrir certo:
+   - separador `;` (o Excel pt-BR usa virgula como decimal);
+   - BOM UTF-8, senao o Excel come os acentos;
+   - numero com VIRGULA decimal e sem "R$", pra entrar como numero e nao texto;
+   - campo que comeca com = + - @ ganha um apostrofo na frente: e texto vindo
+     de relatorio externo, e o Excel executaria como formula. */
+function atCsvCampo(v){
+  let t = v==null ? '' : String(v);
+  if(/^[=+\-@]/.test(t)) t = "'" + t;          /* nao vira formula no Excel */
+  return '"' + t.replace(/"/g,'""') + '"';
+}
+function atCsvNum(n){ return (n==null||!isFinite(n)) ? '' : String(Number(n).toFixed(2)).replace('.',','); }
+const AT_CSV_COLS = [
+  ['Dias em atraso', r=>atDiasAtraso(r.vencido_em, atHojeLocal())||0],
+  ['Apólice',        r=>r.apolice||''],
+  ['Segurado',       r=>r.segurado||''],
+  ['Responsável',    r=>r.resp_pagto||''],
+  ['LP',             r=>r.lp_servico||''],
+  ['Vence em',       r=>r.vencido_em?atFmtBR(r.vencido_em):''],
+  ['Pago até',       r=>r.pago_ate?atFmtBR(r.pago_ate):''],
+  ['Prêmio',         r=>atCsvNum(r.premio)],
+  ['Forma de pagto', r=>r.forma_pagto||''],
+  ['Celular',        r=>r.celular||''],
+  ['Motivo',         r=>r.motivo_recusa||''],
+  ['Status',         r=>atDerivarStatus(r, atHojeLocal())||''],
+  ['Tratativa',      r=>r.tratativa||''],
+  ['Próximo contato',r=>r.prox_contato?atFmtBR(r.prox_contato):''],
+  ['Responsável pela tratativa', r=>r.responsavel||''],
+  ['Origem do relatório', r=>r.origem_relatorio?atFmtBR(r.origem_relatorio):'']
+];
+function atCsv(linhas){
+  const cab = AT_CSV_COLS.map(c=>atCsvCampo(c[0])).join(';');
+  const corpo = (linhas||[]).map(r=>AT_CSV_COLS.map(c=>atCsvCampo(c[1](r))).join(';'));
+  return [cab].concat(corpo).join('\r\n');
+}
+/* o nome diz o recorte: atraso-daniel-criticas-2026-09-02.csv */
+function atCsvNome(){
+  const p=['atraso'];
+  if(FAT.lp) p.push(normKey(FAT.lp).replace(/\s+/g,'-'));
+  if(FAT.faixa) p.push({'50':'criticas-50d','30':'30-49d','15':'15-29d','0':'ate-14d'}[FAT.faixa]||FAT.faixa);
+  if(FAT.status) p.push(normKey(FAT.status).replace(/\s+/g,'-'));
+  if(FAT.q) p.push('busca');
+  return p.join('-')+'-'+atHojeISO()+'.csv';
+}
+function atExportar(){
+  const l=atFiltrados();
+  if(!l.length){ toast('Nada para exportar com este filtro'); return; }
+  /* BOM: sem ele o Excel abre "Jo\u00e3o" como "JoÃ£o" */
+  const blob=new Blob(['\ufeff'+atCsv(l)],{type:'text/csv;charset=utf-8'});
+  subDocSalvar(blob, atCsvNome());
+  const tot=l.reduce((a,r)=>a+(r.premio||0),0);
+  toast(`${l.length} ${l.length===1?'apólice exportada':'apólices exportadas'} · ${brl(tot)}`,true);
+}
+window.atExportar=atExportar;
 function atFiltrados(){ const hoje=atHojeLocal();
   return AT.itens.filter(r=>!r.resolvido_em).filter(r=>{
     if(FAT.lp&&r.lp_servico!==FAT.lp) return false;
@@ -10139,6 +10204,15 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('oportunidade: simulação não ativada não vira título', negTitulo({planos:[{status:'Apresentado',base:'Vida e Saúde',capital:500000}]})==='');
     ok('oportunidade: sem nada, fica vazio', negTitulo({})==='' && negTitulo(null)==='');
     ok('oportunidade: a tela sabe de onde veio', negTituloFonte({titulo:'x'})==='seu' && negTituloFonte({planos:[{status:'Ativado',base:'b'}]})==='simulação ativada');
+    /* export da Lista de Atraso: o que sai e o que esta na tela */
+    ok('export: aspas viram aspas dobradas', atCsvCampo(String.fromCharCode(34)) === String.fromCharCode(34).repeat(4));
+    ok('export: ponto-e-virgula fica dentro do campo', atCsvCampo('a;b') === '"a;b"');
+    ok('export: formula do Excel e neutralizada', atCsvCampo('=1+1').charAt(1) === String.fromCharCode(39));
+    ok('export: sinal de menos tambem e neutralizado', atCsvCampo('-2').charAt(1) === String.fromCharCode(39));
+    ok('export: numero sai com virgula decimal', atCsvNum(300.32) === '300,32');
+    ok('export: numero vazio nao vira zero', atCsvNum(null) === '' && atCsvNum(undefined) === '');
+    ok('export: cabecalho tem uma coluna por definicao', atCsv([]).split(';').length === AT_CSV_COLS.length);
+    ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
     if(_iSalvo===null) localStorage.removeItem(IMP_CHAVE); else localStorage.setItem(IMP_CHAVE,_iSalvo);   /* self-check NÃO deixa lixo salvo (Livro de Erros #17) */
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
