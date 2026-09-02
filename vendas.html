@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.39.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.39.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1015,7 +1015,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.39.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.39.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1037,7 +1037,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.39.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.39.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7043,19 +7043,25 @@ function emNormContest(s){ const n=normKey(s); if(!n) return null; return /nao\s
    NÃO são apólice (9 dígitos puros logo depois de uma proposta), lê o bloco pra
    frente até a próxima proposta / LP: / Total, e tira os campos pelo formato
    fixo do rabo: <contestação> <dias> <dd/mm/aaaa> <PA> <AFYC>. */
+function emClassTok(tok){ return /[A-Z]$/i.test(tok)?'proposta':'apolice'; }
+/* chave de identidade: proposta quando existe, apólice como fallback. NUNCA um no campo do outro. */
+function emChave(r){ return (r&&(r.proposta||r.apolice))||''; }
 function emParse(txt){
   const errors=[], warnings=[]; let m;
   const lpMarks=[]; const lpRe=/(?:^|\n)\s*LP:\s*([^\n]+)/gi;
   while((m=lpRe.exec(txt))){ lpMarks.push({idx:m.index, nome:m[1].trim(), k:emNormLp(m[1])}); }
   const lpAt=(idx)=>{ let r=null; for(const l of lpMarks){ if(l.idx<idx) r=l; else break; } return r; };
-  const propRe=/(?:^|\s)(\d{9}[A-Z]?)(?=\s)/g; const marks=[];
-  while((m=propRe.exec(txt))){ const tok=m[1], idx=m.index+m[0].indexOf(tok);
-    const prev=marks[marks.length-1];
-    /* 9 dígitos puros colados a uma proposta anterior = a APÓLICE dela, não uma proposta nova */
-    if(prev&&/^\d{9}$/.test(tok)&&!prev.apolice&&txt.slice(prev.end,idx).trim()===''){ prev.apolice=tok; prev.end=idx+tok.length; continue; }
-    marks.push({proposta:tok, apolice:null, idx, end:idx+tok.length});
-  }
-  if(!marks.length){ errors.push('Não encontrei números de proposta (9 dígitos + letra). Confira se colou o relatório de Propostas Pendentes completo.'); return {records:[],errors,warnings,totais:null}; }
+  /* EMISSAO-FIX-IDENTIDADE (03/09): o token que termina em LETRA é a PROPOSTA; o de 9
+     dígitos puros é a APÓLICE. Os dois vêm na mesma célula, em qualquer ordem; só viram
+     o MESMO registro quando entre eles há apenas espaço/quebra de linha. Antes, a
+     apólice de uma linha caía no campo proposta da seguinte e a chave nunca casava. */
+  const tokRe=/(?<![\d.,A-Za-z])(\d{9}[A-Z]?)(?![\d.,A-Za-z])/g; const toks=[];
+  while((m=tokRe.exec(txt))) toks.push({tok:m[1], kind:emClassTok(m[1]), idx:m.index, end:m.index+m[1].length});
+  const marks=[];
+  toks.forEach(tk=>{ const cur=marks[marks.length-1];
+    if(cur&&!cur[tk.kind]&&txt.slice(cur.end,tk.idx).trim()===''){ cur[tk.kind]=tk.tok; cur.end=tk.end; return; }
+    marks.push({proposta:null,apolice:null,[tk.kind]:tk.tok,idx:tk.idx,end:tk.end}); });
+  if(!marks.length){ errors.push('Não encontrei números de proposta/apólice (9 dígitos, proposta com letra no fim). Confira se colou o relatório de Propostas Pendentes completo.'); return {records:[],errors,warnings,totais:null}; }
   const cutRe=/\n\s*(?:LP:|Total\s+(?:LP|MFB)\s*:)/i;
   const records=[];
   for(let i=0;i<marks.length;i++){
@@ -7063,53 +7069,49 @@ function emParse(txt){
     let blk=txt.slice(mk.end,end); const c=blk.search(cutRe); if(c>=0) blk=blk.slice(0,c);
     blk=blk.replace(/\s+/g,' ').trim();
     const tail=blk.match(/(N[ãa]o\s+M[ée]dica|M[ée]dica)\s+(\d{1,4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})/i);
-    if(!tail){ warnings.push('Proposta '+mk.proposta+': não achei contestação/dias/data/PA/AFYC no bloco — pulei.'); continue; }
+    if(!tail){ warnings.push('Registro '+(mk.proposta||mk.apolice)+': não achei contestação/dias/data/PA/AFYC no bloco — pulei.'); continue; }
     const meio=blk.slice(0,tail.index).trim();
-    /* status = o rabo do meio que começa em Pendente/Aguardando/Emitida/Cancelada */
     const stM=meio.match(/\b((?:Pendente|Aguardando|Em\s+an[áa]lise|Emitid[ao]|Cancelad[ao]|Aprovad[ao]|Recusad[ao])\b[^]*)$/i);
     const status=stM?stM[1].trim():''; let nomes=stM?meio.slice(0,stM.index).trim():meio;
-    /* Segurado / Resp. Pagto: frequentemente iguais → o texto vem "X X". Se a
-       sequência de palavras é a mesma repetida, são os dois; senão fica tudo no
-       segurado (editável na ficha), igual ao atraso faz. */
     let seg=nomes, resp='';
     const w=nomes.split(' '); if(w.length%2===0){ const h=w.length/2; if(w.slice(0,h).join(' ')===w.slice(h).join(' ')){ seg=w.slice(0,h).join(' '); resp=seg; } }
     const lp=lpAt(mk.idx);
-    records.push({ proposta:mk.proposta, apolice:mk.apolice||null, segurado:atTitleC(seg), resp_pagamento:resp?atTitleC(resp):null,
+    records.push({ proposta:mk.proposta, apolice:mk.apolice, segurado:atTitleC(seg), resp_pagamento:resp?atTitleC(resp):null,
       status_apolice:status||null, contestacao:emNormContest(tail[1]), dias_pendentes:parseInt(tail[2],10), dt_assinatura:atBrToISO(tail[3]),
       pa_sem_iof:atBrNum(tail[4]), afyc_projetado:atBrNum(tail[5]), lp:lp?lp.k:null, lp_nome_completo:lp?lp.nome:null });
   }
-  /* Total MFB / Total LP: conferência, não dado — mas valida o que foi lido */
-  let totais=null; const tm=txt.match(/Total\s+MFB\s*:[^\n]*\n\s*(\d+)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+  /* Total MFB / Total LP: conferência, não dado — mas valida o que foi lido (e BLOQUEIA a gravação se divergir) */
+  let totais=null, diverge=false; const tm=txt.match(/Total\s+MFB\s*:[^\n]*\n\s*(\d+)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})/i);
+  const n=records.length, pa=records.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc=records.reduce((s,r)=>s+(r.afyc_projetado||0),0);
   if(tm){ totais={n:parseInt(tm[1],10), pa:atBrNum(tm[2]), afyc:atBrNum(tm[3])};
-    const n=records.length, pa=records.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc=records.reduce((s,r)=>s+(r.afyc_projetado||0),0);
-    if(n!==totais.n||Math.abs(pa-totais.pa)>0.02||Math.abs(afyc-totais.afyc)>0.02)
-      warnings.push(`Li ${n} proposta(s) · PA ${brl(pa)} · AFYC ${brl(afyc)}, mas o Total MFB do relatório diz ${totais.n} · ${brl(totais.pa)} · ${brl(totais.afyc)}. Confira o texto colado.`);
+    diverge=(n!==totais.n||Math.abs(pa-totais.pa)>0.02||Math.abs(afyc-totais.afyc)>0.02);
+    if(diverge) warnings.push(`Li ${n} proposta(s) · PA ${brl(pa)} · AFYC ${brl(afyc)}, mas o Total MFB do relatório diz ${totais.n} · ${brl(totais.pa)} · ${brl(totais.afyc)}.`);
   }
   const tlRe=/Total\s+LP\s*:\s*([^\n]+)\n\s*(\d+)\s+(\d{1,3}(?:\.\d{3})*,\d{2})\s+(\d{1,3}(?:\.\d{3})*,\d{2})/gi;
   while((m=tlRe.exec(txt))){ const k=emNormLp(m[1]); if(!k) continue; const l=records.filter(r=>r.lp===k);
-    const pa=l.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc=l.reduce((s,r)=>s+(r.afyc_projetado||0),0);
-    if(l.length!==parseInt(m[2],10)||Math.abs(pa-atBrNum(m[3]))>0.02||Math.abs(afyc-atBrNum(m[4]))>0.02)
-      warnings.push(`LP ${k}: li ${l.length} · ${brl(pa)} · ${brl(afyc)}; o Total LP diz ${m[2]} · ${brl(atBrNum(m[3]))} · ${brl(atBrNum(m[4]))}.`); }
-  return {records,errors,warnings,totais};
+    const lpa=l.reduce((s,r)=>s+(r.pa_sem_iof||0),0), lafyc=l.reduce((s,r)=>s+(r.afyc_projetado||0),0);
+    if(l.length!==parseInt(m[2],10)||Math.abs(lpa-atBrNum(m[3]))>0.02||Math.abs(lafyc-atBrNum(m[4]))>0.02)
+      warnings.push(`LP ${k}: li ${l.length} · ${brl(lpa)} · ${brl(lafyc)}; o Total LP diz ${m[2]} · ${brl(atBrNum(m[3]))} · ${brl(atBrNum(m[4]))}.`); }
+  return {records,errors,warnings,totais,diverge,lido:{n,pa,afyc}};
 }
 /* campos que a colagem SOBRESCREVE. Tudo o que não está aqui é do Victor. */
 const EM_CAMPOS_RELATORIO=['apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo'];
 function emDiff(existing,recs){
-  const by={}; existing.forEach(e=>{ if(e.proposta) by[e.proposta]=e; });
-  const noRel={}; recs.forEach(r=>{ noRel[r.proposta]=true; });
+  const by={}; existing.forEach(e=>{ const k=emChave(e); if(k) by[k]=e; });
+  const noRel={}; recs.forEach(r=>{ noRel[emChave(r)]=true; });
   const updates=[], novos=[];
-  recs.forEach(rc=>{ const ex=by[rc.proposta];
+  recs.forEach(rc=>{ const ex=by[emChave(rc)]; if(!emChave(rc)) return;
     if(ex){ const ch=[]; EM_CAMPOS_RELATORIO.forEach(k=>{ const a=ex[k], b=rc[k]; if(b==null) return;
         if(typeof b==='number'){ if(Math.abs((a||0)-b)>0.005) ch.push([k,a,b]); } else if((a||'')!==(b||'')) ch.push([k,a,b]); });
       const reapareceu=!!ex.saiu_do_relatorio_em||!!ex.desfecho;
-      updates.push({proposta:rc.proposta,ex,rc,ch,reapareceu}); }
+      updates.push({chave:emChave(rc),ex,rc,ch,reapareceu}); }
     else novos.push(rc); });
-  const sumiram=existing.filter(e=>e.proposta&&emAtivo(e)&&!e.saiu_do_relatorio_em&&!noRel[e.proposta]);
+  const sumiram=existing.filter(e=>emChave(e)&&emAtivo(e)&&!e.saiu_do_relatorio_em&&!noRel[emChave(e)]);
   return {updates,novos,sumiram};
 }
 /* ── camada de dados (igual ao at*) ── */
 async function emRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ EM_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
-function emRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
+function emRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
 function emRecToRow(r){ const row={ lp_email:EM_EMAIL }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
 async function emCarregar(){
   EM_REMOTE=await emRemoteOn();
@@ -7119,10 +7121,10 @@ async function emCarregar(){
   try{ const raw=localStorage.getItem(EM_CHAVE); if(raw){ const o=JSON.parse(raw); EM.itens=Array.isArray(o.itens)?o.itens:[]; EM.carregadoEm=o.carregadoEm||null; } }catch(e){ console.warn('EM load local',e); }
 }
 function emSalvarLocal(){ try{ localStorage.setItem(EM_CHAVE,JSON.stringify(EM)); }catch(e){} }
-async function emUpsertRemoto(recs){ if(!EM_REMOTE||!sb||!recs.length) return; const rows=recs.filter(r=>r.proposta).map(emRecToRow); if(!rows.length) return;
-  const {data,error}=await sb.from(EM_TABLE).upsert(rows,{onConflict:'lp_email,proposta'}).select('id,proposta'); if(error) throw error;
-  (data||[]).forEach(d=>{ const r=EM.itens.find(x=>x.proposta===d.proposta); if(r) r.id=d.id; }); emSalvarLocal(); }
-async function emPatch(proposta,patch){ const r=EM.itens.find(x=>x.proposta===proposta); if(!r) return; Object.assign(r,patch); emSalvarLocal();
+async function emUpsertRemoto(recs){ if(!EM_REMOTE||!sb||!recs.length) return; const rows=recs.filter(r=>emChave(r)).map(emRecToRow); if(!rows.length) return;
+  const {data,error}=await sb.from(EM_TABLE).upsert(rows,{onConflict:'lp_email,chave'}).select('id,chave'); if(error) throw error;
+  (data||[]).forEach(d=>{ const r=EM.itens.find(x=>emChave(x)===d.chave); if(r) r.id=d.id; }); emSalvarLocal(); }
+async function emPatch(chave,patch){ const r=EM.itens.find(x=>emChave(x)===chave); if(!r) return; Object.assign(r,patch); emSalvarLocal();
   if(EM_REMOTE&&sb){ try{ await emUpsertRemoto([r]); }catch(e){ console.error('EM patch remoto',e); toast('Não consegui salvar no servidor',false); } } }
 
 /* ── JANELA DE COMPENSATION ──
@@ -7144,10 +7146,10 @@ function emJanela(hoje,itens){
 }
 
 /* ── modais ── */
-function emAbrir(proposta){ const r=EM.itens.find(x=>x.proposta===proposta); if(!r) return; const d=emDias(r);
+function emAbrir(chave){ const r=EM.itens.find(x=>emChave(x)===chave); if(!r) return; const d=emDias(r);
   const sumiu=!!r.saiu_do_relatorio_em&&!r.desfecho;
   atModal(`<h2>${esc(atTitleC(r.segurado)||('Proposta '+r.proposta))}</h2>
-   <div class="sub">Proposta <b>${esc(r.proposta)}</b>${r.apolice?' · Apólice '+esc(r.apolice):''} · LP ${esc(r.lp||'—')}${r.status_apolice?' · '+esc(r.status_apolice):''}</div>
+   <div class="sub">${r.proposta?'Proposta <b>'+esc(r.proposta)+'</b>':'<span class="badge b-amarelo">sem nº de proposta</span>'}${r.apolice?' · Apólice '+esc(r.apolice):''} · LP ${esc(r.lp||'—')}${r.status_apolice?' · '+esc(r.status_apolice):''}</div>
    <div style="font-size:13px;margin-top:8px">${r.resp_pagamento&&normKey(r.resp_pagamento)!==normKey(r.segurado)?'Resp. pagamento: <b>'+esc(atTitleC(r.resp_pagamento))+'</b> · ':''}${d!=null?'<b>'+d+' dias</b> pendente':'—'} · assinada ${atFmtBR(r.dt_assinatura)} · contestação <b>${r.contestacao==='medica'?'médica':r.contestacao==='nao_medica'?'não médica':'—'}</b></div>
    <div style="font-size:13px;margin-top:4px">PA s/ IOF <b>${r.pa_sem_iof!=null?brl(r.pa_sem_iof):'—'}</b> · AFYC projetado <b style="color:var(--verde)">${r.afyc_projetado!=null?brl(r.afyc_projetado):'—'}</b></div>
    ${sumiu?`<div class="card" style="padding:10px 12px;margin-top:10px;background:var(--verm-bg)"><b>Saiu do relatório em ${esc(dataBR(String(r.saiu_do_relatorio_em).slice(0,10)))}.</b> O que aconteceu?
@@ -7176,17 +7178,17 @@ function emAbrir(proposta){ const r=EM.itens.find(x=>x.proposta===proposta); if(
    <div style="display:flex;gap:8px;margin-top:16px;align-items:center;flex-wrap:wrap">
      <button class="btn btn-s btn-mini" onclick="soNova({frente:'emissao',ref_emissao_id:'${esc(r.id||'')}',segurado:'${esc(r.segurado||'')}',apolice:'${esc(r.apolice||r.proposta||'')}',base_lp:'${esc(r.lp||'')}',contexto:'${esc((d!=null?d+' dias pendente':'')+(r.pendencia_descricao?' · '+r.pendencia_descricao:''))}'})">📨 Nova solicitação</button>
      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button>
-     <button class="btn btn-p" onclick="emSalvarFicha('${esc(r.proposta)}')">Salvar</button>
+     <button class="btn btn-p" onclick="emSalvarFicha('${esc(emChave(r))}')">Salvar</button>
    </div>`);
 }
-async function emSalvarFicha(proposta){
+async function emSalvarFicha(chave){
   const v=id=>{ const e=$('#'+id); return e?(e.value||'').trim():''; };
   const patch={ pendencia_descricao:v('em_pend')||null, status_tratativa:v('em_st')||null, bola_com:v('em_bola')||null,
     ultima_acao:v('em_ua')||null, ultima_acao_em:v('em_uae')||null, proxima_acao:v('em_pa')||null, proxima_acao_prazo:v('em_pap')||null,
     protocolo:v('em_prot')||null, observacao:v('em_obs')||null };
   const desf=$('#em_desf'); if(desf){ const o=desf.value; if(o==='emitida'||o==='cancelada'){ patch.desfecho=o; patch.desfecho_em=atHojeISO(); if(o==='emitida') patch.status_tratativa='resolvido'; }
     else if(o==='voltar'){ patch.saiu_do_relatorio_em=null; } }
-  await emPatch(proposta,patch); atClose(); render(); toast('Salvo',true);
+  await emPatch(chave,patch); atClose(); render(); toast('Salvo',true);
 }
 function emColarRelatorio(){ atModal(`<h2>📋 Colar relatório</h2>
    <div class="sub">Portal Prudential → <b>Ferramentas → Pendências → Underwriting e Emissão</b> → Tipo = <b>Propostas Pendentes</b> → Filtrar → Imprimir → selecione o texto do PDF e cole aqui. Eu confiro contra o <b>Total MFB</b>.</div>
@@ -7202,27 +7204,43 @@ function emProcessar(){ const txt=($('#em_txt')||{}).value||''; const err=$('#em
 }
 function emChLabel(c){ const map={apolice:'Apólice',segurado:'Segurado',resp_pagamento:'Resp.',status_apolice:'Status',contestacao:'Contestação',dias_pendentes:'Dias',dt_assinatura:'Assinatura',pa_sem_iof:'PA',afyc_projetado:'AFYC',lp:'LP',lp_nome_completo:'LP (nome)'};
   const f=(k,v)=>(k==='pa_sem_iof'||k==='afyc_projetado')?(v!=null?brl(v):'—'):k==='dt_assinatura'?atFmtBR(v):esc(v==null?'—':String(v)); return (map[c[0]]||c[0])+': <span style="color:var(--muted)">'+f(c[0],c[1])+'</span> → <b>'+f(c[0],c[2])+'</b>'; }
-function emPreview(p){ const d=emDiff(EM.itens,p.records); _emPend={updates:d.updates,novos:d.novos,sumiram:d.sumiram,recs:p.records,totais:p.totais};
+function emPreview(p){ const d=emDiff(EM.itens,p.records); _emPend={updates:d.updates,novos:d.novos,sumiram:d.sumiram,recs:p.records,totais:p.totais,p};
   const n=p.records.length, pa=p.records.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc=p.records.reduce((s,r)=>s+(r.afyc_projetado||0),0);
+  /* EMISSAO-FIX-IDENTIDADE: colagem que não bate com o PRÓPRIO rodapé do relatório é
+     colagem quebrada. Não grava por padrão; mostra os dois totais lado a lado e ele decide. */
+  if(p.diverge){ const T=p.totais, L=p.lido; const li=(a,b)=>`<td style="padding:6px 10px">${a}</td><td style="padding:6px 10px;font-weight:700">${b}</td>`;
+    atModal(`<h2>⛔ A colagem não bate com o rodapé do relatório</h2>
+      <div class="sub">Comparei o que li com a linha <b>Total MFB</b> do texto que você colou. Divergiu — normalmente é texto cortado ou coluna que embaralhou na seleção do PDF. <b>Não gravei nada.</b></div>
+      <table style="margin-top:10px;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--muted);font-size:11px;text-align:left"><th style="padding:6px 10px"></th><th style="padding:6px 10px">Li no texto</th><th style="padding:6px 10px">Total MFB</th></tr></thead><tbody>
+        <tr><td style="padding:6px 10px">Propostas</td>${li('<b>'+L.n+'</b>', T.n)}</tr>
+        <tr><td style="padding:6px 10px">PA s/ IOF</td>${li('<b>'+brl(L.pa)+'</b>', brl(T.pa))}</tr>
+        <tr><td style="padding:6px 10px">AFYC</td>${li('<b>'+brl(L.afyc)+'</b>', brl(T.afyc))}</tr></tbody></table>
+      ${p.warnings.slice(1).map(w=>`<div style="color:var(--amarelo);font-size:12px;margin-top:6px">⚠️ ${esc(w)}</div>`).join('')}
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-p" onclick="emColarRelatorio()">↩ Colar de novo</button><button class="btn btn-ghost" style="margin-left:auto" onclick="_emPend.forcado=true;emPreviewLista()">Sei o que estou fazendo — ver mesmo assim</button></div>`);
+    return; }
+  emPreviewLista(p);
+}
+function emPreviewLista(p){ p=p||(_emPend&&_emPend.p); if(!p||!_emPend) return; const d=_emPend; d.p=p;
+  const n=p.records.length, pa=p.lido?p.lido.pa:0, afyc=p.lido?p.lido.afyc:0;
   let h=`<h2>Propostas pendentes — confira antes de aplicar</h2>
     <div class="sub">Li <b>${n}</b> proposta(s) · PA <b>${brl(pa)}</b> · AFYC <b>${brl(afyc)}</b>${p.totais?(Math.abs(pa-p.totais.pa)<=0.02&&Math.abs(afyc-p.totais.afyc)<=0.02&&n===p.totais.n?' · <span class="badge b-verde">bate com o Total MFB</span>':' · <span class="badge b-verm">DIVERGE do Total MFB</span>'):' · <span class="badge b-cinza">sem linha Total MFB pra conferir</span>'}</div>`;
   p.warnings.forEach(w=>{ h+=`<div style="color:var(--amarelo);font-size:12px;margin-top:4px">⚠️ ${esc(w)}</div>`; });
   if(!d.updates.length&&!d.novos.length&&!d.sumiram.length) h+=`<div class="sub" style="margin-top:8px">Nada mudou — a lista já está igual ao relatório.</div>`;
   if(d.updates.length){ h+=`<div class="sub" style="margin-top:10px"><b>Atualizações (${d.updates.length})</b> — os campos que você preencheu ficam intactos</div>`;
-    d.updates.forEach(u=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px"><b>${esc(atTitleC(u.ex.segurado)||u.proposta)}</b> · ${esc(u.proposta)}${u.reapareceu?' · <span class="badge b-amarelo">reapareceu no relatório</span>':''}${u.ch.length?'<br>'+u.ch.map(emChLabel).join(' · '):' · <span style="color:var(--muted)">sem mudança nos dados do relatório</span>'}</div>`; }); }
+    d.updates.forEach(u=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px"><b>${esc(atTitleC(u.ex.segurado)||u.chave)}</b> · ${esc(u.chave)}${u.reapareceu?' · <span class="badge b-amarelo">reapareceu no relatório</span>':''}${u.ch.length?'<br>'+u.ch.map(emChLabel).join(' · '):' · <span style="color:var(--muted)">sem mudança nos dados do relatório</span>'}</div>`; }); }
   if(d.novos.length){ h+=`<div class="sub" style="margin-top:10px"><b>Novas (${d.novos.length})</b></div>`;
-    d.novos.forEach(x=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px"><b>${esc(x.segurado||'—')}</b> · ${esc(x.proposta)}${x.apolice?' / '+esc(x.apolice):''} · LP ${esc(x.lp||'?')} · ${x.dias_pendentes}d · AFYC ${brl(x.afyc_projetado||0)}</div>`; }); }
+    d.novos.forEach(x=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px"><b>${esc(x.segurado||'—')}</b> · ${esc(x.proposta||'(sem proposta)')}${x.apolice?' / '+esc(x.apolice):''} · LP ${esc(x.lp||'?')} · ${x.dias_pendentes}d · AFYC ${brl(x.afyc_projetado||0)}</div>`; }); }
   if(d.sumiram.length){ h+=`<div class="sub" style="margin-top:10px"><b>Saíram do relatório (${d.sumiram.length})</b> — não apago: vão pro card "Sumiram" até você dizer se emitiu ou cancelou</div>`;
-    d.sumiram.forEach(s=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px"><b>${esc(atTitleC(s.segurado)||s.proposta)}</b> · ${esc(s.proposta)} · AFYC ${brl(s.afyc_projetado||0)}</div>`; }); }
+    d.sumiram.forEach(s=>{ h+=`<div style="border:1px solid var(--linha);border-radius:8px;padding:7px 9px;margin:5px 0;font-size:12px"><b>${esc(atTitleC(s.segurado)||emChave(s))}</b> · ${esc(emChave(s))} · AFYC ${brl(s.afyc_projetado||0)}</div>`; }); }
   h+=`<div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="emAplicarUI()">Aplicar</button></div>`;
   atModal(h);
 }
 async function emAplicarUI(){ const p=_emPend; if(!p) return; const origem=atHojeISO(); const up=[];
-  p.updates.forEach(u=>{ const ex=EM.itens.find(x=>x.proposta===u.proposta); if(!ex) return; u.ch.forEach(c=>{ ex[c[0]]=c[2]; });
+  p.updates.forEach(u=>{ const ex=EM.itens.find(x=>emChave(x)===u.chave); if(!ex) return; u.ch.forEach(c=>{ ex[c[0]]=c[2]; });
     /* upsert por proposta: só EM_CAMPOS_RELATORIO mudam; o que é do Victor não é tocado aqui */
     ex.origem_relatorio=origem; ex.saiu_do_relatorio_em=null; if(u.reapareceu){ ex.desfecho=null; ex.desfecho_em=null; } up.push(ex); });
   p.novos.forEach(n=>{ const rec=Object.assign({id:null,pendencia_descricao:null,bola_com:null,status_tratativa:null,ultima_acao:null,ultima_acao_em:null,proxima_acao:null,proxima_acao_prazo:null,protocolo:null,observacao:null,saiu_do_relatorio_em:null,desfecho:null,desfecho_em:null},n,{origem_relatorio:origem}); EM.itens.push(rec); up.push(rec); });
-  p.sumiram.forEach(s=>{ const ex=EM.itens.find(x=>x.proposta===s.proposta); if(!ex) return; ex.saiu_do_relatorio_em=new Date().toISOString(); up.push(ex); });
+  p.sumiram.forEach(s=>{ const ex=EM.itens.find(x=>emChave(x)===emChave(s)); if(!ex) return; ex.saiu_do_relatorio_em=new Date().toISOString(); up.push(ex); });
   EM.carregadoEm=origem;
   impRegistrar('emissao', origem, {atualizadas:p.updates.length, novas:p.novos.length, sumiram:p.sumiram.length});
   emSalvarLocal(); let msg='';
@@ -7234,23 +7252,27 @@ async function emAplicarUI(){ const p=_emPend; if(!p) return; const origem=atHoj
 const EM_EXEMPLO_TXT=`Agência: Island
 MFB: Gustavo Melo Juca
 LP: DANIEL COSTA CAVALCANTI DE SOUZA CRUZ
-000739996E
-002237044
+000000001E
+900000001
 Ana Beatriz Exemplo Ana Beatriz Exemplo Pendente de Emissão Médica 16 17/08/2026 3.310,00 1.311,70
-000740012B
-002237101
+900000002
+000000002E
 Carlos Exemplo Silva Carlos Exemplo Silva Pendente de Emissão Não Médica 9 24/08/2026 3.313,40 1.311,71
 Total LP: DANIEL COSTA CAVALCANTI DE SOUZA CRUZ
 2            6.623,40    2.623,41
 LP: Gustavo Melo Juca
-000740233C
-002237310
+000000003C
 Empresa Exemplo LTDA Joana Exemplo Pendente de Emissão Não Médica 4 29/08/2026 5.712,60 2.316,40
 Total LP: Gustavo Melo Juca
 1            5.712,60    2.316,40
 Total MFB: Gustavo Melo Juca
 3            12.336,00   4.939,81`;
-function emExemplo(){ atClose(); const p=emParse(EM_EXEMPLO_TXT);
+function emExemplo(){ atClose();
+  /* EMISSAO-FIX-IDENTIDADE: o exemplo é pra provar a UI SEM login. Logado, ele desligava a
+     sincronização e a colagem real seguinte ficava só no aparelho — e a fixture usava
+     números reais. Agora: logado não carrega exemplo, e os números são inventados. */
+  if(EM_REMOTE){ toast('Você está logado: o exemplo só existe no modo local, pra não misturar com a base real',false); return; }
+  const p=emParse(EM_EXEMPLO_TXT);
   EM.itens=p.records.map(r=>Object.assign({id:'ex_'+r.proposta,pendencia_descricao:null,bola_com:null,status_tratativa:null,ultima_acao:null,ultima_acao_em:null,proxima_acao:null,proxima_acao_prazo:null,protocolo:null,observacao:null,saiu_do_relatorio_em:null,desfecho:null,desfecho_em:null,origem_relatorio:atHojeISO()},r));
   EM.carregadoEm=atHojeISO(); EM_REMOTE=false; emSalvarLocal();
   if(VIEW!=='lp-pendencias') irPara('lp-pendencias'); else render();
@@ -7337,9 +7359,9 @@ function viewLpPendencias(){
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
       <th style="padding:6px 8px">Dias</th><th>Proposta / Apólice</th><th>Segurado / Resp.</th><th>LP</th><th>Assinatura</th><th>AFYC</th><th>Contestação</th><th>Pendência</th><th>Bola com</th><th>Status</th></tr></thead><tbody>
     ${rows.length?rows.map(r=>{ const d=emDias(r,hoje)||0, fx=emFaixa(d);
-      return `<tr onclick="emAbrir('${esc(r.proposta)}')" style="cursor:pointer;border-top:1px solid var(--linha)${r.saiu_do_relatorio_em?';opacity:.75':''}">
+      return `<tr onclick="emAbrir('${esc(emChave(r))}')" style="cursor:pointer;border-top:1px solid var(--linha)${r.saiu_do_relatorio_em?';opacity:.75':''}">
         <td style="padding:8px"><span class="dias-tag ${fx==='critico'?'hoje':fx==='atencao'?'perto':'longe'}">${d}d</span>${boMudo(r)?' <span title="caso mudo: sem status ou sem próxima ação">🔇</span>':''}${r.saiu_do_relatorio_em?' <span class="badge b-roxo">sumiu</span>':''}</td>
-        <td><b>${esc(r.proposta)}</b>${r.apolice?`<br><span style="font-size:11px;color:var(--muted)">${esc(r.apolice)}</span>`:''}</td>
+        <td>${r.proposta?`<b>${esc(r.proposta)}</b>`:'<span class="badge b-amarelo" title="o relatório não trouxe o nº da proposta">sem proposta</span>'}${r.apolice?`<br><span style="font-size:11px;color:var(--muted)">apólice ${esc(r.apolice)}</span>`:''}</td>
         <td>${esc(atTitleC(r.segurado)||'—')}${r.resp_pagamento&&normKey(r.resp_pagamento)!==normKey(r.segurado)?`<br><span style="font-size:11px;color:var(--muted)">resp: ${esc(atTitleC(r.resp_pagamento))}</span>`:''}</td>
         <td style="font-size:12px">${esc(r.lp||'—')}</td>
         <td style="font-size:12px">${atFmtBR(r.dt_assinatura)}</td>
@@ -7352,8 +7374,8 @@ function viewLpPendencias(){
     </tbody></table></div>
     ${encerradas.length?`<div class="pg" style="font-size:15px;margin-top:22px">✓ Encerradas (${encerradas.length})</div>
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>
-    ${encerradas.slice().sort((a,b)=>(b.desfecho_em||'').localeCompare(a.desfecho_em||'')).map(r=>`<tr onclick="emAbrir('${esc(r.proposta)}')" style="cursor:pointer;border-top:1px solid var(--linha);opacity:.72">
-      <td style="padding:8px;font-weight:800;color:${r.desfecho==='emitida'?'var(--verde)':'var(--verm)'}">${r.desfecho==='emitida'?'✓ emitida':'✕ cancelada'}</td><td><b>${esc(r.proposta)}</b></td><td>${esc(atTitleC(r.segurado)||'—')}</td><td style="font-size:12px">${atFmtBR(r.desfecho_em)}</td><td style="font-weight:700">${r.afyc_projetado!=null?brl(r.afyc_projetado):'—'}</td></tr>`).join('')}
+    ${encerradas.slice().sort((a,b)=>(b.desfecho_em||'').localeCompare(a.desfecho_em||'')).map(r=>`<tr onclick="emAbrir('${esc(emChave(r))}')" style="cursor:pointer;border-top:1px solid var(--linha);opacity:.72">
+      <td style="padding:8px;font-weight:800;color:${r.desfecho==='emitida'?'var(--verde)':'var(--verm)'}">${r.desfecho==='emitida'?'✓ emitida':'✕ cancelada'}</td><td><b>${esc(r.proposta||r.apolice)}</b></td><td>${esc(atTitleC(r.segurado)||'—')}</td><td style="font-size:12px">${atFmtBR(r.desfecho_em)}</td><td style="font-weight:700">${r.afyc_projetado!=null?brl(r.afyc_projetado):'—'}</td></tr>`).join('')}
     </tbody></table></div>`:''}`;
 }
 
@@ -10108,7 +10130,21 @@ function lpSelfCheck(){
       ok('emissão: AFYC bate com o Total MFB', Math.abs(p.records.reduce((s,r)=>s+r.afyc_projetado,0)-4939.81)<0.01);
       ok('emissão: totais não divergem', p.warnings.length===0);
       ok('emissão: LP vem do bloco LP:', p.records[0].lp==='Daniel'&&p.records[2].lp==='Gustavo');
-      ok('emissão: apólice separada da proposta', p.records[0].proposta==='000739996E'&&p.records[0].apolice==='002237044');
+      ok('emissão: apólice separada da proposta', p.records[0].proposta==='000000001E'&&p.records[0].apolice==='900000001');
+      ok('emissão: apólice ANTES da proposta também pareia', p.records[1].proposta==='000000002E'&&p.records[1].apolice==='900000002');
+      ok('emissão: só proposta → apólice null, nunca a proposta no campo da apólice', p.records[2].proposta==='000000003C'&&p.records[2].apolice===null);
+      { const q=emParse('LP: Gustavo Melo Juca\n900000009\nFulano Teste Fulano Teste Pendente de Emissão Não Médica 2 01/09/2026 100,00 40,00\n');
+        ok('emissão: só apólice → proposta null e chave = apólice', q.records.length===1&&q.records[0].proposta===null&&q.records[0].apolice==='900000009'&&emChave(q.records[0])==='900000009'); }
+      { const q=emParse(EM_EXEMPLO_TXT.replace('3            12.336,00   4.939,81','3            12.000,00   4.939,81'));
+        ok('emissão: divergência do Total MFB é sinalizada como bloqueante', q.diverge===true); }
+      /* IDEMPOTÊNCIA ponta a ponta (critério de aceite nº 2): cola → preenche à mão → cola de novo */
+      { const base=[]; const d1=emDiff(base,p.records); d1.novos.forEach(n=>base.push(Object.assign({bola_com:null,proxima_acao:null,saiu_do_relatorio_em:null,desfecho:null},n)));
+        base[0].bola_com='lm'; base[0].proxima_acao='cobrar LM';
+        const d2=emDiff(base,emParse(EM_EXEMPLO_TXT).records);
+        const tot=l=>[l.length, l.reduce((s,r)=>s+r.pa_sem_iof,0).toFixed(2), l.reduce((s,r)=>s+r.afyc_projetado,0).toFixed(2)].join('|');
+        ok('idempotência: 2ª colagem não cria nem some ninguém', d2.novos.length===0&&d2.sumiram.length===0&&d2.updates.length===3&&d2.updates.every(u=>u.ch.length===0));
+        ok('idempotência: totais idênticos após a 2ª colagem', tot(base)==='3|12336.00|4939.81');
+        ok('idempotência: campos manuais sobrevivem', base[0].bola_com==='lm'&&base[0].proxima_acao==='cobrar LM'); }
       ok('emissão: contestação normalizada', p.records[0].contestacao==='medica'&&p.records[1].contestacao==='nao_medica');
       ok('emissão: resp = segurado quando repetido', p.records[0].resp_pagamento===p.records[0].segurado&&!p.records[2].resp_pagamento);
       ok('emissão: recolar o mesmo relatório não cria nada', (()=>{ const d=emDiff(p.records.map(r=>Object.assign({pendencia_descricao:'x'},r)),p.records); return d.novos.length===0&&d.sumiram.length===0&&d.updates.every(u=>u.ch.length===0); })());
