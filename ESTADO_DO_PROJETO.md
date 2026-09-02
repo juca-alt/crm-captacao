@@ -4,6 +4,51 @@
 
 ---
 
+## 📸 Snapshot — 01/09/2026, noite · **v0.31.0 → v0.35.1** (5 entregas, sozinho)
+
+**Estado em 30 s:** ✅ **NO AR** — `main` = `cbce796`, `vendas.html` **v0.35.1**, `revisao-protecao.html` com o PD tarifado como PI. Ele foi dormir e pediu para eu seguir sozinho. Tudo abaixo subiu conferido pelo conteúdo servido.
+
+### 1 · v0.32.0 — o Telephone Approach soma LIGAÇÕES, não pessoas
+
+Item do estudo do LP Business, e era literal. "Ligações" era a soma de `taTentativas` — contador vitalício, **sem data** — e "Sucesso" era quantos contatos estão *hoje* com esse status. Dois significados no mesmo cartão.
+
+Agora **disquei · falei · agendei**, com recorte (hoje/7/30/sempre) e os desfechos do catálogo. Nenhum campo novo: cada resultado registrado já virava interação com dia e desfecho; faltava somar as **interações**. As duas taxas ficam separadas de propósito — `atendimento = falei/disquei` mede a lista e a hora; `agendamento = agendei/falei` mede a conversa. Numa taxa só, uma esconde a outra.
+
+### 2 · v0.33.0 — reunião: agendado × realizado por etapa
+
+O funil conta etapa, o TA conta ligação, e no meio ficava a reunião. **Marquei / aconteceu / sem desfecho**, taxa de comparecimento e a quebra **por etapa**.
+
+**Regra da conta:** `remarcada` **não entra no denominador** — a reunião mudou de data, não falhou, e a nova será contada na vez dela. Falta e cancelamento entram. Uma linha de dado nova, só uma: `t.etapaDe`, senão a quebra por etapa daria o mérito à etapa errada (a que a própria reunião fez avançar).
+
+### 3 · v0.34.0 — diário dos relatórios colados
+
+O app guardava só `AT.carregadoEm`. A Lista de Atraso e a Substituição agora abrem com uma faixa: *"Dado do relatório de 28/08 · colado há 4 dias · 12 atualizadas, 3 novas, 1 sumiu"* — âmbar passando de 14 dias, com o histórico completo num clique. Poda nos últimos 24 **por tipo**.
+
+### 4 · v0.35.0 — o card diz O QUE se vende
+
+Com uma pessoa tendo várias oportunidades (o caso das duas do Rogério), o nome repetido não distingue nada. Precedência: **título escrito > simulação ATIVADA > nada**. Simulação apenas "Apresentada" não vira título.
+
+### 5 · v0.35.1 — o atraso é a palavra da seguradora
+
+O card já avisava quando o vencimento era *estimado*; o caso positivo ficava mudo. Agora: *"✓ atraso conforme a seguradora · relatório de 29/08"*.
+
+### Revisão de Proteção · PD tarifado como PI (`b986544`)
+
+PD não existe no catálogo local e a linha caía na tarifa da origem — mostrando um preço que **o formulário não aceita**. A página 3 do DOC0013133 não tem campo PD, e a Invalidez migra como PI. Agora tarifa como PI e diz que trocou: **R$ 49,42 na origem → R$ 64,25 como PI**. Os 30% são o *"PI encarece"* do playbook.
+
+### O que a verificação pegou antes do deploy
+
+- `const _r` colidiu com um `_r` existente no `lpSelfCheck` → **SyntaxError que matava o boot**.
+- **Plural em português outra vez** (#40): `'aconteceu'+'ram'` = *"aconteceuram"*.
+- **Invariante com data fixa** passaria hoje e quebraria amanhã → reescrito com datas relativas.
+- **`colado há -1 dias`**: `toISOString()` é UTC e às 21h no Brasil já é o dia seguinte lá.
+- WhatsApp contado **duas vezes** no funil da ligação.
+- O guarda de campo morto achou **9 campos na gaveta** que as varreduras anteriores nunca cobriram (só passavam pelas views).
+
+**+32 invariantes** somando as cinco entregas. `lpSelfCheck`, `funSelfCheck` e `selfTest` em 0 falhas; zero campo morto no funil, na ficha e nas 25 views; sem rolagem lateral a 375; console limpo conferido em aba nova.
+
+---
+
 ## 📸 Snapshot — 01/09/2026, tarde · **v0.31.0** — o Início
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `ca3de78`, `vendas.html` **v0.31.0**. O pedido era cosmético ("atualiza esses gráficos, bota tópicos encolhíveis"); o achado não era.
