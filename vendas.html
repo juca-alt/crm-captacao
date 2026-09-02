@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.41.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.41.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1020,7 +1020,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.41.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.41.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1042,7 +1042,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.41.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.41.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -6813,7 +6813,10 @@ function viewLpAtrasos(){
       <button class="btn btn-p" onclick="atColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s" onclick="atNovo()" style="margin-left:8px">＋ Adicionar</button>
       <button class="btn btn-ghost" onclick="atExemplo()" style="margin-left:8px">Ver exemplo</button></div>`; return; }
-  const ativos=AT.itens.filter(r=>!r.resolvido_em);
+  const todosAtivos=AT.itens.filter(r=>!r.resolvido_em);
+  /* CARDS-SEGUEM-FILTRO (02/09): igual à emissão — cards seguem LP e busca; lentes ficam de fora */
+  const ativos=todosAtivos.filter(r=>atRecorte(r));
+  const recorteOn=!!(FAT.lp||FAT.q);
   const totV=ativos.reduce((s,r)=>s+(r.premio||0),0);
   const crit=ativos.filter(r=>(atDiasAtraso(r.vencido_em,hoje)||0)>=50); const critV=crit.reduce((s,r)=>s+(r.premio||0),0);
   const semTL=ativos.filter(r=>atDerivarStatus(r,hoje)===AT_STATUS.SEM);
@@ -6829,7 +6832,7 @@ function viewLpAtrasos(){
   const motivosOrfaos=[...new Set(semScript.map(r=>String(r.motivo_recusa||'').trim()).filter(Boolean))];
   const naoReconhecidas=semScript.length-semMotivo;
   const sumiu=ativos.filter(r=>r.status===AT_STATUS.SUMIU).length;
-  const lps=['Daniel','Gustavo','Rebeca'].map(k=>{ const l=ativos.filter(r=>r.lp_servico===k); return {k,n:l.length,v:l.reduce((s,r)=>s+(r.premio||0),0)}; });
+  const lps=['Daniel','Gustavo','Rebeca'].map(k=>{ const l=todosAtivos.filter(r=>r.lp_servico===k&&atRecorte(r,true)); return {k,n:l.length,v:l.reduce((s,r)=>s+(r.premio||0),0)}; });
   const rows=atFiltrados(); const resolvidos=AT.itens.filter(r=>r.resolvido_em);
   const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   /* Mesma ideia da lente do funil: o número que pede ação vira o caminho até
@@ -6845,7 +6848,7 @@ function viewLpAtrasos(){
     <div class="sub">${AT.carregadoEm?'Último relatório: '+atFmtBR(AT.carregadoEm)+' · ':''}${AT_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias recalculam pela data de hoje.</div>
     ${delegFaixa()}${impFaixa('atraso','relatório de atraso')}
     <div class="kpis" style="margin-top:10px">
-      ${kpi('💰 Prêmio em risco',brl(totV),ativos.length+' apólice'+(ativos.length===1?'':'s')+(critV?' · '+brl(critV)+' crítico':''))}
+      ${kpi('💰 Prêmio em risco'+(recorteOn?' · filtrado':''),brl(totV),ativos.length+' apólice'+(ativos.length===1?'':'s')+(critV?' · '+brl(critV)+' crítico':'')+(recorteOn?' · de '+todosAtivos.length:''))}
       ${kpi('Total em atraso',ativos.length,brl(totV))}
       ${kpiLente(FAT.faixa==='50',"FAT.faixa=FAT.faixa==='50'?'':'50';viewLpAtrasos()",'Críticas ≥50d',crit.length,brl(critV))}
       ${kpiLente(FAT.status===AT_STATUS.SEM,"FAT.status=FAT.status==='"+"Sem tratativa"+"'?'':'"+"Sem tratativa"+"';viewLpAtrasos()",'Sem tratativa',semT,brl(semTV)+' parado')}
@@ -6968,6 +6971,12 @@ function atExportar(){
   toast(`${l.length} ${l.length===1?'apólice exportada':'apólices exportadas'} · ${brl(tot)}`,true);
 }
 window.atExportar=atExportar;
+function atRecorte(r,semLp){
+  if(!semLp&&FAT.lp&&r.lp_servico!==FAT.lp) return false;
+  if(FAT.q){ const q=normKey(FAT.q); const seg=normKey(r.segurado), resp=normKey(r.resp_pagto), ap=String(r.apolice||''), qn=FAT.q.replace(/\D/g,'');
+    const porNome=(FAT.qcampo==='resp')?resp.indexOf(q)>=0:seg.indexOf(q)>=0; if(!(porNome||!!(qn&&ap.indexOf(qn)>=0))) return false; }
+  return true;
+}
 function atFiltrados(){ const hoje=atHojeLocal();
   return AT.itens.filter(r=>!r.resolvido_em).filter(r=>{
     if(FAT.lp&&r.lp_servico!==FAT.lp) return false;
@@ -7114,6 +7123,7 @@ function emDiff(existing,recs){
   const updates=[], novos=[];
   recs.forEach(rc=>{ const ex=by[emChave(rc)]; if(!emChave(rc)) return;
     if(ex){ const ch=[]; EM_CAMPOS_RELATORIO.forEach(k=>{ const a=ex[k], b=rc[k]; if(b==null) return;
+        if((k==='segurado'||k==='resp_pagamento')&&ex.nomes_corrigidos) return;   /* nome corrigido à mão vence o relatório */
         if(typeof b==='number'){ if(Math.abs((a||0)-b)>0.005) ch.push([k,a,b]); } else if((a||'')!==(b||'')) ch.push([k,a,b]); });
       const reapareceu=!!ex.saiu_do_relatorio_em||!!ex.desfecho;
       updates.push({chave:emChave(rc),ex,rc,ch,reapareceu}); }
@@ -7124,7 +7134,7 @@ function emDiff(existing,recs){
 /* ── camada de dados (igual ao at*) ── */
 async function emRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ EM_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
 function emRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
-function emRecToRow(r){ const row={ lp_email:EM_EMAIL }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
+function emRecToRow(r){ const row={ lp_email:EM_EMAIL }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio','nomes_corrigidos'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
 async function emCarregar(){
   EM_REMOTE=await emRemoteOn();
   if(EM_REMOTE){ try{ const {data,error}=await sb.from(EM_TABLE).select('*'); if(error) throw error;
@@ -7187,6 +7197,13 @@ function emAbrir(chave){ const r=EM.itens.find(x=>emChave(x)===chave); if(!r) re
    </div>
    <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">Observação</label>
    <textarea id="em_obs" rows="2" ${boSelectVivo()} style="width:100%;margin-top:3px">${esc(r.observacao||'')}</textarea>
+   <!-- quando segurado ≠ responsável, o PDF cola os dois nomes sem separador e o parser
+        não tem como cortar (mesmo limite do atraso) → corrigível aqui, e a colagem seguinte
+        NÃO sobrescreve nome já corrigido à mão (só preenche vazio). -->
+   <details style="margin-top:12px"><summary style="font-size:12px;color:var(--muted);cursor:pointer">✏️ Corrigir nomes (segurado · responsável pelo pagamento)</summary>
+     <label style="display:block;font-size:11px;color:var(--muted);margin-top:8px">Segurado</label><input id="em_seg" ${boSelectVivo()} value="${esc(atTitleC(r.segurado||''))}" style="width:100%">
+     <label style="display:block;font-size:11px;color:var(--muted);margin-top:6px">Responsável pelo pagamento (se ≠ do segurado)</label><input id="em_resp" ${boSelectVivo()} value="${esc(atTitleC(r.resp_pagamento||''))}" style="width:100%">
+   </details>
    <div style="display:flex;gap:8px;margin-top:16px;align-items:center;flex-wrap:wrap">
      <button class="btn btn-s btn-mini" onclick="soNova({frente:'emissao',ref_emissao_id:'${esc(r.id||'')}',segurado:'${esc(r.segurado||'')}',apolice:'${esc(r.apolice||r.proposta||'')}',base_lp:'${esc(r.lp||'')}',contexto:'${esc((d!=null?d+' dias pendente':'')+(r.pendencia_descricao?' · '+r.pendencia_descricao:''))}'})">📨 Nova solicitação</button>
      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button>
@@ -7198,6 +7215,7 @@ async function emSalvarFicha(chave){
   const patch={ pendencia_descricao:v('em_pend')||null, status_tratativa:v('em_st')||null, bola_com:v('em_bola')||null,
     ultima_acao:v('em_ua')||null, ultima_acao_em:v('em_uae')||null, proxima_acao:v('em_pa')||null, proxima_acao_prazo:v('em_pap')||null,
     protocolo:v('em_prot')||null, observacao:v('em_obs')||null };
+  if(v('em_seg')) patch.segurado=v('em_seg'); patch.resp_pagamento=v('em_resp')||null; patch.nomes_corrigidos=!!(v('em_seg')||v('em_resp'));
   const desf=$('#em_desf'); if(desf){ const o=desf.value; if(o==='emitida'||o==='cancelada'){ patch.desfecho=o; patch.desfecho_em=atHojeISO(); if(o==='emitida') patch.status_tratativa='resolvido'; }
     else if(o==='voltar'){ patch.saiu_do_relatorio_em=null; } }
   await emPatch(chave,patch); atClose(); render(); toast('Salvo',true);
@@ -7299,6 +7317,13 @@ function emExemplo(){ atClose();
   if(VIEW!=='lp-pendencias') irPara('lp-pendencias'); else render();
   toast('Dados de exemplo carregados (só neste aparelho)',true);
 }
+/* recorte dos CARDS: lp + contestação + busca (semLp=true ignora o LP, pra quebra por LP) */
+function emRecorte(r,semLp){
+  if(!semLp&&FEM.lp&&r.lp!==FEM.lp) return false;
+  if(FEM.contest&&r.contestacao!==FEM.contest) return false;
+  if(FEM.q){ const q=normKey(FEM.q), qn=FEM.q.replace(/\D/g,''); const hit=normKey(r.segurado).indexOf(q)>=0||normKey(r.resp_pagamento).indexOf(q)>=0||!!(qn&&(String(r.proposta||'').indexOf(qn)>=0||String(r.apolice||'').indexOf(qn)>=0)); if(!hit) return false; }
+  return true;
+}
 function emFiltrados(){ const hoje=atHojeLocal();
   return EM.itens.filter(emAtivo).filter(r=>{
     if(FEM.lp&&r.lp!==FEM.lp) return false;
@@ -7331,15 +7356,21 @@ function viewLpPendencias(){
     <div class="card" style="text-align:center;padding:34px">Nenhuma proposta ainda. Cole o relatório de Propostas Pendentes pra montar a lista.<br><br>
       <button class="btn btn-p" onclick="emColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-ghost" onclick="emExemplo()" style="margin-left:8px">Ver exemplo</button></div>`; return; }
-  const ativos=EM.itens.filter(emAtivo);
+  const todosAtivos=EM.itens.filter(emAtivo);
+  /* CARDS-SEGUEM-FILTRO (02/09): ele filtrou LP Gustavo e os cards continuaram
+     somando a unidade inteira. Agora os cards seguem LP, contestação e busca;
+     as LENTES (faixa, status, mudos) ficam de fora, senão o card viraria espelho
+     de si mesmo. A quebra por LP continua geral, pra servir de comparação. */
+  const ativos=todosAtivos.filter(r=>emRecorte(r));
   const afyc=l=>l.reduce((s,r)=>s+(r.afyc_projetado||0),0);
   const totA=afyc(ativos), totPA=ativos.reduce((s,r)=>s+(r.pa_sem_iof||0),0);
   const crit=ativos.filter(r=>emFaixa(emDias(r,hoje))==='critico');
   const semT=ativos.filter(r=>!r.status_tratativa||r.status_tratativa==='sem_tratativa');
   const sumiram=ativos.filter(r=>r.saiu_do_relatorio_em);
   const mudos=ativos.filter(boMudo);
-  const lps=['Gustavo','Daniel','Rebeca'].map(k=>{ const l=ativos.filter(r=>r.lp===k); return {k,n:l.length,v:afyc(l)}; });
+  const lps=['Gustavo','Daniel','Rebeca'].map(k=>{ const l=todosAtivos.filter(r=>r.lp===k&&emRecorte(r,true)); return {k,n:l.length,v:afyc(l)}; });
   const jan=emJanela(hoje,ativos);
+  const recorteOn=!!(FEM.lp||FEM.contest||FEM.q);
   const rows=emFiltrados(); const encerradas=EM.itens.filter(r=>!emAtivo(r));
   const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   const kpiLente=(on,liga,l,n,sb)=>`<button class="kpi kpi-lente${on?' on':''}" onclick="${liga}" title="${on?'Clique para ver todas de novo':'Clique para ver só estas na lista'}"><div class="lbl">${l}</div><div class="num">${n}</div><div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estas':sb}</div></button>`;
@@ -7349,7 +7380,7 @@ function viewLpPendencias(){
     <div class="sub">${EM.carregadoEm?'Último relatório: '+atFmtBR(EM.carregadoEm)+' · ':''}${EM_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias envelhecem pela data do relatório.</div>
     ${delegFaixa()}${impFaixa('emissao','relatório de propostas pendentes')}
     <div class="kpis" style="margin-top:10px">
-      ${kpi('💰 AFYC em risco',brl(totA),ativos.length+' proposta'+(ativos.length===1?'':'s')+' · PA '+brl(totPA))}
+      ${kpi('💰 AFYC em risco'+(recorteOn?' · filtrado':''),brl(totA),ativos.length+' proposta'+(ativos.length===1?'':'s')+' · PA '+brl(totPA)+(recorteOn?' · de '+todosAtivos.length:''))}
       ${kpi('Total pendente',ativos.length,brl(totA))}
       ${kpiLente(FEM.faixa==='critico',"FEM.faixa=FEM.faixa==='critico'?'':'critico';viewLpPendencias()",'Críticas ≥'+EM_FAIXAS.critico+'d',crit.length,brl(afyc(crit)))}
       ${kpiLente(FEM.status==='sem_tratativa',"FEM.status=FEM.status==='sem_tratativa'?'':'sem_tratativa';viewLpPendencias()",'Sem tratativa',semT.length,brl(afyc(semT))+' parado')}
@@ -10511,6 +10542,7 @@ function lpSelfCheck(){
       ok('compensation: dia 21 = janela fechada, próxima 20/10', !j2.aberta&&j2.proxima==='2026-10-20'&&j2.perderam.length===1);
       const tx=soTexto({segurado:'Fulano Teste',apolice:'002237044',base_lp:'Daniel',acao:'executar',tipo:'postecipar',contexto:'16 dias',prazo:'2026-09-05',contato_com:'lm'});
       ok('solicitação: formato obrigatório', /^SEGURADO: Fulano Teste\nAPÓLICE: 002237044   ·   BASE: Daniel\nAÇÃO: EXECUTAR\nO QUÊ: postecipar\nCONTEXTO: 16 dias\nPRAZO: 05\/09\/2026\nCONTATO: LM$/.test(tx));
+      { const sv={...FEM}; FEM.lp='Rebeca'; FEM.contest=''; FEM.q=''; const p2=emParse(EM_EXEMPLO_TXT).records; ok('cards seguem o filtro de LP', p2.filter(r=>emRecorte(r)).length===0&&p2.filter(r=>emRecorte(r,true)).length===3); Object.assign(FEM,sv); }
       ok('status: dicionário tem 8 chaves', ST_DIC.length===8&&stDic('Não contatar').chave==='nao_contatar');
       ok('caso mudo: sem próxima ação é mudo', boMudo({status_tratativa:'aguardando_lm'})&&!boMudo({status_tratativa:'aguardando_lm',proxima_acao:'cobrar'}));
     }
