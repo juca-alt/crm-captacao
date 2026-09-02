@@ -5957,6 +5957,8 @@ function msTarifar(fam, cod, classeTxt, capital, prazoForcado){
           prazo:pz.prazo, prazoCaiu:!!pz.caiu, prazoPedido:pz.pedido, classe:quer,
           capAjustado: Math.abs((r.cs||capital)-capital)>0.5 ? r.cs : null};
 }
+/* Coberturas sem tarifa local que TÊM equivalente aceito pelo formulário. */
+const MS_EQUIV={PD:'PI'};
 /* fam da cobertura: o espelho nao carimba, entao vem do NOME (tabela do app) */
 function msFamDe(c){ return (c && c.fam) || (typeof famDeNome==='function' ? famDeNome(String((c&&c.nome)||'')) : null); }
 /* PREMIO NOVO de uma opcional, na ordem de confianca */
@@ -5964,8 +5966,21 @@ function msPreNovoInfo(c, cs){
   if(!(cs>0)) return {liq:0, fonte:'zero'};
   const t=state.ms.taxaNv[c.id];
   if(t!=null && isFinite(t) && t>0 && c.cap>0) return {liq: cs*(t/c.cap), fonte:'prévia'};
-  const m=msTarifar(msFamDe(c), c.cod, c.classe, cs);
+  const fam=msFamDe(c);
+  const m=msTarifar(fam, c.cod, c.classe, cs);
   if(m && m.liq!=null) return {liq:m.liq, fonte:'motor', selo:m.selo, code:m.code, prazoCaiu:m.prazoCaiu, prazoPedido:m.prazoPedido, capAjustado:m.capAjustado};
+  /* EQUIVALENTE DE FORMULÁRIO. Não é chute: a página 3 do DOC0013133 não tem
+     campo PD, então a Invalidez Acidental migra como PI (Total e Parcial) — e
+     PI encarece. Tarifar como PI é o preço que o cliente vai PAGAR de verdade;
+     cair na tarifa da origem mostraria um preço que o formulário não aceita.
+     A tela diz que trocou, para a conversa com o Ponto de Apoio continuar viva
+     (pendência aberta: a MS aceita manter PD como PD?). */
+  const eq=MS_EQUIV[String(fam||'')];
+  if(eq){
+    const me=msTarifar(eq, c.cod, c.classe, cs);
+    if(me && me.liq!=null) return {liq:me.liq, fonte:'motor', equiv:eq, selo:me.selo, code:me.code,
+                                   prazoCaiu:me.prazoCaiu, prazoPedido:me.prazoPedido, capAjustado:me.capAjustado};
+  }
   /* cobertura NOVA nao tem tarifa de origem pra herdar: melhor dizer que nao
      sabe do que devolver 0,00 e o total mentir. */
   if(!(c.cap>0)) return {liq:0, fonte:'sem', motivo:(m&&m.erro)||''};
@@ -6097,7 +6112,8 @@ function msFonteTag(i){
   if(!i || i.fonte==='prévia' || i.fonte==='zero') return '';
   if(i.fonte==='motor'){
     const ok = i.selo==='validado';
-    return ` <span class="mini" title="${esc((i.code||'')+(i.selo?' · selo '+i.selo:'')+(i.prazoCaiu?' · prazo '+i.prazoPedido+'→'+i.prazo:''))}" style="color:${ok?'var(--good-text)':'var(--laranja)'}">motor${ok?'':' · '+esc(i.selo||'')}</span>`;
+    const eq = i.equiv ? ' · como '+esc(i.equiv) : '';
+    return ` <span class="mini" title="${esc((i.code||'')+(i.selo?' · selo '+i.selo:'')+(i.prazoCaiu?' · prazo '+i.prazoPedido+'→'+i.prazo:'')+(i.equiv?' · tarifado como '+i.equiv+', que é o que o DOC0013133 aceita':''))}" style="color:${i.equiv?'var(--laranja)':ok?'var(--good-text)':'var(--laranja)'}">motor${eq}${(ok||i.equiv)?'':' · '+esc(i.selo||'')}</span>`;
   }
   if(i.fonte==='origem') return ` <span class="mini" style="color:var(--crit)" title="${esc(i.motivo||'')}">tarifa da origem · subestima</span>`;
   return '';
@@ -6186,7 +6202,11 @@ function msRenderMig(R){
   const dgAum=R.linhas.filter(l=>/^DD/.test(String(l.c.cod||'')) && l.csNova>l.migCS+0.5);
   if(dgAum.length) av.push(['a-crit','!',`<b>Não é permitido aumentar capital de Doenças Graves na MS</b> (${esc(dgAum.map(l=>l.c.cod).join(' · '))}). Migre igual ou menos — e Doenças Graves também não entra como cobertura nova, só por transferência. Por isso ela nem aparece na lista de acrescentar.`]);
   const pd=R.linhas.find(l=>/^PD/.test(String(l.c.cod||''))&&l.on);
-  if(pd) av.push(['a-warn','▲','A página 3 do DOC0013133 <b>não tem campo PD</b>. A Invalidez Acidental entra como <b>PI (Total e Parcial)</b>, o que encarece. <i>Conferir com o Ponto de Apoio se dá para manter PD.</i>']);
+  if(pd){
+    const comoPI = pd.preNvI && pd.preNvI.equiv==='PI';
+    const naOrigem = pd.migCS*msTaxa(pd.c);
+    av.push(['a-warn','▲',`A página 3 do DOC0013133 <b>não tem campo PD</b>, então a Invalidez Acidental entra como <b>PI (Total e Parcial)</b> — e PI encarece.${comoPI?` Por isso eu já tarifo essa linha <b>como PI</b>: ${msBRL(pd.preNv)}/mês contra ${msBRL(naOrigem)} que ela custa hoje na origem. É o preço que o formulário aceita.`:''} <i>Pendente com o Ponto de Apoio: a MS aceita manter PD como PD?</i>`]);
+  }
   if(R.nova>0&&R.nova<250) av.push(['a-crit','!',`A apólice nova precisa de prêmio mínimo de <b>R$ 250</b> (R$ 200 para cliente da base). Está em ${msBRL(R.nova)}.`]);
   $('msAvisos').innerHTML=av.map(a=>`<div class="aviso ${a[0]}"><span class="ic">${a[1]}</span><span>${a[2]}</span></div>`).join('');
   /* campo de capital alvo da 1ª cobertura com aumento possível */
