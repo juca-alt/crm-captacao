@@ -4,6 +4,27 @@
 
 ---
 
+## 📸 Snapshot — 02/09/2026, tarde · **v0.40.0 · Benefícios (regulação de sinistro)** — branch `beneficios-v1`, PR aberto, **aguarda OK dele pra merge**
+
+**Estado em 30 s:** terceiro módulo do BackOffice, `bf*` no `vendas.html`, espelhando at/em/so (cards, lentes, modal, campos de estado `bola_com`/`ultima_acao`/`proxima_acao`/`protocolo`). **Não tem "Colar relatório"**: o caso é aberto à mão e vive até o pagamento. Banco JÁ MIGRADO no playground (`supabase/migrations/backoffice_v1_beneficios.sql`: `beneficios` + `beneficio_documentos` + `beneficio_exigencias` + `beneficio_eventos`, RLS dono/delegado via `lp_donos_visiveis()`, filhas visíveis só quando o pai é). **O caso Diego foi semeado DIRETO no banco** (1 caso `em_exigencia`, 10 docs = 7 anexados + 3 pendentes, 3 exigências abertas de 18/08, 12 entradas no diário, próxima ação com prazo 02/09) — de propósito NÃO está em migration nem em fixture: dado de saúde + repo público. `lpSelfCheck` 0 falhas (+11 invariantes).
+
+### O que entrou
+- **Tela `beneficios`** (menu BackOffice → 🩹 Benefícios, contador no grupo): cards Casos abertos · Mais antigo · Exigências vencidas (lente) · 🔴 Parados há 3d+ (lente, `BF_PARADO_DIAS`, = sem evento novo no diário) · 🔇 Casos mudos (sem bola ou sem próxima ação) · quebra por LP. Lista SEGURADO · APÓLICE · EVENTO · PROTOCOLO · DIAS · SITUAÇÃO · BOLA · PRÓXIMA AÇÃO · PRAZO; filtros situação/LP/"só os parados"/busca.
+- **Ficha**: cabeçalho com protocolo em TEXTO (badge vermelho "sem protocolo" quando falta), dias aberto, exigências abertas há N dias; estado no topo sempre visível; 3 tópicos dobráveis (norte de UX) — 📎 Documentos (5 estados, dicas nos itens 4 e 10, obs. por item), 📋 Exigências (adicionar + situação), 🗒️ Diário (cronológico + registrar).
+- **A REGRA virou tela**: marcar `anexado` com exigência aberta e outro item ainda em aberto → confirmação em cima da ficha ("ainda tem N itens em aberto… Anexar mesmo assim?"); todo anexo grava `prazo: prazo reiniciado` no diário. Toda ação relevante (doc, exigência, protocolo, mudança de situação, solicitação) escreve no diário.
+- **Gerar solicitação**: registra em Solicitações (frente outro · benefício · EXECUTAR) e mostra o texto no formato obrigatório com PROTOCOLO + itens recebidos ainda não anexados + o que ainda falta.
+- "Ver exemplo" só sem login, nomes inventados, nada clínico.
+
+### Aceite (spec §8) — verificados no preview local com o fixture do mesmo formato do caso real
+1 ✅ protocolo em texto, 23 dias, 3 exigências há 15d, próxima ação com prazo — sem rolar (375 e 1280) · 2 ✅ 7 anexados / 3 pendentes · 3 ✅ aviso "2 itens em aberto" ao anexar · 4 ✅ diário em ordem · 5 ✅ texto com o protocolo · 6 ✅ parado = sem evento há ≥3d (invariante). **Falta ele abrir logado e ver o caso Diego real** (o preview local não tem a sessão dele).
+
+### Decisões tomadas sozinho
+- Seed do caso real fora do git (banco direto). `lp_email` do caso = juca@ (dono; o Victor vê pela delegação).
+- "Exigência ainda tem N itens" = documentos não anexados/não dispensados enquanto houver exigência aberta (o schema não liga doc ↔ exigência).
+- Nova exigência põe o caso em `em_exigencia`; última exigência fechada leva a `em_analise`.
+
+---
+
 ## 📸 Snapshot — 02/09/2026 · **v0.38.0 · Backoffice V1 (Victor)** — branch `backoffice-v1`, PR aberto, **aguarda OK dele pra merge**
 
 **Estado em 30 s:** a spec "Backoffice V1" (levantamento do papel do Victor) foi construída inteira, **espelhando o módulo Lista de Atraso** (mesma stack, mesmo Supabase por dono, mesmos cards/chips/modal). Banco JÁ MIGRADO no playground (6 migrations, todas `if not exists`, versionadas em `supabase/migrations/backoffice_v1_*.sql`). Front no `vendas.html` v0.38.0, verificado a 375 e 1280, base cheia e vazia, 0 campo morto, `lpSelfCheck` 0 falhas (+16 invariantes).
