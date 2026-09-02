@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.39.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.40.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -112,6 +112,9 @@
   .nc-avancar:focus-visible{outline:2px solid var(--azul);outline-offset:2px;opacity:1}
   .toast-undo{font:inherit;font-size:12px;font-weight:700;margin-left:10px;background:transparent;
     border:0;border-bottom:1px solid currentColor;color:inherit;cursor:pointer;padding:0}
+  .bf-sec summary::-webkit-details-marker{display:none}
+  .bf-sec .bf-caret{display:inline-block;transition:transform .15s}
+  .bf-sec[open] .bf-caret{transform:rotate(90deg)}
   .kpi-lente{font:inherit;text-align:left;cursor:pointer;transition:border-color .12s,box-shadow .12s,background .12s}
   .kpi-lente:hover{border-color:var(--azul);box-shadow:0 2px 8px rgba(37,99,235,.14)}
   .kpi-lente:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
@@ -977,6 +980,7 @@
         <button class="nav-btn sub sub2" data-view="lp-atrasos" onclick="irPara('lp-atrasos')"><span class="ic">⏰</span><span class="lbl">Lista de Atraso</span><span class="cnt" id="cnt-atrasos"></span></button>
         <button class="nav-btn sub sub2" data-view="lp-pendencias" onclick="irPara('lp-pendencias')"><span class="ic">📌</span><span class="lbl">Pendências de Emissão</span><span class="cnt" id="cnt-pendencias"></span></button>
         <button class="nav-btn sub sub2" data-view="solicitacoes" onclick="irPara('solicitacoes')"><span class="ic">📨</span><span class="lbl">Solicitações</span><span class="cnt" id="cnt-solicitacoes"></span></button>
+        <button class="nav-btn sub sub2" data-view="beneficios" onclick="irPara('beneficios')"><span class="ic">🩹</span><span class="lbl">Benefícios</span><span class="cnt" id="cnt-beneficios"></span></button>
         <button class="nav-btn sub sub2" data-view="lp-statust" onclick="irPara('lp-statust')"><span class="ic">🅣</span><span class="lbl">Status T</span><span class="cnt" id="cnt-statust"></span></button>
         <button class="nav-btn sub sub2" data-view="subst" onclick="irPara('subst')"><span class="ic">🔁</span><span class="lbl">Substituições</span></button>
       </div>
@@ -1015,7 +1019,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.39.2 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.40.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1037,7 +1041,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.39.2 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.40.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7506,6 +7510,320 @@ function viewSolicitacoes(){
 }
 window.soNova=soNova; window.emAbrir=emAbrir; window.emColarRelatorio=emColarRelatorio;
 
+/* ═══ Módulo 3 · BENEFÍCIOS (bf*) — regulação de sinistro ═══════════════════
+   Não nasce de relatório: o caso é aberto à mão quando o segurado avisa e vive
+   até o pagamento. Espelha at·em·so (cards, lentes, modal, campos de estado).
+   Tabelas: beneficios + beneficio_documentos + beneficio_exigencias +
+   beneficio_eventos (RLS por dono/delegado). DADO DE SAÚDE: nada de nome real
+   na fixture, nada de laudo no console. */
+const BF_TABLE='beneficios', BF_CHAVE='crmlp_beneficios_v1';
+let BF={itens:[]}; let BF_REMOTE=false, BF_EMAIL='';
+let FBF={q:'',sit:'',lp:'',parados:false,mudo:false,venc:false};
+const BF_PARADO_DIAS=3;   /* régua: caso sem evento novo há N dias */
+const BF_EVENTOS=[['quebra_ossos','Quebra de ossos'],['doenca_grave','Doença grave'],['invalidez','Invalidez'],['morte','Morte'],['outro','Outro']];
+const BF_SIT=[['montagem','Montagem'],['aberto','Aberto'],['em_exigencia','Em exigência'],['em_analise','Em análise'],['pago','Pago'],['negado','Negado'],['cancelado','Cancelado']];
+const BF_SIT_FIM=['pago','negado','cancelado'];
+const BF_BOLA=[['','—'],['segurado','Segurado'],['hospital','Hospital'],['assessoria','Assessoria (LM)'],['seguradora','Seguradora (CES)'],['nos','Nós']];
+const BF_DOC_EST=[['nao_se_aplica','Não se aplica'],['pendente','Pendente'],['solicitado','Solicitado'],['recebido','Recebido'],['anexado','Anexado']];
+const BF_EXIG_SIT=[['aberta','Aberta'],['respondida','Respondida'],['cumprida','Cumprida'],['inaplicavel','Inaplicável']];
+const BF_DIARIO_TIPOS=[['contato','Contato'],['documento','Documento'],['exigencia','Exigência'],['protocolo','Protocolo'],['prazo','Prazo'],['nota','Nota']];
+/* checklist padrão: 10 itens, nesta ordem (item 3 da spec). Dica só onde ela evita erro. */
+const BF_DOCS_PADRAO=[
+  {item:'Laudo ou resultado de exame do evento'},
+  {item:'Ficha de atendimento hospitalar/ambulatorial ou prontuário'},
+  {item:'Documento de identidade do segurado (CNH ou RG)'},
+  {item:'Comprovante de residência com validade de 6 meses', dica:'Aceitos: água, gás, luz, telefone fixo ou celular, TV a cabo, internet, comprovante de convênio médico, boleto ou demonstrativo de condomínio, última declaração de IR completa, notificação de multa de trânsito, fatura de cartão de crédito.'},
+  {item:'Dados bancários do segurado (declaração de conta ativa)'},
+  {item:'Carteirinha do plano de saúde'},
+  {item:'Imagens do evento ou da lesão'},
+  {item:'Declaração de próprio punho do segurado'},
+  {item:'CAT — se o acidente foi no local de trabalho'},
+  {item:'Aceite digital do segurado', dica:'Vai para o e-mail cadastrado na apólice — conferir o cadastro antes de abrir.'}
+];
+function bfDica(item){ const d=BF_DOCS_PADRAO.find(x=>x.item===item); return d&&d.dica||''; }
+function bfAtivo(r){ return BF_SIT_FIM.indexOf(r.situacao)<0; }
+function bfDiasAberto(r,hoje){ const base=r.data_abertura||r.data_aviso||(r.criado_em?String(r.criado_em).slice(0,10):null); if(!base) return null; return Math.max(0,Math.round(((hoje||atHojeLocal())-atParseISO(base))/864e5)); }
+function bfUltimoEventoISO(r){ return (r.eventos||[]).reduce((mx,e)=>(String(e.ocorrido_em||'')>mx?String(e.ocorrido_em):mx),'')||null; }
+/* parado = nenhum evento novo há BF_PARADO_DIAS ou mais. Sem evento nenhum, conta desde a criação. */
+function bfDiasParado(r,hoje){ const u=bfUltimoEventoISO(r)||r.criado_em; if(!u) return null; const d=atParseISO(String(u).slice(0,10)); if(!d) return null; return Math.max(0,Math.round(((hoje||atHojeLocal())-d)/864e5)); }
+function bfParado(r,hoje){ const d=bfDiasParado(r,hoje); return d==null||d>=BF_PARADO_DIAS; }
+/* mudo = mesmo card dos outros módulos: ninguém disse com quem está a bola nem o que vem depois */
+function bfMudo(r){ return !String(r.bola_com||'').trim()||!String(r.proxima_acao||'').trim(); }
+function bfExigAbertas(r){ return (r.exigencias||[]).filter(e=>e.situacao==='aberta'); }
+function bfExigVencidas(r,hojeISO){ hojeISO=hojeISO||atHojeISO(); return bfExigAbertas(r).filter(e=>e.prazo&&e.prazo<hojeISO); }
+function bfDocsOrdenados(r){ return (r.documentos||[]).slice().sort((a,b)=>(a.ordem||0)-(b.ordem||0)); }
+/* itens ainda em aberto pra uma exigência: tudo que não está anexado nem dispensado */
+function bfDocsEmAberto(r,exceto){ return bfDocsOrdenados(r).filter(d=>String(d.id)!==String(exceto)&&d.estado!=='anexado'&&d.estado!=='nao_se_aplica'); }
+function bfDocsRecebidosNaoAnexados(r){ return bfDocsOrdenados(r).filter(d=>d.estado==='recebido'); }
+function bfRot(opts,v){ return boRot(opts,v); }
+function bfProtocoloOk(r){ return /\d/.test(String(r.protocolo||'')); }
+
+/* ── persistência: 4 tabelas, juntadas no cliente por beneficio_id ── */
+async function bfRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ BF_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
+async function bfCarregar(){
+  BF_REMOTE=await bfRemoteOn();
+  if(BF_REMOTE){ try{
+    const [c,d,x,e]=await Promise.all([sb.from(BF_TABLE).select('*'),sb.from('beneficio_documentos').select('*'),sb.from('beneficio_exigencias').select('*'),sb.from('beneficio_eventos').select('*').order('ocorrido_em')]);
+    [c,d,x,e].forEach(r=>{ if(r.error) throw r.error; });
+    BF.itens=(c.data||[]).map(r=>{ const id=String(r.id); r.documentos=(d.data||[]).filter(q=>String(q.beneficio_id)===id); r.exigencias=(x.data||[]).filter(q=>String(q.beneficio_id)===id); r.eventos=(e.data||[]).filter(q=>String(q.beneficio_id)===id); r.valor_pago=r.valor_pago!=null?Number(r.valor_pago):null; return r; });
+    bfSalvarLocal(); return;
+  }catch(e){ console.warn('BF load remoto falhou → local',e); BF_REMOTE=false; } }
+  try{ const raw=localStorage.getItem(BF_CHAVE); if(raw){ const o=JSON.parse(raw); BF.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
+}
+function bfSalvarLocal(){ try{ localStorage.setItem(BF_CHAVE,JSON.stringify(BF)); }catch(e){} }
+function bfLocalId(id){ return !id||String(id).startsWith('loc_')||String(id).startsWith('ex_'); }
+function bfRowCaso(r){ const row={ lp_email:BF_EMAIL }; ['segurado','apolice','lp','tipo_evento','descricao_evento','data_evento','data_aviso','data_abertura','protocolo','situacao','bola_com','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','valor_pago','data_pagamento','observacao'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.apolice=r.apolice||''; row.tipo_evento=r.tipo_evento||'outro'; row.situacao=r.situacao||'montagem'; row.atualizado_em=new Date().toISOString(); if(!bfLocalId(r.id)) row.id=r.id; return row; }
+function bfRowFilho(tab,r,q){ const row={ beneficio_id:r.id }; const campos={ beneficio_documentos:['item','estado','solicitado_em','recebido_em','anexado_em','observacao','ordem'], beneficio_exigencias:['descricao','recebida_em','prazo','respondida_em','situacao','observacao'], beneficio_eventos:['ocorrido_em','autor','tipo','texto'] }[tab]; campos.forEach(k=>{ row[k]=(q[k]===''||q[k]===undefined)?null:q[k]; }); if(!bfLocalId(q.id)) row.id=q.id; return row; }
+function bfAcha(id){ return BF.itens.find(x=>String(x.id)===String(id)); }
+/* grava o caso (pai); se ainda era local, troca o id nos filhos também */
+async function bfGravarCaso(r){ const i=BF.itens.findIndex(x=>String(x.id)===String(r.id)); if(i>=0) BF.itens[i]=r; else BF.itens.unshift(r); bfSalvarLocal();
+  if(BF_REMOTE&&sb){ try{ const {data,error}=await sb.from(BF_TABLE).upsert([bfRowCaso(r)]).select('id'); if(error) throw error; if(data&&data[0]&&bfLocalId(r.id)){ r.id=data[0].id; ['documentos','exigencias','eventos'].forEach(k=>(r[k]||[]).forEach(q=>q.beneficio_id=r.id)); bfSalvarLocal(); } return true; }catch(e){ console.error('BF gravar caso',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
+  return true; }
+async function bfGravarFilho(tab,r,q){ bfSalvarLocal();
+  if(BF_REMOTE&&sb&&!bfLocalId(r.id)){ try{ const {data,error}=await sb.from(tab).upsert([bfRowFilho(tab,r,q)]).select('id'); if(error) throw error; if(data&&data[0]&&bfLocalId(q.id)){ q.id=data[0].id; bfSalvarLocal(); } return true; }catch(e){ console.error('BF gravar '+tab,e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
+  return true; }
+async function bfGravarFilhos(tab,r,lista){ bfSalvarLocal();
+  if(BF_REMOTE&&sb&&!bfLocalId(r.id)&&lista.length){ try{ const {data,error}=await sb.from(tab).upsert(lista.map(q=>bfRowFilho(tab,r,q))).select('id,ordem,item'); if(error) throw error; (data||[]).forEach(d=>{ const q=lista.find(x=>bfLocalId(x.id)&&x.item===d.item); if(q) q.id=d.id; }); bfSalvarLocal(); }catch(e){ console.error('BF gravar lote '+tab,e); toast('Salvo só neste aparelho (falha no servidor)',false); } } }
+/* o diário é o histórico que hoje mora no WhatsApp — toda ação relevante escreve nele */
+async function bfEvento(r,tipo,texto,quando){ const ev={ id:'loc_'+uid(), beneficio_id:r.id, ocorrido_em:quando||new Date().toISOString(), autor:soQuemSou(), tipo:tipo||'nota', texto:String(texto||'').trim() }; if(!ev.texto) return null; r.eventos=r.eventos||[]; r.eventos.push(ev); await bfGravarFilho('beneficio_eventos',r,ev); return ev; }
+
+/* ── novo caso ── */
+function bfNovo(){ atClose();
+  const lbl=t=>`<label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">${t}</label>`;
+  atModal(`<h2>🩹 Abrir benefício</h2>
+   <div class="sub">O segurado avisou um evento coberto. Registre aqui ANTES de mandar qualquer documento — o checklist dos 10 itens nasce junto.</div>
+   ${lbl('Segurado *')}<input id="bfn_seg" ${boSelectVivo()} style="width:100%;margin-top:3px" placeholder="nome como está na apólice">
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Apólice *')}<input id="bfn_ap" ${boSelectVivo()} inputmode="numeric" style="width:100%;margin-top:3px"></div>
+     <div style="flex:1;min-width:140px">${lbl('LP')}${boSel('bfn_lp',[['','—'],['Gustavo','Gustavo'],['Daniel','Daniel'],['Rebeca','Rebeca']],'Gustavo',boSelectVivo())}</div></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Evento *')}${boSel('bfn_tipo',BF_EVENTOS,'quebra_ossos',boSelectVivo())}</div>
+     <div style="flex:2;min-width:180px">${lbl('Descrição (sem detalhe clínico além do necessário)')}<input id="bfn_desc" ${boSelectVivo()} style="width:100%;margin-top:3px"></div></div>
+   <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:120px">${lbl('Data do evento')}<input id="bfn_dev" type="date" ${boSelectVivo()} style="width:100%;margin-top:3px"></div>
+     <div style="flex:1;min-width:120px">${lbl('Cliente avisou em')}<input id="bfn_dav" type="date" ${boSelectVivo()} value="${atHojeISO()}" style="width:100%;margin-top:3px"></div>
+     <div style="flex:1;min-width:120px">${lbl('Aberto na seguradora em')}<input id="bfn_dab" type="date" ${boSelectVivo()} style="width:100%;margin-top:3px"></div></div>
+   ${lbl('Protocolo (texto — nunca só a imagem)')}<input id="bfn_prot" ${boSelectVivo()} style="width:100%;margin-top:3px" placeholder="se já tiver">
+   <div id="bfn_err" style="color:var(--verm);font-size:12px;margin-top:6px"></div>
+   <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="bfConfNovo()">Abrir caso</button></div>`);
+  setTimeout(()=>{ const e=$('#bfn_seg'); if(e) e.focus(); },50);
+}
+function bfNovoCaso(v){ const hoje=atHojeISO();
+  const r={ id:'loc_'+uid(), segurado:v.segurado, apolice:v.apolice, lp:v.lp||null, tipo_evento:v.tipo_evento||'outro', descricao_evento:v.descricao_evento||null, data_evento:v.data_evento||null, data_aviso:v.data_aviso||hoje, data_abertura:v.data_abertura||null, protocolo:v.protocolo||null,
+    situacao:v.data_abertura?'aberto':'montagem', bola_com:'nos', ultima_acao:null, ultima_acao_em:null, proxima_acao:null, proxima_acao_prazo:null, valor_pago:null, data_pagamento:null, observacao:null, criado_em:new Date().toISOString(), documentos:[], exigencias:[], eventos:[] };
+  r.documentos=BF_DOCS_PADRAO.map((d,i)=>({ id:'loc_'+uid(), beneficio_id:r.id, item:d.item, estado:'pendente', solicitado_em:null, recebido_em:null, anexado_em:null, observacao:null, ordem:i+1 }));
+  return r; }
+async function bfConfNovo(){ const v=id=>{ const e=$('#'+id); return e?(e.value||'').trim():''; }; const err=$('#bfn_err');
+  if(!v('bfn_seg')){ if(err) err.textContent='Segurado é obrigatório.'; return; } if(!v('bfn_ap')){ if(err) err.textContent='Apólice é obrigatória.'; return; }
+  const r=bfNovoCaso({ segurado:v('bfn_seg'), apolice:v('bfn_ap'), lp:v('bfn_lp'), tipo_evento:v('bfn_tipo'), descricao_evento:v('bfn_desc'), data_evento:v('bfn_dev'), data_aviso:v('bfn_dav'), data_abertura:v('bfn_dab'), protocolo:v('bfn_prot') });
+  await bfGravarCaso(r); await bfGravarFilhos('beneficio_documentos',r,r.documentos);
+  await bfEvento(r,'nota','Caso aberto no CRM. Checklist de 10 documentos criado.');
+  if(r.protocolo) await bfEvento(r,'protocolo','Protocolo registrado em texto: '+r.protocolo);
+  atClose(); render(); bfAbrir(r.id); toast('Caso aberto',true);
+}
+
+/* ── ficha do caso: estado em cima (sempre visível), depois tópicos dobráveis ── */
+let BF_ABERTO={docs:true,exig:true,diario:false};
+function bfAbrir(id,secao){ const r=bfAcha(id); if(!r) return; const hoje=atHojeLocal(), hojeISO=atHojeISO(); const dias=bfDiasAberto(r,hoje), parado=bfDiasParado(r,hoje);
+  const exAb=bfExigAbertas(r), exVenc=bfExigVencidas(r,hojeISO); const exMaisVelha=exAb.reduce((mx,e)=>{ const d=Math.round((hoje-atParseISO(e.recebida_em))/864e5); return d>mx?d:mx; },0);
+  const docs=bfDocsOrdenados(r), anex=docs.filter(d=>d.estado==='anexado').length, na=docs.filter(d=>d.estado==='nao_se_aplica').length, pend=docs.length-anex-na;
+  const lbl=t=>`<label style="display:block;font-size:12px;color:var(--muted);font-weight:600">${t}</label>`;
+  const fim=!bfAtivo(r);
+  const det=(k,titulo,resumo,corpo)=>`<details class="bf-sec"${BF_ABERTO[k]?' open':''} ontoggle="BF_ABERTO['${k}']=this.open"><summary style="cursor:pointer;font-weight:700;font-size:13px;padding:8px 0;list-style:none;display:flex;gap:8px;align-items:center"><span class="bf-caret">▸</span>${titulo}<span style="font-weight:500;color:var(--muted);font-size:12px;margin-left:auto;text-align:right">${resumo}</span></summary>${corpo}</details>`;
+  atModal(`<h2>${esc(atTitleC(r.segurado))}</h2>
+   <div class="sub">Apólice <b>${esc(r.apolice)}</b> · ${esc(bfRot(BF_EVENTOS,r.tipo_evento))}${r.descricao_evento&&normKey(r.descricao_evento)!==normKey(bfRot(BF_EVENTOS,r.tipo_evento))?' — '+esc(r.descricao_evento):''} · LP ${esc(r.lp||'—')}</div>
+   <div class="bf-resumo" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;align-items:center">
+     ${bfProtocoloOk(r)?`<span class="badge b-azul" style="font-size:12.5px">Protocolo <b>${esc(r.protocolo)}</b></span>`:`<span class="badge b-verm">sem protocolo em texto</span>`}
+     <span class="badge b-cinza">${dias!=null?'<b>'+dias+'</b> dias aberto':'ainda não aberto na seguradora'}</span>
+     <span class="badge ${exVenc.length?'b-verm':exAb.length?'b-amarelo':'b-verde'}">${exAb.length?'<b>'+exAb.length+'</b> exigência'+(exAb.length===1?'':'s')+' em aberto há '+exMaisVelha+'d'+(exVenc.length?' · '+exVenc.length+' vencida'+(exVenc.length===1?'':'s'):''):'sem exigência aberta'}</span>
+     ${!fim&&parado!=null&&parado>=BF_PARADO_DIAS?`<span class="badge b-verm">🔴 parado há ${parado}d</span>`:''}
+     ${!fim&&bfMudo(r)?'<span class="badge b-roxo" title="sem bola ou sem próxima ação">🔇 mudo</span>':''}
+   </div>
+   <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+     <div style="flex:1;min-width:140px">${lbl('Situação')}${boSel('bf_sit',BF_SIT,r.situacao,boSelectVivo())}</div>
+     <div style="flex:1;min-width:140px">${lbl('Bola com')}${boSel('bf_bola',BF_BOLA,r.bola_com,boSelectVivo())}</div>
+     <div style="flex:1;min-width:140px">${lbl('Protocolo')}<input id="bf_prot" ${boSelectVivo()} value="${esc(r.protocolo||'')}" style="width:100%;margin-top:3px"></div>
+   </div>
+   <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+     <div style="flex:2;min-width:180px">${lbl('Próxima ação')}<input id="bf_pa" ${boSelectVivo()} value="${esc(r.proxima_acao||'')}" style="width:100%;margin-top:3px"></div>
+     <div style="width:150px">${lbl('Prazo')}<input id="bf_pap" type="date" ${boSelectVivo()} value="${r.proxima_acao_prazo||''}" style="width:100%;margin-top:3px"></div>
+   </div>
+   <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+     <div style="flex:2;min-width:180px">${lbl('Última ação')}<input id="bf_ua" ${boSelectVivo()} value="${esc(r.ultima_acao||'')}" style="width:100%;margin-top:3px"></div>
+     <div style="width:150px">${lbl('Em')}<input id="bf_uae" type="date" ${boSelectVivo()} value="${r.ultima_acao_em||''}" style="width:100%;margin-top:3px"></div>
+   </div>
+   <div id="bf_pago" style="display:${r.situacao==='pago'?'flex':'none'};gap:8px;margin-top:8px;flex-wrap:wrap">
+     <div style="flex:1;min-width:140px">${lbl('Valor pago (R$)')}<input id="bf_vp" ${boSelectVivo()} inputmode="decimal" value="${r.valor_pago!=null?String(r.valor_pago).replace('.',','):''}" style="width:100%;margin-top:3px"></div>
+     <div style="flex:1;min-width:140px">${lbl('Data do pagamento')}<input id="bf_dp" type="date" ${boSelectVivo()} value="${r.data_pagamento||''}" style="width:100%;margin-top:3px"></div>
+   </div>
+   <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+     <div style="flex:1;min-width:120px">${lbl('Aviso do cliente')}<input id="bf_dav" type="date" ${boSelectVivo()} value="${r.data_aviso||''}" style="width:100%;margin-top:3px"></div>
+     <div style="flex:1;min-width:120px">${lbl('Aberto na seguradora')}<input id="bf_dab" type="date" ${boSelectVivo()} value="${r.data_abertura||''}" style="width:100%;margin-top:3px"></div>
+     <div style="flex:2;min-width:160px">${lbl('Observação')}<input id="bf_obs" ${boSelectVivo()} value="${esc(r.observacao||'')}" style="width:100%;margin-top:3px"></div>
+   </div>
+   <div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap">
+     <button class="btn btn-s btn-mini" onclick="bfGerarSolicitacao('${esc(String(r.id))}')">📨 Gerar solicitação</button>
+     <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Fechar</button>
+     <button class="btn btn-p" onclick="bfSalvarFicha('${esc(String(r.id))}')">Salvar</button>
+   </div>
+   <hr style="border:0;border-top:1px solid var(--linha);margin:14px 0 4px">
+   ${det('docs','📎 Documentos',`${anex} anexado${anex===1?'':'s'} · ${pend} pendente${pend===1?'':'s'}${na?' · '+na+' n/a':''}`,bfDocsHtml(r))}
+   ${det('exig','📋 Exigências do CES',exAb.length?`${exAb.length} em aberto${exVenc.length?' · '+exVenc.length+' vencida'+(exVenc.length===1?'':'s'):''}`:((r.exigencias||[]).length?'todas tratadas':'nenhuma'),bfExigHtml(r,hojeISO))}
+   ${det('diario','🗒️ Diário do caso',`${(r.eventos||[]).length} entrada${(r.eventos||[]).length===1?'':'s'}${parado!=null?' · última há '+parado+'d':''}`,bfDiarioHtml(r))}`);
+  const sit=$('#bf_sit'); if(sit) sit.addEventListener('change',()=>{ const p=$('#bf_pago'); if(p) p.style.display=sit.value==='pago'?'flex':'none'; });
+  if(secao){ BF_ABERTO[secao]=true; const d=document.querySelector('#at-ov details.bf-sec:nth-of-type('+({docs:1,exig:2,diario:3}[secao])+')'); if(d){ d.open=true; d.scrollIntoView({block:'start'}); } }
+}
+function bfDocsHtml(r){ const docs=bfDocsOrdenados(r);
+  return `<div style="font-size:11.5px;color:var(--muted);margin-bottom:6px">Cada documento que sobe <b>reinicia o prazo de análise</b> — junte tudo e anexe de uma vez.</div>
+  ${docs.map(d=>`<div class="bf-doc" style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--linha)${d.estado==='nao_se_aplica'?';opacity:.55':''}">
+    <div style="flex:1;min-width:0"><div style="font-size:13px${d.estado==='anexado'?';color:var(--verde)':''}">${d.estado==='anexado'?'✅ ':d.estado==='recebido'?'📥 ':d.estado==='solicitado'?'✉️ ':d.estado==='nao_se_aplica'?'➖ ':'⬜ '}${esc(d.item)}</div>
+      ${bfDica(d.item)?`<div style="font-size:11px;color:var(--muted);margin-top:2px">💡 ${esc(bfDica(d.item))}</div>`:''}
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${d.solicitado_em?'solicitado '+atFmtBR(d.solicitado_em)+' · ':''}${d.recebido_em?'recebido '+atFmtBR(d.recebido_em)+' · ':''}${d.anexado_em?'anexado '+atFmtBR(d.anexado_em):''}</div>
+      <input placeholder="obs. (ex.: hospital disse que sai em 5 dias úteis)" value="${esc(d.observacao||'')}" onchange="bfDocObs('${esc(String(r.id))}','${esc(String(d.id))}',this.value)" style="width:100%;margin-top:4px;font-size:12px;padding:5px 7px">
+    </div>
+    <select onchange="bfDocEstado('${esc(String(r.id))}','${esc(String(d.id))}',this.value,this)" style="min-width:120px;padding:8px 6px;min-height:44px">${BF_DOC_EST.map(o=>`<option value="${o[0]}"${d.estado===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>
+  </div>`).join('')}`;
+}
+function bfExigHtml(r,hojeISO){ const ex=(r.exigencias||[]).slice().sort((a,b)=>String(a.recebida_em).localeCompare(String(b.recebida_em)));
+  return `${ex.length?ex.map(e=>{ const venc=e.situacao==='aberta'&&e.prazo&&e.prazo<hojeISO;
+    return `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--linha)${e.situacao!=='aberta'?';opacity:.65':''}">
+    <div style="flex:1;min-width:0"><div style="font-size:13px">${e.situacao==='cumprida'?'✅ ':e.situacao==='respondida'?'📤 ':e.situacao==='inaplicavel'?'➖ ':'🔶 '}${esc(e.descricao)}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">recebida ${atFmtBR(e.recebida_em)}${e.prazo?' · prazo '+atFmtBR(e.prazo)+(venc?' <b style="color:var(--verm)">passou</b>':''):''}${e.respondida_em?' · respondida '+atFmtBR(e.respondida_em):''}${e.observacao?' · '+esc(e.observacao):''}</div></div>
+    <select onchange="bfExigSit('${esc(String(r.id))}','${esc(String(e.id))}',this.value)" style="min-width:120px;padding:8px 6px;min-height:44px">${BF_EXIG_SIT.map(o=>`<option value="${o[0]}"${e.situacao===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>
+  </div>`; }).join(''):'<div style="font-size:12.5px;color:var(--muted);padding:6px 0">Nenhuma exigência registrada.</div>'}
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
+    <div style="flex:2;min-width:160px"><label style="font-size:11px;color:var(--muted)">Nova exigência</label><input id="bfx_desc" placeholder="o que o CES pediu" style="width:100%;padding:8px"></div>
+    <div style="min-width:120px"><label style="font-size:11px;color:var(--muted)">Recebida</label><input id="bfx_rec" type="date" value="${hojeISO}" style="width:100%;padding:8px"></div>
+    <div style="min-width:120px"><label style="font-size:11px;color:var(--muted)">Prazo</label><input id="bfx_prazo" type="date" style="width:100%;padding:8px"></div>
+    <button class="btn btn-s btn-mini" style="min-height:44px" onclick="bfExigNova('${esc(String(r.id))}')">+ Adicionar</button>
+  </div>`;
+}
+function bfDiarioHtml(r){ const ev=(r.eventos||[]).slice().sort((a,b)=>String(a.ocorrido_em).localeCompare(String(b.ocorrido_em)));
+  const ic={contato:'💬',documento:'📎',exigencia:'🔶',protocolo:'🔖',prazo:'⏱️',nota:'📝'};
+  return `<div style="max-height:320px;overflow:auto">${ev.length?ev.map(e=>`<div style="display:flex;gap:8px;padding:6px 0;border-top:1px solid var(--linha);font-size:12.5px"><div style="min-width:52px;color:var(--muted);font-size:11.5px">${esc(dataBR(String(e.ocorrido_em).slice(0,10)))}</div><div style="flex:1">${ic[e.tipo]||'•'} ${esc(e.texto)}${e.tipo==='prazo'?' <span class="badge b-verm">prazo</span>':''}${e.autor&&e.autor!=='seed'?` <span style="color:var(--muted);font-size:11px">· ${esc(e.autor)}</span>`:''}</div></div>`).join(''):'<div style="font-size:12.5px;color:var(--muted);padding:6px 0">Diário vazio.</div>'}</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
+    <div style="min-width:110px">${boSel('bfd_tipo',BF_DIARIO_TIPOS,'contato','style="padding:8px;min-height:44px"')}</div>
+    <input id="bfd_txt" placeholder="o que aconteceu (quem falou, o que disse)" style="flex:1;min-width:180px;padding:8px;min-height:44px" onkeydown="if(event.key==='Enter'){event.preventDefault();bfDiarioAdd('${esc(String(r.id))}')}">
+    <button class="btn btn-s btn-mini" style="min-height:44px" onclick="bfDiarioAdd('${esc(String(r.id))}')">+ Registrar</button>
+  </div>`;
+}
+/* confirmação em cima da ficha (a ficha é um atModal; não pode ser fechada pra perguntar) */
+function bfConfirmar(html,onOk,onNao){ const old=document.getElementById('bf-ov2'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.className='overlay aberto'; ov.id='bf-ov2'; ov.style.cssText='display:flex;align-items:center;justify-content:center;z-index:1200';
+  ov.innerHTML=`<div class="lp-modal-card" style="max-width:420px" onclick="event.stopPropagation()">${html}<div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-ghost" id="bf-ov2-nao">Não, esperar</button><button class="btn btn-p" id="bf-ov2-sim" style="margin-left:auto">Anexar mesmo assim</button></div></div>`;
+  ov.onclick=()=>{ ov.remove(); if(onNao) onNao(); }; document.body.appendChild(ov);
+  ov.querySelector('#bf-ov2-nao').onclick=()=>{ ov.remove(); if(onNao) onNao(); }; ov.querySelector('#bf-ov2-sim').onclick=()=>{ ov.remove(); onOk(); }; }
+/* A REGRA (item 5): anexar com outro item em aberto reinicia o prazo sem completar a exigência */
+function bfAvisoAnexo(r,docId){ if(!bfExigAbertas(r).length) return 0; return bfDocsEmAberto(r,docId).length; }
+async function bfDocEstado(caseId,docId,estado,sel){ const r=bfAcha(caseId); if(!r) return; const d=(r.documentos||[]).find(x=>String(x.id)===String(docId)); if(!d) return; const antes=d.estado;
+  const aplicar=async()=>{ const hoje=atHojeISO(); d.estado=estado;
+    if(estado==='solicitado'&&!d.solicitado_em) d.solicitado_em=hoje; if(estado==='recebido'&&!d.recebido_em) d.recebido_em=hoje; if(estado==='anexado'&&!d.anexado_em) d.anexado_em=hoje;
+    await bfGravarFilho('beneficio_documentos',r,d);
+    if(estado==='anexado'){ await bfEvento(r,'documento','Anexado: '+d.item); await bfEvento(r,'prazo','prazo reiniciado'); }
+    else if(estado==='recebido') await bfEvento(r,'documento','Recebido: '+d.item);
+    else if(estado==='solicitado') await bfEvento(r,'documento','Solicitado: '+d.item);
+    bfAbrir(caseId,'docs'); render(); };
+  if(estado==='anexado'&&antes!=='anexado'){ const n=bfAvisoAnexo(r,docId);
+    if(n>0){ bfConfirmar(`<h2>⏱️ Reinicia o prazo</h2><div class="sub">Esta exigência ainda tem <b>${n} ${n===1?'item':'itens'} em aberto</b>. Anexar agora reinicia o prazo de análise sem completar a exigência. Anexar mesmo assim?</div>`,aplicar,()=>{ if(sel) sel.value=antes; }); return; } }
+  await aplicar();
+}
+async function bfDocObs(caseId,docId,v){ const r=bfAcha(caseId); if(!r) return; const d=(r.documentos||[]).find(x=>String(x.id)===String(docId)); if(!d) return; d.observacao=String(v||'').trim()||null; await bfGravarFilho('beneficio_documentos',r,d); }
+async function bfExigNova(caseId){ const r=bfAcha(caseId); if(!r) return; const v=id=>{ const e=$('#'+id); return e?(e.value||'').trim():''; }; if(!v('bfx_desc')){ toast('Diga o que o CES pediu'); return; }
+  const e={ id:'loc_'+uid(), beneficio_id:r.id, descricao:v('bfx_desc'), recebida_em:v('bfx_rec')||atHojeISO(), prazo:v('bfx_prazo')||null, respondida_em:null, situacao:'aberta', observacao:null };
+  r.exigencias=r.exigencias||[]; r.exigencias.push(e); await bfGravarFilho('beneficio_exigencias',r,e);
+  if(r.situacao==='aberto'||r.situacao==='em_analise'||r.situacao==='montagem'){ r.situacao='em_exigencia'; await bfGravarCaso(r); }
+  await bfEvento(r,'exigencia','Exigência recebida: '+e.descricao); bfAbrir(caseId,'exig'); render(); }
+async function bfExigSit(caseId,exId,sit){ const r=bfAcha(caseId); if(!r) return; const e=(r.exigencias||[]).find(x=>String(x.id)===String(exId)); if(!e) return; e.situacao=sit; if((sit==='respondida'||sit==='cumprida')&&!e.respondida_em) e.respondida_em=atHojeISO();
+  await bfGravarFilho('beneficio_exigencias',r,e); await bfEvento(r,'exigencia','Exigência '+bfRot(BF_EXIG_SIT,sit).toLowerCase()+': '+e.descricao);
+  if(!bfExigAbertas(r).length&&r.situacao==='em_exigencia'){ r.situacao='em_analise'; await bfGravarCaso(r); }
+  bfAbrir(caseId,'exig'); render(); }
+async function bfDiarioAdd(caseId){ const r=bfAcha(caseId); if(!r) return; const t=($('#bfd_txt')||{}).value||''; if(!t.trim()){ toast('Escreva o que aconteceu'); return; } const tipo=($('#bfd_tipo')||{}).value||'nota';
+  await bfEvento(r,tipo,t); bfAbrir(caseId,'diario'); render(); }
+async function bfSalvarFicha(id){ const r=bfAcha(id); if(!r) return; const v=k=>{ const e=$('#'+k); return e?(e.value||'').trim():''; };
+  const sitAntes=r.situacao, protAntes=r.protocolo||'';
+  r.situacao=v('bf_sit')||r.situacao; r.bola_com=v('bf_bola')||null; r.protocolo=v('bf_prot')||null; r.proxima_acao=v('bf_pa')||null; r.proxima_acao_prazo=v('bf_pap')||null; r.ultima_acao=v('bf_ua')||null; r.ultima_acao_em=v('bf_uae')||null;
+  r.data_aviso=v('bf_dav')||null; r.data_abertura=v('bf_dab')||null; r.observacao=v('bf_obs')||null;
+  if(r.situacao==='pago'){ r.valor_pago=atBrNum(v('bf_vp')); r.data_pagamento=v('bf_dp')||atHojeISO(); }
+  await bfGravarCaso(r);
+  if(r.situacao!==sitAntes) await bfEvento(r,r.situacao==='pago'?'prazo':'nota','Situação: '+bfRot(BF_SIT,sitAntes)+' → '+bfRot(BF_SIT,r.situacao)+(r.situacao==='pago'&&r.valor_pago!=null?' · '+brl(r.valor_pago):''));
+  if((r.protocolo||'')!==protAntes&&r.protocolo) await bfEvento(r,'protocolo','Protocolo registrado em texto: '+r.protocolo);
+  atClose(); render(); toast('Salvo',true); }
+/* Gerar solicitação: registra em Solicitações (frente outro · benefício · EXECUTAR) e mostra o texto
+   no padrão do backoffice, com protocolo e os itens recebidos que ainda não subiram. */
+function bfTextoSolicitacao(r){ const rec=bfDocsRecebidosNaoAnexados(r); const ab=bfDocsEmAberto(r);
+  const ctx=['Benefício · '+bfRot(BF_EVENTOS,r.tipo_evento)+(bfProtocoloOk(r)?' · PROTOCOLO '+r.protocolo:' · SEM PROTOCOLO'),
+    rec.length?'Anexar ('+rec.length+'): '+rec.map(d=>d.item).join('; '):'Nada recebido pendente de anexo',
+    ab.filter(d=>d.estado!=='recebido').length?'Ainda faltam: '+ab.filter(d=>d.estado!=='recebido').map(d=>d.item).join('; '):''].filter(Boolean).join(' | ');
+  return { segurado:r.segurado, apolice:r.apolice, base_lp:r.lp||null, acao:'executar', tipo:'beneficio', contexto:ctx, prazo:r.proxima_acao_prazo||null, contato_com:'lm' }; }
+async function bfGerarSolicitacao(id){ const r=bfAcha(id); if(!r) return; const base=bfTextoSolicitacao(r);
+  const s=Object.assign({ id:'loc_'+uid(), frente:'outro', ref_atraso_id:null, ref_emissao_id:null, aberta_por:soQuemSou(), aberta_em:new Date().toISOString(), respondida_em:null, resultado:null, protocolo:r.protocolo||null, status:'aberta' },base);
+  await soGravar(s); await bfEvento(r,'contato','Solicitação gerada para a assessoria: '+bfRot(SO_TIPOS,s.tipo)+(bfDocsRecebidosNaoAnexados(r).length?' · '+bfDocsRecebidosNaoAnexados(r).length+' item(ns) a anexar':''));
+  soMostrarTexto(s); render(); }
+
+/* ── exemplo (só sem login; nomes inventados, nada clínico) ── */
+function bfExemplo(){ atClose(); if(BF_REMOTE){ toast('Você está logado: o exemplo só existe no modo local, pra não misturar com a base real',false); return; }
+  const dISO=n=>{ const d=atHojeLocal(); d.setDate(d.getDate()-n); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); };
+  const r=bfNovoCaso({ segurado:'SEGURADO EXEMPLO UM', apolice:'000000001', lp:'Gustavo', tipo_evento:'quebra_ossos', data_aviso:dISO(30), data_abertura:dISO(23), protocolo:'00000000' }); r.id='ex_1'; r.criado_em=dISO(30)+'T12:00:00Z'; r.situacao='em_exigencia'; r.bola_com='nos';
+  r.proxima_acao='Perguntar ao CES, via assessoria, qual documento substitui a CAT'; r.proxima_acao_prazo=atHojeISO(); r.documentos.forEach((d,i)=>{ d.beneficio_id=r.id; if([0,2,4,5,6,7,9].indexOf(i)>=0){ d.estado='anexado'; d.anexado_em=dISO(20); } });
+  r.exigencias=['Ficha de atendimento','Comprovante de residência','CAT'].map(t=>({ id:'ex_'+uid(), beneficio_id:r.id, descricao:t, recebida_em:dISO(15), prazo:null, respondida_em:null, situacao:'aberta', observacao:null }));
+  r.eventos=[[30,'documento','Laudo enviado.'],[23,'protocolo','Benefício aberto. Aceite enviado ao e-mail da apólice.'],[15,'exigencia','CES envia exigência com três itens.'],[1,'documento','Três documentos anexados. Prazo reiniciado.']].map(e=>({ id:'ex_'+uid(), beneficio_id:r.id, ocorrido_em:dISO(e[0])+'T12:00:00Z', autor:'exemplo', tipo:e[1], texto:e[2] }));
+  const r2=bfNovoCaso({ segurado:'SEGURADO EXEMPLO DOIS', apolice:'000000002', lp:'Daniel', tipo_evento:'doenca_grave', data_aviso:dISO(6) }); r2.id='ex_2'; r2.criado_em=dISO(6)+'T12:00:00Z'; r2.documentos.forEach(d=>d.beneficio_id=r2.id);
+  r2.eventos=[{ id:'ex_'+uid(), beneficio_id:r2.id, ocorrido_em:dISO(6)+'T12:00:00Z', autor:'exemplo', tipo:'nota', texto:'Caso aberto no CRM.' }];
+  BF.itens=[r,r2]; BF_REMOTE=false; bfSalvarLocal(); if(VIEW!=='beneficios') irPara('beneficios'); else render(); toast('Dados de exemplo carregados (só neste aparelho)',true); }
+
+/* ── lista ── */
+function bfFiltrados(){ const hoje=atHojeLocal(), hojeISO=atHojeISO();
+  return BF.itens.filter(r=>{ if(FBF.sit==='todos'){} else if(FBF.sit){ if(r.situacao!==FBF.sit) return false; } else if(!bfAtivo(r)) return false;
+    if(FBF.lp&&r.lp!==FBF.lp) return false; if(FBF.parados&&!(bfAtivo(r)&&bfParado(r,hoje))) return false; if(FBF.mudo&&!(bfAtivo(r)&&bfMudo(r))) return false; if(FBF.venc&&!bfExigVencidas(r,hojeISO).length) return false;
+    if(FBF.q){ const q=normKey(FBF.q); const qn=FBF.q.replace(/\D/g,''); if(normKey(r.segurado).indexOf(q)<0&&!(qn&&(String(r.apolice||'').indexOf(qn)>=0||String(r.protocolo||'').indexOf(qn)>=0))) return false; } return true; })
+  .sort((a,b)=>{ const fa=bfAtivo(a)?0:1, fb=bfAtivo(b)?0:1; if(fa!==fb) return fa-fb; const pa=a.proxima_acao_prazo||'9999', pb=b.proxima_acao_prazo||'9999'; return pa.localeCompare(pb)||(bfDiasAberto(b,hoje)||0)-(bfDiasAberto(a,hoje)||0); }); }
+function viewBeneficios(){
+  const hoje=atHojeLocal(), hojeISO=atHojeISO();
+  if(!BF.itens.length){ $('#main').innerHTML=`<h1 class="pg">Benefícios</h1><div class="sub">Regulação de sinistro: do aviso do segurado ao pagamento. Checklist de documentos, exigências do CES e o diário do caso — o que hoje mora no WhatsApp.</div>${delegFaixa()}
+    <div class="card" style="text-align:center;padding:34px">Nenhum caso ainda. Quando um segurado avisar um evento coberto, abra o caso aqui antes de mandar qualquer documento.<br><br>
+      <button class="btn btn-p" onclick="bfNovo()">🩹 Abrir benefício</button>
+      <button class="btn btn-ghost" onclick="bfExemplo()" style="margin-left:8px">Ver exemplo</button></div>`; return; }
+  const ativos=BF.itens.filter(bfAtivo);
+  const maisVelho=ativos.reduce((mx,r)=>{ const d=bfDiasAberto(r,hoje); return d!=null&&d>mx?d:mx; },0);
+  const exVenc=ativos.reduce((s,r)=>s+bfExigVencidas(r,hojeISO).length,0), exAb=ativos.reduce((s,r)=>s+bfExigAbertas(r).length,0);
+  const parados=ativos.filter(r=>bfParado(r,hoje)), mudos=ativos.filter(bfMudo);
+  const lps=['Gustavo','Daniel','Rebeca'].map(k=>({k,n:ativos.filter(r=>r.lp===k).length})).filter(p=>p.n);
+  const rows=bfFiltrados();
+  const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
+  const kpiLente=(on,liga,l,n,sb)=>`<button class="kpi kpi-lente${on?' on':''}" onclick="${liga}" title="${on?'Clique para ver todas de novo':'Clique para ver só estas na lista'}"><div class="lbl">${l}</div><div class="num">${n}</div><div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estes':sb}</div></button>`;
+  const sel=(k,opts,cur)=>`<select onchange="FBF.${k}=this.value;viewBeneficios()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">${opts.map(o=>`<option value="${esc(o[0])}"${cur===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
+  $('#main').innerHTML=`<h1 class="pg">Benefícios</h1>
+    <div class="sub">Regulação de sinistro · ${BF_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · cada documento que sobe reinicia o prazo de análise.</div>${delegFaixa()}
+    <div class="kpis" style="margin-top:10px">
+      ${kpi('Casos abertos',ativos.length,BF.itens.length-ativos.length?(BF.itens.length-ativos.length)+' encerrado'+(BF.itens.length-ativos.length===1?'':'s'):'nenhum encerrado')}
+      ${kpi('Mais antigo',maisVelho+'d','dias desde a abertura')}
+      ${kpiLente(FBF.venc,"FBF.venc=!FBF.venc;viewBeneficios()",'Exigências vencidas',exVenc,exAb+' em aberto no total')}
+      ${kpiLente(FBF.parados,"FBF.parados=!FBF.parados;viewBeneficios()",'🔴 Parados há '+BF_PARADO_DIAS+'d+',parados.length,'sem evento novo no diário')}
+      ${kpiLente(FBF.mudo,"FBF.mudo=!FBF.mudo;viewBeneficios()",'🔇 Casos mudos',mudos.length,'sem bola ou sem próxima ação')}
+      ${lps.map(p=>kpi('LP '+p.k,p.n)).join('')}
+    </div>
+    <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="bf-q" placeholder="Buscar segurado, apólice ou protocolo…" value="${esc(FBF.q)}" oninput="FBF.q=this.value;viewBeneficios();atFocus('bf-q')" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
+      ${sel('sit',[['','Em andamento'],['todos','Todos (inclui encerrados)']].concat(BF_SIT),FBF.sit)}
+      ${sel('lp',[['','Todos os LPs'],['Gustavo','Gustavo'],['Daniel','Daniel'],['Rebeca','Rebeca']],FBF.lp)}
+      <button class="sheet-chip${FBF.parados?' on':''}" onclick="FBF.parados=!FBF.parados;viewBeneficios()">só os parados</button>
+      <button class="btn btn-p btn-mini" onclick="bfNovo()">🩹 Abrir benefício</button>
+    </div>
+    <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
+      <th style="padding:6px 8px">Segurado</th><th>Apólice</th><th>Evento</th><th>Protocolo</th><th>Dias aberto</th><th>Situação</th><th>Bola com</th><th>Próxima ação</th><th>Prazo</th></tr></thead><tbody>
+    ${rows.length?rows.map(r=>{ const d=bfDiasAberto(r,hoje), par=bfAtivo(r)&&bfParado(r,hoje), ev=bfExigVencidas(r,hojeISO).length, ea=bfExigAbertas(r).length; const venc=r.proxima_acao_prazo&&r.proxima_acao_prazo<hojeISO&&bfAtivo(r), hojeP=r.proxima_acao_prazo===hojeISO;
+      return `<tr onclick="bfAbrir('${esc(String(r.id))}')" style="cursor:pointer;border-top:1px solid var(--linha)${bfAtivo(r)?'':';opacity:.65'}">
+        <td style="padding:8px"><b>${esc(atTitleC(r.segurado))}</b>${par?' <span title="parado: sem evento novo há '+bfDiasParado(r,hoje)+' dias">🔴</span>':''}${bfAtivo(r)&&bfMudo(r)?' <span title="caso mudo: sem bola ou sem próxima ação">🔇</span>':''}<br><span style="font-size:11px;color:var(--muted)">LP ${esc(r.lp||'—')}</span></td>
+        <td style="font-size:12px">${esc(r.apolice)}</td>
+        <td style="font-size:12px">${esc(bfRot(BF_EVENTOS,r.tipo_evento))}</td>
+        <td style="font-size:12px">${bfProtocoloOk(r)?'<b>'+esc(r.protocolo)+'</b>':'<span class="badge b-verm" title="protocolo precisa estar em texto, não só na imagem">sem protocolo</span>'}</td>
+        <td><span class="dias-tag ${d>=30?'hoje':d>=15?'perto':'longe'}">${d!=null?d+'d':'—'}</span></td>
+        <td><span class="badge ${r.situacao==='pago'?'b-verde':r.situacao==='negado'||r.situacao==='cancelado'?'b-cinza':r.situacao==='em_exigencia'?'b-verm':r.situacao==='montagem'?'b-roxo':'b-amarelo'}">${esc(bfRot(BF_SIT,r.situacao))}</span>${ea?`<br><span style="font-size:10.5px;color:${ev?'var(--verm)':'var(--muted)'}">${ea} exig. aberta${ea===1?'':'s'}${ev?' · '+ev+' vencida'+(ev===1?'':'s'):''}</span>`:''}</td>
+        <td style="font-size:12px">${esc(bfRot(BF_BOLA,r.bola_com))}</td>
+        <td style="font-size:11.5px;max-width:240px">${esc(r.proxima_acao||'—')}</td>
+        <td><span class="dias-tag ${venc||hojeP?'hoje':'longe'}">${r.proxima_acao_prazo?atFmtBR(r.proxima_acao_prazo):'—'}</span>${venc?' <span class="badge b-verm">passou</span>':hojeP?' <span class="badge b-amarelo">hoje</span>':''}</td>
+      </tr>`; }).join(''):`<tr><td colspan="9" style="padding:16px;text-align:center;color:var(--muted)">Nenhum caso com esses filtros.</td></tr>`}
+    </tbody></table></div>`;
+}
+window.bfNovo=bfNovo; window.bfAbrir=bfAbrir; window.bfExemplo=bfExemplo; window.bfDocEstado=bfDocEstado; window.bfDocObs=bfDocObs; window.bfExigNova=bfExigNova; window.bfExigSit=bfExigSit; window.bfDiarioAdd=bfDiarioAdd; window.bfSalvarFicha=bfSalvarFicha; window.bfGerarSolicitacao=bfGerarSolicitacao; window.bfConfNovo=bfConfNovo;
+
 /* ════ VIEW: PENDÊNCIAS (P2 #15) — LEGADO do relatório semanal; a view lp-pendencias agora é do módulo em* (mesmo destino do LPDB 'atrasos') ════ */
 function viewLpPendenciasRelatorio(){
   if(!LP.pendencias.length){ $('#main').innerHTML=semDados('Pendências de Emissão','BackOffice — propostas com pendência pra emitir a apólice.'); return; }
@@ -8410,7 +8728,7 @@ async function sincronizarDados(){
   const viewAntes=VIEW, temModal=!!document.querySelector('.overlay.aberto, #at-ov, .cmdk-bd');
   try{
     await delegCarregar();   /* DELEGACAO-V1: decide o dono antes de qualquer loader */
-    const r=await Promise.allSettled([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar(),emCarregar(),soCarregar()]);
+    const r=await Promise.allSettled([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar(),emCarregar(),soCarregar(),bfCarregar()]);
     const falhas=r.filter(x=>x.status==='rejected').length;
     /* modal aberto = ele está no meio de alguma coisa: os dados entram na memória
        mas o re-render espera, senão a tela se mexe embaixo da mão dele. */
@@ -8490,7 +8808,7 @@ const MODS={
   bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-ta','bn-dups','bn-recs'], grp:'sp'},
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
-  backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
+  backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','subst']},
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos']}
 };
 /* == ACESSO-ASSISTENTE-V1 (02/09) ==========================================
@@ -9699,7 +10017,7 @@ const TITULO_VIEW={inicio:'Início',sitplan:'Lista do Dia (funil)',metas:'Metas'
   'bn-estoque':'Estoque de Nomes','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','lp-atrasos':'Lista de Atraso',
-  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
+  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações',
   revisao:'Revisão de Proteção'};
 function renderTituloTopo(){
@@ -9762,12 +10080,13 @@ function render(){
      Revisão não deve precisar reabrir "Outros módulos" a cada repintura */
   { const abrir=(ids,caret)=>{ ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); });
                                const c=document.getElementById(caret); if(c) c.textContent='▴'; };
-    const BO=['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst'];
+    const BO=['lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','subst'];
     if(BO.includes(VIEW)){ abrir(['outros-toggle','outros-group'],'outros-caret'); abrir(['bo-toggle','bo-group'],'bo-caret'); }
     else if(VIEW==='nn-funil'||VIEW==='bc-funil') abrir(['pipe-toggle','pipe-group'],'pipe-caret');
     else if(VIEW==='revisao'||VIEW==='principios') abrir(['outros-toggle','outros-group'],'outros-caret');
     else if(VIEW==='metas'||VIEW==='lp-adm'||VIEW==='config-funil') abrir(['cfg-toggle','cfg-group'],'cfg-caret'); }
-  { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length+(EM.itens||[]).filter(emAtivo).length; cbo.textContent=n||''; }
+  { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length+(EM.itens||[]).filter(emAtivo).length+(BF.itens||[]).filter(bfAtivo).length; cbo.textContent=n||''; }
+    const cbf=$('#cnt-beneficios'); if(cbf) cbf.textContent=(BF.itens||[]).filter(bfAtivo).length||'';
     const cso=$('#cnt-solicitacoes'); if(cso) cso.textContent=(SO.itens||[]).filter(s=>s.status==='aberta').length||''; }
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
     const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
@@ -9791,6 +10110,7 @@ function render(){
   else if(VIEW==='lp-atrasos') viewLpAtrasos();
   else if(VIEW==='lp-pendencias') viewLpPendencias();
   else if(VIEW==='solicitacoes') viewSolicitacoes();
+  else if(VIEW==='beneficios') viewBeneficios();
   else if(VIEW==='lp-statust') viewLpStatusT();
   else if(VIEW==='lp-aniversario') viewLpAniversario();
   else if(VIEW==='lp-datas') viewLpDatas();
@@ -10132,6 +10452,21 @@ function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
   try{
+    /* BENEFICIOS-V1 (02/09): checklist padrão, parado, aviso de reinício de prazo, texto da solicitação */
+    { ok('benefício: checklist padrão tem 10 itens na ordem da spec', BF_DOCS_PADRAO.length===10&&/^Laudo/.test(BF_DOCS_PADRAO[0].item)&&/^Aceite digital/.test(BF_DOCS_PADRAO[9].item)&&!!bfDica(BF_DOCS_PADRAO[3].item)&&!!bfDica(BF_DOCS_PADRAO[9].item));
+      const c=bfNovoCaso({segurado:'T',apolice:'1',tipo_evento:'outro',data_abertura:'2026-08-10'}); c.id='t1'; c.criado_em='2026-08-10T12:00:00Z';
+      ok('benefício: caso novo nasce com 10 docs pendentes', c.documentos.length===10&&c.documentos.every(d=>d.estado==='pendente'));
+      ok('benefício: 10/08 → 02/09 = 23 dias aberto', bfDiasAberto(c,new Date(2026,8,2))===23);
+      c.eventos=[{ocorrido_em:'2026-09-01T12:00:00Z',tipo:'documento',texto:'x'}];
+      ok('benefício: evento ontem = não parado; há 3 dias = parado', !bfParado(c,new Date(2026,8,2))&&bfParado(c,new Date(2026,8,4)));
+      ok('benefício: sem exigência aberta, anexar não avisa', bfAvisoAnexo(c,c.documentos[0].id)===0);
+      c.exigencias=[{situacao:'aberta',recebida_em:'2026-08-18',prazo:'2026-08-25'}]; c.documentos.forEach((d,i)=>{ if(i<7) d.estado='anexado'; });
+      ok('benefício: 3 pendentes + exigência aberta → anexar 1 avisa que sobram 2', bfAvisoAnexo(c,c.documentos[7].id)===2);
+      ok('benefício: exigência com prazo passado conta como vencida', bfExigVencidas(c,'2026-09-02').length===1&&bfExigVencidas(c,'2026-08-20').length===0);
+      ok('benefício: mudo = sem bola ou sem próxima ação', bfMudo({bola_com:'nos',proxima_acao:''})&&!bfMudo({bola_com:'nos',proxima_acao:'x'}));
+      c.protocolo='01346301'; c.documentos[7].estado='recebido'; const t=soTexto(Object.assign({status:'aberta'},bfTextoSolicitacao(c)));
+      ok('benefício: texto da solicitação traz protocolo, AÇÃO: EXECUTAR e o item recebido', t.indexOf('01346301')>=0&&t.indexOf('AÇÃO: EXECUTAR')>=0&&t.indexOf('O QUÊ: benefício')>=0&&t.indexOf(c.documentos[7].item)>=0);
+      ok('benefício: pago/negado/cancelado não são ativos', !bfAtivo({situacao:'pago'})&&!bfAtivo({situacao:'negado'})&&bfAtivo({situacao:'em_exigencia'})); }
     /* BACKOFFICE-V1 (02/09): parser do relatório de emissão, janela de compensation e formato da solicitação */
     { const p=emParse(EM_EXEMPLO_TXT);
       ok('emissão: exemplo dá 3 propostas', p.records.length===3);
@@ -11025,7 +11360,7 @@ function abrirAjustesVisual(){
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','agenda','contatos','planos','subst','lp-atrasos','lp-pendencias','solicitacoes','lp-statust',
+  'nn-funil','bc-funil','agenda','contatos','planos','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','principios','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
