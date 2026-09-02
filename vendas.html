@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.40.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.40.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1019,7 +1019,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.40.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.40.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1041,7 +1041,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.40.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.40.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -8720,6 +8720,7 @@ function bnLpLabel(id){ const u=(S.users||[]).find(x=>x.id===(id||'gustavo')); r
      ⬆︎ Atualizar app = versão nova do código, com limpeza de cache e reload
    Enquanto roda, o botão vira "⏳ Sincronizando…" pra não parecer travado. */
 let _syncRodando=false;
+const BOOT_LOADERS=[lpCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar,emCarregar,soCarregar,bfCarregar];
 async function sincronizarDados(){
   if(_syncRodando) return;
   _syncRodando=true;
@@ -8728,7 +8729,7 @@ async function sincronizarDados(){
   const viewAntes=VIEW, temModal=!!document.querySelector('.overlay.aberto, #at-ov, .cmdk-bd');
   try{
     await delegCarregar();   /* DELEGACAO-V1: decide o dono antes de qualquer loader */
-    const r=await Promise.allSettled([lpCarregar(),cartCarregar(),lpcCarregar(),perfilCarregar(),bnDupsCarregar(),dicCarregar(),atCarregar(),subCarregar(),emCarregar(),soCarregar(),bfCarregar()]);
+    const r=await Promise.allSettled(BOOT_LOADERS.map(f=>f()));
     const falhas=r.filter(x=>x.status==='rejected').length;
     /* modal aberto = ele está no meio de alguma coisa: os dados entram na memória
        mas o re-render espera, senão a tela se mexe embaixo da mão dele. */
@@ -10452,6 +10453,7 @@ function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
   try{
+    ok('boot: todo módulo do BackOffice carrega no boot (não só no Sincronizar)', [atCarregar,emCarregar,soCarregar,bfCarregar,subCarregar].every(f=>BOOT_LOADERS.indexOf(f)>=0));
     /* BENEFICIOS-V1 (02/09): checklist padrão, parado, aviso de reinício de prazo, texto da solicitação */
     { ok('benefício: checklist padrão tem 10 itens na ordem da spec', BF_DOCS_PADRAO.length===10&&/^Laudo/.test(BF_DOCS_PADRAO[0].item)&&/^Aceite digital/.test(BF_DOCS_PADRAO[9].item)&&!!bfDica(BF_DOCS_PADRAO[3].item)&&!!bfDica(BF_DOCS_PADRAO[9].item));
       const c=bfNovoCaso({segurado:'T',apolice:'1',tipo_evento:'outro',data_abertura:'2026-08-10'}); c.id='t1'; c.criado_em='2026-08-10T12:00:00Z';
@@ -11547,8 +11549,9 @@ render();
    só era repintada quando a ÚLTIMA resposta chegava, e a última é a lp_contatos
    (3,09 MB na base de hoje). Agora cada carga repinta quando o dado DELA chega,
    coalescido em rAF. As 8 continuam saindo em paralelo, como antes. */
-[lpCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar]
-  .forEach(function(f){
+/* BOOT-LOADERS-V1 (02/09): a lista do boot e a do Sincronizar DIVERGIRAM — Emissão,
+   Solicitações e Benefícios só carregavam no botão. Uma lista só, usada nos dois. */
+BOOT_LOADERS.forEach(function(f){
     try{ Promise.resolve(f()).then(agendarRender,function(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); agendarRender(); }); }
     catch(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); }
   });
