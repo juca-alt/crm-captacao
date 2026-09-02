@@ -4,6 +4,30 @@
 
 ---
 
+## 📸 Snapshot — 02/09/2026 · **v0.38.0 · Backoffice V1 (Victor)** — branch `backoffice-v1`, PR aberto, **aguarda OK dele pra merge**
+
+**Estado em 30 s:** a spec "Backoffice V1" (levantamento do papel do Victor) foi construída inteira, **espelhando o módulo Lista de Atraso** (mesma stack, mesmo Supabase por dono, mesmos cards/chips/modal). Banco JÁ MIGRADO no playground (6 migrations, todas `if not exists`, versionadas em `supabase/migrations/backoffice_v1_*.sql`). Front no `vendas.html` v0.38.0, verificado a 375 e 1280, base cheia e vazia, 0 campo morto, `lpSelfCheck` 0 falhas (+16 invariantes).
+
+### O que entrou
+1. **Entrega 3 — Lista de Atraso ganhou o estado do caso**: `bola_com`, `autorizacao_contato` (🚫 Não contatar aparece NA LINHA), última/próxima ação com data, protocolo; card-lente **🔇 Casos mudos** (sem status ou sem próxima ação) e botão **📨 Nova solicitação** na ficha. CSV exporta os campos novos. Nada do resto mudou.
+2. **Entrega 4 — dicionário de status** (`ST_DIC` no JS = `kb_status_tratativa` no banco, 8 chaves com significado, legenda ❔ nas fichas). No atraso é ADITIVO: 4 rótulos novos no dropdown, os antigos seguem válidos.
+3. **Entrega 1 — Pendências de Emissão** (`em*`, tabela `emissao_pendencias`): parser do PDF "Underwriting e Emissão → Propostas Pendentes" (proposta+apólice em 2 linhas, LP pelo bloco `LP:`, confere contra `Total LP`/`Total MFB` e avisa se divergir), upsert por `(lp_email, proposta)` que **preserva os campos do Victor**, "sumiram" não apaga (card + desfecho emitida/cancelada), faixas em `EM_FAIXAS` (≥15 / 8–14 / <8, a confirmar), **card JANELA DE COMPENSATION** (dia 20 em `EM_COMP_DIA`: dias restantes, quantas dá tempo, quantas perderam = janela fechada OU prazo da próxima ação depois do dia 20). Assumiu a view `lp-pendencias` (a antiga do relatório semanal virou `viewLpPendenciasRelatorio`, fora do dispatch — mesmo destino do LPDB `atrasos`).
+4. **Entrega 2 — Solicitações** (`so*`, tabela `solicitacoes`, view `solicitacoes`): `AÇÃO` consultar/executar obrigatória, texto no FORMATO OBRIGATÓRIO do item 4 (invariante testa o formato exato), Em aberto por prazo com "passou", contador **sem retorno há +3d** (`SO_SEM_RETORNO_DIAS`), **Victor × Gustavo no mês** (indicador da migração). Abre de dentro da ficha do atraso e da emissão já preenchida.
+5. **Entrega 6** — 14 regras `BO-01…BO-14` em `kb_regras_negocio` (colunas reais: `dominio`=categoria, `fonte`=historico_lm_2026, `status`=vigente).
+6. **Entrega 5** — `kb_scripts_cobranca` criada com os 3 motivos órfãos e o molde; `ativo=false` até os textos oficiais da assessoria. O app ainda NÃO lê essa tabela (`AT_SCRIPTS` segue no JS) — ligar quando os textos chegarem.
+
+### Decisões tomadas sozinho (reversíveis, avisadas no chat)
+- view `lp-pendencias` reaproveitada pelo módulo novo (precedente do atraso).
+- unicidade `(lp_email, proposta)` em vez de `proposta` global — é o `onConflict` do padrão por dono.
+- **RLS por dono segue valendo**: o Victor logado com o e-mail dele vê tela VAZIA até a delegação (pendência antiga, decisão do Gustavo).
+
+### Aceite (spec §5) — todos verdes no preview local
+1 ✅ exemplo sintético no mesmo formato → 3 · PA 12.336,00 · AFYC 4.939,81 batendo com Total MFB · 2 ✅ recolar = 0 novas, campos manuais intactos · 3 ✅ 02/09 → 18 dias; prazo 25/09 → "perdeu o mês" · 4 ✅ texto gerado com AÇÃO: EXECUTAR · 5 ✅ 🚫 Não contatar na linha · 6 ✅ 14 regras no banco · 7 ✅ atraso: só acréscimos (colunas e campos novos), nenhum comportamento antigo tocado.
+
+**Falta dele:** colar o relatório REAL de 02/09 logado (o parser foi validado só no sintético com o mesmo layout), confirmar as faixas 15/8, e mandar os textos oficiais dos 3 scripts.
+
+---
+
 ## 📸 Snapshot — 01/09/2026, noite · **v0.31.0 → v0.35.1** (5 entregas, sozinho)
 
 **Estado em 30 s:** ✅ **NO AR** — `main` = `cbce796`, `vendas.html` **v0.35.1**, `revisao-protecao.html` com o PD tarifado como PI. Ele foi dormir e pediu para eu seguir sozinho. Tudo abaixo subiu conferido pelo conteúdo servido.
