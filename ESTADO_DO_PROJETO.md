@@ -4,7 +4,9 @@
 
 ---
 
-## 📸 Snapshot — 02/09/2026, tarde · **v0.40.0 · Benefícios (regulação de sinistro)** — branch `beneficios-v1`, PR aberto, **aguarda OK dele pra merge**
+## 📸 Snapshot — 02/09/2026, tarde · **v0.40.0 → v0.41.0 · Benefícios (regulação de sinistro)** — ✅ **NO AR** (main `9492594`, deploy conferido)
+
+**Adendos no ar:** v0.40.1 = fix do boot (Emissão/Solicitações/Benefícios só carregavam no botão Sincronizar — `BOOT_LOADERS` única + invariante) · v0.41.0 = pedido dele depois de ver: **Benefícios saiu de Outros módulos/BackOffice e virou módulo isolado no menu de topo** (gate `MODS.beneficios`) + **card no bloco AGORA do Início** (exigências vencidas · parados · ação pra hoje/atrasada; urgência 1 quando pede ação). PR #110 mergeado por push (gh barrado pelo classificador). Sobra: 1 falha pré-existente do self-check na base real (índice de apólices por cliente, carteira).
 
 **Estado em 30 s:** terceiro módulo do BackOffice, `bf*` no `vendas.html`, espelhando at/em/so (cards, lentes, modal, campos de estado `bola_com`/`ultima_acao`/`proxima_acao`/`protocolo`). **Não tem "Colar relatório"**: o caso é aberto à mão e vive até o pagamento. Banco JÁ MIGRADO no playground (`supabase/migrations/backoffice_v1_beneficios.sql`: `beneficios` + `beneficio_documentos` + `beneficio_exigencias` + `beneficio_eventos`, RLS dono/delegado via `lp_donos_visiveis()`, filhas visíveis só quando o pai é). **O caso Diego foi semeado DIRETO no banco** (1 caso `em_exigencia`, 10 docs = 7 anexados + 3 pendentes, 3 exigências abertas de 18/08, 12 entradas no diário, próxima ação com prazo 02/09) — de propósito NÃO está em migration nem em fixture: dado de saúde + repo público. `lpSelfCheck` 0 falhas (+11 invariantes).
 
