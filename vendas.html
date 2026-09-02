@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.32.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.33.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1008,7 +1008,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.32.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.33.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1030,7 +1030,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.32.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.33.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1711,7 +1711,7 @@ function inicioAgoraHtml(){
    2) o bloco AGORA fica de fora do sistema e nunca fecha. Ele e a resposta a
       "o que eu faco agora"; deixar a resposta fechavel derrotaria o proposito. */
 const INI_CHAVE='crmlp_inicio_secs_v1';
-const INI_PADRAO={numeros:1,'funil-nn':1,'funil-bc':0,ta:0,eventos:0,lp:0};
+const INI_PADRAO={numeros:1,'funil-nn':1,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0};
 function iniLer(){ try{ return JSON.parse(localStorage.getItem(INI_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function iniGravar(o){ try{ localStorage.setItem(INI_CHAVE,JSON.stringify(o)); }catch(_){} }
 function iniAberto(k){ const st=iniLer(); return (k in st)? !!st[k] : !!INI_PADRAO[k]; }
@@ -1830,6 +1830,53 @@ function viewInicio(){
       <button class="btn btn-s btn-mini" style="margin-left:6px" onclick="irPara('sitplan')">abrir a discagem</button></div>`
     : `<div class="vazio" style="padding:14px">Nenhuma ligação registrada ${esc(taPerFrase())}. Os desfechos entram sozinhos quando você registra o resultado no Modo Foco ou na ficha.</div>`}`);
 
+  /* REUNIÕES: agendado × realizado. O seletor de período é O MESMO do
+     Telephone Approach de propósito — é a mesma pergunta ("como foi minha
+     produção nesse recorte"), e dois controles de período na mesma tela é
+     receita de olhar um número achando que é do outro. Mesmo estado, duas
+     portas. */
+  const rn=reunFunil(lista);
+  /* Livro de Erros #40 outra vez: "aconteceu"+"ram" dá "aconteceuram". O radical
+     muda — singular "aconteceu", plural "aconteceram". Escrito à mão, sempre. */
+  const nPlu=(n,sing,plur)=>n===1?sing:plur;
+  const rnDesf=REUN_DESFECHOS.filter(d=>rn.porDesf[d.k]).map(d=>{
+    const cor = REUN_ACONTECEU.has(d.k)?'b-verde' : REUN_NAO.has(d.k)?'b-verm' : 'b-amarelo';
+    return `<span class="badge ${cor}">${d.ico} ${esc(d.l)} ${rn.porDesf[d.k]}</span>`;
+  }).join(' ');
+  const rnEtapas=ETAPAS_FLUXO.filter(e=>rn.porEtapa[e]).map(e=>{
+    const x=rn.porEtapa[e], base=x.ok+x.nao;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed var(--linha);font-size:12.5px">
+      <b style="min-width:78px">${esc(ET_LABEL[e]||e)}</b>
+      <span style="color:var(--muted)">${x.ag} ${nPlu(x.ag,'marcada','marcadas')}</span>
+      <span style="color:var(--muted)">·</span>
+      <span>${x.ok} ${nPlu(x.ok,'aconteceu','aconteceram')}</span>
+      <span style="flex:1"></span>
+      <b style="color:${base? (x.ok/base>=.7?'var(--verde)':x.ok/base>=.4?'var(--amar)':'var(--verm)') : 'var(--muted)'}">${base?taPct(x.ok/base):'—'}</b>
+    </div>`;
+  }).join('');
+  const bReun=iniBloco('reunioes','Reuniões',
+    rn.agendadas?`${rn.agendadas} ${nPlu(rn.agendadas,'marcada','marcadas')} · ${rn.aconteceu} ${nPlu(rn.aconteceu,'aconteceu','aconteceram')} · ${taPct(rn.txComp)} de comparecimento`
+                :`nenhuma reunião ${taPerFrase()}`,
+    `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-size:12px;color:var(--muted)">contando</span>
+      <select onchange="taSetPeriodo(this.value)" style="max-width:150px">
+        ${TA_PERIODOS.map(p=>`<option value="${p[0]}"${taPeriodo()===p[0]?' selected':''}>${p[1]}</option>`).join('')}</select>
+      <span style="font-size:11px;color:var(--muted)">mesmo período do Telephone Approach</span>
+    </div>
+    ${rn.agendadas ? `
+    <div class="kpis" style="margin:0 0 10px">
+      <div class="kpi" style="min-width:92px"><div class="num">${rn.agendadas}</div><div class="lbl">Marquei</div></div>
+      <div class="kpi" style="min-width:92px"><div class="num">${rn.aconteceu}</div><div class="lbl">Aconteceu</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${taPct(rn.txComp)} de comparecimento</div></div>
+      <div class="kpi" style="min-width:92px"><div class="num">${rn.semDesfecho}</div><div class="lbl">Sem desfecho</div>${rn.futuras?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">+${rn.futuras} ainda por vir</div>`:''}</div>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);line-height:1.95;margin-bottom:12px">${rnDesf||'<span class="mini">nenhuma finalizada ainda</span>'}</div>
+    ${rnEtapas?`<div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">por etapa</div>${rnEtapas}`:''}
+    <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6">
+      <b>Remarcada não conta como falha</b> — a reunião mudou de data e será contada na data nova. Falta do cliente e cancelamento, sim.
+      ${rn.legado?`<br><b>${rn.legado}</b> ${nPlu(rn.legado,'reunião antiga sem etapa registrada — atribuída','reuniões antigas sem etapa registrada — atribuídas')} à etapa atual do negócio.`:''}
+      ${rn.semDesfecho?`<button class="btn btn-s btn-mini" style="margin-left:6px" onclick="irPara('agenda')">${nPlu(rn.semDesfecho,'finalizar a pendente','finalizar as '+rn.semDesfecho+' pendentes')}</button>`:''}</div>`
+    : `<div class="vazio" style="padding:14px">Nenhuma reunião marcada ${esc(taPerFrase())}. O comparecimento entra sozinho quando você finaliza a reunião com o desfecho.</div>`}`);
+
   const bEv=iniBloco('eventos','Para acompanhar',
     eventos.length?`${eventos.length} pendente(s)`:'nada pendente',
     eventos.length? eventos.map(e=>`<div class="evento"><span class="dt">${esc(e.data.split('-').reverse().join('/'))} ${esc(e.hora||'')}</span><span><b>${esc(e.tipo)}</b> · ${esc(e.contato)} <span class="badge b-amarelo">${esc(e.status)}</span></span></div>`).join('')
@@ -1853,7 +1900,7 @@ function viewInicio(){
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
     ${inicioAgoraHtml()}
     <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)">⌄ abrir tudo</button></div>
-    ${bNumeros}${bNn}${bBc}${bTa}${bEv}${bLp}`;
+    ${bNumeros}${bNn}${bBc}${bTa}${bReun}${bEv}${bLp}`;
   iniBotaoPinta();
 }
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
@@ -2244,6 +2291,12 @@ function reunAplicar(c,t,k,novaData){
   const marca={desfecho:k, de, para, remarcadaPara:null};
   t.feito=new Date().toISOString();
   t.desfecho=k;
+  /* REUN-AGENDADO-REALIZADO-V1: guarda a etapa em que a reunião DE FATO aconteceu.
+     Sem isso, "agendado x realizado por etapa" só teria a etapa ATUAL do
+     negócio — que já andou por causa desta mesma reunião, e atribuiria o
+     mérito à etapa errada. Uma linha, e a atribuição fica exata daqui pra
+     frente; reunião antiga cai no fallback e a tela diz quantas são. */
+  t.etapaDe=de;
   if(para!==de){ c.etapa=para; logEtapa(c,de,para); }
   if(d.remarca && novaData){
     const nova={id:uid(),tipo:'reuniao',tit:(t.tit||'Reunião')+' (remarcada)',quando:novaData,hora:t.hora||'',
@@ -2256,6 +2309,51 @@ function reunAplicar(c,t,k,novaData){
   return marca;
 }
 
+/* == REUN-AGENDADO-REALIZADO-V1 (01/09) =========================================
+   Segundo item do estudo do LP Business. O funil conta ETAPA, o Telephone
+   Approach conta LIGACAO -- e no meio ficava a REUNIAO, que e onde a venda
+   acontece. O app sabia dizer quantas estao pendentes de desfecho (a fila do
+   Agora) mas nunca quantas foram MARCADAS e quantas ACONTECERAM.
+
+   Marcar reuniao e facil; fazer acontecer e o trabalho. Sem taxa de
+   comparecimento, agenda cheia parece producao.
+
+   REGRA DA CONTA: `remarcada` NAO entra no denominador. A reuniao mudou de
+   data, ela nao falhou -- e a nova ja sera contada quando chegar a vez dela;
+   contar as duas puniria o remarcado duas vezes. Falta do cliente e
+   cancelamento SIM entram: sao reuniao que nao aconteceu. */
+const REUN_ACONTECEU=new Set(['avancou','sem_avanco']);
+const REUN_NAO=new Set(['faltou','nao_rolou']);
+/* corte explicito no 2o argumento = funcao pura, testavel pelo self-check */
+function reunFunil(lista, corte){
+  if(corte===undefined) corte=taCorte();
+  const hoje=hojeISO();
+  const porDesf={}, porEtapa={};
+  let agendadas=0, aconteceu=0, nao=0, remarcada=0, semDesfecho=0, futuras=0, legado=0;
+  (lista||[]).forEach(c=>{
+    const ts = (c && Array.isArray(c.tarefas)) ? c.tarefas : [];   /* leitura direta: tarefasDe() criaria o array e sujaria o estado */
+    ts.forEach(t=>{
+      if(!reunEhReuniao(t) || !t.quando) return;
+      if(corte && t.quando<corte) return;
+      agendadas++;
+      const fin = !!(t.feito && t.desfecho);
+      if(fin && !t.etapaDe) legado++;
+      const et = t.etapaDe || (c&&c.etapa) || '—';
+      const e = porEtapa[et] || (porEtapa[et]={ag:0,ok:0,nao:0});
+      e.ag++;
+      if(fin){
+        porDesf[t.desfecho]=(porDesf[t.desfecho]||0)+1;
+        if(REUN_ACONTECEU.has(t.desfecho)){ aconteceu++; e.ok++; }
+        else if(REUN_NAO.has(t.desfecho)){ nao++; e.nao++; }
+        else remarcada++;
+      } else if(t.quando<hoje) semDesfecho++;
+      else futuras++;
+    });
+  });
+  const base=aconteceu+nao;
+  return {agendadas, aconteceu, nao, remarcada, semDesfecho, futuras, legado, porDesf, porEtapa,
+          txComp: base? aconteceu/base : null};
+}
 function reunFinalizar(cid,tid){
   const c=tarContato(cid); if(!c) return;
   const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
@@ -9865,6 +9963,34 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('TA: base vazia não divide por zero', _v.ligacoes===0 && _v.txAtend===null && _v.txAgenda===null);
     ok('TA: sem corte, o antigo entra', taFunil(_l,null).ligacoes===4);
     ok('TA: interação sem dia fica fora do recorte', taFunil([_mk('e',['lig_atendida'],null)],'2026-08-01').ligacoes===0);
+    /* reunião: agendado × realizado. Arrays novos por contato, como no TA.
+       DATAS RELATIVAS a hoje de propósito: a 1ª versão fixou '2026-09-01' e o
+       teste passaria hoje e quebraria amanhã — invariante que depende do dia
+       em que roda não é invariante, é armadilha. */
+    const _rh=hojeISO(), _rOnt=isoAddDias(_rh,-1), _rAmn=isoAddDias(_rh,1), _rVel=isoAddDias(_rh,-60), _rCor=isoAddDias(_rh,-30);
+    const _rc=(id,etapa,ts)=>({id, etapa, tarefas:ts.map((t,n)=>Object.assign({id:id+n, tipo:'reuniao'}, t))});
+    const _rl=[
+      _rc('p','P/C',[{quando:_rOnt, feito:'x', desfecho:'avancou',   etapaDe:'P/C'},
+                     {quando:_rOnt, feito:'x', desfecho:'faltou',    etapaDe:'P/C'}]),
+      _rc('q','OI/FF',[{quando:_rOnt, feito:'x', desfecho:'sem_avanco', etapaDe:'OI/FF'},
+                       {quando:_rOnt, feito:'x', desfecho:'remarcada',  etapaDe:'OI/FF'}]),
+      _rc('s','TA',[{quando:_rVel, feito:'x', desfecho:'avancou', etapaDe:'TA'}]),
+      _rc('u','C2',[{quando:_rOnt, feito:null, desfecho:null}]),
+      _rc('x','C2',[{quando:_rAmn, feito:null, desfecho:null}]),
+      _rc('v','C2',[{quando:_rOnt, tipo:'ligar', feito:'x', desfecho:'avancou'}])
+    ];
+    _rl[5].tarefas[0].tipo='ligar';
+    const _rf=reunFunil(_rl,_rCor);
+    ok('reunião: só tarefa do tipo reunião entra', _rf.agendadas===6);
+    ok('reunião: aconteceu = avançou + sem avanço', _rf.aconteceu===2);
+    ok('reunião: falta e cancelamento contam como não aconteceu', _rf.nao===1);
+    ok('reunião: remarcada fica FORA do denominador', _rf.remarcada===1 && Math.abs(_rf.txComp-2/3)<1e-9);
+    ok('reunião: data passada sem desfecho vira pendente', _rf.semDesfecho===1);
+    ok('reunião: data futura não é pendente', _rf.futuras===1);
+    ok('reunião: recorte por data exclui o que é velho', !_rf.porEtapa['TA']);
+    ok('reunião: atribui pela etapa registrada, não pela atual', _rf.porEtapa['P/C'].ag===2 && _rf.porEtapa['P/C'].ok===1);
+    ok('reunião: legado sem etapaDe é contado e sinalizado', reunFunil([_rc('w','N',[{quando:_rOnt,feito:'x',desfecho:'avancou'}])],_rCor).legado===1);
+    ok('reunião: base vazia não divide por zero', reunFunil([],null).txComp===null);
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
