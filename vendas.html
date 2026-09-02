@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.33.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.34.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -261,6 +261,10 @@
   .etapa-col .nm{font-size:11px;color:var(--muted);font-weight:700}
   .seta-conv{align-self:center;text-align:center;color:var(--muted);font-size:10.5px;font-weight:700;padding-bottom:38px;min-width:34px}
   .seta-conv .pct{color:var(--azul);font-size:11.5px}
+  .imp-faixa{display:flex;align-items:center;flex-wrap:wrap;gap:4px;font-size:12.5px;color:var(--muted);
+    background:var(--card);border:1px solid var(--linha);border-radius:10px;padding:8px 12px;margin:0 0 12px}
+  .imp-faixa.imp-velho{border-color:var(--amar,#d99b1c);color:var(--txt)}
+  .imp-faixa.imp-nada{border-style:dashed}
   .etapa-col .aqui{font-size:10px;color:var(--muted);font-weight:600;min-height:13px;margin-top:2px}
   /* blocos dobraveis do Inicio (INICIO-BLOCOS-V1) */
   .ini-bl{background:var(--card);border:1px solid var(--linha);border-radius:14px;margin-top:14px;overflow:hidden}
@@ -1008,7 +1012,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.33.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.34.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1030,7 +1034,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.33.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.34.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -4403,6 +4407,80 @@ function subCorVar(c){ return c==='red'?'var(--verm)':c==='amber'?'var(--amar)':
    v:dias em atraso reportado}. Dedupe por data (um relatório = uma leitura);
    poda nas últimas SUB_HIST_MAX. Mora em apolice.hist → dados.hist (JSONB) e
    sincroniza junto com a apólice, sem tabela/coluna nova. */
+/* == IMPORT-DIARIO-V1 (01/09) ===============================================
+   O historico do ATRASO por apolice ja existia (subHistPush/subHistTrail). O
+   que nao existia era o diario dos RELATORIOS: o app guardava so
+   `AT.carregadoEm`, a data do ultimo, e nada sobre o que cada colagem mudou.
+
+   Na pratica isso deixava uma pergunta sem resposta na tela mais operacional
+   do app: "o numero que estou olhando e de quando?". Sem isso da pra tomar
+   decisao de cobranca em cima de dado de tres semanas atras sem perceber -- e
+   a Lista de Atraso e exatamente onde isso custa dinheiro.
+
+   O diario nao inventa dado: registra o que a propria aplicacao ja sabia
+   (quantas atualizou, quantas trouxe, quantas sumiram) mais a data do
+   documento. Poda nos ultimos IMP_MAX por tipo. */
+const IMP_CHAVE='crmlp_import_log_v1', IMP_MAX=24, IMP_VELHO_DIAS=14;
+function impLer(){ try{ const o=JSON.parse(localStorage.getItem(IMP_CHAVE)||'[]'); return Array.isArray(o)?o:[]; }catch(_){ return []; } }
+function impGravar(l){ try{ localStorage.setItem(IMP_CHAVE,JSON.stringify(l)); }catch(_){} }
+function impRegistrar(tipo,doc,st){
+  const l=impLer();
+  /* `dia` LOCAL separado do `ts`: toISOString() e UTC, e as 21h no Brasil ja e
+     o dia seguinte la. Medir "colado ha quantos dias" pelo ts dava -1 dia. */
+  l.push({id:uid(), tipo, doc:doc||null, dia:hojeISO(), ts:new Date().toISOString(), st:st||{}});
+  /* poda POR TIPO: um mes de espelho nao pode apagar o historico do atraso */
+  const porTipo={};
+  l.forEach(x=>{ (porTipo[x.tipo]=porTipo[x.tipo]||[]).push(x); });
+  const podado=[];
+  Object.keys(porTipo).forEach(t=>{
+    const a=porTipo[t].sort((x,y)=>String(x.ts).localeCompare(String(y.ts)));
+    podado.push(...a.slice(Math.max(0,a.length-IMP_MAX)));
+  });
+  podado.sort((x,y)=>String(x.ts).localeCompare(String(y.ts)));
+  impGravar(podado);
+  return podado;
+}
+function impUltimo(tipo,l){ const a=(l||impLer()).filter(x=>x.tipo===tipo); return a.length?a[a.length-1]:null; }
+function impDoTipo(tipo,l){ return (l||impLer()).filter(x=>x.tipo===tipo).slice().reverse(); }
+/* resumo em texto do que a colagem mexeu — so o que tem contagem */
+function impResumo(st){
+  const p=[];
+  if(st.atualizadas) p.push(st.atualizadas+' '+(st.atualizadas===1?'atualizada':'atualizadas'));
+  if(st.novas)       p.push(st.novas+' '+(st.novas===1?'nova':'novas'));
+  if(st.sumiram)     p.push(st.sumiram+' '+(st.sumiram===1?'sumiu':'sumiram'));
+  if(st.clientes)    p.push(st.clientes+' '+(st.clientes===1?'cliente':'clientes'));
+  if(st.pagamentos)  p.push(st.pagamentos+' '+(st.pagamentos===1?'pagamento':'pagamentos'));
+  if(st.velhos)      p.push(st.velhos+' '+(st.velhos===1?'ignorada por ser antiga':'ignoradas por serem antigas'));
+  return p.join(' · ') || 'sem mudança';
+}
+/* A FAIXA: responde "de quando e este dado" no topo da tela que usa o dado. */
+function impFaixa(tipo,rot){
+  const u=impUltimo(tipo);
+  if(!u) return `<div class="imp-faixa imp-nada">Nenhum ${esc(rot)} colado neste aparelho ainda — os números da tela podem estar desatualizados.</div>`;
+  const dias=diasEntreISO(u.dia||String(u.ts).slice(0,10), hojeISO());
+  const velho=dias>=IMP_VELHO_DIAS;
+  const quando = dias===0?'hoje' : dias===1?'ontem' : 'há '+dias+' dias';
+  return `<div class="imp-faixa${velho?' imp-velho':''}">
+    ${velho?'⚠️ ':'📄 '}Dado do ${esc(rot)}${u.doc?` de <b>${esc(dataBR(u.doc))}</b>`:''} · colado <b>${quando}</b>
+    <span style="opacity:.8">· ${esc(impResumo(u.st))}</span>
+    <button class="btn btn-s btn-mini" style="margin-left:8px" onclick="impAbrir('${esc(tipo)}','${esc(rot)}')">histórico</button>
+  </div>`;
+}
+function impAbrir(tipo,rot){
+  const l=impDoTipo(tipo);
+  const linhas = l.length ? l.map(x=>{
+    const d=x.dia||String(x.ts).slice(0,10);
+    return `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--linha);font-size:12.5px">
+      <b style="min-width:74px">${esc(dataBR(d))}</b>
+      <span style="color:var(--muted);min-width:74px">${x.doc?('doc '+esc(dataBR(x.doc))):'—'}</span>
+      <span style="flex:1">${esc(impResumo(x.st))}</span></div>`;
+  }).join('') : '<div class="vazio" style="padding:14px">Nada registrado ainda.</div>';
+  atModal(`<h3 style="margin:0 0 4px">Relatórios colados — ${esc(rot)}</h3>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Do mais recente para o mais antigo. Guarda os últimos ${IMP_MAX} deste tipo, neste aparelho.</div>
+    <div style="max-height:52vh;overflow:auto">${linhas}</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Fechar</button></div>`);
+}
+window.impAbrir=impAbrir;
 const SUB_HIST_MAX=12;
 function subHistPush(a,d,v){
   if(!a||!d||v==null||!isFinite(v)) return;
@@ -4869,7 +4947,8 @@ function viewSubst(){
   if(SUB_CLI) return viewSubstCliente(SUB_CLI);
   const hoje=atHojeLocal();
   const cabec=`<h1 class="pg">Substituição de Apólice</h1>
-    <div class="sub">${SUB_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · a antiga não pode cair antes da nova completar 6 meses · limite ${SUB_LIMITE} dias.</div>`;
+    <div class="sub">${SUB_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · a antiga não pode cair antes da nova completar 6 meses · limite ${SUB_LIMITE} dias.</div>
+    ${impFaixa('espelho','espelho da apólice')}`;
   if(!SUB.clientes.length){
     $('#main').innerHTML=cabec+`<div class="card" style="text-align:center;padding:34px">
       Nenhum cliente em transição ainda.<br><span style="font-size:12.5px;color:var(--muted)">Traga seus dados do controle antigo (o arquivo <b>controle-substituicao.html</b> exporta um backup JSON) ou cole o espelho da apólice.</span><br><br>
@@ -5486,6 +5565,12 @@ async function subConfirmarPreview(){
       SUB.pagamentos.push(pg); pags.push(pg);
     });
   });
+  /* data do DOCUMENTO: o espelho traz "Impresso em"; fico com o mais recente
+     das linhas aplicadas, que e a versao que passou a valer. */
+  const docEsp=(p.updates||[]).filter(u=>!u.stale).reduce((mx,u)=>((u.rec&&u.rec.impresso||'')>mx?u.rec.impresso:mx),'')
+             || (p.naoCad||[]).reduce((mx,r)=>((r.impresso||'')>mx?r.impresso:mx),'') || null;
+  impRegistrar('espelho', docEsp, {atualizadas:aps.length-nNovas, novas:nNovas, clientes:clis.length,
+                                   pagamentos:pags.length, velhos:(p.updates||[]).filter(u=>u.stale).length});
   atClose(); _subPend=null;
   const ok=await subPush({clientes:clis,apolices:aps,pagamentos:pags});
   viewSubst();
@@ -6592,7 +6677,9 @@ async function atAplicarOficialUI(){ const p=_atPend; if(!p||p.tipo!=='oficial')
     if(op==='paga'){ ex.resolvido_em=origem; if(ex.status===AT_STATUS.SUMIU) ex.status=''; }
     else { ex.status=AT_STATUS.SUMIU; }
     if(!ex.origem_relatorio) ex.origem_relatorio=origem; ex.status=atDerivarStatus(ex); up.push(ex); });
-  AT.carregadoEm=origem; atSalvarLocal(); let msg='';
+  AT.carregadoEm=origem;
+  impRegistrar('atraso', origem, {atualizadas:p.updates.length, novas:nNovos, sumiram:(p.sumiram||[]).length});
+  atSalvarLocal(); let msg='';
   if(AT_REMOTE){ try{ await atUpsertRemoto(up); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('AT upsert',e); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
   atClose(); render(); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${nNovos} nova(s)${msg}`,true);
@@ -6681,6 +6768,7 @@ function viewLpAtrasos(){
   const chip=(v,l)=>`<button class="sheet-chip${FAT.faixa===v?' on':''}" onclick="FAT.faixa='${v}';viewLpAtrasos()">${l}</button>`;
   $('#main').innerHTML=`<h1 class="pg">Lista de Atraso</h1>
     <div class="sub">${AT.carregadoEm?'Último relatório: '+atFmtBR(AT.carregadoEm)+' · ':''}${AT_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias recalculam pela data de hoje.</div>
+    ${impFaixa('atraso','relatório de atraso')}
     <div class="kpis" style="margin-top:10px">
       ${kpi('💰 Prêmio em risco',brl(totV),ativos.length+' apólice'+(ativos.length===1?'':'s')+(critV?' · '+brl(critV)+' crítico':''))}
       ${kpi('Total em atraso',ativos.length,brl(totV))}
@@ -9991,6 +10079,20 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('reunião: atribui pela etapa registrada, não pela atual', _rf.porEtapa['P/C'].ag===2 && _rf.porEtapa['P/C'].ok===1);
     ok('reunião: legado sem etapaDe é contado e sinalizado', reunFunil([_rc('w','N',[{quando:_rOnt,feito:'x',desfecho:'avancou'}])],_rCor).legado===1);
     ok('reunião: base vazia não divide por zero', reunFunil([],null).txComp===null);
+    /* diário de importação: poda POR TIPO e resumo sem plural de parêntese */
+    const _il=[];
+    for(let _k=0;_k<IMP_MAX+5;_k++) _il.push({id:'x'+_k, tipo:'atraso', doc:'2026-01-01', ts:'2026-01-'+String((_k%28)+1).padStart(2,'0')+'T10:00:00Z', st:{}});
+    _il.push({id:'e1', tipo:'espelho', doc:'2026-02-01', ts:'2026-02-01T10:00:00Z', st:{}});
+    const _iSalvo=localStorage.getItem(IMP_CHAVE);
+    impGravar(_il); impRegistrar('atraso','2026-03-01',{atualizadas:2});
+    const _iDep=impLer();
+    ok('diário: poda por tipo respeita o teto', _iDep.filter(x=>x.tipo==='atraso').length===IMP_MAX);
+    ok('diário: poda de um tipo não apaga o outro', _iDep.filter(x=>x.tipo==='espelho').length===1);
+    ok('diário: o último é o mais recente', (impUltimo('atraso',_iDep)||{}).doc==='2026-03-01');
+    ok('diário: histórico do tipo vem do mais novo pro mais velho', impDoTipo('atraso',_iDep)[0].doc==='2026-03-01');
+    ok('diário: resumo escreve singular e plural à mão', impResumo({atualizadas:1,novas:2})==='1 atualizada · 2 novas');
+    ok('diário: sem mudança não inventa texto', impResumo({})==='sem mudança');
+    if(_iSalvo===null) localStorage.removeItem(IMP_CHAVE); else localStorage.setItem(IMP_CHAVE,_iSalvo);   /* self-check NÃO deixa lixo salvo (Livro de Erros #17) */
   }catch(e){ falhas.push('exceção: '+e.message); }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
