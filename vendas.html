@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.36.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.37.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1014,7 +1014,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.36.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.37.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1036,7 +1036,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.36.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.37.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7933,6 +7933,37 @@ const MODS={
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','lp-statust','subst']},
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos']}
 };
+/* == ACESSO-ASSISTENTE-V1 (02/09) ==========================================
+   Ele vai trazer o Victor como ASSISTENTE de backoffice e comercial. O papel
+   no banco so tem `lp` e `admin`, e um assistente nao e nem um nem outro --
+   mas isso NAO precisa de coluna nova: papel continua `lp`, o que muda e o
+   conjunto de MODULOS. O preset abaixo evita marcar cinco caixas na mao e,
+   mais importante, deixa a escolha explicada em vez de adivinhada.
+
+   ⚠️ O QUE O PRESET NAO RESOLVE -- e a tela diz isso em voz alta:
+   toda tabela de dado tem RLS `dono = jwt email` (conferido em 02/09 nas
+   lp_contatos, vendas_atrasos, subst_apolices e carteira_clientes). Ou seja:
+   ligar modulo controla o MENU, nao o DADO. O Victor entra e ve as telas
+   VAZIAS ate existir delegacao do dono para ele. Prometer acesso mexendo so
+   nos modulos seria entregar um usuario que nao trabalha. */
+const ACESSO_PRESETS={
+  lp:        {papel:'lp',    rotulo:'Life Planner',
+              mods:null,     /* null = defaults do sistema */
+              nota:'Vê o padrão do sistema: Carteira, BackOffice e Planos.'},
+  assistente:{papel:'lp',    rotulo:'Assistente · backoffice + comercial',
+              mods:{backoffice:true, bn:true, carteira:true, planos:false, revisao:false},
+              nota:'Liga BackOffice (atrasos, pendências, status T, substituição), Base de Nomes/SitPlan/TA e Carteira. Deixa fora Planos & Simulações e a Revisão de Proteção, que são peça de venda do LP.'},
+  admin:     {papel:'admin', rotulo:'Admin', mods:{},
+              nota:'Vê tudo e administra acessos.'}
+};
+function acessoPreset(){ const e=$('#adm-preset'); return ACESSO_PRESETS[(e&&e.value)||'lp']||ACESSO_PRESETS.lp; }
+function acessoPresetNota(){
+  const p=acessoPreset(), el=$('#adm-preset-nota'); if(!el) return;
+  el.innerHTML = esc(p.nota) + (p.papel!=='admin'
+    ? ' <b style="color:var(--amar)">O dado continua sendo do dono</b> — módulo liga o MENU, não o acesso. Sem delegação, esse usuário abre as telas vazias.'
+    : '');
+}
+window.acessoPresetNota=acessoPresetNota;
 let PERFIL=null; // {email,papel,modulos} — null = deslogado/sem linha → defaults
 function souAdm(){ return !!(PERFIL&&PERFIL.papel==='admin'); }
 function modOn(k){ if(!PERFIL) return true;              // sem login = modo local do dono: tudo visível
@@ -9029,10 +9060,11 @@ function viewLpAdm(){
       <h1 class="pg">Acessos & Módulos</h1>
       <div class="sub">O que cada usuário enxerga. A proteção de DADOS é o RLS no banco (cada um só lê o que é seu); aqui você controla os MÓDULOS — beta e privacidade.</div>
       <div class="toolbar">
-        <input id="adm-email" type="email" placeholder="email@dominio.com">
-        <select id="adm-papel"><option value="lp">Life Planner</option><option value="admin">Admin</option></select>
+        <input id="adm-email" type="email" data-so-leitura="lido no clique de Adicionar usuário (admAdd)" placeholder="email@dominio.com">
+        <select id="adm-preset" onchange="acessoPresetNota()">${Object.keys(ACESSO_PRESETS).map(k=>`<option value="${k}">${esc(ACESSO_PRESETS[k].rotulo)}</option>`).join('')}</select>
         <button class="btn btn-p btn-mini" onclick="admAdd()">➕ Adicionar usuário</button>
       </div>
+      <div id="adm-preset-nota" style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6"></div>
       ${ADM.erro? `<div class="card" style="padding:12px">${esc(ADM.erro)}</div>`:''}
       <div class="card" style="padding:6px 10px;overflow-x:auto">
         <table><thead><tr><th>Usuário</th><th>Papel</th>${Object.keys(MODS).map(k=>`<th style="font-size:11px">${esc(MODS[k].label)}</th>`).join('')}</tr></thead><tbody>
@@ -9044,14 +9076,21 @@ function viewLpAdm(){
         </tr>`).join('') || '<tr><td colspan="9" class="vazio">Só você por enquanto — adicione o Daniel pelo e-mail.</td></tr>'}
         </tbody></table>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px">Módulo desmarcado some da barra lateral do usuário no próximo carregamento. Admin sempre vê tudo.</div>`;
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">Módulo desmarcado some da barra lateral do usuário no próximo carregamento. Admin sempre vê tudo.</div>
+      <div class="card" style="padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.7">
+        <b>Módulo ≠ acesso ao dado.</b> Toda tabela tem RLS <code>dono = seu e-mail</code>: cada um só lê o que é seu.
+        Um <b>assistente</b> ligado aqui enxerga os menus certos e as telas <b>vazias</b>, porque os dados são seus, não dele.
+        Para ele trabalhar na sua carteira falta uma <b>delegação</b> (dono → assistente) no banco — decisão em aberto, ainda não implementada.
+      </div>`;
+    acessoPresetNota();
   });
   $('#main').innerHTML='<h1 class="pg">Acessos & Módulos</h1><div class="card" style="padding:14px">Carregando…</div>';
 }
 async function admUpsert(row){ const r=await sb.from('lp_perfis').upsert(row,{onConflict:'email'}); if(r.error){ toast('Falhou: '+r.error.message,false); return false; } return true; }
 async function admAdd(){
   const email=($('#adm-email').value||'').trim().toLowerCase(); if(!email||!email.includes('@')){ toast('E-mail inválido',false); return; }
-  if(await admUpsert({email,papel:$('#adm-papel').value,modulos:{}})){ toast(email+' adicionado',true); viewLpAdm(); }
+  const p=acessoPreset();
+  if(await admUpsert({email, papel:p.papel, modulos:p.mods||{}})){ toast(email+' adicionado como '+p.rotulo,true); viewLpAdm(); }
 }
 async function admPapel(email,papel){ if(await admUpsert({email,papel})) viewLpAdm(); }
 async function admMod(email,k,on){
