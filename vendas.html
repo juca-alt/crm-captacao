@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.40.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.41.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -926,6 +926,8 @@
     <button class="nav-btn ativo" data-view="inicio" onclick="irPara('inicio')"><span class="ic">🏠</span><span class="lbl">Início</span></button>
     <button class="nav-btn" data-view="contatos" onclick="irPara('contatos')"><span class="ic">👤</span><span class="lbl">Contatos</span></button>
     <button class="nav-btn" data-view="agenda" onclick="irPara('agenda')"><span class="ic">📅</span><span class="lbl">Agenda &amp; Tarefas</span><span class="cnt" id="cnt-agenda"></span></button>
+    <!-- BENEFICIOS-ISOLADO (02/09): pedido dele — sinistro é acompanhamento diário, não fica dentro de BackOffice -->
+    <button class="nav-btn" data-view="beneficios" onclick="irPara('beneficios')"><span class="ic">🩹</span><span class="lbl">Benefícios</span><span class="cnt" id="cnt-beneficios"></span></button>
 
     <div class="sep"></div>
     <!-- 2 · SITPLAN & TA (base de nomes + lista do dia) -->
@@ -980,7 +982,6 @@
         <button class="nav-btn sub sub2" data-view="lp-atrasos" onclick="irPara('lp-atrasos')"><span class="ic">⏰</span><span class="lbl">Lista de Atraso</span><span class="cnt" id="cnt-atrasos"></span></button>
         <button class="nav-btn sub sub2" data-view="lp-pendencias" onclick="irPara('lp-pendencias')"><span class="ic">📌</span><span class="lbl">Pendências de Emissão</span><span class="cnt" id="cnt-pendencias"></span></button>
         <button class="nav-btn sub sub2" data-view="solicitacoes" onclick="irPara('solicitacoes')"><span class="ic">📨</span><span class="lbl">Solicitações</span><span class="cnt" id="cnt-solicitacoes"></span></button>
-        <button class="nav-btn sub sub2" data-view="beneficios" onclick="irPara('beneficios')"><span class="ic">🩹</span><span class="lbl">Benefícios</span><span class="cnt" id="cnt-beneficios"></span></button>
         <button class="nav-btn sub sub2" data-view="lp-statust" onclick="irPara('lp-statust')"><span class="ic">🅣</span><span class="lbl">Status T</span><span class="cnt" id="cnt-statust"></span></button>
         <button class="nav-btn sub sub2" data-view="subst" onclick="irPara('subst')"><span class="ic">🔁</span><span class="lbl">Substituições</span></button>
       </div>
@@ -1019,7 +1020,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.40.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.41.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1041,7 +1042,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.40.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.41.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1670,6 +1671,13 @@ function inicioAgora(){
   const atrV=atr.reduce((a,r)=>a+(r.premio||0),0);
   push('cob','💸',atr.length,'apólice em atraso','apólices em atraso',
        atrV?brl(atrV)+' em risco':'prêmio não pago',"irPara('lp-atrasos')",1);
+  /* BENEFÍCIOS NO RADAR (02/09): sinistro em regulação é acompanhamento do dia.
+     Urgência 1 quando algo pede ação (exigência vencida, caso parado, prazo da
+     próxima ação passou ou é hoje); senão 2, só pra não sair do radar. */
+  if(typeof BF!=='undefined'&&BF.itens){ const bfa=BF.itens.filter(bfAtivo); const hj=hojeISO();
+    const bfVenc=bfa.filter(r=>bfExigVencidas(r,hj).length).length, bfPar=bfa.filter(r=>bfParado(r)).length, bfPrazo=bfa.filter(r=>r.proxima_acao_prazo&&r.proxima_acao_prazo<=hj).length;
+    const bfSub=[bfVenc?bfVenc+' exigência'+(bfVenc===1?' vencida':'s vencidas'):'', bfPar?bfPar+' parado'+(bfPar===1?'':'s')+' há '+BF_PARADO_DIAS+'d+':'', bfPrazo?bfPrazo+' com ação pra hoje ou atrasada':''].filter(Boolean).join(' · ')||'documentos, exigências e diário em dia';
+    push('benef','🩹',bfa.length,'benefício em regulação','benefícios em regulação',bfSub,"irPara('beneficios')",(bfVenc||bfPar||bfPrazo)?1:2); }
   const venc=vivos.filter(c=>prevVencida(prevDe(c,'fech')));
   push('venc','🎯',venc.length,'fechamento vencido','fechamentos vencidos',
        'a previsão passou — renegociar a data',"FUN_LENTE.nn='vencido';irPara('nn-funil')",2);
@@ -8809,7 +8817,8 @@ const MODS={
   bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-ta','bn-dups','bn-recs'], grp:'sp'},
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
-  backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','subst']},
+  backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
+  beneficios:{label:'Benefícios (sinistro)',               def:true,  views:['beneficios']},
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos']}
 };
 /* == ACESSO-ASSISTENTE-V1 (02/09) ==========================================
@@ -10081,12 +10090,12 @@ function render(){
      Revisão não deve precisar reabrir "Outros módulos" a cada repintura */
   { const abrir=(ids,caret)=>{ ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); });
                                const c=document.getElementById(caret); if(c) c.textContent='▴'; };
-    const BO=['lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','subst'];
+    const BO=['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst'];
     if(BO.includes(VIEW)){ abrir(['outros-toggle','outros-group'],'outros-caret'); abrir(['bo-toggle','bo-group'],'bo-caret'); }
     else if(VIEW==='nn-funil'||VIEW==='bc-funil') abrir(['pipe-toggle','pipe-group'],'pipe-caret');
     else if(VIEW==='revisao'||VIEW==='principios') abrir(['outros-toggle','outros-group'],'outros-caret');
     else if(VIEW==='metas'||VIEW==='lp-adm'||VIEW==='config-funil') abrir(['cfg-toggle','cfg-group'],'cfg-caret'); }
-  { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length+(EM.itens||[]).filter(emAtivo).length+(BF.itens||[]).filter(bfAtivo).length; cbo.textContent=n||''; }
+  { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length+(EM.itens||[]).filter(emAtivo).length; cbo.textContent=n||''; }
     const cbf=$('#cnt-beneficios'); if(cbf) cbf.textContent=(BF.itens||[]).filter(bfAtivo).length||'';
     const cso=$('#cnt-solicitacoes'); if(cso) cso.textContent=(SO.itens||[]).filter(s=>s.status==='aberta').length||''; }
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
@@ -10453,6 +10462,7 @@ function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
   try{
+    ok('benefícios: módulo isolado (fora do BackOffice, com gate próprio)', MODS.beneficios&&MODS.beneficios.views.indexOf('beneficios')>=0&&MODS.backoffice.views.indexOf('beneficios')<0&&!!document.querySelector('.nav-btn[data-view="beneficios"]:not(.sub)'));
     ok('boot: todo módulo do BackOffice carrega no boot (não só no Sincronizar)', [atCarregar,emCarregar,soCarregar,bfCarregar,subCarregar].every(f=>BOOT_LOADERS.indexOf(f)>=0));
     /* BENEFICIOS-V1 (02/09): checklist padrão, parado, aviso de reinício de prazo, texto da solicitação */
     { ok('benefício: checklist padrão tem 10 itens na ordem da spec', BF_DOCS_PADRAO.length===10&&/^Laudo/.test(BF_DOCS_PADRAO[0].item)&&/^Aceite digital/.test(BF_DOCS_PADRAO[9].item)&&!!bfDica(BF_DOCS_PADRAO[3].item)&&!!bfDica(BF_DOCS_PADRAO[9].item));
