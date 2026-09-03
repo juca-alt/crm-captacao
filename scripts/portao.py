@@ -79,6 +79,23 @@ def imprimir(r):
     if 'prova' in r:
         print('🧪 prova do guarda:', 'acusou o defeito injetado' if r['prova'].get('acusou') else 'NÃO ACUSOU — o portão está quebrado')
 
+def subir_servidor(porta, tentativas=20):
+    """Sobe na porta pedida; se ela estiver presa (servidor solto de outra sessão), anda até achar
+    uma livre — o portão é UM comando e não pode morrer por porta ocupada. O portao.html fala com
+    o servidor por caminho relativo, então qualquer porta serve."""
+    for p in range(porta, porta + tentativas):
+        try:
+            srv = http.server.ThreadingHTTPServer(('127.0.0.1', p), Handler)
+        except OSError as e:
+            if e.errno not in (48, 98):
+                raise
+            print(f'porta {p} ocupada — tentando a {p + 1}')
+            continue
+        if p != porta:
+            print(f'⚠️ subi na porta {p} (a {porta} estava presa por outro processo)')
+        return srv, p
+    sys.exit(f'❌ nenhuma porta livre entre {porta} e {porta + tentativas - 1}')
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--porta', type=int, default=4611)
@@ -89,9 +106,9 @@ def main():
     a = ap.parse_args()
     if a.servido:
         sys.exit(servido())
-    srv = http.server.ThreadingHTTPServer(('127.0.0.1', a.porta), Handler)
+    srv, porta = subir_servidor(a.porta)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    url = f'http://127.0.0.1:{a.porta}/portao.html?auto=1&post=1' + ('&quebrar=1' if a.prova else '')
+    url = f'http://127.0.0.1:{porta}/portao.html?auto=1&post=1' + ('&quebrar=1' if a.prova else '')
     print('portão:', url)
     if not a.sem_abrir:
         try:
@@ -107,7 +124,10 @@ def main():
         sys.exit(2)
     r = RESULTADO['r']
     imprimir(r)
-    print('✅ PORTÃO ABERTO — pode subir' if r.get('ok') else '❌ PORTÃO FECHADO')
+    if a.prova:
+        print('✅ PROVA OK — o guarda acusa defeito (isto NÃO é o portão; rode sem --prova antes de subir)' if r.get('ok') else '❌ PROVA FALHOU — o guarda deixou passar o defeito injetado')
+    else:
+        print('✅ PORTÃO ABERTO — pode subir' if r.get('ok') else '❌ PORTÃO FECHADO')
     sys.exit(0 if r.get('ok') else 1)
 
 if __name__ == '__main__':
