@@ -6,6 +6,8 @@
 
 ## 📸 Snapshot — 03/09/2026, noite (sessão remota, pelo celular) · **v0.45.0 → v0.46.0** · Entradas pelo funil na Carteira + editor do funil com alvo de 44px
 
+✅ **NO AR (03/09, 20h50):** ele autorizou pelo celular ("pode deploy, quero já no app"); a main foi avançada por fast-forward até `e63c844` — isso levou a cadeia inteira #113→#121 + #118 + v0.46.0 + v0.47.0. `python3 scripts/portao.py --servido` = **EXATAMENTE este arquivo, v0.47.0** (sha 892d1f367a63). Falta ele abrir logado e tocar "Atualizar app".
+
 **Estado em 30 s:** sessão rodada num container remoto (claude.ai/code), dirigida pelo celular — **sem o Mac, sem worktrees, sem sessão logada**. `main` segue em `d37b628` / v0.42.1 no ar; **nada da cadeia foi mergeado** (conferido no GitHub: #113 → #121 e #118 abertos). Branch desta sessão: `claude/crm-lp-continuation-59xph2`, em cima de `portao-porta` (ponta da cadeia) + merge de `estado-03-09`. O portão **roda no container** (python3 + Chromium headless dirigindo o `portao.html`): 4 cenários × 29 telas verdes.
 
 ### O que entrou (v0.46.0, um commit)
