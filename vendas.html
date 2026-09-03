@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.43.3 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.44.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -419,6 +419,19 @@
   .hub-tit{font-weight:700;font-size:14px}
   .hub-desc{font-size:12px;color:var(--muted);line-height:1.45;flex:1}
   .hub-tag{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--verde)}
+  /* PAINEL MASTER V2 — cartão por usuário (a tabela de 8 colunas não cabia no celular) */
+  .adm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-top:12px}
+  .adm-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+  .adm-nome{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .adm-mail{font-size:12px;color:var(--muted);word-break:break-all}
+  .adm-lin{font-size:12.5px;line-height:1.7;margin-top:4px}
+  .adm-lin b{color:var(--muted);font-weight:650;font-size:11px;text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
+  .adm-nada{color:var(--muted)}
+  .chipm{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:20px;background:#f1f5f9;color:var(--muted);margin:2px 3px 2px 0}
+  .chipm.on{background:var(--verde-bg);color:#15803d}
+  .adm-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .adm-acoes .btn{min-height:36px}
+  @media(max-width:980px){ .adm-grid{grid-template-columns:1fr} .adm-acoes .btn{min-height:44px;flex:1;justify-content:center} }
   /* board Kanban — Funil Novos Negócios */
   .nn-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
   .seg{display:inline-flex;border:1px solid var(--linha);border-radius:9px;overflow:hidden;background:#fff}
@@ -1018,7 +1031,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.43.3 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.44.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1040,7 +1053,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.43.3 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.44.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -9098,14 +9111,9 @@ const ACESSO_PRESETS={
   admin:     {papel:'admin', rotulo:'Admin', mods:{},
               nota:'Vê tudo e administra acessos.'}
 };
-function acessoPreset(){ const e=$('#adm-preset'); return ACESSO_PRESETS[(e&&e.value)||'lp']||ACESSO_PRESETS.lp; }
-function acessoPresetNota(){
-  const p=acessoPreset(), el=$('#adm-preset-nota'); if(!el) return;
-  el.innerHTML = esc(p.nota) + (p.papel!=='admin'
-    ? ' <b style="color:var(--amar)">O dado continua sendo do dono</b> — módulo liga o MENU, não o acesso. Sem delegação, esse usuário abre as telas vazias.'
-    : '');
-}
-window.acessoPresetNota=acessoPresetNota;
+/* PAINEL MASTER V2: a leitura do preset agora mora na folha
+   (`admPresetAplicar`), que aplica nos checkboxes em vez de só escrever uma
+   nota ao lado de um select que não existe mais. */
 /* == DELEGACAO-V1 (02/09) ==================================================
    O preset de assistente ligava o MENU; o dado continuava do dono e o Victor
    abria as telas vazias. Agora existe lp_delegacoes (dono -> delegado): o RLS
@@ -9135,7 +9143,7 @@ async function perfilCarregar(){
   if(!sb) return; try{
     const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return;
     const email=s.session.user.email;
-    const {data,error}=await sb.from('lp_perfis').select('email,papel,modulos').eq('email',email).maybeSingle();
+    const {data,error}=await sb.from('lp_perfis').select('*').eq('email',email).maybeSingle();
     if(error) throw error;
     PERFIL=data||{email,papel:'lp',modulos:{}};
     const md=s.session.user.user_metadata||{};
@@ -10210,84 +10218,201 @@ function bnDesfazerDup(idA,idB){
 }
 
 /* ── TELA: ACESSOS & MÓDULOS (painel adm) ────────────────────────────────── */
-let ADM={lista:[],erro:''};
+/* == PAINEL MASTER V2 (03/09) ==============================================
+   Pedido dele: "eu com meu painel de master usuário, configuração, liberação,
+   visão etc; Victor e Daniel com permissão, e a possibilidade de cadastrar ou
+   editar de forma simples".
+   O que existia era uma TABELA de 8 colunas de checkbox — ilegível no celular
+   e muda sobre o que cada marca significa. Virou um CARTÃO por pessoa, que
+   diz em uma frase o que ela vê, o que NÃO vê e de quem é a carteira em que
+   ela trabalha; e uma folha única para cadastrar e editar.
+   As colunas `nome` e `ativo` são NOVAS (migration lp_perfis_nome_ativo.sql).
+   O app funciona sem elas: `select('*')` não quebra por coluna que não
+   existe, e os controles que dependem delas só aparecem quando a migration
+   tiver rodado — assim a tela nunca promete o que o banco não aceita. */
+let ADM={lista:[],deleg:[],erro:'',temNome:false,temAtivo:false};
 async function admCarregar(){
   ADM.erro=''; if(!(LPC_REMOTE&&sb)){ ADM.erro='Faça login pra gerenciar acessos.'; return; }
-  try{ const {data,error}=await sb.from('lp_perfis').select('email,papel,modulos').order('email'); if(error) throw error; ADM.lista=data||[];
+  try{ const {data,error}=await sb.from('lp_perfis').select('*').order('email'); if(error) throw error; ADM.lista=data||[];
+    const amostra=ADM.lista[0]||{}; ADM.temNome=('nome' in amostra); ADM.temAtivo=('ativo' in amostra);
     const dg=await sb.from('lp_delegacoes').select('dono_email,delegado_email,criado_em').order('dono_email'); ADM.deleg=dg.error?[]:(dg.data||[]); }
   catch(e){ ADM.erro='Não deu pra carregar: '+(e.message||e); }
 }
+function admNome(p){ return (p&&p.nome)||String((p&&p.email)||'').split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase()); }
+function admAtivo(p){ return !(ADM.temAtivo && p && p.ativo===false); }
+function admModOn(p,k){ return p.papel==='admin' ? true : ((p.modulos&&k in p.modulos)?!!p.modulos[k]:MODS[k].def); }
+function admMods(p){ const o={liga:[],desliga:[]};
+  Object.keys(MODS).forEach(k=>{ (admModOn(p,k)?o.liga:o.desliga).push(MODS[k].label); }); return o; }
+function admPresetDe(p){
+  if(p.papel==='admin') return 'Admin';
+  const m=p.modulos||{}, a=ACESSO_PRESETS.assistente.mods;
+  if(Object.keys(m).length===Object.keys(a).length && Object.keys(a).every(k=>!!m[k]===!!a[k])) return 'Assistente';
+  if(!Object.keys(m).length) return 'Life Planner';
+  return 'Personalizado';
+}
+function admDonosDe(email){ return (ADM.deleg||[]).filter(d=>d.delegado_email===email); }
+function admAssistentesDe(email){ return (ADM.deleg||[]).filter(d=>d.dono_email===email); }
+
 function viewLpAdm(){
   if(!souAdm()){ $('#main').innerHTML='<h1 class="pg">Acessos</h1><div class="card" style="padding:14px">Área restrita ao admin.</div>'; return; }
-  admCarregar().then(()=>{
-    $('#main').innerHTML=`
-      <h1 class="pg">Acessos & Módulos</h1>
-      <div class="sub">O que cada usuário enxerga. A proteção de DADOS é o RLS no banco (cada um só lê o que é seu); aqui você controla os MÓDULOS — beta e privacidade.</div>
-      <div class="toolbar">
-        <input id="adm-email" type="email" data-so-leitura="lido no clique de Adicionar usuário (admAdd)" placeholder="email@dominio.com">
-        <select id="adm-preset" onchange="acessoPresetNota()">${Object.keys(ACESSO_PRESETS).map(k=>`<option value="${k}">${esc(ACESSO_PRESETS[k].rotulo)}</option>`).join('')}</select>
-        <button class="btn btn-p btn-mini" onclick="admAdd()">➕ Adicionar usuário</button>
+  admCarregar().then(()=>{ $('#main').innerHTML=admHtml(); });
+  $('#main').innerHTML='<h1 class="pg">Painel Master · Acessos</h1><div class="card" style="padding:14px">Carregando…</div>';
+}
+function admHtml(){
+  const eu=(PERFIL&&PERFIL.email)||'';
+  const card=p=>{ const m=admMods(p), donos=admDonosDe(p.email), assist=admAssistentesDe(p.email), ativo=admAtivo(p);
+    return `<div class="card adm-card" style="padding:14px 16px${ativo?'':';opacity:.62'}">
+      <div class="adm-top">
+        <div style="min-width:0">
+          <div class="adm-nome">${esc(admNome(p))}${p.email===eu?' <span class="badge b-cinza">você</span>':''}${ativo?'':' <span class="badge b-amarelo">acesso pausado</span>'}</div>
+          <div class="adm-mail">${esc(p.email)}</div>
+        </div>
+        <span class="badge ${p.papel==='admin'?'b-azul':'b-verde'}" style="flex-shrink:0">${esc(admPresetDe(p))}</span>
       </div>
-      <div id="adm-preset-nota" style="font-size:12px;color:var(--muted);margin:-4px 0 12px;line-height:1.6"></div>
+      <div class="adm-lin"><b>Vê</b>${m.liga.length?m.liga.map(l=>`<span class="chipm on">${esc(l)}</span>`).join(''):'<span class="adm-nada">só o funil e a agenda</span>'}</div>
+      ${m.desliga.length?`<div class="adm-lin"><b>Não vê</b>${m.desliga.map(l=>`<span class="chipm">${esc(l)}</span>`).join('')}</div>`:''}
+      ${donos.length?`<div class="adm-lin">🤝 Trabalha na carteira de <b style="text-transform:none;font-size:12.5px;letter-spacing:0">${donos.map(d=>esc(d.dono_email)).join(', ')}</b> — o que ele grava no BackOffice fica sendo do dono.${donos.some(d=>d.dono_email===eu)?` <button class="btn btn-ghost btn-mini" style="padding:1px 8px;font-size:11px" onclick="admDesdelegar('${esc(eu)}','${esc(p.email)}')">tirar</button>`:''}</div>`:''}
+      ${assist.length?`<div class="adm-lin">👥 Tem assistente: <b style="text-transform:none;font-size:12.5px;letter-spacing:0">${assist.map(d=>esc(d.delegado_email)).join(', ')}</b></div>`:''}
+      ${!donos.length&&p.email!==eu&&p.papel!=='admin'?`<div class="adm-lin" style="color:var(--amarelo)">⚠️ Sem delegação: ele entra e abre as telas <b style="text-transform:none;font-size:12.5px;letter-spacing:0">vazias</b>, porque o dado é do dono.</div>`:''}
+      <div class="adm-acoes">
+        <button class="btn btn-s btn-mini" onclick="admFicha('${esc(p.email)}')">✏️ Editar</button>
+        <button class="btn btn-ghost btn-mini" onclick="admVerComo('${esc(p.email)}')">👁️ Ver o que ele enxerga</button>
+        ${(ADM.temAtivo&&p.email!==eu)?`<button class="btn btn-ghost btn-mini" onclick="admPausar('${esc(p.email)}',${ativo?'false':'true'})">${ativo?'⏸️ Pausar':'▶️ Reativar'}</button>`:''}
+      </div>
+    </div>`; };
+  return `
+      <h1 class="pg">Painel Master · Acessos</h1>
+      <div class="sub">Quem entra, o que cada um enxerga e de quem é a carteira em que ele trabalha. Um cartão por pessoa; clique em Editar para mudar tudo num lugar só.</div>
       ${ADM.erro? `<div class="card" style="padding:12px">${esc(ADM.erro)}</div>`:''}
-      <div class="card" style="padding:6px 10px;overflow-x:auto">
-        <table><thead><tr><th>Usuário</th><th>Papel</th>${Object.keys(MODS).map(k=>`<th style="font-size:11px">${esc(MODS[k].label)}</th>`).join('')}</tr></thead><tbody>
-        ${ADM.lista.map(p=>`<tr>
-          <td><b>${esc(p.email)}</b></td>
-          <td><select onchange="admPapel('${esc(p.email)}',this.value)"><option ${p.papel==='lp'?'selected':''} value="lp">LP</option><option ${p.papel==='admin'?'selected':''} value="admin">Admin</option></select></td>
-          ${Object.keys(MODS).map(k=>{ const on=p.papel==='admin'?true:((p.modulos&&k in p.modulos)?!!p.modulos[k]:MODS[k].def);
-            return `<td style="text-align:center"><input type="checkbox" ${on?'checked':''} ${p.papel==='admin'?'disabled title="admin vê tudo"':''} onchange="admMod('${esc(p.email)}','${k}',this.checked)"></td>`; }).join('')}
-        </tr>`).join('') || '<tr><td colspan="9" class="vazio">Só você por enquanto — adicione o Daniel pelo e-mail.</td></tr>'}
-        </tbody></table>
-      </div>
-      <div style="font-size:12px;color:var(--muted);margin-top:8px">Módulo desmarcado some da barra lateral do usuário no próximo carregamento. Admin sempre vê tudo.</div>
-      <h2 class="pg" style="font-size:16px;margin-top:22px">🤝 Delegações (dono → assistente)</h2>
-      <div class="sub">Quem pode trabalhar na carteira de quem, no <b>BackOffice</b> (atrasos, pendências de emissão, solicitações, substituições). O assistente lê e grava as linhas do dono; o dado continua sendo do dono.</div>
-      <div class="toolbar">
-        <input id="dg-dono" type="email" data-so-leitura="lido no clique de Delegar (admDelegar)" placeholder="dono (ex.: você)" value="${esc(PERFIL&&PERFIL.email||'')}">
-        <span style="color:var(--muted)">→</span>
-        <input id="dg-para" type="email" data-so-leitura="lido no clique de Delegar (admDelegar)" placeholder="assistente@dominio.com">
-        <button class="btn btn-p btn-mini" onclick="admDelegar()">🤝 Delegar</button>
-      </div>
-      <div class="card" style="padding:6px 10px;overflow-x:auto"><table><thead><tr><th>Dono</th><th>Assistente</th><th>Desde</th><th></th></tr></thead><tbody>
-        ${(ADM.deleg||[]).map(d=>`<tr><td><b>${esc(d.dono_email)}</b></td><td>${esc(d.delegado_email)}</td><td style="font-size:12px">${esc(dataBR(String(d.criado_em||'').slice(0,10)))}</td><td><button class="btn btn-ghost btn-mini" onclick="admDesdelegar('${esc(d.dono_email)}','${esc(d.delegado_email)}')">✕ remover</button></td></tr>`).join('')||'<tr><td colspan="4" class="vazio">Nenhuma delegação. Sem isso o assistente abre as telas vazias.</td></tr>'}
-      </tbody></table></div>
-      <div class="card" style="padding:12px 14px;margin-top:10px;font-size:12.5px;line-height:1.7">
-        <b>Módulo ≠ acesso ao dado.</b> O RLS aceita <code>dono</code> OU <code>delegado do dono</code> nas tabelas do BackOffice. Fora do BackOffice (contatos, carteira, funil) continua só o dono.
-        Pra um assistente novo: 1) convide o e-mail no Supabase (signup está fechado); 2) adicione aqui com o preset Assistente; 3) delegue.
+      <div class="toolbar"><button class="btn btn-p" onclick="admFicha('')">➕ Novo usuário</button>
+        <span style="font-size:12px;color:var(--muted)">${ADM.lista.length} cadastrado(s) · ${(ADM.deleg||[]).length} delegação(ões)</span></div>
+      <div class="adm-grid">${ADM.lista.map(card).join('')||'<div class="card" style="padding:14px">Só você por enquanto.</div>'}</div>
+      ${ADM.temAtivo?'':`<div class="card" style="padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.7;color:var(--muted)">
+        <b style="color:var(--ink)">Nome e pausa de acesso ainda não estão no banco.</b> Rode a migration <code>supabase/migrations/lp_perfis_nome_ativo.sql</code> no SQL Editor e estes dois controles aparecem sozinhos. Enquanto isso o resto do painel funciona normalmente.</div>`}
+      <div class="card" style="padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.75">
+        <b>Três coisas diferentes, na ordem em que se faz:</b><br>
+        <b>1. Convite</b> — o cadastro aqui não cria a conta. Quem nunca entrou precisa do convite no Supabase (Auth → Users → Add user → Send invitation), porque o signup está fechado.<br>
+        <b>2. Módulo</b> — liga o MENU. Desmarcar some com a tela no próximo carregamento.<br>
+        <b>3. Delegação</b> — libera o DADO do BackOffice (atrasos, emissão, solicitações, benefícios, substituição). Fora do BackOffice — contatos, carteira, funil — continua só o dono.<br>
+        <span style="color:var(--muted)">Pausar o acesso apaga o app para a pessoa, mas não revoga o login: o RLS é que manda no dado. Para tirar de verdade, remova a delegação aqui e o usuário no Supabase.</span>
       </div>`;
-    acessoPresetNota();
-  });
-  $('#main').innerHTML='<h1 class="pg">Acessos & Módulos</h1><div class="card" style="padding:14px">Carregando…</div>';
+}
+
+/* ── folha única de cadastro e edição ────────────────────────────────────
+   Mesma folha para os dois casos: só o e-mail muda de comportamento (é a
+   chave, então não se edita depois). */
+function admFicha(email){
+  const novo=!email;
+  const p=novo?{email:'',papel:'lp',modulos:{}}:(ADM.lista.find(x=>x.email===email)||{email:email,papel:'lp',modulos:{}});
+  const eu=(PERFIL&&PERFIL.email)||'';
+  const jaDelegado=admDonosDe(p.email).some(d=>d.dono_email===eu);
+  const so='data-so-leitura="lido no clique de Salvar (admSalvarFicha)"';
+  const linhaMod=k=>`<label class="mais-item" style="cursor:pointer;min-height:44px">
+      <input type="checkbox" id="admf_mod_${k}" ${admModOn(p,k)?'checked':''} ${so} style="width:22px;height:22px;flex-shrink:0">
+      <span class="tx">${esc(MODS[k].label)}</span></label>`;
+  admFechar();
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd" id="admf-bd" onclick="if(event.target===this)admFechar()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-tit">${novo?'Novo usuário':'Editar '+esc(admNome(p))}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;padding:0 12px 10px">
+        <label style="font-size:12.5px;font-weight:600">E-mail
+          <input id="admf_email" type="email" value="${esc(p.email)}" ${novo?'':'readonly'} ${so} placeholder="email@dominio.com" style="width:100%;margin-top:4px;min-height:44px${novo?'':';background:#f1f5f9'}"></label>
+        ${ADM.temNome?`<label style="font-size:12.5px;font-weight:600">Nome
+          <input id="admf_nome" type="text" value="${esc(p.nome||'')}" ${so} placeholder="como aparece no painel" style="width:100%;margin-top:4px;min-height:44px"></label>`:''}
+        <label style="font-size:12.5px;font-weight:600">Papel
+          <select id="admf_papel" onchange="admPresetAplicar()" style="width:100%;margin-top:4px;min-height:44px">
+            <option value="lp" ${p.papel==='lp'?'selected':''}>Life Planner / Assistente</option>
+            <option value="admin" ${p.papel==='admin'?'selected':''}>Admin — vê tudo e administra acessos</option>
+          </select></label>
+        <label style="font-size:12.5px;font-weight:600">Começar de um preset
+          <select id="admf_preset" onchange="admPresetAplicar()" style="width:100%;margin-top:4px;min-height:44px">
+            <option value="">— manter como está —</option>
+            ${Object.keys(ACESSO_PRESETS).map(k=>`<option value="${k}">${esc(ACESSO_PRESETS[k].rotulo)}</option>`).join('')}
+          </select></label>
+        <div id="admf_preset_nota" style="font-size:12px;color:var(--muted);line-height:1.6"></div>
+        <div style="font-size:12.5px;font-weight:600;margin-top:2px">Módulos que ele enxerga</div>
+        <div id="admf_mods">${Object.keys(MODS).map(linhaMod).join('')}</div>
+        ${eu&&p.email!==eu?`<label class="mais-item" style="cursor:pointer;min-height:44px">
+          <input type="checkbox" id="admf_deleg" ${jaDelegado?'checked':''} ${so} style="width:22px;height:22px;flex-shrink:0">
+          <span class="tx">Trabalha na <b>minha</b> carteira do BackOffice<span class="ds">sem isto ele entra e vê as telas vazias</span></span></label>`:''}
+      </div>
+      <div style="display:flex;gap:8px;padding:0 12px">
+        <button class="btn btn-s" style="flex:1;justify-content:center;min-height:48px" onclick="admFechar()">Cancelar</button>
+        <button class="btn btn-p" style="flex:1;justify-content:center;min-height:48px" onclick="admSalvarFicha()">Salvar</button>
+      </div>
+    </div></div>`);
+}
+function admFechar(){ const e=document.getElementById('admf-bd'); if(e) e.remove(); }
+function admPresetAplicar(){
+  const sel=$('#admf_preset'), nota=$('#admf_preset_nota'), papel=($('#admf_papel')||{}).value;
+  const k=sel&&sel.value; const pr=k?ACESSO_PRESETS[k]:null;
+  if(pr){
+    if($('#admf_papel')) $('#admf_papel').value=pr.papel;
+    Object.keys(MODS).forEach(mk=>{ const el=$('#admf_mod_'+mk); if(!el) return;
+      el.checked = pr.papel==='admin' ? true : (pr.mods&&mk in pr.mods ? !!pr.mods[mk] : MODS[mk].def); });
+  }
+  if(nota) nota.innerHTML = pr? esc(pr.nota)+' <b style="color:var(--amar,#b45309)">Módulo liga o menu, não o dado</b> — sem delegação as telas abrem vazias.'
+                             : (papel==='admin'?'Admin vê tudo, inclusive este painel.':'Marque abaixo o que ele enxerga.');
+}
+async function admSalvarFicha(){
+  const email=(($('#admf_email')||{}).value||'').trim().toLowerCase();
+  if(!email||email.indexOf('@')<0){ toast('E-mail inválido',false); return; }
+  const papel=(($('#admf_papel')||{}).value)||'lp';
+  const modulos={}; Object.keys(MODS).forEach(k=>{ const el=$('#admf_mod_'+k); if(el) modulos[k]=el.checked; });
+  const row={email:email,papel:papel,modulos:modulos};
+  if(ADM.temNome){ const n=(($('#admf_nome')||{}).value||'').trim(); row.nome=n||null; }
+  if(!await admUpsert(row)) return;
+  const eu=(PERFIL&&PERFIL.email)||'', dl=$('#admf_deleg');
+  if(dl&&eu&&email!==eu){
+    const tinha=admDonosDe(email).some(d=>d.dono_email===eu);
+    try{
+      if(dl.checked&&!tinha){ const r=await sb.from('lp_delegacoes').upsert({dono_email:eu,delegado_email:email},{onConflict:'dono_email,delegado_email'}); if(r.error) throw r.error; }
+      if(!dl.checked&&tinha){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:eu,delegado_email:email}); if(r.error) throw r.error; }
+    }catch(e){ toast('Perfil salvo, mas a delegação falhou: '+(e.message||e),false); admFechar(); viewLpAdm(); return; }
+  }
+  admFechar(); toast(email+' salvo',true); viewLpAdm();
+}
+async function admPausar(email,ativo){
+  if(!ADM.temAtivo) return;
+  if(await admUpsert({email:email,ativo:!!ativo})){ toast(ativo?'Acesso reativado':'Acesso pausado — ele vê um aviso ao abrir',true); viewLpAdm(); }
+}
+/* "Ver o que ele enxerga" é a CONTA do app, não uma sessão dele: nada aqui
+   entra na conta da pessoa nem lê o dado dela. */
+function admVerComo(email){
+  const p=ADM.lista.find(x=>x.email===email); if(!p) return;
+  const m=admMods(p), donos=admDonosDe(p.email);
+  const lista=(arr,vazio)=>arr.length?`<ul style="margin:6px 0 0 18px;padding:0">${arr.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:`<div style="color:var(--muted);margin-top:4px">${vazio}</div>`;
+  atModal(`<h3 style="margin:0 0 4px">O que ${esc(admNome(p))} enxerga</h3>
+    <div class="sub">${esc(p.email)} · ${esc(admPresetDe(p))}${admAtivo(p)?'':' · <b>acesso pausado</b>'}</div>
+    <div style="font-size:13px;margin-top:12px"><b>Menus que aparecem</b>${lista(m.liga,'Nenhum módulo — só funil, contatos e agenda.')}</div>
+    <div style="font-size:13px;margin-top:12px"><b>Menus que não aparecem</b>${lista(m.desliga,'Nenhum: ele vê todos os módulos.')}</div>
+    <div style="font-size:13px;margin-top:12px"><b>Dado que ele abre</b>
+      <div style="margin-top:4px">${donos.length
+        ? 'BackOffice de <b>'+donos.map(d=>esc(d.dono_email)).join(', ')+'</b> — lê e grava as linhas do dono.<br><span style="color:var(--muted)">Fora do BackOffice (contatos, carteira, funil) ele só vê o que for dele.</span>'
+        : '<span style="color:var(--amarelo)">Só o que for dele. Sem delegação, todas as telas abrem <b>vazias</b>.</span>'}</div></div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:14px;line-height:1.6">Esta é a conta do app: nada aqui entra na conta dele nem lê o dado dele.</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-p" onclick="atClose()">Fechar</button></div>`);
 }
 async function admUpsert(row){ const r=await sb.from('lp_perfis').upsert(row,{onConflict:'email'}); if(r.error){ toast('Falhou: '+r.error.message,false); return false; } return true; }
-async function admAdd(){
-  const email=($('#adm-email').value||'').trim().toLowerCase(); if(!email||!email.includes('@')){ toast('E-mail inválido',false); return; }
-  const p=acessoPreset();
-  if(await admUpsert({email, papel:p.papel, modulos:p.mods||{}})){ toast(email+' adicionado como '+p.rotulo,true); viewLpAdm(); }
-}
-async function admDelegar(){ const dono=($('#dg-dono').value||'').trim().toLowerCase(), para=($('#dg-para').value||'').trim().toLowerCase();
-  if(!dono.includes('@')||!para.includes('@')){ toast('Preencha os dois e-mails',false); return; } if(dono===para){ toast('Dono e assistente são a mesma pessoa',false); return; }
-  const r=await sb.from('lp_delegacoes').upsert({dono_email:dono,delegado_email:para},{onConflict:'dono_email,delegado_email'}); if(r.error){ toast('Falhou: '+r.error.message,false); return; }
-  toast(para+' agora trabalha na carteira de '+dono,true); viewLpAdm(); }
 async function admDesdelegar(dono,para){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:dono,delegado_email:para}); if(r.error){ toast('Falhou: '+r.error.message,false); return; } toast('Delegação removida',true); viewLpAdm(); }
-async function admPapel(email,papel){ if(await admUpsert({email,papel})) viewLpAdm(); }
-async function admMod(email,k,on){
-  const p=ADM.lista.find(x=>x.email===email); const modulos={...(p&&p.modulos||{}),[k]:on};
-  if(await admUpsert({email,modulos})) viewLpAdm();
-}
 
 const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',sitplan:'Lista do Dia (funil)',metas:'Metas',contatos:'Contatos',
   'bn-estoque':'Estoque de Nomes','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
-  'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações',
+  'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
   revisao:'Revisão de Proteção'};
 function renderTituloTopo(){
   const el=$('#tbTitulo'); if(!el) return;
-  const ativo=document.querySelector('.sidebar .nav-btn.ativo .lbl');
-  el.textContent=(ativo&&ativo.textContent.trim())||TITULO_VIEW[VIEW]||'Visão LP';
+  const btn=document.querySelector('.sidebar .nav-btn.ativo');
+  const lbl=btn&&btn.querySelector('.lbl');
+  /* HUB: dentro de um módulo aberto pelo hub, a barra tem que dizer a TELA,
+     não o hub. Antes ela dizia "Módulos" com a Lista de Atraso na frente, e
+     agora diria "Configurações" com as Metas na frente — o título é a única
+     pista de onde se está no celular. */
+  const dentroDeHub=!!(btn&&btn.dataset&&btn.dataset.view&&btn.dataset.view!==VIEW);
+  el.textContent=(dentroDeHub&&TITULO_VIEW[VIEW])||(lbl&&lbl.textContent.trim())||TITULO_VIEW[VIEW]||'Visão LP';
 }
 /* o título já vive na topbar: se a view repetir o mesmo texto no h1, some com o h1
    (o subtítulo continua) — evita ler "Contatos" duas vezes na mesma tela */
@@ -10332,7 +10457,23 @@ function qaAvisar(){
   if(novos.length) console.warn('[QA campo morto] a tela DESENHA e ninguem LE — digitar aqui nao muda nada:', novos);
   return novos;
 }
+/* PAINEL MASTER V2: a decisão é uma função pura, e o texto é outra. O
+   invariante testa as duas E manda o render de verdade pintar a tela — olhar
+   o código-fonte do `render` não serve, porque ele é embrulhado no fim do
+   arquivo (o `toString()` devolve o embrulho, não o corpo). */
+function perfilPausado(){ return !!(PERFIL && PERFIL.ativo===false); }
+function pausadoHtml(){
+  return `<h1 class="pg">Acesso pausado</h1>
+      <div class="card" style="padding:16px;line-height:1.7;font-size:13.5px">
+        O acesso de <b>${esc((PERFIL&&PERFIL.email)||'')}</b> a este CRM está pausado pelo administrador.<br>
+        Fale com o Gustavo para reativar.</div>`;
+}
 function render(){
+  /* PAINEL MASTER V2: pausa é do APP — a tela avisa e não pinta. Não é
+     revogação: o token do Supabase segue valendo e o RLS é que manda no
+     dado. Para tirar o acesso de verdade: remover a delegação aqui e o
+     usuário no Supabase. Isso está escrito na tela do painel. */
+  if(perfilPausado()){ renderTopo(); $('#main').innerHTML=pausadoHtml(); return; }
   renderTopo(); lpCounts(); renderNnEtapas(); renderBcEtapas(); renderTituloTopo();
   { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
     const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
@@ -11376,6 +11517,35 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       PERFIL=guarda;
       return !vistoPorLp && cfgCabe(acesso)===real;
     })());
+    /* PAINEL MASTER V2 (03/09) — o painel é onde se erra caro: um clique
+       errado abre a carteira de alguém. Estes invariantes guardam as três
+       confusões que a tela existe para desfazer. */
+    { const _pf=PERFIL;
+      try{
+        const p={email:'x@y.z',papel:'lp',modulos:ACESSO_PRESETS.assistente.mods};
+        ok('acesso: o preset Assistente liga BackOffice, Base de Nomes e Carteira, e deixa Planos e Revisão fora',
+            admModOn(p,'backoffice')&&admModOn(p,'bn')&&admModOn(p,'carteira')&&!admModOn(p,'planos')&&!admModOn(p,'revisao'));
+        ok('acesso: admin vê todo módulo, mesmo com o mapa vazio', Object.keys(MODS).every(k=>admModOn({papel:'admin',modulos:{}},k)));
+        ok('acesso: o cartão nomeia quem é sem nome cadastrado', admNome({email:'joao.da.silva@x.com'})==='Joao Da Silva');
+        ok('acesso: preset é derivado do que está gravado, nunca digitado',
+            admPresetDe({papel:'admin',modulos:{}})==='Admin' && admPresetDe({papel:'lp',modulos:{}})==='Life Planner'
+            && admPresetDe(p)==='Assistente' && admPresetDe({papel:'lp',modulos:{bn:true}})==='Personalizado');
+        ok('acesso: pausado é quem está marcado como pausado, e mais ninguém', (()=>{
+            PERFIL={email:'x@y.z',papel:'lp',modulos:{},ativo:false}; const a=perfilPausado();
+            PERFIL={email:'x@y.z',papel:'lp',modulos:{}};            const b=perfilPausado();
+            PERFIL=null;                                             const c=perfilPausado();
+            PERFIL=_pf; return a&&!b&&!c; })());
+        ok('acesso: o app OBEDECE a pausa — a tela avisa e não pinta o CRM', (()=>{
+            PERFIL={email:'x@y.z',papel:'lp',modulos:{},ativo:false};
+            let viu=false; try{ render(); viu=/Acesso pausado/.test($('#main').innerHTML); }catch(e){ viu=false; }
+            PERFIL=_pf; try{ render(); }catch(e){}
+            return viu; })());
+        ok('acesso: nome e pausa só aparecem quando o banco tem as colunas',
+            /ADM\.temNome/.test(admFicha.toString()) && /ADM\.temAtivo/.test(admHtml.toString()));
+        ok('acesso: a folha é a mesma pra cadastrar e editar', /const novo=!email/.test(admFicha.toString()));
+      } finally { PERFIL=_pf; } }
+    ok('título: toda tela aberta por um hub tem nome próprio na barra de cima',
+        HUB_VIEWS.concat(CFG_VIEWS).every(v=>!!TITULO_VIEW[v]));
     ok('menu: nenhum destino órfão', [...document.querySelectorAll('.sidebar .nav-btn[data-view]')]
         .every(b=>VIEWS_CONHECIDAS.includes(b.dataset.view)));
     /* SUBST-SEM-JARGAO (03/09): "pos X/16" saiu do card em 27/08 e voltou a
