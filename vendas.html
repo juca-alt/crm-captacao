@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.43.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.43.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1018,7 +1018,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.43.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.43.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1040,7 +1040,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.43.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.43.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -8414,15 +8414,17 @@ async function cartCarregar(){
   if(CART_REMOTE){ try{
     const [rc,ra]=await Promise.all([sb.from(CART_TCLI).select('*'),sb.from(CART_TAPO).select('*')]);
     if(rc.error) throw rc.error; if(ra.error) throw ra.error;
-    CART.clientes=(rc.data||[]).map(r=>r.dados).filter(Boolean);
-    CART.apolices=(ra.data||[]).map(r=>r.dados).filter(Boolean);
+    CART.clientes=cartNormLista(rc.data,'ref',cartNormCliente);
+    CART.apolices=cartNormLista(ra.data,'chave',cartNormApolice);
     const max=[...(rc.data||[]),...(ra.data||[])].reduce((m,r)=>((r.atualizado||'')>m?r.atualizado:m),'');
     CART.importadoEm=max?max.slice(0,10):null;
     cartSalvar();                         // espelha no cache local
     return;
   }catch(e){ console.warn('CART load remoto falhou → fallback local',e); CART_REMOTE=false; } }
   try{ const raw=localStorage.getItem(CART_CHAVE); if(raw){ const o=JSON.parse(raw);
-    CART.clientes=Array.isArray(o.clientes)?o.clientes:[]; CART.apolices=Array.isArray(o.apolices)?o.apolices:[]; CART.importadoEm=o.importadoEm||null; } }catch(e){ console.warn('CART load falhou',e); } }
+    CART.clientes=cartNormLista(Array.isArray(o.clientes)?o.clientes:[],'ref',cartNormCliente);
+    CART.apolices=cartNormLista(Array.isArray(o.apolices)?o.apolices:[],'chave',cartNormApolice);
+    CART.importadoEm=o.importadoEm||null; } }catch(e){ console.warn('CART load falhou',e); } }
 function cartSalvar(){ try{ localStorage.setItem(CART_CHAVE,JSON.stringify(CART)); }catch(e){ console.warn('CART save falhou',e); } }
 // snapshot substitutivo no banco: delete (RLS limita ao dono) + insert. `dono` sai do DEFAULT do banco.
 async function cartPersistRemoto(){
@@ -8470,9 +8472,71 @@ function cartApoliceDe(o){ const seg=cartTxt(cartCol(o,'Segurado')); if(!seg) re
     email:cartTxt(cartCol(o,'E-mail')), status:cartTxt(cartCol(o,'Status Apólice'))||'Ativa', premio:cartMoney(cartCol(o,'Prêmio')),
     periodicidade:cartTxt(cartCol(o,'Periodicidade Pagto.')), forma:cartTxt(cartCol(o,'Forma Pagto.')) }; }
 
+/* == CARTEIRA-UMA-FORMA-V1 (03/09) =========================================
+   Duas superfícies gravam as MESMAS tabelas com formatos diferentes:
+   - o importador daqui (`cartClienteDe`/`cartApoliceDe`) grava
+     {ref, nascimento, celular, cob{...}} / {apolice, periodicidade, status};
+   - o cockpit (`carteira.html`, que semeou a carteira real em 11/08) grava
+     {nome, nasc, cel, cap, mrr} / {ap, period, cli_ref} — e a CHAVE DA LINHA
+     (`carteira_clientes.ref`, `carteira_apolices.chave`) fica FORA do `dados`.
+   O `cartCarregar` fazia `map(r=>r.dados)`: jogava a chave da linha fora e
+   entregava às telas um objeto sem `ref` e sem `cob`. Resultado na base real
+   (143 clientes / 196 apólices): `c.cob.pm` indefinido, e as TRÊS telas da
+   Carteira estouravam — Visão, Clientes e Oportunidades não pintavam nada.
+   O self-check só acusava o índice porque `a.ref===c.ref` com os dois
+   `undefined` dá true e o filtro devolvia as 196 apólices.
+   Conserto na origem: TODA carga passa por um normalizador, que carrega a
+   chave da linha para dentro do objeto e traduz os nomes de campo. O que a
+   carga não trouxer continua não existindo — `cobDetalhe:false` diz isso em
+   voz alta, em vez de virar zero e o app anunciar gap de cobertura que ele
+   não tem como saber. */
+function cartNum(v){ return typeof v==='number'?v:(v==null||v===''?0:cartMoney(v)); }
+function cartNormCliente(d,rowRef){
+  if(!d||typeof d!=='object') return null;
+  const nome=cartTxt(d.nome); if(!nome) return null;
+  const cob=(d.cob&&typeof d.cob==='object')?d.cob:null;
+  return Object.assign({},d,{
+    nome, ref: d.ref||rowRef||normKey(nome), _rowRef: rowRef||d.ref||null,
+    nascimento: d.nascimento||d.nasc||null,
+    idade: d.idade!=null?d.idade:null,
+    celular: d.celular||d.cel||null,
+    telefone: d.telefone||d.tel||null,
+    telComercial: d.telComercial||null,
+    email: d.email||null,
+    /* sem `cob` na carga, só dá para saber CS e prêmio mensal (cap/mrr do
+       cockpit). As outras coberturas ficam FORA do objeto de propósito. */
+    cob: cob||{cs:cartNum(d.cap), pm:cartNum(d.mrr)},
+    cobDetalhe: !!cob
+  });
+}
+function cartNormApolice(d,rowChave){
+  if(!d||typeof d!=='object') return null;
+  const seg=cartTxt(d.segurado); if(!seg) return null;
+  const numero=d.apolice||d.ap||(rowChave?String(rowChave).split('|')[0]:null);
+  return Object.assign({},d,{
+    segurado: seg, ref: d.ref||normKey(seg),
+    apolice: numero||null, proposta: d.proposta||null,
+    premio: cartNum(d.premio!=null?d.premio:d.mrr),
+    periodicidade: d.periodicidade||d.period||null,
+    forma: d.forma||null,
+    respPagto: d.respPagto||null,
+    celular: d.celular||d.cel||null, telefone: d.telefone||null,
+    /* a carga do cockpit é da carteira ATIVA e não traz status; presumir
+       'Ativa' é o que ela significa, mas fica carimbado. */
+    status: d.status||'Ativa', _statusPresumido: !d.status,
+    cli_ref: d.cli_ref||null
+  });
+}
+function cartNormLista(rows,chave,fn){
+  return (rows||[]).map(r=>{
+    if(r&&typeof r==='object'&&r.dados) return fn(r.dados,r[chave]);
+    return fn(r,null);
+  }).filter(Boolean);
+}
+
 // devolve {sync:'remoto'|'local'|'falhou'} — o caller avisa quando o banco não recebeu o snapshot.
-async function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartParseTabela(a.clientesHTML).map(cartClienteDe).filter(Boolean);
-  if(a.apolicesHTML!=null) CART.apolices=cartParseTabela(a.apolicesHTML).map(cartApoliceDe).filter(Boolean);
+async function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartNormLista(cartParseTabela(a.clientesHTML).map(cartClienteDe).filter(Boolean),'ref',cartNormCliente);
+  if(a.apolicesHTML!=null) CART.apolices=cartNormLista(cartParseTabela(a.apolicesHTML).map(cartApoliceDe).filter(Boolean),'chave',cartNormApolice);
   CART.importadoEm=nowISO(); cartSalvar();
   if(!CART_REMOTE) return {sync:'local'};
   try{ await cartPersistRemoto(); return {sync:'remoto'}; }
@@ -8529,7 +8593,15 @@ function cartIdx(){
              an:porCampos(lpAtivos('aniversario'),['cliente'],['celular','telefone']),
              da:porCampos(lpAtivos('datas'),['cliente'],['celular','telefone']),
              apo:new Map() };
-  (CART.apolices||[]).forEach(a=>pessoaChaves(a,['segurado'],['celular','telefone']).forEach(k=>push(ix.apo,k,a)));
+  /* CARTEIRA-UMA-FORMA-V1: o cockpit grava o vínculo EXPLÍCITO
+     (`apolice.cli_ref` = chave da linha do cliente). Casar só por nome faz a
+     apólice sumir da tela do cliente no dia em que o nome for escrito
+     diferente nas duas tabelas. O vínculo entra como chave própria ('x:'),
+     ao lado de nome e telefone; o Set de sempre continua deduplicando. */
+  (CART.apolices||[]).forEach(a=>{
+    pessoaChaves(a,['segurado'],['celular','telefone']).forEach(k=>push(ix.apo,k,a));
+    if(a.cli_ref) push(ix.apo,'x:'+a.cli_ref,a);
+  });
   _CIX_SELO=selo; return (_CIX=ix);
 }
 /* Aceita a chave antiga (ref = nome normalizado) OU um objeto/Set de chaves.
@@ -8538,7 +8610,9 @@ function cartIdx(){
    linha achada pelo nome E pelo telefone entra uma vez só. */
 function cartChaves(ref){
   if(ref instanceof Set) return ref;
-  if(ref&&typeof ref==='object') return pessoaChaves(ref,['nome','segurado','cliente'],['celular','telefone','telComercial']);
+  if(ref&&typeof ref==='object'){ const ks=pessoaChaves(ref,['nome','segurado','cliente'],['celular','telefone','telComercial']);
+    [ref._rowRef,ref.ref].forEach(k=>{ if(k) ks.add('x:'+k); });   // vínculo explícito da carga
+    return ks; }
   const k=normKey(ref); return new Set(k?['n:'+k]:[]);
 }
 function cartRadar(ref){
@@ -8552,7 +8626,13 @@ function cartRadarTemAcao(rad){ return rad.atrasos.length+rad.statust.length+rad
 
 /* ---- gaps de cobertura: o que o cliente NÃO tem (valor zerado na carteira) ---- */
 const CART_COBS=[['renda','Renda'],['hc','HC'],['funeral','Funeral'],['pd','PD'],['ddr','DDR'],['morteAcid','Morte Acidental']];
-function cartGaps(c){ return CART_COBS.filter(([k])=>!(c.cob[k]>0)); }
+/* CARTEIRA-UMA-FORMA-V1: gap é "o cliente NÃO tem essa proteção". Se a carga
+   não trouxe o detalhe de coberturas (é o caso da semeada pelo cockpit), o
+   que existe é ausência de DADO, não ausência de PROTEÇÃO — e listar todo
+   mundo como sem HC/Funeral/PD viraria uma lista de abordagem inventada. */
+function cartTemDetalheCob(c){ return !!(c&&(c.cobDetalhe||(c.cob&&CART_COBS.some(([k])=>c.cob[k]>0)))); }
+function cartGaps(c){ if(!cartTemDetalheCob(c)) return []; const cob=(c&&c.cob)||{}; return CART_COBS.filter(([k])=>!(cob[k]>0)); }
+function cartSemDetalheCob(){ return (CART.clientes||[]).length && !(CART.clientes||[]).some(cartTemDetalheCob); }
 
 function cartVazio(){ return `<div style="padding:28px;text-align:center;border:1px dashed var(--linha);border-radius:12px;color:var(--muted);margin-top:12px">
   <div style="font-size:34px">👥</div><p>Nenhuma carteira importada ainda.</p>
@@ -8584,7 +8664,10 @@ function viewCartClientes(){ const q=normKey(CART_Q);
     if(FCART.apolices==='1'&&n!==1) return false;
     if(FCART.apolices==='2+'&&n<2) return false;
     // gaps: marcar "HC" lista quem NÃO tem HC (valor zerado) — lista de abordagem
-    if(gset.size && ![...gset].every(k=>!(c.cob[k]>0))) return false;
+    /* CARTEIRA-UMA-FORMA-V1: o filtro de gap pergunta ao cartGaps, que só
+       responde quando a carga trouxe o detalhe — senão o "sem HC" listaria a
+       carteira inteira e viraria abordagem inventada. */
+    if(gset.size){ const g=new Set(cartGaps(c).map(x=>x[0])); if(![...gset].every(k=>g.has(k))) return false; }
     if(fset.size){ const has={atraso:rd.atrasos.length>0,statust:rd.statust.length>0,pendencia:rd.pendencias.length>0,niver:dN!=null&&dN<=JANELA_DIAS};
       if(![...fset].every(k=>has[k])) return false; }
     return true;
@@ -8619,7 +8702,9 @@ function viewCartClientes(){ const q=normKey(CART_Q);
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;align-items:center">
       <span style="font-size:12px;color:var(--muted)">Sem cobertura de:</span>
-      ${CART_COBS.map(([k,l])=>`<button class="sheet-chip ${gset.has(k)?'on':''}" onclick="fcartGap('${k}')" title="Clientes SEM ${esc(l)} — lista de abordagem">${esc(l)}</button>`).join('')}
+      ${cartSemDetalheCob()
+        ? `<span style="font-size:12px;color:var(--muted)">— a carga desta carteira não traz o detalhe de coberturas.</span>`
+        : CART_COBS.map(([k,l])=>`<button class="sheet-chip ${gset.has(k)?'on':''}" onclick="fcartGap('${k}')" title="Clientes SEM ${esc(l)} — lista de abordagem">${esc(l)}</button>`).join('')}
     </div>
     <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left">
@@ -8656,10 +8741,10 @@ function viewCartOportunidades(){
       rad.pendencias.forEach(()=>badges.push(`<span class="fx fx-alerta">📋 pendência</span>`));
       return rowCliente(c,`<td style="padding:8px 10px">${badges.join(' ')}</td>`,cartBtnsContato(c)); }).join('')
     :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">${LP.importadoEm?'Nenhum cliente da carteira com ação pendente no relatório.':'Nenhum relatório semanal importado ainda — suba o PDF nos módulos BackOffice.'}</td></tr>`;
-  const chips=CART_COBS.map(([k,l])=>{ const n=CART.clientes.filter(c=>!(c.cob[k]>0)).length;
+  const chips=CART_COBS.map(([k,l])=>{ const n=CART.clientes.filter(c=>cartGaps(c).some(g=>g[0]===k)).length;
     return `<button class="btn ${CART_GAP===k?'btn-p':'btn-s'} btn-mini" onclick="CART_GAP=CART_GAP==='${k}'?'':'${k}';render()">${l} · ${n}</button>`; }).join(' ');
   const gapLbl=(CART_COBS.find(([k])=>k===CART_GAP)||[])[1];
-  const gapLista=CART_GAP?CART.clientes.filter(c=>!(c.cob[CART_GAP]>0)).sort((a,b)=>(b.cob.cs||0)-(a.cob.cs||0)):[];
+  const gapLista=CART_GAP?CART.clientes.filter(c=>cartGaps(c).some(g=>g[0]===CART_GAP)).sort((a,b)=>(b.cob.cs||0)-(a.cob.cs||0)):[];
   const gapHTML=CART_GAP?`<div style="overflow:auto;border:1px solid var(--linha);border-radius:12px;margin-top:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente sem ${gapLbl}</th><th style="padding:9px 10px">CS · PM atuais</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead>
     <tbody>${gapLista.map(c=>rowCliente(c,`<td style="padding:8px 10px">R$ ${cartFmtK(c.cob.cs)} · R$ ${cartFmt(c.cob.pm)}/mês</td>`,cartBtnsContato(c))).join('')||`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">Todo mundo tem ${gapLbl}. 🎉</td></tr>`}</tbody></table></div>`:'';
@@ -8676,7 +8761,13 @@ function viewCartOportunidades(){
     ${tbl('🎂 Aniversários — próximos 30 dias','Quando',niverHTML)}
     ${tbl('📡 Radar do relatório semanal','Situação',radarHTML)}
     <h3 style="margin:18px 0 8px">💡 Gaps de cobertura <span style="font-weight:400;font-size:12px;color:var(--muted)">— clique num gap pra ver quem está sem (maiores CS primeiro)</span></h3>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div>${gapHTML}`; }
+    ${cartSemDetalheCob()
+      ? `<div class="card" style="padding:12px 14px;font-size:12.5px;line-height:1.65;color:var(--muted)">
+           A carteira que está carregada veio do <b>cockpit</b> e traz capital e prêmio, mas <b>não traz o detalhe de coberturas</b> (HC, Funeral, PD, DDR, Morte Acidental, Renda).
+           Sem esse detalhe o app <b>não afirma</b> que o cliente está sem a proteção — seria uma lista de abordagem inventada.
+           Para ver os gaps, importe a carteira por <b>📄 Reimportar carteira</b>, que lê o arquivo com as colunas de cobertura.
+         </div>`
+      : `<div style="display:flex;gap:8px;flex-wrap:wrap">${chips}</div>${gapHTML}`}`; }
 
 function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) return; const aps=cartApolicesDoCliente(c);
   const linha=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0"><span style="color:var(--muted)">${l}</span><span style="font-weight:600;text-align:right">${v}</span></div>`:'';
@@ -8693,7 +8784,7 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
       <button class="btn btn-s btn-mini" onclick="fecharDrawer();irPara('${i.v}')">abrir</button></div>`).join('')}`:'';
   const gaps=cartGaps(c);
   const apsHTML=aps.length?aps.map(a=>`<div style="border:1px solid var(--linha);border-radius:10px;padding:10px;margin-top:8px">
-    <div style="display:flex;justify-content:space-between;align-items:center"><b>Apólice ${esc(a.apolice||a.proposta||'—')}</b><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--verde-claro,#e6f6ec);color:var(--verde,#1a7f42)">${esc(a.status)}</span></div>
+    <div style="display:flex;justify-content:space-between;align-items:center"><b>Apólice ${esc(a.apolice||a.proposta||'—')}</b><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--verde-claro,#e6f6ec);color:var(--verde,#1a7f42)"${a._statusPresumido?' title="A carga não trouxe o status; a carteira do cockpit é a ativa, então está presumido como Ativa."':''}>${esc(a.status)}${a._statusPresumido?'*':''}</span></div>
     ${a.respPagto&&normKey(a.respPagto)!==ref?`<div style="font-size:12px;color:#a06a00;margin-top:4px">💳 pago por ${esc(a.respPagto)}</div>`:''}
     <div style="font-size:12px;color:var(--muted);margin-top:4px">Prêmio R$ ${cartFmt(a.premio)} · ${esc(a.periodicidade||'—')} · ${esc(a.forma||'—')}${a.proposta?' · prop. '+esc(a.proposta):''}</div></div>`).join(''):'<div style="color:var(--muted);margin-top:8px">Sem apólices ativas ligadas.</div>';
   $('#drawer').innerHTML=`<div style="padding:18px">
@@ -8704,7 +8795,8 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     ${radHTML}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
     <div style="font-size:13px">${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
-    ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`:''}
+    ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`
+      :(cartTemDetalheCob(c)?'':`<div style="margin-top:8px;font-size:11.5px;color:var(--muted)">A carga desta carteira não traz o detalhe de coberturas — o app não tem como dizer o que falta.</div>`)}
     ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Apólices (${aps.length})</h3>${apsHTML}</div>`;
   $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
@@ -10739,8 +10831,37 @@ function lpSelfCheck(){
         return b.atrasos.length>=a.at&&b.statust.length>=a.st&&b.pendencias.length>=a.pe
             && b.aniversario.length>=a.an&&b.datas.length>=a.da; });
     })());
-    ok('índice: apólices por cliente nunca perdem o que o filter por nome achava', (CART.clientes||[]).slice(0,60).every(c=>
-        cartApolicesDoCliente(c).length>=(CART.apolices||[]).filter(a=>a.ref===c.ref).length));
+    /* CARTEIRA-UMA-FORMA-V1 (03/09): este invariante gritava na base REAL, e
+       apontava para o lugar errado. Ele comparava `a.ref===c.ref` sem exigir
+       que a chave EXISTISSE: na carga do cockpit os dois eram `undefined`,
+       `undefined===undefined` é true, o filtro devolvia as 196 apólices e o
+       guarda anunciava "o índice perdeu apólice". O defeito real era outro e
+       maior — sem `ref` e sem `cob`, as TRÊS telas da Carteira estouravam
+       antes de pintar. Guarda que aponta para o lugar errado atrasa o
+       conserto: a comparação agora exige chave dos dois lados. */
+    ok('índice: apólices por cliente nunca perdem o que o filtro por nome achava', (CART.clientes||[]).slice(0,60).every(c=>
+        cartApolicesDoCliente(c).length>=(CART.apolices||[]).filter(a=>a.ref&&c.ref&&a.ref===c.ref).length));
+    ok('carteira: toda linha carregada tem chave', (CART.clientes||[]).every(c=>!!c.ref)&&(CART.apolices||[]).every(a=>!!a.ref));
+    ok('carteira: toda carga passa pelo normalizador',
+        /cartNormCliente/.test(cartCarregar.toString())&&/cartNormApolice/.test(cartCarregar.toString())&&/cartNormLista/.test(cartIngest.toString()));
+    /* O guarda que teria pego o caso sozinho: uma carga NO FORMATO DO COCKPIT
+       (chave fora do `dados`, cel/nasc/cap/mrr, apólice com ap/cli_ref e o
+       segurado escrito diferente do cliente) tem que abrir as três telas sem
+       estourar, achar a apólice pelo VÍNCULO e não inventar gap de cobertura.
+       Fixture sintética, sem nome nem número reais, e o estado é devolvido. */
+    { const _ctC=CART.clientes, _ctA=CART.apolices, _ctG=CART_GAP;
+      try{
+        CART.clientes=cartNormLista([{ref:'ana-demo-teste',dados:{nome:'Ana Demo Teste',cel:'(11) 90000-0001',nasc:'1980-05-04',idade:45,cap:500000,mrr:300}}],'ref',cartNormCliente);
+        CART.apolices=cartNormLista([{chave:'900000001',dados:{ap:'900000001',segurado:'A. D. Teste',cli_ref:'ana-demo-teste',cap:500000,mrr:300,premio:300,period:'Mensal',forma:'Boleto'}}],'chave',cartNormApolice);
+        cartIdxInvalidar();
+        const c0=CART.clientes[0];
+        ok('carteira: a carga do cockpit não estoura nenhuma das três telas', (()=>{ try{ cartResumo(); cartGaps(c0); cartRadar(c0); cartRadarLista(); cartNiverProx(JANELA_DIAS); return true; }catch(e){ return false; } })());
+        ok('carteira: o vínculo cli_ref acha a apólice mesmo com o nome escrito diferente', cartApolicesDoCliente(c0).length===1);
+        ok('carteira: sem detalhe de cobertura o app não inventa gap', cartGaps(c0).length===0&&!!cartSemDetalheCob());
+        ok('carteira: com detalhe de cobertura o gap volta a aparecer', (()=>{
+            CART.clientes=cartNormLista([{ref:'bia-demo-teste',dados:{nome:'Bia Demo Teste',cob:{cs:100000,pm:200,hc:0,funeral:5000,renda:0,pd:0,ddr:0,morteAcid:0}}}],'ref',cartNormCliente);
+            cartIdxInvalidar(); return cartGaps(CART.clientes[0]).length===5; })());
+      } finally { CART.clientes=_ctC; CART.apolices=_ctA; CART_GAP=_ctG; cartIdxInvalidar(); } }
     ok('índice: gravar derruba o cache', (()=>{ cartIdx(); const tinha=!!_CIX; cartIdxInvalidar(); return tinha&&_CIX===null; })());
     ok('índice: uma linha nunca entra duas vezes no mesmo cliente', (()=>{
       const r=cartRadar((CART.clientes[0]||{}).ref||'__nada__');
