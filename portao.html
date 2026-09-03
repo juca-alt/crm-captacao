@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portão de deploy · Vendas LP</title>
+<style>
+  :root{--ok:#1a7f42;--bad:#b91c1c;--warn:#a06a00;--muted:#64748b;--linha:#e2e8f0}
+  body{font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;background:#f8fafc;color:#0f172a}
+  header{padding:14px 18px;border-bottom:1px solid var(--linha);background:#fff;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  h1{font-size:16px;margin:0}
+  button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--linha);background:#fff;cursor:pointer}
+  button.p{background:#2563eb;color:#fff;border-color:#2563eb}
+  #status{font-weight:700}
+  #status.ok{color:var(--ok)} #status.bad{color:var(--bad)}
+  main{display:grid;grid-template-columns:1fr 420px;gap:0;min-height:calc(100vh - 60px)}
+  #rel{padding:14px 18px;overflow:auto}
+  #palco{border-left:1px solid var(--linha);background:#e2e8f0;display:flex;align-items:flex-start;justify-content:center;padding:12px;overflow:auto}
+  iframe{border:1px solid #94a3b8;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.15)}
+  table{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:10px}
+  th,td{border-bottom:1px solid var(--linha);padding:4px 6px;text-align:left;vertical-align:top}
+  th{background:#eef2f7;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em}
+  td.n{text-align:center;font-variant-numeric:tabular-nums}
+  .ok{color:var(--ok)} .bad{color:var(--bad);font-weight:700} .warn{color:var(--warn)}
+  .cen{border:1px solid var(--linha);border-radius:10px;padding:10px 12px;margin-top:12px;background:#fff}
+  .cen h2{font-size:14px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:12px}
+  pre{white-space:pre-wrap;font-size:11.5px;background:#f1f5f9;padding:8px;border-radius:8px;max-height:220px;overflow:auto}
+  @media(max-width:900px){main{grid-template-columns:1fr}#palco{border-left:0;border-top:1px solid var(--linha)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚧 Portão de deploy · Vendas LP</h1>
+  <button class="p" id="bt-rodar" onclick="portaoRodar()">▶ Rodar os 4 cenários</button>
+  <button onclick="portaoRodar({quebrar:true})" title="Injeta um campo morto e um estouro de propósito e exige que o portão acuse">🧪 Provar o guarda</button>
+  <span id="status" class="sub">pronto</span>
+</header>
+<main>
+  <div id="rel">
+    <div class="sub">Cada cenário abre o <b>vendas.html</b> desta pasta num iframe (mesma origem), passa por TODAS as telas de <code>VIEWS_CONHECIDAS</code> (a lista é lida do próprio app, então tela nova entra sozinha) e mede, em cada uma: exceção no console · campo morto (<code>qaCamposMortos</code>) · estouro horizontal · alvos de toque abaixo de 44px (aviso). Por cenário roda <code>lpSelfCheck()</code> e <code>funSelfCheck()</code>. Base <b>cheia</b> = fixture inventada escrita no localStorage + os "Ver exemplo" dos módulos; base <b>vazia</b> = localStorage limpo. Nada aqui grava no banco: o iframe nunca está logado.</div>
+    <div id="cenarios"></div>
+  </div>
+  <div id="palco"><iframe id="f" width="1280" height="820" title="app"></iframe></div>
+</main>
+<script>
+/* ═══ PORTÃO-V1 (03/09) — o portão de deploy virou UM comando.
+   Regra da casa que ele vira código: 26+ telas × {375, 1280} × {cheia, vazia},
+   lpSelfCheck em zero, zero campo morto, zero estouro. Antes disso era uma
+   sequência manual que dependia de lembrar; o caso da Carteira (03/09) passou
+   justamente porque a base real tinha um formato que a base de teste não tinha.
+   Por isso a fixture "cheia" traz a carteira NOS DOIS FORMATOS (importador e
+   cockpit) — a porta que quebrou é a que mais se testa. */
+const $=s=>document.querySelector(s);
+const params=new URLSearchParams(location.search);
+const LARGURAS=[375,1280];
+const CENARIOS=[{base:'cheia'},{base:'vazia'}];
+const ALVO_MIN=44;
+
+/* ── fixture inventada: nenhum nome, telefone, apólice ou CPF real ── */
+function fixtureEstado(){
+  const hoje=new Date(); const iso=d=>d.toISOString().slice(0,10);
+  const dias=n=>{ const d=new Date(hoje); d.setDate(d.getDate()+n); return iso(d); };
+  const uid=(()=>{ let i=0; return ()=>'fx'+(++i); })();
+  const inter=(k,l,dia,extra)=>Object.assign({id:uid(),k,l,dia,ts:dia+'T12:00:00.000Z',por:'gustavo'},extra||{});
+  const base=(o)=>Object.assign({ id:uid(), lp:'gustavo', sexo:'—', estrelas:0, ance:null, origem:'Indicação', criadoEm:dias(-40),
+    taStatus:'—', taTentativas:0, notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false},
+    recs:[], eventos:[], planos:[], interacoes:[], tarefas:[], sitplan:null },o);
+  const pessoaDupla='p-fx-1';
+  const contatos=[
+    base({nome:'Ana Exemplo Souza', idade:34, profissao:'Dentista', telefone:'(81) 90000-1001', etapa:'SitPlan', funil:'nn', sitplan:dias(0)}),
+    base({nome:'Bruno Exemplo Lima', idade:41, profissao:'Engenheiro', telefone:'(81) 90000-1002', etapa:'TA', funil:'nn', taTentativas:2, taStatus:'Retornar',
+      interacoes:[inter('ta','Ligação: retornar',dias(-3))]}),
+    base({nome:'Carla Exemplo Nunes', idade:29, profissao:'Advogada', telefone:'(81) 90000-1003', etapa:'OI/FF', funil:'nn', taTentativas:1, taStatus:'Sucesso',
+      interacoes:[inter('etapa','Etapa: TA → OI/FF',dias(-5),{de:'TA',para:'OI/FF'})],
+      tarefas:[{id:uid(),tipo:'reuniao',tit:'OI com a Carla',quando:dias(-2),feito:null}]}),
+    base({nome:'Diego Exemplo Rocha', idade:38, profissao:'Médico', telefone:'(81) 90000-1004', etapa:'P/C', funil:'nn', pm:450, estrelas:3, temperatura:'quente',
+      interacoes:[inter('etapa','Etapa: OI/FF → P/C',dias(-8),{de:'OI/FF',para:'P/C'})],
+      tarefas:[{id:uid(),tipo:'ligacao',tit:'Confirmar C2',quando:dias(1),feito:null}],
+      recs:[{nome:'Rec Exemplo Um',tel:'',idade:35,perfil:'amigo'},{nome:'Rec Exemplo Dois',tel:'',idade:44,perfil:'colega'}],
+      planos:[{id:uid(),nome:'Vida Inteira 300k',base:'vida',capital:300000,cobs:{},premio:480,parceiro:'',status:'Ativado',criadoEm:dias(-6)}]}),
+    /* mesma pessoa, dois negócios (pessoaId) */
+    base({nome:'Elisa Exemplo Prado', idade:45, profissao:'Empresária', telefone:'(81) 90000-1005', etapa:'N', funil:'nn', pm:900, pessoaId:pessoaDupla, titulo:'Vida + PD',
+      interacoes:[inter('etapa','Etapa: C2 → N',dias(-4),{de:'C2',para:'N'})]}),
+    base({nome:'Elisa Exemplo Prado', idade:45, profissao:'Empresária', telefone:'(81) 90000-1005', etapa:'EMISSÃO', funil:'nn', pm:300, pessoaId:pessoaDupla, titulo:'Funeral do sócio',
+      interacoes:[inter('etapa','Etapa: FA → EMISSÃO',dias(-1),{de:'FA',para:'EMISSÃO'})]}),
+    /* duplicata de propósito (mesmo nome e telefone, sem pessoaId) */
+    base({nome:'Fabio Exemplo Reis', idade:52, profissao:'Contador', telefone:'(81) 90000-1006', etapa:'C2', funil:'nn', pm:250}),
+    base({nome:'Fabio Exemplo Reis', idade:52, profissao:'Contador', telefone:'(81) 90000-1006', etapa:'FA', funil:'nn'}),
+    base({nome:'Gustavo Exemplo Melo', idade:60, profissao:'Aposentado', telefone:'(81) 90000-1007', etapa:'Não', funil:'nn',
+      interacoes:[inter('etapa','Etapa: P/C → Não',dias(-20),{de:'P/C',para:'Não'})]}),
+    /* Base de Clientes: quem já é cliente na carteira (casa por nome e por telefone) */
+    base({nome:'Helena Exemplo Vaz', idade:47, profissao:'Professora', telefone:'(81) 90000-2001', etapa:'Clientes Ativos', funil:'bc'}),
+    base({nome:'Igor Exemplo Maia', idade:39, profissao:'Arquiteto', telefone:'(81) 90000-2002', etapa:'Agendada Revisita', funil:'bc', pm:200,
+      tarefas:[{id:uid(),tipo:'reuniao',tit:'Revisita',quando:dias(3),feito:null}]}),
+    base({nome:'Joana Exemplo Cruz', idade:55, profissao:'Comerciante', telefone:'(81) 90000-2003', etapa:'N/Emissão', funil:'bc', pm:350,
+      interacoes:[inter('etapa','Etapa: Novo Negócio/Resolução pós Revisita → N/Emissão',dias(-2),{de:'Novo Negócio/Resolução pós Revisita',para:'N/Emissão'})]}),
+    base({nome:'Kleber Exemplo Dias', idade:36, profissao:'Autônomo', telefone:'(81) 90000-2004', etapa:'Venda ganha', funil:'bc', pm:180})
+  ];
+  return { activeUser:'gustavo', users:[{id:'gustavo',nome:'Gustavo Exemplo',papel:'Master Franqueado',cor:'#0b3d91'}], contatos };
+}
+function fixtureCarteira(){
+  /* os DOIS formatos que gravam na mesma tabela — CARTEIRA-UMA-FORMA-V1 */
+  const importador=[
+    {nome:'Helena Exemplo Vaz', ref:'helena exemplo vaz', nascimento:'1979-09-20', idade:47, celular:'(81) 90000-2001', telefone:null, telComercial:null, email:'helena@exemplo.test',
+      cob:{cs:250000,morteAcid:0,pd:0,ddr:0,hc:120,funeral:0,pa:3600,pm:300,renda:0}, produtos:'Vida Inteira', numApolices:'1'},
+    {nome:'Lucia Exemplo Torres', ref:'lucia exemplo torres', nascimento:'1985-03-02', idade:41, celular:'(81) 90000-2005', telefone:null, telComercial:null, email:null,
+      cob:{cs:150000,morteAcid:150000,pd:0,ddr:50000,hc:0,funeral:5000,pa:2400,pm:200,renda:0}, produtos:'Temporário', numApolices:'2'}
+  ];
+  const cockpit=[
+    {ref:'igor-exemplo-maia', dados:{nome:'Igor Exemplo Maia', nasc:'1987-01-15', cel:'(81) 90000-2002', cap:400000, mrr:420}},
+    {ref:'joana-exemplo-cruz', dados:{nome:'Joana Exemplo Cruz', nasc:'1971-12-08', cel:'(81) 90000-2003', cap:100000, mrr:150}},
+    {ref:'marcos-exemplo-lins', dados:{nome:'Marcos Exemplo Lins', nasc:'1990-06-30', cel:'(81) 90000-2006', cap:80000, mrr:95}}
+  ];
+  const apolices=[
+    {proposta:'PX-000001', apolice:'000000201', segurado:'Helena Exemplo Vaz', ref:'helena exemplo vaz', respPagto:null, celular:'(81) 90000-2001', status:'Ativa', premio:300, periodicidade:'Mensal', forma:'Cartão'},
+    {proposta:'PX-000002', apolice:'000000202', segurado:'Lucia Exemplo Torres', ref:'lucia exemplo torres', respPagto:null, celular:'(81) 90000-2005', status:'Ativa', premio:120, periodicidade:'Mensal', forma:'Boleto'},
+    {proposta:'PX-000003', apolice:'000000203', segurado:'Lucia Exemplo Torres', ref:'lucia exemplo torres', respPagto:'Pagador Exemplo', celular:'(81) 90000-2005', status:'Cancelada', premio:80, periodicidade:'Mensal', forma:'Boleto'},
+    {chave:'000000204|0', dados:{ap:'000000204', segurado:'Igor Exemplo Maia', period:'Mensal', mrr:420, cli_ref:'igor-exemplo-maia'}},
+    {chave:'000000205|1', dados:{ap:'000000205', segurado:'Joana Exemplo Cruz', period:'Anual', mrr:150, cli_ref:'joana-exemplo-cruz'}},
+    {chave:'000000206|2', dados:{ap:'000000206', segurado:'M. Exemplo Lins', period:'Mensal', mrr:95, cli_ref:'marcos-exemplo-lins'}}   /* nome divergente: só o cli_ref segura */
+  ];
+  return { clientes: importador.concat(cockpit), apolices, importadoEm:new Date().toISOString().slice(0,10) };
+}
+const CHAVES_APP=['crmlp_v03_state','crmlp_carteira_v1','crmlp_relatorio_v1','crmlp_atrasos_v1','crmlp_emissao_v1','crmlp_solicitacoes_v1',
+  'crmlp_beneficios_v1','crmlp_subst_v1','crmlp_bn_v1','crmlp_import_log_v1','crmlp_funil_cfg_v1','crmlp_funil_v1','crmlp_inicio_secs_v1','crmlp_deleg_ativo_v1'];
+function limparStorage(){ Object.keys(localStorage).filter(k=>k.startsWith('crmlp_')).forEach(k=>localStorage.removeItem(k)); }
+function semear(base){
+  limparStorage();
+  if(base==='cheia'){
+    localStorage.setItem('crmlp_v03_state',JSON.stringify(fixtureEstado()));
+    localStorage.setItem('crmlp_carteira_v1',JSON.stringify(fixtureCarteira()));
+  }
+}
+
+/* ── iframe: carregar, esperar o boot, pular o login ── */
+/* aba em segundo plano: o Chrome trava setTimeout em 1 s (e em 1 min depois de 5 min escondida).
+   O render do app é síncrono, então o que precisamos é só CEDER a vez ao navegador — MessageChannel
+   não é estrangulado. `espera` só é usada para prazo de boot, medido em relógio de parede. */
+const ceder=()=>new Promise(r=>{ const ch=new MessageChannel(); ch.port1.onmessage=()=>r(); ch.port2.postMessage(0); });
+const espera=ms=>new Promise(r=>setTimeout(r,ms));
+async function assentar(n){ for(let i=0;i<(n||3);i++) await ceder(); }
+function carregarApp(largura){
+  return new Promise((res,rej)=>{
+    const f=$('#f'); f.width=largura; f.height=largura<600?812:820;
+    const t=setTimeout(()=>rej(new Error('o app não carregou em 20 s')),20000);
+    f.onload=async()=>{ clearTimeout(t);
+      const w=f.contentWindow;
+      /* boot: o estado existe e a tela pintou */
+      const ini=Date.now();
+      while(Date.now()-ini<15000){ try{ if(w.eval('typeof S!=="undefined" && !!S && typeof VIEWS_CONHECIDAS!=="undefined"') && w.document.querySelector('#main') && w.document.querySelector('#main').innerHTML.length>50) break; }catch(_){ } await ceder(); }
+      const skip=w.document.getElementById('lg-skip'); if(skip) skip.click();
+      await assentar(5);
+      res(w);
+    };
+    f.src='vendas.html?portao=1&t='+Date.now();
+  });
+}
+function instalarEscuta(w){
+  const erros=[];
+  w.addEventListener('error',e=>erros.push('exceção: '+(e.message||e)));
+  w.addEventListener('unhandledrejection',e=>erros.push('promise: '+((e.reason&&e.reason.message)||e.reason)));
+  const ce=w.console.error.bind(w.console);
+  w.console.error=(...a)=>{ erros.push('console.error: '+a.map(x=>{ try{ return typeof x==='string'?x:JSON.stringify(x); }catch(_){ return String(x); } }).join(' ').slice(0,300)); ce(...a); };
+  return erros;
+}
+function medirTela(w,largura){
+  const d=w.document, main=d.querySelector('#main'), drw=d.querySelector('#drawer');
+  const estouro=Math.max(d.documentElement.scrollWidth-w.innerWidth, main?main.scrollWidth-main.clientWidth:0);
+  /* tabela dentro de container com overflow:auto pode rolar — o que não pode é a PÁGINA rolar de lado */
+  const estouroPagina=d.documentElement.scrollWidth-w.innerWidth;
+  const mortos=w.qaCamposMortos?w.qaCamposMortos():[];
+  let alvos=0;
+  if(largura<600){
+    /* só o que está visível: o drawer fechado continua com o HTML da última ficha dentro */
+    const sel=(drw&&drw.classList.contains('aberto'))?'#drawer button, #drawer a.btn':'#main button, #main a.btn';
+    d.querySelectorAll(sel).forEach(b=>{ if(b.offsetParent===null) return; const r=b.getBoundingClientRect(); if(r.width&&r.height&&r.height<ALVO_MIN) alvos++; }); }
+  return { estouro:estouroPagina, mortos:mortos.map(m=>m.id+'@'+m.view), alvos };
+}
+
+/* ── um cenário = uma largura × uma base ── */
+async function rodarCenario(largura,base,opts){
+  const cen={largura,base,telas:[],selfcheck:[],funcheck:[],erros:[],ok:true,inicio:Date.now()};
+  semear(base);
+  const w=await carregarApp(largura);
+  const erros=instalarEscuta(w);
+  if(base==='cheia'){
+    /* os módulos do BackOffice têm "Ver exemplo" próprio (sem login, só local). Usar o do app
+       garante que a fixture deles evolui junto com o parser — sem cópia aqui. */
+    for(const fn of ['lpCarregarExemplo','atExemplo','emExemplo','bfExemplo']){ try{ if(typeof w[fn]==='function') w[fn](); }catch(e){ erros.push('exemplo '+fn+': '+e.message); } await assentar(); }
+    try{ w.atClose&&w.atClose(); }catch(_){ }
+  }
+  const views=w.eval('VIEWS_CONHECIDAS.slice()');
+  const fichas={ 'nn-funil':()=>{ const id=w.eval('(S.contatos.find(c=>c.funil!=="bc")||{}).id'); if(id){ w.abrirContato(id); return 'ficha do negócio'; } },
+                 'bc-funil':()=>{ const id=w.eval('(S.contatos.find(c=>c.funil==="bc")||{}).id'); if(id){ w.abrirContato(id); return 'ficha do negócio (bc)'; } },
+                 'cart-clientes':()=>{ const ref=w.eval('(CART.clientes[0]||{}).ref'); if(ref){ w.cartAbrir(ref); return 'ficha do cliente'; } },
+                 'lp-pendencias':()=>{ const ch=w.eval('EM.itens.length?emChave(EM.itens[0]):""'); if(ch){ w.emAbrir(ch); return 'ficha da emissão'; } } };
+  for(const v of views){
+    const antes=erros.length;
+    try{ w.irPara(v); }catch(e){ erros.push('irPara('+v+'): '+e.message); }
+    await assentar();
+    if(opts.quebrar&&v===views[3]){ const m=w.document.querySelector('#main'); m.insertAdjacentHTML('beforeend','<input id="portao-morto-proposital"><div style="width:2400px;height:2px"></div>'); }
+    const med=medirTela(w,largura);
+    const linha={view:v,erros:erros.slice(antes),...med};
+    /* fichas: abrir, medir, fechar — o drawer é onde os campos mortos se escondem */
+    if(base==='cheia'&&fichas[v]){ try{ const nome=fichas[v](); if(nome){ await assentar(); const m2=medirTela(w,largura); linha.ficha={nome,...m2}; } }catch(e){ linha.erros.push('ficha: '+e.message); }
+      try{ w.fecharDrawer&&w.fecharDrawer(); w.atClose&&w.atClose(); }catch(_){ } }
+    linha.ok=!linha.erros.length&&!linha.mortos.length&&linha.estouro<=1&&(!linha.ficha||(!linha.ficha.mortos.length&&linha.ficha.estouro<=1&&!linha.ficha.erros));
+    if(!linha.ok) cen.ok=false;
+    cen.telas.push(linha);
+    pintar();
+  }
+  try{ cen.selfcheck=w.lpSelfCheck()||[]; }catch(e){ cen.selfcheck=['exceção: '+e.message]; }
+  { const a=erros.length; try{ w.funSelfCheck(); }catch(e){ erros.push('funSelfCheck: '+e.message); } cen.funcheck=erros.slice(a); }
+  if(cen.selfcheck.length||cen.funcheck.length) cen.ok=false;
+  cen.erros=erros.slice(); cen.ms=Date.now()-cen.inicio;
+  return cen;
+}
+
+let RESULTADO=null;
+async function portaoRodar(opts){
+  opts=opts||{};
+  $('#bt-rodar').disabled=true; $('#status').textContent='rodando…'; $('#status').className='';
+  RESULTADO={quando:new Date().toISOString(),quebrar:!!opts.quebrar,cenarios:[],ok:true};
+  try{
+    for(const {base} of CENARIOS) for(const largura of LARGURAS){
+      if(opts.quebrar&&!(base==='cheia'&&largura===1280)) continue;   /* a prova do guarda precisa de um cenário só */
+      const cen=await rodarCenario(largura,base,opts); RESULTADO.cenarios.push(cen); if(!cen.ok) RESULTADO.ok=false; pintar();
+    }
+  }catch(e){ RESULTADO.ok=false; RESULTADO.fatal=e.message||String(e); }
+  if(opts.quebrar){
+    /* R6: o guarda se prova quebrando — se o portão passou com defeito injetado, o portão é que está quebrado */
+    const c=RESULTADO.cenarios[0]; const t=c&&c.telas[3];
+    const acusou=!!(t&&t.mortos.some(m=>m.startsWith('portao-morto-proposital'))&&t.estouro>1);
+    RESULTADO.prova={acusou}; RESULTADO.ok=acusou;
+  }
+  limparStorage();
+  pintar();
+  $('#status').textContent=RESULTADO.ok?(opts.quebrar?'✅ o guarda acusou o defeito injetado':'✅ PORTÃO ABERTO — pode subir'):(opts.quebrar?'❌ o guarda NÃO acusou — o portão está quebrado':'❌ PORTÃO FECHADO');
+  $('#status').className=RESULTADO.ok?'ok':'bad';
+  $('#bt-rodar').disabled=false;
+  window.PORTAO_RESULT=RESULTADO;
+  if(params.get('post')==='1'){ try{ await fetch('portao/resultado',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(RESULTADO)}); }catch(e){ console.warn('POST do resultado falhou',e); } }
+  return RESULTADO;
+}
+function pintar(){
+  if(!RESULTADO) return;
+  $('#cenarios').innerHTML=RESULTADO.cenarios.map(c=>`<div class="cen">
+    <h2>${c.largura}px · base ${c.base} — <span class="${c.ok?'ok':'bad'}">${c.ok?'ok':'FALHOU'}</span> <span class="sub">${c.telas.length} tela(s)${c.ms?' · '+(c.ms/1000).toFixed(1)+' s':''}</span></h2>
+    <div class="sub">lpSelfCheck: <b class="${c.selfcheck.length?'bad':'ok'}">${c.selfcheck.length} falha(s)</b> · funSelfCheck: <b class="${c.funcheck.length?'bad':'ok'}">${c.funcheck.length}</b></div>
+    ${c.selfcheck.length?`<pre>${c.selfcheck.map(esc).join('\n')}</pre>`:''}
+    <table><thead><tr><th>tela</th><th>exceção</th><th>campo morto</th><th>estouro</th><th>alvos&lt;44</th><th>ficha</th></tr></thead><tbody>
+    ${c.telas.map(t=>`<tr><td>${esc(t.view)}</td><td class="n ${t.erros.length?'bad':''}">${t.erros.length||''}</td><td class="n ${t.mortos.length?'bad':''}">${t.mortos.length?esc(t.mortos.join(', ')):''}</td><td class="n ${t.estouro>1?'bad':''}">${t.estouro>1?t.estouro+'px':''}</td><td class="n ${t.alvos?'warn':''}">${t.alvos||''}</td><td class="${t.ficha&&(t.ficha.mortos.length||t.ficha.estouro>1)?'bad':''}">${t.ficha?esc(t.ficha.nome)+(t.ficha.mortos.length?' · mortos: '+esc(t.ficha.mortos.join(', ')):'')+(t.ficha.estouro>1?' · estouro '+t.ficha.estouro+'px':''):''}</td></tr>
+      ${t.erros.length?`<tr><td colspan="6"><pre>${t.erros.map(esc).join('\n')}</pre></td></tr>`:''}`).join('')}
+    </tbody></table></div>`).join('')+(RESULTADO.fatal?`<div class="cen bad">Fatal: ${esc(RESULTADO.fatal)}</div>`:'')+(RESULTADO.prova?`<div class="cen"><h2>Prova do guarda</h2><div class="${RESULTADO.prova.acusou?'ok':'bad'}">${RESULTADO.prova.acusou?'acusou o campo morto e o estouro injetados':'NÃO acusou'}</div></div>`:'');
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+if(params.get('auto')==='1') addEventListener('load',()=>portaoRodar({quebrar:params.get('quebrar')==='1'}));
+</script>
+</body>
+</html>
