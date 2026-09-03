@@ -4,6 +4,38 @@
 
 ---
 
+## 📸 Snapshot — 03/09/2026, noite (sessão remota, pelo celular) · **v0.45.0 → v0.46.0** · Entradas pelo funil na Carteira + editor do funil com alvo de 44px
+
+**Estado em 30 s:** sessão rodada num container remoto (claude.ai/code), dirigida pelo celular — **sem o Mac, sem worktrees, sem sessão logada**. `main` segue em `d37b628` / v0.42.1 no ar; **nada da cadeia foi mergeado** (conferido no GitHub: #113 → #121 e #118 abertos). Branch desta sessão: `claude/crm-lp-continuation-59xph2`, em cima de `portao-porta` (ponta da cadeia) + merge de `estado-03-09`. O portão **roda no container** (python3 + Chromium headless dirigindo o `portao.html`): 4 cenários × 29 telas verdes.
+
+### O que entrou (v0.46.0, um commit)
+- **Item 4 — Entradas pelo funil (Visão da Carteira).** `cartEntradasFunil(mes)` conta a apólice que tem `_origem` + `_criadaEm` (só o `vendaAplicar` grava isso; a importação da LP não). Seção nova na Visão: N apólices · prêmio/mês (estimados marcados) · clientes novos · lista por pessoa (🤝 pela venda / 📋 pela emissão · dia · prêmio), clicável pra ficha do cliente; seletor de mês quando há mais de um; vazio honesto ("nenhuma entrou pelo funil em set/26"). `cartApoliceOrigem(a)` → 'venda' | 'emissão' | 'importação'. **+5 invariantes**, provados quebrando (função anulada → 3 caem; religada → 0).
+- **Item 5 — Alvos de toque no `config-funil`.** Bloco `@media(max-width:600px)` dentro do `<style>` do editor (desktop fora dele): bolinha de cor com **área de toque 44px e desenho de 24px** (`background-clip:content-box!important` — o `background` inline, shorthand, reseta o clip; sem o `!important` a bolinha vira um botão de 44px inteiro), setas 44×44, lixeira 44×44, "no fluxo"/encerramento e abas com `min-height:44`, `+ Adicionar etapa` 48. **Medido a 375: 123 → 0** alvos abaixo de 44px (eram 72 `fc-sw`, 24 `fc-arrow`, 12 `fc-del`, 12 `fc-enc`, 2 abas, 1 `fc-add`). Zero estouro. 1280 conferido por print: idêntico ao de antes.
+
+### Provas
+- Portão no container: 375/1280 × cheia/vazia, 29 telas, 0 exceção, 0 campo morto, 0 estouro, `lpSelfCheck` 0, `funSelfCheck` 0. Avisos de alvo: **186 → 63** (cheia) e **159 → 36** (vazia). O que sobra: `nn-funil` 19, `bc-funil` 12, `inicio` 8, `cart-clientes` 6 (fila de UX celular).
+- Prints a 375 e 1280 da Visão da Carteira (com uma apólice entrada pela venda injetada na aba) e do editor do funil.
+- Guard do choke point ok. Diff sem PII (só `Zz …` inventados nos invariantes).
+
+### Itens do prompt que continuam presos nele (conferido, não presumido)
+1. Merge da cadeia — nada entrou; o `--servido` tem que dizer EXATAMENTE **v0.46.0** agora (esta sessão subiu a versão).
+2. `lp_perfis_nome_ativo.sql` — não rodada (o painel Master ainda sem nome/pausa).
+3. 3 textos de cobrança — não chegaram (`kb_scripts_cobranca` com as 3 linhas `ativo=false`).
+6. CPF / extensão — sem resposta; fase 3 não começou.
+- **As 29 telas LOGADO na base real** (Carteira ×3, Card Cliente com dado dele) não dá pra fazer do container: é passo dele no PC.
+
+### Lições novas
+- **#55 — Shorthand inline vence regra de mídia.** `style="background:…"` reseta `background-clip`; regra de mídia que depende de sub-propriedade do shorthand precisa de `!important` ou de mudar o inline pra `background-color`.
+- **#56 — String simples dentro de `${}` não interpola.** `${x?'…${y}…':''}` deixa `${y}` literal e quebra na primeira aspa — o `node --check` por bloco `<script>` acha em segundos.
+- **Sessão remota é uma superfície válida pra Visão LP:** portão, prints e invariantes rodam no container; o que não roda é a sessão logada dele.
+
+### Falta dele
+1. OK para mergear #113 → #121 + #118, e depois **este branch** (`claude/crm-lp-continuation-59xph2`) — ou abrir PR dele pra main depois da cadeia.
+2. No PC, logado: 29 telas, Carteira ×3 na base real, Card Cliente, e a Visão da Carteira com as entradas reais do mês.
+3. Migration, textos, CPF/extensão (iguais).
+
+---
+
 ## 📸 Snapshot — 03/09/2026, fechamento · **v0.45.0 + PR #121** · o portão rodou de ponta a ponta como UM comando; nada da cadeia foi mergeado
 
 **Estado em 30 s:** `main` = `d37b628` / **v0.42.1 no ar** (conferido pelo CONTEÚDO servido: sha `e2701bbcc925` do Pages = `main:vendas.html`, byte a byte). **#113 → #120 seguem todos ABERTOS** — ele não mergeou nada. Dos 5 itens do prompt dele, só o 2 (portão) era destravável; os outros 4 continuam presos nele (merge, migration, textos, CPF/extensão). Cadeia agora: **#113 → #114 → #115 → #116 → #117 → #119 → #120 → #121**.
