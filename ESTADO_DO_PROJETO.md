@@ -4,6 +4,43 @@
 
 ---
 
+## 📸 Snapshot — 03/09/2026 · **v0.42.1 → v0.44.0** · a Carteira estava MORTA na base real, e o acesso virou painel
+
+**Estado em 30 s:** cinco PRs escritos e **abertos, nenhum mergeado** — `main` segue em `d37b628` / v0.42.1 no ar. Os PRs são **encadeados**: #113 → #114 → #115 → #116 → #117. O achado da sessão: **as três telas da Carteira estouravam com os dados reais dele** (143 clientes, 196 apólices), e o self-check que gritava apontava para o lugar errado. Planta da 2.0 publicada: https://claude.ai/code/artifact/70adfead-06fb-40da-a731-e12846e1f8de
+
+### O que entrou (um PR por item, na ordem que ele pediu)
+- **#113 · v0.43.0 — Configurações vira hub de cards.** Pedido dele ao ver o print dos Módulos. O grupo dobrável virou UM item que abre a tela de cartões. O cartão saiu de dentro do `viewModulos` e virou `hubCardHtml`/`hubSecoesHtml`: **os dois hubs usam a mesma função**, com invariante provando. Card de Acessos só é DESENHADO para admin; Barra inferior só no celular.
+- **#114 · v0.43.1 — Carteira: uma forma só.** 🚨 **O maior achado.** Duas superfícies gravam as MESMAS tabelas com formatos diferentes: o importador da LP grava `{ref, nascimento, celular, cob{}}`, e o **cockpit** (`carteira.html`, que semeou a carteira real em 11/08) grava `{nome, nasc, cel, cap, mrr}` + `{ap, period, cli_ref}` — com a **chave da linha FORA do `dados`**. O `cartCarregar` fazia `map(r=>r.dados)` e jogava a chave fora → `c.cob.pm` indefinido → **Visão, Clientes e Oportunidades estouravam antes de pintar**. Conserto: normalizador único em toda carga (remoto, cache e importador); `cli_ref` entra no índice como chave própria (`'x:'`); e **sem detalhe de cobertura o app não inventa gap** (`cobDetalhe:false` — a tela explica em vez de listar todo mundo como "sem HC").
+- **#115 · v0.43.2 — `pos X/16` fora do modal.** O card já estava limpo desde 27/08 (`e7b60c0`, conferido por `merge-base`); o jargão sobrava no modal da Postergação. A condição `pc.pos===16` do "já na melhor data" **não foi tocada** — tem invariante exigindo que ela continue de pé.
+- **#116 · v0.43.3 — `atScript` lê a `kb_scripts_cobranca`.** Ligado na tomada e **apagado**: só entram linhas `ativo=true`, e as 3 de hoje são `false`. Casamento pelo motivo normalizado + variantes (o relatório muda acento/hífen/maiúscula de mês para mês). Molde preenchido sem deixar `{buraco}`. Quando os textos chegarem, ativar é **uma linha de SQL, sem release**.
+- **#117 · v0.44.0 — Painel Master de usuários.** A tabela de 8 colunas de checkbox virou **um cartão por pessoa** (o que ela vê · o que não vê · de quem é a carteira · aviso âmbar quando falta delegação) e **uma folha só** para cadastrar e editar, com delegação como caixa. "Ver o que ele enxerga" responde qual DADO ele abre. **Migration nova** `supabase/migrations/lp_perfis_nome_ativo.sql` (`nome` + `ativo`, `if not exists`, com rollback escrito) — **o app funciona antes dela**. De quebra: a barra de cima voltou a dizer a TELA dentro de um hub, e 6 funções mortas saíram.
+
+### Provas
+- **Base real, aba logada, leitura pura:** antes → `Cannot read properties of undefined (reading 'pm'/'renda')` nas três telas; depois → as três pintam, 143 clientes, 196 apólices, **196 achadas pelo índice**, 0 cliente sem apólice, 42 com mais de uma.
+- **Três guardas provados quebrando de propósito** (desliga → acusa → religa → zero): normalizador da Carteira, jargão da Substituição, pausa de acesso.
+- 1280 e 375 reais, base cheia e vazia: `lpSelfCheck` 0, `qaCamposMortos` 0, zero estouro horizontal, alvos ≥44px. **+28 invariantes.**
+
+### Lições novas (entram no Livro de Erros)
+- **#47 — Guarda que compara chave sem exigir que ela exista.** `a.ref===c.ref` com os dois `undefined` dá `true`. O guarda gritou "o índice perdeu apólice" enquanto o defeito era a porta de entrada. *Regra:* comparação de chave exige chave dos dois lados.
+- **#48 — Duas superfícies gravando a mesma tabela com formatos diferentes.** *Regra:* **um normalizador na porta de cada tabela**, e a chave da linha entra no objeto.
+- **#49 — Ausência de DADO virando afirmação na tela.** Zerar cobertura que a carga não trouxe cria lista de abordagem inventada. *Regra:* o que não veio não vira zero; a tela diz que não sabe.
+- **#50 — Invariante que lê `funcao.toString()` mente quando a função é embrulhada.** O `render` é embrulhado no fim do arquivo (bnav) e o `toString()` devolve o embrulho. *Regra:* testar COMPORTAMENTO; leitura de código-fonte só para o que nunca é embrulhado.
+
+### Decisões tomadas sozinho (reversíveis)
+- Gap de cobertura some quando a carga não traz o detalhe, com a tela explicando por quê — em vez de listar 143 clientes como "sem HC".
+- `status: 'Ativa'` presumido na carga do cockpit fica **carimbado** com asterisco e explicação.
+- Pausa de acesso (`lp_perfis.ativo`) é **do app**: a tela avisa e não pinta. **Não é revogação** — está escrito na tela e no comentário da migration.
+- PRs encadeados em vez de cinco branches paralelas, para o diff de cada um ficar limpo (custo: mergear em ordem e reapontar os filhos antes de apagar a base — erro #32).
+
+### Falta dele
+1. **OK para mergear** os cinco, na ordem, reapontando cada filho para `main` antes de apagar a branch do pai.
+2. **Rodar a migration** `lp_perfis_nome_ativo.sql` no SQL Editor (nome e pausa só aparecem depois).
+3. **Convite do Victor** no Supabase (Auth → Users → Add user → Send invitation).
+4. **Os 3 textos oficiais** de cobrança + confirmar as faixas 15/8 da emissão.
+5. **CPF vira identidade?** e **a extensão cria pessoa ou só anexa?** — travam a fase 3 e a extensão 2.0.
+
+---
+
 ## 📸 Snapshot — 02/09/2026, tarde · **v0.40.0 → v0.41.0 · Benefícios (regulação de sinistro)** — ✅ **NO AR** (main `9492594`, deploy conferido)
 
 **Adendos no ar:** v0.40.1 = fix do boot (Emissão/Solicitações/Benefícios só carregavam no botão Sincronizar — `BOOT_LOADERS` única + invariante) · v0.41.0 = pedido dele depois de ver: **Benefícios saiu de Outros módulos/BackOffice e virou módulo isolado no menu de topo** (gate `MODS.beneficios`) + **card no bloco AGORA do Início** (exigências vencidas · parados · ação pra hoje/atrasada; urgência 1 quando pede ação). PR #110 mergeado por push (gh barrado pelo classificador). Sobra: 1 falha pré-existente do self-check na base real (índice de apólices por cliente, carteira).
