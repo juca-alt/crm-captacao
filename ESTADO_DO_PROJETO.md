@@ -27,6 +27,30 @@
 
 ---
 
+## 📸 Snapshot — 02/09/2026, noite (fechamento) · **v0.38.0 → v0.42.1** · Backoffice V1 no ar, Victor a um convite de entrar
+
+**Estado em 30 s:** ✅ `main` = `cbf2907`, `vendas.html` **v0.42.1** servida. Sete PRs desta sessão (#106–#112) mergeados; a outra sessão subiu v0.40.1/v0.41.0 (Benefícios)/v0.42.1. Painel de pendências do CRM: https://claude.ai/code/artifact/5d57e691-38c9-4ac7-9eb3-021f485e910a (34 abertas, 4 altas).
+
+### O que entrou depois do snapshot da tarde
+- **v0.39.0 — Delegação dono → assistente** (`lp_delegacoes`, `lp_donos_visiveis()`, RLS das 6 tabelas do BackOffice aceita o delegado; o app grava com `lp_email` = dono; painel Delegações em Acessos). SQL rodado por ele no dashboard (classificador barrou DDL de RLS na sessão).
+- **v0.39.1/v0.39.2 — parser da emissão consertado com o relatório REAL**: token com letra = proposta, 9 dígitos = apólice, pareados por adjacência aceitando `/` entre eles; chave `coalesce(proposta, apolice)` como coluna gerada + unique por dono; colagem que diverge do `Total MFB` **não grava**; "Ver exemplo" bloqueado logado e com números inventados; teste de idempotência no `lpSelfCheck`. Erro de origem: fixture com identificador real + exemplo desligando a sync.
+- **v0.41.1 — cards seguem os filtros** (LP/contestação/busca; lentes ficam de fora) na emissão e no atraso; ficha de emissão com "Corrigir nomes" (`nomes_corrigidos`).
+- **v0.42.0 — hub Módulos**: o grupo "Outros módulos" virou um item que abre tela de cards (como o Atalhos do Painel Central); gates MODS valem nos cards.
+- **Banco**: relatório real de UW e Emissão colado logado (5 propostas · PA 37.696,56 · AFYC 15.013,88, sem duplicar); Victor (`vfigueiredo.solucoes@gmail.com`) já com `lp_perfis` (preset Assistente) e `lp_delegacoes` (juca → victor). **Falta só o convite no Supabase** (Auth → Users → Add user → Send invitation).
+
+### Lições desta sessão
+- Aba com versão em cache = colagem que "parece" que rodou e não vai pro banco. Sempre "Atualizar app" antes de testar.
+- Duas sessões no mesmo clone: `git fetch` + `git pull` na main antes de cada branch; o branch local muda sozinho.
+- Preview local: sem `node`; o servidor estático não segue symlink pra fora do cwd; a porta 4599 é da outra sessão.
+
+### Próxima sessão (ordem recomendada)
+1. Self-check da Carteira acusando na base real (risco de apólice escondida) — sessão própria.
+2. `pos X/16` fora do card da Substituição; CANONICO_CRM.md no Drive.
+3. Ligar `kb_scripts_cobranca` no `atScript` assim que os 3 textos chegarem.
+4. Depois das decisões dele (CPF, extensão cria/anexa): fase 3 da identidade.
+
+---
+
 ## 📸 Snapshot — 02/09/2026 · **v0.38.0 · Backoffice V1 (Victor)** — branch `backoffice-v1`, PR aberto, **aguarda OK dele pra merge**
 
 **Estado em 30 s:** a spec "Backoffice V1" (levantamento do papel do Victor) foi construída inteira, **espelhando o módulo Lista de Atraso** (mesma stack, mesmo Supabase por dono, mesmos cards/chips/modal). Banco JÁ MIGRADO no playground (6 migrations, todas `if not exists`, versionadas em `supabase/migrations/backoffice_v1_*.sql`). Front no `vendas.html` v0.38.0, verificado a 375 e 1280, base cheia e vazia, 0 campo morto, `lpSelfCheck` 0 falhas (+16 invariantes).
