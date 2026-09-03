@@ -4,6 +4,103 @@
 
 ---
 
+## 📸 Snapshot — 03/09/2026, fechamento · **v0.45.0 + PR #121** · o portão rodou de ponta a ponta como UM comando; nada da cadeia foi mergeado
+
+**Estado em 30 s:** `main` = `d37b628` / **v0.42.1 no ar** (conferido pelo CONTEÚDO servido: sha `e2701bbcc925` do Pages = `main:vendas.html`, byte a byte). **#113 → #120 seguem todos ABERTOS** — ele não mergeou nada. Dos 5 itens do prompt dele, só o 2 (portão) era destravável; os outros 4 continuam presos nele (merge, migration, textos, CPF/extensão). Cadeia agora: **#113 → #114 → #115 → #116 → #117 → #119 → #120 → #121**.
+
+### O que foi conferido (não presumido)
+- **Item 1 (v0.44.0 no Pages):** não aplicável — nada mergeado. O `--servido` rodado na pasta da `main` diz *"EXATAMENTE este arquivo"* (v0.42.1); rodado no worktree diz DIFERENTE (local v0.45.0). É o comportamento certo dos dois lados.
+- **Item 3 (`lp_perfis_nome_ativo.sql`):** NÃO rodada — `information_schema` do playground não tem `nome` nem `ativo` em `lp_perfis`. Nome e pausa no Painel Master ficam pra depois dela.
+- **Item 4 (3 textos de cobrança):** NÃO chegaram — `kb_scripts_cobranca` tem as 3 linhas com `ativo=false` e o MESMO molde de 294 caracteres (`*Seguradora:* Prudential *Segurado:* {segurado}…`). Nada pra ativar; o selo "texto oficial" fica pra quando os textos entrarem.
+- **Item 5 (CPF / extensão):** sem resposta dele → fase 3 da identidade não começou.
+
+### Item 2 · o portão como UM comando — rodado de verdade, e consertado no caminho (PR #121)
+`python3 scripts/portao.py` no worktree `card-cliente` (v0.45.0), navegador da sessão dirigindo:
+- **Normal:** 375/1280 × cheia/vazia, **29 telas** (ele falou em 26; `VIEWS_CONHECIDAS` tem 29 hoje — a lista é lida do app), 0 exceção, 0 campo morto, 0 estouro, `lpSelfCheck` 0, `funSelfCheck` 0 → **exit 0, PORTÃO ABERTO**.
+- **`--prova`:** `cart-visao: campo morto portao-morto-proposital · estouro 2112px` → **acusou**.
+- **`--servido`:** ver acima.
+- **Defeito do próprio comando, achado ao rodar:** a porta 4611 estava presa por um `python -m http.server` solto da sessão anterior → `OSError 48` e o comando morria. **PR #121 (só `scripts/portao.py`):** anda até a próxima porta livre e avisa (provado: 4611 presa → subiu em 4612); e o `--prova` deixa de terminar com "PORTÃO ABERTO — pode subir" (era enganoso: o vermelho era o defeito injetado) → agora `PROVA OK — o guarda acusa defeito (isto NÃO é o portão; rode sem --prova antes de subir)`.
+- **Aviso que o portão registra sem fechar:** **183 alvos de toque < 44px a 375 (base cheia)**, 123 deles em `config-funil`: 72 chaves `fc-sw` de 16px, 24 setas `fc-arrow` de 18px, 12 lixeiras `fc-del` de 27px, 12 `fc-enc` de 21–23px. É o editor de etapas do funil — entra na fila de UX celular. Fora dele: `nn-funil` 19, `bc-funil` 12, `inicio` 8, `cart-clientes` 6.
+
+### Lição nova
+- **#54 — Comando de portão tem que sobreviver ao ambiente.** Porta presa por processo órfão não é falha do app, e o portão não pode morrer por ela. *Regra:* recurso externo (porta, pasta, navegador) falhou → o comando contorna e avisa; só o APP fecha o portão.
+
+### Falta dele (igual à noite, mais um)
+1. **OK para mergear #113 → #121, na ordem**, reapontando cada filho para `main` antes de apagar a base do pai. Depois: `git checkout main && python3 scripts/portao.py --servido` → tem que dizer "EXATAMENTE" e **v0.45.0**.
+2. Rodar `lp_perfis_nome_ativo.sql` · 3 textos de cobrança · CPF? · extensão cria ou anexa?
+3. **Próximo que dá pra tocar sozinho:** relatório da carteira com "entradas pelo funil"; outros cards do contato (mock b149d50e); alvos < 44px do `config-funil` (UX celular).
+
+---
+
+## 📸 Snapshot — 03/09/2026, noite · **v0.44.1 → v0.45.0** · o portão virou UM comando, e o Card Cliente fecha o ciclo emitida → entregue → apólice na base
+
+**Estado em 30 s:** `main` segue em `d37b628` / v0.42.1 no ar — **nada dos #113–#117 foi mergeado** (conferido no GitHub e no Pages, não presumido). A cadeia cresceu: **#113 → #114 → #115 → #116 → #117 → #119 → #120**. Dos 5 itens do prompt dele, só o 2 (portão) era destravável; 1/3/4/5 dependem dele (merge, migration, textos, CPF/extensão). Depois, o foco que ele pediu: *funil da Base de Clientes + base de clientes 100% redondos, começando pelo card cliente*.
+
+### O que entrou
+- **#119 · v0.44.1 — Portão de deploy em UM comando** (Onda 3 da planta). `python3 scripts/portao.py` sobe um servidor, abre `portao.html`, que carrega o `vendas.html` num iframe em **375 e 1280, base cheia e vazia**, passa por **todas as `VIEWS_CONHECIDAS`** (29 hoje — a lista é lida do app, tela nova entra sozinha), abre 4 fichas (negócio nn/bc, cliente da carteira, emissão) e mede exceção · campo morto · estouro · alvos <44px (aviso); por cenário roda `lpSelfCheck` e `funSelfCheck`. Devolve 0/1. **`--prova`** injeta um campo morto e um estouro e exige que o portão acuse (R6 — provado). **`--servido`** compara o `vendas.html` do Pages com o local por sha256 + versão do `<title>` (hoje: servido v0.42.1 ≠ local, como deve). Só python3, sem node; o iframe nunca está logado. A fixture cheia é inventada e traz a **carteira nos dois formatos** (importador e cockpit) — a porta que quebrou de manhã é a que mais se testa.
+  - **Achados de cara:** (a) a Agenda pedia token silencioso do Google **sem ninguém logado** → popup bloqueado + erro no console em toda abertura fria; agora só com sessão. (b) A fixture da Lista de Atraso e do relatório de exemplo tinham **nomes, celulares e nºs de apólice reais** → inventados. (c) Aba escondida no Chrome estrangula `setTimeout` (o 1º passe levou 7 min); o portão cede a vez por `MessageChannel` e roda os 4 cenários em ~5 s.
+- **#120 · v0.45.0 — Card Cliente.** `clienteDe(pessoa)` = UMA leitura derivada: apólices vivas/canceladas, atraso, **propostas pendentes na Emissão** (o radar antigo lia só a lista legada do PDF), negócios no funil; casa por nome, telefone ou `cli_ref`. `cliCardHtml` pinta o MESMO card em três lugares: chips no card do funil (`🛡 2 apólices · R$ 500/mês` · `⏰ atraso 12d` · `📋 emissão 18d`), o bloco da ficha do negócio (substitui "Já é seu cliente") e a ficha da carteira, que ganha **Negócios e emissão**.
+  - **O ciclo fecha por decisão dele:** desfecho *emitida* na Emissão → `vendaModal`: apólice na carteira (prêmio = PA s/ IOF ÷ 12, carimbado **estimado**) + negócio casado → **Delivery** (editável). Negócio **ganho sem apólice** mostra "Registrar apólice" na ficha → mesmo modal; já em Venda ganha não muda de etapa. `vendaPlano` é pura, `vendaAplicar` grava só no Aplicar, duplicata por nº/proposta não entra. Cliente que não existia nasce **sem cobertura inventada** (a ficha diz que capital chega na próxima importação).
+  - **Bug pego no caminho:** modal aberto de dentro da ficha ficava **atrás** dela (z-index 80 < 90) — no celular, invisível. Corrigido, medido a 375.
+
+### Provas
+- Portão: 4 cenários × 29 telas, 0 exceção, 0 campo morto, 0 estouro, `lpSelfCheck` 0 (+12 invariantes do card, cada um provado quebrando: sem `funEhGanho` caem 2, sem chips 1, sem dup 1, religa → 0). Estado restaurado depois do self-check (CART/EM/S e o cache local — erro #17).
+- Ciclo de ponta a ponta no preview: Joana (bc, N/Emissão, 1 apólice do cockpit por `cli_ref`) → emitida → Delivery + 2ª apólice ≈ R$ 350 → chips `🛡 2 apólices · R$ 500/mês`; Kleber (Venda ganha sem apólice) → registrar → cliente novo na carteira com PM e sem CS inventado.
+
+### Lições novas
+- **#51 — Aba escondida estrangula timer.** Portão/harness em iframe: ceder a vez por `MessageChannel`, nunca `setTimeout`.
+- **#52 — Modal em cima de folha precisa de z-index acima da folha.** `atModal` nasce em 80 e o drawer está em 90; toda confirmação aberta de dentro da ficha tem que subir (ou o `atModal` ganhar um parâmetro).
+- **#53 — `display` inline vence `[hidden]`.** Tópico dobrável esconde filhos por `hidden`; um `style="display:flex"` inline fura. Usar classe.
+
+### Decisões tomadas sozinho (reversíveis)
+- `ET_GANHO={nn:['DELIVERY'], bc:['Delivery','Venda ganha']}` — emitida sugere entregar (Delivery encerra o funil, decisão dele de 31/08).
+- Apólice da venda entra no **snapshot** da carteira (`cartPersistRemoto`) — sem migration. Se a próxima importação do .xls não a trouxer, ela sai (aí está no relatório oficial, que é a autoridade).
+- Card cliente **abre por padrão** na ficha (é ação — atraso, emissão pendente, registrar apólice — não estoque).
+
+### Falta dele
+1. **OK para mergear #113 → #120, na ordem**, reapontando cada filho para `main` antes de apagar a base do pai. Depois: `git checkout main && python3 scripts/portao.py --servido` (deve dizer "EXATAMENTE este arquivo" e v0.45.0).
+2. Rodar `lp_perfis_nome_ativo.sql` · convite do Victor · 3 textos de cobrança · CPF? · extensão cria ou anexa?
+3. **Não feito (próximo):** relatório da carteira com "entradas pelo funil" (ele citou "relatório carteira clientes, algo assim"); os outros cards de informação do contato (prospect × cliente, mock b149d50e).
+
+---
+
+## 📸 Snapshot — 03/09/2026 · **v0.42.1 → v0.44.0** · a Carteira estava MORTA na base real, e o acesso virou painel
+
+**Estado em 30 s:** cinco PRs escritos e **abertos, nenhum mergeado** — `main` segue em `d37b628` / v0.42.1 no ar. Os PRs são **encadeados**: #113 → #114 → #115 → #116 → #117. O achado da sessão: **as três telas da Carteira estouravam com os dados reais dele** (143 clientes, 196 apólices), e o self-check que gritava apontava para o lugar errado. Planta da 2.0 publicada: https://claude.ai/code/artifact/70adfead-06fb-40da-a731-e12846e1f8de
+
+### O que entrou (um PR por item, na ordem que ele pediu)
+- **#113 · v0.43.0 — Configurações vira hub de cards.** Pedido dele ao ver o print dos Módulos. O grupo dobrável virou UM item que abre a tela de cartões. O cartão saiu de dentro do `viewModulos` e virou `hubCardHtml`/`hubSecoesHtml`: **os dois hubs usam a mesma função**, com invariante provando. Card de Acessos só é DESENHADO para admin; Barra inferior só no celular.
+- **#114 · v0.43.1 — Carteira: uma forma só.** 🚨 **O maior achado.** Duas superfícies gravam as MESMAS tabelas com formatos diferentes: o importador da LP grava `{ref, nascimento, celular, cob{}}`, e o **cockpit** (`carteira.html`, que semeou a carteira real em 11/08) grava `{nome, nasc, cel, cap, mrr}` + `{ap, period, cli_ref}` — com a **chave da linha FORA do `dados`**. O `cartCarregar` fazia `map(r=>r.dados)` e jogava a chave fora → `c.cob.pm` indefinido → **Visão, Clientes e Oportunidades estouravam antes de pintar**. Conserto: normalizador único em toda carga (remoto, cache e importador); `cli_ref` entra no índice como chave própria (`'x:'`); e **sem detalhe de cobertura o app não inventa gap** (`cobDetalhe:false` — a tela explica em vez de listar todo mundo como "sem HC").
+- **#115 · v0.43.2 — `pos X/16` fora do modal.** O card já estava limpo desde 27/08 (`e7b60c0`, conferido por `merge-base`); o jargão sobrava no modal da Postergação. A condição `pc.pos===16` do "já na melhor data" **não foi tocada** — tem invariante exigindo que ela continue de pé.
+- **#116 · v0.43.3 — `atScript` lê a `kb_scripts_cobranca`.** Ligado na tomada e **apagado**: só entram linhas `ativo=true`, e as 3 de hoje são `false`. Casamento pelo motivo normalizado + variantes (o relatório muda acento/hífen/maiúscula de mês para mês). Molde preenchido sem deixar `{buraco}`. Quando os textos chegarem, ativar é **uma linha de SQL, sem release**.
+- **#117 · v0.44.0 — Painel Master de usuários.** A tabela de 8 colunas de checkbox virou **um cartão por pessoa** (o que ela vê · o que não vê · de quem é a carteira · aviso âmbar quando falta delegação) e **uma folha só** para cadastrar e editar, com delegação como caixa. "Ver o que ele enxerga" responde qual DADO ele abre. **Migration nova** `supabase/migrations/lp_perfis_nome_ativo.sql` (`nome` + `ativo`, `if not exists`, com rollback escrito) — **o app funciona antes dela**. De quebra: a barra de cima voltou a dizer a TELA dentro de um hub, e 6 funções mortas saíram.
+
+### Provas
+- **Base real, aba logada, leitura pura:** antes → `Cannot read properties of undefined (reading 'pm'/'renda')` nas três telas; depois → as três pintam, 143 clientes, 196 apólices, **196 achadas pelo índice**, 0 cliente sem apólice, 42 com mais de uma.
+- **Três guardas provados quebrando de propósito** (desliga → acusa → religa → zero): normalizador da Carteira, jargão da Substituição, pausa de acesso.
+- 1280 e 375 reais, base cheia e vazia: `lpSelfCheck` 0, `qaCamposMortos` 0, zero estouro horizontal, alvos ≥44px. **+28 invariantes.**
+
+### Lições novas (entram no Livro de Erros)
+- **#47 — Guarda que compara chave sem exigir que ela exista.** `a.ref===c.ref` com os dois `undefined` dá `true`. O guarda gritou "o índice perdeu apólice" enquanto o defeito era a porta de entrada. *Regra:* comparação de chave exige chave dos dois lados.
+- **#48 — Duas superfícies gravando a mesma tabela com formatos diferentes.** *Regra:* **um normalizador na porta de cada tabela**, e a chave da linha entra no objeto.
+- **#49 — Ausência de DADO virando afirmação na tela.** Zerar cobertura que a carga não trouxe cria lista de abordagem inventada. *Regra:* o que não veio não vira zero; a tela diz que não sabe.
+- **#50 — Invariante que lê `funcao.toString()` mente quando a função é embrulhada.** O `render` é embrulhado no fim do arquivo (bnav) e o `toString()` devolve o embrulho. *Regra:* testar COMPORTAMENTO; leitura de código-fonte só para o que nunca é embrulhado.
+
+### Decisões tomadas sozinho (reversíveis)
+- Gap de cobertura some quando a carga não traz o detalhe, com a tela explicando por quê — em vez de listar 143 clientes como "sem HC".
+- `status: 'Ativa'` presumido na carga do cockpit fica **carimbado** com asterisco e explicação.
+- Pausa de acesso (`lp_perfis.ativo`) é **do app**: a tela avisa e não pinta. **Não é revogação** — está escrito na tela e no comentário da migration.
+- PRs encadeados em vez de cinco branches paralelas, para o diff de cada um ficar limpo (custo: mergear em ordem e reapontar os filhos antes de apagar a base — erro #32).
+
+### Falta dele
+1. **OK para mergear** os cinco, na ordem, reapontando cada filho para `main` antes de apagar a branch do pai.
+2. **Rodar a migration** `lp_perfis_nome_ativo.sql` no SQL Editor (nome e pausa só aparecem depois).
+3. **Convite do Victor** no Supabase (Auth → Users → Add user → Send invitation).
+4. **Os 3 textos oficiais** de cobrança + confirmar as faixas 15/8 da emissão.
+5. **CPF vira identidade?** e **a extensão cria pessoa ou só anexa?** — travam a fase 3 e a extensão 2.0.
+
+---
+
 ## 📸 Snapshot — 02/09/2026, tarde · **v0.40.0 → v0.41.0 · Benefícios (regulação de sinistro)** — ✅ **NO AR** (main `9492594`, deploy conferido)
 
 **Adendos no ar:** v0.40.1 = fix do boot (Emissão/Solicitações/Benefícios só carregavam no botão Sincronizar — `BOOT_LOADERS` única + invariante) · v0.41.0 = pedido dele depois de ver: **Benefícios saiu de Outros módulos/BackOffice e virou módulo isolado no menu de topo** (gate `MODS.beneficios`) + **card no bloco AGORA do Início** (exigências vencidas · parados · ação pra hoje/atrasada; urgência 1 quando pede ação). PR #110 mergeado por push (gh barrado pelo classificador). Sobra: 1 falha pré-existente do self-check na base real (índice de apólices por cliente, carteira).
