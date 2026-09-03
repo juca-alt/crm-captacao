@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.43.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.43.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1018,7 +1018,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.43.2 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.43.3 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1040,7 +1040,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.43.2 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.43.3 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -6591,7 +6591,57 @@ const AT_SCRIPTS=[
    acao:'fazer o pagamento do boleto'},
   {id:'generico', rot:'Sem motivo informado', re:/.^/, acao:'regularizar o pagamento'}
 ];
+/* == SCRIPTS-DO-BANCO-V1 (03/09) ===========================================
+   A `kb_scripts_cobranca` nasceu em 02/09 com os 3 motivos órfãos e o molde,
+   `ativo=false`, esperando os textos oficiais da assessoria. O app não lia a
+   tabela: o texto vinha todo do `AT_SCRIPTS` daqui.
+   Agora o caminho existe e está LIGADO NA TOMADA, mas apagado: só entram
+   linhas com `ativo=true`, e hoje não há nenhuma. Com a tabela vazia,
+   indisponível, ou o app deslogado, o comportamento é EXATAMENTE o de hoje —
+   é o que os invariantes provam. Quando os 3 textos chegarem, ele liga as
+   linhas no banco e a mensagem passa a sair no texto oficial, sem release.
+   O casamento é pelo motivo NORMALIZADO (minúsculas, sem acento, sem
+   pontuação) e pelas VARIANTES da linha; o texto do relatório vem com
+   maiúsculas e hífens que mudam de um mês para o outro. */
+let AT_SCRIPTS_DB=[];
+function atMotivoChave(s){ return normKey(s).replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }
+function atScriptsKbDe(linhas){
+  return (linhas||[]).filter(r=>r&&r.ativo&&r.script).map(r=>({
+    id:'kb:'+r.id, _kb:true, script:r.script, canal:r.canal||'whatsapp',
+    rot: atTitleC(String((r.motivo_variantes&&r.motivo_variantes[0])||r.motivo_normalizado||'').trim())||'Script da assessoria',
+    acao:'seguir o combinado com a assessoria',
+    chaves:[r.motivo_normalizado].concat(r.motivo_variantes||[]).map(atMotivoChave).filter(Boolean)
+  })).filter(sc=>sc.chaves.length);
+}
+async function atScriptsCarregar(){
+  AT_SCRIPTS_DB=[];
+  if(!sb) return;
+  try{
+    const {data:ses}=await sb.auth.getSession(); if(!ses||!ses.session) return;   // deslogado = texto do app
+    const {data,error}=await sb.from('kb_scripts_cobranca').select('id,motivo_normalizado,motivo_variantes,script,canal,ativo').eq('ativo',true);
+    if(error) throw error;
+    AT_SCRIPTS_DB=atScriptsKbDe(data);
+  }catch(e){ console.warn('kb_scripts_cobranca indisponível → AT_SCRIPTS do app',e); AT_SCRIPTS_DB=[]; }
+}
+function atScriptKb(r){
+  const k=atMotivoChave((r&&r.motivo_recusa)||''); if(!k) return null;
+  return AT_SCRIPTS_DB.find(sc=>sc.chaves.indexOf(k)>=0)||null;
+}
+/* {segurado} {apolice} {venc} {dias} {valor} {forma} {motivo} — chave que o
+   molde não conhecer vira travessão, para o texto nunca sair com `{buraco}`. */
+function atPreencher(tpl,r){
+  const d=atDiasAtraso(r&&r.vencido_em);
+  const v={ segurado: atTitleC(String((r&&r.segurado)||''))||'—',
+            apolice: (r&&r.apolice)||'—',
+            venc: (r&&r.vencido_em)?atFmtBR(r.vencido_em):'—',
+            dias: d!=null?String(d):'—',
+            valor: (r&&r.premio!=null)?brl(r.premio):'—',
+            forma: (r&&r.forma_pagto)||'—',
+            motivo: (r&&r.motivo_recusa)||'—' };
+  return String(tpl||'').replace(/\{\s*([a-zA-Z_]+)\s*\}/g,function(_,k){ const key=String(k).toLowerCase(); return (key in v)?v[key]:'—'; });
+}
 function atScript(r){
+  const kb=atScriptKb(r); if(kb) return kb;          // texto oficial vence o do app
   const m=String((r&&r.motivo_recusa)||'').trim();
   if(m) { const achado=AT_SCRIPTS.find(sc=>sc.id!=='generico'&&sc.re.test(m)); if(achado) return achado; }
   return AT_SCRIPTS[AT_SCRIPTS.length-1];
@@ -6609,6 +6659,7 @@ function atScriptRot(r){
 function atWaMsg(r){
   const nome=atTitleC(String((r&&r.segurado)||'').split(' ')[0]||'');
   const sc=atScript(r);
+  if(sc._kb) return atPreencher(sc.script,r);       // texto oficial, preenchido
   const valor=(r&&r.premio!=null)?brl(r.premio):null;
   const venc=(r&&r.vencido_em)?atFmtBR(r.vencido_em):null;
   const abre='Olá'+(nome?' '+nome:'')+'! Tudo bem?';
@@ -6633,6 +6684,7 @@ function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apol
      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);font-weight:600">
        💬 Mensagem pronta
        <span class="badge ${atScriptReconhecido(r)?'b-verde':'b-cinza'}">${esc(atScriptRot(r))}</span>
+       ${atScript(r)._kb?'<span class="badge b-azul" title="Veio da kb_scripts_cobranca, ativa no banco — não é texto escrito no app.">texto oficial da assessoria</span>':''}
        ${atScriptReconhecido(r)?'':'<span style="font-weight:400">texto genérico — me mande o motivo que eu escrevo o específico</span>'}
      </div>
      <textarea id="at_msg" rows="4" style="width:100%;margin-top:6px;font-size:13px">${esc(atWaMsg(r))}</textarea>
@@ -8930,7 +8982,7 @@ function bnLpLabel(id){ const u=(S.users||[]).find(x=>x.id===(id||'gustavo')); r
      ⬆︎ Atualizar app = versão nova do código, com limpeza de cache e reload
    Enquanto roda, o botão vira "⏳ Sincronizando…" pra não parecer travado. */
 let _syncRodando=false;
-const BOOT_LOADERS=[lpCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar,emCarregar,soCarregar,bfCarregar];
+const BOOT_LOADERS=[lpCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar,emCarregar,soCarregar,bfCarregar,atScriptsCarregar];
 async function sincronizarDados(){
   if(_syncRodando) return;
   _syncRodando=true;
@@ -11234,6 +11286,30 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const m=atWaMsg({segurado:'Ana',apolice:'003',premio:250,vencido_em:'2026-06-10',motivo_recusa:'saldo insuficiente'});
       return m.includes('250') && m.includes('10/06/2026'); })());
     ok('script: todo motivo mapeado tem rótulo e ação escritos', AT_SCRIPTS.every(sc=>sc.id&&sc.rot&&sc.acao));
+    /* SCRIPTS-DO-BANCO-V1: o caminho novo só pode existir se, DESLIGADO, ele
+       for invisível. Os três primeiros provam isso; os outros provam que,
+       quando ele ligar as linhas, o texto oficial entra inteiro. */
+    { const _sdb=AT_SCRIPTS_DB;
+      const casoFraude={segurado:'Fulano De Teste',apolice:'900000000',vencido_em:'2026-08-01',premio:300,forma_pagto:'Débito',
+                        motivo_recusa:'Suspeita De Fraude - Transação Rejeitada Pelo Banco Emissor'};
+      const casoCartao={segurado:'Fulano De Teste',apolice:'900000001',vencido_em:'2026-08-01',premio:300,motivo_recusa:'Cartão vencido'};
+      try{
+        AT_SCRIPTS_DB=[];
+        const semBanco={f:atScript(casoFraude).id, c:atScript(casoCartao).id, msg:atWaMsg(casoCartao)};
+        ok('cobrança: com a tabela desligada o script é o mesmo de sempre', semBanco.c==='cartao_vencido'&&semBanco.f==='generico'&&/Olá Fulano/.test(semBanco.msg));
+        AT_SCRIPTS_DB=atScriptsKbDe([{id:'t1',ativo:false,script:'x {segurado}',motivo_normalizado:'suspeita de fraude transacao rejeitada pelo banco emissor',motivo_variantes:[]}]);
+        ok('cobrança: linha inativa no banco não entra', AT_SCRIPTS_DB.length===0&&atScript(casoFraude).id==='generico');
+        AT_SCRIPTS_DB=atScriptsKbDe([{id:'t2',ativo:true,canal:'whatsapp',
+          script:'*Segurado:* {segurado}\n*Apólice:* {apolice}\n*Venc:* {venc}\n*Dias:* {dias}\n*R$:* {valor}\n*Forma:* {forma}\n*Nada:* {inexistente}',
+          motivo_normalizado:'suspeita de fraude transacao rejeitada pelo banco emissor',
+          motivo_variantes:['Suspeita De Fraude - Transação Rejeitada Pelo Banco Emissor']}]);
+        const msg=atWaMsg(casoFraude);
+        ok('cobrança: linha ativa casa o motivo do relatório apesar de acento, hífen e maiúscula', atScript(casoFraude)._kb===true);
+        ok('cobrança: o texto oficial sai preenchido e sem buraco', /Fulano De Teste/.test(msg)&&/900000000/.test(msg)&&/01\/08\/2026/.test(msg)&&!/\{[a-zA-Z_]+\}/.test(msg));
+        ok('cobrança: o texto oficial vence o do app, e o resto segue no app', atScript(casoCartao).id==='cartao_vencido');
+        ok('cobrança: a ficha avisa quando o texto é o oficial', atScript(casoFraude)._kb&&!atScript(casoCartao)._kb);
+      } finally { AT_SCRIPTS_DB=_sdb; } }
+    ok('cobrança: os scripts carregam no boot, não só no Sincronizar', BOOT_LOADERS.indexOf(atScriptsCarregar)>=0);
     ok('script: rótulo separa "sem motivo" de "motivo sem script"', (()=>{
       const a=atScriptRot({motivo_recusa:''}), b=atScriptRot({motivo_recusa:'erro 733 sei la'});
       return a==='Sem motivo informado' && b==='Motivo ainda sem script' && a!==b; })());
