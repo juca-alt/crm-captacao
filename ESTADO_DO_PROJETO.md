@@ -4,6 +4,38 @@
 
 ---
 
+## 📸 Snapshot — 03/09/2026, noite · **v0.44.1 → v0.45.0** · o portão virou UM comando, e o Card Cliente fecha o ciclo emitida → entregue → apólice na base
+
+**Estado em 30 s:** `main` segue em `d37b628` / v0.42.1 no ar — **nada dos #113–#117 foi mergeado** (conferido no GitHub e no Pages, não presumido). A cadeia cresceu: **#113 → #114 → #115 → #116 → #117 → #119 → #120**. Dos 5 itens do prompt dele, só o 2 (portão) era destravável; 1/3/4/5 dependem dele (merge, migration, textos, CPF/extensão). Depois, o foco que ele pediu: *funil da Base de Clientes + base de clientes 100% redondos, começando pelo card cliente*.
+
+### O que entrou
+- **#119 · v0.44.1 — Portão de deploy em UM comando** (Onda 3 da planta). `python3 scripts/portao.py` sobe um servidor, abre `portao.html`, que carrega o `vendas.html` num iframe em **375 e 1280, base cheia e vazia**, passa por **todas as `VIEWS_CONHECIDAS`** (29 hoje — a lista é lida do app, tela nova entra sozinha), abre 4 fichas (negócio nn/bc, cliente da carteira, emissão) e mede exceção · campo morto · estouro · alvos <44px (aviso); por cenário roda `lpSelfCheck` e `funSelfCheck`. Devolve 0/1. **`--prova`** injeta um campo morto e um estouro e exige que o portão acuse (R6 — provado). **`--servido`** compara o `vendas.html` do Pages com o local por sha256 + versão do `<title>` (hoje: servido v0.42.1 ≠ local, como deve). Só python3, sem node; o iframe nunca está logado. A fixture cheia é inventada e traz a **carteira nos dois formatos** (importador e cockpit) — a porta que quebrou de manhã é a que mais se testa.
+  - **Achados de cara:** (a) a Agenda pedia token silencioso do Google **sem ninguém logado** → popup bloqueado + erro no console em toda abertura fria; agora só com sessão. (b) A fixture da Lista de Atraso e do relatório de exemplo tinham **nomes, celulares e nºs de apólice reais** → inventados. (c) Aba escondida no Chrome estrangula `setTimeout` (o 1º passe levou 7 min); o portão cede a vez por `MessageChannel` e roda os 4 cenários em ~5 s.
+- **#120 · v0.45.0 — Card Cliente.** `clienteDe(pessoa)` = UMA leitura derivada: apólices vivas/canceladas, atraso, **propostas pendentes na Emissão** (o radar antigo lia só a lista legada do PDF), negócios no funil; casa por nome, telefone ou `cli_ref`. `cliCardHtml` pinta o MESMO card em três lugares: chips no card do funil (`🛡 2 apólices · R$ 500/mês` · `⏰ atraso 12d` · `📋 emissão 18d`), o bloco da ficha do negócio (substitui "Já é seu cliente") e a ficha da carteira, que ganha **Negócios e emissão**.
+  - **O ciclo fecha por decisão dele:** desfecho *emitida* na Emissão → `vendaModal`: apólice na carteira (prêmio = PA s/ IOF ÷ 12, carimbado **estimado**) + negócio casado → **Delivery** (editável). Negócio **ganho sem apólice** mostra "Registrar apólice" na ficha → mesmo modal; já em Venda ganha não muda de etapa. `vendaPlano` é pura, `vendaAplicar` grava só no Aplicar, duplicata por nº/proposta não entra. Cliente que não existia nasce **sem cobertura inventada** (a ficha diz que capital chega na próxima importação).
+  - **Bug pego no caminho:** modal aberto de dentro da ficha ficava **atrás** dela (z-index 80 < 90) — no celular, invisível. Corrigido, medido a 375.
+
+### Provas
+- Portão: 4 cenários × 29 telas, 0 exceção, 0 campo morto, 0 estouro, `lpSelfCheck` 0 (+12 invariantes do card, cada um provado quebrando: sem `funEhGanho` caem 2, sem chips 1, sem dup 1, religa → 0). Estado restaurado depois do self-check (CART/EM/S e o cache local — erro #17).
+- Ciclo de ponta a ponta no preview: Joana (bc, N/Emissão, 1 apólice do cockpit por `cli_ref`) → emitida → Delivery + 2ª apólice ≈ R$ 350 → chips `🛡 2 apólices · R$ 500/mês`; Kleber (Venda ganha sem apólice) → registrar → cliente novo na carteira com PM e sem CS inventado.
+
+### Lições novas
+- **#51 — Aba escondida estrangula timer.** Portão/harness em iframe: ceder a vez por `MessageChannel`, nunca `setTimeout`.
+- **#52 — Modal em cima de folha precisa de z-index acima da folha.** `atModal` nasce em 80 e o drawer está em 90; toda confirmação aberta de dentro da ficha tem que subir (ou o `atModal` ganhar um parâmetro).
+- **#53 — `display` inline vence `[hidden]`.** Tópico dobrável esconde filhos por `hidden`; um `style="display:flex"` inline fura. Usar classe.
+
+### Decisões tomadas sozinho (reversíveis)
+- `ET_GANHO={nn:['DELIVERY'], bc:['Delivery','Venda ganha']}` — emitida sugere entregar (Delivery encerra o funil, decisão dele de 31/08).
+- Apólice da venda entra no **snapshot** da carteira (`cartPersistRemoto`) — sem migration. Se a próxima importação do .xls não a trouxer, ela sai (aí está no relatório oficial, que é a autoridade).
+- Card cliente **abre por padrão** na ficha (é ação — atraso, emissão pendente, registrar apólice — não estoque).
+
+### Falta dele
+1. **OK para mergear #113 → #120, na ordem**, reapontando cada filho para `main` antes de apagar a base do pai. Depois: `git checkout main && python3 scripts/portao.py --servido` (deve dizer "EXATAMENTE este arquivo" e v0.45.0).
+2. Rodar `lp_perfis_nome_ativo.sql` · convite do Victor · 3 textos de cobrança · CPF? · extensão cria ou anexa?
+3. **Não feito (próximo):** relatório da carteira com "entradas pelo funil" (ele citou "relatório carteira clientes, algo assim"); os outros cards de informação do contato (prospect × cliente, mock b149d50e).
+
+---
+
 ## 📸 Snapshot — 03/09/2026 · **v0.42.1 → v0.44.0** · a Carteira estava MORTA na base real, e o acesso virou painel
 
 **Estado em 30 s:** cinco PRs escritos e **abertos, nenhum mergeado** — `main` segue em `d37b628` / v0.42.1 no ar. Os PRs são **encadeados**: #113 → #114 → #115 → #116 → #117. O achado da sessão: **as três telas da Carteira estouravam com os dados reais dele** (143 clientes, 196 apólices), e o self-check que gritava apontava para o lugar errado. Planta da 2.0 publicada: https://claude.ai/code/artifact/70adfead-06fb-40da-a731-e12846e1f8de
