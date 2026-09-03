@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.44.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.45.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -456,6 +456,15 @@
   .vneg b{font-weight:800}
   .vneg-total{margin-top:0;font-size:12px;padding:5px 11px;border-radius:20px}
   .nnrec{font-size:10.5px;font-weight:700;color:#7c3aed;background:#f3ecff;border-radius:6px;padding:2px 6px;margin-left:6px;white-space:nowrap}
+  /* CARD-CLIENTE-V1: chips do cliente no card do funil + linhas do card completo */
+  .nc-clirow{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+  .nc-cli{font-size:10.5px;font-weight:700;color:#15803d;background:var(--verde-bg,#e6f6ec);border-radius:6px;padding:2px 6px;white-space:nowrap}
+  .nc-cli.verm{color:#b91c1c;background:#fee2e2}
+  .nc-cli.amar{color:#a06a00;background:#fef3c7}
+  .cli-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}   /* sem display inline: o tópico fechado esconde por [hidden] */
+  .cli-linha{display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--linha);border-radius:9px;padding:7px 10px;margin-top:6px;font-size:12.5px}
+  .cli-linha>span{min-width:0;overflow-wrap:anywhere}
+  .cli-ganho{margin-top:8px;font-size:12.5px;padding:8px 10px;border-radius:9px;background:#fef3c7;color:#7c5a00;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
   .nncol-taxa{font-size:10px;font-weight:700;text-align:center;margin:-4px 6px 8px;letter-spacing:.02em}
   .nncol-pa{font-size:10.5px;font-weight:700;color:#15803d;background:var(--verde-bg);border-radius:6px;padding:3px 7px;margin:-4px 6px 8px;text-align:center}
   .col-pa{text-align:right;white-space:nowrap}
@@ -1031,7 +1040,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.44.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.45.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1053,7 +1062,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.44.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.45.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2621,6 +2630,7 @@ function nnCard(c){
     ${(()=>{ const t=negTitulo(c); return t?`<div class="nc-oq" title="O que se vende neste negócio (${esc(negTituloFonte(c))})">${esc(t)}</div>`:''; })()}
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(c.telefone||'')}</div>
+    ${cliChipsHtml(clienteDe(c,{semNegocios:true}))}
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
     ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
@@ -3253,25 +3263,175 @@ function drwCarteira(c){
   return {cli, aps, atrasos:rad.atrasos, via: porNome?'nome':'telefone'};
 }
 function drwCarteiraHtml(c){
-  const d=drwCarteira(c); if(!d) return '';
-  const pm=(d.cli&&d.cli.cob&&d.cli.cob.pm)||d.aps.reduce((a,x)=>a+(x.premio||0),0);
+  /* CARD-CLIENTE-V1: a ficha do negócio pinta o mesmo card das outras duas telas.
+     `drwCarteira` continua existindo (os invariantes leem por ela). */
+  if(!c) return '';
+  return cliCardHtml(clienteDe(c,{excetoId:c.id,semNegocios:true}),{negocio:c});
+}
+
+/* ═══ CARD CLIENTE V1 (03/09) ═══════════════════════════════════════════════
+   Pedido dele: "o funil da Base de Clientes e a base de clientes têm que ficar
+   100% redondos: o que vai pra emissão e é emitido significa que ganhei — atualiza
+   o card e põe a apólice na base. Começando pelo card cliente."
+   Três depósitos falavam da mesma pessoa sem se olhar: o NEGÓCIO no funil, a
+   PROPOSTA na Emissão e a APÓLICE na Carteira. O card cliente é UMA leitura
+   derivada (`clienteDe`) pintada por UMA função (`cliCardHtml`) em três lugares —
+   o card do funil, a ficha do negócio e a ficha da carteira. Nada aqui digita
+   estado (R4): tudo é derivado do que já existe; o que a carga não traz continua
+   não existindo (R3); e o ciclo fecha por DECISÃO dele, num modal (`vendaModal`),
+   nunca sozinho. */
+const ET_GANHO={nn:['DELIVERY'], bc:['Delivery','Venda ganha']};   // ids de fábrica: emitida = entregar
+function funEhGanho(c){ return !!(c&&(ET_GANHO[funilDe(c)]||[]).includes(c.etapa)); }
+function funEtapaGanho(funil){ return (ET_GANHO[funil==='bc'?'bc':'nn']||[])[0]; }
+/* propostas pendentes na Emissão casadas por nome — o relatório da Prudential não traz telefone */
+function cliEmissoesDe(pessoa){
+  const ks=cartChaves(pessoa), out=[];
+  (EM.itens||[]).filter(emAtivo).forEach(r=>{ const rk=pessoaChaves(r,['segurado','resp_pagamento'],[]); for(const k of rk){ if(ks.has(k)){ out.push(r); break; } } });
+  return out; }
+function cliNegociosDe(pessoa,excetoId){
+  const ks=cartChaves(pessoa), pid=pessoa&&pessoa.pessoaId;
+  return (S.contatos||[]).filter(c=>{ if(excetoId&&String(c.id)===String(excetoId)) return false;
+    if(pid&&c.pessoaId===pid) return true;
+    const ck=pessoaChaves(c,['nome'],['telefone']); for(const k of ck){ if(ks.has(k)) return true; } return false; }); }
+function clienteDe(pessoa,opts){
+  if(!pessoa) return null; opts=opts||{};
+  const p={nome:pessoa.nome||pessoa.segurado||'', celular:pessoa.celular||pessoa.telefone||null, telefone:pessoa.telefone||null, pessoaId:pessoa.pessoaId||null, ref:pessoa.ref||null, _rowRef:pessoa._rowRef||null};
+  if(!normKey(p.nome)&&!telKey(p.celular)) return null;
+  const ks=cartChaves(p);
+  const cli=(CART.clientes||[]).find(x=>{ const a=cartChaves(x); for(const k of ks){ if(a.has(k)) return true; } return false; })||null;
+  const todas=cartApolicesDoCliente(p);
+  const aps=todas.filter(a=>!/cancel/i.test(a.status||'')), canceladas=todas.filter(a=>/cancel/i.test(a.status||''));
+  const rad=cartRadar(p);
+  const emissoes=cliEmissoesDe(p);
+  const negocios=opts.semNegocios?[]:cliNegociosDe(p,opts.excetoId);
+  /* prêmio: a soma das apólices vivas é a leitura mais fresca (uma venda nova entra na hora);
+     o PM da carga do cliente é o que vale quando a carga de apólices não traz prêmio */
+  const pmAps=aps.reduce((s,a)=>s+(a.premio||0),0);
+  const pm=pmAps||((cli&&cli.cob&&cli.cob.pm)||0);
+  const porNome=!!(cli&&normKey(cli.nome)===normKey(p.nome));
+  return { pessoa:p, cli, aps, canceladas, atrasos:rad.atrasos, emissoes, negocios, pm, cs:(cli&&cli.cob&&cli.cob.cs)||0,
+    gaps:cli?cartGaps(cli):[], cobDetalhe:!!(cli&&cartTemDetalheCob(cli)),
+    via: cli?(porNome?'nome':'telefone'):(aps.length?'apólice':null), eCliente:!!(cli||aps.length) };
+}
+/* uma linha de chips — o card do funil. Card limpo continua limpo: sem apólice, atraso ou emissão, não pinta nada. */
+function cliChipsHtml(d){
+  if(!d) return '';
+  const ch=[];
+  if(d.aps.length) ch.push(`<span class="nc-cli" title="apólice(s) viva(s) na carteira${d.pm?' · '+brl(d.pm)+'/mês':''}">🛡 ${d.aps.length} apólice${d.aps.length===1?'':'s'}${d.pm?' · '+brlCurto(d.pm)+'/mês':''}</span>`);
+  else if(d.cli) ch.push(`<span class="nc-cli" title="está na carteira, sem apólice viva ligada">🛡 na carteira</span>`);
+  if(d.atrasos.length){ const a=d.atrasos[0]; ch.push(`<span class="nc-cli verm" title="em atraso no relatório da seguradora">⏰ atraso${a.dias_atraso!=null?' '+a.dias_atraso+'d':''}</span>`); }
+  d.emissoes.forEach(r=>{ const dd=emDias(r); ch.push(`<span class="nc-cli amar" title="proposta ${esc(r.proposta||'')} pendente de emissão">📋 emissão${dd!=null?' '+dd+'d':''}</span>`); });
+  return ch.length?`<div class="nc-clirow">${ch.join('')}</div>`:'';
+}
+/* o card completo — ficha do negócio (opts.negocio) e ficha da carteira (opts.modo==='carteira') */
+function cliCardHtml(d,opts){
+  opts=opts||{}; if(!d) return '';
+  const c=opts.negocio||null, ganho=funEhGanho(c), carteira=opts.modo==='carteira';
+  if(!carteira&&!d.eCliente&&!d.emissoes.length&&!d.atrasos.length&&!ganho) return '';
   const atras=d.atrasos.length;
-  return `<div class="sec">
-    <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Já é seu cliente</span>
-      <span class="badge ${atras?'b-verm':'b-verde'}">${d.aps.length} apólice${d.aps.length===1?'':'s'}</span>
+  const titulo=d.eCliente?'Já é seu cliente':(ganho?'Venda ganha':'Na emissão');
+  const apChip=a=>`<span class="vneg" title="${esc(a.status||'')}${a._premioEstimado?' · prêmio estimado (PA ÷ 12)':''}${a._origem?' · entrou pela '+esc(a._origem):''}">${esc(a.apolice||a.proposta||'—')}${a.premio?' · '+(a._premioEstimado?'≈ ':'')+brl(a.premio):''}</span>`;
+  const emLinha=r=>{ const dd=emDias(r); return `<div class="cli-linha"><span>📋 Proposta <b>${esc(r.proposta||r.apolice||'—')}</b>${dd!=null?' · pendente há <b>'+dd+'d</b>':''}${r.pendencia_descricao?' · '+esc(r.pendencia_descricao):''}</span><button class="btn btn-s btn-mini" onclick="fecharDrawer();irPara('lp-pendencias');emAbrir('${esc(emChave(r))}')">abrir</button></div>`; };
+  const negLinha=n=>`<div class="cli-linha"><span>${funilDe(n)==='bc'?'🏠':'🎯'} ${esc(negTitulo(n)||n.nome)} · ${badgeEtapa(n.etapa)}${pmDe(n)?' · '+brlCurto(pmDe(n))+'/mês':''}</span><button class="btn btn-s btn-mini" onclick="fecharDrawer();abrirContato('${esc(n.id)}')">abrir</button></div>`;
+  const semApolice=ganho&&!d.aps.length&&!d.emissoes.length;
+  return `<div class="sec cli-card"${c?' data-cli-card="'+esc(c.id)+'"':''}>
+    <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>${carteira?'Negócios e emissão':titulo}</span>
+      ${!carteira?`<span class="badge ${atras?'b-verm':(d.aps.length?'b-verde':'b-amarelo')}">${d.aps.length} apólice${d.aps.length===1?'':'s'}</span>`:''}
       ${atras?`<span class="badge b-verm">${atras} em atraso</span>`:''}
-      <span style="font-size:11px;font-weight:400;color:var(--muted)">casado por ${d.via}</span></h3>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:6px">
-      ${d.cli?esc(d.cli.nome):esc(c.nome)}${pm?` · ${brl(pm)}/mês na carteira`:''}
-    </div>
-    ${d.aps.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">${
-      d.aps.slice(0,6).map(a=>`<span class="vneg" title="${esc(a.status||'')}">${esc(a.apolice||'—')}${a.premio?' · '+brl(a.premio):''}</span>`).join('')
-    }${d.aps.length>6?`<span class="vneg">+${d.aps.length-6}</span>`:''}</div>`:''}
-    ${atras?`<div style="font-size:12.5px;color:var(--verm);font-weight:600">⏰ ${
-      d.atrasos.slice(0,3).map(a=>esc(a.apolice)+' · '+(a.dias_atraso!=null?a.dias_atraso+'d':'—')).join(' · ')
-    }${atras>3?` +${atras-3}`:''} — resolver antes de oferecer coisa nova.</div>`:''}
+      ${d.emissoes.length?`<span class="badge b-amarelo">${d.emissoes.length} na emissão</span>`:''}
+      ${d.via&&!carteira?`<span style="font-size:11px;font-weight:400;color:var(--muted)">casado por ${d.via}</span>`:''}</h3>
+    ${!carteira&&d.eCliente?`<div style="font-size:13px;color:var(--muted);margin-bottom:6px">${esc(d.cli?d.cli.nome:d.pessoa.nome)}${d.pm?` · ${brl(d.pm)}/mês na carteira`:''}${d.canceladas.length?` · ${d.canceladas.length} cancelada${d.canceladas.length===1?'':'s'}`:''}</div>`:''}
+    ${!carteira&&d.aps.length?`<div class="cli-chips">${d.aps.slice(0,6).map(apChip).join('')}${d.aps.length>6?`<span class="vneg">+${d.aps.length-6}</span>`:''}</div>`:''}
+    ${atras?`<div style="font-size:12.5px;color:var(--verm);font-weight:600;margin-bottom:6px">⏰ ${d.atrasos.slice(0,3).map(a=>esc(a.apolice)+' · '+(a.dias_atraso!=null?a.dias_atraso+'d':'—')).join(' · ')}${atras>3?` +${atras-3}`:''} — resolver antes de oferecer coisa nova.</div>`:''}
+    ${d.emissoes.map(emLinha).join('')}
+    ${carteira?(d.negocios.length?d.negocios.map(negLinha).join(''):`<div style="font-size:12.5px;color:var(--muted)">Nenhum negócio aberto no funil para esta pessoa.</div>`):''}
+    ${!carteira&&d.cli&&!d.cobDetalhe?`<div style="font-size:11.5px;color:var(--muted);margin-top:4px">A carga da carteira não traz o detalhe de coberturas — o app não diz o que falta.</div>`:''}
+    ${!carteira&&d.gaps.length?`<div style="margin-top:4px;font-size:12px;color:var(--muted)">💡 Sem: ${d.gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`:''}
+    ${semApolice?`<div class="cli-ganho"><b>Ganhou e a apólice ainda não está na base.</b> Registre o número pra carteira e o card ficarem redondos.
+        <button class="btn btn-p btn-mini" style="margin-left:6px" onclick="vendaModal({origem:'funil',negocioId:'${esc(c.id)}'})">🛡 Registrar apólice</button></div>`:''}
     ${d.via==='telefone'?`<div style="font-size:11.5px;color:var(--muted);margin-top:6px">O nome está escrito diferente na carteira — o encontro foi pelo telefone. Se não for a mesma pessoa, corrija o telefone no cadastro.</div>`:''}
   </div>`;
+}
+
+/* ── fechar o ciclo: emitida → negócio entregue + apólice na base ─────────────
+   Duas portas chegam no MESMO modal: o desfecho "emitida" na ficha da Emissão e
+   o botão "Registrar apólice" no card de um negócio ganho sem apólice. O plano é
+   função pura (`vendaPlano`) — decide sem gravar; `vendaAplicar` grava só depois
+   do "Aplicar". Prêmio vindo da emissão = PA s/ IOF ÷ 12, carimbado ESTIMADO. */
+function cartJaTemApolice(numero,proposta){ return (CART.apolices||[]).some(a=>(numero&&a.apolice===numero)||(proposta&&a.proposta===proposta)); }
+function vendaPlano(o){
+  o=o||{}; const seg=cartTxt(o.segurado); if(!seg) return null;
+  const d=clienteDe({nome:seg, celular:o.celular||null});
+  const numero=cartTxt(o.apolice)||null, proposta=cartTxt(o.proposta)||null;
+  const dup=cartJaTemApolice(numero,proposta);
+  const premio=Number(o.premio)||0;
+  const apolice=dup?null:cartNormApolice({apolice:numero, proposta, segurado:seg, celular:o.celular||null, premio, periodicidade:'Mensal', status:'Ativa',
+    cli_ref:d.cli?(d.cli._rowRef||d.cli.ref):null, _origem:o.origem==='emissao'?'emissão':'venda', _premioEstimado:!!o.premioEstimado, _criadaEm:hojeISO()},null);
+  return { dup, cliNovo:!d.cli, cli:d.cli, apolice, negocios:d.negocios, segurado:seg, celular:o.celular||null };
+}
+async function vendaAplicar(plano,escolhas){
+  escolhas=escolhas||{}; const feito={apolice:false,clienteNovo:false,movidos:[]};
+  if(plano.apolice&&escolhas.adicionar!==false){
+    if(plano.cliNovo){
+      const c=cartNormCliente({nome:plano.segurado, celular:plano.celular, cob:null, mrr:plano.apolice.premio, _origem:plano.apolice._origem, _criadoEm:hojeISO()},null);
+      c.cobDetalhe=false; CART.clientes.push(c); plano.apolice.cli_ref=c.ref; feito.clienteNovo=true;
+    }
+    CART.apolices.push(plano.apolice); cartIdxInvalidar(); cartSalvar(); feito.apolice=true;
+    if(CART_REMOTE){ try{ await cartPersistRemoto(); }catch(e){ console.error('venda→carteira remoto',e); toast('A apólice ficou só neste aparelho (sync falhou)',false); } }
+  }
+  (escolhas.mover||[]).forEach(m=>{ const c=S.contatos.find(x=>String(x.id)===String(m.id)); if(!c||!m.etapa||c.etapa===m.etapa) return;
+    const de=c.etapa; c.etapa=m.etapa; logEtapa(c,de,m.etapa);
+    interacoesDe(c).push({id:uid(),k:'emissao',l:'Apólice '+(plano.apolice?(plano.apolice.apolice||plano.apolice.proposta||''):(escolhas.numero||''))+' emitida — negócio entregue',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    feito.movidos.push(c.id); });
+  if(feito.movidos.length) salvar();
+  return feito;
+}
+function vendaModal(ctx){
+  ctx=ctx||{};
+  let seg=ctx.segurado, cel=ctx.celular, premio=ctx.premio, est=!!ctx.premioEstimado, neg=null;
+  if(ctx.origem==='funil'){ neg=S.contatos.find(x=>String(x.id)===String(ctx.negocioId)); if(!neg) return; seg=neg.nome; cel=neg.telefone; premio=pmDe(neg); est=false; }
+  const plano=vendaPlano({segurado:seg, celular:cel, apolice:ctx.apolice, proposta:ctx.proposta, premio, premioEstimado:est, origem:ctx.origem});
+  if(!plano) return;
+  const jaGanho=!!(neg&&funEhGanho(neg));
+  const negs=neg?(jaGanho?[]:[neg]):plano.negocios.filter(n=>!funEhGanho(n));
+  const opt=(n)=>etapasDoFunil(funilDe(n)).map(e=>`<option value="${esc(e)}"${e===funEtapaGanho(funilDe(n))?' selected':''}>${esc(ET_LABEL[e]||e)}</option>`).join('');
+  atModal(`<h2>${ctx.origem==='emissao'?'✅ Emitida — fechar o ciclo':'🛡 Registrar apólice na base'}</h2>
+    <div class="sub">${esc(atTitleC(seg))}${ctx.proposta?' · proposta <b>'+esc(ctx.proposta)+'</b>':''}. Nada abaixo acontece sem o Aplicar.</div>
+    <div class="card" style="padding:10px 12px;margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px"><input type="checkbox" id="venda-add" ${plano.dup?'disabled':'checked'} onchange="vendaPreview()"> Apólice na Carteira${plano.dup?' <span class="badge b-verde">já está na base</span>':(plano.cliNovo?' <span class="badge b-amarelo">cliente novo na carteira</span>':'')}</label>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px"><label style="display:block;font-size:12px;color:var(--muted);font-weight:600">Nº da apólice</label><input id="venda-ap" value="${esc(ctx.apolice||'')}" placeholder="9 dígitos" oninput="vendaPreview()" style="width:100%;margin-top:3px"></div>
+        <div style="width:150px"><label style="display:block;font-size:12px;color:var(--muted);font-weight:600">Prêmio mensal</label><input id="venda-pm" type="number" step="0.01" value="${premio?Number(premio).toFixed(2):''}" oninput="vendaPreview()" style="width:100%;margin-top:3px"></div>
+      </div>
+      <div id="venda-nota" style="font-size:11.5px;color:var(--muted);margin-top:6px">${est?'Prêmio estimado = PA s/ IOF ÷ 12 — fica carimbado como estimado até a próxima importação da carteira.':''}${plano.cliNovo&&!plano.dup?' Capital e coberturas chegam com a próxima importação da carteira; até lá o app não inventa.':''}</div>
+    </div>
+    <div class="card" style="padding:10px 12px;margin-top:8px">
+      <div style="font-weight:700;font-size:13px">Negócio no funil</div>
+      ${negs.length?negs.map(n=>`<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;flex-wrap:wrap"><input type="checkbox" data-venda-mv="${esc(n.id)}" ${neg?'checked disabled':'checked'} onchange="vendaPreview()"> ${esc(negTitulo(n)||n.nome)} · ${badgeEtapa(n.etapa)} → <select data-venda-et="${esc(n.id)}" onchange="vendaPreview()" style="font-size:12px">${opt(n)}</select></label>`).join('')
+        :(jaGanho?`<div style="font-size:12.5px;color:var(--muted);margin-top:4px">${esc(negTitulo(neg)||neg.nome)} já está em ${badgeEtapa(neg.etapa)} — não muda de etapa.</div>`
+          :`<div style="font-size:12.5px;color:var(--muted);margin-top:4px">Nenhum negócio aberto no funil com esse nome. A apólice entra na base mesmo assim; o funil você acerta na ficha, se houver.</div>`)}
+    </div>
+    <div id="venda-erro" style="color:var(--verm);font-size:12px;margin-top:6px"></div>
+    <div style="display:flex;gap:10px;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Agora não</button><button class="btn btn-p" style="margin-left:auto" onclick="vendaConfirmar()">Aplicar</button></div>`);
+  /* o modal nasce com z-index 80 e a ficha (drawer) fica em 90: aberto de dentro da ficha, ele
+     ficava ESCONDIDO atrás dela — no celular, invisível. Medido a 375 antes de subir. */
+  { const ov=document.getElementById('at-ov'); if(ov) ov.style.zIndex='95'; }
+  window._VENDA={ctx:{segurado:seg, celular:cel, proposta:ctx.proposta||null, origem:ctx.origem||'funil', premioEstimado:est}, negs};
+  vendaPreview();
+}
+function vendaPreview(){ const add=$('#venda-add'), ap=$('#venda-ap'), pm=$('#venda-pm'); if(!add||!ap||!pm) return;
+  const ligado=add.checked&&!add.disabled; ap.disabled=!ligado; pm.disabled=!ligado; const e=$('#venda-erro'); if(e) e.textContent=''; }
+async function vendaConfirmar(){
+  const v=window._VENDA; if(!v) return;
+  const add=$('#venda-add'), numero=($('#venda-ap')||{}).value||'', pm=Number(($('#venda-pm')||{}).value)||0;
+  const adicionar=!!(add&&add.checked&&!add.disabled);
+  if(adicionar&&!cartTxt(numero)&&!v.ctx.proposta){ $('#venda-erro').textContent='Informe o número da apólice (ou desligue "Apólice na Carteira").'; return; }
+  const plano=vendaPlano(Object.assign({},v.ctx,{apolice:numero, premio:pm}));
+  const mover=[...document.querySelectorAll('[data-venda-mv]')].filter(cb=>cb.checked).map(cb=>{ const id=cb.dataset.vendaMv; const sel=document.querySelector('[data-venda-et="'+id+'"]'); return {id, etapa:sel?sel.value:funEtapaGanho('nn')}; });
+  const feito=await vendaAplicar(plano,{adicionar, mover, numero});
+  atClose(); window._VENDA=null; render(); if(CONTATO) renderDrawer();
+  const partes=[]; if(feito.apolice) partes.push('apólice na carteira'+(feito.clienteNovo?' (cliente novo)':'')); if(feito.movidos.length) partes.push(feito.movidos.length+' negócio(s) movido(s)');
+  toast(partes.length?('Ciclo fechado: '+partes.join(' · ')):'Nada a aplicar',true);
 }
 
 /* ═══ PESSOA ↔ OPORTUNIDADES V1 (31/08) ═════════════════════════════════════
@@ -3583,7 +3743,8 @@ function drwIrmaosHtml(c){
    O padrão abre só o que se usa todo dia; o resto começa fechado e lembra a
    escolha por aparelho. */
 const DRW_SEC_CHAVE='crmlp_ficha_secs_v1';
-const DRW_SEC_PADRAO=['etapa de comercializacao','tarefas & atividades','valor do negocio','registrar contato'];
+const DRW_SEC_PADRAO=['etapa de comercializacao','tarefas & atividades','valor do negocio','registrar contato',
+  'ja e seu cliente','venda ganha','na emissao'];   /* CARD-CLIENTE-V1: o card do cliente abre por padrão — atraso, emissão pendente e "registrar apólice" são ação, não estoque */
 /* A chave sai só do PRIMEIRO pedaço do título, não do textContent inteiro: o
    h3 carrega dentro dele o <select> de funil, o aviso "sem próxima atividade" e
    botões, e isso ia junto — foi assim que "Etapa" e "Tarefas" deixaram de casar
@@ -7292,6 +7453,9 @@ async function emSalvarFicha(chave){
   const desf=$('#em_desf'); if(desf){ const o=desf.value; if(o==='emitida'||o==='cancelada'){ patch.desfecho=o; patch.desfecho_em=atHojeISO(); if(o==='emitida') patch.status_tratativa='resolvido'; }
     else if(o==='voltar'){ patch.saiu_do_relatorio_em=null; } }
   await emPatch(chave,patch); atClose(); render(); toast('Salvo',true);
+  /* CARD-CLIENTE-V1: emitida = ganhou. O modal oferece entregar o negócio e pôr a apólice na
+     base; decisão dele, nada acontece sozinho. */
+  if(patch.desfecho==='emitida'){ const r=EM.itens.find(x=>emChave(x)===chave); if(r) vendaModal({origem:'emissao', segurado:r.segurado, celular:null, proposta:r.proposta||null, apolice:r.apolice||'', premio:r.pa_sem_iof?Math.round(r.pa_sem_iof/12*100)/100:0, premioEstimado:!!r.pa_sem_iof}); }
 }
 function emColarRelatorio(){ atModal(`<h2>📋 Colar relatório</h2>
    <div class="sub">Portal Prudential → <b>Ferramentas → Pendências → Underwriting e Emissão</b> → Tipo = <b>Propostas Pendentes</b> → Filtrar → Imprimir → selecione o texto do PDF e cole aqui. Eu confiro contra o <b>Total MFB</b>.</div>
@@ -8858,8 +9022,10 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}</div>
     ${radHTML}
+    ${cliCardHtml(clienteDe(c),{modo:'carteira'})}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
-    <div style="font-size:13px">${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
+    ${c._origem?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Cliente entrou pela ${esc(c._origem)}${c._criadoEm?' em '+dataBR(c._criadoEm):''}. Capital e coberturas chegam com a próxima importação da carteira — até lá o app não inventa.</div>`:''}
+    <div style="font-size:13px">${c._origem?linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))+'</div><div hidden>':''}${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
     ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`
       :(cartTemDetalheCob(c)?'':`<div style="margin-top:8px;font-size:11.5px;color:var(--muted)">A carga desta carteira não traz o detalhe de coberturas — o app não tem como dizer o que falta.</div>`)}
     ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
@@ -10860,6 +11026,37 @@ function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
   try{
+    /* CARD-CLIENTE-V1 (03/09): uma leitura derivada da pessoa, e o ciclo emitida → entregue → apólice na base.
+       Tudo em cima de cópias: CART, EM e S voltam ao que eram no fim (Livro de Erros #17). */
+    { const _c0=CART.clientes, _a0=CART.apolices, _e0=EM.itens, _s0=S.contatos, _r0=CART_REMOTE; let _ls=null; try{ _ls=localStorage.getItem(CART_CHAVE); }catch(_){}
+      try{
+        CART.clientes=_c0.slice(); CART.apolices=_a0.slice(); EM.itens=_e0.slice(); S.contatos=_s0.slice(); CART_REMOTE=false; cartIdxInvalidar();
+        CART.apolices.push(cartNormApolice({apolice:'000000901',segurado:'Zz Nome Diferente',celular:'(81) 90000-0901',status:'Ativa',premio:100},null)); cartIdxInvalidar();
+        const d1=clienteDe({nome:'Zz Cliente Selfcheck',telefone:'(81) 90000-0901'});
+        ok('card cliente: casa a apólice pelo telefone quando o nome diverge', d1&&d1.aps.length===1&&d1.eCliente&&d1.via==='apólice'&&d1.pm===100);
+        EM.itens.push({proposta:'ZZSC1',segurado:'ZZ CLIENTE SELFCHECK',desfecho:null,pa_sem_iof:1200});
+        const d2=clienteDe({nome:'Zz Cliente Selfcheck',telefone:''});
+        ok('card cliente: proposta pendente na Emissão aparece no card (casada por nome)', d2&&d2.emissoes.length===1&&/📋 emissão/.test(cliChipsHtml(d2)));
+        EM.itens[EM.itens.length-1].desfecho='emitida';
+        ok('card cliente: emitida some da lista de pendentes', clienteDe({nome:'Zz Cliente Selfcheck',telefone:''}).emissoes.length===0);
+        ok('card cliente: quem não é cliente nem tem emissão não ganha chip (card limpo continua limpo)', cliChipsHtml(clienteDe({nome:'Zz Ninguem Zz',telefone:''}))==='');
+        ok('ganho: DELIVERY (nn) e Delivery/Venda ganha (bc) são ganho; EMISSÃO não é', funEhGanho({funil:'nn',etapa:'DELIVERY'})&&funEhGanho({funil:'bc',etapa:'Venda ganha'})&&funEhGanho({funil:'bc',etapa:'Delivery'})&&!funEhGanho({funil:'nn',etapa:'EMISSÃO'})&&funEtapaGanho('nn')==='DELIVERY'&&funEtapaGanho('bc')==='Delivery');
+        const pl=vendaPlano({segurado:'Zz Venda Nova',celular:'(81) 90000-0902',apolice:'000000902',premio:150,premioEstimado:true,origem:'emissao'});
+        ok('venda: plano de pessoa fora da carteira = cliente novo + apólice com prêmio estimado, sem gravar nada', pl&&pl.cliNovo&&!pl.dup&&pl.apolice&&pl.apolice.premio===150&&pl.apolice._premioEstimado&&pl.apolice._origem==='emissão'&&CART.apolices.length===_a0.length+1);
+        const nn0=CART.clientes.length; const fe=vendaAplicar(pl,{adicionar:true,mover:[]});
+        ok('venda: aplicar cria o cliente sem inventar cobertura e a apólice entra no índice', CART.clientes.length===nn0+1&&!cartTemDetalheCob(CART.clientes[nn0])&&cartGaps(CART.clientes[nn0]).length===0&&CART.clientes[nn0]._origem==='emissão'&&cartApolicesDoCliente({nome:'Zz Venda Nova'}).length===1);
+        ok('venda: cliente vindo da venda vira "cliente" nos estados do contato', ctEstado({nome:'Zz Venda Nova',telefone:'',funil:'nn',etapa:'SitPlan'})==='cliente');
+        const pl2=vendaPlano({segurado:'Zz Venda Nova',celular:'(81) 90000-0902',apolice:'000000902',premio:150});
+        ok('venda: a mesma apólice de novo é duplicata — não entra duas vezes', pl2&&pl2.dup&&pl2.apolice===null&&!pl2.cliNovo);
+        S.contatos.push({id:'zz-sc-neg',nome:'Zz Venda Nova',telefone:'(81) 90000-0902',funil:'bc',etapa:'Emissão Final',interacoes:[]});
+        const plM=vendaPlano({segurado:'Zz Venda Nova',celular:'',apolice:'000000903',premio:10});
+        ok('venda: o plano acha o negócio no funil pelo nome/telefone', plM.negocios.some(n=>n.id==='zz-sc-neg'));
+        const _salvar=window.salvar; window.salvar=function(){}; try{ vendaAplicar(plM,{adicionar:false,mover:[{id:'zz-sc-neg',etapa:'Delivery'}]}); }finally{ window.salvar=_salvar; }
+        const nz=S.contatos.find(x=>x.id==='zz-sc-neg');
+        ok('venda: mover entrega o negócio e registra no histórico; adicionar=false não toca a carteira', nz.etapa==='Delivery'&&nz.interacoes.some(i=>i.k==='emissao')&&nz.interacoes.some(i=>i.k==='etapa')&&CART.apolices.length===_a0.length+2);
+        ok('card cliente: negócio ganho sem apólice pede o número na ficha', /Registrar apólice/.test(cliCardHtml(clienteDe({nome:'Zz Ganho Sem Apolice',telefone:''}),{negocio:{id:'x',funil:'nn',etapa:'DELIVERY',nome:'Zz Ganho Sem Apolice'}})));
+      }finally{ CART.clientes=_c0; CART.apolices=_a0; EM.itens=_e0; S.contatos=_s0; CART_REMOTE=_r0; cartIdxInvalidar(); try{ if(_ls===null) localStorage.removeItem(CART_CHAVE); else localStorage.setItem(CART_CHAVE,_ls); }catch(_){} }
+    }
     ok('benefícios: módulo isolado (fora do BackOffice, com gate próprio)', MODS.beneficios&&MODS.beneficios.views.indexOf('beneficios')>=0&&MODS.backoffice.views.indexOf('beneficios')<0&&!!document.querySelector('.nav-btn[data-view="beneficios"]:not(.sub)'));
     ok('boot: todo módulo do BackOffice carrega no boot (não só no Sincronizar)', [atCarregar,emCarregar,soCarregar,bfCarregar,subCarregar].every(f=>BOOT_LOADERS.indexOf(f)>=0));
     /* BENEFICIOS-V1 (02/09): checklist padrão, parado, aviso de reinício de prazo, texto da solicitação */
