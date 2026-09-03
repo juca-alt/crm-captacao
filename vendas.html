@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.45.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.46.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1040,7 +1040,7 @@
       </div>
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
-      <span class="tag">ISLAND · v0.45.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.46.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1062,7 +1062,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.45.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.46.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -8779,6 +8779,46 @@ function cartResumo(){ const C=CART.clientes,A=CART.apolices;
     multi:C.filter(c=>cartApolicesDoCliente(c).length>1).length,
     segNeqPag:A.filter(a=>a.respPagto&&normKey(a.segurado)!==normKey(a.respPagto)).length }; }
 
+/* CARTEIRA-ENTRADAS-FUNIL-V1 (03/09): a apólice que entrou pela venda (vendaAplicar, via
+   emissão ou "Registrar apólice") carrega `_origem` + `_criadaEm`; a importação da LP não
+   carrega nenhum dos dois. É essa marca que distingue "entrou pelo funil" de "veio no .xls".
+   Função pura: lê a carteira, não grava. */
+function cartApoliceOrigem(a){ return a&&a._origem&&a._criadaEm?a._origem:'importação'; }
+function cartClienteDaApolice(a){ if(!a) return null;
+  return (CART.clientes||[]).find(c=>(a.cli_ref&&(c._rowRef===a.cli_ref||c.ref===a.cli_ref))||(a.ref&&c.ref===a.ref))||null; }
+function cartEntradasFunil(mes){ mes=mes||mesDe(hojeISO());
+  const aps=(CART.apolices||[]).filter(a=>cartApoliceOrigem(a)!=='importação'&&mesDe(a._criadaEm)===mes)
+    .slice().sort((x,y)=>String(y._criadaEm).localeCompare(String(x._criadaEm)));
+  const novos=new Set((CART.clientes||[]).filter(c=>c._origem&&c._criadoEm&&mesDe(c._criadoEm)===mes).map(c=>c.ref));
+  return { mes, apolices:aps, n:aps.length, premio:aps.reduce((s,a)=>s+(a.premio||0),0), estimados:aps.filter(a=>a._premioEstimado).length, clientesNovos:novos.size };
+}
+function cartMesesComEntrada(){ const m=new Set([mesDe(hojeISO())]);
+  (CART.apolices||[]).forEach(a=>{ if(cartApoliceOrigem(a)!=='importação') m.add(mesDe(a._criadaEm)); });
+  return [...m].filter(Boolean).sort().reverse(); }
+function cartMesLabel(mes){ const [y,m]=String(mes).split('-'); const N=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return (N[+m-1]||m)+'/'+String(y).slice(2); }
+let CART_ENT_MES=null;
+function cartEntradasHtml(){
+  const meses=cartMesesComEntrada(); if(CART_ENT_MES&&meses.indexOf(CART_ENT_MES)<0) meses.push(CART_ENT_MES);
+  const e=cartEntradasFunil(CART_ENT_MES||meses[0]);
+  const sel=meses.length>1?`<select id="cart-ent-mes" aria-label="Mês" onchange="CART_ENT_MES=this.value;viewCartVisao()" style="font:inherit;font-size:13px;padding:6px 10px;min-height:36px;border:1px solid var(--linha);border-radius:8px;background:#fff">${meses.map(m=>`<option value="${m}"${m===e.mes?' selected':''}>${cartMesLabel(m)}</option>`).join('')}</select>`:`<span style="font-size:13px;color:var(--muted)">${cartMesLabel(e.mes)}</span>`;
+  const linhas=e.apolices.map(a=>{ const c=cartClienteDaApolice(a); const via=a._origem==='emissão'?'📋 pela emissão':'🤝 pela venda';
+    return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--linha)${c?';cursor:pointer':''}"${c?` onclick="cartAbrir('${esc(c.ref)}')"`:''}>
+      <span style="flex:1;min-width:140px;font-weight:600">${esc(a.segurado)}</span>
+      <span class="vneg">${esc(a.apolice||a.proposta||'—')}</span>
+      <span style="font-size:12px;color:var(--muted)">${via} · ${dataBR(a._criadaEm)}</span>
+      <span style="font-size:12.5px;font-weight:700;margin-left:auto">${a.premio?(a._premioEstimado?'≈ ':'')+brl(a.premio):'—'}</span></div>`; }).join('');
+  return `<div class="card" style="margin-top:16px;padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h3 style="margin:0;font-size:14px;flex:1;min-width:160px">🚪 Entradas pelo funil</h3>${sel}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:4px">Apólices que entraram na base pela venda (emissão ou "Registrar apólice") — as da importação da LP não contam aqui.</div>
+    ${e.n?`<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:13px">
+        <span><b style="font-size:20px">${e.n}</b> apólice${e.n>1?'s':''}</span>
+        <span><b style="font-size:20px">${brl(e.premio)}</b>/mês${e.estimados?`<span style="font-size:11px;color:var(--muted)"> (${e.estimados} estimado${e.estimados>1?'s':''})</span>`:''}</span>
+        <span><b style="font-size:20px">${e.clientesNovos}</b> cliente${e.clientesNovos!==1?'s':''} novo${e.clientesNovos!==1?'s':''}</span></div>
+      <div style="margin-top:8px">${linhas}</div>`
+      :`<div style="font-size:13px;color:var(--muted);margin-top:10px">Nenhuma apólice entrou pelo funil em ${cartMesLabel(e.mes)}. Quando uma proposta for <b>emitida</b> na Emissão, ou você registrar a apólice de um negócio ganho, ela aparece aqui.</div>`}
+  </div>`;
+}
+
 /* ---- contato: WhatsApp (wa.me) / e-mail (mailto) a partir dos dados da carteira ---- */
 function cartTel(c){ return c.celular||c.telefone||c.telComercial||null; }
 function cartWaUrl(tel,msg){ let d=String(tel||'').replace(/\D/g,''); if(d.length<10) return null;
@@ -8878,6 +8918,7 @@ function viewCartVisao(){ const r=cartResumo();
       ${card('Prêmio mensal','R$ '+cartFmtK(r.pmMes),'soma PM da carteira')}
       ${card('Capital segurado','R$ '+cartFmtK(r.csTot),'exposição total')}
       ${card('Segurado ≠ Pagador',r.segNeqPag,'apólices pagas por terceiro')}</div>
+    ${cartEntradasHtml()}
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-p" onclick="irPara('cart-oportunidades')">💡 Ver oportunidades</button><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
 
 function viewCartClientes(){ const q=normKey(CART_Q);
@@ -10924,6 +10965,24 @@ function viewFunilCfg(){
     .fc-dest:hover{border-color:var(--azul);background:var(--azul-claro)}
     .fc-dest .id{margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--muted)}
     .fc-mf{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--linha);background:#f8fafc}
+    /* FUNIL-CFG-TOQUE-V1 (03/09): no celular todo alvo do editor tem ≥44px de altura. O desenho
+       (bolinha de cor, seta, lixeira) fica pequeno; a ÁREA de toque cresce — bolinha por
+       background-clip, o resto por tamanho. Desktop fica fora deste bloco. */
+    @media(max-width:600px){
+      .fc-tab{min-height:44px;padding:10px 16px}
+      .fc-row{gap:8px;padding:8px}
+      .fc-k{gap:4px}
+      .fc-arrow{width:44px;height:44px;font-size:14px;border-radius:8px}
+      .fc-sws{gap:0;flex-wrap:wrap}
+      .fc-sw{width:44px;height:44px;padding:10px;border:0;background-clip:content-box!important} /* !important: o background inline (shorthand) reseta o clip */
+      .fc-sw[aria-pressed="true"]{box-shadow:none;outline:2px solid var(--ink);outline-offset:-7px}
+      .fc-prob input{min-height:44px;width:64px;font-size:14px}
+      .fc-enc{min-height:44px;padding:10px 14px;font-size:12.5px}
+      .fc-del{width:44px;height:44px;font-size:16px}
+      .fc-cnt{font-size:11px}
+      .fc-add{min-height:48px}
+      .fc-dest{min-height:48px}
+    }
   </style>
   <div class="fc-wrap">
     <h1 class="pg">Funil &amp; Etapas</h1>
@@ -11054,6 +11113,19 @@ function lpSelfCheck(){
         const _salvar=window.salvar; window.salvar=function(){}; try{ vendaAplicar(plM,{adicionar:false,mover:[{id:'zz-sc-neg',etapa:'Delivery'}]}); }finally{ window.salvar=_salvar; }
         const nz=S.contatos.find(x=>x.id==='zz-sc-neg');
         ok('venda: mover entrega o negócio e registra no histórico; adicionar=false não toca a carteira', nz.etapa==='Delivery'&&nz.interacoes.some(i=>i.k==='emissao')&&nz.interacoes.some(i=>i.k==='etapa')&&CART.apolices.length===_a0.length+2);
+        /* CARTEIRA-ENTRADAS-FUNIL-V1 */
+        { const mesH=mesDe(hojeISO()); const mesA=(()=>{ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); return mesDe(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); })();
+          const base=cartEntradasFunil(mesH).n;
+          CART.apolices.push(cartNormApolice({apolice:'000000904',segurado:'Zz Entrada Funil',premio:80,_origem:'venda',_criadaEm:hojeISO()},null));
+          CART.apolices.push(cartNormApolice({apolice:'000000905',segurado:'Zz Entrada Antiga',premio:70,_origem:'emissão',_criadaEm:mesA+'-15',_premioEstimado:true},null));
+          CART.apolices.push(cartNormApolice({apolice:'000000906',segurado:'Zz Importada',premio:60},null));
+          const eH=cartEntradasFunil(mesH), eA=cartEntradasFunil(mesA);
+          ok('entradas pelo funil: só apólice com origem+data do MÊS conta (a importada e a do mês passado ficam fora)', eH.n===base+1&&eH.apolices.some(a=>a.apolice==='000000904')&&!eH.apolices.some(a=>a.apolice==='000000905'||a.apolice==='000000906'));
+          ok('entradas pelo funil: o mês passado soma o dele, com o prêmio estimado contado', eA.n>=1&&eA.apolices.some(a=>a.apolice==='000000905')&&eA.estimados>=1&&eA.premio>=70);
+          ok('entradas pelo funil: apólice sem marca é importação; a da venda diz de onde veio', cartApoliceOrigem(CART.apolices[CART.apolices.length-1])==='importação'&&cartApoliceOrigem(CART.apolices[CART.apolices.length-3])==='venda');
+          ok('entradas pelo funil: a lista de meses traz o mês atual e o do lançamento antigo', cartMesesComEntrada().indexOf(mesH)>=0&&cartMesesComEntrada().indexOf(mesA)>=0);
+          ok('entradas pelo funil: a Visão pinta a seção com a apólice do mês', /Entradas pelo funil/.test(cartEntradasHtml())&&/Zz Entrada Funil/.test(cartEntradasHtml()));
+        }
         ok('card cliente: negócio ganho sem apólice pede o número na ficha', /Registrar apólice/.test(cliCardHtml(clienteDe({nome:'Zz Ganho Sem Apolice',telefone:''}),{negocio:{id:'x',funil:'nn',etapa:'DELIVERY',nome:'Zz Ganho Sem Apolice'}})));
       }finally{ CART.clientes=_c0; CART.apolices=_a0; EM.itens=_e0; S.contatos=_s0; CART_REMOTE=_r0; cartIdxInvalidar(); try{ if(_ls===null) localStorage.removeItem(CART_CHAVE); else localStorage.setItem(CART_CHAVE,_ls); }catch(_){} }
     }
