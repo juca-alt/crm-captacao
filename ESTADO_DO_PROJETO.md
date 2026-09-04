@@ -4,6 +4,21 @@
 
 ---
 
+## 📸 Snapshot — 04/09/2026, fim de tarde · **v5.0 NO AR (PR #126)** · Controle de PLACED virou módulo · numeração curta
+
+**Estado em 30 s:** `main` = `f9968fb`, **v5.0** (a partir daqui a versão é curta: 5.0, 5.1, 5.2… — pedido dele), Pages conferido por hash nos dois arquivos. Barra de cima diz **PipeX** (era ISLAND). Aprovado no chat depois de ver no localhost; ele foi usar a Revisão em reunião.
+
+### O que entrou
+- **Controle de PLACED** em Módulos: engine do `controleplaced.html` portada 1:1 (funções `pl*`), estado em **`placed_estado`** (jsonb por dono, RLS = jwt email, migration aplicada), cache local sem login, exemplo inventado, **+10 invariantes de aceite** (ago/26 85,3 · set/26 86,1 · PTC 84,5 · 2+4 → 88,7 · ~57 novas). Base real da MFB semeada **direto no banco** (nomes reais nunca no repo). Os 3 pontos [a confirmar] do prompt: (1) não há tabela de propostas com status do portal → jsonb, importação do extrato fica pra depois; (2) o módulo grava só o próprio estado; (3) defasagem 3 é parâmetro.
+- **Revisão**: "Como é hoje e como fica" lê o **destino do Checkout** e inclui a **MS** na mesma visão (o que fica na origem + apólice nova), sem depender de cenário · MS com **duplicar simulação** e **"usar no cliente"** · barra de baixo segue os blocos (Planos/MS desligados = cards somem) · textos de apoio fora, iframe mais alto, **buraco de 120px** sob a barra de perfil (padding do `.wrap`) removido.
+- Portão: **31 telas** × 4 cenários verde; reconhece versão curta.
+
+### Pendências novas (registradas)
+- Revisar **valores e cálculos das previsões de resgate** nas apresentações (pedido dele).
+- LP Business: cotação completa e recalibrar DT/TM/FI; PLACED: importar extrato do portal; 8 alvos <44px no PLACED a 375; frase do "como fica" quando só a MS está ligada.
+
+---
+
 ## 📸 Snapshot — 04/09/2026, tarde · **v0.49.0 NO AR** · PRs #122 → #125 mergeados com OK dele · LP Business conferido ao vivo
 
 **Estado em 30 s:** `main` = `0e6a793`+ (v0.49.0), Pages conferido por hash nos dois arquivos. ⚠️ A cadeia #113→#121 já tinha sido mergeada por outra sessão (main estava em v0.48.1) — este snapshot corrige o anterior. Tudo abaixo subiu com o OK explícito dele ("pode mergear" / "já manda no ar").
