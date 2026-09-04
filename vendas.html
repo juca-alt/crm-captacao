@@ -2756,6 +2756,21 @@ function tarGcalAcaoHTML(c,t){
   const gc=tarGcalUrl(c,t);
   return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido">📅</a>`:'';
 }
+/* ═══ COMPROMISSO-WA-V1 (04/09) ════════════════════════════════════════════
+   Pedido dele: na atividade agendada, um botão que manda ao cliente, pelo
+   WhatsApp, o compromisso marcado — texto pronto, ele só aperta enviar.
+   Sai com dia da semana, data, hora e o tipo; assina com o primeiro nome do
+   LP. Só existe quando a atividade tem data e o contato tem telefone. */
+function tarWaMsg(c,t){
+  if(!c||!t||!t.quando) return '';
+  const nome=String(c.nome||'').trim().split(' ')[0];
+  const tipo=t.tipo==='reuniao'?'nossa reunião':t.tipo==='ligar'?'nossa ligação':'nosso compromisso';
+  const quando=diaSemanaBR(t.quando)+', '+dataBR(t.quando)+(t.hora?' às '+t.hora:'');
+  const eu=user(); const ass=eu&&eu.nome?eu.nome.split(' ')[0]:'';
+  return (nome?'Oi, '+nome+'! ':'Oi! ')+'Confirmando '+tipo+(t.tit&&t.tipo!=='reuniao'&&t.tipo!=='ligar'?' ('+t.tit+')':'')+': '+quando+'. Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:'');
+}
+function tarWaHref(c,t){ const m=tarWaMsg(c,t); if(!m) return ''; return cartWaUrl(c&&c.telefone,m)||''; }
+function tarWaAcaoHTML(c,t){ const h=tarWaHref(c,t); return h?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(h)}" target="_blank" rel="noopener" title="Enviar o compromisso ao cliente pelo WhatsApp (texto pronto)">💬 enviar</a>`:''; }
 /* ── mutadores ── */
 function tarContato(cid){ return (S.contatos||[]).find(c=>String(c.id)===String(cid)); }
 window.tarCriar = (cid,tipo,tit,quando,hora,notas) => {
@@ -3459,6 +3474,7 @@ function tarBlocoDrawer(c){
         <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')" title="Marcar como feita">✓ feita</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',1)" title="Remarcar para o dia seguinte">+1d</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)" title="Remarcar para daqui a uma semana">+7d</button>
+        ${tarWaAcaoHTML(c,t)}
         ${tarGcalAcaoHTML(c,t)}
         <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(c.id)}','${esc(t.id)}')" title="Remover">✕</button>
       </span></div>`;
@@ -7785,7 +7801,7 @@ function viewAgenda(){
         <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')">✓ feita</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',1)">+1d</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)">+7d</button>
-        ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener">💬</a>`:''}
+        ${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
         ${tarGcalAcaoHTML(c,t)}
       </span></div>`;
   };
@@ -13607,6 +13623,13 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('rec do nome: Recife, Recuperação e nome limpo não casam', recDoNome('Zz Recife Norte')===null&&recDoNome('Zz Marcos Recuperação')===null&&recDoNome('Zz Hellen Costa')===null&&recDoNome('')===null);
     ok('rec do nome: aplicar limpa o nome, guarda o original, preenche o campo e é idempotente', (()=>{ const c={nome:'Zz Mat Beicin- Rec Zz Vitor',recomendante:''}; const a=recAplicarDoNome(c); const b=recAplicarDoNome(c); return a&&!b&&c.nome==='Zz Mat Beicin'&&c.recomendante==='Zz Vitor'&&c.nome_original==='Zz Mat Beicin- Rec Zz Vitor'; })());
     ok('rec do nome: recomendante já digitado à mão não é sobrescrito', (()=>{ const c={nome:'Zz X - Rec Zz Y',recomendante:'Zz Digitado'}; recAplicarDoNome(c); return c.recomendante==='Zz Digitado'&&c.nome==='Zz X'; })());
+    /* COMPROMISSO-WA-V1 */
+    { const c={id:'x',nome:'Ana Exemplo Souza',telefone:'(81) 90000-1001'}; const t={id:'t',tipo:'reuniao',quando:'2026-09-08',hora:'15:30'};
+      const m=tarWaMsg(c,t), h=tarWaHref(c,t);
+      ok('compromisso-wa: texto traz nome, dia da semana, data e hora', /Oi, Ana!/.test(m)&&/terça, 08\/09\/2026 às 15:30/.test(m)&&/nossa reunião/.test(m));
+      ok('compromisso-wa: link vai pro wa.me do contato com o texto', /wa\.me\/5581900001001\?text=/.test(h)&&decodeURIComponent(h.split('text=')[1])===m);
+      ok('compromisso-wa: sem data não há botão; sem telefone também não', tarWaAcaoHTML(c,{id:'s',tipo:'ligar'})===''&&tarWaAcaoHTML({nome:'B'},t)==='');
+      ok('compromisso-wa: botão aparece na linha da ficha e da agenda', tarBlocoDrawer(Object.assign({tarefas:[t]},c)).indexOf('💬 enviar')>=0); }
     ok('ficha: Ligar e WhatsApp saem do mesmo telefone', telHref('+5581988451010')==='tel:+5581988451010'&&waHref('+5581988451010').indexOf('5581988451010')>0);
     ok('barra inferior: todo destino escolhido é uma view conhecida',
        bnavLer().every(v=>VIEWS_CONHECIDAS.includes(v)));
