@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.47.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.48.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -637,6 +637,7 @@
     .drawer-head .nome{font-size:19px;line-height:1.2}
     .drawer-head .meta{font-size:12.5px;line-height:1.4;margin-top:4px}
     .drawer-head .drw-acao{min-height:44px;padding:0 14px;display:inline-flex;align-items:center}
+    .rec-chip{min-height:44px;display:inline-flex;align-items:center;padding:0 12px!important;max-width:100%;white-space:normal;text-align:left}
     .drw-funil-sel{flex:1 0 100%;margin-left:0!important;max-width:none!important;min-height:44px;font-size:14px!important}
     .stepper{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
     .stepper .step{min-height:44px;padding:6px 4px;font-size:12px;text-align:center;overflow:hidden;text-overflow:ellipsis}
@@ -1063,7 +1064,7 @@
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
-      <span class="tag">ISLAND · v0.47.1 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.48.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1085,7 +1086,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.47.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.48.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3519,7 +3520,7 @@ function pessoaIdNovo(){ return 'p-'+uid(); }
    todo dia. Propagar na escrita mantém cada card com sua cópia (como já era) e
    só garante que elas ficam iguais. O `salvar()` carimba `_upd` em todo contato
    que mudou, então os irmãos sincronizam junto sem nada a mais. */
-const PESSOA_CAMPOS=['nome','telefone','email','sexo','idade','profissao'];
+const PESSOA_CAMPOS=['nome','telefone','email','sexo','idade','profissao','recomendante'];
 function pessoaPropagar(c,todos){
   const irmaos=pessoaIrmaos(c,todos); if(!irmaos.length) return 0;
   irmaos.forEach(o=>{ PESSOA_CAMPOS.forEach(k=>{ if(c[k]!==undefined) o[k]=c[k]; }); });
@@ -3721,6 +3722,31 @@ function dupDesfazer(){
 /* As outras oportunidades da MESMA pessoa. Aparece só quando existe vínculo —
    sem pessoaId o app não chuta parentesco. */
 /* Recolhida por padrão: é dado que se mexe de vez em quando, não todo dia. */
+/* RECOMENDANTE-V1 (04/09): quem indicou é dado de venda, não enfeite. A fonte é o
+   campo `recomendante` (vem da Base de Nomes ou digitado aqui); sem ele, o app
+   procura quem tem esta pessoa na própria lista de recomendações (`recs`).
+   O selo "cliente" vem do mesmo `clienteDe` do Card Cliente — uma conta só. */
+function recomendanteDe(c,contatos){
+  if(!c) return null; contatos=contatos||S.contatos||[];
+  let nome=String(c.recomendante||'').trim(), fonte='campo';
+  if(!nome){ const k=normKey(c.nome||''); if(k){ const dono=contatos.find(o=>o!==c&&(o.recs||[]).some(r=>normKey(r.nome||'')===k)); if(dono){ nome=dono.nome; fonte='recs'; } } }
+  if(!nome) return null;
+  const k=normKey(nome);
+  const noFunil=contatos.find(o=>o!==c&&normKey(o.nome||'')===k)||null;
+  const d=clienteDe({nome, telefone:noFunil?noFunil.telefone:''},{semNegocios:true});
+  return { nome, fonte, cliente:!!(d&&d.eCliente), aps:d?d.aps.length:0, pm:d?d.pm:0, noFunil, cliRef:d&&d.cli?d.cli.ref:null };
+}
+function recomendanteChip(c,mini){
+  const r=recomendanteDe(c); if(!r) return '';
+  const st=r.cliente?`<b>cliente</b>${r.aps?' · '+r.aps+' apólice'+(r.aps>1?'s':''):''}`.replace('<b>',' <b>').trim():(r.noFunil?'no funil · '+esc(ET_LABEL[r.noFunil.etapa]||r.noFunil.etapa||''):'não é cliente');
+  const abre=r.cliRef?`irPara('cart-clientes');cartAbrir('${esc(r.cliRef)}')`:(r.noFunil?`abrirContato('${esc(String(r.noFunil.id))}')`:'');
+  const tt=`Recomendante: ${r.nome}${r.fonte==='recs'?' (está na lista de recomendações dele)':''}`;
+  return `<button class="badge ${r.cliente?'b-verde':'b-cinza'} rec-chip" title="${esc(tt)}" ${abre?`onclick="${abre}"`:''} style="border:0;font:inherit;font-size:${mini?'11px':'12px'};cursor:${abre?'pointer':'default'}">🙌 ${esc(r.nome)} · ${st}</button>`;
+}
+function recomendanteDatalist(){
+  const nomes=new Set(); (S.contatos||[]).forEach(c=>{ if(c.nome) nomes.add(c.nome); }); (CART.clientes||[]).forEach(c=>{ if(c.nome) nomes.add(c.nome); });
+  return `<datalist id="pes_rec_lista">${[...nomes].sort().slice(0,400).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+}
 function drwPessoaHtml(c){
   const n=pessoaIrmaos(c).length;
   const campo=(id,rot,val,tipo)=>`<div style="flex:1;min-width:130px">
@@ -3737,6 +3763,14 @@ function drwPessoaHtml(c){
         ${campo('pes_mail','E-mail',c.email,'email')}
         ${campo('pes_prof','Profissão',c.profissao)}
         ${campo('pes_idade','Idade',c.idade,'number')}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
+        <div style="flex:1;min-width:200px">
+          <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Recomendante (quem indicou)</label>
+          <input id="pes_rec" list="pes_rec_lista" autocomplete="off" data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" value="${esc(c.recomendante||'')}" placeholder="Nome de quem indicou" style="width:100%">
+          ${recomendanteDatalist()}
+        </div>
+        <div style="flex:1;min-width:160px;padding-bottom:4px">${recomendanteChip(c)||`<span style="font-size:11.5px;color:var(--muted)">Sem recomendante registrado.</span>`}</div>
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-p btn-mini" onclick="pessoaSalvarDados('${esc(c.id)}')">Salvar</button>
@@ -3755,6 +3789,7 @@ function pessoaSalvarDados(id){
   const mail=v('pes_mail'); if(mail!==undefined) c.email=mail;
   const prof=v('pes_prof'); if(prof!==undefined) c.profissao=prof||'—';
   const idade=v('pes_idade'); if(idade!==undefined) c.idade=idade?Number(idade):null;
+  const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec||'';
   const n=pessoaPropagar(c);
   salvar(); renderDrawer(); render();
   toast(n?`Salvo — vale para as ${n+1} oportunidades desta pessoa`:'Salvo',true);
@@ -3870,7 +3905,7 @@ function renderDrawer(){
       <button class="fechar" onclick="fecharDrawer()">✕</button>
       <div class="nome">${esc(c.nome)}</div>
       <div class="meta">${esc(drwMetaPartes(c).concat(isMaster()?['LP: '+lpNome(c.lp)]:[]).join(' · '))}</div>
-      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${(()=>{const e=CT_EST_BY_K[ctEstado(c)];return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`;})()} ${badgeEtapa(c.etapa)}${quenteChip(c)}
+      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${(()=>{const e=CT_EST_BY_K[ctEstado(c)];return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`;})()} ${badgeEtapa(c.etapa)}${quenteChip(c)} ${recomendanteChip(c,true)}
         ${telHref(c.telefone)? `<a class="btn btn-s btn-mini drw-acao" style="text-decoration:none" href="${esc(telHref(c.telefone))}">📞 Ligar</a>`:''}
         ${waHref(c.telefone)? `<a class="btn btn-s btn-mini drw-acao" style="text-decoration:none" href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
       </div>
@@ -11908,6 +11943,16 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('ficha: telefone vira (DD) 9XXXX-XXXX, com ou sem +55, e o que não é telefone volta como veio', telBR('+5581988451010')==='(81) 98845-1010'&&telBR('81 9 8845 1010')==='(81) 98845-1010'&&telBR('8132211234')==='(81) 3221-1234'&&telBR('ramal 12')==='ramal 12'&&telBR('')==='');
     ok('ficha: a linha de meta não mostra traço nem "anos" sem número', (()=>{ const m=drwMetaPartes({sexo:'',idade:'',profissao:'—',telefone:'+5581988451010',origem:'Base de Nomes'}).join(' · '); return m==='(81) 98845-1010 · Origem: Base de Nomes'&&drwMetaPartes({idade:34,sexo:'F'}).join(' · ')==='F · 34 anos'; })());
     ok('ficha: encerramentos ficam fora do fluxo, em linha própria', (()=>{ const h=drwStepperHtml({funil:'nn',etapa:ETAPAS_FLUXO[1]||ETAPAS[0]}); const fl=(h.split('stepper-enc')[0].match(/class="step[ "]/g)||[]).length; return fl===ETAPAS_FLUXO.length&&(ETAPAS_ENCERR.length===0||/stepper-enc/.test(h))&&/step atual/.test(h); })());
+    /* RECOMENDANTE-V1 */
+    ok('recomendante: o campo manda; sem ele, quem tem a pessoa nas próprias recomendações é o recomendante; sem nada, nulo', (()=>{
+      const L=[{id:'zz-l',nome:'Zz Laura Rec',telefone:'',recs:[{nome:'Zz Hellen Rec'}]},{id:'zz-h',nome:'Zz Hellen Rec',telefone:''},{id:'zz-x',nome:'Zz Sozinho',telefone:''}];
+      const a=recomendanteDe(L[1],L), b=recomendanteDe({nome:'Zz Outra',recomendante:'Zz Laura Rec'},L), n=recomendanteDe(L[2],L);
+      return a&&a.nome==='Zz Laura Rec'&&a.fonte==='recs'&&a.noFunil&&a.noFunil.id==='zz-l'&&b&&b.fonte==='campo'&&n===null; })());
+    ok('recomendante: o selo "cliente" vem da carteira (mesma conta do Card Cliente)', (()=>{ const _a=CART.apolices; CART.apolices=_a.slice(); cartIdxInvalidar(); try{
+      CART.apolices.push(cartNormApolice({apolice:'000000907',segurado:'Zz Laura Cliente',premio:90},null)); cartIdxInvalidar();
+      const r=recomendanteDe({nome:'Zz Hellen',recomendante:'Zz Laura Cliente'},[]); const r2=recomendanteDe({nome:'Zz Hellen',recomendante:'Zz Ninguem Cliente'},[]);
+      return r&&r.cliente&&r.aps===1&&/cliente/.test(recomendanteChip({nome:'Zz Hellen',recomendante:'Zz Laura Cliente'}))&&r2&&!r2.cliente&&/não é cliente/.test(recomendanteChip({nome:'Zz Hellen',recomendante:'Zz Ninguem Cliente'})); }finally{ CART.apolices=_a; cartIdxInvalidar(); } })());
+    ok('recomendante: o campo é da pessoa e propaga para as outras oportunidades dela', PESSOA_CAMPOS.includes('recomendante'));
     ok('ficha: Ligar e WhatsApp saem do mesmo telefone', telHref('+5581988451010')==='tel:+5581988451010'&&waHref('+5581988451010').indexOf('5581988451010')>0);
     ok('barra inferior: todo destino escolhido é uma view conhecida',
        bnavLer().every(v=>VIEWS_CONHECIDAS.includes(v)));
