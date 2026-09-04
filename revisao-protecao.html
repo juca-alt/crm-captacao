@@ -172,6 +172,11 @@ tr.off td{color:var(--muted)}
 body.modo-cliente .crm-pm-bar, body.modo-apresenta .crm-pm-bar{display:none}
 @media print{ .crm-pm-bar{display:none} }
 .footbar .tile .v{font-size:.95rem}
+.footbar.off{display:none}
+.footbar .foot-tgl{margin-left:auto;font-size:.72rem;color:var(--muted);min-height:32px}
+#footShow{position:fixed;right:14px;bottom:14px;z-index:56;font-size:.74rem;box-shadow:0 4px 14px rgba(0,0,0,.14)}
+body.modo-apresenta #footShow{display:none!important}
+@media print{ #footShow{display:none!important} }
 .badge{font-size:.66rem;font-weight:700;padding:4px 9px;border-radius:7px}
 
 /* ---------- capa apresentação ---------- */
@@ -1502,6 +1507,23 @@ const CORCEN = ['var(--azul)','var(--verde)','var(--roxo)','var(--laranja)'];
 const SOFTCEN = ['var(--azul-soft)','var(--verde-soft)','var(--roxo-soft)','color-mix(in srgb,var(--laranja) 12%,transparent)'];
 const CL_LABEL = {ST:'Standard', PR:'Preferencial', A1:'A1', A2:'A2', B:'B', C:'C', D1:'D1', D2:'D2', E1:'E1', E2:'E2', F1:'F1', F2:'F2', G:'G', H1:'H1', H2:'H2'};
 
+/* == FOOT-TOGGLE-V1 (04/09) ================================================
+   Pedido dele: "esses cards no final deixa eu escolher se mostro ou escondo,
+   porque às vezes não quero isso na hora de sentar com o cliente". A barra de
+   baixo (hoje · plano · MS · capital · renda · motor) liga e desliga por um
+   botão, lembra a escolha (state.ui.footOn) e volta por um ▤ no canto. */
+function footAplicar(){
+  const fb = document.querySelector('.footbar'); if (!fb) return;
+  const off = state.ui && state.ui.footOn === false;
+  fb.classList.toggle('off', off);
+  let sh = document.getElementById('footShow');
+  if (!sh){ sh = document.createElement('button'); sh.id = 'footShow'; sh.className = 'btn sm no-print'; sh.title = 'Mostrar a barra de baixo';
+            sh.textContent = '▤ barra'; sh.onclick = footToggle; document.body.appendChild(sh); }
+  sh.style.display = off ? '' : 'none';
+}
+function footToggle(){ if (!state.ui) state.ui = {}; state.ui.footOn = (state.ui.footOn === false); save(); footAplicar(); }
+window.footToggle = footToggle;
+
 /* ============================================================
    MOTOR DE TARIFAÇÃO  (validado contra 6 capturas do app em 31/07/2026)
    ============================================================ */
@@ -1701,6 +1723,10 @@ function selfTest(){
     else bad.push('MS · Temporário Decrescente tem que contar como principal temporário');
     /* o nome que o espelho traz é "Doenças Graves MDL Opc 5-G" (código DDMRG) = Modular 2.0 (DIMR).
        Caía no genérico DDR e a MS "reduzia" o prêmio (105,70 no lugar dos 238,09 da prévia real). */
+    total++;
+    if (typeof paramsCliente === 'function' && (()=>{ const q = paramsCliente('?nome=Cliente%20Exemplo&nasc=1985-03-12&sexo=f&renda=12.500,00&aba=prop&novo=1');
+          return q && q.nome === 'Cliente Exemplo' && q.sexo === 'F' && q.renda === 12500 && q.idade >= 40 && q.novo && q.aba === 'prop' && paramsCliente('?x=1') === null; })()) ok++;
+    else bad.push('URL · paramsCliente não lê nome/nasc/sexo/renda como o módulo do CRM manda');
     total++;
     if (typeof famDeNome === 'function' && famDeNome('Doenças Graves MDL Opc 5-G') === 'DIMR') ok++;
     else bad.push('DG · "Doenças Graves MDL Opc 5-G" tem que ser Modular 2.0 (DIMR), deu ' + famDeNome('Doenças Graves MDL Opc 5-G'));
@@ -3972,9 +3998,12 @@ function renderFoot(){
   $('footTiles').innerHTML = `
     <div class="tile"><div class="k">Hoje</div><div class="v">${fmt(vper(tH))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>
     <div class="tile a"><div class="k">${esc(state.cen[0] ? state.cen[0].nome : 'Plano A')}</div><div class="v">${fmt(vper(tA))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>
+    ${(()=>{ const R=(typeof msCalc==='function')?msCalc():null; return R&&R.nova>0 ? `<div class="tile b"><div class="k">MS · apólice nova</div><div class="v">${fmt(vper(R.nova*(1+MS_IOF)))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>` : ''; })()}
     <div class="tile"><div class="k">Capital de morte proposto</div><div class="v">${fmt0(cA.MQC.cap)}</div></div>
     <div class="tile"><div class="k">% da renda</div><div class="v">${renda ? pct(tA/renda*100) : '—'}</div></div>
     <span class="right badge" style="background:${st.bad.length ? 'var(--crit-soft)' : 'var(--good-soft)'};color:${st.bad.length ? 'var(--crit)' : 'var(--good-text)'}">motor: ${st.bad.length ? '✗ '+st.bad.length+' divergência(s)' : '✓ '+st.ok+'/'+st.total+' capturas do app'}</span>`;
+  $('footTiles').insertAdjacentHTML('beforeend', `<button class="btn sm foot-tgl" onclick="footToggle()" title="Esconder a barra de baixo (volta pelo botão ▤ no canto)">⌄ esconder</button>`);
+  footAplicar();
   $('motorBadge').textContent = st.bad.length ? 'motor com divergência, ver console' : 'motor conferido contra '+st.total+' capturas reais do app em '+(D.validacao ? D.validacao.data : '');
   if (st.bad.length) console.warn('selfTest', st.bad);
   selfTestFam();
@@ -6319,7 +6348,7 @@ function msRenderMig(R){
     const aum = Math.max(0, l.csNova - l.migCS);
     return `<tr class="${l.on?'':'off'}${l.ehNova?' nova-cob':''}">
       <td><b>${esc(c.nome||c.cod)}</b>${plana?' <span class="pill p-free">tarifa plana</span>':''}${l.ehNova?' <span class="pill p-vit">cobertura nova</span>':''}${(!l.ehNova&&aum>0.5)?' <span class="pill p-vit">+ aumento</span>':''}
-          <div class="cd">${(R.aps.length>1&&!l.ehNova)?'da '+esc(c._ap||'')+' · ':''}${esc(c.cod||'')}${l.tetoAplicado?` · <span style="color:var(--laranja)">teto ${l.trava.mult}× a básica nova = ${msBRL0(l.teto)}</span>`:''}${l.ehNova?` · <a href="#" onclick="msRemoverNova('${esc(c.id)}');return false" style="color:var(--crit)">remover</a>`:''}</div></td>
+          <div class="cd">${(R.aps.length>1&&!l.ehNova)?'da '+esc(c._ap||'')+' · ':''}${esc(c.cod||'')}${l.tetoAplicado?` · <span style="color:var(--laranja)">teto ${l.trava.mult}× a básica nova = ${msBRL0(l.teto)}</span> · <span style="color:var(--verde)">fica na origem ${msBRL0((c.cap||0)-l.migCS)}</span>`:''}${l.ehNova?` · <a href="#" onclick="msRemoverNova('${esc(c.id)}');return false" style="color:var(--crit)">remover</a>`:''}</div></td>
       <td class="num">${l.ehNova?'<span class="mini">—</span>':msBRL(c.cap)}</td>
       <td class="so-consultor">${l.ehNova?'<span class="mini">nova</span>':`<label class="sw"><input type="checkbox" data-mson="${esc(c.id)}" ${l.on?'checked':''}><i></i></label>`}</td>
       <td class="so-consultor">${l.ehNova?'<span class="mini">—</span>':`<input class="csin" data-mscs="${esc(c.id)}" value="${msBRL(l.migCS)}">`}</td>
@@ -7619,6 +7648,40 @@ $('btCliente').classList.toggle('on', !!state.ui.cliente);
 $('btPeriodo').textContent = perAno() ? 'Anual' : 'Mensal';
 $('btPeriodo').classList.toggle('on', perAno());
 render();
+
+/* == CLIENTE-POR-URL-V1 (04/09) =============================================
+   O CRM (módulo "Montagem de planos") abre esta peça já com o cliente: nome,
+   nascimento/idade, sexo, renda, e cai na aba pedida (planos por padrão). Com
+   `novo=1` o estado atual é guardado em KEY+'.anterior' e a peça recomeça
+   limpa para esse cliente — sem isso, só preenche o que estiver vazio. A URL
+   é limpa depois (replaceState) para um F5 não recomeçar de novo. */
+function paramsCliente(qs){
+  const u = new URLSearchParams(qs || ''); if (!u.get('nome')) return null;
+  const n = v => { const x = parseFloat(String(v||'').replace(/\./g,'').replace(',','.')); return isFinite(x) ? x : null; };
+  let idade = n(u.get('idade')), nasc = u.get('nasc') || '';
+  if (idade == null && /^\d{4}-\d{2}-\d{2}$/.test(nasc)){ const d = new Date(nasc+'T00:00:00'), h = new Date();
+    idade = h.getFullYear() - d.getFullYear() - ((h.getMonth() < d.getMonth() || (h.getMonth() === d.getMonth() && h.getDate() < d.getDate())) ? 1 : 0); }
+  return {nome:u.get('nome').trim(), nasc, idade, sexo:(u.get('sexo')||'M').toUpperCase() === 'F' ? 'F' : 'M',
+          renda:n(u.get('renda')) || 0, prof:u.get('prof')||'', cidade:u.get('cidade')||'',
+          fumante:/^(1|true|sim)$/i.test(u.get('fumante')||''), aba:u.get('aba')||'prop', novo:/^(1|true|sim)$/i.test(u.get('novo')||'')};
+}
+(function(){
+  const q = paramsCliente(location.search); if (!q) return;
+  if (q.novo){ try{ localStorage.setItem(KEY+'.anterior', JSON.stringify(state)); }catch(e){} state = VAZIO(); normEstado(); }
+  const c = state.cliente;
+  if (q.novo || !c.nome) c.nome = q.nome;
+  if (q.novo || !c.nasc) c.nasc = q.nasc || c.nasc;
+  if (q.idade != null && (q.novo || !c.idade)) c.idade = q.idade;
+  if (q.novo || !c.sexo) c.sexo = q.sexo;
+  if (q.renda && (q.novo || !c.renda)) c.renda = q.renda;
+  if (q.prof && !c.prof) c.prof = q.prof;
+  if (q.cidade && !c.cidade) c.cidade = q.cidade;
+  if (q.fumante) c.fumante = true;
+  state.ui.aba = ABAS.some(a => a[0] === q.aba) ? q.aba : 'prop';
+  save();
+  try{ history.replaceState(null, '', location.pathname); }catch(e){}
+  bindCliente(); render();
+})();
 
 
 /* ============================================================
