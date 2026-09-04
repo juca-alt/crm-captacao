@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.48.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.49.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -5996,6 +5996,80 @@ function viewRevisaoProtecao(){
               style="width:100%;height:calc(100vh - 260px);min-height:460px;border:0;display:block"></iframe>
     </div>`;
 }
+/* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
+   Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
+   podemos selecionar o cliente (inclusive os novos) para ter a calculadora e
+   montar os planos". A calculadora É a Revisão de Proteção (motor de 566
+   séries, etapa 5 Planos) — o módulo escolhe QUEM e abre a peça já com o
+   cliente (revisao-protecao.html?nome=&nasc=&sexo=&renda=&aba=prop&novo=1).
+   Fonte do cliente: funil (lp_contatos), carteira (CART) ou digitado. */
+const MT={q:'', sel:null};
+function mtCandidatos(){
+  const out=[];
+  meusContatos().concat(meusContatosBC()).forEach(c=>{ if(!c||!c.nome) return;
+    out.push({k:'funil:'+c.id, origem:'funil', nome:c.nome, nasc:c.nascimento||'', idade:c.idade!=null&&c.idade!==''?+c.idade:null,
+              sexo:(String(c.sexo||'').toUpperCase().startsWith('F')?'F':'M'), renda:+c.renda_estimada||0, prof:c.profissao||'', cidade:c.cidade||'', extra:funilNome(funilDe(c))+' · '+(c.etapa||'')}); });
+  (CART.clientes||[]).forEach(c=>{ if(!c||!c.nome) return;
+    out.push({k:'cart:'+(c.ref||c.nome), origem:'carteira', nome:c.nome, nasc:c.nascimento||'', idade:c.idade!=null?+c.idade:null,
+              sexo:'M', renda:0, prof:'', cidade:'', extra:'carteira'+(c.cob&&c.cob.pm?' · R$ '+brlCurto(c.cob.pm)+'/mês':'')}); });
+  return out;
+}
+function mtIdade(nasc){ if(!/^\d{4}-\d{2}-\d{2}$/.test(nasc||'')) return null; const d=new Date(nasc+'T00:00:00'),h=new Date();
+  return h.getFullYear()-d.getFullYear()-((h.getMonth()<d.getMonth()||(h.getMonth()===d.getMonth()&&h.getDate()<d.getDate()))?1:0); }
+function mtUrl(f){
+  const u=new URLSearchParams(); u.set('nome',f.nome); if(f.nasc) u.set('nasc',f.nasc); if(f.idade!=null&&f.idade!=='') u.set('idade',String(f.idade));
+  u.set('sexo',f.sexo||'M'); if(+f.renda>0) u.set('renda',String(+f.renda)); if(f.prof) u.set('prof',f.prof); if(f.cidade) u.set('cidade',f.cidade);
+  u.set('aba','prop'); u.set('novo','1'); return 'revisao-protecao.html?'+u.toString();
+}
+function viewMontagem(){
+  const q=normKey(MT.q||''); const todos=mtCandidatos();
+  const lista=(q?todos.filter(c=>normKey(c.nome).includes(q)):todos.slice(0,0)).slice(0,12);
+  const f=MT.sel||{nome:'',nasc:'',idade:'',sexo:'M',renda:0,prof:'',cidade:'',origem:'novo',extra:'novo cliente'};
+  $('#main').innerHTML=`
+    <h1 class="pg">Montagem de planos</h1>
+    <div class="sub">Escolha o cliente e abra a calculadora da Revisão de Proteção já com os dados dele — funciona pra quem está no funil, na carteira ou pra alguém novo.</div>
+    <div class="card" style="padding:12px 14px">
+      <div style="font-weight:700;margin-bottom:6px">1 · Quem é o cliente?</div>
+      <input id="mtBusca" placeholder="Buscar no funil e na carteira (${todos.length} pessoas)" value="${esc(MT.q||'')}" oninput="MT.q=this.value;viewMontagem();document.getElementById('mtBusca').focus();document.getElementById('mtBusca').setSelectionRange(this.value.length,this.value.length)" style="width:100%;min-height:44px">
+      ${lista.length?`<div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">${lista.map(c=>`<button class="btn btn-s" style="justify-content:space-between;min-height:44px;text-align:left" onclick="mtEscolher('${esc(c.k)}')"><span><b>${esc(c.nome)}</b>${c.idade!=null?' · '+c.idade+'a':''}</span><span style="font-size:11.5px;color:var(--muted)">${esc(c.extra)}</span></button>`).join('')}</div>`
+        : (q?`<div class="sub" style="margin-top:8px">Ninguém com "${esc(MT.q)}". Preencha abaixo como cliente novo.</div>`:'')}
+      <div style="margin-top:8px"><button class="btn btn-s btn-mini" onclick="MT.sel=null;MT.q='';viewMontagem()">＋ cliente novo</button></div>
+    </div>
+    <div class="card" style="padding:12px 14px">
+      <div style="font-weight:700;margin-bottom:6px">2 · Confira os dados <span style="font-weight:500;color:var(--muted);font-size:12px">· ${esc(f.extra||'')}</span></div>
+      <div class="grid2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px">
+        <label>Nome<input id="mtNome" data-so-leitura="lido no clique de Montar planos (mtAbrir)" value="${esc(f.nome||'')}" style="min-height:44px"></label>
+        <label>Nascimento<input id="mtNasc" type="date" data-so-leitura="lido no clique de Montar planos (mtAbrir)" value="${esc(f.nasc||'')}" style="min-height:44px"></label>
+        <label>Idade<input id="mtIdade" type="number" min="18" max="75" data-so-leitura="lido no clique de Montar planos (mtAbrir)" value="${f.idade!=null&&f.idade!==''?esc(String(f.idade)):(mtIdade(f.nasc)??'')}" style="min-height:44px"></label>
+        <label>Sexo<select id="mtSexo" data-so-leitura="lido no clique de Montar planos (mtAbrir)" style="min-height:44px"><option value="M" ${f.sexo!=='F'?'selected':''}>Masculino</option><option value="F" ${f.sexo==='F'?'selected':''}>Feminino</option></select></label>
+        <label>Renda mensal (R$)<input id="mtRenda" type="number" data-so-leitura="lido no clique de Montar planos (mtAbrir)" value="${+f.renda>0?esc(String(f.renda)):''}" placeholder="opcional" style="min-height:44px"></label>
+      </div>
+      <div class="toolbar" style="margin-top:10px">
+        <button class="btn btn-p" style="min-height:44px" onclick="mtAbrir(false)">🧮 Montar planos aqui</button>
+        <button class="btn btn-s" style="min-height:44px" onclick="mtAbrir(true)">⛶ Abrir em tela cheia</button>
+        <span style="font-size:11.5px;color:var(--muted)">Abre a Revisão de Proteção na etapa Planos, com este cliente. O trabalho anterior da peça fica guardado.</span>
+      </div>
+    </div>
+    <div class="card" id="mtFrameBox" style="padding:0;overflow:hidden;display:none">
+      <iframe id="mtFrame" title="Montagem de planos" style="width:100%;height:calc(100vh - 260px);min-height:460px;border:0;display:block"></iframe>
+    </div>`;
+}
+function mtEscolher(k){ MT.sel=mtCandidatos().find(c=>c.k===k)||null; viewMontagem(); }
+function mtLerForm(){
+  const v=id=>(($('#'+id)||{}).value||'').trim();
+  const nasc=v('mtNasc'); const idade=v('mtIdade')!==''?+v('mtIdade'):mtIdade(nasc);
+  return {nome:v('mtNome'), nasc, idade, sexo:v('mtSexo')==='F'?'F':'M', renda:+v('mtRenda')||0, prof:(MT.sel&&MT.sel.prof)||'', cidade:(MT.sel&&MT.sel.cidade)||''};
+}
+function mtAbrir(telaCheia){
+  const f=mtLerForm();
+  if(!f.nome){ toast('Diga o nome do cliente'); return; }
+  if(!(f.idade>=18&&f.idade<=75)){ toast('Idade entre 18 e 75 (ou o nascimento)'); return; }
+  const url=mtUrl(f);
+  if(telaCheia){ window.open(url,'_blank','noopener'); return; }
+  const box=$('#mtFrameBox'), fr=$('#mtFrame'); if(!box||!fr) return;
+  box.style.display=''; fr.src=url; box.scrollIntoView({behavior:'smooth',block:'start'});
+}
+window.viewMontagem=viewMontagem; window.mtEscolher=mtEscolher; window.mtAbrir=mtAbrir;
 function revImprimir(){
   const f=$('#revFrame');
   try{ f.contentWindow.focus(); f.contentWindow.print(); }
@@ -8211,7 +8285,8 @@ const HUB_SECOES=[
   {titulo:'Operação', itens:[
     {view:'revisao',      ic:'🛡️', titulo:'Revisão de Proteção', desc:'Apólice a apólice: o que o cliente tem, o que falta e a Mudança de Seguro tarifada.', mod:'revisao'},
     {href:'carteira.html',ic:'📊', titulo:'Carteira (Cockpit)',   desc:'Persistência, coberturas e ABCD da carteira inteira.', mod:'carteira'},
-    {view:'planos',       ic:'📐', titulo:'Planos & Simulações',  desc:'Catálogo de planos e simulações por contato.', mod:'planos'}
+    {view:'planos',       ic:'📐', titulo:'Planos & Simulações',  desc:'Catálogo de planos e simulações por contato.', mod:'planos'},
+    {view:'montagem',     ic:'🧮', titulo:'Montagem de planos',   desc:'Escolha o cliente — da carteira, do funil ou novo — e monte os planos na calculadora da Revisão, já com os dados dele.', mod:'planos'}
   ]},
   {titulo:'BackOffice Prudential', itens:[
     {view:'lp-atrasos',   ic:'⏰', titulo:'Lista de Atraso',      desc:'Prêmio em atraso: dias, motivo, script de cobrança e o estado de cada caso.', mod:'backoffice', cnt:()=>(AT.itens||[]).filter(r=>!r.resolvido_em).length},
@@ -9399,7 +9474,7 @@ const MODS={
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
   beneficios:{label:'Benefícios (sinistro)',               def:true,  views:['beneficios']},
-  planos:   {label:'Planos & Simulações',                 def:true,  views:['planos']}
+  planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']}
 };
 /* == ACESSO-ASSISTENTE-V1 (02/09) ==========================================
    Ele vai trazer o Victor como ASSISTENTE de backoffice e comercial. O papel
@@ -10715,7 +10790,7 @@ const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
-  revisao:'Revisão de Proteção'};
+  revisao:'Revisão de Proteção', montagem:'Montagem de planos'};
 function renderTituloTopo(){
   const el=$('#tbTitulo'); if(!el) return;
   const btn=document.querySelector('.sidebar .nav-btn.ativo');
@@ -10836,6 +10911,7 @@ function render(){
   else if(VIEW==='lp-aniversario') viewLpAniversario();
   else if(VIEW==='lp-datas') viewLpDatas();
   else if(VIEW==='revisao') viewRevisaoProtecao();
+  else if(VIEW==='montagem') viewMontagem();
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
@@ -12358,7 +12434,7 @@ function abrirAjustesVisual(){
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','agenda','contatos','planos','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','agenda','contatos','planos','montagem','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','principios','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
