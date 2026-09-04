@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v5.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v5.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1232,7 +1232,7 @@
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
-      <span class="tag">PipeX · v5.1 · Vendas LP</span>
+      <span class="tag">PipeX · v5.3 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1254,7 +1254,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v5.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v5.3 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7164,6 +7164,145 @@ function exExemplo(){ atClose(); if(EX_REMOTE){ toast('Você está logado: o exe
   if(VIEW!=='lp-pendencias') irPara('lp-pendencias'); else render(); toast('Emitidas de exemplo carregadas (só neste aparelho)',true); }
 window.exColar=exColar; window.exProcessar=exProcessar; window.exAplicarUI=exAplicarUI; window.exExemplo=exExemplo;
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   EMISSÃO DIÁRIA (04/09) — espelho do painel "Emissão Diária" do BI HUB-MFB
+   da Prudential, alimentado pelo que JÁ está no app:
+   · emitidas (relatório "Apólices Emitidas no Período", EX.itens) → PA, apólices,
+     cycle time (assinatura → emissão), eventos;
+   · pendentes ativas (EM.itens) → Estoque PA, Estoque N, Aging;
+   · Plano PA por LP e mês → digitado aqui, guardado junto do PLACED
+     (placed_estado.edPlano, mesma RLS por dono), sem migration nova.
+   O que o BI tem e aqui NÃO tem: CS MQC (capital) — o relatório de emitidas não
+   traz; e cancelamento administrativo com data própria — aqui o cancelado
+   conta no mês da emissão dele (status ≠ Ativa), e a tela avisa isso. */
+const ED={mes:null, d1:1, d2:31};
+function edMesAtual(){ return ED.mes||atHojeISO().slice(0,7); }
+function edPlano(){ if(typeof PL==='undefined'||!PL) return {}; if(!PL.edPlano||typeof PL.edPlano!=='object') PL.edPlano={}; return PL.edPlano; }
+function edLpDe(r){
+  const lps=(typeof PL!=='undefined'&&PL&&PL.lps)||[];
+  const k=r.lp||(r.lp_nome_completo?null:'Gustavo');
+  if(k){ const f=lps.find(l=>emNormLp(l.nome)===k); if(f) return {id:f.id,nome:f.nome}; }
+  const pn=normKey(String(r.lp_nome_completo||'')).split(' ')[0];
+  const f2=pn?lps.find(l=>normKey(l.nome).split(' ')[0]===pn):null; if(f2) return {id:f2.id,nome:f2.nome};
+  const nome=r.lp_nome_completo||r.lp||'Sem LP'; return {id:'x:'+normKey(nome), nome};
+}
+function edDia(iso){ return +String(iso||'').slice(8,10)||0; }
+/* recorte do mês/dias: emitidas com data de emissão no mês; Ativa = +1, outro status = -1 (evento) */
+function edDados(mes,d1,d2){
+  mes=mes||edMesAtual(); d1=d1||1; d2=d2||31;
+  const linhas=(EX.itens||[]).filter(r=>String(r.emissao||'').slice(0,7)===mes&&edDia(r.emissao)>=d1&&edDia(r.emissao)<=d2)
+    .map(r=>{ const canc=r.status_apolice&&r.status_apolice!=='Ativa'; const lp=edLpDe(r);
+      const ct=(r.dt_assinatura&&r.emissao)?diasEntreISO(r.dt_assinatura,r.emissao):null;
+      return {r, lp, dia:edDia(r.emissao), evento:canc?'Canc. Administrativo':'Emissão de Apólice', n:canc?-1:1, pa:(canc?-1:1)*(r.pa_sem_iof||0), afyc:(canc?-1:1)*(r.afyc_projetado||0), ct}; })
+    .sort((a,b)=>a.dia-b.dia||String(a.r.apolice||'').localeCompare(String(b.r.apolice||'')));
+  const emit=linhas.filter(l=>l.n>0), canc=linhas.filter(l=>l.n<0);
+  const nEmit=emit.length, paEmit=emit.reduce((s,l)=>s+l.pa,0), paLiq=linhas.reduce((s,l)=>s+l.pa,0), nLiq=linhas.reduce((s,l)=>s+l.n,0);
+  const cts=emit.map(l=>l.ct).filter(x=>x!=null); const cycle=cts.length?cts.reduce((a,b)=>a+b,0)/cts.length:null;
+  const ultimoDia=emit.length?Math.max(...emit.map(l=>l.dia)):null;
+  const paDia=ultimoDia?emit.filter(l=>l.dia===ultimoDia).reduce((s,l)=>s+l.pa,0):0;
+  /* por LP */
+  const porLp={}; linhas.forEach(l=>{ const o=porLp[l.lp.id]||(porLp[l.lp.id]={id:l.lp.id,nome:l.lp.nome,n:0,pa:0,cts:[]}); o.n+=l.n; o.pa+=l.pa; if(l.ct!=null&&l.n>0) o.cts.push(l.ct); });
+  const lps=Object.values(porLp).map(o=>Object.assign(o,{plano:+(edPlano()[o.id+'|'+mes]||0), paMedio:o.n>0?o.pa/o.n:0, cycle:o.cts.length?o.cts.reduce((a,b)=>a+b,0)/o.cts.length:null})).sort((a,b)=>b.pa-a.pa);
+  /* LPs cadastrados sem emissão no mês entram com zero (o plano deles conta no total) */
+  ((typeof PL!=='undefined'&&PL&&PL.lps)||[]).forEach(l=>{ if(!porLp[l.id]) lps.push({id:l.id,nome:l.nome,n:0,pa:0,cts:[],plano:+(edPlano()[l.id+'|'+mes]||0),paMedio:0,cycle:null}); });
+  const lpsComEmissao=lps.filter(l=>l.n>0).length;
+  const plano=lps.reduce((s,l)=>s+l.plano,0);
+  /* estoque = pendentes ativas hoje (não depende do mês) */
+  const pend=(EM.itens||[]).filter(emAtivo); const hoje=atHojeISO();
+  const estoquePA=pend.reduce((s,r)=>s+(r.pa_sem_iof||0),0), estoqueN=pend.length;
+  const ages=pend.map(r=>r.dt_assinatura?diasEntreISO(r.dt_assinatura,hoje):(r.dias_pendentes!=null?+r.dias_pendentes:null)).filter(x=>x!=null&&x>=0);
+  const aging=ages.length?ages.reduce((a,b)=>a+b,0)/ages.length:null;
+  /* por dia (1..31) */
+  const dias={}; linhas.forEach(l=>{ const o=dias[l.dia]||(dias[l.dia]={n:0,pa:0}); o.n+=l.n; o.pa+=l.pa; });
+  return {mes,d1,d2,linhas,emit,canc,nEmit,paEmit,paLiq,nLiq,paMedio:nEmit?paEmit/nEmit:0,cycle,ultimoDia,paDia,lps,lpsComEmissao,
+    prodPA:lpsComEmissao?paLiq/lpsComEmissao:0, prodN:lpsComEmissao?nLiq/lpsComEmissao:0, plano, estoquePA,estoqueN,aging,dias};
+}
+function edN(v,d){ return Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
+function edMesLbl(k){ const [y,m]=k.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+m-1]+'/'+y.slice(2); }
+function edSetMes(v){ ED.mes=v; viewEmissaoDiaria(); }
+function edSetDias(){ const a=+($('#ed-d1')||{}).value||1, b=+($('#ed-d2')||{}).value||31; ED.d1=Math.max(1,Math.min(31,a)); ED.d2=Math.max(ED.d1,Math.min(31,b)); viewEmissaoDiaria(); }
+function edSetPlano(lpId,v){ const k=lpId+'|'+edMesAtual(); const n=Math.max(0,Math.round(atBrNum(v)||+v||0)); edPlano()[k]=n; if(typeof PL_DIRTY!=='undefined'){ PL_DIRTY=true; } if(typeof plSalvar==='function') plSalvar(); viewEmissaoDiaria(); }
+function edGaugeHTML(real,plano){
+  const pct=plano>0?Math.min(1.25,real/plano):0; const w=Math.round(Math.min(1,pct)*100);
+  const cor=pct>=1?'var(--verde,#0ca30c)':pct>=.7?'#f0a500':'#d03b3b';
+  return `<div style="margin-top:6px"><div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)"><span>0</span><span>plano ${brlCurto(plano)}</span></div>
+    <div style="height:14px;background:#eef2f7;border-radius:8px;overflow:hidden;position:relative"><div style="width:${w}%;height:100%;background:${cor};border-radius:8px"></div></div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:4px"><b style="font-size:20px">${brlCurto(real)}</b><span style="font-size:12px;color:var(--muted)">${plano>0?edN(pct*100,1)+'% do plano':'defina o Plano PA por LP abaixo'}</span></div></div>`;
+}
+function edBarrasHTML(d){
+  const W=620,H=150,pad=22, dias=[]; for(let i=d.d1;i<=d.d2;i++) dias.push(i);
+  const maxPa=Math.max(1,...dias.map(i=>Math.abs((d.dias[i]||{}).pa||0))); const bw=Math.max(6,(W-2*pad)/dias.length-3);
+  const y0=H/2; const bars=dias.map((i,ix)=>{ const o=d.dias[i]||{n:0,pa:0}; const x=pad+ix*((W-2*pad)/dias.length); const h=Math.abs(o.pa)/maxPa*(H/2-18);
+    return `<g><rect x="${x}" y="${o.pa>=0?y0-h:y0}" width="${bw}" height="${h}" rx="2" fill="${o.pa>=0?'var(--azul,#2563eb)':'#d03b3b'}"></rect>
+      ${o.n?`<text x="${x+bw/2}" y="${o.pa>=0?y0-h-4:y0+h+11}" font-size="9" text-anchor="middle" fill="var(--ink)">${o.n>0?'+':''}${o.n}</text>`:''}
+      <text x="${x+bw/2}" y="${H-4}" font-size="9" text-anchor="middle" fill="var(--muted)">${i}</text></g>`; }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block"><line x1="${pad}" x2="${W-pad}" y1="${y0}" y2="${y0}" stroke="#cbd5e1" stroke-dasharray="3 3"></line>${bars}</svg>`;
+}
+function viewEmissaoDiaria(){
+  const d=edDados(edMesAtual(),ED.d1,ED.d2);
+  const meses=(()=>{ const set=new Set((EX.itens||[]).map(r=>String(r.emissao||'').slice(0,7)).filter(x=>x.length===7)); set.add(atHojeISO().slice(0,7)); return [...set].sort().reverse(); })();
+  const kpi=(l,v,sub,dest)=>`<div class="kpi" style="min-width:104px;flex:1${dest?';border:1.5px solid var(--azul,#2563eb)':''}"><div class="lbl">${l}</div><div class="num" style="font-size:19px">${v}</div>${sub?`<div style="font-size:11px;color:var(--muted)">${sub}</div>`:''}</div>`;
+  const semDados=!(EX.itens||[]).length;
+  $('#main').innerHTML=`<h1 class="pg">Emissão Diária</h1>
+    <div class="sub">Os números do painel do BI, com o que está no app: emitidas (relatório UW e Emissão) + pendentes ativas. Atualizado em <b>${EX.carregadoEm?atFmtBR(EX.carregadoEm):'—'}</b> · <span style="color:var(--muted)">informação não oficial</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <select onchange="edSetMes(this.value)" style="min-height:44px;width:auto;min-width:120px">${meses.map(m=>`<option value="${m}"${m===d.mes?' selected':''}>${edMesLbl(m)}</option>`).join('')}</select>
+      <span style="font-size:12px;color:var(--muted)">dias</span>
+      <input id="ed-d1" type="number" min="1" max="31" value="${d.d1}" onchange="edSetDias()" style="width:64px;min-height:44px">
+      <input id="ed-d2" type="number" min="1" max="31" value="${d.d2}" onchange="edSetDias()" style="width:64px;min-height:44px">
+      <span style="flex:1"></span>
+      <button class="btn btn-s btn-mini" onclick="exColar()">✅ Colar emitidas</button>
+      <button class="btn btn-s btn-mini" onclick="irPara('lp-pendencias')">📌 Pendências</button>
+    </div>
+    ${semDados?`<div class="card" style="text-align:center;padding:26px;color:var(--muted)">Nenhuma emitida no app ainda. Cole o relatório <b>Apólices Emitidas no Período</b> (botão acima) e este painel se monta sozinho.${!logado()?' <button class="btn btn-ghost btn-mini" onclick="exExemplo()">Ver exemplo</button>':''}</div>`:''}
+    <div class="kpis" style="margin-bottom:12px">
+      ${kpi('PA Bruto do Dia',brlCurto(d.paDia),d.ultimoDia?'dia '+d.ultimoDia:'sem emissão',true)}
+      ${kpi('Apol. Emit.',edN(d.nLiq),d.canc.length?`${d.nEmit} emitidas − ${d.canc.length} canc.`:'')}
+      ${kpi('PA Emit.',brlCurto(d.paLiq),'s/ IOF, líquido de canc.')}
+      ${kpi('PA Médio',brlCurto(d.paMedio),'por apólice emitida')}
+      ${kpi('Prod. PA',brlCurto(d.prodPA),'PA por LP c/ emissão')}
+      ${kpi('Prod.',edN(d.prodN,1),'apólices por LP')}
+      ${kpi('Cycle Time',d.cycle!=null?edN(d.cycle,0):'—','dias assinatura → emissão')}
+      ${kpi('Estoque PA',brlCurto(d.estoquePA),'pendentes ativas hoje')}
+      ${kpi('Estoque N',edN(d.estoqueN),'propostas pendentes')}
+      ${kpi('Aging',d.aging!=null?edN(d.aging,0):'—','dias médios das pendentes')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;align-items:start">
+      <div class="card" style="padding:12px 14px">
+        <div style="font-weight:700">Real × Planejado <span style="font-weight:500;font-size:12px;color:var(--muted)">· PA emitida no mês</span></div>
+        ${edGaugeHTML(d.paLiq,d.plano)}
+      </div>
+      <div class="card" style="padding:12px 14px">
+        <div style="font-weight:700">Apólices por evento</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">
+          <div class="kpi" style="flex:1;border-left:4px solid #0ca30c"><div class="lbl">Emissão</div><div class="num" style="font-size:19px">+${d.nEmit}</div><div style="font-size:11px;color:var(--muted)">${brlCurto(d.paEmit)}</div></div>
+          <div class="kpi" style="flex:1;border-left:4px solid #d03b3b"><div class="lbl">Canc. Adm.</div><div class="num" style="font-size:19px">−${d.canc.length}</div><div style="font-size:11px;color:var(--muted)">${brlCurto(d.canc.reduce((s,l)=>s+l.pa,0))}</div></div>
+          <div class="kpi" style="flex:1;border-left:4px solid var(--azul,#2563eb)"><div class="lbl">Total</div><div class="num" style="font-size:19px">${d.nLiq}</div><div style="font-size:11px;color:var(--muted)">${brlCurto(d.paLiq)}</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Cancelada/anulada conta no mês da emissão dela (o relatório não traz a data do cancelamento).</div>
+      </div>
+    </div>
+    <div class="card" style="padding:12px 14px;margin-top:12px">
+      <div style="font-weight:700;margin-bottom:6px">Apol. Emit. × PA Emit. por dia</div>
+      ${edBarrasHTML(d)}
+    </div>
+    <div class="card" style="padding:6px 10px;margin-top:12px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
+        <th style="padding:6px 8px">Life Planner</th><th style="text-align:right">PA Emit.</th><th style="text-align:right">Plano PA</th><th style="text-align:right">Apol.</th><th style="text-align:right">PA Médio</th><th style="text-align:right">Cycle</th></tr></thead>
+        <tbody>${d.lps.map(l=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:8px"><b>${esc(l.nome)}</b></td><td style="text-align:right">${brlCurto(l.pa)}</td>
+          <td style="text-align:right"><input value="${l.plano?edN(l.plano):''}" placeholder="—" inputmode="numeric" onchange="edSetPlano('${esc(l.id)}',this.value)" style="width:96px;text-align:right;min-height:40px" title="Plano de PA deste LP em ${edMesLbl(d.mes)}"></td>
+          <td style="text-align:right">${l.n}</td><td style="text-align:right">${brlCurto(l.paMedio)}</td><td style="text-align:right">${l.cycle!=null?edN(l.cycle):'—'}</td></tr>`).join('')}
+        <tr style="border-top:2px solid var(--linha);font-weight:700"><td style="padding:8px">Total · ${d.lpsComEmissao} LP c/ emissão</td><td style="text-align:right">${brlCurto(d.paLiq)}</td><td style="text-align:right">${brlCurto(d.plano)}</td><td style="text-align:right">${d.nLiq}</td><td style="text-align:right">${brlCurto(d.paMedio)}</td><td style="text-align:right">${d.cycle!=null?edN(d.cycle):'—'}</td></tr></tbody></table>
+    </div>
+    <details class="card" style="padding:10px 14px;margin-top:12px"${d.linhas.length&&d.linhas.length<=12?' open':''}><summary style="cursor:pointer;font-weight:700">Detalhado · ${d.linhas.length} evento(s)</summary>
+      <div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
+        <th style="padding:6px 8px">Dia</th><th>Apólice</th><th>Cliente</th><th>LP</th><th>Evento</th><th style="text-align:right">Apol.</th><th style="text-align:right">PA</th><th style="text-align:right">AFYC</th></tr></thead>
+        <tbody>${d.linhas.map(l=>`<tr style="border-top:1px solid var(--linha)${l.n<0?';color:#d03b3b':''}"><td style="padding:6px 8px">${l.dia}</td><td>${esc(l.r.apolice||l.r.proposta||'')}</td><td>${esc(atTitleC(l.r.segurado))}</td><td>${esc(l.lp.nome.split(' ')[0])}</td><td>${l.evento}</td><td style="text-align:right">${l.n}</td><td style="text-align:right">${brlCurto(l.pa)}</td><td style="text-align:right">${brlCurto(l.afyc)}</td></tr>`).join('')}</tbody></table></div>
+    </details>`;
+}
+window.edSetMes=edSetMes; window.edSetDias=edSetDias; window.edSetPlano=edSetPlano; window.viewEmissaoDiaria=viewEmissaoDiaria;
+
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
    podemos selecionar o cliente (inclusive os novos) para ter a calculadora e
@@ -9462,6 +9601,7 @@ const HUB_SECOES=[
   ]},
   {titulo:'BackOffice Prudential', itens:[
     {view:'lp-atrasos',   ic:'⏰', titulo:'Lista de Atraso',      desc:'Prêmio em atraso: dias, motivo, script de cobrança e o estado de cada caso.', mod:'backoffice', cnt:()=>(AT.itens||[]).filter(r=>!r.resolvido_em).length},
+    {view:'emissao-diaria',ic:'📈', titulo:'Emissão Diária',       desc:'O painel do BI da Prudential, com os seus números: PA e apólices emitidas por dia, plano × real, cycle time, estoque e aging.', mod:'backoffice'},
     {view:'lp-pendencias',ic:'📌', titulo:'Pendências de Emissão',desc:'Propostas pendentes, AFYC represado e a janela de compensation.', mod:'backoffice', cnt:()=>(EM.itens||[]).filter(emAtivo).length},
     {view:'solicitacoes', ic:'📨', titulo:'Solicitações',         desc:'Pedidos à assessoria com prazo, dono e retorno; texto pronto pro WhatsApp.', mod:'backoffice', cnt:()=>(SO.itens||[]).filter(s=>s.status==='aberta').length},
     {view:'lp-statust',   ic:'🅣', titulo:'Status T',             desc:'Apólices emitidas na janela dos 30 dias / 2º prêmio.', mod:'backoffice', cnt:()=>lpAtivos('statust').length},
@@ -10310,7 +10450,8 @@ function viewCartClientes(){ const q=normKey(CART_Q);
       <td style="padding:8px 10px">${esc(c.celular||c.telefone||'—')}</td>
       <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
       <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.pm)}</td>
-      <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.cs)}</td></tr>`; }).join('');
+      <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.cs)}</td>
+      <td style="padding:4px 6px;text-align:center"><button class="btn btn-s btn-mini" style="min-height:40px" onclick="event.stopPropagation();cartNovoNegocioUI('${esc(c.ref)}','bc')" title="Abrir negócio no funil Base de Clientes">➕</button></td></tr>`; }).join('');
   $('#main').innerHTML=`<h1 class="pg">Clientes</h1>
     <div class="sub">${CART.clientes.length} cliente(s) na carteira${CART.importadoEm?' · importado em '+CART.importadoEm:''}. Clique num cliente pra ver apólices e coberturas.</div>
     ${CART.clientes.length?`<input id="cart-q" placeholder="Buscar por nome ou e-mail…" value="${esc(CART_Q)}" oninput="CART_Q=this.value;viewCartClientes()" style="width:100%;max-width:420px;margin:6px 0 8px;padding:9px 12px;border:1px solid var(--linha);border-radius:9px">
@@ -10415,6 +10556,9 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}${dNiver!=null&&dNiver<=30?` · <span class="dias-tag ${diasTagCls(dNiver)}">🎂 ${dNiver===0?'hoje!':'em '+dNiver+'d'}</span>`:''}</div>
     <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}</div>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><span style="font-size:12px;color:var(--muted)">Abrir negócio:</span>
+      <button class="btn btn-p btn-mini" onclick="cartNovoNegocioUI('${esc(c.ref)}','bc')" title="Cria o negócio no funil Base de Clientes já com os dados dele">🏠 Base de Clientes</button>
+      <button class="btn btn-s btn-mini" onclick="cartNovoNegocioUI('${esc(c.ref)}','nn')" title="Cria o negócio no funil Novos Negócios (SitPlan)">🎯 Novos Negócios</button></div>
     ${radHTML}
     ${cliCardHtml(clienteDe(c),{modo:'carteira'})}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
@@ -10426,6 +10570,28 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Apólices (${aps.length})</h3>${apsHTML}</div>`;
   $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
 
+
+/* ═══ CARTEIRA→FUNIL V1 (04/09) ═══════════════════════════════════════════
+   Pedido dele: da tela Clientes (carteira) abrir negócio e pôr o cliente no
+   funil. Nasce com nome, telefone, idade e origem "carteira" já preenchidos,
+   ligado à pessoa da carteira (pessoaId = ref) pra ficha do funil mostrar a
+   carteira dele na hora. Padrão: Base de Clientes (cliente que já é cliente);
+   Novos Negócios só se ele pedir. */
+function cartNovoNegocio(ref,funil){
+  const c=(CART.clientes||[]).find(x=>x.ref===ref); if(!c) return null;
+  const bc=funil!=='nn';
+  const n={ id:uid(), lp:S.activeUser, nome:c.nome, sexo:'—', idade:c.idade!=null?c.idade:null, profissao:'—', telefone:cartTel(c)||'', estrelas:0, ance:null,
+    etapa: bc?'Clientes Ativos':'SitPlan', funil: bc?'bc':'nn', origem:'carteira', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
+    infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[], sitplan:null, pessoaId:c.ref||null };
+  S.contatos.push(n); salvar();
+  return n;
+}
+function cartNovoNegocioUI(ref,funil){
+  const n=cartNovoNegocio(ref,funil); if(!n) return;
+  fecharDrawer(); toast(`${n.nome.split(' ')[0]} entrou no funil ${n.funil==='bc'?'Base de Clientes':'Novos Negócios'}`,true);
+  render(); abrirContato(n.id);
+}
+window.cartNovoNegocioUI=cartNovoNegocioUI;
 function openCarteiraImport(){
   const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.cssText='display:flex;align-items:center;justify-content:center;z-index:60';
   ov.innerHTML=`<div onclick="event.stopPropagation()" style="background:#fff;border-radius:16px;padding:22px;max-width:440px;width:92%">
@@ -10861,6 +11027,7 @@ function viewBnEstoque(){
       ${BN_ESTAGIOS.map(e=>`<button class="btn btn-s btn-mini" onclick="bnLote('${e}')">→ ${BN_EST_LABEL[e]}</button>`).join('')}
       <button class="btn btn-s btn-mini" onclick="bnLote('_ta')">📞 Lista de hoje</button>
       <button class="btn btn-p btn-mini" onclick="bnLoteLista()">📋 Adicionar à lista…</button>
+      ${FBN.sel.size>1?`<button class="btn btn-s btn-mini" onclick="bnJuntarSel()" title="Juntar os marcados num só (duplicatas)">🔗 Juntar</button>`:''}
       <button class="btn btn-s btn-mini" onclick="FBN.sel.clear();viewBnEstoque()">Limpar</button>
     </div>`:''}
     ${bnUndoBarra()}
@@ -11761,6 +11928,38 @@ function bnFundir(idA,idB,keepId){
   d.decisao='fundir'; d.decidido_em=new Date().toISOString();
   bnSalvar(); render(); _bnDupSync(d); toast('Fundidos — reversível em "Decididos"',true);
 }
+
+/* ═══ JUNTAR-NO-ESTOQUE V1 (04/09) ════════════════════════════════════════
+   Pedido dele: no Estoque de Nomes, marcar 2+ e juntar ali mesmo — ele já
+   enxerga as duplicatas na busca e não quer esperar a fila. Reusa o bnFundir
+   (mesmo backup, mesmo "desfazer" em Decididos): cada par vira uma decisão
+   manual na fila (motivo "juntado à mão no estoque"), fundida no que ele
+   escolheu manter. */
+function bnJuntarSel(){
+  const ids=[...FBN.sel].filter(id=>bnPor(id)); if(ids.length<2){ toast('Marque pelo menos 2 nomes pra juntar',false); return; }
+  const cs=ids.map(bnPor);
+  atModal(`<h2>🔗 Juntar ${cs.length} nomes</h2>
+    <div class="sub">Escolha qual fica. Os outros somem da lista e o que tinham (telefone, e-mail, empresa, notas, recomendante) vai pro que fica — sem apagar nada que já estava nele. Dá pra desfazer em Duplicatas → Decididos.</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">${cs.map((c,i)=>`<label style="display:flex;gap:10px;align-items:center;min-height:44px;border:1px solid var(--linha);border-radius:10px;padding:6px 10px;cursor:pointer">
+      <input type="radio" name="bnj_keep" value="${esc(c.id)}"${i===0?' checked':''}><div><b>${esc(c.nome)}</b><div style="font-size:12px;color:var(--muted)">${esc(c.telefone||'sem telefone')}${c.empresa?' · '+esc(c.empresa):''}${c.recomendante?' · rec. '+esc(c.recomendante):''} · ${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</div></div></label>`).join('')}</div>
+    <div style="display:flex;gap:10px;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="bnJuntarAplicar()">Juntar</button></div>`);
+}
+function bnJuntarAplicar(){
+  const keepId=(document.querySelector('input[name=bnj_keep]:checked')||{}).value; if(!keepId||!bnPor(keepId)) return;
+  const outros=[...FBN.sel].filter(id=>id!==keepId&&bnPor(id)&&!bnPor(id).merged_into);
+  const n=bnJuntar(keepId,outros); FBN.sel.clear(); atClose(); render();
+  toast(n+' junto'+(n>1?'s':'')+' em '+bnPor(keepId).nome.split(' ')[0]+' — reversível em Duplicatas → Decididos',true);
+}
+/* núcleo puro (testável): funde cada "outro" no keep, criando a decisão manual na fila quando não existe */
+function bnJuntar(keepId,outros){
+  let n=0; (outros||[]).forEach(id=>{ if(id===keepId||!bnPor(id)) return;
+    let d=_bnDup(keepId,id)||_bnDup(id,keepId);
+    if(!d){ d={id_a:keepId,id_b:id,motivo:'juntado à mão no estoque',chave:'manual:'+keepId+'|'+id,decisao:null,decidido_em:null}; BN.dups.push(d); }
+    if(d.decisao==='fundir') return;
+    d.decisao=null; bnFundir(d.id_a,d.id_b,keepId); n++; });
+  return n;
+}
+window.bnJuntarSel=bnJuntarSel; window.bnJuntarAplicar=bnJuntarAplicar;
 function bnManterSeparado(idA,idB){
   const d=_bnDup(idA,idB); if(!d) return;
   d.decisao='manter_separado'; d.decidido_em=new Date().toISOString();
@@ -11963,7 +12162,7 @@ const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
-  revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED'};
+  revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária'};
 function renderTituloTopo(){
   const el=$('#tbTitulo'); if(!el) return;
   const btn=document.querySelector('.sidebar .nav-btn.ativo');
@@ -12086,6 +12285,7 @@ function render(){
   else if(VIEW==='revisao') viewRevisaoProtecao();
   else if(VIEW==='montagem') viewMontagem();
   else if(VIEW==='placed') viewPlaced();
+  else if(VIEW==='emissao-diaria') viewEmissaoDiaria();
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
@@ -13162,6 +13362,42 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
           ok('placed: mês digitado à mão sem emitida não muda', PL.meses['g|2026-07'].a===5 && PL.meses['g|2026-07'].e===4);
         }catch(e){ falhas.push('emitidas→placed: exceção '+(e&&e.message)); } finally{ PL=_pl0; EX.itens=_ex0; EM.itens=_em0; PL_DIRTY=_d0; } }
     }
+
+    /* EMISSAO-DIARIA-V1 (04/09): o painel do BI lê das emitidas + pendentes. */
+    { const _ex0=EX.itens, _em0=EM.itens, _pl0=PL; try{
+        PL=plNorm({lps:[{id:'g',nome:'Gustavo (própria)',inicio:'2025-09'},{id:'d',nome:'Daniel Cruz',inicio:'2025-09'}],meses:{},pend:[],edPlano:{'g|2026-09':60000}});
+        EX.itens=[{apolice:'1',segurado:'A',status_apolice:'Ativa',dt_assinatura:'2026-08-30',emissao:'2026-09-04',pa_sem_iof:6000,afyc_projetado:2400,lp:'Gustavo'},
+                  {apolice:'2',segurado:'B',status_apolice:'Ativa',dt_assinatura:'2026-09-01',emissao:'2026-09-04',pa_sem_iof:4000,afyc_projetado:1600,lp:'Gustavo'},
+                  {apolice:'3',segurado:'C',status_apolice:'Anulada',dt_assinatura:'2026-08-01',emissao:'2026-09-10',pa_sem_iof:1000,afyc_projetado:400,lp:'Daniel'},
+                  {apolice:'4',segurado:'D',status_apolice:'Ativa',dt_assinatura:'2026-07-01',emissao:'2026-08-20',pa_sem_iof:9000,afyc_projetado:3600,lp:'Gustavo'}];
+        EM.itens=[{proposta:'9E',dt_assinatura:atHojeISO(),pa_sem_iof:2500,desfecho:null},{proposta:'8E',dt_assinatura:'2026-01-01',pa_sem_iof:100,desfecho:'emitida'}];
+        const d=edDados('2026-09',1,31);
+        ok('emissão diária: só o mês escolhido; canc. entra negativo (2 emitidas − 1 canc = 1)', d.nEmit===2&&d.canc.length===1&&d.nLiq===1&&d.paEmit===10000&&d.paLiq===9000);
+        ok('emissão diária: PA do dia = último dia com emissão (04 → 10.000) e PA médio 5.000', d.ultimoDia===4&&d.paDia===10000&&d.paMedio===5000);
+        ok('emissão diária: cycle time = média assinatura→emissão das emitidas (5 e 3 → 4)', d.cycle===4);
+        ok('emissão diária: estoque só das pendentes ativas (N=1, PA 2.500, aging 0)', d.estoqueN===1&&d.estoquePA===2500&&d.aging===0);
+        ok('emissão diária: plano por LP vem do PLACED (60.000) e Daniel aparece com o canc.', d.plano===60000&&d.lps.some(l=>l.id==='d'&&l.n===-1)&&d.lpsComEmissao===1);
+        ok('emissão diária: recorte de dias (1–5) deixa o canc. do dia 10 de fora', edDados('2026-09',1,5).nLiq===2);
+        ok('emissão diária: tela existe e está no hub', typeof viewEmissaoDiaria==='function'&&VIEWS_CONHECIDAS.includes('emissao-diaria')&&HUB_SECOES.some(s=>s.itens.some(i=>i.view==='emissao-diaria')));
+      }catch(e){ falhas.push('emissão diária: exceção '+(e&&e.message)); } finally{ EX.itens=_ex0; EM.itens=_em0; PL=_pl0; } }
+
+    /* CARTEIRA→FUNIL V1 + JUNTAR-NO-ESTOQUE V1 (04/09) */
+    { const _c0=CART.clientes, _s0=S.contatos.slice(); try{
+        CART.clientes=[{ref:'inv-x',nome:'Cliente Invariante Teste',celular:'(81) 90000-9999',idade:40,cob:{}}];
+        const n=cartNovoNegocio('inv-x','bc');
+        ok('carteira→funil: cria negócio na Base de Clientes com nome, telefone, idade e pessoaId', !!n&&n.funil==='bc'&&n.etapa==='Clientes Ativos'&&n.telefone==='(81) 90000-9999'&&n.idade===40&&n.pessoaId==='inv-x'&&n.origem==='carteira');
+        ok('carteira→funil: a ficha da carteira passa a listar esse negócio', cliNegociosDe({nome:'Cliente Invariante Teste',celular:'(81) 90000-9999',ref:'inv-x'}).some(x=>x.id===n.id));
+        ok('carteira→funil: ref inexistente não cria nada', cartNovoNegocio('nao-existe','bc')===null);
+        S.contatos=S.contatos.filter(x=>x.id!==n.id);
+      }catch(e){ falhas.push('carteira→funil: exceção '+(e&&e.message)); } finally{ CART.clientes=_c0; S.contatos=_s0; } }
+    { const _bn0=BN.contatos, _d0=BN.dups; try{
+        BN.contatos=[{id:'j1',nome:'Davi Teste',telefone:'',estagio:'estoque'},{id:'j2',nome:'Davi Teste Dentista',telefone:'+5581900000000',empresa:'Clínica',estagio:'estoque'},{id:'j3',nome:'Davi T.',email:'d@x.com',estagio:'estoque'}];
+        BN.dups=[];
+        const n=bnJuntar('j1',['j2','j3']);
+        ok('juntar: 2 outros fundidos no que fica; telefone/e-mail/empresa vêm pra ele', n===2&&bnPor('j1').telefone==='+5581900000000'&&bnPor('j1').email==='d@x.com'&&bnPor('j1').empresa==='Clínica'&&bnPor('j2').merged_into==='j1'&&bnPor('j3').merged_into==='j1');
+        ok('juntar: cada par vira decisão "fundir" na fila com backup (dá pra desfazer)', BN.dups.length===2&&BN.dups.every(d=>d.decisao==='fundir'&&d._backup&&d.motivo==='juntado à mão no estoque'));
+        ok('juntar: repetir não funde de novo', bnJuntar('j1',['j2'])===0);
+      }catch(e){ falhas.push('juntar: exceção '+(e&&e.message)); } finally{ BN.contatos=_bn0; BN.dups=_d0; } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
@@ -13647,7 +13883,7 @@ function abrirAjustesVisual(){
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','agenda','contatos','planos','montagem','placed','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','principios','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
