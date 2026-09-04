@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v0.48.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v0.48.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1064,7 +1064,7 @@
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
-      <span class="tag">ISLAND · v0.48.0 · Vendas LP</span>
+      <span class="tag">ISLAND · v0.48.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1086,7 +1086,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v0.48.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v0.48.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1272,8 +1272,38 @@ let S; // estado
    abria. Preenche o que falta em memória; não força `salvar()` pra não
    disparar um push de toda a base à toa (o 1º save real leva junto).
    ══════════════════════════════════════════════════════════════════ */
+/* REC-DO-NOME-V1: nomes vindos do WhatsApp carregam o recomendante dentro do próprio nome.
+   "Fulana - Rec Beltrana"      → nome Fulana · recomendante Beltrana
+   "Rec Fulana Rec Beltrana"    → Fulana É uma rec (indicada por Beltrana)
+   Sufixo "Cliente"/"Novo" no recomendante é etiqueta, não nome. Nada aqui grava: só devolve. */
+function recDoNome(nome){
+  let s=String(nome||'').replace(/\s+/g,' ').trim(); if(!s) return null;
+  const RE=/(^|[\s\-–—(])rec\.?\s*:?\s+(?=\S)/i;
+  if(!RE.test(s)) return null;
+  let ehRec=false;
+  if(/^rec\.?\s*:?\s+/i.test(s)){ ehRec=true; s=s.replace(/^rec\.?\s*:?\s+/i,''); }
+  const m=s.match(/\s*[\-–—(]?\s*\brec\.?\s*:?\s+(.+)$/i);
+  let pessoa=s, quem='';
+  if(m){ pessoa=s.slice(0,m.index); quem=m[1]; }
+  pessoa=pessoa.replace(/[\s\-–—(]+$/,'').trim();
+  quem=quem.replace(/[)\s]+$/,'').replace(/\s+(cliente|novo|nova)\s*$/i,'').trim();
+  if(!pessoa||!quem) return null;
+  return { nome:pessoa, recomendante:quem, ehRec, original:String(nome).trim() };
+}
+/* aplica na carga: nome vira nome, quem indicou vira campo. Idempotente (o nome limpo
+   não casa mais o padrão) e reversível (`nome_original`). Só preenche recomendante
+   vazio ou que ainda carrega "Rec" dentro. */
+function recAplicarDoNome(c){
+  const r=recDoNome(c&&c.nome); if(!r) return false;
+  const atual=String(c.recomendante||'').trim();
+  if(!c.nome_original) c.nome_original=r.original;
+  c.nome=r.nome;
+  if(!atual||/\brec\b/i.test(atual)) c.recomendante=r.recomendante;
+  return true;
+}
 function normContato(c){
   if(!c||typeof c!=='object') return c;
+  try{ recAplicarDoNome(c); }catch(_){}
   if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
   ['recs','eventos','planos','interacoes','tarefas'].forEach(k=>{ if(!Array.isArray(c[k])) c[k]=[]; });
   ['sexo','profissao','origem','taStatus'].forEach(k=>{ if(c[k]==null||c[k]==='') c[k]='—'; });
@@ -11953,6 +11983,12 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const r=recomendanteDe({nome:'Zz Hellen',recomendante:'Zz Laura Cliente'},[]); const r2=recomendanteDe({nome:'Zz Hellen',recomendante:'Zz Ninguem Cliente'},[]);
       return r&&r.cliente&&r.aps===1&&/cliente/.test(recomendanteChip({nome:'Zz Hellen',recomendante:'Zz Laura Cliente'}))&&r2&&!r2.cliente&&/não é cliente/.test(recomendanteChip({nome:'Zz Hellen',recomendante:'Zz Ninguem Cliente'})); }finally{ CART.apolices=_a; cartIdxInvalidar(); } })());
     ok('recomendante: o campo é da pessoa e propaga para as outras oportunidades dela', PESSOA_CAMPOS.includes('recomendante'));
+    /* REC-DO-NOME-V1 */
+    ok('rec do nome: "Nome - Rec Fulano" separa nome e recomendante; sufixo Cliente/Novo cai', (()=>{ const a=recDoNome('Zz Maria Med - Rec Zz Joana Cliente'), b=recDoNome('Zz Paulo Rec Zz Ana Novo'); return a&&a.nome==='Zz Maria Med'&&a.recomendante==='Zz Joana'&&!a.ehRec&&b&&b.nome==='Zz Paulo'&&b.recomendante==='Zz Ana'; })());
+    ok('rec do nome: "Rec Nome Rec Fulano" = a pessoa é uma rec indicada por Fulano', (()=>{ const r=recDoNome('Rec Zz Bruno Sport Rec Zz Amanda Cliente'); return r&&r.ehRec&&r.nome==='Zz Bruno Sport'&&r.recomendante==='Zz Amanda'; })());
+    ok('rec do nome: Recife, Recuperação e nome limpo não casam', recDoNome('Zz Recife Norte')===null&&recDoNome('Zz Marcos Recuperação')===null&&recDoNome('Zz Hellen Costa')===null&&recDoNome('')===null);
+    ok('rec do nome: aplicar limpa o nome, guarda o original, preenche o campo e é idempotente', (()=>{ const c={nome:'Zz Mat Beicin- Rec Zz Vitor',recomendante:''}; const a=recAplicarDoNome(c); const b=recAplicarDoNome(c); return a&&!b&&c.nome==='Zz Mat Beicin'&&c.recomendante==='Zz Vitor'&&c.nome_original==='Zz Mat Beicin- Rec Zz Vitor'; })());
+    ok('rec do nome: recomendante já digitado à mão não é sobrescrito', (()=>{ const c={nome:'Zz X - Rec Zz Y',recomendante:'Zz Digitado'}; recAplicarDoNome(c); return c.recomendante==='Zz Digitado'&&c.nome==='Zz X'; })());
     ok('ficha: Ligar e WhatsApp saem do mesmo telefone', telHref('+5581988451010')==='tel:+5581988451010'&&waHref('+5581988451010').indexOf('5581988451010')>0);
     ok('barra inferior: todo destino escolhido é uma view conhecida',
        bnavLer().every(v=>VIEWS_CONHECIDAS.includes(v)));
