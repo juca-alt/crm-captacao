@@ -367,6 +367,7 @@ i.mix-t{background:var(--laranja)}
 .acc.cur-drag{opacity:.35}
 .prodcli{border:1px solid var(--ring);border-radius:13px;padding:14px 16px;margin-top:10px;background:var(--surface)}
 .prodcli h4{margin:0 0 6px;font-size:1rem}
+#perfilBar{padding-bottom:0!important}   /* o .wrap reserva 120px pra barra de baixo; aqui isso virava um buraco entre o cabeçalho e o 1º card */
 .perfilbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
 .perfilbar select,.perfilbar .btn{font-size:.8rem}
 body.modo-apresenta .cur-x,body.modo-apresenta .ativo-gr,body.modo-apresenta .prod-ck,
@@ -3997,10 +3998,10 @@ function renderFoot(){
   const renda = state.cliente.renda, st = selfTest();
   $('footTiles').innerHTML = `
     <div class="tile"><div class="k">Hoje</div><div class="v">${fmt(vper(tH))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>
-    <div class="tile a"><div class="k">${esc(state.cen[0] ? state.cen[0].nome : 'Plano A')}</div><div class="v">${fmt(vper(tA))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>
-    ${(()=>{ const R=(typeof msCalc==='function')?msCalc():null; return R&&R.nova>0 ? `<div class="tile b"><div class="k">MS · apólice nova</div><div class="v">${fmt(vper(R.nova*(1+MS_IOF)))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>` : ''; })()}
+    ${state.show.planos!==false && (state.cen[0]&&(state.cen[0].linhas||[]).length) ? `<div class="tile a"><div class="k">${esc(state.cen[0] ? state.cen[0].nome : 'Plano A')}</div><div class="v">${fmt(vper(tA))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>
     <div class="tile"><div class="k">Capital de morte proposto</div><div class="v">${fmt0(cA.MQC.cap)}</div></div>
-    <div class="tile"><div class="k">% da renda</div><div class="v">${renda ? pct(tA/renda*100) : '—'}</div></div>
+    <div class="tile"><div class="k">% da renda</div><div class="v">${renda ? pct(tA/renda*100) : '—'}</div></div>` : ''}
+    ${(()=>{ const R=(typeof abMs==='function')?abMs():null; const on=state.show.msmigra!==false||state.show.mspaga!==false; return R&&on ? `<div class="tile b"><div class="k">MS · apólice nova</div><div class="v">${fmt(vper(R.nova*(1+MS_IOF)))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>` : ''; })()}
     <span class="right badge" style="background:${st.bad.length ? 'var(--crit-soft)' : 'var(--good-soft)'};color:${st.bad.length ? 'var(--crit)' : 'var(--good-text)'}">motor: ${st.bad.length ? '✗ '+st.bad.length+' divergência(s)' : '✓ '+st.ok+'/'+st.total+' capturas do app'}</span>`;
   $('footTiles').insertAdjacentHTML('beforeend', `<button class="btn sm foot-tgl" onclick="footToggle()" title="Esconder a barra de baixo (volta pelo botão ▤ no canto)">⌄ esconder</button>`);
   footAplicar();
@@ -4604,22 +4605,50 @@ function ckDestinoHTML(){
     <div class="ab-resumo">${resumo.join('<br>')}</div>
     </div></div>`;
 }
+/* == AB-MS-V1 (04/09) =======================================================
+   Pedido dele: "como é e como fica vai pro Checkout de forma completa" — a
+   comparação passa a ler o DESTINO de cada apólice (Checkout) e a mostrar a
+   Mudança de Seguro na mesma visão: o que sai é substituído pelo plano novo, e
+   as apólices da MS aparecem como "o que fica na origem" + a apólice nova.
+   Não depende mais de existir cenário: com a MS ligada, já compara. */
+function msItensFicam(R){
+  const out=[]; if(!R) return out;
+  const gr=c=>c.grupo||FAM2SIN[msFamDe(c)]||'MQC_TEMP';
+  if(R.principal && R.restante>0) out.push({grupo:gr(R.principal), cap:R.restante, pre:R.preOrigPrincipal, cod:R.principal.cod, vig:'', prod:''});
+  R.linhas.filter(l=>!l.ehNova && ((l.c.cap||0)-l.migCS)>0.5).forEach(l=>out.push({grupo:gr(l.c), cap:(l.c.cap||0)-l.migCS, pre:l.preOrFica, cod:l.c.cod, vig:'', prod:''}));
+  (R.ficamExtras||[]).forEach(c=>out.push({grupo:gr(c), cap:+c.cap||0, pre:(+c.pre||0)/(c._div||1), cod:c.cod, vig:'', prod:''}));
+  return out;
+}
+function msItensNova(R){
+  const out=[]; if(!R) return out;
+  const gr=c=>c.grupo||FAM2SIN[msFamDe(c)]||'MQC_TEMP';
+  if(R.csVit>0) out.push({grupo:'MQC_VIT', cap:R.csVit, pre:R.preVit, cod:R.P.fam+R.P.prazo, vig:'vitalício, quitado em '+R.P.prazo+' anos', prod:''});
+  R.linhas.filter(l=>l.on && l.csNova>0).forEach(l=>out.push({grupo:gr(l.c), cap:l.csNova, pre:l.preNv, cod:l.c.cod, vig:'', prod:''}));
+  return out;
+}
+function abMs(){ if(typeof msCalc!=='function' || (state.ms&&state.ms.off)) return null; const R=msCalc(); return (R&&R.nova>0)?R:null; }
 function abDados(){
-  const cen = abCen(); if (!cen) return null;
+  const cen = abCen(), R = abMs();
+  if (!cen && !R) return null;
   const aps = state.hoje.apolices || [];
   const saem = aps.filter(a => abApolEstado(a.num) === 'sai');
-  const ficam = aps.filter(a => abApolEstado(a.num) !== 'sai');
+  const msNums = new Set(R ? R.aps.map(a => String(a.num||'')) : []);
+  const emMs = aps.filter(a => msNums.has(String(a.num||'')));
+  const ficam = aps.filter(a => abApolEstado(a.num) !== 'sai' && !msNums.has(String(a.num||'')));
   const visao = abVisao();
-  /* FOCO: só o que sai × a proposta. GLOBAL: carteira toda × (o que fica + proposta) */
-  const apsA = (visao === 'foco') ? (saem.length ? saem : aps) : aps;
+  /* FOCO: só o que muda (sai + entra na MS) × (plano novo + MS). GLOBAL: carteira toda × resultado final */
+  const mudam = saem.concat(emMs);
+  const apsA = (visao === 'foco') ? (mudam.length ? mudam : aps) : aps;
   const apsB = (visao === 'foco') ? [] : ficam;
-  const itA = itensDe(apsA), itB = itensDe(apsB).concat(itensCen(cen));
+  const itA = itensDe(apsA);
+  let itB = itensDe(apsB).concat(msItensFicam(R)).concat(msItensNova(R));
+  if (cen) itB = itB.concat(itensCen(cen));
   const cA = consolidar(itA), cB = consolidar(itB);
   const tA = itA.reduce((t,x) => t + x.pre, 0) * (1 + IOF);
   /* totalCen() JA vem bruto (calcLinha: r.mensal = mensalLiq*(1+IOF)).
-     O `pre` dos itens de apolice e LIQUIDO, por isso so ele leva o (1+IOF). */
-  const tB = itensDe(apsB).reduce((t,x) => t + x.pre, 0) * (1 + IOF) + totalCen(cen);
-  return {cen, visao, saem, ficam, aps, cA, cB, tA, tB, dif: tB - tA, itA, itB,
+     O `pre` dos itens de apolice e da MS e LIQUIDO, por isso so eles levam o (1+IOF). */
+  const tB = (itensDe(apsB).concat(msItensFicam(R)).concat(msItensNova(R))).reduce((t,x) => t + x.pre, 0) * (1 + IOF) + (cen ? totalCen(cen) : 0);
+  return {cen, ms:R, visao, saem, emMs, ficam, aps, cA, cB, tA, tB, dif: tB - tA, itA, itB,
           som: visao === 'global' && ficam.length > 0};
 }
 
@@ -4702,11 +4731,11 @@ function _invMod(itens){
   return {tp, p, tem: tp || p};
 }
 function abExtras(d){
-  const out = [], cen = d.cen, cli = state.cliente;
+  const out = [], cen = d.cen || {linhas:[], nome:'Mudança de Seguro'}, cli = state.cliente;
   const apsA = (d.visao === 'foco') ? (d.saem.length ? d.saem : d.aps) : d.aps;
 
   /* 1 · vigência do temporário: a apólice nova reinicia o prazo */
-  const fh = _fimTempDe(apsA), fc = idadeFimCen(cen);
+  const fh = _fimTempDe(apsA), fc = d.cen ? idadeFimCen(cen) : null;
   if (fh && fc && fc > fh)
     out.push({h:`<b>Mais ${fc-fh} ano${fc-fh===1?'':'s'} de vigência</b> na cobertura temporária de morte`,
       sub2:`Deixa de acabar aos <b>${fh} anos</b> e passa a valer até os <b>${fc}</b>. A apólice nova reinicia o prazo, então o mesmo produto contratado hoje cobre por mais tempo.`});
@@ -4945,9 +4974,9 @@ function abHTML(){
   const ed = _edit();
   const lista = (state.cen||[]).filter(x => (x.linhas||[]).length);
   const g = abGanhos(d);
-  const nome = d.cen.nome || 'proposta';
+  const nome = d.cen ? (d.cen.nome || 'proposta') : ((msSims().find(x=>x.id===state.ms.simAtiva)||{}).nome || 'Mudança de Seguro');
   let h = '';
-  if (ed && lista.length > 1){
+  if (ed && d.cen && lista.length > 1){
     h += `<div class="ab-modo no-print so-consultor"><span class="mini" style="font-weight:800">COMPARAR COM</span>
       <select onchange="setAbCen(this.value)" style="border:1px solid var(--axis);border-radius:9px;padding:4px 9px;font-size:.8rem;font-weight:700">
         ${lista.map(x => `<option value="${esc(x.id)}"${x.id===d.cen.id?' selected':''}>${esc(x.nome)}</option>`).join('')}
@@ -4960,7 +4989,7 @@ function abHTML(){
       <button class="ab-bt${det?' on':''}" onclick="setAbDet(true)">cobertura por cobertura</button>
       <span class="mini">o cliente vê exatamente o que estiver marcado aqui</span></div>
       <div class="ab-modo no-print so-consultor"><span class="mini" style="font-weight:800">VISÃO</span>
-      <button class="ab-bt${d.visao==='foco'?' on':''}" onclick="setAbVisao('foco')">apólice que sai × proposta</button>
+      <button class="ab-bt${d.visao==='foco'?' on':''}" onclick="setAbVisao('foco')">${d.ms?'o que muda × plano novo + MS':'apólice que sai × proposta'}</button>
       <button class="ab-bt${d.visao==='global'?' on':''}" onclick="setAbVisao('global')">como fica a carteira toda</button>
       <span class="mini">a de cima compara o que está sendo trocado; a de baixo mostra o resultado final</span></div>`;
     h += abApolHTML();
@@ -5492,7 +5521,7 @@ function renderAB(){
   const box = $('abOut'); if (!box) return;
   const d = abDados();
   box.innerHTML = d ? abHTML()
-    : '<p class="sub">Monte um plano na aba Proposta para ver a comparação.</p>';
+    : '<p class="sub">Monte um plano na etapa Planos, ou ligue a Mudança de Seguro no Checkout (uma apólice como origem), para ver a comparação.</p>';
 }
 
 /* ═══════ NOVAS_V1 · linha do tempo e raio-x de lacunas (em avaliação) ═══════ */
@@ -6619,6 +6648,19 @@ function msCarregarSim(id){
   Object.assign(state.ms, JSON.parse(JSON.stringify(s0.snap)));
   save(); renderMS();
 }
+/* == MS-SIMS-MULTI (04/09) — pedido dele: "na MS quero montar múltiplos cenários como
+   faço no plano novo; bota o duplicar; vou editando e escolho qual uso no cliente". */
+function msDuplicarSim(id){
+  const s0=msSims().find(x=>x.id===id); if(!s0) return;
+  const c=JSON.parse(JSON.stringify(s0)); c.id=uid(); c.nome=s0.nome+' (cópia)'; c.criadoEm=new Date().toISOString().slice(0,10);
+  msSims().push(c); save(); renderMS();
+}
+function msUsarSim(id){
+  const s0=msSims().find(x=>x.id===id); if(!s0) return;
+  state.ms.simAtiva=id; Object.assign(state.ms, JSON.parse(JSON.stringify(s0.snap)));
+  save(); render();
+}
+window.msDuplicarSim=msDuplicarSim; window.msUsarSim=msUsarSim;
 function msExcluirSim(id){
   const s0=msSims().find(x=>x.id===id); if(!s0) return;
   if(!confirm(`Excluir a simulação "${s0.nome}"?`)) return;
@@ -6658,13 +6700,15 @@ function msRenderSims(R){
       É essa linha que vai para o cenário, marcada como prêmio informado, para o app não tentar tarifar por cima. Daí ela entra no comparador da etapa 4 ao lado do Plano A.</div>
     ${l.length?`<div class="scroll" style="margin-top:10px"><table>
       <thead><tr><th>simulação</th><th class="num">cliente paga</th><th class="num">capital</th><th class="num so-consultor">caixa 1º ano</th><th></th></tr></thead>
-      <tbody>${l.map(x=>`<tr>
-        <td><b>${esc(x.nome)}</b><div class="cd">${esc(x.criadoEm)} · ${esc(x.snap.prod)}</div></td>
+      <tbody>${l.map(x=>`<tr class="${state.ms.simAtiva===x.id?'dest':''}">
+        <td><b>${esc(x.nome)}</b>${state.ms.simAtiva===x.id?' <span class="pill p-vit">em uso com o cliente</span>':''}<div class="cd">${esc(x.criadoEm)} · ${esc(x.snap.prod)}</div></td>
         <td class="num">${msBRL(x.res.bruto)}</td>
         <td class="num">${msBRL0(x.res.capital)}</td>
         <td class="num so-consultor">${msBRL0(x.res.caixa)}</td>
         <td class="num" style="white-space:nowrap">
           <button class="btn sm" onclick="msCarregarSim('${esc(x.id)}')">abrir</button>
+          <button class="btn sm" onclick="msDuplicarSim('${esc(x.id)}')" title="Copia esta simulação para editar sem perder a original">⧉ duplicar</button>
+          <button class="btn sm ${state.ms.simAtiva===x.id?'pri':''}" onclick="msUsarSim('${esc(x.id)}')" title="Esta é a que vai para o cliente (comparação, barra de baixo e apresentação)">${state.ms.simAtiva===x.id?'✓ em uso':'usar no cliente'}</button>
           <button class="btn sm" onclick="msParaCenario('${esc(x.nome)}')">→ cenário</button>
           <button class="btn sm" style="color:var(--crit)" onclick="msExcluirSim('${esc(x.id)}')">✕</button>
         </td></tr>`).join('')}</tbody></table></div>`
