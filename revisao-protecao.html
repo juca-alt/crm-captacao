@@ -1677,7 +1677,24 @@ function selfTest(){
     if (r && r.ok && Math.abs(r.mensal - c.esperado_mensal) <= 0.02) ok++;
     else bad.push(c.desc+': '+(r && r.mensal != null ? r.mensal.toFixed(2) : 'erro')+' ≠ '+c.esperado_mensal);
   });
-  return {ok, total:(D.capturas||[]).length, bad};
+  /* MS · o mínimo do remanescente é o do PRODUTO que fica, lido do catálogo (erro do caso Sylvio:
+     1e6 fixo mandava o Temporário Decrescente pro DOC0013133 sem precisar). */
+  let total = (D.capturas||[]).length;
+  if (typeof msMinProduto === 'function'){
+    [ ['MS mínimo · Temporário Decrescente = 60.000', {cod:'DT20M', nome:'Temporário Decrescente'}, 60000],
+      ['MS mínimo · Temporário = 60.000',             {cod:'TM10M', nome:'Temporário'},             60000],
+      ['MS mínimo · Temporário Preferencial = 1 mi', {cod:'TP20M', nome:'Temporário Preferencial'}, 1000000],
+      ['MS mínimo · produto desconhecido = null',    {cod:'ZZ',    nome:'coisa desconhecida'},      null]
+    ].forEach(([desc, c, esperado]) => {
+      total++;
+      const m = msMinProduto(c).min;
+      if (m === esperado) ok++; else bad.push(desc+': deu '+m);
+    });
+    total++;
+    if (typeof msEhTemporario === 'function' && msEhTemporario({cod:'DT20M', nome:'Temporário Decrescente'})) ok++;
+    else bad.push('MS · Temporário Decrescente tem que contar como principal temporário');
+  }
+  return {ok, total, bad};
 }
 
 /* ============================================================
@@ -5886,7 +5903,17 @@ function msRemoverNova(id){
 }
 window.msAddNova=msAddNova; window.msRemoverNova=msRemoverNova;
 /* o produto principal temporário é o que a MS converte */
-function msEhTemporario(c){ return /TEMP/.test(String(c&&c.grupo||'')) || /^T[PB]/.test(String(c&&c.cod||'')); }
+function msEhTemporario(c){ return /TEMP/.test(String(c&&c.grupo||'')) || /^T[PB]/.test(String(c&&c.cod||'')) || /^(TP|TM|DT)$/.test(String(msFamDe(c)||'')); }
+/* mínimo de capital do produto que FICA na origem depois da MS. Vem do catálogo (csmin):
+   Temporário Preferencial 1.000.000 · Temporário 60.000 · Temporário Decrescente 60.000.
+   Antes era 1e6 fixo — errava para todo temporário que não é o Preferencial (caso Sylvio, decrescente). */
+function msMinProduto(c){
+  if(!c) return {min:0, nome:'', fam:null};
+  const fam = msFamDe(c) || (String(c.cod||'').match(/^(TP|TM|DT|TB)/)||[])[1] || null;
+  const p = (typeof PRODS!=='undefined' && fam) ? PRODS[fam] : null;
+  if(!p || !(p.csmin>0)) return {min:null, nome:fam||'', fam};
+  return {min:p.csmin, nome:p.nome||fam, fam};
+}
 
 function msApolices(){ return (state.hoje.apolices||[]).filter(a=>(a.cob||[]).length); }
 function msOrigem(){
@@ -6072,8 +6099,9 @@ function msCalc(){
 function msRenderTriagem(R){
   const or=R.or, m=msMeses(or.emissao||or.inicio||'');
   const classes=new Set((or.cob||[]).map(c=>String(c.classe||'').trim()).filter(Boolean));
-  const minProd = R.principal ? 1e6 : 0;   /* mínimo do produto principal (Temporário) */
-  const acimaMin = !R.principal || R.restante>=minProd;
+  const mp = msMinProduto(R.principal);   /* mínimo do produto que FICA na origem — lido do catálogo, não fixo */
+  const minProd = mp.min;
+  const acimaMin = !R.principal || minProd==null || R.restante>=minProd;
   const t=[];
   t.push({ok:!!R.principal, tt:'Tem cobertura temporária vigente',
     d: R.principal ? `${esc(R.principal.nome||R.principal.cod)} ${msBRL(R.principal.cap)} na ${esc(or.num||'')}. É o que a MS transforma em vitalício.`
@@ -6086,9 +6114,10 @@ function msRenderTriagem(R){
              : `Abaixo de 18 meses: o remanescente não pode furar o mínimo. Faltam ${18-m} meses.`});
   else t.push({warn:true, tt:'Data de emissão da origem não informada',
     d:'Sem ela não dá para aplicar a regra dos 18 meses. Preencha na etapa 2.'});
-  if(R.principal) t.push({ok:acimaMin, warn:!acimaMin&&m!=null&&m>=18, tt:`Remanescente ${msBRL(R.restante)}`,
-    d: acimaMin ? `Acima do mínimo do produto (${msBRL(minProd)}). Este teste, sozinho, permitiria a <b>MS Digital</b>.`
-                : `Abaixo do mínimo (${msBRL(minProd)}). Só passa pelo <b>DOC0013133</b>${m!=null&&m>=18?` — e só porque a apólice tem ${m} meses`:''}.`});
+  if(R.principal) t.push({ok:acimaMin&&minProd!=null, warn:(minProd==null)||(!acimaMin&&m!=null&&m>=18), tt:`Remanescente ${msBRL(R.restante)}`,
+    d: minProd==null ? `Não identifiquei o produto da cobertura principal (${esc(R.principal.cod||R.principal.nome||'?')}) no catálogo — o mínimo não foi conferido. Confira no LP Business.`
+     : acimaMin ? `Acima do mínimo do ${esc(mp.nome)} (${msBRL(minProd)}). Este teste, sozinho, permitiria a <b>MS Digital</b>.`
+                : `Abaixo do mínimo do ${esc(mp.nome)} (${msBRL(minProd)}). Só passa pelo <b>DOC0013133</b>${m!=null&&m>=18?` — e só porque a apólice tem ${m} meses`:''}.`});
   t.push({ok:classes.size<=1, warn:classes.size>1, tt:'Mais de uma classe de ajuste',
     d: classes.size>1 ? `Há ${classes.size} classes diferentes nesta apólice. Essa combinação <b>tira o processo do digital</b>. <i>Pendente confirmar com o Ponto de Apoio se a leitura é por cliente ou por apólice.</i>`
                       : 'Classe única — não tira o processo do digital por este critério.'});
