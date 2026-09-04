@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v5.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v5.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1232,7 +1232,7 @@
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
-      <span class="tag">PipeX · v5.0 · Vendas LP</span>
+      <span class="tag">PipeX · v5.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1254,7 +1254,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v5.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v5.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -6928,6 +6928,242 @@ function plAddPend(){ PL_DIRTY=true;
 }
 
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   APÓLICES EMITIDAS NO PERÍODO (04/09) — relatório "UW e Emissão → Apólices
+   Emitidas no Período" do portal. Fecha três lacunas de uma vez:
+   1) desfecho "emitida" da proposta pendente (casa por proposta/apólice);
+   2) o ciclo do Card Cliente: emitida = ganhei → negócio entregue + apólice
+      na base (vendaPlano/vendaAplicar — por DECISÃO dele, caixa a caixa);
+   3) o PLACED deixa de ser digitado: entregues por LP e mês de assinatura
+      vêm daqui (plSincronizarEmitidas).
+   Tabela `emissao_emitidas` (mesma RLS por dono/delegação das pendências).
+   Nenhum nome real no código: o exemplo é inventado (exExemplo). */
+const EX_TABLE='emissao_emitidas', EX_CHAVE='crmlp_emitidas_v1';
+let EX={itens:[],carregadoEm:null}; let EX_REMOTE=false; let _exPend=null;
+function exChave(r){ return (r&&(r.apolice||r.proposta))||''; }
+function exMes(r){ return r&&r.dt_assinatura?String(r.dt_assinatura).slice(0,7):null; }
+function exRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
+function exRecToRow(r){ const row={lp_email:EM_EMAIL}; ['proposta','apolice','segurado','resp_pagamento','status_apolice','dt_assinatura','emissao','motivo_cancelamento','motivo_uw','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','origem_relatorio','periodo_ini','periodo_fim','nomes_conferir'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.nomes_conferir=!!r.nomes_conferir; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
+async function exCarregar(){
+  EX_REMOTE=await emRemoteOn();
+  if(EX_REMOTE){ try{ const {data,error}=await sb.from(EX_TABLE).select('*'); if(error) throw error;
+    EX.itens=(data||[]).map(exRowToRec); EX.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null; exSalvarLocal(); return;
+  }catch(e){ console.warn('EX load remoto falhou → local',e); EX_REMOTE=false; } }
+  try{ const raw=localStorage.getItem(EX_CHAVE); if(raw){ const o=JSON.parse(raw); EX.itens=Array.isArray(o.itens)?o.itens:[]; EX.carregadoEm=o.carregadoEm||null; } }catch(e){}
+}
+function exSalvarLocal(){ try{ localStorage.setItem(EX_CHAVE,JSON.stringify(EX)); }catch(e){} }
+async function exUpsertRemoto(recs){ if(!EX_REMOTE||!sb||!recs.length) return; const rows=recs.filter(exChave).map(exRecToRow);
+  const {data,error}=await sb.from(EX_TABLE).upsert(rows,{onConflict:'lp_email,chave'}).select('id,chave'); if(error) throw error;
+  (data||[]).forEach(d=>{ const r=EX.itens.find(x=>exChave(x)===d.chave); if(r) r.id=d.id; }); exSalvarLocal(); }
+
+/* ── parser ───────────────────────────────────────────────────────────────
+   Aceita os DOIS jeitos de colar: (a) o texto do PDF/tela, em que cada proposta
+   vem em várias linhas ("000748143E /\n002245101\nNOME…\nAtiva 01/09/2026
+   04/09/2026 6.012,48 2.360,41"); (b) linhas com TAB (Excel do portal). Em (a)
+   o segurado e o responsável pelo pagamento vêm colados sem separador: quando
+   o texto é o mesmo nome duas vezes, são a mesma pessoa; quando não, guardo o
+   bloco inteiro como segurado e marco `nomes_conferir` — a tela diz que precisa
+   olhar, em vez de inventar o corte. */
+const EX_STATUS=/\b(Ativa|Anulada|Rejeitada|Cancelada|Pendente de Emiss[ãa]o|Not Taken(?: Up)?)\b/i;
+function exNormStatus(s){ const n=normKey(s); if(/^ativa/.test(n)) return 'Ativa'; if(/anulada|not taken/.test(n)) return 'Anulada'; if(/rejeitada/.test(n)) return 'Rejeitada'; if(/cancelada/.test(n)) return 'Cancelada'; if(/pendente/.test(n)) return 'Pendente de Emissão'; return s||null; }
+function exNomes(bloco){
+  const t=String(bloco||'').replace(/\s+/g,' ').trim(); if(!t) return {segurado:'',resp:null,conferir:false};
+  const w=t.split(' '); if(w.length%2===0){ const h=w.length/2; const a=w.slice(0,h).join(' '), b=w.slice(h).join(' '); if(normKey(a)===normKey(b)) return {segurado:a,resp:a,conferir:false}; }
+  /* nomes diferentes: tenta achar um sufixo que se repete no começo (segurado X / resp Y onde Y começa igual não ajuda) → não inventa */
+  return {segurado:t,resp:null,conferir:true};
+}
+function exParse(txt){
+  const errors=[], warnings=[]; let m;
+  const lpMarks=[]; const lpRe=/(?:^|\n)\s*LP:\s*([^\n]+)/gi;
+  while((m=lpRe.exec(txt))){ lpMarks.push({idx:m.index, nome:m[1].trim(), k:emNormLp(m[1])}); }
+  const lpAt=(idx)=>{ let r=null; for(const l of lpMarks){ if(l.idx<idx) r=l; else break; } return r; };
+  /* (b) TAB: uma linha por apólice */
+  const tabLines=txt.split('\n').filter(l=>l.split('\t').length>=8 && /\d{9}/.test(l));
+  const records=[];
+  if(tabLines.length){
+    tabLines.forEach(l=>{ const c=l.split('\t').map(x=>x.trim()); const ids=(c[0].match(/\d{9}[A-Z]?/g)||[]); const prop=ids.find(x=>/[A-Z]$/.test(x))||null, apol=ids.find(x=>!/[A-Z]$/.test(x))||null;
+      const dates=l.match(/\d{2}\/\d{2}\/\d{4}/g)||[]; const money=l.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g)||[];
+      const st=(l.match(EX_STATUS)||[])[1]||null;
+      records.push({proposta:prop,apolice:apol,segurado:c[1]||'',resp_pagamento:c[2]||null,status_apolice:exNormStatus(st),dt_assinatura:dates[0]?atBrIsoEx(dates[0]):null,emissao:dates[1]?atBrIsoEx(dates[1]):null,motivo_cancelamento:null,motivo_uw:null,pa_sem_iof:money.length>=2?atBrNum(money[money.length-2]):null,afyc_projetado:money.length>=1?atBrNum(money[money.length-1]):null,lp:null,lp_nome_completo:null,nomes_conferir:false}); });
+  } else {
+    /* (a) texto corrido: mesma âncora do parser das pendências (proposta com letra + apólice de 9 dígitos) */
+    const tokRe=/(?<![\d.,A-Za-z])(\d{9}[A-Z]?)(?![\d.,A-Za-z])/g; const toks=[];
+    while((m=tokRe.exec(txt))) toks.push({tok:m[1], kind:emClassTok(m[1]), idx:m.index, end:m.index+m[1].length});
+    const marks=[];
+    toks.forEach(tk=>{ const cur=marks[marks.length-1];
+      if(cur&&!cur[tk.kind]&&txt.slice(cur.end,tk.idx).replace(/[\s\/]/g,'')===''){ cur[tk.kind]=tk.tok; cur.end=tk.end; return; }
+      marks.push({proposta:null,apolice:null,[tk.kind]:tk.tok,idx:tk.idx,end:tk.end}); });
+    if(!marks.length){ errors.push('Não encontrei números de proposta/apólice. Cole o relatório "Apólices Emitidas no Período" inteiro (ou as linhas do Excel).'); return {records:[],errors,warnings,totais:null}; }
+    const cutRe=/\n\s*(?:LP:|Total\s+(?:LP|MFB)\s*:)/i;
+    for(let i=0;i<marks.length;i++){
+      const mk=marks[i]; let bloco=txt.slice(mk.end, i+1<marks.length?marks[i+1].idx:txt.length);
+      const cut=bloco.search(cutRe); if(cut>=0) bloco=bloco.slice(0,cut);
+      const sm=bloco.match(EX_STATUS); if(!sm){ warnings.push('Sem status na proposta '+(mk.proposta||mk.apolice)+' — pulei.'); continue; }
+      const antes=bloco.slice(0,sm.index), depois=bloco.slice(sm.index+sm[0].length);
+      const dates=depois.match(/\d{2}\/\d{2}\/\d{4}/g)||[]; const money=depois.match(/\d{1,3}(?:\.\d{3})*,\d{2}/g)||[];
+      const nomes=exNomes(antes); const lp=lpAt(mk.idx);
+      /* o que sobra entre as datas e os valores é motivo (rejeição/cancelamento · decisão UW) */
+      let motivo=depois; dates.forEach(d=>{ motivo=motivo.replace(d,' '); }); money.forEach(v=>{ motivo=motivo.replace(v,' '); }); motivo=motivo.replace(/\s+/g,' ').trim();
+      records.push({proposta:mk.proposta,apolice:mk.apolice,segurado:nomes.segurado,resp_pagamento:nomes.resp,status_apolice:exNormStatus(sm[1]),
+        dt_assinatura:dates[0]?atBrIsoEx(dates[0]):null, emissao:dates[1]?atBrIsoEx(dates[1]):null,
+        motivo_cancelamento:motivo||null, motivo_uw:null,
+        pa_sem_iof:money.length>=2?atBrNum(money[money.length-2]):(money.length===1?atBrNum(money[0]):null), afyc_projetado:money.length>=2?atBrNum(money[money.length-1]):null,
+        lp:lp?lp.k:null, lp_nome_completo:lp?lp.nome:null, nomes_conferir:nomes.conferir});
+    }
+  }
+  /* rodapé: "Total LP: … \n 6 80.317,08 32.163,10" / "Total MFB: …" */
+  let totais=null; const tRe=/Total\s+(LP|MFB)\s*:[^\n]*\n\s*(\d+)\s+([\d.]+,\d{2})\s+([\d.]+,\d{2})/gi;
+  while((m=tRe.exec(txt))){ const t={n:+m[2], pa:atBrNum(m[3]), afyc:atBrNum(m[4])}; if(m[1].toUpperCase()==='MFB'||!totais) totais=t; }
+  const lido={n:records.length, pa:records.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc:records.reduce((s,r)=>s+(r.afyc_projetado||0),0)};
+  const diverge=!!(totais&&(totais.n!==lido.n||Math.abs(totais.pa-lido.pa)>0.05||Math.abs(totais.afyc-lido.afyc)>0.05));
+  if(diverge) warnings.push('O que li não bate com o rodapé do relatório.');
+  return {records,errors,warnings,totais,lido,diverge};
+}
+function atBrIsoEx(br){ const m=String(br||'').match(/(\d{2})\/(\d{2})\/(\d{4})/); return m?(m[3]+'-'+m[2]+'-'+m[1]):null; }
+
+/* ── colar → prévia → aplicar ───────────────────────────────────────────── */
+function exColar(){ atModal(`<h2>✅ Colar apólices emitidas</h2>
+   <div class="sub">Portal Prudential → <b>Ferramentas → UW e Emissão</b> → Tipo = <b>Apólices Emitidas no Período</b> → período → Filtrar → selecione o texto (ou copie do Excel) e cole aqui. Eu confiro contra o rodapé <b>Total</b>, caso a proposta pendente, entrego o negócio e ponho a apólice na base — cada linha com a sua caixa.</div>
+   <textarea id="ex_txt" style="min-height:200px;margin-top:8px" placeholder="Cole aqui o relatório…"></textarea>
+   <div id="ex_err" style="color:var(--verm);font-size:12px;margin-top:6px"></div>
+   <div style="display:flex;gap:10px;margin-top:14px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button>${EX_REMOTE?'':'<button class="btn btn-s" onclick="exExemplo()">Ver exemplo</button>'}<button class="btn btn-p" style="margin-left:auto" onclick="exProcessar()">Processar</button></div>`);
+  setTimeout(()=>{ const e=$('#ex_txt'); if(e) e.focus(); },50); }
+function exProcessar(){ const txt=($('#ex_txt')||{}).value||''; const err=$('#ex_err'); if(err) err.textContent='';
+  if(txt.trim().length<40){ if(err) err.textContent='Cole o relatório primeiro.'; return; }
+  try{ const p=exParse(txt); if(!p.records.length){ if(err) err.textContent=p.errors[0]||p.warnings[0]||'Não reconheci o formato.'; return; } exPreview(p); }
+  catch(e){ if(err) err.textContent='Erro ao ler: '+((e&&e.message)||e); console.error(e); } }
+/* o plano de cada linha: pendência que casa · negócio(s) no funil ainda não ganhos · apólice já na carteira */
+function exPlanoLinha(r){
+  const pend=EM.itens.find(x=>(r.proposta&&x.proposta===r.proposta)||(r.apolice&&x.apolice===r.apolice))||null;
+  const premio=r.pa_sem_iof?Math.round(r.pa_sem_iof/12*100)/100:0;
+  const venda=(r.status_apolice==='Ativa')?vendaPlano({segurado:r.segurado, celular:null, apolice:r.apolice, proposta:r.proposta, premio, premioEstimado:!!r.pa_sem_iof, origem:'emissao'}):null;
+  const negs=(venda&&venda.negocios)?venda.negocios.filter(n=>!funEhGanho(n)):[];
+  const ja=EX.itens.find(x=>exChave(x)===exChave(r))||null;
+  return {r,pend,venda,negs,ja,dup:!!(venda&&venda.dup)};
+}
+function exPreview(p){
+  const linhas=p.records.map(exPlanoLinha); _exPend={p,linhas};
+  const T=p.totais, L=p.lido;
+  const cab=p.diverge?`<div class="card" style="border-color:var(--verm);padding:10px 12px;margin-top:8px"><b>⛔ Não bate com o rodapé:</b> li ${L.n} apólice(s) · PA ${brl(L.pa)} · AFYC ${brl(L.afyc)}; o relatório diz ${T.n} · ${brl(T.pa)} · ${brl(T.afyc)}. Normalmente é texto cortado. Confira antes de aplicar.</div>`
+    :(T?`<div class="sub" style="margin-top:6px">✓ Bate com o rodapé: <b>${L.n}</b> apólice(s) · PA <b>${brl(L.pa)}</b> · AFYC <b>${brl(L.afyc)}</b>.</div>`:`<div class="sub" style="margin-top:6px">Li <b>${L.n}</b> apólice(s) · PA <b>${brl(L.pa)}</b> · AFYC <b>${brl(L.afyc)}</b> (sem rodapé pra conferir).</div>`);
+  const emis=p.records.map(r=>r.emissao).filter(Boolean).sort(); const ini=emis[0]||'', fim=emis[emis.length-1]||'';
+  const rows=linhas.map((l,i)=>{ const r=l.r; const ativa=r.status_apolice==='Ativa';
+    return `<tr>
+      <td style="padding:6px 8px"><b>${esc(atTitleC(r.segurado))}</b>${r.nomes_conferir?' <span class="badge b-amarelo" title="Segurado e responsável vieram colados; confira o nome">conferir nome</span>':''}<div style="font-size:11px;color:var(--muted)">${esc(r.proposta||'')} / ${esc(r.apolice||'')} · ${esc(r.lp||'')}</div></td>
+      <td><span class="badge ${ativa?'b-verde':'b-cinza'}">${esc(r.status_apolice||'?')}</span></td>
+      <td style="white-space:nowrap">${atFmtBR(r.dt_assinatura)}<div style="font-size:11px;color:var(--muted)">emit. ${atFmtBR(r.emissao)}</div></td>
+      <td style="text-align:right;white-space:nowrap">${r.pa_sem_iof!=null?brl(r.pa_sem_iof):'—'}<div style="font-size:11px;color:var(--muted)">AFYC ${r.afyc_projetado!=null?brl(r.afyc_projetado):'—'}</div></td>
+      <td>${l.pend?(l.pend.desfecho?'<span class="badge b-cinza">pendência já com desfecho</span>':`<label style="display:flex;gap:6px;align-items:center;min-height:44px"><input type="checkbox" data-exdesf="${i}" checked> emitida</label>`):'<span style="font-size:11px;color:var(--muted)">não estava nas pendentes</span>'}</td>
+      <td>${!ativa?'<span style="font-size:11px;color:var(--muted)">só Ativa entra</span>':l.dup?'<span class="badge b-verde">já na base</span>':`<label style="display:flex;gap:6px;align-items:center;min-height:44px"><input type="checkbox" data-excart="${i}" checked> apólice na carteira${l.venda&&l.venda.cliNovo?' <span class="badge b-amarelo">cliente novo</span>':''}</label>`}</td>
+      <td>${l.negs.length?l.negs.map(n=>`<label style="display:flex;gap:6px;align-items:center;min-height:44px"><input type="checkbox" data-exneg="${i}" data-neg="${esc(n.id)}" checked> entregar <b>${esc(n.nome)}</b> <span style="font-size:11px;color:var(--muted)">(${esc(ET_LABEL[n.etapa]||n.etapa)} → ${esc(ET_LABEL[funEtapaGanho(funilDe(n))]||funEtapaGanho(funilDe(n)))})</span></label>`).join(''):'<span style="font-size:11px;color:var(--muted)">sem negócio aberto no funil</span>'}</td>
+    </tr>`; }).join('');
+  atModal(`<h2>✅ Apólices emitidas — o que vai acontecer</h2>${cab}
+    <div class="sub" style="margin-top:4px">Período (emissão): <b>${atFmtBR(ini)}</b> a <b>${atFmtBR(fim)}</b>. Nada abaixo acontece sem o Aplicar; desmarque o que não quiser.</div>
+    <div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)"><th style="padding:6px 8px">Segurado</th><th>Status</th><th>Assinatura</th><th style="text-align:right">PA s/IOF</th><th>Pendência</th><th>Carteira</th><th>Funil</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="exColar()">↩ Colar de novo</button><button class="btn btn-p" style="margin-left:auto" onclick="exAplicarUI()">Aplicar</button></div>`);
+  const card=document.querySelector('#at-ov .lp-modal-card'); if(card){ card.style.maxWidth='min(1100px,96vw)'; card.style.width='min(1100px,96vw)'; }
+}
+async function exAplicarUI(){
+  const d=_exPend; if(!d) return; const origem=atHojeISO();
+  const ler=(sel)=>[...document.querySelectorAll(sel)];
+  const desf=new Set(ler('[data-exdesf]:checked').map(e=>+e.dataset.exdesf));
+  const cart=new Set(ler('[data-excart]:checked').map(e=>+e.dataset.excart));
+  const negs={}; ler('[data-exneg]:checked').forEach(e=>{ (negs[+e.dataset.exneg]=negs[+e.dataset.exneg]||[]).push(e.dataset.neg); });
+  const emis=d.p.records.map(r=>r.emissao).filter(Boolean).sort();
+  const st={novas:0,atualizadas:0,desfechos:0,apolices:0,clientes:0,entregues:0};
+  const upEx=[], upEm=[];
+  for(let i=0;i<d.linhas.length;i++){ const l=d.linhas[i], r=l.r;
+    /* 1 · a tabela de emitidas */
+    const rec=Object.assign({}, l.ja||{}, r, {origem_relatorio:origem, periodo_ini:emis[0]||null, periodo_fim:emis[emis.length-1]||null});
+    if(l.ja){ Object.assign(l.ja,rec); st.atualizadas++; upEx.push(l.ja); } else { EX.itens.push(rec); st.novas++; upEx.push(rec); }
+    /* 2 · desfecho da pendência */
+    if(l.pend&&!l.pend.desfecho&&desf.has(i)){ l.pend.desfecho='emitida'; l.pend.desfecho_em=r.emissao||origem; upEm.push(l.pend); st.desfechos++; }
+    /* 3 · carteira + funil (o mesmo vendaAplicar do Card Cliente) */
+    if(l.venda&&(cart.has(i)||(negs[i]||[]).length)){
+      const mover=(negs[i]||[]).map(id=>{ const n=S.contatos.find(x=>String(x.id)===String(id)); return n?{id:n.id, etapa:funEtapaGanho(funilDe(n))}:null; }).filter(Boolean);
+      const feito=await vendaAplicar(l.venda,{adicionar:cart.has(i), mover});
+      if(feito.apolice) st.apolices++; if(feito.clienteNovo) st.clientes++; st.entregues+=feito.movidos.length;
+    }
+  }
+  EX.carregadoEm=origem; exSalvarLocal(); if(upEm.length) emSalvarLocal();
+  impRegistrar('emitidas', origem, st);
+  let msg='';
+  if(EX_REMOTE){ try{ await exUpsertRemoto(upEx); if(upEm.length) await emUpsertRemoto(upEm); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('EX upsert',e); } }
+  else msg=' · só neste aparelho (faça login pra sincronizar)';
+  /* 4 · PLACED lê daqui */
+  const pl=plSincronizarEmitidas();
+  atClose(); render();
+  toast(`Emitidas: ${st.novas} nova(s), ${st.atualizadas} atualizada(s) · ${st.desfechos} pendência(s) emitida(s) · ${st.apolices} apólice(s) na base · ${st.entregues} negócio(s) entregue(s)${pl?` · PLACED: ${pl.meses} mês(es) de ${pl.lps} LP(s)`:''}${msg}`,true);
+}
+/* resumo pra tela de Pendências (o que emiti no período) */
+function exResumoHtml(){
+  const l=EX.itens.filter(r=>r.status_apolice==='Ativa'); if(!l.length) return '';
+  const mes=atHojeISO().slice(0,7); const noMes=l.filter(r=>String(r.emissao||'').slice(0,7)===mes);
+  const pa=noMes.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc=noMes.reduce((s,r)=>s+(r.afyc_projetado||0),0);
+  return `<div class="card" style="padding:12px 14px;margin-top:10px"><div style="font-weight:700">✅ Emitidas no mês <span style="font-weight:500;color:var(--muted);font-size:12px">· relatório de ${atFmtBR(EX.carregadoEm)}</span></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px"><div class="kpi"><div class="num">${noMes.length}</div><div class="lbl">apólices</div></div><div class="kpi"><div class="num">${brlCurto(pa)}</div><div class="lbl">PA s/ IOF</div></div><div class="kpi"><div class="num">${brlCurto(afyc)}</div><div class="lbl">AFYC projetado</div></div><div class="kpi"><div class="num">${l.length}</div><div class="lbl">emitidas no total</div></div></div></div>`;
+}
+/* PLACED: entregues por LP × mês de assinatura = apólices Ativas do relatório de emitidas.
+   Assinadas = entregues + pendentes ativas + não-entregues já lançadas (pend do PLACED) do mesmo mês.
+   Só mexe em mês que tem emitida; o que foi digitado à mão em outro mês fica. */
+function plSincronizarEmitidas(){
+  if(typeof PL==='undefined'||!PL||!PL.lps||!PL.lps.length) return null;
+  /* casa a LP do relatório com a linha do PLACED: pelo apelido (Daniel/Rebeca/Gustavo) ou pelo primeiro nome;
+     relatório sem "LP:" nenhum = a própria (Gustavo). LP desconhecida não entra em ninguém. */
+  const lpDe=(r)=>{ const k=r.lp||(r.lp_nome_completo?null:'Gustavo'); if(k){ const f=PL.lps.find(l=>emNormLp(l.nome)===k); if(f) return f; }
+    const pn=normKey(String(r.lp_nome_completo||'')).split(' ')[0]; return pn?(PL.lps.find(l=>normKey(l.nome).split(' ')[0]===pn)||null):null; };
+  const por={}; let meses=0, lps=new Set();
+  EX.itens.filter(r=>r.status_apolice==='Ativa'&&exMes(r)).forEach(r=>{ const lp=lpDe(r); if(!lp) return; const k=lp.id+'|'+exMes(r); por[k]=(por[k]||0)+1; });
+  Object.keys(por).forEach(k=>{ const [lpid,m]=k.split('|'); const e=por[k];
+    const pendMes=(EM.itens||[]).filter(x=>emAtivo(x)&&String(x.dt_assinatura||'').slice(0,7)===m&&(lpDe(x)||{}).id===lpid).length;
+    const naoEnt=(PL.pend||[]).filter(p=>!p.ok&&p.lp===lpid&&p.m===m).length;
+    const c=PL.meses[k]||{a:0,e:0}; c.e=e; c.a=Math.max(c.a||0, e+pendMes+naoEnt); c.src='emitidas'; PL.meses[k]=c; meses++; lps.add(lpid); });
+  if(meses){ PL_DIRTY=true; if(VIEW==='placed') plRender(); else { PL_DIRTY=false; plSalvar(); } }
+  return {meses, lps:lps.size};
+}
+/* exemplo INVENTADO no formato do relatório (nomes fictícios, números redondos) */
+const EX_EXEMPLO_TXT=`Agência: Exemplo
+MFB: LP Exemplo
+LP: LP Exemplo
+Proposta /
+Apólice Segurado Resp. Pagto. Status
+Apólice Dt.Assinatura Emissão
+000000101E /
+000000201
+CLIENTE
+ALFA
+EXEMPLO
+CLIENTE
+ALFA
+EXEMPLO
+Ativa 01/09/2026 04/09/2026 6.000,00 2.400,00
+000000102E /
+000000202
+CLIENTE
+BRAVO
+EXEMPLO
+CLIENTE
+BRAVO
+EXEMPLO
+Ativa 17/08/2026 02/09/2026 5.700,00 2.300,00
+000000103E /
+000000203
+CLIENTE
+CHARLIE
+EXEMPLO
+RESPONSAVEL
+OUTRO
+Ativa 10/08/2026 20/08/2026 7.500,00 2.900,00
+Total LP: LP Exemplo
+3 19.200,00 7.600,00
+UW e Emissão
+Apólices Emitidas no Período`;
+function exExemplo(){ atClose(); if(EX_REMOTE){ toast('Você está logado: o exemplo só existe no modo local',false); return; }
+  const p=exParse(EX_EXEMPLO_TXT); EX.itens=p.records.map(r=>Object.assign({id:'ex_'+r.apolice,origem_relatorio:atHojeISO()},r)); EX.carregadoEm=atHojeISO(); exSalvarLocal();
+  if(VIEW!=='lp-pendencias') irPara('lp-pendencias'); else render(); toast('Emitidas de exemplo carregadas (só neste aparelho)',true); }
+window.exColar=exColar; window.exProcessar=exProcessar; window.exAplicarUI=exAplicarUI; window.exExemplo=exExemplo;
+
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
    podemos selecionar o cliente (inclusive os novos) para ter a calculadora e
@@ -8704,7 +8940,8 @@ function viewLpPendencias(){
   if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1><div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; o Victor mantém o estado de cada caso.</div>
     <div class="card" style="text-align:center;padding:34px">Nenhuma proposta ainda. Cole o relatório de Propostas Pendentes pra montar a lista.<br><br>
       <button class="btn btn-p" onclick="emColarRelatorio()">📋 Colar relatório</button>
-      <button class="btn btn-ghost" onclick="emExemplo()" style="margin-left:8px">Ver exemplo</button></div>`; return; }
+      <button class="btn btn-s" onclick="exColar()" style="margin-left:8px">✅ Colar emitidas</button>
+      <button class="btn btn-ghost" onclick="emExemplo()" style="margin-left:8px">Ver exemplo</button></div>${exResumoHtml()}`; return; }
   const todosAtivos=EM.itens.filter(emAtivo);
   /* CARDS-SEGUEM-FILTRO (02/09): ele filtrou LP Gustavo e os cards continuaram
      somando a unidade inteira. Agora os cards seguem LP, contestação e busca;
@@ -8755,8 +8992,10 @@ function viewLpPendencias(){
       ${chip('','Todas')}${chip('critico','🔴 ≥'+EM_FAIXAS.critico+'d')}${chip('atencao','🟠 '+EM_FAIXAS.atencao+'–'+(EM_FAIXAS.critico-1))}${chip('normal','🔵 < '+EM_FAIXAS.atencao+'d')}
       <span style="flex:1"></span>
       <button class="btn btn-p btn-mini" onclick="emColarRelatorio()">📋 Colar relatório</button>
+      <button class="btn btn-s btn-mini" onclick="exColar()">✅ Colar emitidas</button>
       <button class="btn btn-s btn-mini" onclick="emExportar()">⬇︎ Exportar</button>
     </div>
+    ${exResumoHtml().replace('margin-top:10px','margin:0 0 12px')}
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
       <th style="padding:6px 8px">Dias</th><th>Proposta / Apólice</th><th>Segurado / Resp.</th><th>LP</th><th>Assinatura</th><th>AFYC</th><th>Contestação</th><th>Pendência</th><th>Bola com</th><th>Status</th></tr></thead><tbody>
     ${rows.length?rows.map(r=>{ const d=emDias(r,hoje)||0, fx=emFaixa(d);
@@ -10316,7 +10555,7 @@ function bnLpLabel(id){ const u=(S.users||[]).find(x=>x.id===(id||'gustavo')); r
      ⬆︎ Atualizar app = versão nova do código, com limpeza de cache e reload
    Enquanto roda, o botão vira "⏳ Sincronizando…" pra não parecer travado. */
 let _syncRodando=false;
-const BOOT_LOADERS=[lpCarregar,plCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar,emCarregar,soCarregar,bfCarregar,atScriptsCarregar];
+const BOOT_LOADERS=[lpCarregar,plCarregar,exCarregar,cartCarregar,lpcCarregar,perfilCarregar,bnDupsCarregar,dicCarregar,atCarregar,subCarregar,emCarregar,soCarregar,bfCarregar,atScriptsCarregar];
 async function sincronizarDados(){
   if(_syncRodando) return;
   _syncRodando=true;
@@ -12903,6 +13142,26 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('placed: faixas 87/92', plFaixa(92).k==='ok' && plFaixa(91.9).k==='med' && plFaixa(86.9).k==='bad');
         ok('placed: tela existe e está no hub', typeof viewPlaced==='function' && VIEWS_CONHECIDAS.includes('placed') && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='placed')));
       }catch(e){ falhas.push('placed: exceção '+(e&&e.message)); } finally{ PL=_pl0; PL_DIRTY=_d0; } }
+
+    /* EMITIDAS-V1 (04/09): o relatório "Apólices Emitidas no Período" fecha desfecho, funil e PLACED. */
+    { const p=exParse(EX_EXEMPLO_TXT);
+      ok('emitidas: parser lê as 3 apólices do exemplo', p.records.length===3 && p.records.every(r=>r.proposta&&r.apolice&&r.status_apolice==='Ativa'));
+      ok('emitidas: nome repetido vira segurado = responsável, sem "conferir"', p.records[0].segurado==='CLIENTE ALFA EXEMPLO' && p.records[0].resp_pagamento==='CLIENTE ALFA EXEMPLO' && !p.records[0].nomes_conferir);
+      ok('emitidas: nomes diferentes não são cortados no chute — viram "conferir nome"', p.records[2].nomes_conferir===true && /CHARLIE/.test(p.records[2].segurado));
+      ok('emitidas: assinatura, emissão, PA e AFYC lidos', p.records[0].dt_assinatura==='2026-09-01' && p.records[0].emissao==='2026-09-04' && p.records[0].pa_sem_iof===6000 && p.records[0].afyc_projetado===2400);
+      ok('emitidas: bate com o rodapé Total', p.totais && p.totais.n===3 && !p.diverge);
+      ok('emitidas: linha TAB (Excel) também entra', (()=>{ const q=exParse('000000109E / 000000209\tCLIENTE TAB\tCLIENTE TAB\tAtiva\t01/08/2026\t05/08/2026\t\t\t1.200,00\t480,00\n'); return q.records.length===1&&q.records[0].apolice==='000000209'&&q.records[0].pa_sem_iof===1200; })());
+      ok('emitidas: texto cortado diverge do rodapé e avisa', (()=>{ const q=exParse(EX_EXEMPLO_TXT.replace('Ativa 10/08/2026 20/08/2026 7.500,00 2.900,00','')); return q.diverge===true; })());
+      /* PLACED lê daqui: entregues por mês de assinatura, sem mexer no que não veio */
+      { const _pl0=PL, _ex0=EX.itens, _em0=EM.itens, _d0=PL_DIRTY; try{
+          PL=plNorm({lps:[{id:'g',nome:'Gustavo (própria)',inicio:'2025-09'}],meses:{'g|2026-07':{a:5,e:4}},pend:[]});
+          EX.itens=p.records.map(r=>Object.assign({},r,{lp:'Gustavo'})); EM.itens=[{proposta:'000000199E',dt_assinatura:'2026-08-05',lp:'Gustavo',desfecho:null}];
+          const r=plSincronizarEmitidas();
+          ok('placed: emitidas viram entregues por mês (ago/26 = 2, set/26 = 1)', r&&r.meses===2 && PL.meses['g|2026-08'].e===2 && PL.meses['g|2026-09'].e===1);
+          ok('placed: assinadas = entregues + pendentes do mês (ago/26 = 2 + 1)', PL.meses['g|2026-08'].a===3);
+          ok('placed: mês digitado à mão sem emitida não muda', PL.meses['g|2026-07'].a===5 && PL.meses['g|2026-07'].e===4);
+        }catch(e){ falhas.push('emitidas→placed: exceção '+(e&&e.message)); } finally{ PL=_pl0; EX.itens=_ex0; EM.itens=_em0; PL_DIRTY=_d0; } }
+    }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
