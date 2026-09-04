@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v5.3 · Vendas LP</title>
+<title>CRM SeguroComJucá · v5.4 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1232,7 +1232,7 @@
       <button class="tb-link tb-so-mob" onclick="lpkAbrir()" title="Buscar em tudo (⌘K / Ctrl+K)">🔍</button>
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
-      <span class="tag">PipeX · v5.3 · Vendas LP</span>
+      <span class="tag">PipeX · v5.4 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1254,7 +1254,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v5.3 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v5.4 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2195,7 +2195,7 @@ function viewInicio(){
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
     ${inicioAgoraHtml()}
     <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)">⌄ abrir tudo</button></div>
-    ${bNumeros}${bNn}${bBc}${bTa}${bReun}${bEv}${bLp}`;
+    ${mfBlocoHTML()}${bNumeros}${bNn}${bBc}${bTa}${bReun}${bEv}${bLp}`;
   iniBotaoPinta();
 }
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
@@ -7302,6 +7302,79 @@ function viewEmissaoDiaria(){
     </details>`;
 }
 window.edSetMes=edSetMes; window.edSetDias=edSetDias; window.edSetPlano=edSetPlano; window.viewEmissaoDiaria=viewEmissaoDiaria;
+
+
+/* ═══ RESUMO MF (04/09) — o "Resumo MF" do BI HUB-MFB, no Início ═════════════
+   Pedido dele: o painel é visual e ajuda a acompanhar os indicadores; as
+   lacunas de informação vão sendo trazidas. Fonte: emitidas (EX) por ano de
+   emissão + PLACED (leitura atual). O que o BI tem e o app AINDA não tem
+   aparece como chip cinza "sem fonte" — de propósito, pra ele ver a lacuna. */
+const MF={tab:'pa'};
+const MF_TABS=[['n','Apólices emitidas'],['pa','PA total'],['pam','PA médio'],['afyc','NAFYC total'],['afycm','NAFYC médio'],['prodpa','Prod. de PA'],['prod','Produtividade']];
+const MF_LACUNAS=[['CS Emit.','capital segurado'],['ISF Geral',''],['CS Médio',''],['LP Mês STA',''],['Captação',''],['Resilição',''],['Early Lapse',''],['PAV/PANCEC','']];
+function mfAno(){ return +atHojeISO().slice(0,4); }
+function mfPlanoAno(ano){ if(typeof PL==='undefined'||!PL) return 0; if(!PL.edPlanoAno||typeof PL.edPlanoAno!=='object') PL.edPlanoAno={}; return +(PL.edPlanoAno[ano]||0); }
+function mfSetPlanoAno(v){ const ano=mfAno(); if(typeof PL==='undefined'||!PL) return; if(!PL.edPlanoAno) PL.edPlanoAno={}; PL.edPlanoAno[ano]=Math.max(0,Math.round(atBrNum(v)||+v||0)); if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); render(); }
+function mfSetTab(t){ MF.tab=t; render(); }
+function mfPlacedAtual(){ try{ if(typeof PL==='undefined'||!PL||!PL.lps.length||!Object.keys(PL.meses||{}).length) return null; const J=plJanela(PL.cfg.leitura||PL_HOJE); const c=plAgrega(J.ms); return plPct(c.e,c.a); }catch(e){ return null; } }
+/* série mensal (12 posições) de um ano, por métrica, a partir das emitidas Ativas */
+function mfSerie(ano,tab){
+  const m=Array.from({length:12},()=>({n:0,pa:0,afyc:0,lps:new Set()}));
+  (EX.itens||[]).forEach(r=>{ if(r.status_apolice!=='Ativa') return; const e=String(r.emissao||''); if(+e.slice(0,4)!==ano) return; const i=+e.slice(5,7)-1; if(i<0||i>11) return;
+    m[i].n++; m[i].pa+=r.pa_sem_iof||0; m[i].afyc+=r.afyc_projetado||0; m[i].lps.add(edLpDe(r).id); });
+  return m.map(o=>{ const k=o.lps.size; return tab==='n'?o.n:tab==='pa'?o.pa:tab==='pam'?(o.n?o.pa/o.n:0):tab==='afyc'?o.afyc:tab==='afycm'?(o.n?o.afyc/o.n:0):tab==='prodpa'?(k?o.pa/k:0):(k?o.n/k:0); });
+}
+function mfDados(ano){
+  ano=ano||mfAno();
+  const l=(EX.itens||[]).filter(r=>r.status_apolice==='Ativa'&&+String(r.emissao||'').slice(0,4)===ano);
+  const n=l.length, pa=l.reduce((s,r)=>s+(r.pa_sem_iof||0),0), afyc=l.reduce((s,r)=>s+(r.afyc_projetado||0),0);
+  const lps=new Set(l.map(r=>edLpDe(r).id)).size;
+  return {ano,n,pa,afyc,paMedio:n?pa/n:0,afycMedio:n?afyc/n:0,lps,prod:lps?n/lps:0,prodPa:lps?pa/lps:0,plano:mfPlanoAno(ano),placed:mfPlacedAtual(),temDados:n>0};
+}
+function mfFmt(tab,v){ return tab==='n'||tab==='prod'?edN(v,tab==='prod'?1:0):brlCurto(v); }
+function mfGraficoHTML(ano,tab){
+  const A=mfSerie(ano,tab), B=mfSerie(ano-1,tab); const W=640,H=170,px=34,py=18;
+  const max=Math.max(1,...A,...B); const X=i=>px+i*((W-2*px)/11), Y=v=>H-py-(v/max)*(H-2*py-10);
+  const path=(S)=>S.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
+  const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const lab=(S,dy,cor)=>S.map((v,i)=>v?`<text x="${X(i)}" y="${Y(v)+dy}" font-size="9" text-anchor="middle" fill="${cor}">${esc(mfFmt(tab,v).replace('R$ ',''))}</text>`:'').join('');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+    <line x1="${px}" x2="${W-px}" y1="${H-py}" y2="${H-py}" stroke="#cbd5e1"></line>
+    <path d="${path(B)}" fill="none" stroke="#93c5fd" stroke-width="2"></path>${B.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="3" fill="#93c5fd"></circle>`).join('')}
+    <path d="${path(A)}" fill="none" stroke="#1d4ed8" stroke-width="2.5"></path>${A.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="3.5" fill="#1d4ed8"></circle>`).join('')}
+    ${lab(A,-7,'#1e3a8a')}
+    ${meses.map((m,i)=>`<text x="${X(i)}" y="${H-4}" font-size="9" text-anchor="middle" fill="var(--muted)">${m}</text>`).join('')}
+  </svg>
+  <div style="display:flex;gap:14px;font-size:11px;color:var(--muted)"><span><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:#1d4ed8"></span> Realizado ${ano}</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:#93c5fd"></span> Realizado ${ano-1}</span></div>`;
+}
+function mfGaugeHTML(real,plano){
+  const pct=plano>0?Math.min(1,real/plano):0; const R=54, C=Math.PI*R; const cor=pct>=1?'#0ca30c':pct>=.7?'#1d4ed8':'#f0a500';
+  return `<div style="display:flex;flex-direction:column;align-items:center;min-width:170px">
+    <svg viewBox="0 0 140 80" style="width:170px;height:auto"><path d="M16 70 A54 54 0 0 1 124 70" fill="none" stroke="#e5e7eb" stroke-width="14" stroke-linecap="round"></path>
+      ${pct>0?`<path d="M16 70 A54 54 0 0 1 124 70" fill="none" stroke="${cor}" stroke-width="14" stroke-linecap="round" stroke-dasharray="${(C*pct).toFixed(1)} ${C.toFixed(1)}"></path>`:''}
+      <text x="70" y="66" font-size="17" font-weight="700" text-anchor="middle" fill="var(--ink)">${esc(brlCurto(real).replace('R$ ',''))}</text></svg>
+    <div style="display:flex;justify-content:space-between;width:170px;font-size:10px;color:var(--muted)"><span>0</span><span>${plano?esc(brlCurto(plano).replace('R$ ','')):'plano?'}</span></div>
+    <label style="font-size:11px;color:var(--muted);margin-top:4px">plano do ano <input value="${plano?edN(plano):''}" placeholder="R$" inputmode="numeric" onchange="mfSetPlanoAno(this.value)" style="width:92px;min-height:36px;font-size:12px"></label></div>`;
+}
+function mfBlocoHTML(){
+  const d=mfDados(); const ano=d.ano;
+  const big=(l,v)=>`<div class="kpi" style="flex:1;min-width:120px;background:#1d4ed8;color:#fff;border:none;text-align:center"><div class="lbl" style="color:#dbeafe">${l}</div><div class="num" style="font-size:22px;color:#fff">${v}</div></div>`;
+  const mini=(l,v,sub)=>`<div class="kpi" style="flex:1;min-width:104px;padding:8px 10px;text-align:center"><div class="lbl">${l}</div><div class="num" style="font-size:16px">${v}</div>${sub?`<div style="font-size:10px;color:var(--muted)">${sub}</div>`:''}</div>`;
+  const lac=(l)=>`<div class="kpi" style="flex:1;min-width:96px;padding:8px 10px;text-align:center;background:#f3f4f6;border-style:dashed" title="O app ainda não tem a fonte deste número"><div class="lbl" style="color:#9ca3af">${l}</div><div class="num" style="font-size:14px;color:#9ca3af">sem fonte</div></div>`;
+  const resumo=d.temDados?`PA ${brlCurto(d.pa)} · ${d.n} apólice${d.n===1?'':'s'} · PA médio ${brlCurto(d.paMedio)}${d.placed!=null?' · Placed '+plF1(d.placed)+'%':''}`:'sem emitidas de '+ano+' no app';
+  const corpo=`
+    <div class="kpis" style="margin:0 0 10px">${big('PA Total '+ano,brlCurto(d.pa))}${big('Produtividade',edN(d.prod,1))}${big('Produtividade PA',brlCurto(d.prodPa))}${big('PA Médio',brlCurto(d.paMedio))}</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+      ${mfGaugeHTML(d.pa,d.plano)}
+      <div style="flex:1;min-width:240px"><div class="kpis" style="margin:0 0 8px">${mini('N emitidas',edN(d.n),'apólices Ativas')}${mini('NAFYC Total',brlCurto(d.afyc))}${mini('NAFYC Médio',brlCurto(d.afycMedio))}${mini('LPs c/ emissão',edN(d.lps))}${mini('Placed Atual %',d.placed!=null?plF1(d.placed)+'%':'—','leitura do PLACED')}</div>
+        <div class="kpis" style="margin:0">${MF_LACUNAS.map(l=>lac(l[0])).join('')}</div></div>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0 6px">${MF_TABS.map(t=>`<button class="btn btn-mini ${MF.tab===t[0]?'btn-p':'btn-s'}" style="min-height:36px" onclick="mfSetTab('${t[0]}')">${t[1]}</button>`).join('')}</div>
+    ${mfGraficoHTML(ano,MF.tab)}
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">Fonte: relatório "Apólices Emitidas no Período" colado no app (mês de emissão) + PLACED. ${(EX.itens||[]).length?'':'<button class="btn btn-s btn-mini" onclick="exColar()">✅ Colar emitidas</button>'} <button class="btn btn-ghost btn-mini" onclick="irPara('emissao-diaria')">Emissão Diária →</button></div>`;
+  return iniBloco('mf','Resumo MF',resumo,corpo);
+}
+window.mfSetTab=mfSetTab; window.mfSetPlanoAno=mfSetPlanoAno;
 
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
@@ -13398,6 +13471,22 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('juntar: cada par vira decisão "fundir" na fila com backup (dá pra desfazer)', BN.dups.length===2&&BN.dups.every(d=>d.decisao==='fundir'&&d._backup&&d.motivo==='juntado à mão no estoque'));
         ok('juntar: repetir não funde de novo', bnJuntar('j1',['j2'])===0);
       }catch(e){ falhas.push('juntar: exceção '+(e&&e.message)); } finally{ BN.contatos=_bn0; BN.dups=_d0; } }
+
+    /* RESUMO-MF-V1 (04/09) */
+    { const _ex0=EX.itens, _pl0=PL; try{
+        PL=plNorm({lps:[{id:'g',nome:'Gustavo (própria)',inicio:'2025-09'}],meses:{},pend:[],edPlanoAno:{[mfAno()]:780000}});
+        const A=mfAno();
+        EX.itens=[{apolice:'1',segurado:'A',status_apolice:'Ativa',emissao:A+'-04-10',pa_sem_iof:40000,afyc_projetado:16000,lp:'Gustavo'},
+                  {apolice:'2',segurado:'B',status_apolice:'Ativa',emissao:A+'-04-20',pa_sem_iof:20000,afyc_projetado:8000,lp:'Gustavo'},
+                  {apolice:'3',segurado:'C',status_apolice:'Anulada',emissao:A+'-05-01',pa_sem_iof:9000,afyc_projetado:1,lp:'Gustavo'},
+                  {apolice:'4',segurado:'D',status_apolice:'Ativa',emissao:(A-1)+'-04-01',pa_sem_iof:5000,afyc_projetado:2000,lp:'Gustavo'}];
+        const d=mfDados(A);
+        ok('resumo MF: PA total do ano só das Ativas do ano (60.000), N=2, PA médio 30.000', d.pa===60000&&d.n===2&&d.paMedio===30000&&d.afyc===24000);
+        ok('resumo MF: produtividade = N por LP com emissão (2,0) e prod. PA 60.000', d.lps===1&&d.prod===2&&d.prodPa===60000);
+        ok('resumo MF: plano do ano vem do PLACED (780.000)', d.plano===780000);
+        ok('resumo MF: série mensal do ano atual × anterior (abr = 60.000 vs 5.000)', mfSerie(A,'pa')[3]===60000&&mfSerie(A-1,'pa')[3]===5000&&mfSerie(A,'n')[4]===0);
+        ok('resumo MF: bloco está no Início com as lacunas visíveis', mfBlocoHTML().indexOf('Resumo MF')>=0&&mfBlocoHTML().indexOf('sem fonte')>=0);
+      }catch(e){ falhas.push('resumo MF: exceção '+(e&&e.message)); } finally{ EX.itens=_ex0; PL=_pl0; } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
