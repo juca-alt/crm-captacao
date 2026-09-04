@@ -4,6 +4,38 @@
 
 ---
 
+## 📸 Snapshot — 04/09/2026, tarde · **v0.49.0 NO AR** · PRs #122 → #125 mergeados com OK dele · LP Business conferido ao vivo
+
+**Estado em 30 s:** `main` = `0e6a793`+ (v0.49.0), Pages conferido por hash nos dois arquivos. ⚠️ A cadeia #113→#121 já tinha sido mergeada por outra sessão (main estava em v0.48.1) — este snapshot corrige o anterior. Tudo abaixo subiu com o OK explícito dele ("pode mergear" / "já manda no ar").
+
+### O que entrou hoje (Revisão de Proteção + CRM)
+- **#122** · mínimo do remanescente **por produto** (DT/TM 60 mil, TP 1 mi) · **MS com várias apólices** (origem + extras que emprestam opcionais) · **teto vinculado à básica da nova** (Invalidez 5×, Perda de Autonomia 2×, DG sem teto — confirmado na prévia real do Sylvio).
+- **#123** · "Doenças Graves MDL Opc 5-G" (DDMRG) tarifa como **Modular 2.0 (DIMR)**, não como o genérico (a linha "reduzia" 170→105; na prévia custa 238) · **o destino de cada apólice vive no Checkout** (fica · sai · origem da MS · empresta opcionais), uma escolha lida pela comparação A×B e pela MS; MS desligável.
+- **#124 · v0.49.0** · **módulo "Montagem de planos"** no hub Módulos: escolhe o cliente (funil, carteira ou novo) e abre a calculadora da Revisão já com ele (`?nome=&nasc=&sexo=&renda=&aba=prop&novo=1`) · **barra de baixo liga/desliga** + card "MS · apólice nova" · linha com teto mostra "fica na origem X".
+- **#125** · selos do motor depois do LP Business (abaixo).
+
+### LP Business ao vivo (app nativo `com.prudential.growsales`, controle de tela) — homem 41, Standard, IMC 25
+| cobertura | LP | motor | |
+|---|---|---|---|
+| Vida e Saúde 20 anos 100k | 284,04 | 284,04 | ✅ ao centavo |
+| Renda Hospitalar diária 100 · Quebra de Ossos 100k · Perda de Autonomia 100k | 8,30 · 32,23 · 10,22 | 8,27 · 32,11 · 10,18 | ✅ (0,4% = IOF?) |
+| **Temporário Decrescente 20a 100k** | **36,75** | 45,87 | ❌ motor +25% |
+| **Temporário 30a 100k** | **127,28** | 142,95 | ❌ +12% |
+| **Renda Familiar 30a renda 1.000** | **131,23** | 149,46 | ❌ +14% |
+DT/TM/FI viraram selo **divergente** (a MS avisa "confirme na prévia"); as 7 capturas ficam em `DATA.capturas_lp_2026_09_04`. Não dava pra conferir DG/Cirurgia/Funeral/Invalidez/AB no formulário simplificado. Registrado no Notion (Motor de tarifa + Playbook MS) e em `kb_regras_negocio` MS-005/MS-007.
+
+### Lições
+- **#55** — constante "de exemplo" virando regra (1 mi do TP como piso de todo temporário). Limite vem do catálogo.
+- **#56** — nome do espelho ≠ nome do catálogo ("MDL" × "Modular"): tabela de nomes precisa dos apelidos que o relatório usa, e o selo *planilha* tem que aparecer na linha.
+- **#57** — "já tá tudo no ar?" não se responde de cabeça: conferir `gh pr list` + hash do Pages (hoje a resposta era "não, faltava o #123").
+
+### Falta dele / próximo
+- Rodar o Sylvio no ar com "Atualizar app"; no Checkout marcar 001685973 como origem e 001687182 como "empresta opcionais".
+- Próxima rodada no LP Business: cotação **completa** por contato (DG, Cirurgia, Funeral, Invalidez, AB) e recalibrar DT/TM/FI.
+- Continuam abertos: migration `lp_perfis_nome_ativo`, 3 textos de cobrança, CPF/extensão, config-funil <44px.
+
+---
+
 ## 📸 Snapshot — 04/09/2026 · **Revisão de Proteção · MS: o mínimo do remanescente é o do PRODUTO que fica** (PR #122, independente da cadeia)
 
 Caso Sylvio (origem **Temporário Decrescente**): a triagem da Mudança de Seguro comparava o remanescente com **1.000.000 fixo** e mandava pro DOC0013133 sem precisar. O piso de 1 mi é só do Temporário Preferencial; Temporário e Decrescente têm **60.000** (`csmin` do catálogo). `msMinProduto()` lê o catálogo e o teste diz o nome do produto; fora do catálogo = aviso âmbar. `msEhTemporario` reconhece TP/TM/DT pela família. `selfTest` +5 invariantes (11/11), provados quebrando (3 falhas com o fixo de volta). Regra corrigida no **Notion (Playbook MS)** e em **`kb_regras_negocio` MS-005**. **✅ MERGEADO com OK dele 04/09 — `main 4d04b26`, Pages servindo `revisao-protecao.html` byte a byte (sha `ac90db36b711`). Worktree `crm-wt-rp` removido.**
