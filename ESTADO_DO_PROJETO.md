@@ -4,6 +4,15 @@
 
 ---
 
+## 📸 Snapshot — 04/09/2026 · **Revisão de Proteção · MS: o mínimo do remanescente é o do PRODUTO que fica** (PR #122, independente da cadeia)
+
+Caso Sylvio (origem **Temporário Decrescente**): a triagem da Mudança de Seguro comparava o remanescente com **1.000.000 fixo** e mandava pro DOC0013133 sem precisar. O piso de 1 mi é só do Temporário Preferencial; Temporário e Decrescente têm **60.000** (`csmin` do catálogo). `msMinProduto()` lê o catálogo e o teste diz o nome do produto; fora do catálogo = aviso âmbar. `msEhTemporario` reconhece TP/TM/DT pela família. `selfTest` +5 invariantes (11/11), provados quebrando (3 falhas com o fixo de volta). Regra corrigida no **Notion (Playbook MS)** e em **`kb_regras_negocio` MS-005**. Branch `ms-minimo-produto`, worktree `crm-wt-rp`. **Aguarda OK dele.**
+
+### Lição
+- **#55 — Constante "de exemplo" virando regra.** O 1 mi era o exemplo do playbook (TP) e ficou como piso de todo temporário. *Regra:* limite de produto vem do catálogo, nunca de literal no código.
+
+---
+
 ## 📸 Snapshot — 03/09/2026, fechamento · **v0.45.0 + PR #121** · o portão rodou de ponta a ponta como UM comando; nada da cadeia foi mergeado
 
 **Estado em 30 s:** `main` = `d37b628` / **v0.42.1 no ar** (conferido pelo CONTEÚDO servido: sha `e2701bbcc925` do Pages = `main:vendas.html`, byte a byte). **#113 → #120 seguem todos ABERTOS** — ele não mergeou nada. Dos 5 itens do prompt dele, só o 2 (portão) era destravável; os outros 4 continuam presos nele (merge, migration, textos, CPF/extensão). Cadeia agora: **#113 → #114 → #115 → #116 → #117 → #119 → #120 → #121**.
