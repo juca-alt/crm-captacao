@@ -12,7 +12,7 @@
 - **#122** · mínimo do remanescente **por produto** (DT/TM 60 mil, TP 1 mi) · **MS com várias apólices** (origem + extras que emprestam opcionais) · **teto vinculado à básica da nova** (Invalidez 5×, Perda de Autonomia 2×, DG sem teto — confirmado na prévia real do Sylvio).
 - **#123** · "Doenças Graves MDL Opc 5-G" (DDMRG) tarifa como **Modular 2.0 (DIMR)**, não como o genérico (a linha "reduzia" 170→105; na prévia custa 238) · **o destino de cada apólice vive no Checkout** (fica · sai · origem da MS · empresta opcionais), uma escolha lida pela comparação A×B e pela MS; MS desligável.
 - **#124 · v0.49.0** · **módulo "Montagem de planos"** no hub Módulos: escolhe o cliente (funil, carteira ou novo) e abre a calculadora da Revisão já com ele (`?nome=&nasc=&sexo=&renda=&aba=prop&novo=1`) · **barra de baixo liga/desliga** + card "MS · apólice nova" · linha com teto mostra "fica na origem X".
-- **#125** · selos do motor depois do LP Business (abaixo).
+- **#125** · selos do motor depois do LP Business (abaixo) — ✅ mergeado, `main b996b36`.
 
 ### LP Business ao vivo (app nativo `com.prudential.growsales`, controle de tela) — homem 41, Standard, IMC 25
 | cobertura | LP | motor | |
