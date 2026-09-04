@@ -632,6 +632,10 @@ body.cmp-limpa .comp-row .barw{display:none}
 .ab-apol .sw button{border:1px solid var(--axis);background:var(--surface);border-radius:999px;
   padding:4px 11px;font-size:.74rem;font-weight:700;cursor:pointer;color:var(--ink2)}
 .ab-apol .sw button.on.fica{background:var(--verde);border-color:var(--verde);color:#fff}
+.ab-apol .sw button.on.ms{background:var(--azul);border-color:var(--azul);color:#fff}
+.ck-dest .ab-apol .sw{flex-wrap:wrap}
+.ck-dest .ab-apol .sw button{min-height:44px}
+.ab-apols .ab-link{font-size:.76rem;font-weight:700;color:var(--azul);text-decoration:none}
 .ab-apol .sw button.on.sai{background:var(--crit);border-color:var(--crit);color:#fff}
 .ab-apol.sai .nm b{text-decoration:line-through;color:var(--ink2)}
 .ab-resumo{font-size:.78rem;color:var(--ink2);margin-top:4px}
@@ -1247,6 +1251,7 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
         <span class="right mini" id="ckResumo"></span>
       </div>
     </div>
+    <div id="ckDestino"></div>
     <div id="ckLista"></div>
     <div class="card">
       <h2><span class="ico">↗</span>Gerar</h2>
@@ -1694,11 +1699,16 @@ function selfTest(){
     total++;
     if (typeof msEhTemporario === 'function' && msEhTemporario({cod:'DT20M', nome:'Temporário Decrescente'})) ok++;
     else bad.push('MS · Temporário Decrescente tem que contar como principal temporário');
+    /* o nome que o espelho traz é "Doenças Graves MDL Opc 5-G" (código DDMRG) = Modular 2.0 (DIMR).
+       Caía no genérico DDR e a MS "reduzia" o prêmio (105,70 no lugar dos 238,09 da prévia real). */
+    total++;
+    if (typeof famDeNome === 'function' && famDeNome('Doenças Graves MDL Opc 5-G') === 'DIMR') ok++;
+    else bad.push('DG · "Doenças Graves MDL Opc 5-G" tem que ser Modular 2.0 (DIMR), deu ' + famDeNome('Doenças Graves MDL Opc 5-G'));
   }
   /* MS · várias apólices no processo + teto vinculado à básica da nova (caso Sylvio, 04/09).
      Roda em cima de um estado inventado e devolve o estado real depois. */
   if (typeof msCalc === 'function' && typeof state !== 'undefined'){
-    const guard = JSON.stringify({hoje:state.hoje, ms:state.ms, cliente:state.cliente});
+    const guard = JSON.stringify({hoje:state.hoje, ms:state.ms, cliente:state.cliente, ui:state.ui});
     try{
       state.cliente = Object.assign({}, state.cliente, {idade:45, sexo:'M'});
       state.hoje = Object.assign({}, state.hoje, {apolices:[
@@ -1722,8 +1732,18 @@ function selfTest(){
       chk('MS teto · Doenças Graves NÃO tem teto na MS (migra 288.604,45 com básica de 70.000)', li('t-dg') && !li('t-dg').tetoAplicado);
       chk('MS multi · o que fica é por apólice (A1 e A2)', R.origPor && R.origPor.length === 2 && R.origPor.every(o => o.v > 0));
       chk('MS multi · apólice fora do processo continua fora', R.outrasAp.length === 0);
+    /* destino por apólice (Checkout) — uma escolha, duas máquinas lendo */
+    state.ui = Object.assign({}, state.ui, {abApol:{}});
+    aplicarDestino('A1','ms-origem'); aplicarDestino('A2','ms-extra');
+    chk('Destino · origem da MS e extra lidos de volta', abDestino('A1')==='ms-origem' && abDestino('A2')==='ms-extra' && !state.ms.off);
+    aplicarDestino('A2','sai');
+    chk('Destino · "sai" tira a apólice da MS e a comparação A×B vê "sai"', abDestino('A2')==='sai' && !msExtras().includes('A2') && abApolEstado('A2')==='sai');
+    aplicarDestino('A1','fica');
+    chk('Destino · sem origem a MS desliga (msCalc devolve null)', state.ms.off===true && msCalc()===null && abDestino('A1')==='fica');
+    aplicarDestino('A1','ms-origem');
+    chk('Destino · escolher origem religa a MS', state.ms.off===false && !!msCalc());
     }catch(e){ total++; bad.push('MS multi · exceção no cálculo: ' + (e && e.message)); }
-    finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; }
+    finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; state.ui = g.ui; }
   }
   return {ok, total, bad};
 }
@@ -4473,25 +4493,87 @@ window.setAbApol = (num, v) => {
 };
 window.setAbVisao = v => { state.ui.abVisao = v; save(); render(); };
 function abVisao(){ return (state.ui && state.ui.abVisao) === 'foco' ? 'foco' : 'global'; }
+/* ═══════ DESTINO_V1 (04/09) · o destino de cada apólice vive no CHECKOUT ═══════
+   Pedido dele: "o quadro como fica faz mais sentido ir pro checkout, aí o checkout
+   considera tudo e eu seleciono o que vai ser MS, o que vai ser plano novo, se vai
+   ser só plano ou nenhum". Uma escolha só por apólice, quatro destinos, e as duas
+   máquinas (comparação A×B e Mudança de Seguro) leem dela:
+     fica       → nada muda nessa apólice
+     sai        → substituída pelo plano novo (a comparação A×B usa isso)
+     ms-origem  → o temporário dela vira o vitalício da apólice nova (state.ms.origem)
+     ms-extra   → ela empresta opcionais à MS (state.ms.extras)
+   Nenhuma apólice como origem = MS DESLIGADA (state.ms.off): a etapa 4 diz isso
+   em vez de escolher uma origem sozinha. */
+const DESTINOS = [['fica','fica como está','fica'],['sai','sai · plano novo','sai'],
+                  ['ms-origem','origem da MS','ms'],['ms-extra','empresta opcionais à MS','ms']];
+function abDestino(num){
+  num = String(num||'');
+  if (!(state.ms && state.ms.off)){
+    if (String((state.ms||{}).origem||'') === num && num) return 'ms-origem';
+    if (typeof msExtras === 'function' && msExtras().includes(num)) return 'ms-extra';
+  }
+  return abApolEstado(num);
+}
+function aplicarDestino(num, v){
+  num = String(num||'');
+  if (!state.ui.abApol) state.ui.abApol = {};
+  if (!state.ms) state.ms = {};
+  const ex = (typeof msExtras === 'function' ? msExtras() : []).filter(x => x !== num);
+  state.ms.extras = ex;
+  if (String(state.ms.origem||'') === num) state.ms.origem = '';
+  state.ui.abApol[num] = (v === 'sai') ? 'sai' : 'fica';
+  if (v === 'ms-origem'){ state.ms.origem = num; state.ms.off = false; }
+  else if (v === 'ms-extra'){ state.ms.extras = ex.concat([num]); state.ms.off = false; }
+  /* sem origem não há MS: desliga em vez de a etapa 4 escolher uma sozinha */
+  if (!state.ms.origem) { state.ms.off = true; }
+}
+window.setDestino = (num, v) => { aplicarDestino(num, v); save(); render(); };
+window.irCheckout = () => { state.ui.aba = 'checkout'; save(); render(); };
+function destinoRotulo(v){ const d = DESTINOS.find(x => x[0] === v); return d ? d[1] : v; }
 function abApolHTML(){
   const aps = state.hoje.apolices || [];
   if (aps.length < 2) return '';
   return `<div class="ab-apols no-print so-consultor">
-    <div class="mini" style="font-weight:800">O QUE ACONTECE COM CADA APÓLICE</div>
+    <div class="mini" style="font-weight:800">O QUE ACONTECE COM CADA APÓLICE <a class="ab-link" href="#" onclick="irCheckout();return false" style="margin-left:8px">ajustar no Checkout →</a></div>
     ${aps.map(a => {
-      const est = abApolEstado(a.num);
+      const d = abDestino(a.num), cls = (DESTINOS.find(x => x[0] === d) || [])[2] || 'fica';
       const cs = (a.cob||[]).reduce((t,x) => t + (+x.cap||0), 0);
-      const vit = (a.cob||[]).some(x => x.grupo === 'MQC_VIT');
-      return `<div class="ab-apol ${est}">
+      return `<div class="ab-apol ${cls}">
         <div class="nm"><b>Apólice ${esc(a.num||'—')}</b>
-          <small>${fmt0(cs)} em capital · ${(a.cob||[]).length} cobertura(s)${vit?' · tem vitalício':' · só temporário'}</small></div>
-        <div class="sw">
-          <button class="fica${est==='fica'?' on':''}" onclick="setAbApol('${esc(a.num)}','fica')">fica como está</button>
-          <button class="sai${est==='sai'?' on':''}" onclick="setAbApol('${esc(a.num)}','sai')">sai · substituída</button>
-        </div></div>`;
+          <small>${fmt0(cs)} em capital · ${(a.cob||[]).length} cobertura(s)</small></div>
+        <div class="sw"><button class="${cls} on" onclick="irCheckout()" title="A escolha é feita no Checkout">${esc(destinoRotulo(d))}</button></div></div>`;
     }).join('')}
-    <div class="ab-resumo">Marque o que sai. A comparação usa exatamente essa escolha.</div>
+    <div class="ab-resumo">A comparação usa exatamente essa escolha — ela é feita no Checkout, junto com o que vai para o cliente.</div>
   </div>`;
+}
+function ckDestinoHTML(){
+  const aps = state.hoje.apolices || [];
+  if (!aps.length) return '';
+  const cen = (typeof abCen === 'function') ? abCen() : null;
+  const R = (typeof msCalc === 'function') ? msCalc() : null;
+  const saem = aps.filter(a => abDestino(a.num) === 'sai').length;
+  const resumo = [
+    saem ? `<b>Plano novo</b>: substitui ${saem} apólice(s)${cen ? ' · cenário <b>'+esc(cen.nome)+'</b> a '+'R$ '+msBRL(totalCen(cen))+'/mês' : ' · <i>nenhum cenário montado na etapa 5</i>'}` : `<b>Plano novo</b>: nenhuma apólice sai${cen ? ' (o cenário <b>'+esc(cen.nome)+'</b> entra como acréscimo)' : ''}`,
+    (state.ms && state.ms.off) || !R ? `<b>Mudança de Seguro</b>: desligada — marque uma apólice como <i>origem da MS</i> para ligar`
+      : `<b>Mudança de Seguro</b>: apólice nova <b>${esc(R.P.n)}</b> a ${'R$ '+msBRL(R.nova*(1+MS_IOF))}/mês, ${R.aps.length} apólice(s) no processo · ${R.linhas.filter(l=>l.on).length} cobertura(s) migrando`
+  ];
+  return `<div class="card ck-dest">
+    <h2 style="font-size:.86rem">O destino de cada apólice</h2>
+    <p class="sub">Uma escolha por apólice. A comparação "como é hoje × como fica" e a Mudança de Seguro leem daqui.</p>
+    <div class="ab-apols" style="margin-top:6px">
+    ${aps.map(a => {
+      const d = abDestino(a.num);
+      const cs = (a.cob||[]).reduce((t,x) => t + (+x.cap||0), 0);
+      const temp = (a.cob||[]).some(x => typeof msEhTemporario === 'function' && msEhTemporario(x));
+      return `<div class="ab-apol ${(DESTINOS.find(x=>x[0]===d)||[])[2]||'fica'}">
+        <div class="nm"><b>Apólice ${esc(a.num||'—')}</b>
+          <small>${fmt0(cs)} em capital · ${(a.cob||[]).length} cobertura(s)${temp?' · tem temporário':' · sem temporário'}</small></div>
+        <div class="sw">${DESTINOS.map(([v,rot,cls]) => {
+          const off = (v === 'ms-origem' && !temp);
+          return `<button class="${cls}${d===v?' on':''}" ${off?'disabled title="Sem temporário não há o que virar vitalício"':''} onclick="setDestino('${esc(a.num)}','${v}')">${esc(rot)}</button>`; }).join('')}</div></div>`;
+    }).join('')}
+    <div class="ab-resumo">${resumo.join('<br>')}</div>
+    </div></div>`;
 }
 function abDados(){
   const cen = abCen(); if (!cen) return null;
@@ -6077,6 +6159,7 @@ function msMeses(iso){
 
 /* ---------- o cálculo ---------- */
 function msCalc(){
+  if(state.ms && state.ms.off) return null;   /* desligada no Checkout */
   const or=msOrigem();
   if(!or) return null;
   const P=MS_PRODS[state.ms.prod]||MS_PRODS.WV20;
@@ -6427,15 +6510,20 @@ function msRenderFech(R){
 function renderMS(){
   const sel=$('msOrigem'); if(!sel) return;   /* pane ainda não existe */
   const aps=msApolices();
-  sel.innerHTML = aps.length ? aps.map(a=>`<option value="${esc(a.num||'')}">${esc(a.num||'(sem número)')}</option>`).join('')
+  sel.innerHTML = aps.length ? ((state.ms&&state.ms.off)?'<option value="">— escolher a origem —</option>':'') + aps.map(a=>`<option value="${esc(a.num||'')}">${esc(a.num||'(sem número)')}</option>`).join('')
                              : '<option value="">— nenhuma apólice na etapa 2 —</option>';
   const pr=$('msProd');
   if(pr) pr.innerHTML=Object.entries(MS_PRODS).map(([k,v])=>`<option value="${k}">${esc(v.n)}</option>`).join('');
   const R=msCalc();
   if(!R){
+    /* mesmo desligada, o select de origem tem que RECEBER: escolher aqui religa */
+    if(sel && !sel.dataset.on){ sel.dataset.on='1'; sel.onchange=()=>{ aplicarDestino(sel.value,'ms-origem'); save(); render(); }; }
+    if(sel && state.ms && state.ms.off) sel.value='';
     ['msSemaforo','msTriagem','msTabMig','msAvisos','msTiles','msTabApol','msComparador','msRegras','msFechamento']
       .forEach(id=>{ const e=$(id); if(e) e.innerHTML=''; });
-    const sm=$('msSemaforo'); if(sm) sm.innerHTML=`<div class="semaf sf-warn"><span class="big">▲</span><div>Sem apólice para analisar<br><span style="font-weight:500;font-size:.76rem">Lance as apólices na etapa 2 — a Mudança de Seguro lê de lá, não redigita.</span></div></div>`;
+    const sm=$('msSemaforo'); if(sm) sm.innerHTML = (state.ms&&state.ms.off&&aps.length)
+      ? `<div class="semaf sf-warn"><span class="big">▲</span><div>Mudança de Seguro desligada<br><span style="font-weight:500;font-size:.76rem">No <a href="#" onclick="irCheckout();return false">Checkout</a>, marque uma apólice como <b>origem da MS</b> — ou escolha a origem aqui em cima.</span></div></div>`
+      : `<div class="semaf sf-warn"><span class="big">▲</span><div>Sem apólice para analisar<br><span style="font-weight:500;font-size:.76rem">Lance as apólices na etapa 2 — a Mudança de Seguro lê de lá, não redigita.</span></div></div>`;
     return;
   }
   if(!state.ms.origem) state.ms.origem=R.or.num||'';
@@ -6594,10 +6682,10 @@ function msLiga(){
      onchange (nao input) de proposito: e a convencao dos outros campos deste
      arquivo e evita re-renderizar o painel a cada tecla. */
   const lig=(el,fn)=>{ if(el) el.onchange=()=>{ fn(el); save(); renderMS(); }; };
-  lig($('msOrigem'), el=>{ state.ms.origem=el.value; state.ms.extras=msExtras().filter(n=>n!==String(el.value)); });
+  lig($('msOrigem'), el=>{ state.ms.origem=el.value; state.ms.off=false; state.ms.extras=msExtras().filter(n=>n!==String(el.value)); if(state.ui.abApol) state.ui.abApol[String(el.value)]='fica'; });
   document.querySelectorAll('[data-msextra]').forEach(el=>el.onchange=()=>{
     const n=String(el.dataset.msextra), cur=msExtras().filter(x=>x!==n);
-    state.ms.extras = el.checked ? cur.concat([n]) : cur; save(); renderMS();
+    state.ms.extras = el.checked ? cur.concat([n]) : cur; state.ms.off=false; if(el.checked&&state.ui.abApol) state.ui.abApol[n]='fica'; save(); renderMS();
   });
   lig($('msProd'),   el=>{ state.ms.prod=MS_PRODS[el.value]?el.value:'WV20'; });
   const setCsVit=v=>{ const R0=msCalc(), teto=(R0&&R0.principal)?(R0.principal.cap||0):Infinity;
@@ -6653,6 +6741,7 @@ function ckPreset(p){
 }
 function renderCheckout(){
   const box=$('ckLista'); if(!box) return;
+  const dst=$('ckDestino'); if(dst) dst.innerHTML=ckDestinoHTML();
   let ligados=0, total=0;
   box.innerHTML = CK_GRUPOS.map(([nome,chaves])=>{
     const itens=chaves.filter(ckExiste);
@@ -7422,7 +7511,7 @@ const NOME2FAM = [
   [/vida inteira.*idades especiais|idades especiais/i,'WS'], [/vida inteira/i,'WL'],
   [/tempor[áa]rio preferencial/i,'TP'], [/tempor[áa]rio decrescente/i,'DT'], [/tempor[áa]rio/i,'TM'],
   [/renda familiar/i,'FI'], [/renda hospitalar/i,'HC'],
-  [/doen[çc]as graves modular/i,'DD3M'], [/doen[çc]as graves plus/i,'DDP'], [/doen[çc]as graves ampliada/i,'DIMR'], [/doen[çc]as graves/i,'DDR'],
+  [/doen[çc]as graves mdl(?!.*\bexc\b)|doen[çc]as graves modular 2/i,'DIMR'], [/doen[çc]as graves modular/i,'DD3M'], [/doen[çc]as graves plus/i,'DDP'], [/doen[çc]as graves ampliada/i,'DIMR'], [/doen[çc]as graves/i,'DDR'],
   [/funeral familiar iii|funeral.*plus/i,'AFP'], [/funeral familiar ii/i,'AFF'], [/funeral familiar/i,'AFC'], [/funeral/i,'AF'],
   [/morte acidental/i,'AB'], [/invalidez total e parcial|invalidez acidental/i,'PI'], [/invalidez parcial/i,'PD'],
   [/perda da? autonomia/i,'PA'], [/cirurgia ampliada/i,'CIA'], [/cirurgia b[áa]sica|cirurgias/i,'CIB'],
