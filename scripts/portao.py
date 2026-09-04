@@ -20,7 +20,7 @@ PAGES = 'https://juca-alt.github.io/crm-captacao/vendas.html'
 RESULTADO = {}
 
 def versao(txt):
-    m = re.search(r'<title>[^<]*?(v\d+\.\d+\.\d+)', txt)
+    m = re.search(r'<title>[^<]*?(v\d+\.\d+(?:\.\d+)?)', txt)
     return m.group(1) if m else '?'
 
 def servido():
