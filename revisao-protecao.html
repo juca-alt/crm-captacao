@@ -1270,9 +1270,10 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
         <span class="blk-cx">▾</span></div>
       <div class="blk-b">
         <div class="grid g2" style="margin-bottom:12px">
-          <div><span class="lbl">Apólice de origem</span><select id="msOrigem"></select></div>
+          <div><span class="lbl">Apólice de origem (o temporário que vira vitalício)</span><select id="msOrigem"></select></div>
           <div><span class="lbl">Produto vitalício da apólice nova</span><select id="msProd"></select></div>
         </div>
+        <div id="msExtras" class="so-consultor" style="margin:-4px 0 12px"></div>
         <div id="msSemaforo"></div>
         <div id="msTriagem" style="margin-top:14px"></div>
       </div>
@@ -1677,7 +1678,54 @@ function selfTest(){
     if (r && r.ok && Math.abs(r.mensal - c.esperado_mensal) <= 0.02) ok++;
     else bad.push(c.desc+': '+(r && r.mensal != null ? r.mensal.toFixed(2) : 'erro')+' ≠ '+c.esperado_mensal);
   });
-  return {ok, total:(D.capturas||[]).length, bad};
+  /* MS · o mínimo do remanescente é o do PRODUTO que fica, lido do catálogo (erro do caso Sylvio:
+     1e6 fixo mandava o Temporário Decrescente pro DOC0013133 sem precisar). */
+  let total = (D.capturas||[]).length;
+  if (typeof msMinProduto === 'function'){
+    [ ['MS mínimo · Temporário Decrescente = 60.000', {cod:'DT20M', nome:'Temporário Decrescente'}, 60000],
+      ['MS mínimo · Temporário = 60.000',             {cod:'TM10M', nome:'Temporário'},             60000],
+      ['MS mínimo · Temporário Preferencial = 1 mi', {cod:'TP20M', nome:'Temporário Preferencial'}, 1000000],
+      ['MS mínimo · produto desconhecido = null',    {cod:'ZZ',    nome:'coisa desconhecida'},      null]
+    ].forEach(([desc, c, esperado]) => {
+      total++;
+      const m = msMinProduto(c).min;
+      if (m === esperado) ok++; else bad.push(desc+': deu '+m);
+    });
+    total++;
+    if (typeof msEhTemporario === 'function' && msEhTemporario({cod:'DT20M', nome:'Temporário Decrescente'})) ok++;
+    else bad.push('MS · Temporário Decrescente tem que contar como principal temporário');
+  }
+  /* MS · várias apólices no processo + teto vinculado à básica da nova (caso Sylvio, 04/09).
+     Roda em cima de um estado inventado e devolve o estado real depois. */
+  if (typeof msCalc === 'function' && typeof state !== 'undefined'){
+    const guard = JSON.stringify({hoje:state.hoje, ms:state.ms, cliente:state.cliente});
+    try{
+      state.cliente = Object.assign({}, state.cliente, {idade:45, sexo:'M'});
+      state.hoje = Object.assign({}, state.hoje, {apolices:[
+        {num:'A1', emissao:'2024-03-12', per:'mes', cob:[
+          {id:'t-dt', cod:'DT25G', nome:'Temporário Decrescente', cap:265516.09, pre:95.06, classe:'Standard'},
+          {id:'t-pd', cod:'PD05G', nome:'Invalidez Acidental',    cap:227208.91, pre:10.23, classe:'Standard'},
+          {id:'t-pa', cod:'PA05G', nome:'Perda da Autonomia',     cap:288604.45, pre:23.52, classe:'Standard'}]},
+        {num:'A2', emissao:'2024-03-08', per:'ano', cob:[
+          {id:'t-wv', cod:'WV10G', nome:'Vida e Saúde', cap:218639.74, pre:9702.84, classe:'Standard'},
+          {id:'t-dg', cod:'DDMRG', nome:'Doenças Graves Modular', cap:288604.45, pre:2045.28, classe:'Standard'}]}]});
+      state.ms = Object.assign({}, state.ms, {origem:'A1', extras:['A2'], prod:'WH10', csVit:70000, preVit:288.96,
+        mig:{'t-pd':227208.91, 't-pa':288604.45, 't-dg':288604.45}, alvos:{'t-pd':500000}, taxaNv:{}, novas:[]});
+      const R = msCalc();
+      const li = id => (R.linhas||[]).find(l => l.c.id === id);
+      const chk = (desc, cond) => { total++; if (cond) ok++; else bad.push(desc); };
+      chk('MS multi · a DG da outra apólice entra na tabela do que migra', !!li('t-dg') && li('t-dg').migCS > 288000);
+      chk('MS multi · o Vida e Saúde da outra apólice NÃO vira linha (só opcionais emprestam)', !li('t-wv'));
+      chk('MS multi · prêmio da apólice anual dividido por 12 (2045,28/ano → 170,44/mês)', li('t-dg') && Math.abs(li('t-dg').preOrMig - 170.44) < 0.05);
+      chk('MS teto · Invalidez pedida a 500k entra com no máximo 5× a básica nova (350.000)', li('t-pd') && li('t-pd').tetoAplicado && Math.abs(li('t-pd').csNova - 350000) < 0.5);
+      chk('MS teto · Perda de Autonomia trava em 2× (140.000)', li('t-pa') && li('t-pa').tetoAplicado && Math.abs(li('t-pa').csNova - 140000) < 0.5);
+      chk('MS teto · Doenças Graves NÃO tem teto na MS (migra 288.604,45 com básica de 70.000)', li('t-dg') && !li('t-dg').tetoAplicado);
+      chk('MS multi · o que fica é por apólice (A1 e A2)', R.origPor && R.origPor.length === 2 && R.origPor.every(o => o.v > 0));
+      chk('MS multi · apólice fora do processo continua fora', R.outrasAp.length === 0);
+    }catch(e){ total++; bad.push('MS multi · exceção no cálculo: ' + (e && e.message)); }
+    finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; }
+  }
+  return {ok, total, bad};
 }
 
 /* ============================================================
@@ -5886,7 +5934,17 @@ function msRemoverNova(id){
 }
 window.msAddNova=msAddNova; window.msRemoverNova=msRemoverNova;
 /* o produto principal temporário é o que a MS converte */
-function msEhTemporario(c){ return /TEMP/.test(String(c&&c.grupo||'')) || /^T[PB]/.test(String(c&&c.cod||'')); }
+function msEhTemporario(c){ return /TEMP/.test(String(c&&c.grupo||'')) || /^T[PB]/.test(String(c&&c.cod||'')) || /^(TP|TM|DT)$/.test(String(msFamDe(c)||'')); }
+/* mínimo de capital do produto que FICA na origem depois da MS. Vem do catálogo (csmin):
+   Temporário Preferencial 1.000.000 · Temporário 60.000 · Temporário Decrescente 60.000.
+   Antes era 1e6 fixo — errava para todo temporário que não é o Preferencial (caso Sylvio, decrescente). */
+function msMinProduto(c){
+  if(!c) return {min:0, nome:'', fam:null};
+  const fam = msFamDe(c) || (String(c.cod||'').match(/^(TP|TM|DT|TB)/)||[])[1] || null;
+  const p = (typeof PRODS!=='undefined' && fam) ? PRODS[fam] : null;
+  if(!p || !(p.csmin>0)) return {min:null, nome:fam||'', fam};
+  return {min:p.csmin, nome:p.nome||fam, fam};
+}
 
 function msApolices(){ return (state.hoje.apolices||[]).filter(a=>(a.cob||[]).length); }
 function msOrigem(){
@@ -5898,7 +5956,30 @@ function msOrigem(){
    somar tudo como se fosse mês foi o que corrigiu um total 6× maior que o
    consolidado da própria tela. */
 function msDiv(){ const or=msOrigem(); return or?divApol(or):1; }
-function msTaxa(c){ return (c && c.cap>0) ? ((c.pre||0)/msDiv())/c.cap : 0; }
+/* == MS-MULTI-APOLICE-V1 (04/09) ==========================================
+   A prévia real (caso Sylvio) junta DUAS apólices: o temporário decrescente
+   de uma vira Vida e Saúde 360, e o Doenças Graves Modular vem da OUTRA. O app
+   só lia uma. Agora: `origem` segue sendo a apólice do temporário que converte,
+   e `extras` são as outras que emprestam opcionais. Cada cobertura no processo
+   carrega `_ap` (nº da apólice) e `_div` (12 se aquela apólice é anual), porque
+   o prêmio de cada uma segue a periodicidade da SUA apólice, não da origem. */
+function msExtras(){ return Array.isArray(state.ms.extras) ? state.ms.extras.map(String) : []; }
+function msApsProcesso(){
+  const or=msOrigem(); if(!or) return [];
+  const ex=new Set(msExtras());
+  return [or].concat(msApolices().filter(a=>a!==or && ex.has(String(a.num||''))));
+}
+function msTaxa(c){ const d=(c&&c._div)||msDiv(); return (c && c.cap>0) ? ((c.pre||0)/d)/c.cap : 0; }
+/* teto de capital VINCULADO à básica da apólice nova. Confirmado na prévia real
+   do Sylvio: Invalidez entrou com exatamente 5× o vitalício novo (350.000 para
+   70.000) e a Perda de Autonomia ficou na origem. Doenças Graves NÃO tem esse
+   teto na MS (o Modular de 288k migrou inteiro com básica de 70k) — por isso a
+   lista é explícita e não reaproveita a trava dos planos novos para DG. */
+const MS_TRAVA = {PI:5, PD:5, AB:5, PA:2};
+function msTravaMS(c){
+  const fam = (c && c.fam) || msFamDe(c) || (String((c&&c.cod)||'').match(/^(PI|PD|AB|PA)/)||[])[1] || '';
+  return MS_TRAVA[fam] ? {fam, mult:MS_TRAVA[fam]} : null;
+}
 function msTaxaNova(c){
   const t=state.ms.taxaNv[c.id];
   return (t!=null && isFinite(t) && t>0) ? t/ (c.cap||1) : msTaxa(c);   /* guardo o PRÊMIO novo, derivo a taxa */
@@ -5999,9 +6080,18 @@ function msCalc(){
   const or=msOrigem();
   if(!or) return null;
   const P=MS_PRODS[state.ms.prod]||MS_PRODS.WV20;
-  const cobs=(or.cob||[]);
+  const aps=msApsProcesso();
+  const divOr=divApol(or);
+  const cobs=(or.cob||[]).map(c=>Object.assign({},c,{_ap:String(or.num||''), _div:divOr}));
   const principal=cobs.find(msEhTemporario)||null;
   const opcionais=cobs.filter(c=>c!==principal);
+  /* as outras apólices do processo emprestam opcionais; um segundo temporário
+     não converte (a nova tem UMA básica) — ele fica onde está. */
+  const extrasAp=aps.slice(1), ficamExtras=[];
+  extrasAp.forEach(a=>{ const d=divApol(a);
+    (a.cob||[]).forEach(c=>{ const cc=Object.assign({},c,{_ap:String(a.num||''), _div:d});
+      /* temporário e vitalício da outra apólice ficam lá (a nova tem UMA básica); só opcionais emprestam */
+      if(msEhTemporario(cc) || MS_FAM_VIT.has(String(msFamDe(cc)||''))) ficamExtras.push(cc); else opcionais.push(cc); }); });
   const csVit=+state.ms.csVit||0;
   /* classe de ajuste que a MS PRESERVA: e a do temporario que esta virando
      vitalicio. Sem principal, cai na classe unica da apolice. */
@@ -6023,9 +6113,13 @@ function msCalc(){
   });
   const linhas=opcionais.concat(novasCob).map(c=>{
     const ehNova=!!c._nova;
-    const migCS=ehNova?0:Math.min(Math.max(+state.ms.mig[c.id]||0,0), c.cap||0);
+    let migCS=ehNova?0:Math.min(Math.max(+state.ms.mig[c.id]||0,0), c.cap||0);
     const alvo=ehNova?c._cap:(+state.ms.alvos[c.id]||0);
-    const csNova=ehNova ? alvo : (migCS>0 ? Math.max(alvo,migCS) : 0);
+    let csNova=ehNova ? alvo : (migCS>0 ? Math.max(alvo,migCS) : 0);
+    /* teto vinculado à básica da nova (csVit). Acima dele a prévia recusa. */
+    const trava=msTravaMS(c), teto=trava?csVit*trava.mult:Infinity;
+    const tetoAplicado = trava && csNova>teto+0.5;
+    if(tetoAplicado){ csNova=Math.max(0,teto); migCS=Math.min(migCS,csNova); }
     const preNvI=msPreNovoInfo(c,csNova);
     const preNv=preNvI.liq;
     const preOrFica=((c.cap||0)-migCS)*msTaxa(c);
@@ -6048,12 +6142,18 @@ function msCalc(){
        Uma definicao so, valendo para migrar, aumentar e acrescentar. */
     const ef=Math.abs(dCli)<0.005 ? Infinity : caixa/dCli;
     return {c,ehNova,migCS,csNova,preNv,preNvI,preOrFica,preOrMig,extra,dCli,dMig,caixa,ef,fyc:f,
+            trava,teto:trava?teto:null,tetoAplicado:!!tetoAplicado,
             on: ehNova ? csNova>0 : migCS>0};
   });
   const preOrigPrincipal = principal ? Math.max(0,(principal.cap||0)-csVit)*msTaxa(principal) : 0;
   const nova = preVit + linhas.reduce((a,l)=>a+l.preNv,0);
-  const orig = preOrigPrincipal + linhas.reduce((a,l)=>a+l.preOrFica,0);
-  const outrasAp = msApolices().filter(a=>a!==or);
+  /* o que fica, apólice por apólice do processo */
+  const origPor = aps.map(a=>{ const num=String(a.num||''); let v=(a===or)?preOrigPrincipal:0;
+    v+=linhas.filter(l=>!l.ehNova&&l.c._ap===num).reduce((s,l)=>s+l.preOrFica,0);
+    v+=ficamExtras.filter(c=>c._ap===num).reduce((s,c)=>s+(c.pre||0)/c._div,0);
+    return {a,num,v}; });
+  const orig = origPor.reduce((s,x)=>s+x.v,0);
+  const outrasAp = msApolices().filter(a=>!aps.includes(a));
   const outras = outrasAp.reduce((a,x)=>{const d=divApol(x); return a+(x.cob||[]).reduce((y,c)=>y+(c.pre||0)/d,0);},0);
   const liq=nova+orig+outras;
   const comNova = preVit*P.fyc + linhas.reduce((a,l)=>a+l.preNv*l.fyc,0);
@@ -6062,18 +6162,21 @@ function msCalc(){
   const caixa12=(comNova+renov)*12+agen;
   const capital = (principal?Math.max(0,(principal.cap||0)-csVit):0) + csVit
                 + linhas.reduce((a,l)=>a+Math.max(l.csNova,0)+((l.c.cap||0)-l.migCS),0)
+                + ficamExtras.reduce((a,c)=>a+(c.cap||0),0)
                 + outrasAp.reduce((a,x)=>a+(x.cob||[]).reduce((y,c)=>y+(c.cap||0),0),0);
   const hoje = msApolices().reduce((a,x)=>{const d=divApol(x); return a+(x.cob||[]).reduce((y,c)=>y+(c.pre||0)/d,0);},0);
-  return {or,P,principal,linhas,preVit,preVitInfo,classeOrig,csVit,preOrigPrincipal,nova,orig,outras,outrasAp,liq,
+  const cobsProc = (principal?[principal]:[]).concat(opcionais);
+  return {or,aps,extrasAp,ficamExtras,origPor,cobsProc,P,principal,linhas,preVit,preVitInfo,classeOrig,csVit,preOrigPrincipal,nova,orig,outras,outrasAp,liq,
           bruto:liq*(1+MS_IOF),comNova,renov,agen,caixa12,capital,hoje,
           restante:principal?Math.max(0,(principal.cap||0)-csVit):0};
 }
 /* ---------- 1 · triagem ---------- */
 function msRenderTriagem(R){
   const or=R.or, m=msMeses(or.emissao||or.inicio||'');
-  const classes=new Set((or.cob||[]).map(c=>String(c.classe||'').trim()).filter(Boolean));
-  const minProd = R.principal ? 1e6 : 0;   /* mínimo do produto principal (Temporário) */
-  const acimaMin = !R.principal || R.restante>=minProd;
+  const classes=new Set(R.aps.flatMap(a=>(a.cob||[])).map(c=>String(c.classe||'').trim()).filter(Boolean));
+  const mp = msMinProduto(R.principal);   /* mínimo do produto que FICA na origem — lido do catálogo, não fixo */
+  const minProd = mp.min;
+  const acimaMin = !R.principal || minProd==null || R.restante>=minProd;
   const t=[];
   t.push({ok:!!R.principal, tt:'Tem cobertura temporária vigente',
     d: R.principal ? `${esc(R.principal.nome||R.principal.cod)} ${msBRL(R.principal.cap)} na ${esc(or.num||'')}. É o que a MS transforma em vitalício.`
@@ -6086,9 +6189,12 @@ function msRenderTriagem(R){
              : `Abaixo de 18 meses: o remanescente não pode furar o mínimo. Faltam ${18-m} meses.`});
   else t.push({warn:true, tt:'Data de emissão da origem não informada',
     d:'Sem ela não dá para aplicar a regra dos 18 meses. Preencha na etapa 2.'});
-  if(R.principal) t.push({ok:acimaMin, warn:!acimaMin&&m!=null&&m>=18, tt:`Remanescente ${msBRL(R.restante)}`,
-    d: acimaMin ? `Acima do mínimo do produto (${msBRL(minProd)}). Este teste, sozinho, permitiria a <b>MS Digital</b>.`
-                : `Abaixo do mínimo (${msBRL(minProd)}). Só passa pelo <b>DOC0013133</b>${m!=null&&m>=18?` — e só porque a apólice tem ${m} meses`:''}.`});
+  if(R.principal) t.push({ok:acimaMin&&minProd!=null, warn:(minProd==null)||(!acimaMin&&m!=null&&m>=18), tt:`Remanescente ${msBRL(R.restante)}`,
+    d: minProd==null ? `Não identifiquei o produto da cobertura principal (${esc(R.principal.cod||R.principal.nome||'?')}) no catálogo — o mínimo não foi conferido. Confira no LP Business.`
+     : acimaMin ? `Acima do mínimo do ${esc(mp.nome)} (${msBRL(minProd)}). Este teste, sozinho, permitiria a <b>MS Digital</b>.`
+                : `Abaixo do mínimo do ${esc(mp.nome)} (${msBRL(minProd)}). Só passa pelo <b>DOC0013133</b>${m!=null&&m>=18?` — e só porque a apólice tem ${m} meses`:''}.`});
+  if(R.aps.length>1) t.push({ok:true, tt:`${R.aps.length} apólices no processo`,
+    d:`A ${esc(or.num||'origem')} dá o temporário que vira vitalício; ${R.extrasAp.map(a=>'a '+esc(a.num||'?')).join(' e ')} empresta${R.extrasAp.length>1?'m':''} opcionais. Cada uma sobrevive com o que não migrou.`});
   t.push({ok:classes.size<=1, warn:classes.size>1, tt:'Mais de uma classe de ajuste',
     d: classes.size>1 ? `Há ${classes.size} classes diferentes nesta apólice. Essa combinação <b>tira o processo do digital</b>. <i>Pendente confirmar com o Ponto de Apoio se a leitura é por cliente ou por apólice.</i>`
                       : 'Classe única — não tira o processo do digital por este critério.'});
@@ -6130,7 +6236,7 @@ function msRenderMig(R){
     const aum = Math.max(0, l.csNova - l.migCS);
     return `<tr class="${l.on?'':'off'}${l.ehNova?' nova-cob':''}">
       <td><b>${esc(c.nome||c.cod)}</b>${plana?' <span class="pill p-free">tarifa plana</span>':''}${l.ehNova?' <span class="pill p-vit">cobertura nova</span>':''}${(!l.ehNova&&aum>0.5)?' <span class="pill p-vit">+ aumento</span>':''}
-          <div class="cd">${esc(c.cod||'')}${l.ehNova?` · <a href="#" onclick="msRemoverNova('${esc(c.id)}');return false" style="color:var(--crit)">remover</a>`:''}</div></td>
+          <div class="cd">${(R.aps.length>1&&!l.ehNova)?'da '+esc(c._ap||'')+' · ':''}${esc(c.cod||'')}${l.tetoAplicado?` · <span style="color:var(--laranja)">teto ${l.trava.mult}× a básica nova = ${msBRL0(l.teto)}</span>`:''}${l.ehNova?` · <a href="#" onclick="msRemoverNova('${esc(c.id)}');return false" style="color:var(--crit)">remover</a>`:''}</div></td>
       <td class="num">${l.ehNova?'<span class="mini">—</span>':msBRL(c.cap)}</td>
       <td class="so-consultor">${l.ehNova?'<span class="mini">nova</span>':`<label class="sw"><input type="checkbox" data-mson="${esc(c.id)}" ${l.on?'checked':''}><i></i></label>`}</td>
       <td class="so-consultor">${l.ehNova?'<span class="mini">—</span>':`<input class="csin" data-mscs="${esc(c.id)}" value="${msBRL(l.migCS)}">`}</td>
@@ -6207,6 +6313,8 @@ function msRenderMig(R){
     const naOrigem = pd.migCS*msTaxa(pd.c);
     av.push(['a-warn','▲',`A página 3 do DOC0013133 <b>não tem campo PD</b>, então a Invalidez Acidental entra como <b>PI (Total e Parcial)</b> — e PI encarece.${comoPI?` Por isso eu já tarifo essa linha <b>como PI</b>: ${msBRL(pd.preNv)}/mês contra ${msBRL(naOrigem)} que ela custa hoje na origem. É o preço que o formulário aceita.`:''} <i>Pendente com o Ponto de Apoio: a MS aceita manter PD como PD?</i>`]);
   }
+  const tet=R.linhas.filter(l=>l.tetoAplicado);
+  if(tet.length) av.push(['a-warn','▲',`<b>Capital vinculado à básica da nova:</b> ${tet.map(l=>`${esc(l.c.cod||l.c.nome)} entra com no máximo <b>${msBRL0(l.teto)}</b> (${l.trava.mult}× o vitalício de ${msBRL0(R.csVit)})`).join(' · ')}. O que passa disso fica na origem — foi assim na prévia real (Invalidez 5×, Perda de Autonomia 2×). Para migrar mais, aumente o vitalício.`]);
   if(R.nova>0&&R.nova<250) av.push(['a-crit','!',`A apólice nova precisa de prêmio mínimo de <b>R$ 250</b> (R$ 200 para cliente da base). Está em ${msBRL(R.nova)}.`]);
   $('msAvisos').innerHTML=av.map(a=>`<div class="aviso ${a[0]}"><span class="ic">${a[1]}</span><span>${a[2]}</span></div>`).join('');
   /* campo de capital alvo da 1ª cobertura com aumento possível */
@@ -6237,14 +6345,16 @@ function msRenderResultado(R){
    <div class="tile"><div class="k">diferença</div><div class="v">${dif>=0?'+':''}R$ ${msBRL(dif)}</div><div class="d">${R.hoje?((R.bruto/R.hoje-1)*100).toFixed(1)+'% a mais':''}</div></div>
    <div class="tile b"><div class="k">capital protegido</div><div class="v">R$ ${msBRL0(R.capital)}</div><div class="d">nada é reduzido</div></div>
    <div class="tile good so-consultor"><div class="k">caixa 1º ano</div><div class="v">R$ ${msBRL0(R.caixa12)}</div><div class="d">comissão + renovação + agenciamento</div></div>`;
-  const fica=(R.principal?`${esc(R.principal.cod||'')} ${msBRL(R.restante)}`:'')
-    + R.linhas.filter(l=>l.preOrFica>0.005).map(l=>` + ${esc(l.c.cod||'')} ${msBRL((l.c.cap||0)-l.migCS)}`).join('');
+  const ficaDe=(num,html)=>{ const b=html?(x=>`<b>${x}</b>`):(x=>x);
+    return (R.principal&&String(R.or.num||'')===num?`${esc(R.principal.cod||'')} ${b(msBRL(R.restante))}`:'')
+    + R.linhas.filter(l=>!l.ehNova&&l.c._ap===num&&l.preOrFica>0.005).map(l=>` + ${esc(l.c.cod||'')} ${b(msBRL((l.c.cap||0)-l.migCS))}`).join('')
+    + R.ficamExtras.filter(c=>c._ap===num).map(c=>` + ${esc(c.cod||'')} ${b(msBRL(c.cap||0))}`).join(''); };
   $('msTabApol').innerHTML=`<thead><tr><th>apólice</th><th class="num">prêmio líquido</th><th class="num">IOF</th><th class="num">prêmio bruto</th></tr></thead>
     <tbody>
       <tr class="dest"><td><b>Apólice nova (MS)</b><div class="cd">${esc(state.ms.prod)} · ${R.P.prazo*12} parcelas</div></td>
         <td class="num">${msBRL(R.nova)}</td><td class="num">${msBRL(R.nova*MS_IOF)}</td><td class="num"><b>${msBRL(R.nova*(1+MS_IOF))}</b></td></tr>
-      <tr><td><b>${esc(R.or.num||'origem')}</b> — o que fica<div class="cd">${fica||'—'}</div></td>
-        <td class="num">${msBRL(R.orig)}</td><td class="num">${msBRL(R.orig*MS_IOF)}</td><td class="num"><b>${msBRL(R.orig*(1+MS_IOF))}</b></td></tr>
+      ${R.origPor.map(o=>`<tr><td><b>${esc(o.num||'origem')}</b> — o que fica<div class="cd">${ficaDe(o.num,false).replace(/^ \+ /,'')||'—'}</div></td>
+        <td class="num">${msBRL(o.v)}</td><td class="num">${msBRL(o.v*MS_IOF)}</td><td class="num"><b>${msBRL(o.v*(1+MS_IOF))}</b></td></tr>`).join('')}
       ${R.outrasAp.map(a=>{const _d=divApol(a), pr=(a.cob||[]).reduce((y,c)=>y+(c.pre||0)/_d,0);
         return `<tr><td><b>${esc(a.num||'')}</b> — não entra no processo</td><td class="num">${msBRL(pr)}</td>
           <td class="num">${msBRL(pr*MS_IOF)}</td><td class="num"><b>${msBRL(pr*(1+MS_IOF))}</b></td></tr>`;}).join('')}
@@ -6271,7 +6381,7 @@ function msRenderResultado(R){
 function msRenderRegras(R){
   const m=msMeses(R.or.emissao||R.or.inicio||'');
   const reduz=R.linhas.some(l=>l.csNova>0 && l.csNova<(l.c.cap||0)-0.01 && l.preOrFica<0.005);
-  const classes=new Set((R.or.cob||[]).map(c=>String(c.classe||'').trim()).filter(Boolean));
+  const classes=new Set(R.aps.flatMap(a=>(a.cob||[])).map(c=>String(c.classe||'').trim()).filter(Boolean));
   const rg=[
     ['a-good','✓','A apólice de origem sempre sobrevive','A MS nunca cancela a origem. O que não migra continua valendo lá — por isso deixar CS para trás não é redução de capital nem substituição.'],
     ['a-good','✓','Opcionais migram pelo capital corrigido por IPCA','E o prêmio acompanha na mesma proporção. Não confunda queda de prêmio com queda de capital.'],
@@ -6282,7 +6392,7 @@ function msRenderRegras(R){
       classes.size>1?'Marcar "Sim" no formulário. <i>Pendente confirmar com o Ponto de Apoio se a leitura é por cliente ou por apólice.</i>':'Classe única nesta apólice.'],
     ['a-good','✓','Não se pode aumentar capital de Doenças Graves na MS','Só migrar igual ou menos.'],
     ['a-good','✓','Vida e Saúde como básica exige DDR Plus ou Modular','Presença na prévia; o valor não precisa migrar inteiro.'],
-    ['a-info','i','Invalidez trava em 5× a básica no negócio novo','Limite do LP Business em plano novo — não se aplica à MS, mas invalida comparação acima disso.'],
+    ['a-info','i','Capital vinculado à básica da nova','Invalidez (PI/PD) entra com até <b>5×</b> o vitalício novo e Perda de Autonomia com até <b>2×</b>; o que passa fica na origem. Doenças Graves não tem esse teto na MS. Confirmado na prévia real de 04/09 (Invalidez a exatamente 5× a básica).'],
     ['a-info','i','Agenciamento = 100% do primeiro prêmio bruto da nova',`Campanha, uma vez só. Hoje representa <b>${R.caixa12?((R.agen/R.caixa12)*100).toFixed(0):0}%</b> do caixa do 1º ano deste caso. Quando acabar, a conta muda.`],
     [reduz?'a-crit':'a-good', reduz?'✕':'✓','Substituição desfavorável',
       reduz?'Há cobertura entrando na nova com capital menor do que tinha, <b>sem sobra na origem</b>. É o gatilho — o FYC pode não vir integral.'
@@ -6294,11 +6404,13 @@ function msRenderRegras(R){
 /* ---------- 5 · fechamento ---------- */
 function msRenderFech(R){
   const m=msMeses(R.or.emissao||R.or.inicio||'');
-  const fica=(R.principal?`${esc(R.principal.cod||'')} <b>${msBRL(R.restante)}</b>`:'')
-    + R.linhas.filter(l=>l.preOrFica>0.005).map(l=>` + ${esc(l.c.cod||'')} <b>${msBRL((l.c.cap||0)-l.migCS)}</b>`).join('');
+  const ficaB=(num)=>(R.principal&&String(R.or.num||'')===num?`${esc(R.principal.cod||'')} <b>${msBRL(R.restante)}</b>`:'')
+    + R.linhas.filter(l=>!l.ehNova&&l.c._ap===num&&l.preOrFica>0.005).map(l=>` + ${esc(l.c.cod||'')} <b>${msBRL((l.c.cap||0)-l.migCS)}</b>`).join('')
+    + R.ficamExtras.filter(c=>c._ap===num).map(c=>` + ${esc(c.cod||'')} <b>${msBRL(c.cap||0)}</b>`).join('');
+  const fica=R.origPor.map(o=>`${esc(o.num||'origem')}: ${ficaB(o.num).replace(/^ \+ /,'')||'—'}`).join(' · ');
   const itens=[
     `Prévia de MS com a composição desta tela — apólice nova <b>${esc(state.ms.prod)}</b>, ${R.P.prazo*12} parcelas, prêmio <b>R$ ${msBRL(R.nova*(1+MS_IOF))}</b>.`,
-    `Formulário <b>DOC0013133</b> com as três colunas: (A) apólice original, (B) o que fica na ${esc(R.or.num||'origem')}, (C) apólice nova. As três somas têm que bater ou gera pendência.`,
+    `Formulário <b>DOC0013133</b> com as três colunas: (A) apólice original, (B) o que fica ${R.aps.length>1?'em cada uma das '+R.aps.length+' apólices ('+R.aps.map(a=>esc(a.num||'?')).join(', ')+')':'na '+esc(R.or.num||'origem')}, (C) apólice nova. As três somas têm que bater ou gera pendência.`,
     `Conferir a coluna (B): ${fica||'—'}.`,
     `Assinatura do cliente e anexo no sistema${m!=null&&m>=18?` (via exceção — apólice com ${m} meses)`:''}.`,
     `Registrar no CRM: prêmio final <b>R$ ${msBRL(R.bruto)}</b>, capital <b>R$ ${msBRL0(R.capital)}</b>, caixa 1º ano <b>R$ ${msBRL0(R.caixa12)}</b>.`
@@ -6328,6 +6440,12 @@ function renderMS(){
   }
   if(!state.ms.origem) state.ms.origem=R.or.num||'';
   sel.value=state.ms.origem;
+  const ex=$('msExtras');
+  if(ex){ const outras=aps.filter(a=>a!==R.or);
+    ex.innerHTML = outras.length
+      ? `<span class="lbl">Outras apólices que também entram no processo (emprestam opcionais)</span>
+         <div style="display:flex;gap:14px;flex-wrap:wrap">${outras.map(a=>`<label style="display:flex;gap:6px;align-items:center;min-height:44px;cursor:pointer"><input type="checkbox" data-msextra="${esc(a.num||'')}" ${msExtras().includes(String(a.num||''))?'checked':''}> ${esc(a.num||'(sem número)')} <span class="mini">${(a.cob||[]).length} cobertura(s)</span></label>`).join('')}</div>`
+      : ''; }
   if(pr) pr.value=state.ms.prod;
   const cv=$('msCsVit'); if(cv && document.activeElement!==cv) cv.value=msBRL(R.csVit);
   const pv=$('msPreVit'); if(pv && document.activeElement!==pv) pv.value=msBRL(R.preVit);
@@ -6368,7 +6486,7 @@ function msLigaSecoes(){
       A partir daí a MS aparece ao lado do Plano A no comparador da Proposta,
       sem nenhum caminho especial. */
 function msSims(){ if(!Array.isArray(state.ms.sims)) state.ms.sims=[]; return state.ms.sims; }
-function msSnap(){ return JSON.parse(JSON.stringify({prod:state.ms.prod, origem:state.ms.origem,
+function msSnap(){ return JSON.parse(JSON.stringify({prod:state.ms.prod, origem:state.ms.origem, extras:msExtras(),
   csVit:+state.ms.csVit||0, preVit:+state.ms.preVit||0,
   alvos:state.ms.alvos||{}, mig:state.ms.mig||{}, taxaNv:state.ms.taxaNv||{}})); }
 function msSalvarSim(nome){
@@ -6437,11 +6555,11 @@ function msRenderSims(R){
 }
 function msLiga(){
   document.querySelectorAll('[data-mson]').forEach(el=>el.onchange=()=>{
-    const R=msCalc(); const c=(R.or.cob||[]).find(x=>x.id===el.dataset.mson); if(!c) return;
+    const R=msCalc(); const c=R.cobsProc.find(x=>x.id===el.dataset.mson); if(!c) return;
     state.ms.mig[c.id]= el.checked ? (c.cap||0) : 0; save(); renderMS();
   });
   document.querySelectorAll('[data-mscs]').forEach(el=>el.onchange=()=>{
-    const R=msCalc(); const c=(R.or.cob||[]).find(x=>x.id===el.dataset.mscs); if(!c) return;
+    const R=msCalc(); const c=R.cobsProc.find(x=>x.id===el.dataset.mscs); if(!c) return;
     state.ms.mig[c.id]=Math.max(0,Math.min(moneyParse(el.value), c.cap||0)); save(); renderMS();
   });
   document.querySelectorAll('[data-msnv]').forEach(el=>el.onchange=()=>{
@@ -6476,7 +6594,11 @@ function msLiga(){
      onchange (nao input) de proposito: e a convencao dos outros campos deste
      arquivo e evita re-renderizar o painel a cada tecla. */
   const lig=(el,fn)=>{ if(el) el.onchange=()=>{ fn(el); save(); renderMS(); }; };
-  lig($('msOrigem'), el=>{ state.ms.origem=el.value; });
+  lig($('msOrigem'), el=>{ state.ms.origem=el.value; state.ms.extras=msExtras().filter(n=>n!==String(el.value)); });
+  document.querySelectorAll('[data-msextra]').forEach(el=>el.onchange=()=>{
+    const n=String(el.dataset.msextra), cur=msExtras().filter(x=>x!==n);
+    state.ms.extras = el.checked ? cur.concat([n]) : cur; save(); renderMS();
+  });
   lig($('msProd'),   el=>{ state.ms.prod=MS_PRODS[el.value]?el.value:'WV20'; });
   const setCsVit=v=>{ const R0=msCalc(), teto=(R0&&R0.principal)?(R0.principal.cap||0):Infinity;
                       state.ms.csVit=Math.max(0,Math.min(v,teto)); };   /* nao da pra converter mais do que existe no temporario */
@@ -6489,7 +6611,7 @@ function msLiga(){
   lig(document.querySelector('[data-msvitpre]'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); });
   document.querySelectorAll('[data-mspreset]').forEach(b=>b.onclick=()=>{
     const R=msCalc(); if(!R) return; const p=b.dataset.mspreset;
-    (R.or.cob||[]).filter(c=>c!==R.principal).forEach(c=>{
+    R.cobsProc.filter(c=>c!==R.principal).forEach(c=>{
       state.ms.mig[c.id]= p==='tudo' ? (c.cap||0) : p==='planas' ? (msPlana(c.cod)?(c.cap||0):0) : 0;
     });
     save(); renderMS();
