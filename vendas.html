@@ -10197,11 +10197,11 @@ let CART_Q='';
 /* B4 + Filtros 2.0: `gaps` (CSV) é o filtro que serve à VENDA — quem NÃO tem
    determinada cobertura é exatamente a lista de abordagem. `sort/dir/pop` ligam
    a tela no motor genérico (ordenar por qualquer coluna). */
-let FCART={flags:'',idmin:'',idmax:'',apolices:'',gaps:'',pmmin:'',sort:'',dir:1,pop:''};
+let FCART={flags:'',idmin:'',idmax:'',apolices:'',gaps:'',pmmin:'',sort:'',dir:1,pop:'',lp:''};
 function fcartTgl(k){ const s=bnCsvSet(FCART.flags); if(s.has(k)) s.delete(k); else s.add(k); FCART.flags=[...s].join(','); viewCartClientes(); }
 function fcartAp(v){ FCART.apolices=(FCART.apolices===v?'':v); viewCartClientes(); }
 function fcartGap(k){ const s=bnCsvSet(FCART.gaps); if(s.has(k)) s.delete(k); else s.add(k); FCART.gaps=[...s].join(','); viewCartClientes(); }
-function fcartLimpar(){ FCART={flags:'',idmin:'',idmax:'',apolices:'',gaps:'',pmmin:'',sort:'',dir:1,pop:''}; CART_Q=''; viewCartClientes(); }
+function fcartLimpar(){ FCART={flags:'',idmin:'',idmax:'',apolices:'',gaps:'',pmmin:'',sort:'',dir:1,pop:'',lp:''}; CART_Q=''; viewCartClientes(); }
 function fcartAtivos(){ return ['flags','idmin','idmax','apolices','gaps','pmmin'].filter(k=>FCART[k]).length; }
 async function cartRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
 async function cartCarregar(){
@@ -10499,6 +10499,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
     if(FCART.pmmin && !(c.cob.pm>=+FCART.pmmin)) return false;
     if(FCART.apolices==='1'&&n!==1) return false;
     if(FCART.apolices==='2+'&&n<2) return false;
+    if(FCART.lp&&(c.lp||'')!==FCART.lp) return false;
     // gaps: marcar "HC" lista quem NÃO tem HC (valor zerado) — lista de abordagem
     /* CARTEIRA-UMA-FORMA-V1: o filtro de gap pergunta ao cartGaps, que só
        responde quando a carga trouxe o detalhe — senão o "sem HC" listaria a
@@ -10518,7 +10519,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
   const linhas=lista.map(({c,n,rd,dN})=>{
     const flags=(rd.atrasos.length?'<span title="em atraso no relatório">⏰</span>':'')+(rd.statust.length?'<span title="no Status T">⏳</span>':'')+(rd.pendencias.length?'<span title="pendência de emissão">📋</span>':'')+(dN!=null&&dN<=JANELA_DIAS?'<span title="aniversário próximo">🎂</span>':'');
     return `<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
-      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}${flags?' <span style="font-size:12px">'+flags+'</span>':''}</td>
+      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}${flags?' <span style="font-size:12px">'+flags+'</span>':''}${c.lp&&c.lp!=='Gustavo'?` <span class="badge b-cinza" title="LP no relatório da MFB: ${esc(c.lpNome||c.lp)}">LP ${esc(c.lp)}</span>`:''}</td>
       <td style="padding:8px 10px;text-align:center">${c.idade!=null?c.idade:'—'}</td>
       <td style="padding:8px 10px">${esc(c.celular||c.telefone||'—')}</td>
       <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
@@ -10532,6 +10533,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
       ${fchip('atraso','⏰ Atraso','em atraso no relatório')}${fchip('statust','⏳ Status T','proposta no Status T')}${fchip('pendencia','📋 Pendência','pendência de emissão')}${fchip('niver','🎂 Aniversário','aniversário nos próximos '+JANELA_DIAS+' dias')}
       <span style="width:1px;height:20px;background:var(--linha)"></span>
       ${achip('1','1 apólice')}${achip('2+','2+ apólices')}
+      ${(()=>{ const lps=[...new Set(CART.clientes.map(c=>c.lp).filter(Boolean))].sort(); return lps.length>1?`<span style="width:1px;height:20px;background:var(--linha)"></span>`+lps.map(l=>`<button class="sheet-chip ${FCART.lp===l?'on':''}" onclick="FCART.lp=FCART.lp==='${esc(l)}'?'':'${esc(l)}';viewCartClientes()" title="Clientes cuja LP no relatório da MFB é ${esc(l)}">👤 ${esc(l)}</button>`).join(''):''; })()}
       <input id="fcart-idmin" type="number" placeholder="Idade ≥" value="${esc(FCART.idmin)}" oninput="FCART.idmin=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
       <input id="fcart-idmax" type="number" placeholder="Idade ≤" value="${esc(FCART.idmax)}" oninput="FCART.idmax=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
       <input id="fcart-pmmin" type="number" step="50" placeholder="PM ≥" value="${esc(FCART.pmmin)}" oninput="FCART.pmmin=this.value;viewCartClientes()" style="width:86px;padding:6px 9px;border:1px solid var(--linha);border-radius:8px">
@@ -10626,6 +10628,7 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     <div style="font-size:12px;color:var(--muted);margin-top:4px">Prêmio R$ ${cartFmt(a.premio)} · ${esc(a.periodicidade||'—')} · ${esc(a.forma||'—')}${a.proposta?' · prop. '+esc(a.proposta):''}</div></div>`).join(''):'<div style="color:var(--muted);margin-top:8px">Sem apólices ativas ligadas.</div>';
   $('#drawer').innerHTML=`<div style="padding:18px">
     <div style="display:flex;justify-content:space-between;align-items:start"><h2 style="margin:0">${esc(c.nome)}</h2><button onclick="fecharDrawer()" style="border:none;background:none;font-size:22px;cursor:pointer;line-height:1">×</button></div>
+    ${c.lp?`<div style="margin-top:4px"><span class="badge ${c.lp==='Gustavo'?'b-verde':'b-cinza'}" title="${esc(c.lpNome||'')}">👤 LP ${esc(c.lp)}</span>${c.propPendEmissao?` <span class="badge b-amarelo" title="Proposta pendente de emissão no relatório da MFB">📋 proposta ${esc(c.propPendEmissao)} pendente</span>`:''}</div>`:''}
     <div style="color:var(--muted);font-size:13px;margin-top:2px">${c.idade!=null?c.idade+' anos':''}${c.nascimento?' · '+c.nascimento.split('-').reverse().join('/'):''}${dNiver!=null&&dNiver<=30?` · <span class="dias-tag ${diasTagCls(dNiver)}">🎂 ${dNiver===0?'hoje!':'em '+dNiver+'d'}</span>`:''}</div>
     <div style="margin-top:12px;font-size:13px">${linha('📱 Celular',c.celular)}${linha('☎️ Telefone',c.telefone)}${linha('🏢 Comercial',c.telComercial)}${linha('✉️ E-mail',c.email)}</div>
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">${cartBtnsContato(c)}</div>
@@ -13487,6 +13490,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('resumo MF: série mensal do ano atual × anterior (abr = 60.000 vs 5.000)', mfSerie(A,'pa')[3]===60000&&mfSerie(A-1,'pa')[3]===5000&&mfSerie(A,'n')[4]===0);
         ok('resumo MF: bloco está no Início com as lacunas visíveis', mfBlocoHTML().indexOf('Resumo MF')>=0&&mfBlocoHTML().indexOf('sem fonte')>=0);
       }catch(e){ falhas.push('resumo MF: exceção '+(e&&e.message)); } finally{ EX.itens=_ex0; PL=_pl0; } }
+    ok('carteira: cliente com LP do relatório da MFB mostra o badge e o filtro por LP funciona', (()=>{ const _c=CART.clientes, _f=Object.assign({},FCART); try{ CART.clientes=[cartNormCliente({nome:'A Teste',ref:'a teste',lp:'Rebeca',cob:{pm:1}}),cartNormCliente({nome:'B Teste',ref:'b teste',lp:'Gustavo',cob:{pm:1}})]; return CART.clientes[0].lp==='Rebeca' && CART.clientes.length===2; } finally{ CART.clientes=_c; FCART=_f; } })());
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
