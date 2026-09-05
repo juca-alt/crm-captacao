@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v6.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v6.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -81,7 +81,7 @@
 .pl .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
 /* MENU-SEM-ETAPAS: o [hidden] perdia pro display:flex do .nav-grp-btn */
-#nn-et-toggle,#nn-etapas,#bc-et-toggle,#bc-etapas{display:none!important}
+#nn-et-toggle,#nn-etapas,#bc-et-toggle,#bc-etapas,#nav-lp-aniversario,#nav-lp-datas{display:none!important}
 /* ficha da carteira em tópicos */
 .cf-bl{margin-top:10px}
 .cf-bl .ini-h{padding:10px 12px}
@@ -1206,8 +1206,9 @@
         <button class="nav-btn sub sub2" data-view="cart-clientes" onclick="irPara('cart-clientes')"><span class="ic">🗂️</span><span class="lbl">Clientes</span><span class="cnt" id="cnt-cart"></span></button>
         <button class="nav-btn sub sub2" data-view="cart-oportunidades" onclick="irPara('cart-oportunidades')"><span class="ic">💡</span><span class="lbl">Oportunidades</span><span class="cnt" id="cnt-cart-op"></span></button>
       </div>
-      <button class="nav-btn sub" data-view="lp-aniversario" onclick="irPara('lp-aniversario')"><span class="ic">🎂</span><span class="lbl">Aniversariantes</span><span class="cnt" id="cnt-aniversario"></span></button>
-      <button class="nav-btn sub" data-view="lp-datas" onclick="irPara('lp-datas')"><span class="ic">📅</span><span class="lbl">Aniversário de Apólice</span><span class="cnt" id="cnt-datas"></span></button>
+      <!-- ANIVERSARIOS-EM-MODULOS (05/09): as duas telas moram em Módulos → Operação; os nós ficam escondidos porque lpCounts escreve os contadores neles -->
+      <button hidden id="nav-lp-aniversario" class="nav-btn sub" data-view="lp-aniversario" onclick="irPara('lp-aniversario')"><span class="ic">🎂</span><span class="lbl">Aniversariantes</span><span class="cnt" id="cnt-aniversario"></span></button>
+      <button hidden id="nav-lp-datas" class="nav-btn sub" data-view="lp-datas" onclick="irPara('lp-datas')"><span class="ic">📅</span><span class="lbl">Aniversário de Apólice</span><span class="cnt" id="cnt-datas"></span></button>
     </div>
 
     <div class="sep"></div>
@@ -1252,7 +1253,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v6.2 · Vendas LP</span>
+      <span class="tag">PipeX · v6.3 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1274,7 +1275,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v6.2 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v6.3 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7713,6 +7714,30 @@ function cliCarteiraResumoHtml(d){ const c=d.cli; if(!c) return ''; const cob=c.
     <button class="btn btn-s btn-mini" style="margin-top:8px;min-height:36px" onclick="event.stopPropagation();fecharDrawer();cartAbrir('${esc(c.ref)}')">📁 Ficha completa na carteira</button>
   </div>`; }
 
+
+/* ═══ ANIVERSARIOS-DERIVADOS-V1 (05/09) ═══════════════════════════════════
+   Pedido dele: "já vai povoando com as informações que tem". Aniversariantes
+   nascem da CARTEIRA (data de nascimento) e o Aniversário de Apólice nasce das
+   EMITIDAS (data de emissão) — o relatório da semana, quando vier, só soma.
+   As linhas derivadas entram em LP.aniversario / LP.datas com chave própria
+   (cart:/em:), então o status de contato funciona e persiste como as outras. */
+function lpDerivar(){
+  if(typeof LP==='undefined'||!LP||!Array.isArray(LP.aniversario)||!Array.isArray(LP.datas)) return 0;
+  let n=0; const tocou=(ent,lp)=>{ try{ LP_TOUCHED.add(ent+'\t'+lp); }catch(_){} };
+  const temNome=(ent,nome)=>{ const k=normKey(nome||''); return LP[ent].some(r=>normKey(r.cliente||'')===k); };
+  const keys=new Set(LP.aniversario.map(r=>r._key));
+  (typeof cartVis==='function'?cartVis():[]).forEach(c=>{ if(!c.nascimento) return; const key='cart:'+c.ref; if(keys.has(key)||temNome('aniversario',c.nome)) return;
+    const lp=(c.lp&&emNormLp(c.lp))||'Gustavo';
+    LP.aniversario.push({_key:key,lp,cliente:c.nome,data_nasc:c.nascimento,telefone:c.celular||c.telefone||'',status_contato:'pendente',_fonte:'carteira'}); keys.add(key); tocou('aniversario',lp); n++; });
+  const kd=new Set(LP.datas.map(r=>r._key)); const apInDatas=new Set(LP.datas.map(r=>String(r.apolice||'')));
+  const cliPorRef={}; (typeof cartVis==='function'?cartVis():[]).forEach(c=>{ cliPorRef[c.ref]=c; });
+  (typeof exVis==='function'?exVis():[]).forEach(r=>{ if(!r.emissao||!r.apolice||r.status_apolice!=='Ativa') return; const key='em:'+r.apolice; if(kd.has(key)||apInDatas.has(String(r.apolice))) return;
+    const cli=cliPorRef[normKey(r.segurado||'')]||null; const lp=(r.lp&&emNormLp(r.lp))||'Gustavo';
+    LP.datas.push({_key:key,lp,cliente:r.segurado||'',apolice:r.apolice,data_emissao:r.emissao,telefone:(cli&&(cli.celular||cli.telefone))||'',status_contato:'pendente',_fonte:'emitidas'}); kd.add(key); tocou('datas',lp); n++; });
+  if(n){ lpSalvarLocal(); try{ if(typeof lpPersistRemoto==='function') lpPersistRemoto().catch(()=>{}); }catch(_){} }
+  return n;
+}
+
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
    podemos selecionar o cliente (inclusive os novos) para ter a calculadora e
@@ -10017,6 +10042,8 @@ const HUB_SECOES=[
     {href:'carteira.html',ic:'📊', titulo:'Carteira (Cockpit)',   desc:'Persistência, coberturas e ABCD da carteira inteira.', mod:'carteira'},
     {view:'planos',       ic:'📐', titulo:'Planos & Simulações',  desc:'Catálogo de planos e simulações por contato.', mod:'planos'},
     {view:'montagem',     ic:'🧮', titulo:'Montagem de planos',   desc:'Escolha o cliente — da carteira, do funil ou novo — e monte os planos na calculadora da Revisão, já com os dados dele.', mod:'planos'},
+    {view:'lp-aniversario',ic:'🎂', titulo:'Aniversariantes',      desc:'Quem faz aniversário nos próximos dias — nascimento da carteira + relatório da semana. Gancho de relacionamento.', mod:'carteira', cnt:()=>lpAtivos('aniversario').filter(r=>{ const d=lpDiasAte(r.data_nasc); return d!=null&&d<=JANELA_DIAS; }).length},
+    {view:'lp-datas',     ic:'📅', titulo:'Aniversário de Apólice', desc:'Aniversário do contrato (data de emissão) — o melhor gancho de revisão. Emitidas coladas + relatório da semana.', mod:'carteira', cnt:()=>lpAtivos('datas').filter(r=>{ const d=lpDiasAte(r.data_emissao?String(r.data_emissao).slice(5):null); return d!=null&&d<=JANELA_DIAS; }).length},
     {view:'placed',       ic:'🎯', titulo:'Controle de PLACED',   desc:'Onde a MFB bate em cada leitura (Clube 3W, PTC 2027): simulador, fila de resgate e meta reversa.', mod:'placed'}
   ]},
   {titulo:'BackOffice Prudential', itens:[
@@ -10128,9 +10155,10 @@ function viewLpStatusT(){
 
 /* ════ VIEW: ANIVERSARIANTES (P2 #17) ════ */
 function viewLpAniversario(){
-  if(!LP.aniversario.length){ $('#main').innerHTML=semDados('Aniversariantes do Mês','Clientes — relacionamento. Janela de ação nos próximos '+JANELA_DIAS+' dias.'); return; }
+  try{ lpDerivar(); }catch(_){}
+  if(!LP.aniversario.length){ $('#main').innerHTML=semDados('Aniversariantes','Nasce da data de nascimento da carteira (Clientes → Importar) e do relatório da semana. Ainda não há nenhum dos dois.'); return; }
   const l=lpFiltra('aniversario').map(r=>({r,d:lpDiasAte(r.data_nasc)})).sort((a,b)=>(a.d??1e9)-(b.d??1e9));
-  $('#main').innerHTML=`<h1 class="pg">Aniversariantes do Mês</h1><div class="sub">${l.length} cliente(s) — ordenados por proximidade. Linha destacada = dentro da janela (${JANELA_DIAS}d).</div>
+  $('#main').innerHTML=`<h1 class="pg">Aniversariantes</h1><div class="sub">${l.length} cliente(s) — ordenados por proximidade. Linha destacada = dentro da janela (${JANELA_DIAS}d). Fonte: nascimento da carteira${LP.aniversario.some(r=>r._fonte!=='carteira')?' + relatório da semana':''}.</div>
     ${lpFiltroBar('aniversario')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Quando</th><th>Cliente</th><th>Nascimento</th><th>Telefone</th><th>Contato</th>
@@ -10147,9 +10175,10 @@ function viewLpAniversario(){
 
 /* ════ VIEW: DATAS DE APÓLICE (P2 #17) ════ */
 function viewLpDatas(){
-  if(!LP.datas.length){ $('#main').innerHTML=semDados('Datas de Apólice','Clientes — aniversários de apólice (ótimo gancho de revisão). Janela de '+JANELA_DIAS+' dias.'); return; }
+  try{ lpDerivar(); }catch(_){}
+  if(!LP.datas.length){ $('#main').innerHTML=semDados('Aniversário de Apólice','Nasce da data de emissão das emitidas coladas (Pendências → Colar emitidas) e do relatório da semana. A carteira não traz a data de emissão — por isso ainda está vazio.'); return; }
   const l=lpFiltra('datas').map(r=>({r,d:lpDiasAte(r.data_emissao? String(r.data_emissao).slice(5):r.data_emissao)})).sort((a,b)=>(a.d??1e9)-(b.d??1e9));
-  $('#main').innerHTML=`<h1 class="pg">Datas de Apólice</h1><div class="sub">${l.length} apólice(s) — aniversário do contrato, ordenado por proximidade.</div>
+  $('#main').innerHTML=`<h1 class="pg">Aniversário de Apólice</h1><div class="sub">${l.length} apólice(s) — aniversário do contrato, ordenado por proximidade. Fonte: emitidas coladas${LP.datas.some(r=>r._fonte!=='emitidas')?' + relatório da semana':''}. A carteira não traz data de emissão; as apólices antigas entram quando vier um relatório com a data.</div>
     ${lpFiltroBar('datas')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Quando</th><th>Cliente</th><th>Apólice</th><th>Emissão</th><th>Tempo</th><th>Telefone</th><th>Contato</th>
@@ -13974,6 +14003,18 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const h=cliCardHtml(d,{});
         ok('ficha do contato: "Já é seu cliente" traz coberturas, apólices e atalho pra ficha da carteira', h.indexOf('Capital Segurado')>=0 && h.indexOf('K2')>=0 && h.indexOf('Ficha completa na carteira')>=0);
       }catch(e){ falhas.push('cliente na ficha: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; cartIdxInvalidar(); } }
+
+    /* ANIVERSARIOS-EM-MODULOS + DERIVADOS (05/09) */
+    ok('menu: Aniversariantes e Aniversário de Apólice saíram do grupo Clientes e estão em Módulos', ['nav-lp-aniversario','nav-lp-datas'].every(id=>{ const e=document.getElementById(id); return e&&getComputedStyle(e).display==='none'; }) && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='lp-aniversario')) && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='lp-datas')));
+    { const _c=CART.clientes, _e=EX.itens, _la=LP.aniversario.slice(), _ld=LP.datas.slice(), _t=new Set(LP_TOUCHED); try{ PX._teste=true;
+        CART.clientes=[cartNormCliente({nome:'Niver Teste',ref:'niver teste',nascimento:'1990-03-15',celular:'(81) 90000-0002',cob:{pm:1}})];
+        EX.itens=[{apolice:'AP9',segurado:'Niver Teste',status_apolice:'Ativa',emissao:'2025-09-10',lp:'Gustavo'}];
+        LP.aniversario=LP.aniversario.filter(r=>r._key!=='cart:niver teste'); LP.datas=LP.datas.filter(r=>r._key!=='em:AP9');
+        const n=lpDerivar();
+        ok('aniversariantes: nascimento da carteira vira linha (com telefone)', LP.aniversario.some(r=>r._key==='cart:niver teste'&&r.data_nasc==='1990-03-15'&&r.telefone));
+        ok('aniversário de apólice: data de emissão das emitidas vira linha, com telefone da carteira', LP.datas.some(r=>r._key==='em:AP9'&&r.data_emissao==='2025-09-10'&&r.telefone));
+        ok('derivação é idempotente (rodar de novo não duplica)', lpDerivar()===0 && n===2);
+      }catch(e){ falhas.push('aniversários derivados: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; EX.itens=_e; LP.aniversario=_la; LP.datas=_ld; LP_TOUCHED=_t; } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
