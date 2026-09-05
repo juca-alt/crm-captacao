@@ -2,6 +2,35 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 📸 Snapshot — 04/09/2026 noite → 05/09 madrugada · **v5.1 → v6.4** · 14 PRs (#127→#140), todos no ar
+
+**Estado em 30 s:** `main b0496eb`, v6.4 servida (hash conferido a cada merge). Sessão longa no Mac com worktree `crm-wt-rp` (branch por feature). A partir do #135 os ajustes entraram **direto** por regra dele ("segue mergeando direto o que for ajuste"); regra de negócio, dado real e RLS continuam esperando OK.
+
+### O que entrou (por PR)
+- **#128 v5.1 Emitidas** — importador "Apólices Emitidas no Período" (`exParse`, prévia caixa a caixa): desfecho da pendência, apólice na carteira, negócio entregue, PLACED sincronizado. Tabela `emissao_emitidas`.
+- **#129 v5.2** — 💬 enviar o compromisso ao cliente pelo WhatsApp (texto pronto) na ficha e na Agenda.
+- **#130 v5.4** — Emissão Diária + Resumo MF (espelhos do BI HUB-MFB) · carteira→funil · 🔗 Juntar no Estoque · LP por cliente na carteira.
+- **Banco (04/09, sem PR):** `carteira_clientes`/`carteira_apolices` estavam **zeradas** (delete+insert do importador falhou; os 147 "importados" eram cache). Repovoadas por SQL a partir de Carteira de Clientes + Apólices Vigentes do portal: 232 clientes / 324 apólices exatas; Rebeca na base dele com `lp`, Daniel no dono dele. Arquivos datados no Drive (Pipe X/CRM Life Planner/01).
+- **#131 v5.5 Pipe X** — escopo meu/todos/LP na topbar (carteira por `lp_donos_visiveis()` + delegação Daniel→Gustavo; gravação só do próprio dono) · **login sem loop** (Google nunca ligou a identidade; e-mail+senha no card) · Google Agenda com token persistido + hint.
+- **#132 v5.6** — vários telefones por nome · sugestões nos filtros das Recomendações · menu sem listas de etapas.
+- **#133 v5.7** — **Base de Clientes redesenhada**: Clientes Ativos = carteira inteira, Pendência/Atraso vira STATUS filtrável, venda só de Revisita em diante, revisita paga (🤝) · Detalhado por Apólice · portão headless.
+- **#134 v5.8 · #135 v5.9** — títulos de etapas somem de vez · modal de novo negócio pergunta o funil · etapa extinta não volta do servidor · quadro acompanha a ficha · grupo familiar (paga p/ · pago por · c/) · ficha da carteira rola.
+- **#136 v6.0** — perfil do cliente (profissão, locais múltiplos, cônjuge, filhos/outros com idades, notas) em `carteira_perfil`.
+- **#137 v6.1** — ficha da carteira em tópicos dobráveis; grupo familiar clicável.
+- **#138 v6.2** — carteira dentro do tópico "Já é seu cliente" da ficha do contato; apólices do cliente casado por telefone (era 0).
+- **#139 v6.3** — Aniversariantes / Aniversário de Apólice em Módulos, derivados da carteira e das emitidas (`lpDerivar`).
+- **#140 v6.4** — **Subir relatório universal**: detecta o tipo (semanal, Carteira .xls, Apólices Vigentes .xls, Emitidas, Pendentes, Atraso) e roteia.
+- **Casa:** acervo no Drive (subpastas 01–04 + LEIA-ME) e página [Acervo] CRM Life Planner no Notion; regra "material entra no acervo na hora".
+
+### Provas
+Portão em cada PR (33 telas × {375,1280} × {cheia,vazia}, lpSelfCheck 0, ~60 invariantes novas); hash do Pages conferido a cada merge; fluxos testados no preview (emitidas, funil BC, perfil, roteamento).
+
+### Lacunas conhecidas (fecham com relatório do portal)
+CS MQC por apólice · cancelamentos com data · data de emissão das apólices antigas · Status T/Benefícios no detector.
+
+### Presos nele
+Exports acima · Google como identidade (opcional) · Sylvio no ar · migration `lp_perfis_nome_ativo.sql` · Victor · textos de cobrança · faixas 15/8 · PR #35.
+
 ---
 
 ## 📸 Snapshot — 03/09/2026, noite (sessão remota, pelo celular) · **v0.45.0 → v0.46.0** · Entradas pelo funil na Carteira + editor do funil com alvo de 44px
