@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v6.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v6.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -82,6 +82,11 @@
 
 /* MENU-SEM-ETAPAS: o [hidden] perdia pro display:flex do .nav-grp-btn */
 #nn-et-toggle,#nn-etapas,#bc-et-toggle,#bc-etapas{display:none!important}
+/* ficha da carteira em tópicos */
+.cf-bl{margin-top:10px}
+.cf-bl .ini-h{padding:10px 12px}
+.cf-bl .ini-b{padding:0 12px 12px}
+.cf-bl .ini-res{font-size:11.5px;color:var(--muted);margin-left:auto;text-align:right}
 /* BC · card de cliente da carteira (ainda sem negócio) */
 .nncard-cli{border-style:dashed;background:#fbfdff}
 /* Pipe X · escopo */
@@ -1247,7 +1252,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v6.0 · Vendas LP</span>
+      <span class="tag">PipeX · v6.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1269,7 +1274,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v6.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v6.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2030,7 +2035,7 @@ function inicioAgoraHtml(){
    2) o bloco AGORA nasce ABERTO e, desde 02/09 (pedido dele), tambem dobra --
       mas o cabecalho fechado ainda diz quantos itens e quantos pedem acao ja. */
 const INI_CHAVE='crmlp_inicio_secs_v1';
-const INI_PADRAO={agora:1,numeros:1,'funil-nn':1,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0};
+const INI_PADRAO={agora:1,numeros:1,'funil-nn':1,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':1,'cf-neg':1,'cf-perfil':1,'cf-cob':0,'cf-aps':1};
 function iniLer(){ try{ return JSON.parse(localStorage.getItem(INI_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function iniGravar(o){ try{ localStorage.setItem(INI_CHAVE,JSON.stringify(o)); }catch(_){} }
 function iniAberto(k){ const st=iniLer(); return (k in st)? !!st[k] : !!INI_PADRAO[k]; }
@@ -7629,11 +7634,16 @@ function cartGrupo(cli){
   const mesmo=[]; const em=nk(cli.email), tel=telKey(cli.celular||cli.telefone);
   (typeof cartVis==='function'?cartVis():(CART.clientes||[])).forEach(o=>{ if(o.ref===ref) return; if((em&&nk(o.email)===em)||(tel&&telKey(o.celular||o.telefone)===tel)) mesmo.push(o.nome); });
   const out={paga,pagoPor:[...pagoPor.values()],mesmo}; out.tem=!!(paga.length||out.pagoPor.length||mesmo.length); return out; }
+/* GRUPO-CLICAVEL-V1 (04/09): cada pessoa do grupo é um botão que abre a ficha dela (quando está na carteira) */
+function cartRefDe(nome){ const k=normKey(nome||''); if(!k) return null; const l=(CART.clientes||[]); const c=l.find(x=>x.ref===k)||l.find(x=>normKey(x.nome)===k); return c?c.ref:null; }
+function cartPessoaBtn(nome,cls,ico,pre){ const ref=cartRefDe(nome); const p1=atTitleC(String(nome||'')).split(' ')[0];
+  return ref?`<button class="nc-cli ${cls||''}" style="cursor:pointer;border:1px solid currentColor;background:#eef2ff;color:#3730a3" onclick="event.stopPropagation();cartAbrir('${esc(ref)}')" title="Abrir a ficha de ${esc(atTitleC(nome))}">${ico} ${esc(pre)}${esc(p1)} ↗</button>`
+            :`<span class="nc-cli" style="background:#eef2ff;color:#3730a3" title="${esc(atTitleC(nome))} — não está na carteira">${ico} ${esc(pre)}${esc(p1)}</span>`; }
 function cartGrupoChips(cli){ const g=cartGrupo(cli); if(!g||!g.tem) return '';
-  const p1=n=>atTitleC(String(n||'')).split(' ')[0]; const ch=[];
-  if(g.paga.length){ const tot=g.paga.reduce((s,x)=>s+x.premio,0); ch.push(`<span class="nc-cli" style="background:#eef2ff;color:#3730a3" title="Paga a apólice de: ${esc(g.paga.map(x=>atTitleC(x.nome)).join(', '))}">👨‍👩‍👧 paga p/ ${esc(g.paga.map(x=>p1(x.nome)).join(', '))}${tot?' · '+brlCurto(tot)+'/mês':''}</span>`); }
-  if(g.pagoPor.length) ch.push(`<span class="nc-cli" style="background:#eef2ff;color:#3730a3" title="Apólice paga por ${esc(g.pagoPor.map(atTitleC).join(', '))}">💳 pago por ${esc(g.pagoPor.map(p1).join(', '))}</span>`);
-  if(g.mesmo.length) ch.push(`<span class="nc-cli" title="Mesmo e-mail/telefone de: ${esc(g.mesmo.map(atTitleC).join(', '))}">👥 c/ ${esc(g.mesmo.map(p1).join(', '))}</span>`);
+  const ch=[];
+  g.paga.forEach(x=>ch.push(cartPessoaBtn(x.nome,'','👨‍👩‍👧','paga p/ ')+(x.premio?`<span class="nc-cli" style="background:transparent;padding-left:0">${brlCurto(x.premio)}/mês</span>`:'')));
+  g.pagoPor.forEach(n=>ch.push(cartPessoaBtn(n,'','💳','pago por ')));
+  g.mesmo.forEach(n=>ch.push(cartPessoaBtn(n,'','👥','c/ ')));
   return ch.join(''); }
 
 
@@ -10961,16 +10971,22 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
     <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><span style="font-size:12px;color:var(--muted)">Abrir negócio:</span>
       <button class="btn btn-p btn-mini" onclick="cartNovoNegocioUI('${esc(c.ref)}','bc')" title="Cria o negócio no funil Base de Clientes já com os dados dele">🏠 Base de Clientes</button>
       <button class="btn btn-s btn-mini" onclick="cartNovoNegocioUI('${esc(c.ref)}','nn')" title="Cria o negócio no funil Novos Negócios (SitPlan)">🎯 Novos Negócios</button></div>
-    ${radHTML}
-    ${cliCardHtml(clienteDe(c),{modo:'carteira'})}
-    ${cartPerfilHtml(c)}
-    <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
+    ${(()=>{ /* FICHA-TOPICOS-V1 (04/09): tópicos que encolhem e expandem, lembrados por aparelho (mesmo motor do Início) */
+      const dcli=clienteDe(c); const negs=(dcli&&dcli.negocios||[]).length, emis=(dcli&&dcli.emissoes||[]).length;
+      const pr=cartPerfilResumo(c.ref);
+      const cobRes=[cob.cs?'CS '+brlCurto(cob.cs):'',cob.pm?brlCurto(cob.pm)+'/mês':'',gaps.length?'sem '+gaps.map(g=>g[1]).join('/'):''].filter(Boolean).join(' · ');
+      const bl=(k,t,res,corpo)=>iniBloco(k,t,res,corpo).replace('class="ini-bl','class="ini-bl cf-bl');
+      return (radItens.length?bl('cf-radar','📡 No relatório da semana',radItens.map(i=>i.t).join(' · '),radHTML.replace(/<h3[^>]*>.*?<\/h3>/,'')):'')
+        +bl('cf-neg','Negócios e emissão',negs||emis?[negs?negs+' negócio(s)':'',emis?emis+' na emissão':''].filter(Boolean).join(' · '):'nenhum negócio aberto',cliCardHtml(dcli,{modo:'carteira'}))
+        +bl('cf-perfil','👨‍👩‍👧 Pessoa e família',pr.length?pr.slice(0,2).join(' · '):'nada anotado',cartPerfilHtml(c).replace(/<h3[^>]*>.*?<\/h3>/,''))
+        +`<div class="ini-bl cf-bl${iniAberto('cf-cob')?'':' fechado'}" data-ini="cf-cob"><button class="ini-h" onclick="iniToggle('cf-cob')" aria-expanded="${iniAberto('cf-cob')?'true':'false'}"><span class="ini-car">${iniAberto('cf-cob')?'▾':'▸'}</span><span class="ini-t">Coberturas vigentes</span><span class="ini-res">${esc(cobRes)}</span></button><div class="ini-b">`; })()}
     ${c._origem?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Cliente entrou pela ${esc(c._origem)}${c._criadoEm?' em '+dataBR(c._criadoEm):''}. Capital e coberturas chegam com a próxima importação da carteira — até lá o app não inventa.</div>`:''}
     <div style="font-size:13px">${c._origem?linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))+'</div><div hidden>':''}${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
     ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`
       :(cartTemDetalheCob(c)?'':`<div style="margin-top:8px;font-size:11.5px;color:var(--muted)">A carga desta carteira não traz o detalhe de coberturas — o app não tem como dizer o que falta.</div>`)}
     ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
-    <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Apólices (${aps.length})</h3>${apsHTML}</div>`;
+    </div></div>
+    ${iniBloco('cf-aps','Apólices ('+aps.length+')',aps.length?aps.map(a=>a.apolice||a.proposta||'—').join(' · '):'nenhuma viva',apsHTML).replace('class="ini-bl','class="ini-bl cf-bl')}</div>`;
   $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
 
 
@@ -13913,6 +13929,18 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('perfil: a ficha da carteira mostra a seção Pessoa e família', cartPerfilHtml(CART.clientes[0]).indexOf('Pessoa e família')>=0 && cartPerfilHtml(CART.clientes[0]).indexOf('Petrolina')>=0);
         ok('perfil: importar a carteira de novo NÃO apaga o perfil (vive em CART.perfis, tabela própria)', (()=>{ CART.clientes=[]; return !!CART.perfis['bruno teste']; })());
       }catch(e){ falhas.push('perfil: exceção '+(e&&e.message)); } finally{ CART.perfis=_p; CART.clientes=_c; } }
+
+    /* FICHA-TOPICOS-V1 + GRUPO-CLICAVEL-V1 */
+    { const _c=CART.clientes, _a=CART.apolices; try{ PX._teste=true;
+        CART.clientes=[cartNormCliente({nome:'Amanda Teste',ref:'amanda teste',cob:{pm:1}}),cartNormCliente({nome:'Ricardo Teste',ref:'ricardo teste',cob:{pm:1}})];
+        CART.apolices=[cartNormApolice({apolice:'R1',segurado:'Ricardo Teste',ref:'ricardo teste',cli_ref:'ricardo teste',respPagto:'AMANDA TESTE',premio:400,status:'Ativa'})]; cartIdxInvalidar();
+        cartAbrir('ricardo teste');
+        const d=document.getElementById('drawer');
+        ok('ficha: "pago por" é botão que abre a ficha de quem paga', !![...d.querySelectorAll('button')].find(b=>/pago por Amanda/.test(b.textContent)&&/cartAbrir/.test(b.getAttribute('onclick')||'')));
+        ok('ficha: tópicos dobráveis (relatório, negócios, pessoa, coberturas, apólices) com resumo no cabeçalho', d.querySelectorAll('.cf-bl').length>=4 && !!d.querySelector('.cf-bl[data-ini="cf-cob"] .ini-res'));
+        iniToggle('cf-cob'); const ab1=iniAberto('cf-cob'); iniToggle('cf-cob'); ok('ficha: encolher/expandir é lembrado por aparelho', ab1!==iniAberto('cf-cob'));
+        fecharDrawer();
+      }catch(e){ falhas.push('ficha tópicos: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; cartIdxInvalidar(); } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
