@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v5.9 · Vendas LP</title>
+<title>CRM SeguroComJucá · v6.0 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1247,7 +1247,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v5.9 · Vendas LP</span>
+      <span class="tag">PipeX · v6.0 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1269,7 +1269,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v5.9 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v6.0 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3613,7 +3613,7 @@ function cliChipsHtml(d){
   else if(d.cli) ch.push(`<span class="nc-cli" title="está na carteira, sem apólice viva ligada">🛡 na carteira</span>`);
   if(d.atrasos.length){ const a=d.atrasos[0]; ch.push(`<span class="nc-cli verm" title="em atraso no relatório da seguradora">⏰ atraso${a.dias_atraso!=null?' '+a.dias_atraso+'d':''}</span>`); }
   d.emissoes.forEach(r=>{ const dd=emDias(r); ch.push(`<span class="nc-cli amar" title="proposta ${esc(r.proposta||'')} pendente de emissão">📋 emissão${dd!=null?' '+dd+'d':''}</span>`); });
-  if(d.cli){ const fam=cartGrupoChips(d.cli); if(fam) ch.push(fam); }
+  if(d.cli){ const fam=cartGrupoChips(d.cli); if(fam) ch.push(fam); const pr=cartPerfilResumo(d.cli.ref); if(pr.length) ch.push(`<span class="nc-cli" style="background:#f3f4f6;color:#374151" title="${esc(pr.join(' | '))}">${esc(pr.slice(0,2).join(' · '))}</span>`); }
   return ch.length?`<div class="nc-clirow">${ch.join('')}</div>`:'';
 }
 /* o card completo — ficha do negócio (opts.negocio) e ficha da carteira (opts.modo==='carteira') */
@@ -7506,6 +7506,7 @@ function bcCardCliente(it){
   rad.statust.forEach(()=>chips.push(`<span class="nc-cli amar">⏳ Status T</span>`));
   if(c.cob&&c.cob.cs) chips.push(`<span class="nc-cli" title="capital segurado">CS ${brlCurto(c.cob.cs)}</span>`);
   const fam=cartGrupoChips(c); if(fam) chips.push(fam);
+  const pr=cartPerfilResumo(c.ref); if(pr.length) chips.push(`<span class="nc-cli" style="background:#f3f4f6;color:#374151" title="${esc(pr.join(' | '))}">${esc(pr.slice(0,2).join(' · '))}</span>`);
   return `<div class="nncard nncard-cli" data-ref="${esc(c.ref)}" onclick="cartAbrir('${esc(c.ref)}')" title="Cliente da carteira — abre a ficha; o botão cria o negócio na Base">
     <div class="nc-nome">${esc(c.nome)}</div>
     <div class="nc-sub">${c.idade!=null?esc(c.idade)+'a · ':''}${esc(telBR(c.celular||c.telefone||''))}</div>
@@ -7634,6 +7635,50 @@ function cartGrupoChips(cli){ const g=cartGrupo(cli); if(!g||!g.tem) return '';
   if(g.pagoPor.length) ch.push(`<span class="nc-cli" style="background:#eef2ff;color:#3730a3" title="Apólice paga por ${esc(g.pagoPor.map(atTitleC).join(', '))}">💳 pago por ${esc(g.pagoPor.map(p1).join(', '))}</span>`);
   if(g.mesmo.length) ch.push(`<span class="nc-cli" title="Mesmo e-mail/telefone de: ${esc(g.mesmo.map(atTitleC).join(', '))}">👥 c/ ${esc(g.mesmo.map(p1).join(', '))}</span>`);
   return ch.join(''); }
+
+
+/* ═══ PERFIL-DO-CLIENTE-V1 (04/09) ════════════════════════════════════════
+   Pedido dele: "mais importante que e-mail: profissão, local (pode ter vários —
+   Bruno mora em Recife e Petrolina), nome da esposa e dos filhos, idades, grupo
+   familiar". Vive em `carteira_perfil` (dono+ref), FORA de carteira_clientes,
+   porque a importação apaga e reinsere aquela tabela e levaria isso junto. */
+const CART_TPERF='carteira_perfil', CART_PERF_CHAVE='crmlp_cart_perfis_v1';
+(function(){ try{ const o=JSON.parse(localStorage.getItem(CART_PERF_CHAVE)||'{}'); if(o&&typeof o==='object') CART.perfis=o; }catch(_){} })();
+function cartPerfil(ref){ if(!CART.perfis||typeof CART.perfis!=='object') CART.perfis={}; return CART.perfis[ref]||{}; }
+function cartPerfilNorm(p){ p=p||{}; return { profissao:String(p.profissao||'').trim(), locais:Array.isArray(p.locais)?p.locais.filter(Boolean):[], conjuge:String(p.conjuge||'').trim(), conjugeIdade:p.conjugeIdade!=null&&p.conjugeIdade!==''?Number(p.conjugeIdade):null,
+  filhos:Array.isArray(p.filhos)?p.filhos.filter(f=>f&&f.nome).map(f=>({nome:String(f.nome).trim(),idade:f.idade!=null&&f.idade!==''?Number(f.idade):null})):[], outros:Array.isArray(p.outros)?p.outros.filter(f=>f&&f.nome).map(f=>({nome:String(f.nome).trim(),parentesco:String(f.parentesco||'').trim(),idade:f.idade!=null&&f.idade!==''?Number(f.idade):null})):[], notas:String(p.notas||'').trim(), _upd:p._upd||null }; }
+async function cartPerfilSalvar(ref,p){ p=cartPerfilNorm(p); p._upd=new Date().toISOString(); CART.perfis[ref]=p; try{ localStorage.setItem(CART_PERF_CHAVE,JSON.stringify(CART.perfis)); }catch(_){}
+  if(CART_REMOTE&&sb){ try{ const me=await cartMeuEmail(); const cli=(CART.clientes||[]).find(c=>c.ref===ref); const dono=(cli&&cli._dono)||me; const r=await sb.from(CART_TPERF).upsert({dono,ref,dados:p,atualizado:p._upd},{onConflict:'dono,ref'}); if(r.error) throw r.error; return 'remoto'; }catch(e){ console.error('perfil da carteira: sync falhou',e); return 'falhou'; } } return 'local'; }
+/* linhas "Nome, idade" → [{nome,idade}] */
+function cartPerfilParseLista(txt){ return String(txt||'').split(/\n|;/).map(l=>l.trim()).filter(Boolean).map(l=>{ const m=l.match(/^(.*?)(?:[,·]\s*(\d{1,3})\s*(?:a|anos)?)?\s*$/); return {nome:(m?m[1]:l).trim().replace(/,$/,''),idade:m&&m[2]?Number(m[2]):null}; }).filter(x=>x.nome); }
+function cartPerfilResumo(ref){ const p=cartPerfilNorm(cartPerfil(ref)); const parts=[];
+  if(p.profissao) parts.push('💼 '+p.profissao); if(p.locais.length) parts.push('📍 '+p.locais.join(' · '));
+  if(p.conjuge) parts.push('💍 '+p.conjuge+(p.conjugeIdade!=null?' ('+p.conjugeIdade+'a)':''));
+  if(p.filhos.length) parts.push('👶 '+p.filhos.map(f=>f.nome+(f.idade!=null?' ('+f.idade+'a)':'')).join(', '));
+  if(p.outros.length) parts.push('👥 '+p.outros.map(f=>f.nome+(f.parentesco?' ('+f.parentesco+(f.idade!=null?', '+f.idade+'a':'')+')':(f.idade!=null?' ('+f.idade+'a)':''))).join(', '));
+  return parts; }
+function cartPerfilHtml(c){ const p=cartPerfilNorm(cartPerfil(c.ref)); const res=cartPerfilResumo(c.ref); const ed=CART._perfilEdit===c.ref;
+  const linha=(l,v)=>`<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0"><span style="color:var(--muted)">${l}</span><span style="font-weight:600;text-align:right">${v}</span></div>`;
+  const vis=`<div style="font-size:13px">${p.profissao?linha('💼 Profissão',esc(p.profissao)):''}${p.locais.length?linha('📍 Locais',esc(p.locais.join(' · '))):''}${p.conjuge?linha('💍 Cônjuge',esc(p.conjuge)+(p.conjugeIdade!=null?' · '+p.conjugeIdade+' anos':'')):''}
+      ${p.filhos.length?linha('👶 Filhos',p.filhos.map(f=>esc(f.nome)+(f.idade!=null?' ('+f.idade+'a)':'')).join('<br>')):''}${p.outros.length?linha('👥 Outros',p.outros.map(f=>esc(f.nome)+(f.parentesco?' · '+esc(f.parentesco):'')+(f.idade!=null?' ('+f.idade+'a)':'')).join('<br>')):''}${p.notas?`<div style="margin-top:6px;color:var(--muted);font-size:12.5px;white-space:pre-wrap">${esc(p.notas)}</div>`:''}
+      ${res.length?'':'<div style="color:var(--muted);font-size:12.5px">Nada anotado ainda — profissão, onde mora, quem é a família.</div>'}</div>
+    <button class="btn btn-s btn-mini" style="margin-top:6px;min-height:36px" onclick="event.stopPropagation();CART._perfilEdit='${esc(c.ref)}';cartAbrir('${esc(c.ref)}')">✏️ ${res.length?'Editar':'Anotar'}</button>`;
+  const form=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12.5px" onclick="event.stopPropagation()">
+      <label style="grid-column:1/-1">Profissão<input id="cp-prof" value="${esc(p.profissao)}" placeholder="ex.: médico, empresário (ramo)"></label>
+      <label style="grid-column:1/-1">Onde mora / trabalha (vírgula entre os locais)<input id="cp-loc" value="${esc(p.locais.join(', '))}" placeholder="Recife, Petrolina"></label>
+      <label>Cônjuge<input id="cp-conj" value="${esc(p.conjuge)}" placeholder="nome"></label>
+      <label>Idade do cônjuge<input id="cp-conji" type="number" min="0" max="120" value="${p.conjugeIdade!=null?p.conjugeIdade:''}"></label>
+      <label style="grid-column:1/-1">Filhos (um por linha: Nome, idade)<textarea id="cp-filhos" rows="3" placeholder="Maria, 8&#10;João, 12">${esc(p.filhos.map(f=>f.nome+(f.idade!=null?', '+f.idade:'')).join('\n'))}</textarea></label>
+      <label style="grid-column:1/-1">Outros da família (Nome, parentesco, idade)<textarea id="cp-outros" rows="2" placeholder="Dona Ana, mãe, 70">${esc(p.outros.map(f=>f.nome+(f.parentesco?', '+f.parentesco:'')+(f.idade!=null?', '+f.idade:'')).join('\n'))}</textarea></label>
+      <label style="grid-column:1/-1">Notas<textarea id="cp-notas" rows="2">${esc(p.notas)}</textarea></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p btn-mini" style="min-height:40px" onclick="event.stopPropagation();cartPerfilGravar('${esc(c.ref)}')">💾 Salvar</button><button class="btn btn-ghost btn-mini" style="min-height:40px" onclick="event.stopPropagation();CART._perfilEdit=null;cartAbrir('${esc(c.ref)}')">Cancelar</button></div>`;
+  return `<h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">👨‍👩‍👧 Pessoa e família</h3>${ed?form:vis}`; }
+async function cartPerfilGravar(ref){ const v=id=>(document.getElementById(id)||{}).value||'';
+  const outros=String(v('cp-outros')).split(/\n|;/).map(l=>l.trim()).filter(Boolean).map(l=>{ const p=l.split(',').map(x=>x.trim()); return {nome:p[0]||'',parentesco:(p[1]&&!/^\d+$/.test(p[1]))?p[1]:'',idade:(p.slice(1).find(x=>/^\d{1,3}$/.test(x))||null)&&Number(p.slice(1).find(x=>/^\d{1,3}$/.test(x)))}; }).filter(x=>x.nome);
+  const p={profissao:v('cp-prof'),locais:String(v('cp-loc')).split(/,|;/).map(x=>x.trim()).filter(Boolean),conjuge:v('cp-conj'),conjugeIdade:v('cp-conji')||null,filhos:cartPerfilParseLista(v('cp-filhos')),outros,notas:v('cp-notas')};
+  const st=await cartPerfilSalvar(ref,p); CART._perfilEdit=null; cartAbrir(ref); toast(st==='remoto'?'Perfil salvo':st==='local'?'Perfil salvo neste aparelho (faça login pra sincronizar)':'Salvo aqui — sync falhou',st!=='falhou'); }
+window.cartPerfilGravar=cartPerfilGravar;
 
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
@@ -10461,7 +10506,7 @@ function lpCounts(){ Object.keys(LP_ENT).forEach(e=>{ const el=$('#cnt-'+e); if(
    (preview/deslogado), molde do LP_REMOTE. */
 const CART_CHAVE='crmlp_carteira_v1';
 const CART_TCLI='carteira_clientes', CART_TAPO='carteira_apolices';
-let CART={clientes:[],apolices:[],importadoEm:null};
+let CART={clientes:[],apolices:[],importadoEm:null,perfis:{}};
 let CART_REMOTE=false;                    // true quando há sessão Supabase → lê/grava no banco
 let CART_Q='';
 /* B4 + Filtros 2.0: `gaps` (CSV) é o filtro que serve à VENDA — quem NÃO tem
@@ -10487,6 +10532,7 @@ async function cartCarregar(){
     CART.apolices=cartNormLista(ra.data,'chave',cartNormApolice);
     const max=[...(rc.data||[]),...(ra.data||[])].reduce((m,r)=>((r.atualizado||'')>m?r.atualizado:m),'');
     CART.importadoEm=max?max.slice(0,10):null;
+    try{ const rp=await sb.from(CART_TPERF).select('ref,dados'); if(!rp.error){ CART.perfis={}; (rp.data||[]).forEach(r=>{ if(r&&r.ref) CART.perfis[r.ref]=r.dados||{}; }); } }catch(e){ console.warn('perfil da carteira: load falhou',e); }
     cartSalvar();                         // espelha no cache local
     return;
   }catch(e){ console.warn('CART load remoto falhou → fallback local',e); CART_REMOTE=false; } }
@@ -10917,6 +10963,7 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
       <button class="btn btn-s btn-mini" onclick="cartNovoNegocioUI('${esc(c.ref)}','nn')" title="Cria o negócio no funil Novos Negócios (SitPlan)">🎯 Novos Negócios</button></div>
     ${radHTML}
     ${cliCardHtml(clienteDe(c),{modo:'carteira'})}
+    ${cartPerfilHtml(c)}
     <h3 style="margin:16px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Coberturas vigentes</h3>
     ${c._origem?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Cliente entrou pela ${esc(c._origem)}${c._criadoEm?' em '+dataBR(c._criadoEm):''}. Capital e coberturas chegam com a próxima importação da carteira — até lá o app não inventa.</div>`:''}
     <div style="font-size:13px">${c._origem?linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))+'</div><div hidden>':''}${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
@@ -13856,6 +13903,16 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('grupo familiar: vira chip no card', cartGrupoChips(CART.clientes[0]).indexOf('paga p/ Ricardo')>=0 && cartGrupoChips(CART.clientes[1]).indexOf('pago por Amanda')>=0);
       }catch(e){ falhas.push('grupo familiar: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; cartIdxInvalidar&&cartIdxInvalidar(); } }
     ok('ficha da carteira: o corpo rola (mesmo .drawer-body da ficha do contato)', (()=>{ const _c=CART.clientes; try{ CART.clientes=[cartNormCliente({nome:'Rola Teste',ref:'rola teste',cob:{pm:1}})]; cartAbrir('rola teste'); const b=document.querySelector('#drawer .drawer-body'); const okk=!!b&&getComputedStyle(b).overflowY==='auto'; fecharDrawer(); return okk; } finally{ CART.clientes=_c; } })());
+
+    /* PERFIL-DO-CLIENTE-V1 */
+    { const _p=CART.perfis, _c=CART.clientes; try{ CART.perfis={}; CART.clientes=[cartNormCliente({nome:'Bruno Teste',ref:'bruno teste',cob:{pm:1}})];
+        const p=cartPerfilNorm({profissao:'Médico',locais:['Recife','Petrolina'],conjuge:'Ana',conjugeIdade:'40',filhos:cartPerfilParseLista('Maria, 8\nJoão, 12 anos'),outros:[{nome:'Dona Ana',parentesco:'mãe',idade:70}],notas:'x'});
+        ok('perfil: filhos "Nome, idade" viram nome + idade', p.filhos.length===2&&p.filhos[1].idade===12&&p.filhos[0].nome==='Maria');
+        CART.perfis['bruno teste']=p;
+        ok('perfil: resumo traz profissão, locais, cônjuge e filhos com idades', cartPerfilResumo('bruno teste').join(' | ').indexOf('Recife · Petrolina')>=0 && cartPerfilResumo('bruno teste').join(' | ').indexOf('João (12a)')>=0);
+        ok('perfil: a ficha da carteira mostra a seção Pessoa e família', cartPerfilHtml(CART.clientes[0]).indexOf('Pessoa e família')>=0 && cartPerfilHtml(CART.clientes[0]).indexOf('Petrolina')>=0);
+        ok('perfil: importar a carteira de novo NÃO apaga o perfil (vive em CART.perfis, tabela própria)', (()=>{ CART.clientes=[]; return !!CART.perfis['bruno teste']; })());
+      }catch(e){ falhas.push('perfil: exceção '+(e&&e.message)); } finally{ CART.perfis=_p; CART.clientes=_c; } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
