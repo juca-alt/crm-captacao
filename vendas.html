@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v5.5 · Vendas LP</title>
+<title>CRM SeguroComJucá · v5.6 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1179,11 +1179,12 @@
     <button class="nav-grp modulo nav-grp-btn fechado" id="pipe-toggle" onclick="toggleGrp('pipe')"><span class="ic">📈</span><span class="lbl">Pipe Negócios</span><span class="caret" id="pipe-caret">▾</span></button>
     <div class="nav-grp-wrap fechado" id="pipe-group">
       <button class="nav-btn sub" data-view="nn-funil" onclick="irPara('nn-funil')"><span class="ic">🎯</span><span class="lbl">Novos Negócios</span></button>
-      <button class="nav-grp nav-sub-et nav-grp-btn fechado" id="nn-et-toggle" onclick="toggleGrp('nn-et')"><span class="lbl">Etapas Novos Negócios</span><span class="caret" id="nn-et-caret">▾</span></button>
-      <div class="nav-grp-wrap fechado" id="nn-etapas"></div>
+      <!-- MENU-SEM-ETAPAS (04/09): as listas de etapas saem do menu lateral a pedido dele — o quadro do funil já mostra tudo. Os nós ficam (hidden) porque o contador/render ainda escreve neles. -->
+      <button hidden class="nav-grp nav-sub-et nav-grp-btn fechado" id="nn-et-toggle" onclick="toggleGrp('nn-et')"><span class="lbl">Etapas Novos Negócios</span><span class="caret" id="nn-et-caret">▾</span></button>
+      <div hidden class="nav-grp-wrap fechado" id="nn-etapas"></div>
       <button class="nav-btn sub" data-view="bc-funil" onclick="irPara('bc-funil')"><span class="ic">💼</span><span class="lbl">Negócios na Base</span></button>
-      <button class="nav-grp nav-sub-et nav-grp-btn fechado" id="bc-et-toggle" onclick="toggleGrp('bc-et')"><span class="lbl">Etapas Base de Clientes</span><span class="caret" id="bc-et-caret">▾</span></button>
-      <div class="nav-grp-wrap fechado" id="bc-etapas"></div>
+      <button hidden class="nav-grp nav-sub-et nav-grp-btn fechado" id="bc-et-toggle" onclick="toggleGrp('bc-et')"><span class="lbl">Etapas Base de Clientes</span><span class="caret" id="bc-et-caret">▾</span></button>
+      <div hidden class="nav-grp-wrap fechado" id="bc-etapas"></div>
     </div>
 
     <div class="sep"></div>
@@ -1242,7 +1243,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v5.5 · Vendas LP</span>
+      <span class="tag">PipeX · v5.6 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1264,7 +1265,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v5.5 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v5.6 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -10867,6 +10868,18 @@ function bnVivos(){ const m=isMaster();
   return BN.contatos.filter(b=>!b.merged_into &&
     (m? (!FBN.lp||(b.lp||'gustavo')===FBN.lp) : (b.lp||'gustavo')===S.activeUser)); }
 function bnPor(id){ return BN.contatos.find(b=>b.id===id); }
+/* TELEFONES-ALT-V1 (04/09): um nome pode ter mais de um número (o antigo, o do
+   trabalho, o que veio da duplicata). O principal segue em `telefone`; os
+   outros em `telefones_alt` (a fusão já gravava aí). Busca, filtro "com
+   telefone", duplicata e a busca global olham todos. */
+function bnTels(c){ const out=[]; const add=v=>{ v=String(v||'').trim(); if(v&&!out.includes(v)) out.push(v); }; if(c){ add(c.telefone); (c.telefones_alt||[]).forEach(add); } return out; }
+function bnTelsTxt(c){ return bnTels(c).join(' '); }
+function bnTelsSet(c,txt){ const l=String(txt||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean); const p=c.telefone||''; c.telefones_alt=[...new Set(l.filter(x=>x&&x!==p))]; if(!c.telefones_alt.length) delete c.telefones_alt; }
+/* SUGESTOES-COLUNA-V1 (04/09): datalist por coluna nos filtros das Recomendações —
+   valores distintos da base que casam com o que ele digitou. */
+function bnSugColuna(k,q){ const n=normKey(String(q||'')); const vistos={}, out=[];
+  bnVivos().forEach(c=>{ let v=k==='telefone'?bnTelsTxt(c):(k==='estado_civil'?bnCivilDe(c):c[k]); v=v==null?'':String(v).trim(); if(!v||out.length>=12) return; if(n&&!normKey(v).includes(n)) return; const key=normKey(v); if(vistos[key]) return; vistos[key]=1; out.push('<option value="'+esc(v)+'"></option>'); });
+  return out.join(''); }
 function bnLpLabel(id){ const u=(S.users||[]).find(x=>x.id===(id||'gustavo')); return u?String(u.nome).split(' ')[0]:(id||'gustavo'); }
 /* Atualizar app: limpa caches (SW/CacheStorage) e recarrega — versão nova na hora */
 /* Dois botões, dois propósitos — antes eram um só e qualquer refresh custava um
@@ -11115,12 +11128,12 @@ function bnTh(col,label){ const on=FBN.sort===col; return `<th onclick="bnSort('
 function bnFilhosStr(v){ return (v===true||v==='sim')?'sim':(v===false||v==='nao')?'nao':''; }
 function bnFiltrados(){
   let l=bnVivos();
-  if(FBN.busca){ const q=FBN.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.telefone||'').includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
+  if(FBN.busca){ const q=FBN.busca.toLowerCase(); l=l.filter(c=>(c.nome||'').toLowerCase().includes(q)||bnTelsTxt(c).includes(q)||(c.recomendante||'').toLowerCase().includes(q)); }
   if(FBN.trilha) l=l.filter(c=>c.trilha===FBN.trilha);
   if(FBN.estagio){ const s=bnCsvSet(FBN.estagio); l=l.filter(c=>s.has(csvKey(c.estagio))); }   // CSV = multi (compat: valor único é CSV de 1)
   if(FBN.pri){ const s=bnCsvSet(FBN.pri); l=l.filter(c=>s.has(csvKey(c.prioridade))); }
-  if(FBN.tel==='com') l=l.filter(c=>c.telefone);
-  if(FBN.tel==='sem') l=l.filter(c=>!c.telefone);   // sem-telefone é matéria-prima do SitPlan: só filtra se VOCÊ pedir
+  if(FBN.tel==='com') l=l.filter(c=>bnTels(c).length);
+  if(FBN.tel==='sem') l=l.filter(c=>!bnTels(c).length);   // sem-telefone é matéria-prima do SitPlan: só filtra se VOCÊ pedir
   if(FBN.prof){ const q=FBN.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
   if(FBN.cid){ const q=FBN.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
   if(FBN.ecivil){ const s=bnCsvSet(FBN.ecivil); l=l.filter(c=>s.has(csvKey(bnCivilDe(c)))); }  // lê civil_cod da carga também
@@ -11255,7 +11268,7 @@ function bnSheetRender(){
 function bnCelHtml(c,k){
   switch(k){
     case 'nome': return `<b>${esc(c.nome)}</b>${(c.contexto||c.cidade||c.idade)? `<br><span style="font-size:11.5px;color:var(--muted)">${esc([c.contexto,c.cidade,c.idade&&(c.idade+' anos')].filter(Boolean).join(' · '))}</span>`:''}`;
-    case 'telefone': return c.telefone? esc(c.telefone):'<span style="color:var(--muted)">—</span>';
+    case 'telefone': { const alt=(c.telefones_alt||[]); return (c.telefone? esc(c.telefone):'<span style="color:var(--muted)">—</span>')+(alt.length?`<br><span style="font-size:11px;color:var(--muted)" title="outros números">${alt.map(esc).join(' · ')}</span>`:''); }
     case 'renda_estimada': return c.renda_estimada? brlCurto(c.renda_estimada):'';
     case 'civil_cod': { const i=bnCivilInfo(bnCivilCod(c)); return i?`<span class="badge b-cinza" title="${esc(i.longo)}">${esc(i.cod)}</span>`:''; }
     case 'estado_civil': return esc(bnCivilDe(c).split('(')[0]);
@@ -11467,6 +11480,7 @@ function bnEditorHtml(c){
       <label>Nome<input id="bne-nome" value="${esc(c.nome)}"></label>
       <label>Contexto (sufixo do nome)<input id="bne-ctx" value="${esc(c.contexto||'')}" placeholder="ex.: Faculdade, MED Radiologista"></label>
       <label>Telefone<input id="bne-tel" value="${esc(c.telefone||'')}"></label>
+      <label>Outros telefones (vírgula)<input id="bne-tel2" value="${esc((c.telefones_alt||[]).join(', '))}" placeholder="antigo, trabalho…"></label>
       <label>Recomendante<input id="bne-rec" value="${esc(c.recomendante||'')}"></label>
       <label>Trilha<select id="bne-tri">${BN_TRILHAS.map(t=>`<option ${c.trilha===t?'selected':''} value="${t}">${t}</option>`).join('')}</select></label>
       <label>Estágio<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select></label>
@@ -11495,7 +11509,7 @@ function bnEditar(id){ FBN.edit=FBN.edit===id?null:id;
 function bnSalvarEdicao(id){
   const c=bnPor(id); if(!c) return;
   c.nome=$('#bne-nome').value.trim()||c.nome; c.contexto=$('#bne-ctx').value.trim();
-  c.telefone=$('#bne-tel').value.trim()||null; c.recomendante=$('#bne-rec').value.trim()||null;
+  c.telefone=$('#bne-tel').value.trim()||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=$('#bne-rec').value.trim()||null;
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
   c.idade=$('#bne-idade').value?Number($('#bne-idade').value):null;
@@ -11514,7 +11528,7 @@ function bnPromover(id){
   if(b.funil_contato_id && S.contatos.some(x=>x.id===b.funil_contato_id)){ abrirContato(b.funil_contato_id); return; }
   const c={id:'bn'+Date.now(), lp:S.activeUser, funil:'nn', nome:b.nome, telefone:b.telefone||'',
     etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'',
-    idade:b.idade||'', profissao:b.cargo||'', notas:[b.notas,b.contexto&&('ctx: '+b.contexto)].filter(Boolean).join(' | '),
+    idade:b.idade||'', profissao:b.cargo||'', notas:[b.notas,b.contexto&&('ctx: '+b.contexto),(b.telefones_alt||[]).length&&('outros tel: '+b.telefones_alt.join(', '))].filter(Boolean).join(' | '),
     criadoEm:hojeISO(), sitplan:null};
   S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id;
   salvar(); bnSalvar(); render(); toast(b.nome.split(' ')[0]+' agora é contato do funil ✓',true);
@@ -11865,7 +11879,7 @@ function recVis(v){ RECP.vis=v; recPrefSalvar(); viewBnRecs(); }
 /* filtro por coluna: contém, sem diferenciar acento/caixa (normKey já faz isso) */
 function recColFiltro(k,v){ BNR.cf=Object.assign({},BNR.cf||{}); if(v) BNR.cf[k]=v; else delete BNR.cf[k]; viewBnRecs(); }
 function recPassaCf(c){ const f=BNR.cf||{};
-  return Object.keys(f).every(k=>{ const alvo=k==='estagio'?(BN_EST_LABEL[c.estagio]||c.estagio):c[k];
+  return Object.keys(f).every(k=>{ const alvo=k==='estagio'?(BN_EST_LABEL[c.estagio]||c.estagio):(k==='telefone'?bnTelsTxt(c):c[k]);
     return normKey(String(alvo??'')).includes(normKey(f[k])); }); }
 /* largura arrastável (mouse; no celular a tela usa os cards) */
 let _recRz=null;
@@ -11899,7 +11913,7 @@ function recTabelaHtml(l,row){
   const seta=k=>BNR.sort===k?(BNR.dir>0?' ↑':' ↓'):'';
   const wst=k=>RECP.w&&RECP.w[k]?`width:${RECP.w[k]}px;min-width:${RECP.w[k]}px;`:'';
   const th=k=>`<th style="${wst(k)}white-space:nowrap;position:relative;cursor:pointer" title="Clique pra ordenar · arraste a borda pra redimensionar" onclick="fxSort('rec','${k}')">${esc(BN_COLS[k].label)}${seta(k)}<span class="colres" onmousedown="recRzStart(event,'${k}')"></span></th>`;
-  const filtro=k=>`<th style="${wst(k)}padding:2px 4px"><input id="reccf-${k}" type="search" placeholder="filtrar…" value="${esc(cf[k]||'')}" oninput="recCfInput('${k}',this.value)" style="width:100%;min-width:60px;font-size:11.5px;padding:3px 6px"></th>`;
+  const filtro=k=>`<th style="${wst(k)}padding:2px 4px"><input id="reccf-${k}" list="reccf-dl-${k}" type="search" placeholder="filtrar…" value="${esc(cf[k]||'')}" oninput="recCfInput('${k}',this.value)" style="width:100%;min-width:60px;font-size:11.5px;padding:3px 6px"><datalist id="reccf-dl-${k}">${bnSugColuna(k,cf[k]||'')}</datalist></th>`;
   return `${bnUndoBarra()}<div class="card bn-tabela" style="padding:6px 10px;overflow-x:auto">
     <table><thead><tr><th style="width:26px"></th>${cols.map(th).join('')}</tr>
     <tr><th></th>${cols.map(filtro).join('')}</tr></thead><tbody>
@@ -11937,7 +11951,7 @@ function viewBnRecs(){
   if(BNR.recom && !recomSet.includes(BNR.recom)) BNR.recom='';
   if(BNR.recom) lista=lista.filter(b=>b.recomendante.trim()===BNR.recom);
   // Filtros 2.0: as mesmas lentes do Estoque, agora sobre os recomendados
-  if(BNR.busca){ const q=BNR.busca.toLowerCase(); lista=lista.filter(b=>(b.nome||'').toLowerCase().includes(q)||(b.recomendante||'').toLowerCase().includes(q)||(b.telefone||'').includes(q)); }
+  if(BNR.busca){ const q=BNR.busca.toLowerCase(); lista=lista.filter(b=>(b.nome||'').toLowerCase().includes(q)||(b.recomendante||'').toLowerCase().includes(q)||bnTelsTxt(b).includes(q)); }
   if(BNR.trilha){ const s=csvSet(BNR.trilha); lista=lista.filter(b=>s.has(csvKey(b.trilha))); }
   if(BNR.estagio){ const s=csvSet(BNR.estagio); lista=lista.filter(b=>s.has(csvKey(b.estagio))); }
   if(BNR.pri){ const s=csvSet(BNR.pri); lista=lista.filter(b=>s.has(csvKey(b.prioridade))); }
@@ -12469,7 +12483,7 @@ function lpkMatches(q){
   const n=lpkNorm(q), out=[];
   const hit=campos=>campos.some(x=>x&&lpkNorm(x).includes(n));
   if(LPK_SCOPE==='all'||LPK_SCOPE==='bn'){
-    bnVivos().filter(c=>hit([c.nome,c.telefone,c.recomendante,c.cargo,c.empresa,c.cidade,c.contexto,c.notas]))
+    bnVivos().filter(c=>hit([c.nome,bnTelsTxt(c),c.recomendante,c.cargo,c.empresa,c.cidade,c.contexto,c.notas]))
       .slice(0,LPK_SCOPE==='bn'?14:6)
       .forEach(c=>out.push({t:'bn',id:c.id,nome:c.nome,sub:[c.cargo,c.cidade,BN_EST_LABEL[c.estagio]].filter(Boolean).join(' · ')||'Estoque de Nomes',tag:'📦 Estoque'}));
   }
@@ -13584,6 +13598,15 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('google: token guardado válido é reaproveitado sem pedir conta de novo', (()=>{ const _g=Object.assign({},GCAL); try{ GCAL.tok='t1'; GCAL.exp=Date.now()+3000000; let pediu=false; const _r=gcalGisReady; let got=null; gcalToken(false).then(t=>{ got=t; }); return GCAL.tok==='t1'; } finally{ Object.assign(GCAL,_g); } })());
     ok('google: a dica da conta vem do login do CRM (não deixa o Google perguntar)', typeof gcalHint==='function' && (gcalHint()===null || typeof gcalHint()==='string'));
     ok('login: o card da Visão LP tem e-mail + senha além do Google (o Google nunca fechou o ciclo pra ele)', !!document.getElementById('lg-email')&&!!document.getElementById('lg-senha')&&!!document.getElementById('lg-entrar')&&!!document.getElementById('lg-google'));
+    /* TELEFONES-ALT-V1 + SUGESTOES-COLUNA-V1 */
+    { const c={id:'t1',nome:'Teste Tel',telefone:'+5581900000001',telefones_alt:['+5581900000002']};
+      ok('telefones: bnTels junta principal + alternativos sem repetir', bnTels(c).length===2 && bnTels({telefone:'x',telefones_alt:['x']}).length===1);
+      bnTelsSet(c,'+5581900000002, +5581900000003, +5581900000001'); ok('telefones: editar "outros" grava lista limpa e não repete o principal', c.telefones_alt.length===2 && !c.telefones_alt.includes('+5581900000001'));
+      ok('telefones: a célula mostra os outros números', bnCelHtml(c,'telefone').indexOf('+5581900000003')>=0);
+      const _b=BN.contatos; try{ BN.contatos=[{id:'s1',nome:'A',recomendante:'Maria Teste',cargo:'Médico(a)',estagio:'estoque'},{id:'s2',nome:'B',recomendante:'Mario Teste',cargo:'Advogado(a)',estagio:'estoque'}];
+        ok('sugestões: filtro de coluna sugere valores da base conforme digita', bnSugColuna('recomendante','mar').split('<option').length-1===2 && bnSugColuna('cargo','adv').indexOf('Advogado')>=0 && bnSugColuna('cargo','zzz')==='');
+      } finally{ BN.contatos=_b; } }
+    ok('menu: as listas de etapas não aparecem no menu lateral (pedido de 04/09)', ['nn-et-toggle','nn-etapas','bc-et-toggle','bc-etapas'].every(id=>{ const e=document.getElementById(id); return e&&e.hidden; }));
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
