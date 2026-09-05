@@ -104,6 +104,7 @@ def main():
     ap.add_argument('--sem-abrir', action='store_true')
     ap.add_argument('--aba', action='store_true', help='abrir numa aba do seu navegador (antes era o padrão)')
     ap.add_argument('--timeout', type=int, default=300)
+    ap.add_argument('--json', help='grava o resultado bruto (por tela: exceções, mortos, estouro, alvos<44 com lista) neste arquivo')
     a = ap.parse_args()
     if a.servido:
         sys.exit(servido())
@@ -147,6 +148,10 @@ def main():
         print(f'❌ sem resultado em {a.timeout} s (o navegador não devolveu nada)')
         sys.exit(2)
     r = RESULTADO['r']
+    if a.json:
+        with open(a.json, 'w', encoding='utf-8') as f:
+            json.dump(r, f, ensure_ascii=False, indent=1)
+        print('resultado bruto:', a.json)
     imprimir(r)
     if a.prova:
         print('✅ PROVA OK — o guarda acusa defeito (isto NÃO é o portão; rode sem --prova antes de subir)' if r.get('ok') else '❌ PROVA FALHOU — o guarda deixou passar o defeito injetado')
