@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v6.3 · Vendas LP</title>
+<title>CRM SeguroComJucá · v6.4 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1253,7 +1253,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v6.3 · Vendas LP</span>
+      <span class="tag">PipeX · v6.4 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1275,7 +1275,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v6.3 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v6.4 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7738,6 +7738,45 @@ function lpDerivar(){
   return n;
 }
 
+
+/* ═══ SUBIR-UNIVERSAL-V1 (05/09) ══════════════════════════════════════════
+   Pedido dele: "esse Subir relatório fica útil como botão de TODOS os relatórios
+   que vamos colando — só colocar e identificar o tipo". Um detector por
+   assinatura do próprio relatório e um roteador pro módulo que já sabe ler. */
+const REL_TIPOS={
+  carteira_clientes:{nome:'Carteira de Clientes (portal, .xls)'},
+  carteira_apolices:{nome:'Apólices Vigentes (portal, .xls)'},
+  emitidas:{nome:'Apólices Emitidas no Período (UW e Emissão)'},
+  pendencias:{nome:'Propostas Pendentes (UW e Emissão)'},
+  atraso:{nome:'Lista de Atraso'},
+  semanal:{nome:'Relatório semanal do LP'} };
+function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
+  if(/<table|<tr|<td/i.test(cab)){ const h=normKey(cab.replace(/<[^>]+>/g,' '));
+    if(/data de nascimento/.test(h)&&/num\.? ?apolices|apolices/.test(h)&&/cs/.test(h)) return 'carteira_clientes';
+    if(/resp\.? ?pagto/.test(h)&&/periodicidade/.test(h)) return 'carteira_apolices';
+    if(/segurado/.test(h)&&/premio/.test(h)&&/apolice/.test(h)) return 'carteira_apolices';
+    if(/cliente/.test(h)&&/nascimento/.test(h)) return 'carteira_clientes'; }
+  if(/apolices emitidas no periodo/.test(n)) return 'emitidas';
+  if(/propostas pendentes/.test(n)||/contestacao/.test(n)||/pendente de emissao/.test(n)) return 'pendencias';
+  if(/apolices em atraso|relatorio de atraso|dias de atraso|premio em atraso|vencido em/.test(n)) return 'atraso';
+  if(/total (lp|mfb)/.test(n)&&/\bativa\b/.test(n)&&/emissao/.test(n)) return 'emitidas';
+  return 'semanal'; }
+async function relRotear(tipo,bruto){
+  if(tipo==='carteira_clientes'||tipo==='carteira_apolices'){
+    try{ toast('Identifiquei: '+REL_TIPOS[tipo].nome+' — importando…',true);
+      const st=await cartIngest(tipo==='carteira_clientes'?{clientesHTML:bruto}:{apolicesHTML:bruto});
+      const suf=st&&st.sync==='remoto'?' · salvo na nuvem':st&&st.sync==='falhou'?' · ficou SÓ neste aparelho (sync falhou)':'';
+      toast(`Carteira atualizada — ${CART.clientes.length} cliente(s), ${CART.apolices.length} apólice(s)${suf}`,!(st&&st.sync==='falhou'));
+      if(!/^cart-/.test(VIEW)) irPara('cart-clientes'); else render();
+    }catch(e){ console.error(e); toast('Não consegui ler esse .xls — confira se é o export do portal.',false); }
+    return; }
+  if(tipo==='emitidas'){ exColar(); setTimeout(()=>{ const t=$('#ex_txt'); if(t){ t.value=bruto; exProcessar(); } },80); return; }
+  if(tipo==='pendencias'){ emColarRelatorio(); setTimeout(()=>{ const t=$('#em_txt'); if(t){ t.value=bruto; emProcessar(); } },80); return; }
+  if(tipo==='atraso'){ atColarRelatorio(); setTimeout(()=>{ const t=$('#at_txt'); if(t){ t.value=bruto; atProcessar(); } },80); return; }
+  openLpImport(); setTimeout(()=>{ const t=$('#lp-text'); if(t){ t.value=bruto; } },80);
+}
+window.relDetectar=relDetectar; window.relRotear=relRotear;
+
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
    podemos selecionar o cliente (inclusive os novos) para ter a calculadora e
@@ -10412,18 +10451,18 @@ function lpB64(buf){ var b=new Uint8Array(buf),s='',CH=0x8000; for(var i=0;i<b.l
 function openLpImport(){
   const ov=document.createElement('div'); ov.className='overlay aberto'; ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center';
   ov.innerHTML=`<div class="lp-modal-card" onclick="event.stopPropagation()">
-    <h2>📄 Subir relatório semanal</h2>
-    <div class="sub">Duas formas de subir: solte o <b>PDF</b> ou <b>cole o texto</b> do relatório. O app lê <b>localmente, sem IA</b> (instantâneo, de graça e sem “alta demanda”); a IA só entra se o texto não for reconhecido. O status do follow-up é preservado a cada semana.</div>
+    <h2>📄 Subir relatório</h2>
+    <div class="sub">Um lugar só pra <b>qualquer relatório da Prudential</b>: solte o arquivo (PDF ou .xls do portal) ou cole o texto. Eu <b>identifico o tipo</b> — relatório semanal, Carteira de Clientes, Apólices Vigentes, Apólices Emitidas, Propostas Pendentes, Lista de Atraso — e mando pro módulo certo. Leitura local, sem IA.</div>
     <div class="lp-tabs" style="display:flex;gap:6px;margin:4px 0 12px">
       <button class="lp-tab" id="tab-pdf" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--azul-borda);background:var(--azul-claro);color:var(--azul);font-weight:700">📄 Subir PDF</button>
       <button class="lp-tab" id="tab-txt" style="flex:1;padding:9px;border-radius:9px;border:1px solid var(--linha);background:#fff;color:var(--cinza);font-weight:700">📋 Colar texto</button>
     </div>
     <div id="pane-pdf">
-      <div class="lp-drop" id="lp-drop"><b>Solte o PDF aqui</b> ou clique pra escolher<br><span style="font-size:12px">um arquivo .pdf do relatório</span><div id="lp-file-nome" style="margin-top:8px;color:var(--azul);font-weight:700"></div></div>
-      <input type="file" id="lp-file" accept="application/pdf" style="display:none">
+      <div class="lp-drop" id="lp-drop"><b>Solte o arquivo aqui</b> ou clique pra escolher<br><span style="font-size:12px">.pdf do relatório · .xls/.htm exportado do portal (Carteira de Clientes, Apólices Vigentes)</span><div id="lp-file-nome" style="margin-top:8px;color:var(--azul);font-weight:700"></div></div>
+      <input type="file" id="lp-file" accept="application/pdf,.pdf,.xls,.htm,.html,.txt" style="display:none">
     </div>
     <div id="pane-txt" style="display:none">
-      <textarea id="lp-text" placeholder="No PDF: Ctrl+A (selecionar tudo) → Ctrl+C → cole aqui. Pode colar de 1 ou vários LPs de uma vez." style="width:100%;min-height:180px"></textarea>
+      <textarea id="lp-text" placeholder="Cole aqui o texto de qualquer relatório: semanal, Apólices Emitidas, Propostas Pendentes, Lista de Atraso… eu identifico." style="width:100%;min-height:180px"></textarea>
       <div style="font-size:11px;color:var(--muted);margin-top:6px">Lido localmente, sem IA — não depende do Gemini.</div>
     </div>
     <div class="lp-spin" id="lp-spin"><i></i> Lendo o relatório…</div>
@@ -10448,9 +10487,12 @@ function openLpImport(){
   const setMsg=(t,cor)=>{ const el=ov.querySelector('#lp-msg'); if(el){ el.textContent=t||''; el.style.color=cor||''; } };
   const startCooldown=(secs)=>{ const go=ov.querySelector('#lp-go'); if(!go) return; let s=secs; go.disabled=true; go.dataset.lbl=go.dataset.lbl||'Importar'; go.textContent='Aguarde '+s+'s';
     clearInterval(cooldownTimer); cooldownTimer=setInterval(()=>{ s--; if(s<=0){ clearInterval(cooldownTimer); go.disabled=false; go.textContent=go.dataset.lbl; } else go.textContent='Aguarde '+s+'s'; },1000); };
-  let pdfBuf=null;
-  const setFile=(file)=>{ if(!file) return; if(file.type&&file.type!=='application/pdf'){ $('#lp-msg').textContent='Envie um arquivo PDF.'; return; }
-    $('#lp-file-nome').textContent=file.name; const fr=new FileReader(); fr.onload=()=>{ pdfBuf=fr.result; }; fr.readAsArrayBuffer(file); };
+  let pdfBuf=null, htmlTxt=null;
+  const setFile=(file)=>{ if(!file) return; htmlTxt=null; pdfBuf=null; $('#lp-file-nome').textContent=file.name;
+    const ehPdf=/pdf$/i.test(file.name)||file.type==='application/pdf';
+    if(ehPdf){ const fr=new FileReader(); fr.onload=()=>{ pdfBuf=fr.result; }; fr.readAsArrayBuffer(file); return; }
+    /* .xls do portal é HTML em ISO-8859-1; .txt/.htm também entram como texto */
+    const fr=new FileReader(); fr.onload=()=>{ htmlTxt=String(fr.result||''); const t=relDetectar(htmlTxt); setMsg('Identifiquei: '+REL_TIPOS[t].nome+' — clique em Importar.',''); }; fr.readAsText(file,'ISO-8859-1'); };
   const drop=ov.querySelector('#lp-drop'), fileEl=ov.querySelector('#lp-file');
   drop.onclick=()=>fileEl.click();
   fileEl.onchange=()=>{ if(fileEl.files&&fileEl.files[0]) setFile(fileEl.files[0]); };
@@ -10461,13 +10503,16 @@ function openLpImport(){
   ov.querySelector('#lp-go').onclick=async()=>{
     let texto=($('#lp-text').value||'').trim();
     let pdf_base64='';
-    if(!pdfBuf && !texto){ setMsg('Escolha um PDF ou cole o texto do relatório.'); return; }
+    if(!pdfBuf && !texto && !htmlTxt){ setMsg('Escolha um arquivo ou cole o texto do relatório.'); return; }
+    /* SUBIR-UNIVERSAL-V1 (05/09): identifica o tipo e manda pro módulo certo */
+    if(htmlTxt||texto){ const bruto=htmlTxt||texto; const tipo=relDetectar(bruto);
+      if(tipo!=='semanal'){ ov.remove(); await relRotear(tipo,bruto); return; } }
     const go=ov.querySelector('#lp-go'); go.dataset.lbl='Importar'; go.disabled=true; $('#lp-spin').style.display='flex'; setMsg('');
     try{
       // extrai o texto do PDF aqui no navegador (rápido, de graça); PDF escaneado (sem camada de texto) → base64 pra IA.
       if(pdfBuf && !texto){
         let extr=''; try{ extr=await lpPdfText(pdfBuf.slice(0)); }catch(e){ extr=''; }
-        if(extr && extr.replace(/\s/g,'').length>=80){ texto=extr; }
+        if(extr && extr.replace(/\s/g,'').length>=80){ texto=extr; const tipo=relDetectar(texto); if(tipo!=='semanal'){ ov.remove(); await relRotear(tipo,texto); return; } }
         else { pdf_base64=lpB64(pdfBuf); }
       }
       // 1) LOCAL primeiro (parser determinístico, SEM IA) — mata o "alta demanda" no caso comum.
@@ -14015,6 +14060,9 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('aniversário de apólice: data de emissão das emitidas vira linha, com telefone da carteira', LP.datas.some(r=>r._key==='em:AP9'&&r.data_emissao==='2025-09-10'&&r.telefone));
         ok('derivação é idempotente (rodar de novo não duplica)', lpDerivar()===0 && n===2);
       }catch(e){ falhas.push('aniversários derivados: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; EX.itens=_e; LP.aniversario=_la; LP.datas=_ld; LP_TOUCHED=_t; } }
+
+    /* SUBIR-UNIVERSAL-V1 */
+    ok('subir relatório: identifica o tipo pela assinatura do texto', relDetectar(EX_EXEMPLO_TXT)==='emitidas' && relDetectar('Propostas Pendentes\nContestação médica 12 dias')==='pendencias' && relDetectar('Relatório de atraso\nApólice 000 dias de atraso 30')==='atraso' && relDetectar('<table><tr><td>Agência</td><td>Cliente</td><td>Data de Nascimento</td><td>CS</td><td>Núm. Apólices</td></tr></table>')==='carteira_clientes' && relDetectar('<table><tr><td>Proposta</td><td>Apólice</td><td>Segurado</td><td>Resp. Pagto.</td><td>Prêmio</td><td>Periodicidade Pagto.</td></tr></table>')==='carteira_apolices' && relDetectar('LP: Fulano\nSitPlan 10 TA 5')==='semanal');
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
