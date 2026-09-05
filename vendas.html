@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v5.6 · Vendas LP</title>
+<title>CRM SeguroComJucá · v5.7 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -80,6 +80,8 @@
 .pl input:focus,select:focus{outline:none;border-color:var(--pl-series)}
 .pl .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
+/* BC · card de cliente da carteira (ainda sem negócio) */
+.nncard-cli{border-style:dashed;background:#fbfdff}
 /* Pipe X · escopo */
 .px-sel{font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid var(--linha);border-radius:9px;background:#fff;min-height:36px;max-width:150px}
 @media(max-width:760px){ .px-sel{max-width:110px} }
@@ -1243,7 +1245,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v5.6 · Vendas LP</span>
+      <span class="tag">PipeX · v5.7 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1265,7 +1267,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v5.6 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v5.7 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1320,7 +1322,7 @@ const CHAVE='crmlp_v03_state'; // v03 (23/07): base zerada pro uso REAL — esta
    negócio fica num id apagado (excluir-com-destino move todos). Ver crm-lp-configuracoes-funil. */
 const FUNIL_FAB={
   lp:[['SitPlan','cinza',5],['TA','azul',10],['OI/FF','amarelo',20],['P/C','roxo',35],['C2','azul',50],['N','amarelo',70],['FA','azul',85],['EMISSÃO','roxo',95],['DELIVERY','verde',100],['Não','verm',0,1],['Prop. Cancelada','verm',0,1],['Apól. Cancelada','verm',0,1]],
-  bc:[['Clientes Ativos','verde',5],['Pendência/Atraso','verm',10],['Contato Agenda/Revisita','amarelo',15],['Agendada Revisita','azul',30],['Novo Negócio/Resolução pós Revisita','roxo',50],['N/Emissão','amarelo',75],['Emissão Final','roxo',90],['Delivery','verde',100],['Venda ganha','verde',100,1],['Venda perdida','verm',0,1]]
+  bc:[['Clientes Ativos','verde',0],['Contato Agenda/Revisita','amarelo',15],['Agendada Revisita','azul',30],['Novo Negócio/Resolução pós Revisita','roxo',50],['N/Emissão','amarelo',75],['Emissão Final','roxo',90],['Delivery','verde',100],['Venda ganha','verde',100,1],['Venda perdida','verm',0,1]]
 };
 const FUN_PAL=['cinza','azul','amarelo','roxo','verde','verm'];
 const FUN_BADGE={cinza:'b-cinza',azul:'b-azul',amarelo:'b-amarelo',roxo:'b-roxo',verde:'b-verde',verm:'b-verm'};
@@ -1340,6 +1342,12 @@ function rebuildFunilLp(){
   ETAPAS=L.ids; ETAPAS_ENCERR=L.enc; ETAPAS_FLUXO=ETAPAS.filter(e=>!ETAPAS_ENCERR.includes(e));
   ETAPAS_BC=B.ids; ETAPAS_BC_ENCERR=B.enc; ETAPAS_BC_FLUXO=ETAPAS_BC.filter(e=>!ETAPAS_BC_ENCERR.includes(e));
 }
+/* BC-CLIENTES-ATIVOS-V1 (04/09): "Pendência/Atraso" não é etapa — é STATUS de
+   cliente ativo (o mesmo cliente pode estar em atraso hoje e em dia amanhã). A
+   etapa sai da fábrica e da cfg guardada; negócio que estava nela volta pra
+   Clientes Ativos. */
+const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos';
+(function(){ try{ const arr=FUNIL_CFG&&FUNIL_CFG.bc; if(Array.isArray(arr)&&arr.some(e=>e.id===BC_ETAPA_EXTINTA)){ FUNIL_CFG.bc=arr.filter(e=>e.id!==BC_ETAPA_EXTINTA); localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); } }catch(_){} })();
 rebuildFunilLp();
 /* Funil Negócios BASE DE CLIENTES — espelho do funil "CLIENTES CARTEIRA" do Kommo
    (conta jucasegurocomjucacom, pipeline 12543239, capturado 23/07/2026).
@@ -1482,6 +1490,7 @@ function recAplicarDoNome(c){
 }
 function normContato(c){
   if(!c||typeof c!=='object') return c;
+  if(c.funil==='bc'&&c.etapa===BC_ETAPA_EXTINTA) c.etapa=BC_ATIVOS;
   try{ recAplicarDoNome(c); }catch(_){}
   if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
   ['recs','eventos','planos','interacoes','tarefas'].forEach(k=>{ if(!Array.isArray(c[k])) c[k]=[]; });
@@ -2441,7 +2450,8 @@ function funControlesHtml(rec,fluxo){
   </div>`;
 }
 function nnNegocioHtml(lista,fluxo,ns,rec){
-  const vivos=lista.filter(c=>fluxo.includes(c.etapa));
+  /* BC: cliente ativo é a carteira inteira — dinheiro só conta a partir de Contato Agenda/Revisita */
+  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&c.etapa===BC_ATIVOS));
   const pa=somaPA(vivos), pm=somaPM(vivos), pond=paPonderado(vivos);
   const comValor=vivos.filter(c=>pmDe(c)>0).length;
   const mes=mesAtual();
@@ -2905,6 +2915,7 @@ function nnCard(c){
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
     ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
+    ${bcRevisitaHtml(c)}
     ${_tar}
     ${(()=>{ const n=pessoaIrmaos(c).length; return n?`<div class="nc-pessoa" title="Esta pessoa tem ${n+1} oportunidades no funil">👤 1 de ${n+1} desta pessoa</div>`:''; })()}
     ${(()=>{ const px=funProxEtapa(c); return px?`<button class="nc-avancar" onclick="funAvancar('${esc(c.id)}',event)"
@@ -3080,6 +3091,7 @@ function viewBcFunil(){
   probCalibrar(rec.lista,ETAPAS_BC_FLUXO);
   const tx=nnTaxaMapa(rec.lista,ETAPAS_BC_FLUXO);
   const colDe=e=>{
+    if(e===BC_ATIVOS) return bcColAtivos(lista);
     const cs=nnOrdenar(funAplicaLente(lista,'bc').filter(c=>c.etapa===e));
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
@@ -3103,8 +3115,12 @@ function viewBcFunil(){
          </div>`;
     body='<div class="nnboard">'+ETAPAS_BC_FLUXO.map(colDe).join('')+encBloco+'</div>';
   }
+  const rk=bcRevisitaKpis(lista);
+  const revKpi=`<div class="kpis" style="margin:-4px 0 10px"><div class="kpi" style="flex:1;min-width:140px"><div class="lbl">Revisitas em curso</div><div class="num" style="font-size:19px">${rk.rev}</div><div style="font-size:11px;color:var(--muted)">agendadas ou pós-revisita</div></div>
+    <div class="kpi" style="flex:1;min-width:140px${rk.pagaram?';border:1.5px solid var(--verde,#0ca30c)':''}"><div class="lbl">Revisitas que pagaram</div><div class="num" style="font-size:19px">${rk.pagaram}</div><div style="font-size:11px;color:var(--muted)">saiu negócio novo ou recomendação</div></div>
+    <div class="kpi" style="flex:1;min-width:140px"><div class="lbl">Recomendações das revisitas</div><div class="num" style="font-size:19px">${rk.recs}</div><div style="font-size:11px;color:var(--muted)">colhidas com o 🤝 +1 no card</div></div></div>`;
   $('#main').innerHTML=`<h1 class="pg">Negócios na Base</h1>
-        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc',rec)}${toolbar}${funEtapasBarHtml(lista,ETAPAS_BC_FLUXO,'bc')}${body}`;
+        ${nnNegocioHtml(lista,ETAPAS_BC_FLUXO,'bc',rec)}${revKpi}${toolbar}${funEtapasBarHtml(lista,ETAPAS_BC_FLUXO,'bc')}${body}`;
   if(BC_MODE==='kanban'){
     wireBcBoard();
     if(BC_FOCUS) funIrParaEtapa(BC_FOCUS);
@@ -7437,6 +7453,149 @@ function exVis(){ return (EX.itens||[]).filter(r=>pxLpOk(r.lp)); }
 function emVis(){ return (EM.itens||[]).filter(r=>pxLpOk(r.lp)); }
 window.pxSet=pxSet;
 
+
+/* ═══ BC-CLIENTES-ATIVOS-V1 (04/09) ═══════════════════════════════════════
+   Pedido dele: "Clientes Ativos" já traz TODA a base que o app sabe que é
+   minha (carteira), com o principal no card (apólices, prêmio pago, PA), e
+   Pendência/Atraso vira STATUS filtrável dentro da etapa — não etapa. Esses
+   valores não somam venda: o funil só começa a contar em Contato Agenda/Revisita.
+   Cada cliente da carteira aparece UMA vez: se já tem negócio na Base em
+   Clientes Ativos, é o card do negócio; senão é o card do cliente, que vira
+   negócio no primeiro toque. Cliente que já está mais à frente no funil não
+   aparece aqui (está na coluna dele). */
+let BC_ST='';   /* filtro de status na coluna: '' | atraso | pendencia | statust | emdia */
+function bcSetSt(v){ BC_ST=BC_ST===v?'':v; viewBcFunil(); }
+function bcStatusDe(rad){ const st=[]; if(rad.atrasos.length) st.push('atraso'); if(rad.pendencias.length) st.push('pendencia'); if(rad.statust.length) st.push('statust'); if(!st.length) st.push('emdia'); return st; }
+function bcAtivosItens(lista){
+  /* negócios BC que estão na etapa Clientes Ativos, indexados pela pessoa */
+  const emAtivos=lista.filter(c=>c.etapa===BC_ATIVOS);
+  const adiante=lista.filter(c=>c.etapa!==BC_ATIVOS&&!ETAPAS_BC_ENCERR.includes(c.etapa));
+  const usados=new Set(); const out=[];
+  (typeof cartVis==='function'?cartVis():[]).forEach(cli=>{
+    const negs=cliNegociosDe({nome:cli.nome,celular:cli.celular||cli.telefone,ref:cli.ref});
+    if(negs.some(n=>adiante.includes(n))) return;                      // já está mais à frente
+    const neg=negs.find(n=>emAtivos.includes(n))||null; if(neg) usados.add(neg.id);
+    const rad=cartRadar(cli); const aps=cartApolicesDoCliente(cli).filter(a=>!/cancel/i.test(a.status||''));
+    const pm=aps.reduce((s,a)=>s+(a.premio||0),0)||(cli.cob&&cli.cob.pm)||0;
+    out.push({cli, neg, rad, aps, pm, pa:(cli.cob&&cli.cob.pa)||pm*12, st:bcStatusDe(rad)});
+  });
+  emAtivos.filter(n=>!usados.has(n.id)).forEach(n=>{ const rad=cartRadar({nome:n.nome,celular:n.telefone}); out.push({cli:null,neg:n,rad,aps:[],pm:pmDe(n),pa:paDe(n),st:bcStatusDe(rad)}); });
+  return out;
+}
+function bcCardCliente(it){
+  const c=it.cli, rad=it.rad; const chips=[];
+  if(it.aps.length) chips.push(`<span class="nc-cli" title="apólices vivas na carteira">🛡 ${it.aps.length} apólice${it.aps.length===1?'':'s'}${it.pm?' · '+brlCurto(it.pm)+'/mês':''}</span>`);
+  if(it.pa) chips.push(`<span class="nc-cli" title="prêmio anual pago (carteira)">PA ${brlCurto(it.pa)}</span>`);
+  if(rad.atrasos.length){ const a=rad.atrasos[0]; chips.push(`<span class="nc-cli verm">⏰ atraso${a.dias_atraso!=null?' '+a.dias_atraso+'d':''}</span>`); }
+  rad.pendencias.forEach(r=>chips.push(`<span class="nc-cli amar" title="${esc(r.pendencia||'')}">📋 pendência</span>`));
+  rad.statust.forEach(()=>chips.push(`<span class="nc-cli amar">⏳ Status T</span>`));
+  if(c.cob&&c.cob.cs) chips.push(`<span class="nc-cli" title="capital segurado">CS ${brlCurto(c.cob.cs)}</span>`);
+  return `<div class="nncard nncard-cli" data-ref="${esc(c.ref)}" onclick="cartAbrir('${esc(c.ref)}')" title="Cliente da carteira — abre a ficha; o botão cria o negócio na Base">
+    <div class="nc-nome">${esc(c.nome)}</div>
+    <div class="nc-sub">${c.idade!=null?esc(c.idade)+'a · ':''}${esc(telBR(c.celular||c.telefone||''))}</div>
+    <div class="nc-clirow">${chips.join('')}</div>
+    <button class="nc-avancar" onclick="event.stopPropagation();bcRevisitar('${esc(c.ref)}')" title="Abre o negócio na Base já em Contato Agenda/Revisita">→ ${esc(ET_LABEL['Contato Agenda/Revisita']||'Contato Agenda/Revisita')}</button>
+  </div>`;
+}
+function bcRevisitar(ref){
+  const n=cartNovoNegocio(ref,'bc'); if(!n) return;
+  const de=n.etapa; n.etapa='Contato Agenda/Revisita'; logEtapa(n,de,n.etapa); salvar();
+  toast(n.nome.split(' ')[0]+' → Contato Agenda/Revisita',true); render();
+}
+function bcColAtivos(lista){
+  const todos=bcAtivosItens(lista);
+  const cont={atraso:0,pendencia:0,statust:0,emdia:0}; todos.forEach(it=>it.st.forEach(k=>cont[k]++));
+  const itens=BC_ST?todos.filter(it=>it.st.includes(BC_ST)):todos;
+  const chip=(k,l,cor)=>`<button class="sheet-chip ${BC_ST===k?'on':''}" style="font-size:11px;padding:3px 8px;min-height:30px" onclick="event.stopPropagation();bcSetSt('${k}')">${l} ${cont[k]}</button>`;
+  const pmTot=itens.reduce((s,it)=>s+it.pm,0);
+  return `<div class="nncol${BC_FOCUS===BC_ATIVOS?' foco':''}" data-etapa="${esc(BC_ATIVOS)}">
+      <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(BC_ATIVOS)}">●</span>${esc(ET_LABEL[BC_ATIVOS]||BC_ATIVOS)}</span><span class="qt">${itens.length}</span></div>
+      <div class="nncol-pa" title="Prêmio mensal pago pela base (carteira) — não é venda em jogo">${brlCurto(pmTot)}/mês pagos · ${typeof pxRotulo==='function'?esc(pxRotulo()):''}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin:4px 0 6px">${chip('atraso','⏰ atraso')}${chip('pendencia','📋 pendência')}${chip('statust','⏳ Status T')}${chip('emdia','✓ em dia')}</div>
+      ${itens.map(it=>it.neg?nnCard(it.neg):bcCardCliente(it)).join('')||'<div class="nncol-vazia">—</div>'}
+    </div>`;
+}
+/* ── REVISITA-PAGA-V1: a revisita tem objetivo simples — sai negócio novo OU
+   recomendação nova e quente. O card conta as recomendações colhidas nela e a
+   faixa do funil mostra quantas revisitas "pagaram". */
+const BC_REVISITA_ETAPAS=['Agendada Revisita','Novo Negócio/Resolução pós Revisita'];
+function bcRecRevisita(id,delta,ev){ if(ev){ ev.stopPropagation(); ev.preventDefault(); } const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
+  c.recsRevisita=Math.max(0,(Number(c.recsRevisita)||0)+delta); if(delta>0) interacoesDe(c).push({id:uid(),k:'rec_revisita',l:'Recomendação colhida na revisita',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar(); render(); }
+function bcRevisitaPagou(c){ return (Number(c.recsRevisita)||0)>0 || (c.funil==='bc'&&ETAPAS_BC.indexOf(c.etapa)>ETAPAS_BC.indexOf('Agendada Revisita')&&!ETAPAS_BC_ENCERR.includes(c.etapa)) || funEhGanho(c); }
+function bcRevisitaHtml(c){ if(c.funil!=='bc'||!BC_REVISITA_ETAPAS.includes(c.etapa)&&!(Number(c.recsRevisita)>0)) return '';
+  const n=Number(c.recsRevisita)||0;
+  return `<div class="nc-clirow" title="Objetivo da revisita: negócio novo ou recomendação quente"><span class="nc-cli ${n?'':'amar'}">🤝 ${n} rec. da revisita</span><button class="btn btn-s btn-mini" style="min-height:26px;padding:0 8px" onclick="bcRecRevisita('${esc(c.id)}',1,event)" title="Colhi uma recomendação nesta revisita">+1</button>${n?`<button class="btn btn-ghost btn-mini" style="min-height:26px;padding:0 6px" onclick="bcRecRevisita('${esc(c.id)}',-1,event)">−1</button>`:''}</div>`; }
+function bcRevisitaKpis(lista){ const rev=lista.filter(c=>BC_REVISITA_ETAPAS.includes(c.etapa)||Number(c.recsRevisita)>0); const recs=lista.reduce((s,c)=>s+(Number(c.recsRevisita)||0),0); const pagaram=rev.filter(bcRevisitaPagou).length; return {rev:rev.length,recs,pagaram}; }
+window.bcSetSt=bcSetSt; window.bcRevisitar=bcRevisitar; window.bcRecRevisita=bcRecRevisita;
+
+
+/* ═══ DETALHADO POR APÓLICE (04/09) ═══════════════════════════════════════
+   Espelho do "Detalhado Apólice" do BI HUB-MFB: uma linha por apólice com LP
+   (responsável técnico), cliente, evento, nº, PA e CS. Fontes: apólices da
+   carteira (relatório Apólices Vigentes) × emitidas (PA exato e data de emissão)
+   × cliente da carteira (CS). O que o relatório não traz fica "—" e é dito:
+   CS só quando o cliente tem UMA apólice viva (o relatório dá CS por cliente). */
+const AD={ano:'',mes:'',ev:'',q:''};
+function adSet(k,v){ AD[k]=v; viewApolicesDetalhado(); }
+function adPaDe(a,em){ if(em&&em.pa_sem_iof) return {pa:em.pa_sem_iof,fonte:'emitidas'}; const p=Number(a.premio)||0; const per=String(a.periodicidade||'').toLowerCase();
+  if(!p) return {pa:0,fonte:null}; if(per.startsWith('anu')) return {pa:p,fonte:'prêmio anual'}; if(per.startsWith('sem')) return {pa:p*2,fonte:'prêmio semestral × 2'}; if(per.startsWith('tri')) return {pa:p*4,fonte:'prêmio trimestral × 4'}; return {pa:p*12,fonte:'prêmio mensal × 12'}; }
+function adLinhas(){
+  const emPor={}; (typeof exVis==='function'?exVis():[]).forEach(r=>{ if(r.apolice) emPor[r.apolice]=r; });
+  const cliPor={}; (typeof cartVis==='function'?cartVis():[]).forEach(c=>{ cliPor[c.ref]=c; });
+  const apsPorCli={}; (typeof cartApVis==='function'?cartApVis():[]).forEach(a=>{ const k=a.cli_ref||a.ref; (apsPorCli[k]=apsPorCli[k]||[]).push(a); });
+  const out=[];
+  (typeof cartApVis==='function'?cartApVis():[]).forEach(a=>{ if(/cancel/i.test(a.status||'')) return;
+    const em=emPor[a.apolice]||null; const cli=cliPor[a.cli_ref||a.ref]||null; const vivas=(apsPorCli[a.cli_ref||a.ref]||[]).filter(x=>!/cancel/i.test(x.status||''));
+    const pa=adPaDe(a,em); const cs=(cli&&cli.cob&&cli.cob.cs&&vivas.length===1)?cli.cob.cs:null;
+    out.push({lp:a.lpVenda||a.lp||(cli&&cli.lp)||'', cliente:a.segurado||(cli&&cli.nome)||'', apolice:a.apolice||'', proposta:a.proposta||em&&em.proposta||'', evento:em?'Emissão':'Ativa', emissao:em&&em.emissao||null,
+      pa:pa.pa, paFonte:pa.fonte, premio:Number(a.premio)||0, periodicidade:a.periodicidade||'', forma:a.forma||'', cs, csNota:cs==null?(cli&&cli.cob&&cli.cob.cs?'cliente com '+vivas.length+' apólices — CS é por cliente':'sem CS no relatório'):'', resp:a.respPagto||'', afyc:em&&em.afyc_projetado||null, status:a.status||'Ativa'}); });
+  return out;
+}
+function adFiltrar(l){ let r=l;
+  if(AD.ano) r=r.filter(x=>String(x.emissao||'').slice(0,4)===AD.ano);
+  if(AD.mes) r=r.filter(x=>String(x.emissao||'').slice(5,7)===AD.mes);
+  if(AD.ev) r=r.filter(x=>x.evento===AD.ev);
+  if(AD.q){ const q=normKey(AD.q); r=r.filter(x=>normKey(x.cliente).includes(q)||String(x.apolice).includes(AD.q)||String(x.proposta).includes(AD.q)||normKey(x.lp).includes(q)); }
+  return r.sort((a,b)=>String(b.emissao||'').localeCompare(String(a.emissao||''))||a.cliente.localeCompare(b.cliente)); }
+function adCsv(){ const l=adFiltrar(adLinhas()); const cab=['LP','Cliente','Apólice','Proposta','Evento','Emissão','PA','Fonte PA','Prêmio','Periodicidade','Forma','CS','Resp. pagto'];
+  const esc2=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const txt=[cab.join(';')].concat(l.map(x=>[x.lp,x.cliente,x.apolice,x.proposta,x.evento,x.emissao?atFmtBR(x.emissao):'',x.pa,x.paFonte||'',x.premio,x.periodicidade,x.forma,x.cs==null?'':x.cs,x.resp].map(esc2).join(';'))).join('\n');
+  const b=new Blob(['﻿'+txt],{type:'text/csv;charset=utf-8'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download='detalhado-apolices-'+atHojeISO()+'.csv'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000); }
+function viewApolicesDetalhado(){
+  const todas=adLinhas(), l=adFiltrar(todas);
+  const anos=[...new Set(todas.map(x=>String(x.emissao||'').slice(0,4)).filter(x=>x.length===4))].sort().reverse();
+  const tot={n:l.length, pa:l.reduce((s,x)=>s+x.pa,0), cs:l.reduce((s,x)=>s+(x.cs||0),0), csN:l.filter(x=>x.cs!=null).length, pm:l.reduce((s,x)=>s+(String(x.periodicidade).toLowerCase().startsWith('men')?x.premio:0),0)};
+  const porLp={}; l.forEach(x=>{ const o=porLp[x.lp||'—']||(porLp[x.lp||'—']={n:0,pa:0}); o.n++; o.pa+=x.pa; });
+  const sel=(k,ops,ph)=>`<select onchange="adSet('${k}',this.value)" style="min-height:44px;width:auto;min-width:110px"><option value="">${ph}</option>${ops.map(([v,t])=>`<option value="${v}"${AD[k]===v?' selected':''}>${t}</option>`).join('')}</select>`;
+  const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'].map((m,i)=>[String(i+1).padStart(2,'0'),m]);
+  $('#main').innerHTML=`<h1 class="pg">Detalhado por Apólice <span style="font-size:12px;font-weight:500;color:var(--muted)">· ${typeof pxRotulo==='function'?esc(pxRotulo()):''}</span></h1>
+    <div class="sub">Uma linha por apólice viva, no formato do BI da MFB. PA vem das <b>emitidas</b> quando a apólice está lá; senão do prêmio da carteira (mensal × 12). CS só quando o cliente tem uma apólice viva — o relatório dá o capital por cliente, não por apólice.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${sel('ano',anos.map(a=>[a,a]),'Ano (emissão)')}${sel('mes',meses,'Mês')}${sel('ev',[['Emissão','Emissão'],['Ativa','Ativa (sem data)']],'Evento')}
+      <input value="${esc(AD.q)}" placeholder="cliente, apólice, proposta, LP" oninput="AD.q=this.value" onchange="viewApolicesDetalhado()" style="min-height:44px;flex:1;min-width:160px">
+      <button class="btn btn-s btn-mini" onclick="adCsv()">⬇︎ CSV</button>
+    </div>
+    <div class="kpis" style="margin-bottom:10px">
+      <div class="kpi" style="flex:1"><div class="lbl">Apólices</div><div class="num" style="font-size:19px">${tot.n}</div></div>
+      <div class="kpi" style="flex:1"><div class="lbl">PA total</div><div class="num" style="font-size:19px">${brlCurto(tot.pa)}</div></div>
+      <div class="kpi" style="flex:1"><div class="lbl">Prêmio mensal</div><div class="num" style="font-size:19px">${brlCurto(tot.pm)}</div><div style="font-size:11px;color:var(--muted)">só as mensais</div></div>
+      <div class="kpi" style="flex:1"><div class="lbl">CS total</div><div class="num" style="font-size:19px">${brlCurto(tot.cs)}</div><div style="font-size:11px;color:var(--muted)">${tot.csN} de ${tot.n} com CS conhecido</div></div>
+      ${Object.keys(porLp).sort().map(k=>`<div class="kpi" style="flex:1"><div class="lbl">👤 ${esc(k)}</div><div class="num" style="font-size:16px">${porLp[k].n} · ${brlCurto(porLp[k].pa)}</div></div>`).join('')}
+    </div>
+    ${todas.length?'':`<div class="card" style="text-align:center;padding:26px;color:var(--muted)">Sem apólices na carteira deste escopo. Importe a carteira (Clientes → Importar) ou mude o escopo Pipe X.</div>`}
+    <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
+      <th style="padding:6px 8px">LP</th><th>Cliente</th><th>Evento</th><th>Emissão</th><th>Nº apólice</th><th>Proposta</th><th style="text-align:right">PA</th><th style="text-align:right">Prêmio</th><th style="text-align:right">CS</th></tr></thead>
+      <tbody>${l.slice(0,400).map(x=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 8px">${esc((x.lp||'').split(' ')[0])}</td><td><b>${esc(atTitleC(x.cliente))}</b>${x.resp&&normKey(x.resp)!==normKey(x.cliente)?`<div style="font-size:11px;color:var(--muted)">pago por ${esc(atTitleC(x.resp))}</div>`:''}</td>
+        <td><span class="badge ${x.evento==='Emissão'?'b-verde':'b-cinza'}">${x.evento}</span></td><td>${x.emissao?atFmtBR(x.emissao):'—'}</td><td>${esc(x.apolice)}</td><td style="font-size:11px;color:var(--muted)">${esc(x.proposta)}</td>
+        <td style="text-align:right" title="${esc(x.paFonte||'')}">${x.pa?brlCurto(x.pa):'—'}${x.paFonte==='emitidas'?'':'<span style="color:var(--muted)" title="estimado pelo prêmio">*</span>'}</td>
+        <td style="text-align:right;white-space:nowrap">${x.premio?brl(x.premio):'—'}<div style="font-size:10.5px;color:var(--muted)">${esc(x.periodicidade||'')}${x.forma?' · '+esc(x.forma):''}</div></td>
+        <td style="text-align:right" title="${esc(x.csNota||'')}">${x.cs!=null?brlCurto(x.cs):'—'}</td></tr>`).join('')}
+      <tr style="border-top:2px solid var(--linha);font-weight:700"><td style="padding:6px 8px" colspan="6">Total · ${tot.n} apólice(s)${l.length>400?' (mostrando 400)':''}</td><td style="text-align:right">${brlCurto(tot.pa)}</td><td style="text-align:right">${brlCurto(tot.pm)}/mês</td><td style="text-align:right">${brlCurto(tot.cs)}</td></tr></tbody></table></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">* PA estimado pelo prêmio da carteira (a apólice não está nas emitidas coladas). Lacunas do BI aqui: CS MQC por apólice e cancelamentos com data — fecham com o relatório de coberturas por apólice.</div>`;
+}
+window.adSet=adSet; window.adCsv=adCsv; window.viewApolicesDetalhado=viewApolicesDetalhado;
+
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
    podemos selecionar o cliente (inclusive os novos) para ter a calculadora e
@@ -9746,6 +9905,7 @@ const HUB_SECOES=[
   {titulo:'BackOffice Prudential', itens:[
     {view:'lp-atrasos',   ic:'⏰', titulo:'Lista de Atraso',      desc:'Prêmio em atraso: dias, motivo, script de cobrança e o estado de cada caso.', mod:'backoffice', cnt:()=>(AT.itens||[]).filter(r=>!r.resolvido_em).length},
     {view:'emissao-diaria',ic:'📈', titulo:'Emissão Diária',       desc:'O painel do BI da Prudential, com os seus números: PA e apólices emitidas por dia, plano × real, cycle time, estoque e aging.', mod:'backoffice'},
+    {view:'apolices-detalhado',ic:'📑', titulo:'Detalhado por Apólice', desc:'Uma linha por apólice, no formato do BI: LP, cliente, evento, nº, PA, prêmio, CS. Filtra por ano/mês de emissão e LP.', mod:'backoffice'},
     {view:'lp-pendencias',ic:'📌', titulo:'Pendências de Emissão',desc:'Propostas pendentes, AFYC represado e a janela de compensation.', mod:'backoffice', cnt:()=>(EM.itens||[]).filter(emAtivo).length},
     {view:'solicitacoes', ic:'📨', titulo:'Solicitações',         desc:'Pedidos à assessoria com prazo, dono e retorno; texto pronto pro WhatsApp.', mod:'backoffice', cnt:()=>(SO.itens||[]).filter(s=>s.status==='aberta').length},
     {view:'lp-statust',   ic:'🅣', titulo:'Status T',             desc:'Apólices emitidas na janela dos 30 dias / 2º prêmio.', mod:'backoffice', cnt:()=>lpAtivos('statust').length},
@@ -12330,7 +12490,7 @@ const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',principios:'Princípios v0.1',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
-  revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária'};
+  revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice'};
 function renderTituloTopo(){
   const el=$('#tbTitulo'); if(!el) return;
   const btn=document.querySelector('.sidebar .nav-btn.ativo');
@@ -12455,6 +12615,7 @@ function render(){
   else if(VIEW==='montagem') viewMontagem();
   else if(VIEW==='placed') viewPlaced();
   else if(VIEW==='emissao-diaria') viewEmissaoDiaria();
+  else if(VIEW==='apolices-detalhado') viewApolicesDetalhado();
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
@@ -13607,6 +13768,38 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('sugestões: filtro de coluna sugere valores da base conforme digita', bnSugColuna('recomendante','mar').split('<option').length-1===2 && bnSugColuna('cargo','adv').indexOf('Advogado')>=0 && bnSugColuna('cargo','zzz')==='');
       } finally{ BN.contatos=_b; } }
     ok('menu: as listas de etapas não aparecem no menu lateral (pedido de 04/09)', ['nn-et-toggle','nn-etapas','bc-et-toggle','bc-etapas'].every(id=>{ const e=document.getElementById(id); return e&&e.hidden; }));
+
+    /* BC-CLIENTES-ATIVOS-V1 + REVISITA-PAGA-V1 */
+    ok('bc: Pendência/Atraso deixou de ser etapa e negócio antigo volta pra Clientes Ativos', !ETAPAS_BC.includes('Pendência/Atraso') && (()=>{ const c={funil:'bc',etapa:'Pendência/Atraso',nome:'X'}; normContato(c); return c.etapa==='Clientes Ativos'; })());
+    { const _c=CART.clientes, _a=CART.apolices, _s=S.contatos.slice(); try{
+        CART.clientes=[cartNormCliente({nome:'Cli Base Teste',ref:'cli base teste',celular:'(81) 90000-7777',lp:'Gustavo',cob:{pm:300,pa:3600,cs:100000}})]; CART.apolices=[];
+        S.contatos=S.contatos.filter(x=>x.nome!=='Cli Base Teste');
+        const itens=bcAtivosItens(meusContatosBC());
+        ok('bc: cliente da carteira aparece em Clientes Ativos mesmo sem negócio, com PM/PA', itens.some(it=>it.cli&&it.cli.ref==='cli base teste'&&!it.neg&&it.pm===300));
+        ok('bc: status vira filtro (em dia quando não há atraso/pendência)', itens.find(it=>it.cli&&it.cli.ref==='cli base teste').st.includes('emdia'));
+        const n=cartNovoNegocio('cli base teste','bc'); n.etapa='Contato Agenda/Revisita';
+        ok('bc: cliente que já está mais à frente no funil não repete em Clientes Ativos', !bcAtivosItens(meusContatosBC()).some(it=>it.cli&&it.cli.ref==='cli base teste'));
+        ok('bc: Clientes Ativos não soma PA em jogo (só de Revisita em diante)', (()=>{ const h=nnNegocioHtml([{funil:'bc',etapa:'Clientes Ativos',pm:1000,nome:'a',interacoes:[]},{funil:'bc',etapa:'Contato Agenda/Revisita',pm:100,nome:'b',interacoes:[]}],ETAPAS_BC_FLUXO,'bc',null); return h.indexOf(brlCurto(100*PA_MESES))>=0 && h.indexOf(brlCurto(1100*PA_MESES))<0; })());
+        n.etapa='Agendada Revisita'; bcRecRevisita(n.id,1); const k=bcRevisitaKpis(meusContatosBC());
+        ok('bc: recomendação colhida na revisita conta e a revisita "paga"', n.recsRevisita===1 && k.recs>=1 && k.pagaram>=1);
+        S.contatos=S.contatos.filter(x=>x.id!==n.id);
+      }catch(e){ falhas.push('bc ativos: exceção '+(e&&e.message)); } finally{ CART.clientes=_c; CART.apolices=_a; S.contatos=_s; } }
+
+    /* DETALHADO-APOLICE-V1 (04/09) */
+    { const _c=CART.clientes, _a=CART.apolices, _e=EX.itens; try{ PX._teste=true;
+        CART.clientes=[cartNormCliente({nome:'Cli Um',ref:'cli um',lp:'Gustavo',cob:{cs:500000,pm:100}}),cartNormCliente({nome:'Cli Dois',ref:'cli dois',lp:'Rebeca',cob:{cs:900000,pm:200}})];
+        CART.apolices=[cartNormApolice({apolice:'A1',segurado:'Cli Um',ref:'cli um',cli_ref:'cli um',premio:100,periodicidade:'Mensal',status:'Ativa',lp:'Gustavo'}),
+                       cartNormApolice({apolice:'B1',segurado:'Cli Dois',ref:'cli dois',cli_ref:'cli dois',premio:100,periodicidade:'Mensal',status:'Ativa',lp:'Rebeca'}),
+                       cartNormApolice({apolice:'B2',segurado:'Cli Dois',ref:'cli dois',cli_ref:'cli dois',premio:1200,periodicidade:'Anual',status:'Ativa',lp:'Rebeca'}),
+                       cartNormApolice({apolice:'C9',segurado:'Cli Dois',ref:'cli dois',cli_ref:'cli dois',premio:50,periodicidade:'Mensal',status:'Cancelada',lp:'Rebeca'})];
+        EX.itens=[{apolice:'A1',status_apolice:'Ativa',emissao:'2026-09-04',pa_sem_iof:1500,lp:'Gustavo'}];
+        const l=adLinhas();
+        ok('detalhado: uma linha por apólice viva (cancelada fora)', l.length===3 && !l.some(x=>x.apolice==='C9'));
+        ok('detalhado: PA vem das emitidas quando existe, senão do prêmio (mensal×12, anual×1)', l.find(x=>x.apolice==='A1').pa===1500 && l.find(x=>x.apolice==='B1').pa===1200 && l.find(x=>x.apolice==='B2').pa===1200);
+        ok('detalhado: CS só quando o cliente tem uma apólice viva', l.find(x=>x.apolice==='A1').cs===500000 && l.find(x=>x.apolice==='B1').cs==null);
+        AD.ano='2026'; ok('detalhado: filtro por ano de emissão', adFiltrar(l).length===1); AD.ano='';
+        ok('detalhado: tela existe e está no hub', typeof viewApolicesDetalhado==='function'&&VIEWS_CONHECIDAS.includes('apolices-detalhado')&&HUB_SECOES.some(s=>s.itens.some(i=>i.view==='apolices-detalhado')));
+      }catch(e){ falhas.push('detalhado: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; EX.itens=_e; } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
@@ -14099,7 +14292,7 @@ function abrirAjustesVisual(){
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','principios','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
