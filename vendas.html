@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v6.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v6.2 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1252,7 +1252,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v6.1 · Vendas LP</span>
+      <span class="tag">PipeX · v6.2 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1274,7 +1274,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v6.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v6.2 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3596,7 +3596,11 @@ function clienteDe(pessoa,opts){
   if(!normKey(p.nome)&&!telKey(p.celular)) return null;
   const ks=cartChaves(p);
   const cli=(CART.clientes||[]).find(x=>{ const a=cartChaves(x); for(const k of ks){ if(a.has(k)) return true; } return false; })||null;
-  const todas=cartApolicesDoCliente(p);
+  /* CLIENTE-POR-TELEFONE-V1 (05/09): casou o cliente pelo telefone mas as apólices só
+     eram procuradas pelas chaves do CONTATO (nome escrito diferente) → "0 apólices".
+     Agora, achado o cliente, as apólices dele entram também. */
+  const vistas=new Set(); const todas=[];
+  cartApolicesDoCliente(p).concat(cli?cartApolicesDoCliente(cli):[]).forEach(a=>{ const k=a.apolice||a.proposta||a; if(!vistas.has(k)){ vistas.add(k); todas.push(a); } });
   const aps=todas.filter(a=>!/cancel/i.test(a.status||'')), canceladas=todas.filter(a=>/cancel/i.test(a.status||''));
   const rad=cartRadar(p);
   const emissoes=cliEmissoesDe(p);
@@ -3640,6 +3644,7 @@ function cliCardHtml(d,opts){
       ${d.via&&!carteira?`<span style="font-size:11px;font-weight:400;color:var(--muted)">casado por ${d.via}</span>`:''}</h3>
     ${!carteira&&d.eCliente?`<div style="font-size:13px;color:var(--muted);margin-bottom:6px">${esc(d.cli?d.cli.nome:d.pessoa.nome)}${d.pm?` · ${brl(d.pm)}/mês na carteira`:''}${d.canceladas.length?` · ${d.canceladas.length} cancelada${d.canceladas.length===1?'':'s'}`:''}</div>`:''}
     ${!carteira&&d.aps.length?`<div class="cli-chips">${d.aps.slice(0,6).map(apChip).join('')}${d.aps.length>6?`<span class="vneg">+${d.aps.length-6}</span>`:''}</div>`:''}
+    ${!carteira&&d.cli?cliCarteiraResumoHtml(d):''}
     ${atras?`<div style="font-size:12.5px;color:var(--verm);font-weight:600;margin-bottom:6px">⏰ ${d.atrasos.slice(0,3).map(a=>esc(a.apolice)+' · '+(a.dias_atraso!=null?a.dias_atraso+'d':'—')).join(' · ')}${atras>3?` +${atras-3}`:''} — resolver antes de oferecer coisa nova.</div>`:''}
     ${d.emissoes.map(emLinha).join('')}
     ${carteira?(d.negocios.length?d.negocios.map(negLinha).join(''):`<div style="font-size:12.5px;color:var(--muted)">Nenhum negócio aberto no funil para esta pessoa.</div>`):''}
@@ -7689,6 +7694,24 @@ async function cartPerfilGravar(ref){ const v=id=>(document.getElementById(id)||
   const p={profissao:v('cp-prof'),locais:String(v('cp-loc')).split(/,|;/).map(x=>x.trim()).filter(Boolean),conjuge:v('cp-conj'),conjugeIdade:v('cp-conji')||null,filhos:cartPerfilParseLista(v('cp-filhos')),outros,notas:v('cp-notas')};
   const st=await cartPerfilSalvar(ref,p); CART._perfilEdit=null; cartAbrir(ref); toast(st==='remoto'?'Perfil salvo':st==='local'?'Perfil salvo neste aparelho (faça login pra sincronizar)':'Salvo aqui — sync falhou',st!=='falhou'); }
 window.cartPerfilGravar=cartPerfilGravar;
+
+
+/* ═══ CLIENTE-NA-FICHA-V1 (05/09) ═════════════════════════════════════════
+   Pedido dele: "se é cliente, traz as informações do plano que tem" — dentro do
+   tópico "Já é seu cliente" da ficha do contato, o que a carteira sabe: coberturas,
+   apólices, pessoa e família, grupo familiar, e o atalho pra ficha completa. */
+function cliCarteiraResumoHtml(d){ const c=d.cli; if(!c) return ''; const cob=c.cob||{};
+  const li=(l,v)=>v?`<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0"><span style="color:var(--muted)">${l}</span><b>${v}</b></div>`:'';
+  const cobs=[li('Capital Segurado',cob.cs?brlCurto(cob.cs):''),li('Perda por Doença',cob.pd?brlCurto(cob.pd):''),li('DDR',cob.ddr?brlCurto(cob.ddr):''),li('HC',cob.hc?brlCurto(cob.hc):''),li('Renda',cob.renda?brlCurto(cob.renda):''),li('Prêmio mensal',cob.pm||d.pm?brlCurto(cob.pm||d.pm):''),li('Prêmio anual',cob.pa?brlCurto(cob.pa):'')].join('');
+  const aps=d.aps.map(a=>`<div style="font-size:12px;padding:2px 0">🛡 <b>${esc(a.apolice||a.proposta||'—')}</b>${a.premio?' · '+brl(a.premio):''}${a.periodicidade?' · '+esc(a.periodicidade):''}${a.respPagto&&normKey(a.respPagto)!==normKey(c.nome)?' · 💳 '+esc(atTitleC(a.respPagto)):''}</div>`).join('');
+  const pr=cartPerfilResumo(c.ref); const fam=cartGrupoChips(c);
+  return `<div style="margin-top:8px;font-size:12.5px;border-top:1px dashed var(--linha);padding-top:8px">
+    ${cobs?`<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:2px">Coberturas</div>${cobs}`:''}
+    ${d.gaps&&d.gaps.length?`<div style="margin-top:4px;font-size:12px;color:var(--muted)">💡 Sem: ${d.gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`:''}
+    ${aps?`<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:8px 0 2px">Apólices (${d.aps.length})</div>${aps}`:''}
+    ${pr.length||fam?`<div style="font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:8px 0 2px">Pessoa e família</div>${pr.length?`<div style="font-size:12px">${esc(pr.join(' · '))}</div>`:''}${fam?`<div class="nc-clirow" style="margin-top:4px">${fam}</div>`:''}`:''}
+    <button class="btn btn-s btn-mini" style="margin-top:8px;min-height:36px" onclick="event.stopPropagation();fecharDrawer();cartAbrir('${esc(c.ref)}')">📁 Ficha completa na carteira</button>
+  </div>`; }
 
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
    Pedido dele: "um módulo dentro de Módulos só de montagem de planos; aí
@@ -13941,6 +13964,16 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         iniToggle('cf-cob'); const ab1=iniAberto('cf-cob'); iniToggle('cf-cob'); ok('ficha: encolher/expandir é lembrado por aparelho', ab1!==iniAberto('cf-cob'));
         fecharDrawer();
       }catch(e){ falhas.push('ficha tópicos: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; cartIdxInvalidar(); } }
+
+    /* CLIENTE-POR-TELEFONE-V1 + CLIENTE-NA-FICHA-V1 */
+    { const _c=CART.clientes, _a=CART.apolices; try{ PX._teste=true;
+        CART.clientes=[cartNormCliente({nome:'Kanny Teste Longo Nome',ref:'kanny teste longo nome',celular:'(81) 98324-9999',cob:{cs:1000000,pm:388,pd:350000}})];
+        CART.apolices=[cartNormApolice({apolice:'K1',segurado:'Kanny Teste Longo Nome',ref:'kanny teste longo nome',cli_ref:'kanny teste longo nome',celular:'(81) 98324-9999',premio:188,status:'Ativa'}),cartNormApolice({apolice:'K2',segurado:'Kanny Teste Longo Nome',ref:'kanny teste longo nome',cli_ref:'kanny teste longo nome',celular:'(81) 98324-9999',premio:200,status:'Ativa'})]; cartIdxInvalidar();
+        const d=clienteDe({nome:'Kanny Cvip',telefone:'(81) 8324-9999'});
+        ok('cliente por telefone: nome diferente no funil, mas as apólices do cliente aparecem (2, não 0)', !!d&&d.via==='telefone'&&d.aps.length===2);
+        const h=cliCardHtml(d,{});
+        ok('ficha do contato: "Já é seu cliente" traz coberturas, apólices e atalho pra ficha da carteira', h.indexOf('Capital Segurado')>=0 && h.indexOf('K2')>=0 && h.indexOf('Ficha completa na carteira')>=0);
+      }catch(e){ falhas.push('cliente na ficha: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; cartIdxInvalidar(); } }
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
