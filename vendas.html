@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v6.4 · Vendas LP</title>
+<title>CRM SeguroComJucá · v6.5 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1253,7 +1253,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v6.4 · Vendas LP</span>
+      <span class="tag">PipeX · v6.5 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1275,7 +1275,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v6.4 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v6.5 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -7639,7 +7639,16 @@ function cartGrupo(cli){
     if(seg===ref&&resp!==ref&&resp!==nk(cli.nome)) pagoPor.set(resp,a.respPagto); });
   const mesmo=[]; const em=nk(cli.email), tel=telKey(cli.celular||cli.telefone);
   (typeof cartVis==='function'?cartVis():(CART.clientes||[])).forEach(o=>{ if(o.ref===ref) return; if((em&&nk(o.email)===em)||(tel&&telKey(o.celular||o.telefone)===tel)) mesmo.push(o.nome); });
-  const out={paga,pagoPor:[...pagoPor.values()],mesmo}; out.tem=!!(paga.length||out.pagoPor.length||mesmo.length); return out; }
+  /* GRUPO-PERFIL-V1 (05/09): cônjuge/filhos anotados no perfil entram no grupo quando são clientes — e o inverso (alguém me anotou como cônjuge/filho) */
+  const familia=[]; const seen=new Set();
+  const addF=(nome,papel)=>{ const k=nk(nome); if(!k||k===ref||seen.has(k)) return; seen.add(k); familia.push({nome,papel}); };
+  const meuP=(typeof cartPerfil==='function')?cartPerfilNorm(cartPerfil(ref)):null;
+  if(meuP){ if(meuP.conjuge) addF(meuP.conjuge,'cônjuge'); meuP.filhos.forEach(f=>addF(f.nome,'filho(a)')); meuP.outros.forEach(f=>addF(f.nome,f.parentesco||'família')); }
+  Object.keys((CART.perfis&&typeof CART.perfis==='object')?CART.perfis:{}).forEach(oref=>{ if(oref===ref) return; const p=cartPerfilNorm(CART.perfis[oref]); const dono=(CART.clientes||[]).find(c=>c.ref===oref); const dn=dono?dono.nome:oref;
+    if(nk(p.conjuge)===ref||nk(p.conjuge)===nk(cli.nome)) addF(dn,'cônjuge');
+    if(p.filhos.some(f=>nk(f.nome)===ref||nk(f.nome)===nk(cli.nome))) addF(dn,'pai/mãe');
+    const o=p.outros.find(f=>nk(f.nome)===ref||nk(f.nome)===nk(cli.nome)); if(o) addF(dn,o.parentesco?'família ('+o.parentesco+')':'família'); });
+  const out={paga,pagoPor:[...pagoPor.values()],mesmo,familia}; out.tem=!!(paga.length||out.pagoPor.length||mesmo.length||familia.length); return out; }
 /* GRUPO-CLICAVEL-V1 (04/09): cada pessoa do grupo é um botão que abre a ficha dela (quando está na carteira) */
 function cartRefDe(nome){ const k=normKey(nome||''); if(!k) return null; const l=(CART.clientes||[]); const c=l.find(x=>x.ref===k)||l.find(x=>normKey(x.nome)===k); return c?c.ref:null; }
 function cartPessoaBtn(nome,cls,ico,pre){ const ref=cartRefDe(nome); const p1=atTitleC(String(nome||'')).split(' ')[0];
@@ -7650,6 +7659,7 @@ function cartGrupoChips(cli){ const g=cartGrupo(cli); if(!g||!g.tem) return '';
   g.paga.forEach(x=>ch.push(cartPessoaBtn(x.nome,'','👨‍👩‍👧','paga p/ ')+(x.premio?`<span class="nc-cli" style="background:transparent;padding-left:0">${brlCurto(x.premio)}/mês</span>`:'')));
   g.pagoPor.forEach(n=>ch.push(cartPessoaBtn(n,'','💳','pago por ')));
   g.mesmo.forEach(n=>ch.push(cartPessoaBtn(n,'','👥','c/ ')));
+  (g.familia||[]).forEach(f=>ch.push(cartPessoaBtn(f.nome,'',f.papel==='cônjuge'?'💍':/filh/.test(f.papel)?'👶':/pai|mae|mãe/.test(f.papel)?'👪':'👥',f.papel+' ')));
   return ch.join(''); }
 
 
@@ -7749,6 +7759,8 @@ const REL_TIPOS={
   emitidas:{nome:'Apólices Emitidas no Período (UW e Emissão)'},
   pendencias:{nome:'Propostas Pendentes (UW e Emissão)'},
   atraso:{nome:'Lista de Atraso'},
+  statust:{nome:'Status T — apólices emitidas na janela (relatório semanal)'},
+  beneficios:{nome:'Aviso de sinistro / benefício'},
   semanal:{nome:'Relatório semanal do LP'} };
 function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
   if(/<table|<tr|<td/i.test(cab)){ const h=normKey(cab.replace(/<[^>]+>/g,' '));
@@ -7760,6 +7772,10 @@ function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,60
   if(/propostas pendentes/.test(n)||/contestacao/.test(n)||/pendente de emissao/.test(n)) return 'pendencias';
   if(/apolices em atraso|relatorio de atraso|dias de atraso|premio em atraso|vencido em/.test(n)) return 'atraso';
   if(/total (lp|mfb)/.test(n)&&/\bativa\b/.test(n)&&/emissao/.test(n)) return 'emitidas';
+  /* REL-DETECT-V2 (05/09): Status T = seção "APÓLICES EMITIDAS" do semanal (cabeçalho MÊS PROPOSTA APÓLICE SEGURADO / prazos p/ Status T) */
+  if(/prazos? p\/ status t/.test(n)||/mes\s+proposta\s+apolice\s+segurado/.test(n)||(/apolices emitidas\s*-/.test(n)&&/proposta/.test(n))) return 'statust';
+  /* Benefícios: aviso de sinistro/evento coberto — não tem relatório do portal; vira caso no módulo */
+  if(/aviso de sinistro|comunicado de sinistro|\bsinistro\b|regulacao do beneficio|abertura de beneficio|solicitacao de beneficio/.test(n)) return 'beneficios';
   return 'semanal'; }
 async function relRotear(tipo,bruto){
   if(tipo==='carteira_clientes'||tipo==='carteira_apolices'){
@@ -7773,8 +7789,21 @@ async function relRotear(tipo,bruto){
   if(tipo==='emitidas'){ exColar(); setTimeout(()=>{ const t=$('#ex_txt'); if(t){ t.value=bruto; exProcessar(); } },80); return; }
   if(tipo==='pendencias'){ emColarRelatorio(); setTimeout(()=>{ const t=$('#em_txt'); if(t){ t.value=bruto; emProcessar(); } },80); return; }
   if(tipo==='atraso'){ atColarRelatorio(); setTimeout(()=>{ const t=$('#at_txt'); if(t){ t.value=bruto; atProcessar(); } },80); return; }
+  if(tipo==='beneficios'){ relAbrirBeneficio(bruto); return; }
   openLpImport(); setTimeout(()=>{ const t=$('#lp-text'); if(t){ t.value=bruto; } },80);
 }
+/* REL-BENEF-V1 (05/09): texto de aviso de sinistro → módulo Benefícios com o caso pré-preenchido (segurado/apólice/protocolo/data) */
+function relExtrairBeneficio(txt){ const t=String(txt||''); const n=normKey(t); const o={segurado:'',apolice:'',protocolo:'',data:''};
+  const ap=t.match(/ap[oó]lice[^0-9]{0,12}(\d{6,9})/i); if(ap) o.apolice=ap[1];
+  const pr=t.match(/protocolo[^0-9A-Z]{0,12}([0-9][0-9A-Z.\/-]{3,})/i); if(pr) o.protocolo=pr[1];
+  const sg=t.match(/(?:segurado|cliente|nome)\s*[:\-]\s*([^\n;|]{3,60})/i); if(sg) o.segurado=sg[1].trim();
+  const dt=t.match(/(\d{2})\/(\d{2})\/(\d{4})/); if(dt) o.data=dt[3]+'-'+dt[2]+'-'+dt[1];
+  if(!o.segurado&&o.apolice&&typeof cartApVis==='function'){ const a=cartApVis().find(x=>String(x.apolice||x.chave||'')===o.apolice); if(a) o.segurado=a.segurado||''; }
+  return o; }
+function relAbrirBeneficio(bruto){ const o=relExtrairBeneficio(bruto); if(VIEW!=='beneficios') irPara('beneficios');
+  setTimeout(()=>{ bfNovo(); setTimeout(()=>{ const set=(id,v)=>{ const e=document.getElementById(id); if(e&&v) e.value=v; }; set('bfn_seg',o.segurado); set('bfn_ap',o.apolice); set('bfn_prot',o.protocolo); set('bfn_dev',o.data); },60); },80);
+  toast('Identifiquei um aviso de sinistro — abrindo o caso no módulo Benefícios',true); }
+window.relExtrairBeneficio=relExtrairBeneficio;
 window.relDetectar=relDetectar; window.relRotear=relRotear;
 
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
@@ -14014,6 +14043,13 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('grupo familiar: quem paga a apólice do outro aparece dos dois lados', ga.paga.length===1&&ga.paga[0].premio===400&&gr.pagoPor.length===1);
         ok('grupo familiar: mesmo e-mail amarra as duas pessoas', ga.mesmo.length===1&&gr.mesmo.length===1);
         ok('grupo familiar: vira chip no card', cartGrupoChips(CART.clientes[0]).indexOf('paga p/ Ricardo')>=0 && cartGrupoChips(CART.clientes[1]).indexOf('pago por Amanda')>=0);
+        { const _p=CART.perfis; try{ CART.perfis={'amanda teste':{conjuge:'Ricardo Teste',filhos:[{nome:'Gael Teste',idade:5}]}};
+            CART.clientes.push(cartNormCliente({nome:'Gael Teste',ref:'gael teste',cob:{pm:1}})); cartIdxInvalidar&&cartIdxInvalidar();
+            const fa=cartGrupo(CART.clientes[0]).familia, fr=cartGrupo(CART.clientes[1]).familia, fg=cartGrupo(CART.clientes[2]).familia;
+            ok('grupo familiar: cônjuge e filhos do perfil entram no grupo', fa.length===2&&fa[0].papel==='cônjuge'&&fa[1].papel==='filho(a)');
+            ok('grupo familiar: o inverso também (quem me anotou como cônjuge/filho aparece na minha ficha)', fr.some(f=>f.papel==='cônjuge'&&/Amanda/.test(f.nome)) && fg.some(f=>f.papel==='pai/mãe'&&/Amanda/.test(f.nome)));
+            ok('grupo familiar: cônjuge do perfil vira botão clicável no card', cartGrupoChips(CART.clientes[0]).indexOf('cônjuge Ricardo')>=0);
+          }catch(e){ falhas.push('grupo familiar/perfil: exceção '+(e&&e.message)); } finally{ CART.perfis=_p; } }
       }catch(e){ falhas.push('grupo familiar: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; CART.apolices=_a; cartIdxInvalidar&&cartIdxInvalidar(); } }
     ok('ficha da carteira: o corpo rola (mesmo .drawer-body da ficha do contato)', (()=>{ const _c=CART.clientes; try{ CART.clientes=[cartNormCliente({nome:'Rola Teste',ref:'rola teste',cob:{pm:1}})]; cartAbrir('rola teste'); const b=document.querySelector('#drawer .drawer-body'); const okk=!!b&&getComputedStyle(b).overflowY==='auto'; fecharDrawer(); return okk; } finally{ CART.clientes=_c; } })());
 
@@ -14063,6 +14099,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
 
     /* SUBIR-UNIVERSAL-V1 */
     ok('subir relatório: identifica o tipo pela assinatura do texto', relDetectar(EX_EXEMPLO_TXT)==='emitidas' && relDetectar('Propostas Pendentes\nContestação médica 12 dias')==='pendencias' && relDetectar('Relatório de atraso\nApólice 000 dias de atraso 30')==='atraso' && relDetectar('<table><tr><td>Agência</td><td>Cliente</td><td>Data de Nascimento</td><td>CS</td><td>Núm. Apólices</td></tr></table>')==='carteira_clientes' && relDetectar('<table><tr><td>Proposta</td><td>Apólice</td><td>Segurado</td><td>Resp. Pagto.</td><td>Prêmio</td><td>Periodicidade Pagto.</td></tr></table>')==='carteira_apolices' && relDetectar('LP: Fulano\nSitPlan 10 TA 5')==='semanal');
+    ok('subir relatório: reconhece Status T (seção do semanal) e aviso de sinistro', relDetectar('APÓLICES EMITIDAS - DANIEL CRUZ\nMÊS PROPOSTA APÓLICE SEGURADO\n30 dias')==='statust' && relDetectar('Aviso de sinistro\nSegurado: Fulano\nApólice 1234567\nProtocolo 2026-88')==='beneficios' && REL_TIPOS.statust && REL_TIPOS.beneficios);
+    ok('subir relatório: do aviso de sinistro sai segurado/apólice/protocolo pro caso', (()=>{ const o=relExtrairBeneficio('Aviso de sinistro em 03/09/2026\nSegurado: Fulano de Tal\nApólice nº 1234567\nProtocolo: 2026-88'); return o.segurado==='Fulano de Tal'&&o.apolice==='1234567'&&o.protocolo==='2026-88'&&o.data==='2026-09-03'; })());
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
     ok('menu: Configurações virou hub de cards (sem grupo dobrável)', !document.getElementById('cfg-group') && !document.getElementById('cfg-toggle'));
     ok('hub: Módulos e Configurações desenham o MESMO cartão', (()=>{
