@@ -102,6 +102,7 @@ def main():
     ap.add_argument('--servido', action='store_true')
     ap.add_argument('--prova', action='store_true')
     ap.add_argument('--sem-abrir', action='store_true')
+    ap.add_argument('--aba', action='store_true', help='abrir numa aba do seu navegador (antes era o padrão)')
     ap.add_argument('--timeout', type=int, default=300)
     a = ap.parse_args()
     if a.servido:
@@ -110,15 +111,38 @@ def main():
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{porta}/portao.html?auto=1&post=1' + ('&quebrar=1' if a.prova else '')
     print('portão:', url)
+    # PORTAO-SEM-ABA-V1 (04/09): cada rodada abria uma aba "Portão de deploy" no
+    # Chrome dele e nunca fechava — sobrava uma pilha. Agora roda em Chrome
+    # HEADLESS com perfil temporário (não toca nas abas dele) e mata o processo
+    # ao receber o resultado. Sem Chrome: cai no `open` de antes.
+    proc = None
+    perfil = None
     if not a.sem_abrir:
+        chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
         try:
-            subprocess.Popen(['open', url])
+            if os.path.exists(chrome) and not a.aba:
+                import tempfile
+                perfil = tempfile.mkdtemp(prefix='portao-chrome-')
+                proc = subprocess.Popen([chrome, '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+                                         '--window-size=1280,900', f'--user-data-dir={perfil}', url],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                subprocess.Popen(['open', url])
         except Exception as e:
             print('não consegui abrir o navegador:', e, '— abra a URL acima')
     ini = time.time()
     while 'r' not in RESULTADO and time.time() - ini < a.timeout:
         time.sleep(0.5)
     srv.shutdown()
+    if proc is not None:
+        try:
+            proc.terminate(); proc.wait(timeout=10)
+        except Exception:
+            try: proc.kill()
+            except Exception: pass
+    if perfil:
+        import shutil
+        shutil.rmtree(perfil, ignore_errors=True)
     if 'r' not in RESULTADO:
         print(f'❌ sem resultado em {a.timeout} s (o navegador não devolveu nada)')
         sys.exit(2)
