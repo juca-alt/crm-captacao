@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.2 · Vendas LP</span>
+      <span class="tag">PipeX · v7.3 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.2 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.3 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -3219,6 +3219,11 @@ function bcMoveEtapa(id,etapa,cardEl,colEl){
 }
 /* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
 function logEtapa(c,de,para){ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
+/* GC-08 (07/09): registrar um toque/status manual na jornada da rec/contato */
+let JORNADA_TUDO=false;
+function jornadaAddNota(){ const c=S.contatos.find(x=>x.id===CONTATO); if(!c) return; const el=document.getElementById('jornadaNota'); const t=el?(el.value||'').trim():''; if(!t){ if(el) el.focus(); return; }
+  interacoesDe(c).push({id:uid(),k:'nota',l:t,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); salvar(); renderDrawer(); toast('Status registrado na jornada',true); }
+window.jornadaAddNota=jornadaAddNota;
 function registrarResultado(id,k,dia){
   const c=S.contatos.find(x=>x.id===id); const r=RES_BY_K[k]; if(!c||!r) return;
   const it={id:uid(),k,l:r.l,dia:dia||hojeISO(),ts:new Date().toISOString(),por:S.activeUser};
@@ -4368,11 +4373,17 @@ function renderDrawer(){
 
       <div class="sec">
         <h3>Jornada (${interacoesDe(c).length})</h3>
-        ${interacoesDe(c).length? interacoesDe(c).slice(-8).reverse().map(i=>`
-          <div class="evento"><span class="dt">${esc(dataBR(i.dia))}${i.ts?(' '+esc(new Date(i.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))):''}</span>
-          <span>${i.k==='etapa'?'🔀':'📞'} <b>${esc(i.l)}</b>${i.por&&isMaster()? ' <span style="color:var(--muted);font-size:11px">· '+esc(lpNome(i.por))+'</span>':''}</span></div>`).join('')
-          + (interacoesDe(c).length>8? `<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando os 8 últimos de ${interacoesDe(c).length}.</div>`:'')
-        : '<div class="vazio" style="padding:12px">Nenhum contato registrado ainda — o primeiro "Registrar contato" começa a jornada.</div>'}
+        <!-- GC-08 (07/09): linha do tempo do ciclo de vida + "Adicionar status" (registra um toque manual) -->
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <input id="jornadaNota" placeholder="Registrar um status/toque (liguei, mandei msg, pediu retorno…)" style="flex:1;min-height:38px" onkeydown="if(event.key==='Enter')jornadaAddNota()">
+          <button class="btn btn-s btn-mini" style="min-height:38px" onclick="jornadaAddNota()">➕ Status</button>
+        </div>
+        ${(()=>{ const its=interacoesDe(c); if(!its.length) return '<div class="vazio" style="padding:12px">Nenhum contato registrado ainda — o primeiro toque começa a jornada.</div>';
+          const mostra=JORNADA_TUDO?its.slice().reverse():its.slice(-8).reverse();
+          const ico=k=>k==='etapa'?'🔀':k==='nota'?'📝':k==='reuniao'?'📅':k==='tarefa'?'✅':k==='emissao'?'📄':'📞';
+          return mostra.map(i=>`<div class="evento"><span class="dt">${esc(dataBR(i.dia))}${i.ts?(' '+esc(new Date(i.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))):''}</span>
+            <span>${ico(i.k)} <b>${esc(i.l)}</b>${i.por&&isMaster()?' <span style="color:var(--muted);font-size:11px">· '+esc(lpNome(i.por))+'</span>':''}</span></div>`).join('')
+            + (its.length>8?`<div style="margin-top:6px"><button class="btn btn-ghost btn-mini" onclick="JORNADA_TUDO=${JORNADA_TUDO?'false':'true'};renderDrawer()">${JORNADA_TUDO?'▴ mostrar só os 8 últimos':'▾ ver todos os '+its.length}</button></div>`:''); })()}
       </div>
 
       <div class="sec">
@@ -8923,6 +8934,7 @@ function atAbrir(id){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apol
        <button class="btn btn-ghost btn-mini" onclick="atCopiarMsg()">📋 Copiar</button>
      </div>
    </div>
+   <div style="margin-top:10px;font-size:12.5px;color:var(--muted)">Regularizou? <button class="btn btn-s btn-mini" onclick="atMsgRetorno('${esc(r.apolice)}')" title="Mensagem de retorno pós-pagamento: apólice em dia + resumo das coberturas + convite de revisão">✅ Retorno + revisão</button> <span style="font-size:11px">vira reunião</span></div>
    <label style="display:block;font-size:12px;color:var(--muted);margin-top:12px;font-weight:600">Status</label>
    <select id="at_st" style="width:100%;margin-top:3px">${opts.map(s=>`<option${stAtual===s?' selected':''}>${esc(s)}</option>`).join('')}</select>
    <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">Tratativa (nota de cobrança)</label>
@@ -8978,9 +8990,19 @@ async function atSalvarFicha(ap){
   const ve=$('#at_ve'); if(ve&&ve.value) patch.vencido_em=ve.value;
   const pr=$('#at_pr'); if(pr&&pr.value){ const n=atBrNum(pr.value); if(n!=null) patch.premio=n; }
   patch.resolvido_em = (st===AT_STATUS.RESOLV) ? (ex.resolvido_em||atHojeISO()) : null;  // Resolvido carimba a data; sair de Resolvido limpa
+  const virouResolvido = !ex.resolvido_em && !!patch.resolvido_em;   // GC-02: transição p/ resolvido dispara o retorno
   await atPatch(ap,patch); atClose(); render(); toast('Salvo',true);
+  if(virouResolvido) setTimeout(()=>atMsgRetorno(ap),220);
 }
-async function atResolver(ap){ await atPatch(ap,{resolvido_em:atHojeISO()}); atClose(); render(); toast('Marcada como resolvida',true); }
+/* GC-02 (07/09): retorno pós-regularização — quando o cliente sai do atraso, mensagem pronta
+   ("pagamento processado, apólice em dia") + resumo das coberturas + convite de revisão. */
+function cartClientePorAtraso(r){ if(!r) return null; const tk=telKey(r.celular), nk=normKey(r.segurado||'');
+  return (CART.clientes||[]).find(c=>{ if(tk&&telKey(cartTel(c))===tk) return true; if(nk&&(c.ref===nk||normKey(c.nome)===nk)) return true; return false; })||null; }
+function atMsgRetorno(ap){ const r=(AT.itens||[]).find(x=>x.apolice===ap||String(x.id)===String(ap)); if(!r){ toast('Caso não encontrado',false); return; }
+  const c=cartClientePorAtraso(r);
+  msgPronta({nome:r.segurado||(c&&c.nome), sexo:c&&c.sexo, tel:r.celular||(c&&cartTel(c)), coberturas:c?msgCoberturasResumo(c):'sua proteção atual', apolice:r.apolice},'pos_regularizacao'); }
+window.atMsgRetorno=atMsgRetorno;
+async function atResolver(ap){ await atPatch(ap,{resolvido_em:atHojeISO()}); atClose(); render(); toast('Marcada como resolvida — mande o retorno pós-pagamento 👇',true); setTimeout(()=>atMsgRetorno(ap),220); }
 async function atReabrir(ap){ const r=AT.itens.find(x=>x.apolice===ap); if(r&&r.status===AT_STATUS.SUMIU) r.status=''; await atPatch(ap,{resolvido_em:null}); atClose(); render(); toast('Reaberta',true); }
 
 function atColarRelatorio(){ atModal(`<h2>📋 Colar relatório</h2>
@@ -14326,6 +14348,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const nf2=cartFunilInfo(cartNegsDe(cartNormCliente({nome:'Zzz Sozinho',ref:'zzz sozinho',cob:{pm:1}}),idx));
         return nf.no&&nf.ultimoToque==='2026-09-01'&&nf.nTouch===1&&!nf2.no;
       } finally{ S.contatos=_s; CART.clientes=_c; } })());
+    /* GC-08 (07/09): jornada + adicionar status */
+    ok('GC-08: adicionar status na jornada (nota entra como toque na timeline)', typeof jornadaAddNota==='function' && (()=>{ const c={interacoes:[]}; interacoesDe(c).push({k:'nota',l:'liguei, pediu retorno',dia:'2026-09-07'}); return interacoesDe(c).length===1&&interacoesDe(c)[0].k==='nota'; })());
+    /* GC-02 (07/09): retorno pós-regularização com coberturas */
+    ok('GC-02: retorno pós-regularização acha o cliente (nome/telefone) e resume coberturas', (()=>{ const _c=CART.clientes; try{ CART.clientes=[cartNormCliente({nome:'Paga Teste',ref:'paga teste',celular:'81977776666',cob:{cs:500000,pm:300}})]; const cli=cartClientePorAtraso({apolice:'999',segurado:'Paga Teste',celular:'81977776666'}); return !!cli&&/capital/.test(msgCoberturasResumo(cli))&&typeof atMsgRetorno==='function'&&!!MSG_TEMPLATES.pos_regularizacao; } finally{ CART.clientes=_c; } })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
