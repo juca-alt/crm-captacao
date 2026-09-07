@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.6 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.7 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.6 · Vendas LP</span>
+      <span class="tag">PipeX · v7.7 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.6 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.7 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -4876,11 +4876,16 @@ function viewSitplan(){
 let MT_PER='sem';
 function mtNoPeriodo(iso){ if(!iso) return false; iso=String(iso).slice(0,10); const hoje=hojeISO();
   if(MT_PER==='mes') return iso.slice(0,7)===hoje.slice(0,7);
+  if(MT_PER==='tri'){ if(iso.slice(0,4)!==hoje.slice(0,4)) return false; const q=x=>Math.floor((+x.slice(5,7)-1)/3); return q(iso)===q(hoje); }
   const p=hoje.split('-').map(Number); const dow=(new Date(p[0],p[1]-1,p[2]).getDay()+6)%7;
   const ini=isoAddDias(hoje,-dow); return iso>=ini && iso<=isoAddDias(ini,6);
 }
+/* META-EMISSAO-V1 (07/09): além das atividades, meta de EMISSÃO — apólices emitidas e PA emitida.
+   Realizado conta sozinho do funil: negócio que teve transição pro marco de ganho (Venda ganha no BC,
+   DELIVERY no Novos) dentro do período. Espelha a mesma cadeia dos outros módulos. */
+const MT_GANHO={nn:'DELIVERY',bc:'Venda ganha',vg:'Ganho',prud:'Ganho',mfo:'Ganho'};
 function mtRealizado(){
-  const meus=meusContatos(); let rec=0,lig=0,oi=0,n=0;
+  const meus=meusContatos(); let rec=0,lig=0,oi=0,n=0,emit=0,pa=0;
   meus.forEach(c=>{
     if(mtNoPeriodo(c.criadoEm)) rec++;
     interacoesDe(c).forEach(i=>{ if(!mtNoPeriodo(i.dia)) return;
@@ -4889,18 +4894,22 @@ function mtRealizado(){
       if(i.k==='etapa'&&i.para==='N') n++;
     });
   });
-  return {rec,lig,oi,n};
+  (S.contatos||[]).filter(c=>(isMaster()||logado()||c.lp===S.activeUser)).forEach(c=>{
+    const g=MT_GANHO[funilDe(c)]||MT_GANHO.nn;
+    if(interacoesDe(c).some(i=>i.k==='etapa'&&i.para===g&&mtNoPeriodo(i.dia))){ emit++; pa+=(typeof paDe==='function'?(paDe(c)||0):0); }
+  });
+  return {rec,lig,oi,n,emit,pa};
 }
 function mtMetas(){ if(!S.metas) S.metas={}; const u=S.activeUser; if(!S.metas[u]) S.metas[u]={sem:{},mes:{}}; if(!S.metas[u][MT_PER]) S.metas[u][MT_PER]={}; return S.metas[u][MT_PER]; }
 function setMeta(k,v){ mtMetas()[k]=Math.max(0,parseInt(v||'0',10)||0); salvar(); render(); }
-function anelHtml(key,lbl,real,cor){
+function anelHtml(key,lbl,real,cor,fmt){
   const meta=mtMetas()[key]||0; const pct=meta>0?Math.min(1,real/meta):0; const C=2*Math.PI*30;
-  const cheio=meta>0&&real>=meta;
+  const cheio=meta>0&&real>=meta; const disp=fmt?fmt(real):real; const fs=fmt?12:16;
   return `<div class="kpi" style="min-width:150px;padding:14px">
     <svg width="76" height="76" viewBox="0 0 76 76" style="display:block;margin:0 auto">
       <circle cx="38" cy="38" r="30" fill="none" stroke="var(--linha)" stroke-width="7"/>
       <circle cx="38" cy="38" r="30" fill="none" stroke="${cor}" stroke-width="7" stroke-linecap="round" stroke-dasharray="${(C*pct).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 38 38)"/>
-      <text x="38" y="43" text-anchor="middle" font-size="16" font-weight="800" fill="var(--ink)">${real}</text>
+      <text x="38" y="43" text-anchor="middle" font-size="${fs}" font-weight="800" fill="var(--ink)">${disp}</text>
     </svg>
     <div class="lbl" style="margin-top:6px">${lbl}${cheio?' ✅':''}</div>
     <div class="meta-in">meta: <input type="number" min="0" value="${meta||''}" placeholder="—" onchange="setMeta('${key}',this.value)"> ${meta>0?Math.round(pct*100)+'%':''}</div>
@@ -4910,20 +4919,27 @@ function viewMetas(){
   const r=mtRealizado();
   $('#main').innerHTML=`
     <h1 class="pg">Metas</h1>
-    <div class="sub">Realizado conta SOZINHO da atividade registrada (contatos novos, resultados de ligação, etapa N) — meta é o único número que você digita.</div>
+    <div class="sub">Realizado conta SOZINHO do que você registra (contatos, ligações, etapa N e emissões do funil) — meta é o único número que você digita. Metas por período e por perfil.</div>
     <div class="toolbar"><div class="seg">
       <button class="${MT_PER==='sem'?'on':''}" onclick="MT_PER='sem';render()">Semana</button>
       <button class="${MT_PER==='mes'?'on':''}" onclick="MT_PER='mes';render()">Mês</button>
-    </div><span style="font-size:12px;color:var(--muted)">${MT_PER==='sem'?'segunda a domingo desta semana':'mês corrente'} · metas salvas por perfil</span></div>
+      <button class="${MT_PER==='tri'?'on':''}" onclick="MT_PER='tri';render()">Trimestre</button>
+    </div><span style="font-size:12px;color:var(--muted)">${MT_PER==='sem'?'segunda a domingo desta semana':MT_PER==='tri'?'trimestre corrente':'mês corrente'} · metas salvas por perfil</span></div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:12px 0 4px">Atividade (a cadeia do método)</div>
     <div class="kpis" style="gap:14px;flex-wrap:wrap">
       ${anelHtml('rec','Recomendações novas',r.rec,'var(--azul)')}
       ${anelHtml('lig','Ligações feitas',r.lig,'var(--roxo)')}
       ${anelHtml('oi','OI/FF agendados',r.oi,'var(--amarelo)')}
       ${anelHtml('n','N — propostas',r.n,'var(--verde)')}
     </div>
+    <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:16px 0 4px">Resultado (emissão)</div>
+    <div class="kpis" style="gap:14px;flex-wrap:wrap">
+      ${anelHtml('emit','Apólices emitidas',r.emit,'var(--verde)')}
+      ${anelHtml('pa','PA emitida (R$)',r.pa,'var(--roxo)',v=>brlCurto(v))}
+    </div>
     <div class="card" style="margin-top:14px;font-size:12.5px;color:var(--muted)">
-      A cadeia do método: <b>recomendações</b> viram <b>ligações</b>, ligações viram <b>OI/FF</b>, OI/FFs viram <b>propostas (N)</b>.
-      Se um anel trava, o gargalo tá na etapa anterior.
+      A cadeia do método: <b>recomendações</b> viram <b>ligações</b>, ligações viram <b>OI/FF</b>, OI/FFs viram <b>propostas (N)</b> — e propostas viram <b>emissão</b> (apólice + PA).
+      Emissão conta do funil: negócio que chega em <b>Apólice Emitida</b> (ou Delivery, nos Novos) no período. Se um anel trava, o gargalo tá na etapa anterior.
     </div>`;
 }
 
@@ -14408,6 +14424,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('BC v7.6: Delivery vem logo após Venda ganha e só Venda perdida encerra', (()=>{ const M=ETAPAS_MAP.bc; const i=M.ids.indexOf('Venda ganha'),j=M.ids.indexOf('Delivery'); return i>=0&&j===i+1&&M.enc.length===1&&M.enc[0]==='Venda perdida'&&M.fluxo.includes('Venda ganha')&&M.fluxo.includes('Delivery'); })());
     ok('BC-AUTO-1: apólice emitida (Venda ganha) gera automaticamente a entrega no Delivery', (()=>{ const c={funil:'bc',etapa:'Venda ganha',interacoes:[]}; const acted=funAutoDelivery(c); return acted&&c.etapa==='Delivery'&&interacoesDe(c).some(i=>i.k==='nota'&&/Automa/.test(i.l)); })());
     ok('BC v7.6: ganho aponta pra Venda ganha (emitida) e concluir entrega devolve pra Ativos', funEtapaGanho('bc')==='Venda ganha'&&typeof bcConcluirEntrega==='function'&&BC_DELIVERY==='Delivery'&&BC_EMITIDA==='Venda ganha');
+    /* METAS-V7.7 (07/09): trimestre + metas de emissão (apólices/PA) contadas do funil */
+    ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
