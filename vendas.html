@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.0 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.0 · Vendas LP</span>
+      <span class="tag">PipeX · v7.1 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.0 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.1 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -2144,7 +2144,7 @@ function viewInicio(){
         <span class="dias-tag ${diasTagCls(d)}">${d===0?'hoje!':d===1?'amanhã':'em '+d+'d'}</span>
         <span style="flex:1;min-width:120px;font-weight:600">${esc(c.nome)}</span>
         <span style="font-size:12px;color:var(--muted)">🎂 ${dataBR(c.nascimento).slice(0,5)}${c.idade!=null?' · faz '+(c.idade+1):''}</span>
-        ${wa?`<a class="btn btn-p btn-mini" href="${wa}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Mandar parabéns no WhatsApp">💬</a>`:''}</div>`; };
+        <button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(c.ref)}','aniversario')" title="Mensagem de aniversário (editável antes de enviar)">💬</button></div>`; };
     const refHoje=new Set(nHoje.map(x=>x.c.ref)), refSem=new Set(nSem.map(x=>x.c.ref));
     const grp=(t,arr)=>arr.length?`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px">${t} · ${arr.length}</div>${arr.map(linha).join('')}`:'';
     const corpo=(nHoje.length||nSem.length||nMes.length)
@@ -11036,6 +11036,67 @@ function cartBtnsContato(c,msg){ const out=[]; const wa=cartWaUrl(cartTel(c),msg
   if(c.email) out.push(`<a class="btn btn-s btn-mini" href="mailto:${esc(c.email)}" onclick="event.stopPropagation()">✉️ E-mail</a>`);
   return out.join(' '); }
 
+/* ═══ PT-A · MOTOR DE MENSAGEM-PRONTA (07/09 · GC-A) ════════════════════════
+   Benchmark Global CRM (padrão transversal A): template com placeholders,
+   EDITÁVEL antes de enviar, resolve gênero (o/a), botão "Enviar via WhatsApp".
+   Um primitivo, N gatilhos — cada ticket (GC-02/06/22/30/34/35/37/39) vira só
+   mais um template + um ponto de chamada. Reusa cartWaUrl/atTitleC/brl. */
+function msgPrimeiro(nome){ return atTitleC(String(nome||'').trim().split(/\s+/)[0]||''); }
+function msgGenero(ctx,mForm,fForm){ const s=(ctx&&ctx.sexo)||''; return s==='F'?fForm:(s==='M'?mForm:(mForm+'('+fForm+')')); }
+/* {primeiro} {nome} {o} {sr} {coberturas} {apolice} {premio} {dias} {venc} {valor} {forma} {motivo} — chave desconhecida some (nunca sai {buraco}) */
+function msgPreencher(tpl,ctx){ ctx=ctx||{};
+  const V={ primeiro:msgPrimeiro(ctx.nome), nome:atTitleC(String(ctx.nome||'')), o:msgGenero(ctx,'o','a'), sr:msgGenero(ctx,'Sr.','Sra.'),
+    coberturas:ctx.coberturas||'', apolice:ctx.apolice||'', premio:ctx.premio!=null?brl(ctx.premio):'', dias:ctx.dias!=null?String(ctx.dias):'',
+    venc:ctx.venc||'', valor:ctx.valor!=null?brl(ctx.valor):'', forma:ctx.forma||'', motivo:ctx.motivo||'' };
+  return String(tpl||'').replace(/\{\s*([a-zA-Z_]+)\s*\}/g,(_,k)=>{ const key=String(k).toLowerCase(); return (key in V)?V[key]:''; }).replace(/[ \t]{2,}/g,' ').replace(/ +([.,!?])/g,'$1').trim();
+}
+const MSG_TEMPLATES={
+  aniversario:{titulo:'Aniversário do cliente', texto:'Oi {primeiro}, tudo bem? 🎉 Passei aqui só pra te desejar um feliz aniversário, muita saúde e coisas boas! Qualquer coisa, tô à disposição. Um abraço!'},
+  aniversario_apolice:{titulo:'Aniversário de apólice → revisão', texto:'Oi {primeiro}! Sua proteção completou mais um ano com a gente 🎯. Que tal reservarmos uns 15-20min por vídeo pra revisar suas coberturas e ver se seguem no tamanho certo pro seu momento? Quando fica melhor pra você?'},
+  pos_regularizacao:{titulo:'Retorno pós-regularização + revisão', texto:'Oi {primeiro}, tudo certo! ✅ Seu pagamento foi processado e sua apólice está em dia. Aproveitando o contato: hoje sua proteção é {coberturas}. Vale marcarmos uns minutos pra revisar se está no tamanho certo? Um abraço!'},
+  apolice_emitida:{titulo:'Apólice emitida', texto:'Oi {primeiro}! Sua apólice {apolice} foi emitida ✅ — já pode contar com a proteção. Qualquer dúvida sobre coberturas ou assistências, é só me chamar por aqui!'},
+  abordagem:{titulo:'Abordagem (não atendeu)', texto:'Oi {primeiro}, tudo bem? Tentei te ligar mas não consegui falar. Quando tiver um minutinho me chama por aqui? Tenho uma orientação rápida sobre sua proteção. Obrigado!'},
+  antecipar_boleto:{titulo:'Antecipar boleto', texto:'Oi {primeiro}! Passando pra lembrar do boleto da sua apólice {apolice}. Se quiser, te envio pra adiantar e manter tudo em dia — te ajudo?'},
+  agradece_indicacao:{titulo:'Agradecer indicação', texto:'Oi {primeiro}, muito obrigado pela confiança e pela indicação! 🙏 Fico à disposição sempre que precisar. Um abraço!'}
+};
+let MSGP_CTX=null;
+function msgProntaTexto(key){ const t=MSG_TEMPLATES[key]||MSG_TEMPLATES.aniversario; return msgPreencher(t.texto,MSGP_CTX||{}); }
+function msgProntaTroca(key){ const ta=document.getElementById('msgpTxt'); if(ta) ta.value=msgProntaTexto(key); }
+function msgProntaEnviar(){ const ta=document.getElementById('msgpTxt'); const txt=ta?ta.value:''; const tel=(MSGP_CTX&&MSGP_CTX.tel)||''; const url=cartWaUrl(tel,txt);
+  if(!url){ toast('Sem telefone válido pra este contato — copie a mensagem e envie manualmente.',false); return; }
+  window.open(url,'_blank','noopener'); }
+function msgProntaCopiar(){ const ta=document.getElementById('msgpTxt'); if(!ta) return; try{ navigator.clipboard.writeText(ta.value); toast('Mensagem copiada',true); }catch(_){ ta.select(); document.execCommand&&document.execCommand('copy'); toast('Mensagem copiada',true); } }
+/* ctx = {nome, sexo, tel, coberturas?, apolice?, premio?, dias?, venc?, valor?, forma?, motivo?} */
+function msgPronta(ctx,key){ MSGP_CTX=ctx||{}; const cur=MSG_TEMPLATES[key]?key:'aniversario';
+  const semTel=!cartWaUrl((ctx&&ctx.tel)||'','x');
+  const old=document.getElementById('msgpModal'); if(old) old.remove();
+  const opts=Object.keys(MSG_TEMPLATES).map(k=>`<option value="${k}"${k===cur?' selected':''}>${esc(MSG_TEMPLATES[k].titulo)}</option>`).join('');
+  document.body.insertAdjacentHTML('beforeend',`
+  <div id="msgpModal" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:1300;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div class="card" style="width:min(460px,94vw);padding:18px" onclick="event.stopPropagation()">
+      <h3 style="margin:0 0 6px">💬 Mensagem pronta${ctx&&ctx.nome?' — '+esc(msgPrimeiro(ctx.nome)):''}</h3>
+      <select onchange="msgProntaTroca(this.value)" style="width:100%;min-height:40px;margin-bottom:8px">${opts}</select>
+      <textarea id="msgpTxt" style="width:100%;min-height:150px;font-size:14px">${esc(msgProntaTexto(cur))}</textarea>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Edite à vontade antes de enviar.${semTel?' <b style="color:var(--verm)">Sem telefone cadastrado</b> — use Copiar.':''}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-p" style="min-height:44px" onclick="msgProntaEnviar()">💬 Enviar via WhatsApp</button>
+        <button class="btn btn-s" style="min-height:44px" onclick="msgProntaCopiar()">📋 Copiar</button>
+        <button class="btn btn-ghost" style="min-height:44px;margin-left:auto" onclick="document.getElementById('msgpModal').remove()">Fechar</button>
+      </div>
+    </div>
+  </div>`);
+}
+window.msgPronta=msgPronta; window.msgProntaTroca=msgProntaTroca; window.msgProntaEnviar=msgProntaEnviar; window.msgProntaCopiar=msgProntaCopiar;
+/* resumo curto das coberturas do cliente da carteira, pro template pos_regularizacao/revisão */
+function msgCoberturasResumo(c){ if(!c) return 'sua proteção atual'; const p=[]; const cob=c.cob||{};
+  if(cob.cs) p.push(brlCurto(cob.cs)+' de capital'); if(cob.renda) p.push('renda de '+brlCurto(cob.renda));
+  const pm=cob.pm; if(pm) p.push('prêmio de '+brl(pm)+'/mês');
+  return p.length?p.join(', '):'sua proteção atual'; }
+function msgCtxCliente(c,extra){ return Object.assign({nome:c&&c.nome, sexo:c&&c.sexo, tel:c&&(cartTel(c)), coberturas:msgCoberturasResumo(c)}, extra||{}); }
+/* abre a mensagem pronta pra um cliente da carteira (pelo ref) — usado nos cards/listas */
+function msgProntaCarteira(ref,key,extra){ const c=(cartVis()||[]).find(x=>x.ref===ref)||(CART.clientes||[]).find(x=>x.ref===ref); if(!c){ toast('Cliente não encontrado',false); return; } msgPronta(msgCtxCliente(c,extra),key); }
+window.msgProntaCarteira=msgProntaCarteira;
+
 /* ---- radar: cruza o cliente com o relatório semanal (LPDB) por nome normalizado (ref).
    Só itens NÃO resolvidos. Se nenhum relatório foi importado, tudo volta vazio (honesto). ---- */
 /* FLUIDEZ-V1:IDX-RADAR
@@ -14231,6 +14292,11 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('menu v7: Clientes/Contatos/Benefícios/Duplicatas/Lista do dia moram em Módulos (hub) e têm título', ['contatos','cart-visao','cart-clientes','cart-oportunidades','beneficios','sitplan','bn-dups'].every(v=>HUB_VIEWS.includes(v)&&!!TITULO_VIEW[v]));
     ok('menu v7: Recomendações é item próprio no topo e Estoque de Nomes fica em SitPlan & TA', !!document.querySelector('.sidebar .nav-btn[data-view="bn-recs"]') && !!document.querySelector('#sp-group .nav-btn[data-view="bn-estoque"]'));
     ok('menu v7: Carteira/Contatos saíram do menu lateral visível (só via Módulos)', !document.querySelector('#cli-group') && !document.querySelector('.sidebar .nav-btn[data-view="contatos"]:not([hidden])'));
+    /* PT-A · MOTOR DE MENSAGEM-PRONTA (07/09) */
+    ok('PT-A: preenche primeiro nome e some com placeholder desconhecido', msgPreencher('Feliz aniversário, {primeiro}! {xyz}',{nome:'joão paulo',sexo:'M'})==='Feliz aniversário, João!');
+    ok('PT-A: resolve gênero (o/a, Sr./Sra.) e cai em o(a) quando não sabe', msgPreencher('{o} {sr}',{sexo:'F'})==='a Sra.' && msgPreencher('{o}',{})==='o(a)');
+    ok('PT-A: catálogo de gatilhos + modal editável com Enviar via WhatsApp', typeof msgPronta==='function'&&!!MSG_TEMPLATES.aniversario&&!!MSG_TEMPLATES.pos_regularizacao&&!!MSG_TEMPLATES.apolice_emitida&&typeof msgProntaEnviar==='function');
+    ok('PT-A: o modal abre com o texto já preenchido pelo contato', (()=>{ try{ msgPronta({nome:'ana lima',sexo:'F',tel:'81999990000'},'aniversario'); const m=document.getElementById('msgpModal'),ta=document.getElementById('msgpTxt'); const okm=!!(m&&ta&&/Ana/.test(ta.value)); if(m) m.remove(); return okm; }catch(e){ return false; } })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
