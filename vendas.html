@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.2 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.1 · Vendas LP</span>
+      <span class="tag">PipeX · v7.2 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.1 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.2 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -11189,12 +11189,28 @@ function viewCartVisao(){ const r=cartResumo();
     ${cartEntradasHtml()}
     <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-p" onclick="irPara('cart-oportunidades')">💡 Ver oportunidades</button><button class="btn btn-s" onclick="openCarteiraImport()">📄 Reimportar carteira</button></div>`:cartVazio()}`; }
 
+/* NO-FUNIL-V1 (07/09): o cliente da carteira JÁ tem negócio no funil? e qual o último toque?
+   Índice montado 1× por render (chave de nome/telefone/pessoaId → negócios) pra não pagar O(n²). */
+function cartNegIndex(){ const m=new Map();
+  (S.contatos||[]).forEach(ct=>{ const ks=pessoaChaves(ct,['nome'],['telefone']); if(ct.pessoaId) ks.add('p:'+ct.pessoaId);
+    ks.forEach(k=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(ct); }); });
+  return m; }
+function cartNegsDe(c,idx){ const ks=cartChaves(c); if(c&&c.pessoaId) ks.add('p:'+c.pessoaId); const seen=new Set(),out=[];
+  ks.forEach(k=>{ (idx.get(k)||[]).forEach(ct=>{ if(!seen.has(ct.id)){ seen.add(ct.id); out.push(ct); } }); }); return out; }
+function cartUltToque(neg){ let d=''; ((neg&&neg.interacoes)||[]).forEach(i=>{ const x=(i&&(i.dia||(i.ts?String(i.ts).slice(0,10):''))); if(x&&x>d) d=x; });
+  if(!d&&neg&&neg.criadoEm) d=neg.criadoEm; return d||null; }
+function cartFunilInfo(negs){ if(!negs||!negs.length) return {no:false,etapaLabel:'',ultimoToque:null,nTouch:0};
+  const encOf=n=>{ const M=ETAPAS_MAP[n.funil||'nn']; return (M&&M.enc)||[]; };
+  const viv=negs.filter(n=>!encOf(n).includes(n.etapa)); const pick=viv[0]||negs[0];
+  let ult=null,nTouch=0; negs.forEach(n=>{ const d=cartUltToque(n); if(d&&(!ult||d>ult)) ult=d; nTouch+=((n.interacoes||[]).filter(i=>i&&i.k!=='etapa').length); });
+  return {no:true,etapaLabel:pick?(ET_LABEL[pick.etapa]||pick.etapa):'',funil:pick&&(pick.funil||'nn'),ultimoToque:ult,nTouch}; }
 function viewCartClientes(){ const q=normKey(CART_Q);
   fxReg('cart',FCART,'viewCartClientes');
   const _af=document.activeElement?document.activeElement.id:'';  // devolve o foco pro campo certo após o re-render
   const fset=bnCsvSet(FCART.flags), gset=bnCsvSet(FCART.gaps);
-  const enr=cartVis().map(c=>({c,n:cartApolicesDoCliente(c).length,rd:cartRadar(c),dN:lpDiasAte(c.nascimento)}));
-  const filtrada=enr.filter(({c,n,rd,dN})=>{
+  const _nidx=cartNegIndex();
+  const enr=cartVis().map(c=>({c,n:cartApolicesDoCliente(c).length,rd:cartRadar(c),dN:lpDiasAte(c.nascimento),nf:cartFunilInfo(cartNegsDe(c,_nidx))}));
+  const filtrada=enr.filter(({c,n,rd,dN,nf})=>{
     if(q && !(c.ref.indexOf(q)>=0||normKey(c.nome).indexOf(q)>=0||(c.email&&normKey(c.email).indexOf(q)>=0))) return false;
     if(FCART.idmin && !(c.idade!=null&&c.idade>=+FCART.idmin)) return false;
     if(FCART.idmax && !(c.idade!=null&&c.idade<=+FCART.idmax)) return false;
@@ -11207,7 +11223,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
        responde quando a carga trouxe o detalhe — senão o "sem HC" listaria a
        carteira inteira e viraria abordagem inventada. */
     if(gset.size){ const g=new Set(cartGaps(c).map(x=>x[0])); if(![...gset].every(k=>g.has(k))) return false; }
-    if(fset.size){ const has={atraso:rd.atrasos.length>0,statust:rd.statust.length>0,pendencia:rd.pendencias.length>0,niver:dN!=null&&dN<=JANELA_DIAS};
+    if(fset.size){ const has={atraso:rd.atrasos.length>0,statust:rd.statust.length>0,pendencia:rd.pendencias.length>0,niver:dN!=null&&dN<=JANELA_DIAS,nofunil:nf.no,semneg:!nf.no};
       if(![...fset].every(k=>has[k])) return false; }
     return true;
   });
@@ -11218,10 +11234,13 @@ function viewCartClientes(){ const q=normKey(CART_Q);
   const fchip=(k,l,t)=>`<button class="sheet-chip ${fset.has(k)?'on':''}" onclick="fcartTgl('${k}')" title="${esc(t)}">${l}</button>`;
   const achip=(v,l)=>`<button class="sheet-chip ${FCART.apolices===v?'on':''}" onclick="fcartAp('${v}')">${l}</button>`;
   const temFiltro=fset.size||gset.size||FCART.apolices||FCART.idmin||FCART.idmax||FCART.pmmin||q;
-  const linhas=lista.map(({c,n,rd,dN})=>{
+  const linhas=lista.map(({c,n,rd,dN,nf})=>{
     const flags=(rd.atrasos.length?'<span title="em atraso no relatório">⏰</span>':'')+(rd.statust.length?'<span title="no Status T">⏳</span>':'')+(rd.pendencias.length?'<span title="pendência de emissão">📋</span>':'')+(dN!=null&&dN<=JANELA_DIAS?'<span title="aniversário próximo">🎂</span>':'');
+    const tagFunil=nf.no
+      ? `<div style="font-size:10.5px;margin-top:3px"><span class="badge b-verde" style="font-size:10px">🟢 no funil · ${esc(nf.etapaLabel)}</span>${nf.ultimoToque?` <span style="color:var(--muted)">últ. toque ${dataBR(nf.ultimoToque).slice(0,5)}${nf.nTouch?' · '+nf.nTouch+' toque'+(nf.nTouch>1?'s':''):''}</span>`:''}</div>`
+      : `<div style="font-size:10.5px;margin-top:3px;color:var(--muted)">⚪ sem negócio no funil</div>`;
     return `<tr onclick="cartAbrir('${esc(c.ref)}')" style="cursor:pointer;border-top:1px solid var(--linha)">
-      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}${flags?' <span style="font-size:12px">'+flags+'</span>':''}${c.lp&&c.lp!=='Gustavo'?` <span class="badge b-cinza" title="LP no relatório da MFB: ${esc(c.lpNome||c.lp)}">LP ${esc(c.lp)}</span>`:''}</td>
+      <td style="padding:8px 10px;font-weight:600">${esc(c.nome)}${flags?' <span style="font-size:12px">'+flags+'</span>':''}${c.lp&&c.lp!=='Gustavo'?` <span class="badge b-cinza" title="LP no relatório da MFB: ${esc(c.lpNome||c.lp)}">LP ${esc(c.lp)}</span>`:''}${tagFunil}</td>
       <td style="padding:8px 10px;text-align:center">${c.idade!=null?c.idade:'—'}${fset.has('niver')&&c.nascimento?`<div style="font-size:11px;color:var(--muted);white-space:nowrap">🎂 ${dataBR(c.nascimento).slice(0,5)}${dN!=null?' · '+(dN===0?'hoje!':dN===1?'amanhã':dN+'d'):''}</div>`:''}</td>
       <td style="padding:8px 10px">${esc(c.celular||c.telefone||'—')}</td>
       <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
@@ -11233,6 +11252,8 @@ function viewCartClientes(){ const q=normKey(CART_Q);
     ${cartVis().length?`<input id="cart-q" placeholder="Buscar por nome ou e-mail…" value="${esc(CART_Q)}" oninput="CART_Q=this.value;viewCartClientes()" style="width:100%;max-width:420px;margin:6px 0 8px;padding:9px 12px;border:1px solid var(--linha);border-radius:9px">
     <div class="toolbar" style="gap:6px;flex-wrap:wrap;margin:0 0 12px;align-items:center">
       ${fchip('atraso','⏰ Atraso','em atraso no relatório')}${fchip('statust','⏳ Status T','proposta no Status T')}${fchip('pendencia','📋 Pendência','pendência de emissão')}${fchip('niver','🎂 Aniversário','aniversário nos próximos '+JANELA_DIAS+' dias')}
+      <span style="width:1px;height:20px;background:var(--linha)"></span>
+      ${fchip('nofunil','🟢 No funil','já tem um negócio/oportunidade aberto no funil')}${fchip('semneg','⚪ Sem negócio','ainda sem oportunidade no funil — não trabalhado')}
       <span style="width:1px;height:20px;background:var(--linha)"></span>
       ${achip('1','1 apólice')}${achip('2+','2+ apólices')}
       ${(()=>{ const lps=[...new Set(cartVis().map(c=>c.lp).filter(Boolean))].sort(); return lps.length>1?`<span style="width:1px;height:20px;background:var(--linha)"></span>`+lps.map(l=>`<button class="sheet-chip ${FCART.lp===l?'on':''}" onclick="FCART.lp=FCART.lp==='${esc(l)}'?'':'${esc(l)}';viewCartClientes()" title="Clientes cuja LP no relatório da MFB é ${esc(l)}">👤 ${esc(l)}</button>`).join(''):''; })()}
@@ -14297,6 +14318,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('PT-A: resolve gênero (o/a, Sr./Sra.) e cai em o(a) quando não sabe', msgPreencher('{o} {sr}',{sexo:'F'})==='a Sra.' && msgPreencher('{o}',{})==='o(a)');
     ok('PT-A: catálogo de gatilhos + modal editável com Enviar via WhatsApp', typeof msgPronta==='function'&&!!MSG_TEMPLATES.aniversario&&!!MSG_TEMPLATES.pos_regularizacao&&!!MSG_TEMPLATES.apolice_emitida&&typeof msgProntaEnviar==='function');
     ok('PT-A: o modal abre com o texto já preenchido pelo contato', (()=>{ try{ msgPronta({nome:'ana lima',sexo:'F',tel:'81999990000'},'aniversario'); const m=document.getElementById('msgpModal'),ta=document.getElementById('msgpTxt'); const okm=!!(m&&ta&&/Ana/.test(ta.value)); if(m) m.remove(); return okm; }catch(e){ return false; } })());
+    /* NO-FUNIL-V1 (07/09): cliente da carteira já no funil? + último toque */
+    ok('carteira: identifica cliente JÁ no funil (por nome/telefone) com etapa e último toque', (()=>{ const _s=S.contatos,_c=CART.clientes; try{
+        CART.clientes=[cartNormCliente({nome:'Tico Teste',ref:'tico teste',celular:'81988887777',cob:{pm:1}})];
+        S.contatos=[{id:'n1',nome:'Tico Teste',telefone:'81988887777',funil:'nn',etapa:'TA',interacoes:[{k:'ta',dia:'2026-09-01'}]}];
+        const idx=cartNegIndex(); const nf=cartFunilInfo(cartNegsDe(CART.clientes[0],idx));
+        const nf2=cartFunilInfo(cartNegsDe(cartNormCliente({nome:'Zzz Sozinho',ref:'zzz sozinho',cob:{pm:1}}),idx));
+        return nf.no&&nf.ultimoToque==='2026-09-01'&&nf.nTouch===1&&!nf2.no;
+      } finally{ S.contatos=_s; CART.clientes=_c; } })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
