@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.5 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.6 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.5 · Vendas LP</span>
+      <span class="tag">PipeX · v7.6 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.5 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.6 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -1332,7 +1332,7 @@ const CHAVE='crmlp_v03_state'; // v03 (23/07): base zerada pro uso REAL — esta
    negócio fica num id apagado (excluir-com-destino move todos). Ver crm-lp-configuracoes-funil. */
 const FUNIL_FAB={
   lp:[['SitPlan','cinza',5],['TA','azul',10],['OI/FF','amarelo',20],['P/C','roxo',35],['C2','azul',50],['N','amarelo',70],['FA','azul',85],['EMISSÃO','roxo',95],['DELIVERY','verde',100],['Não','verm',0,1],['Prop. Cancelada','verm',0,1],['Apól. Cancelada','verm',0,1]],
-  bc:[['Clientes Ativos','verde',0],['Contato Agenda/Revisita','amarelo',15],['Agendada Revisita','azul',30],['Novo Negócio/Resolução pós Revisita','roxo',50],['N/Emissão','amarelo',75],['Emissão Final','roxo',90],['Delivery','verde',100],['Venda ganha','verde',100,1],['Venda perdida','verm',0,1]],
+  bc:[['Clientes Ativos','verde',0],['Contato Agenda/Revisita','amarelo',15],['Agendada Revisita','azul',30],['Novo Negócio/Resolução pós Revisita','roxo',50],['N/Emissão','amarelo',75],['Emissão Final','roxo',90],['Venda ganha','verde',100],['Delivery','azul',100],['Venda perdida','verm',0,1]],
   /* FUNIS-EXTRA-V1 (06/09): 3 funis novos pedidos por ele, ESQUELETO ("depois vou evoluindo, deixa existindo").
      Vida em Grupo (corporativo), Prud. Demais (Primeira Proteção/Proteção Em Vida/Seg. Viagem), MFO (outros serviços). */
   vg:[['Oportunidade','cinza',10],['Em contato','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
@@ -1344,7 +1344,20 @@ const FUN_BADGE={cinza:'b-cinza',azul:'b-azul',amarelo:'b-amarelo',roxo:'b-roxo'
 const FUN_COR={cinza:'#5b6770',azul:'var(--azul)',amarelo:'var(--amarelo)',roxo:'var(--roxo)',verde:'var(--verde)',verm:'var(--verm)'};
 function funFabMat(){ const m={}; for(const f of Object.keys(FUNIL_FAB)) m[f]=FUNIL_FAB[f].map(x=>({id:x[0],label:x[0],cor:x[1],prob:x[2],enc:!!x[3]})); return m; }
 function funCfgValida(c){ return c&&Array.isArray(c.lp)&&Array.isArray(c.bc)&&c.lp.every(e=>e&&e.id)&&c.bc.every(e=>e&&e.id); }
-const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos';
+const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos', BC_DELIVERY='Delivery', BC_EMITIDA='Venda ganha';
+/* BC-REDESIGN-V1 (07/09): Delivery vai pro FIM (pós-Apólice Emitida) e volta pra Clientes Ativos;
+   Oportunidade Perdida deixa de ser coluna do fluxo (fica como encerramento, marcável em qualquer etapa).
+   Reordena a cfg salva pro desenho novo, preservando rótulo/cor/prob que ele editou. */
+const BC_ORDER_V1=['Clientes Ativos','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Venda ganha','Delivery','Venda perdida'];
+const BC_ENC_V1={'Venda perdida':true};
+function bcRedesign(cfg){ if(!cfg||!Array.isArray(cfg.bc)) return false;
+  const atual=cfg.bc.map(e=>e&&e.id).join('|');
+  const jaOk = atual===BC_ORDER_V1.join('|') && cfg.bc.every(e=>!!e.enc===!!BC_ENC_V1[e.id]);
+  if(jaOk) return false;
+  const byId={}; cfg.bc.forEach(e=>{ if(e&&e.id) byId[e.id]=e; });
+  const fab={}; (FUNIL_FAB.bc||[]).forEach(x=>{ fab[x[0]]={id:x[0],label:x[0],cor:x[1],prob:x[2],enc:!!x[3]}; });
+  cfg.bc=BC_ORDER_V1.map(id=>{ const e=byId[id]||fab[id]||{id,label:id,cor:'cinza',prob:10}; return {id,label:e.label||id,cor:e.cor||'cinza',prob:(e.prob==null?10:e.prob),enc:!!BC_ENC_V1[id]}; });
+  return true; }
 let FUNIL_CFG=funFabMat();
 try{ const _r=localStorage.getItem('crmlp_funil_cfg_v1'); if(_r){ const _c=JSON.parse(_r); if(funCfgValida(_c)) Object.keys(_c).forEach(k=>{ if(Array.isArray(_c[k])) FUNIL_CFG[k]=_c[k]; }); } }catch(_){}
 let ETAPAS=[],ETAPAS_ENCERR=[],ETAPAS_FLUXO=[],ETAPAS_BC=[],ETAPAS_BC_ENCERR=[],ETAPAS_BC_FLUXO=[],ETAPAS_MAP={};
@@ -1352,6 +1365,7 @@ let ET_LABEL={},ET_COR={},ET_BADGE={},PROB_ETAPA={};
 function rebuildFunilLp(){
   /* BC-CLIENTES-ATIVOS-V1: a cfg pode voltar do servidor com a etapa extinta — some aqui, sempre */
   try{ if(typeof BC_ETAPA_EXTINTA!=='undefined'&&FUNIL_CFG&&Array.isArray(FUNIL_CFG.bc)&&FUNIL_CFG.bc.some(e=>e.id===BC_ETAPA_EXTINTA)){ FUNIL_CFG.bc=FUNIL_CFG.bc.filter(e=>e.id!==BC_ETAPA_EXTINTA); try{ localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); }catch(_){} (typeof S!=='undefined'&&S&&S.contatos||[]).forEach(c=>{ if(c&&c.funil==='bc'&&c.etapa===BC_ETAPA_EXTINTA) c.etapa=BC_ATIVOS; }); } }catch(_){}
+  try{ if(typeof bcRedesign==='function'&&bcRedesign(FUNIL_CFG)){ try{ localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); }catch(_){} } }catch(_){}
   ET_LABEL={};ET_COR={};ET_BADGE={};PROB_ETAPA={};
   const build=f=>{ const arr=(FUNIL_CFG[f]||[]);
     arr.forEach(e=>{ ET_LABEL[e.id]=e.label||e.id; ET_COR[e.id]=FUN_COR[e.cor]||FUN_COR.cinza; ET_BADGE[e.id]=FUN_BADGE[e.cor]||'b-cinza'; PROB_ETAPA[e.id]=(e.prob==null?10:e.prob); });
@@ -2491,7 +2505,7 @@ function funControlesHtml(rec,fluxo){
 }
 function nnNegocioHtml(lista,fluxo,ns,rec){
   /* BC: cliente ativo é a carteira inteira — dinheiro só conta a partir de Contato Agenda/Revisita */
-  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&c.etapa===BC_ATIVOS));
+  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&(c.etapa===BC_ATIVOS||c.etapa===BC_EMITIDA||c.etapa===BC_DELIVERY)));
   const pa=somaPA(vivos), pm=somaPM(vivos), pond=paPonderado(vivos);
   const comValor=vivos.filter(c=>pmDe(c)>0).length;
   const mes=mesAtual();
@@ -2914,10 +2928,12 @@ function funAvancar(id,ev){
   const de=c.etapa;
   c.etapa=prox; logEtapa(c,de,prox);
   const marca=interacoesDe(c).slice(-1)[0];   /* guarda QUAL registro foi este */
+  const _autoAv=funAutoDelivery(c); const _autoMarca=_autoAv?interacoesDe(c).slice(-1)[0]:null;
   salvar();
-  toastDesfazer(`${c.nome.split(' ')[0]}: ${LBLE(de)} → ${LBLE(prox)}`, ()=>{
+  toastDesfazer(_autoAv?`${c.nome.split(' ')[0]}: apólice emitida → Delivery`:`${c.nome.split(' ')[0]}: ${LBLE(de)} → ${LBLE(prox)}`, ()=>{
     const v=S.contatos.find(x=>String(x.id)===String(id)); if(!v) return;
     v.etapa=de;
+    if(_autoMarca&&_autoMarca.id){ const li2=interacoesDe(v); const j=li2.findIndex(x=>x.id===_autoMarca.id); if(j>=0) li2.splice(j,1); }
     /* APAGA o registro em vez de empilhar a volta. A taxa de passagem conta
        quem ALCANÇOU cada etapa lendo o histórico — se o toque errado ficasse
        gravado, o negócio contaria como tendo chegado numa etapa onde nunca
@@ -2958,7 +2974,7 @@ function nnCard(c){
     ${bcRevisitaHtml(c)}
     ${_tar}
     ${(()=>{ const n=pessoaIrmaos(c).length; return n?`<div class="nc-pessoa" title="Esta pessoa tem ${n+1} oportunidades no funil">👤 1 de ${n+1} desta pessoa</div>`:''; })()}
-    ${(()=>{ const px=funProxEtapa(c); return px?`<button class="nc-avancar" onclick="funAvancar('${esc(c.id)}',event)"
+    ${(c.funil==='bc'&&c.etapa===BC_DELIVERY)?`<button class="nc-avancar" style="opacity:1;border-style:solid" onclick="event.stopPropagation();bcConcluirEntrega('${esc(c.id)}')" title="Entrega concluída — cliente volta pra Clientes Ativos">✅ Concluir entrega → Ativos</button>`:(()=>{ const px=funProxEtapa(c); return px?`<button class="nc-avancar" onclick="funAvancar('${esc(c.id)}',event)"
         title="Avançar para ${esc(LBLE(px))} — dá pra desfazer">→ ${esc(LBLE(px))}</button>`:''; })()}
     <div class="nc-foot">${estrelasHtml(estrelasDe(c))}${tempChipHtml(c,true)}${_recBadge}<span style="color:var(--muted)">${isQuente(c)?'🔥 ':''}${esc(c.taStatus&&c.taStatus!=='—'?c.taStatus:'')}</span></div>
   </div>`;
@@ -3090,8 +3106,8 @@ function nnMoveEtapa(id,etapa,cardEl,colEl){
      re-renderizar o quadro inteiro. Antes, salvar()+render() rodavam primeiro e
      o card só aparecia no destino depois — era esse o engasgo ao arrastar. */
   if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); colEl.appendChild(cardEl); }
-  logEtapa(c,de,etapa); salvar();
-  toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
+  logEtapa(c,de,etapa); const _auto=funAutoDelivery(c); salvar();
+  toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁 (peça recomendações)`:`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
   NN_FOCUS='';
   /* re-render depois do frame: reconcilia contadores/somas de PA sem travar o gesto */
   requestAnimationFrame(()=>setTimeout(render,0));
@@ -3211,8 +3227,8 @@ function bcMoveEtapa(id,etapa,cardEl,colEl){
      re-renderizar o quadro inteiro. Antes, salvar()+render() rodavam primeiro e
      o card só aparecia no destino depois — era esse o engasgo ao arrastar. */
   if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); colEl.appendChild(cardEl); }
-  logEtapa(c,de,etapa); salvar();
-  toast(`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
+  logEtapa(c,de,etapa); const _auto=funAutoDelivery(c); salvar();
+  toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁 (peça recomendações)`:`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
   BC_FOCUS='';
   /* re-render depois do frame: reconcilia contadores/somas de PA sem travar o gesto */
   requestAnimationFrame(()=>setTimeout(render,0));
@@ -3638,8 +3654,19 @@ function drwCarteiraHtml(c){
    estado (R4): tudo é derivado do que já existe; o que a carga não traz continua
    não existindo (R3); e o ciclo fecha por DECISÃO dele, num modal (`vendaModal`),
    nunca sozinho. */
-const ET_GANHO={nn:['DELIVERY'], bc:['Delivery','Venda ganha'], vg:['Ganho'], prud:['Ganho'], mfo:['Ganho']};   // ids de fábrica: emitida = entregar
+const ET_GANHO={nn:['DELIVERY'], bc:['Venda ganha','Delivery'], vg:['Ganho'], prud:['Ganho'], mfo:['Ganho']};   // BC: Venda ganha=Apólice Emitida (marco); automação leva ao Delivery
 function funEhGanho(c){ return !!(c&&(ET_GANHO[funilDe(c)]||[]).includes(c.etapa)); }
+/* BC-AUTO-1 (07/09): 1ª regra de automação — Apólice Emitida (Venda ganha) gera a oportunidade
+   de ENTREGA no Delivery (pós-venda: agendar entrega, brinde, e o melhor momento pra pedir recs).
+   Concluída a entrega, o "✅ Concluir entrega" devolve o cliente pra Clientes Ativos. Chamado
+   por todo caminho que muda etapa (drag, avançar, ficha, checkout). Devolve true se agiu. */
+function funAutoDelivery(c){ if(!c||c.funil!=='bc'||c.etapa!==BC_EMITIDA) return false;
+  c.etapa=BC_DELIVERY;
+  interacoesDe(c).push({id:uid(),k:'nota',l:'⚙️ Automação: apólice emitida → entrega (Delivery). Pós-venda — agendar entrega/brinde e pedir recomendações.',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  return true; }
+/* Concluir a entrega devolve o cliente pra Clientes Ativos (fecha o ciclo). */
+function bcConcluirEntrega(id){ const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c||c.funil!=='bc') return; const de=c.etapa; c.etapa=BC_ATIVOS; logEtapa(c,de,BC_ATIVOS); interacoesDe(c).push({id:uid(),k:'nota',l:'Entrega concluída — cliente volta pra Clientes Ativos.',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); salvar(); toast(c.nome.split(' ')[0]+': entrega concluída → Clientes Ativos',true); requestAnimationFrame(()=>setTimeout(render,0)); }
+window.bcConcluirEntrega=bcConcluirEntrega;
 function funEtapaGanho(funil){ return (ET_GANHO[funil==='bc'?'bc':'nn']||[])[0]; }
 /* propostas pendentes na Emissão casadas por nome — o relatório da Prudential não traz telefone */
 function cliEmissoesDe(pessoa){
@@ -4409,7 +4436,7 @@ function renderDrawer(){
     </div>`;
   drwSecsWire();
 }
-function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); salvar(); renderDrawer(); toast(`${c.nome.split(' ')[0]}: ${de} → ${e}`,true);
+function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); const _auto=funAutoDelivery(c); salvar(); renderDrawer(); toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁`:`${c.nome.split(' ')[0]}: ${de} → ${e}`,true);
   /* QUADRO-ACOMPANHA-V1 (04/09): mudar a etapa pela ficha deixava o quadro atrás na versão velha ("travado") — o card só andava na próxima tela. Agora o fundo redesenha junto, sem fechar a ficha. */
   setTimeout(()=>{ try{ render(); }catch(_){} },0); }
 function drwPedirFunil(dest){
@@ -13531,7 +13558,7 @@ function lpSelfCheck(){
         EM.itens[EM.itens.length-1].desfecho='emitida';
         ok('card cliente: emitida some da lista de pendentes', clienteDe({nome:'Zz Cliente Selfcheck',telefone:''}).emissoes.length===0);
         ok('card cliente: quem não é cliente nem tem emissão não ganha chip (card limpo continua limpo)', cliChipsHtml(clienteDe({nome:'Zz Ninguem Zz',telefone:''}))==='');
-        ok('ganho: DELIVERY (nn) e Delivery/Venda ganha (bc) são ganho; EMISSÃO não é', funEhGanho({funil:'nn',etapa:'DELIVERY'})&&funEhGanho({funil:'bc',etapa:'Venda ganha'})&&funEhGanho({funil:'bc',etapa:'Delivery'})&&!funEhGanho({funil:'nn',etapa:'EMISSÃO'})&&funEtapaGanho('nn')==='DELIVERY'&&funEtapaGanho('bc')==='Delivery');
+        ok('ganho: DELIVERY (nn) e Venda ganha/Delivery (bc) são ganho; EMISSÃO não é (BC v7.6: ganho=Venda ganha→auto Delivery)', funEhGanho({funil:'nn',etapa:'DELIVERY'})&&funEhGanho({funil:'bc',etapa:'Venda ganha'})&&funEhGanho({funil:'bc',etapa:'Delivery'})&&!funEhGanho({funil:'nn',etapa:'EMISSÃO'})&&funEtapaGanho('nn')==='DELIVERY'&&funEtapaGanho('bc')==='Venda ganha');
         const pl=vendaPlano({segurado:'Zz Venda Nova',celular:'(81) 90000-0902',apolice:'000000902',premio:150,premioEstimado:true,origem:'emissao'});
         ok('venda: plano de pessoa fora da carteira = cliente novo + apólice com prêmio estimado, sem gravar nada', pl&&pl.cliNovo&&!pl.dup&&pl.apolice&&pl.apolice.premio===150&&pl.apolice._premioEstimado&&pl.apolice._origem==='emissão'&&CART.apolices.length===_a0.length+1);
         const nn0=CART.clientes.length; const fe=vendaAplicar(pl,{adicionar:true,mover:[]});
@@ -14377,6 +14404,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('GC-22/30: mensagem pronta acessível no contato e no cliente (todos os gatilhos no seletor)', typeof msgProntaContato==='function'&&typeof msgProntaCarteira==='function'&&!!MSG_TEMPLATES.apolice_emitida&&!!MSG_TEMPLATES.abordagem&&(()=>{ const ctx=msgCtxContato({nome:'Rui Teste',sexo:'M',telefone:'81966665555'}); return ctx.nome==='Rui Teste'&&ctx.tel==='81966665555'&&!!ctx.coberturas; })());
     /* GC-13/14 (07/09): resumo de coberturas enviável + destaque do que falta */
     ok('GC-13/14: resumo detalhado das coberturas + gaps do que o cliente não tem', (()=>{ const det=msgCoberturasDetalhe({cob:{cs:500000,pd:100000,pm:300}}); const g=cartGaps(cartNormCliente({nome:'G',ref:'g',cob:{cs:1,hc:0,funeral:0,pd:0,ddr:0,morteAcid:0,renda:0}})); return /Capital Segurado/.test(det)&&/Perda por Doença/.test(det)&&/Prêmio/.test(det)&&!!MSG_TEMPLATES.resumo_coberturas&&g.length>0; })());
+    /* BC-REDESIGN-V1 + BC-AUTO-1 (07/09): Delivery ao fim, Apólice Emitida gera entrega, PA exclui pós-venda */
+    ok('BC v7.6: Delivery vem logo após Venda ganha e só Venda perdida encerra', (()=>{ const M=ETAPAS_MAP.bc; const i=M.ids.indexOf('Venda ganha'),j=M.ids.indexOf('Delivery'); return i>=0&&j===i+1&&M.enc.length===1&&M.enc[0]==='Venda perdida'&&M.fluxo.includes('Venda ganha')&&M.fluxo.includes('Delivery'); })());
+    ok('BC-AUTO-1: apólice emitida (Venda ganha) gera automaticamente a entrega no Delivery', (()=>{ const c={funil:'bc',etapa:'Venda ganha',interacoes:[]}; const acted=funAutoDelivery(c); return acted&&c.etapa==='Delivery'&&interacoesDe(c).some(i=>i.k==='nota'&&/Automa/.test(i.l)); })());
+    ok('BC v7.6: ganho aponta pra Venda ganha (emitida) e concluir entrega devolve pra Ativos', funEtapaGanho('bc')==='Venda ganha'&&typeof bcConcluirEntrega==='function'&&BC_DELIVERY==='Delivery'&&BC_EMITIDA==='Venda ganha');
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
