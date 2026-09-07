@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.4 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.5 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.4 · Vendas LP</span>
+      <span class="tag">PipeX · v7.5 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.4 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.5 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -11080,7 +11080,8 @@ const MSG_TEMPLATES={
   apolice_emitida:{titulo:'Apólice emitida', texto:'Oi {primeiro}! Sua apólice {apolice} foi emitida ✅ — já pode contar com a proteção. Qualquer dúvida sobre coberturas ou assistências, é só me chamar por aqui!'},
   abordagem:{titulo:'Abordagem (não atendeu)', texto:'Oi {primeiro}, tudo bem? Tentei te ligar mas não consegui falar. Quando tiver um minutinho me chama por aqui? Tenho uma orientação rápida sobre sua proteção. Obrigado!'},
   antecipar_boleto:{titulo:'Antecipar boleto', texto:'Oi {primeiro}! Passando pra lembrar do boleto da sua apólice {apolice}. Se quiser, te envio pra adiantar e manter tudo em dia — te ajudo?'},
-  agradece_indicacao:{titulo:'Agradecer indicação', texto:'Oi {primeiro}, muito obrigado pela confiança e pela indicação! 🙏 Fico à disposição sempre que precisar. Um abraço!'}
+  agradece_indicacao:{titulo:'Agradecer indicação', texto:'Oi {primeiro}, muito obrigado pela confiança e pela indicação! 🙏 Fico à disposição sempre que precisar. Um abraço!'},
+  resumo_coberturas:{titulo:'Resumo de coberturas', texto:'Oi {primeiro}! Segue um resumo da sua proteção hoje:\n{coberturas}\nSe quiser, marcamos uns minutos pra revisar se está tudo no tamanho certo. Um abraço!'}
 };
 let MSGP_CTX=null;
 function msgProntaTexto(key){ const t=MSG_TEMPLATES[key]||MSG_TEMPLATES.aniversario; return msgPreencher(t.texto,MSGP_CTX||{}); }
@@ -11115,9 +11116,14 @@ function msgCoberturasResumo(c){ if(!c) return 'sua proteção atual'; const p=[
   if(cob.cs) p.push(brlCurto(cob.cs)+' de capital'); if(cob.renda) p.push('renda de '+brlCurto(cob.renda));
   const pm=cob.pm; if(pm) p.push('prêmio de '+brl(pm)+'/mês');
   return p.length?p.join(', '):'sua proteção atual'; }
+/* GC-13: lista detalhada (uma linha por cobertura que o cliente TEM) pro resumo enviável */
+function msgCoberturasDetalhe(c){ const cob=(c&&c.cob)||{}; const L=[['Capital Segurado','cs'],['Morte Acidental','morteAcid'],['Perda por Doença','pd'],['DDR','ddr'],['HC','hc'],['Assistência Funeral','funeral'],['Renda','renda']];
+  const linhas=L.filter(([_,k])=>cob[k]>0).map(([l,k])=>'• '+l+': '+brl(cob[k]));
+  if(cob.pm>0) linhas.push('• Prêmio: '+brl(cob.pm)+'/mês');
+  return linhas.length?linhas.join('\n'):'sua proteção atual'; }
 function msgCtxCliente(c,extra){ return Object.assign({nome:c&&c.nome, sexo:c&&c.sexo, tel:c&&(cartTel(c)), coberturas:msgCoberturasResumo(c)}, extra||{}); }
 /* abre a mensagem pronta pra um cliente da carteira (pelo ref) — usado nos cards/listas */
-function msgProntaCarteira(ref,key,extra){ const c=(cartVis()||[]).find(x=>x.ref===ref)||(CART.clientes||[]).find(x=>x.ref===ref); if(!c){ toast('Cliente não encontrado',false); return; } msgPronta(msgCtxCliente(c,extra),key); }
+function msgProntaCarteira(ref,key,extra){ const c=(cartVis()||[]).find(x=>x.ref===ref)||(CART.clientes||[]).find(x=>x.ref===ref); if(!c){ toast('Cliente não encontrado',false); return; } extra=extra||{}; if(key==='resumo_coberturas'&&!extra.coberturas) extra.coberturas=msgCoberturasDetalhe(c); msgPronta(msgCtxCliente(c,extra),key); }
 window.msgProntaCarteira=msgProntaCarteira;
 /* ctx de um contato do FUNIL (usa clienteDe pra puxar coberturas quando ele é cliente da carteira) */
 function msgCtxContato(c){ let cob='sua proteção atual'; try{ const cd=clienteDe(c); if(cd&&cd.cli) cob=msgCoberturasResumo(cd.cli); else if(cd&&cd.pm) cob=msgCoberturasResumo({cob:{pm:cd.pm,cs:cd.cs}}); }catch(_){}
@@ -11398,7 +11404,16 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
         +bl('cf-perfil','👨‍👩‍👧 Pessoa e família',pr.length?pr.slice(0,2).join(' · '):'nada anotado',cartPerfilHtml(c).replace(/<h3[^>]*>.*?<\/h3>/,''))
         +`<div class="ini-bl cf-bl${iniAberto('cf-cob')?'':' fechado'}" data-ini="cf-cob"><button class="ini-h" onclick="iniToggle('cf-cob')" aria-expanded="${iniAberto('cf-cob')?'true':'false'}"><span class="ini-car">${iniAberto('cf-cob')?'▾':'▸'}</span><span class="ini-t">Coberturas vigentes</span><span class="ini-res">${esc(cobRes)}</span></button><div class="ini-b">`; })()}
     ${c._origem?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Cliente entrou pela ${esc(c._origem)}${c._criadoEm?' em '+dataBR(c._criadoEm):''}. Capital e coberturas chegam com a próxima importação da carteira — até lá o app não inventa.</div>`:''}
-    <div style="font-size:13px">${c._origem?linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))+'</div><div hidden>':''}${linha('Capital Segurado (CS)','R$ '+cartFmt(cob.cs))}${linha('Morte Acidental','R$ '+cartFmt(cob.morteAcid))}${linha('Perda por Doença (PD)','R$ '+cartFmt(cob.pd))}${linha('DDR','R$ '+cartFmt(cob.ddr))}${linha('Vr. HC','R$ '+cartFmt(cob.hc))}${linha('Renda','R$ '+cartFmt(cob.renda))}${linha('Prêmio mensal (PM)','R$ '+cartFmt(cob.pm))}${linha('Prêmio anual (PA)','R$ '+cartFmt(cob.pa))}</div>
+    ${(()=>{ const destaca=!!CART._cobDestaca, det=cartTemDetalheCob(c);
+      const rows=[['Capital Segurado (CS)','cs'],['Morte Acidental','morteAcid'],['Perda por Doença (PD)','pd'],['DDR','ddr'],['Vr. HC','hc'],['Assistência Funeral','funeral'],['Renda','renda'],['Prêmio mensal (PM)','pm'],['Prêmio anual (PA)','pa']];
+      const isCob=k=>CART_COBS.some(([kk])=>kk===k);
+      const linhaCob=(l,k)=>{ const v=cob[k]||0; if(v>0) return linha(l,'R$ '+cartFmt(v));
+        if(destaca&&det&&isCob(k)) return `<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;color:var(--verm)"><span>🔴 ${l}</span><span style="font-weight:700">não contratado</span></div>`; return ''; };
+      return `<div style="font-size:13px">${rows.map(([l,k])=>linhaCob(l,k)).join('')}</div>`; })()}
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn btn-s btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(c.ref)}','resumo_coberturas')" title="Enviar o resumo das coberturas por WhatsApp (editável antes de enviar)">📤 Enviar resumo</button>
+      ${cartTemDetalheCob(c)?`<button class="btn btn-ghost btn-mini" onclick="event.stopPropagation();CART._cobDestaca=${CART._cobDestaca?'false':'true'};cartAbrir('${esc(c.ref)}')" title="Pinta em vermelho as coberturas que o cliente NÃO tem">${CART._cobDestaca?'ocultar o que falta':'🔴 destacar o que falta'}</button>`:''}
+    </div>
     ${gaps.length?`<div style="margin-top:8px;font-size:12px;color:var(--muted)">💡 Sem: ${gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`
       :(cartTemDetalheCob(c)?'':`<div style="margin-top:8px;font-size:11.5px;color:var(--muted)">A carga desta carteira não traz o detalhe de coberturas — o app não tem como dizer o que falta.</div>`)}
     ${c.produtos?`<div style="margin-top:10px;font-size:12px;color:var(--muted);word-break:break-word">Produtos: ${esc(c.produtos)}</div>`:''}
@@ -14360,6 +14375,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('GC-02: retorno pós-regularização acha o cliente (nome/telefone) e resume coberturas', (()=>{ const _c=CART.clientes; try{ CART.clientes=[cartNormCliente({nome:'Paga Teste',ref:'paga teste',celular:'81977776666',cob:{cs:500000,pm:300}})]; const cli=cartClientePorAtraso({apolice:'999',segurado:'Paga Teste',celular:'81977776666'}); return !!cli&&/capital/.test(msgCoberturasResumo(cli))&&typeof atMsgRetorno==='function'&&!!MSG_TEMPLATES.pos_regularizacao; } finally{ CART.clientes=_c; } })());
     /* GC-22/30 (07/09): mensagem pronta por contato do funil e por cliente da carteira */
     ok('GC-22/30: mensagem pronta acessível no contato e no cliente (todos os gatilhos no seletor)', typeof msgProntaContato==='function'&&typeof msgProntaCarteira==='function'&&!!MSG_TEMPLATES.apolice_emitida&&!!MSG_TEMPLATES.abordagem&&(()=>{ const ctx=msgCtxContato({nome:'Rui Teste',sexo:'M',telefone:'81966665555'}); return ctx.nome==='Rui Teste'&&ctx.tel==='81966665555'&&!!ctx.coberturas; })());
+    /* GC-13/14 (07/09): resumo de coberturas enviável + destaque do que falta */
+    ok('GC-13/14: resumo detalhado das coberturas + gaps do que o cliente não tem', (()=>{ const det=msgCoberturasDetalhe({cob:{cs:500000,pd:100000,pm:300}}); const g=cartGaps(cartNormCliente({nome:'G',ref:'g',cob:{cs:1,hc:0,funeral:0,pd:0,ddr:0,morteAcid:0,renda:0}})); return /Capital Segurado/.test(det)&&/Perda por Doença/.test(det)&&/Prêmio/.test(det)&&!!MSG_TEMPLATES.resumo_coberturas&&g.length>0; })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
