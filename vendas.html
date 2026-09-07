@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.7 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.8 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.7 · Vendas LP</span>
+      <span class="tag">PipeX · v7.8 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.7 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.8 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -4872,6 +4872,95 @@ function viewSitplan(){
     <div style="font-size:11px;color:var(--muted);margin-top:8px">O resultado registra a tentativa, alimenta os KPIs acima e ("Agendou…"/"Sem interesse") move a etapa sozinho. Lead novo entra na lista de HOJE automaticamente.</div>`;
 }
 
+
+/* ═══ MÓDULO: PERSISTÊNCIA (Extrato Consolidado de Comissão) — PT-B · GC-03/04/11 (07/09) ═══
+   Pedido dele: "meu controle + um simulador tipo PLACED, mas pra persistência".
+   Lê o Extrato (PDF colado): PAV, PANCEC, % Persistência e o compensation (Bruta/Líquido) por
+   mês e por CPD (MFB você / LP). Trend + simulador de cancelamento usando os prêmios da Lista de
+   Atraso: "se essas apólices caírem, a persistência vai pra X". Dado real fica no aparelho (localStorage). */
+const PERS_CHAVE='crmlp_persist_v1';
+let PERS={secoes:[]}, PERS_CPD='241182', PERS_SIM=new Set();
+(function(){ try{ const o=JSON.parse(localStorage.getItem(PERS_CHAVE)||'null'); if(o&&Array.isArray(o.secoes)) PERS=o; }catch(_){} })();
+const PERS_MES={jan:'01',fev:'02',mar:'03',abr:'04',mai:'05',jun:'06',jul:'07',ago:'08',set:'09',out:'10',nov:'11',dez:'12'};
+function pxMoney(s){ s=String(s==null?'':s).trim(); return /^-?\d{1,3}(?:\.\d{3})*,\d{2}$/.test(s)?parseFloat(s.replace(/\./g,'').replace(',','.')):null; }
+function pxPct(s){ s=String(s==null?'':s).trim(); return /^\d{1,3}(?:\.\d{3})*,\d{1,2}$/.test(s)||/^\d+,\d{1,2}$/.test(s)?parseFloat(s.replace(/\./g,'').replace(',','.')):(parseFloat(String(s).replace(',','.'))||null); }
+function pxComParse(txt){ const lines=String(txt||'').replace(/\r/g,'').split('\n').map(l=>l.trim()); const secs=[]; let cur=null;
+  const push=()=>{ if(cur&&cur.cpd) secs.push(cur); };
+  lines.forEach(l=>{ const m=l.match(/^M[êe]s\s*\/\s*Ano:\s*([A-Za-z]{3})\/(\d{2})/i);
+    if(m){ push(); cur={mesAno:m[1]+'/'+m[2], mesISO:'20'+m[2]+'-'+(PERS_MES[m[1].toLowerCase()]||'00')}; return; }
+    if(!cur) return; let mm;
+    if((mm=l.match(/^Tipo de Atividade:\s*(.+)/i))) cur.tipo=mm[1].trim();
+    else if((mm=l.match(/^CPD:\s*(\d+)/i))) cur.cpd=mm[1];
+    else if(/^PAV M[êe]s Atual/i.test(l)) cur.pav=pxMoney(l.replace(/^PAV M[êe]s Atual/i,''));
+    else if(/^PANCEC M[êe]s Atual/i.test(l)) cur.pancec=pxMoney(l.replace(/^PANCEC M[êe]s Atual/i,''));
+    else if(/^Comiss[ãa]o Bruta/i.test(l)) cur.bruta=pxMoney(l.replace(/^Comiss[ãa]o Bruta/i,''));
+    else if(/^Vr\. L[íi]quido de Impostos/i.test(l)) cur.liquido=pxMoney(l.replace(/^Vr\. L[íi]quido de Impostos/i,''));
+    else if((mm=l.match(/^%\s*Persist[êe]ncia PAV\/PANCEC M[êe]s Atual\s+([\d.,]+)/i))) cur.persist=pxPct(mm[1]);
+  }); push(); return secs; }
+function pxSalvar(){ try{ localStorage.setItem(PERS_CHAVE,JSON.stringify(PERS)); }catch(_){} }
+function pxComMerge(secs){ const key=s=>s.mesISO+'|'+s.cpd; const m=new Map((PERS.secoes||[]).map(s=>[key(s),s])); let n=0;
+  (secs||[]).forEach(s=>{ if(!s.cpd||s.pav==null) return; m.set(key(s),s); n++; }); PERS.secoes=[...m.values()]; pxSalvar(); return n; }
+function pxCpds(){ return [...new Set((PERS.secoes||[]).map(s=>s.cpd))]; }
+function pxSerie(cpd){ return (PERS.secoes||[]).filter(s=>s.cpd===cpd).slice().sort((a,b)=>String(a.mesISO).localeCompare(String(b.mesISO))); }
+function pxTipoLabel(cpd){ const s=(PERS.secoes||[]).find(x=>x.cpd===cpd); const t=(s&&s.tipo)||''; return /master|mfb/i.test(t)?'MFB (você)':/life planner/i.test(t)?('LP · '+cpd):(t||cpd); }
+function pxPersistCor(p){ return p==null?'var(--muted)':p>=85?'var(--verde)':p>=75?'var(--amarelo)':'var(--verm)'; }
+function pxSimTgl(ap){ if(PERS_SIM.has(ap)) PERS_SIM.delete(ap); else PERS_SIM.add(ap); if(VIEW==='persistencia') viewPersistencia(); }
+function viewPersistencia(){
+  const cpds=pxCpds();
+  if(!cpds.length){ $('#main').innerHTML=`<h1 class="pg">Persistência</h1><div class="sub">Controle de persistência (PAV/PANCEC) e simulador de cancelamento.</div>
+    <div class="card" style="padding:16px;margin-top:12px;font-size:13.5px;line-height:1.7">Cole o <b>Extrato Consolidado de Comissão</b> no <b>📄 Subir relatório</b> (ou arraste o PDF). Eu leio <b>PAV</b>, <b>PANCEC</b> e a <b>% de persistência</b> por mês, monto o seu controle de compensation e o simulador de cancelamento.
+      <div style="margin-top:10px"><button class="btn btn-p" onclick="openLpImport()">📄 Subir extrato</button></div></div>`; return; }
+  if(cpds.indexOf(PERS_CPD)<0) PERS_CPD=cpds[0];
+  const serie=pxSerie(PERS_CPD), atual=serie[serie.length-1]||{}, ant=serie[serie.length-2];
+  const delta=(ant&&atual.persist!=null&&ant.persist!=null)?(atual.persist-ant.persist):null;
+  const card=(t,v,s,cor)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:14px 16px">
+    <div style="font-size:12px;color:var(--muted)">${t}</div><div style="font-size:22px;font-weight:800;margin-top:4px${cor?';color:'+cor:''}">${v}</div>${s?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div>`:''}</div>`;
+  const cpdSel=cpds.length>1?`<select onchange="PERS_CPD=this.value;PERS_SIM.clear();viewPersistencia()" style="min-height:40px;padding:6px 10px;border:1px solid var(--linha);border-radius:8px">${cpds.map(c=>`<option value="${esc(c)}"${c===PERS_CPD?' selected':''}>${esc(pxTipoLabel(c))}</option>`).join('')}</select>`:`<span style="font-size:12px;color:var(--muted)">${esc(pxTipoLabel(PERS_CPD))}</span>`;
+  const trend=serie.slice().reverse().map(s=>{ const i=serie.indexOf(s); const d=i>0?(s.persist-serie[i-1].persist):null;
+    return `<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 8px;font-weight:600">${esc(s.mesAno)}</td>
+      <td style="padding:6px 8px;text-align:right">R$ ${cartFmtK(s.pav||0)}</td><td style="padding:6px 8px;text-align:right">R$ ${cartFmtK(s.pancec||0)}</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:700;color:${pxPersistCor(s.persist)}">${s.persist!=null?s.persist.toFixed(2)+'%':'—'}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:11.5px;color:${d==null?'var(--muted)':d>=0?'var(--verde)':'var(--verm)'}">${d==null?'—':(d>=0?'+':'')+d.toFixed(2)}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:11.5px;color:var(--muted)">${s.bruta!=null?'R$ '+cartFmtK(s.bruta):'—'}</td></tr>`; }).join('');
+  // simulador: candidatos = Lista de Atraso não resolvida, com prêmio
+  const cands=((typeof AT!=='undefined'&&AT.itens)?AT.itens:[]).filter(r=>!r.resolvido_em&&r.premio).slice().sort((a,b)=>(Number(b.premio)||0)-(Number(a.premio)||0));
+  const somaPA=cands.filter(r=>PERS_SIM.has(r.apolice)).reduce((s,r)=>s+(Number(r.premio)||0)*12,0);
+  const novoPav=(atual.pav||0)-somaPA, novoPct=atual.pancec?100*novoPav/atual.pancec:null;
+  const simRows=cands.slice(0,40).map(r=>{ const pa=(Number(r.premio)||0)*12; const on=PERS_SIM.has(r.apolice);
+    return `<tr onclick="pxSimTgl('${esc(r.apolice)}')" style="cursor:pointer;border-top:1px solid var(--linha)${on?';background:var(--azul-claro,#eef4ff)':''}">
+      <td style="padding:6px 8px"><input type="checkbox" ${on?'checked':''} onclick="event.stopPropagation();pxSimTgl('${esc(r.apolice)}')"> ${esc(atTitleC(r.segurado||'')||r.apolice)}</td>
+      <td style="padding:6px 8px;font-size:11.5px;color:var(--muted)">${esc(r.apolice)}${r.motivo_recusa?' · '+esc(atMotivoUltimo?atMotivoUltimo(r.motivo_recusa):r.motivo_recusa):''}</td>
+      <td style="padding:6px 8px;text-align:right">R$ ${cartFmt(r.premio)}/mês</td>
+      <td style="padding:6px 8px;text-align:right;font-weight:600">R$ ${cartFmtK(pa)}</td></tr>`; }).join('');
+  $('#main').innerHTML=`<h1 class="pg">Persistência</h1>
+    <div class="sub">PAV/PANCEC do Extrato Consolidado de Comissão · ${serie.length} mês(es) · ${esc(atual.mesAno||'')} é o mais recente.</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0">${cpdSel}<button class="btn btn-s btn-mini" onclick="openLpImport()">📄 Subir outro extrato</button></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      ${card('Persistência atual',atual.persist!=null?atual.persist.toFixed(2)+'%':'—',(delta!=null?(delta>=0?'▲ +':'▼ ')+delta.toFixed(2)+' vs mês anterior':'')+' · '+esc(atual.mesAno||''),pxPersistCor(atual.persist))}
+      ${card('PAV (vigente)','R$ '+cartFmtK(atual.pav||0),'prêmio anual em vigor')}
+      ${card('PANCEC (base)','R$ '+cartFmtK(atual.pancec||0),'base da persistência')}
+      ${card('Comissão líquida','R$ '+cartFmtK(atual.liquido||0),esc(atual.mesAno||'')+' · seu controle')}
+    </div>
+    <div class="card" style="margin-top:16px;padding:12px 14px">
+      <h3 style="margin:0 0 8px;font-size:14px">📉 Simulador de cancelamento</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Marque as apólices em risco (da Lista de Atraso). Se caírem, a persistência vai pra:</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline;margin-bottom:8px">
+        <div><span style="font-size:26px;font-weight:800;color:${pxPersistCor(novoPct)}">${novoPct!=null?novoPct.toFixed(2)+'%':'—'}</span> <span style="font-size:12px;color:var(--muted)">nova persistência</span></div>
+        <div style="font-size:12.5px;color:var(--muted)">PAV −R$ ${cartFmtK(somaPA)} → R$ ${cartFmtK(novoPav)} · ${PERS_SIM.size} apólice(s) marcada(s)${atual.persist!=null&&novoPct!=null?' · '+(novoPct-atual.persist).toFixed(2)+' pts':''}</div>
+        ${PERS_SIM.size?`<button class="btn btn-ghost btn-mini" onclick="PERS_SIM.clear();viewPersistencia()">limpar</button>`:''}
+      </div>
+      ${cands.length?`<div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">
+        <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:6px 8px">Segurado</th><th style="padding:6px 8px">Apólice · motivo</th><th style="padding:6px 8px;text-align:right">Prêmio</th><th style="padding:6px 8px;text-align:right">PA (impacto)</th></tr></thead>
+        <tbody>${simRows}</tbody></table></div>${cands.length>40?`<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando as 40 de maior prêmio.</div>`:''}`
+        :`<div style="font-size:12.5px;color:var(--muted)">Nenhuma apólice em atraso agora — nada em risco imediato. (O simulador usa a Lista de Atraso.)</div>`}
+    </div>
+    <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px;margin-top:16px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:6px 8px">Mês</th><th style="padding:6px 8px;text-align:right">PAV</th><th style="padding:6px 8px;text-align:right">PANCEC</th><th style="padding:6px 8px;text-align:right">Persistência</th><th style="padding:6px 8px;text-align:right">Δ</th><th style="padding:6px 8px;text-align:right">Comissão bruta</th></tr></thead>
+      <tbody>${trend}</tbody></table></div>
+    <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Persistência = PAV ÷ PANCEC. O simulador estima PA da apólice como prêmio × 12; a data exata de saída da persistência não vem no extrato consolidado (precisa do relatório por apólice).</div>`;
+}
+window.pxSimTgl=pxSimTgl;
+
 /* ═══════════════════ MÓDULO: METAS (realizado automático) ═══════════════════ */
 let MT_PER='sem';
 function mtNoPeriodo(iso){ if(!iso) return false; iso=String(iso).slice(0,10); const hoje=hojeISO();
@@ -7875,6 +7964,7 @@ const REL_TIPOS={
   pendencias:{nome:'Propostas Pendentes (UW e Emissão)'},
   atraso:{nome:'Lista de Atraso'},
   statust:{nome:'Status T — apólices emitidas na janela (relatório semanal)'},
+  persistencia:{nome:'Extrato Consolidado de Comissão (persistência)'},
   beneficios:{nome:'Aviso de sinistro / benefício'},
   semanal:{nome:'Relatório semanal do LP'} };
 function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
@@ -7886,6 +7976,7 @@ function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,60
   /* CARTEIRA-PDF-COLADO-V1 (06/09): PDF do portal copiado como TEXTO (não é HTML). Assinatura
      do cabeçalho: Carteira de Clientes tem "Data de Nascimento"+"Vr. Renda"; Consulta de Apólices
      tem "Resp. Pagto."+"Primeiro/Demais prêmios". Roteia pra MESMA carteira (relRotear vê texto). */
+  if(/extrato consolidado de comiss/.test(n)&&/pancec/.test(n)) return 'persistencia';
   if(/data de nascimento/.test(n)&&/vr\.? ?renda/.test(n)) return 'carteira_clientes';
   if(/resp\.? ?pagto/.test(n)&&(/primeiro premio/.test(n)||/demais premios/.test(n)||/apolice proposta segurado/.test(n))) return 'carteira_apolices';
   if(/apolices emitidas no periodo/.test(n)) return 'emitidas';
@@ -7917,6 +8008,7 @@ async function relRotear(tipo,bruto){
   if(tipo==='emitidas'){ exColar(); setTimeout(()=>{ const t=$('#ex_txt'); if(t){ t.value=bruto; exProcessar(); } },80); return; }
   if(tipo==='pendencias'){ emColarRelatorio(); setTimeout(()=>{ const t=$('#em_txt'); if(t){ t.value=bruto; emProcessar(); } },80); return; }
   if(tipo==='atraso'){ atColarRelatorio(); setTimeout(()=>{ const t=$('#at_txt'); if(t){ t.value=bruto; atProcessar(); } },80); return; }
+  if(tipo==='persistencia'){ const n=pxComMerge(pxComParse(bruto)); if(!/^cart-/.test(VIEW)) irPara('persistencia'); else render(); toast('Extrato lido — '+n+' seção(ões) de persistência (PAV/PANCEC) importadas',true); return; }
   if(tipo==='beneficios'){ relAbrirBeneficio(bruto); return; }
   openLpImport(); setTimeout(()=>{ const t=$('#lp-text'); if(t){ t.value=bruto; } },80);
 }
@@ -10254,7 +10346,8 @@ const HUB_SECOES=[
     {view:'lp-pendencias',ic:'📌', titulo:'Pendências de Emissão',desc:'Propostas pendentes, AFYC represado e a janela de compensation.', mod:'backoffice', cnt:()=>(EM.itens||[]).filter(emAtivo).length},
     {view:'solicitacoes', ic:'📨', titulo:'Solicitações',         desc:'Pedidos à assessoria com prazo, dono e retorno; texto pronto pro WhatsApp.', mod:'backoffice', cnt:()=>(SO.itens||[]).filter(s=>s.status==='aberta').length},
     {view:'lp-statust',   ic:'🅣', titulo:'Status T',             desc:'Apólices emitidas na janela dos 30 dias / 2º prêmio.', mod:'backoffice', cnt:()=>lpAtivos('statust').length},
-    {view:'subst',        ic:'🔁', titulo:'Substituições',        desc:'Controle de substituição e postecipação, apólice antiga × nova.', mod:'backoffice'}
+    {view:'subst',        ic:'🔁', titulo:'Substituições',        desc:'Controle de substituição e postecipação, apólice antiga × nova.', mod:'backoffice'},
+    {view:'persistencia', ic:'📉', titulo:'Persistência',        desc:'PAV/PANCEC e % de persistência por mês (Extrato de Comissão) + simulador de cancelamento.', mod:'backoffice'}
   ]},
   {titulo:'Referência', itens:[
   ]}
@@ -13074,7 +13167,7 @@ const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',
   'bn-estoque':'Estoque de Nomes','bn-ta':'Lista de TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo','prud-funil':'Prud. Demais','mfo-funil':'MFO','lp-atrasos':'Lista de Atraso',
-  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
+  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
   revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice'};
 function renderTituloTopo(){
@@ -13205,6 +13298,7 @@ function render(){
   else if(VIEW==='placed') viewPlaced();
   else if(VIEW==='emissao-diaria') viewEmissaoDiaria();
   else if(VIEW==='apolices-detalhado') viewApolicesDetalhado();
+  else if(VIEW==='persistencia') viewPersistencia();
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
@@ -14426,6 +14520,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('BC v7.6: ganho aponta pra Venda ganha (emitida) e concluir entrega devolve pra Ativos', funEtapaGanho('bc')==='Venda ganha'&&typeof bcConcluirEntrega==='function'&&BC_DELIVERY==='Delivery'&&BC_EMITIDA==='Venda ganha');
     /* METAS-V7.7 (07/09): trimestre + metas de emissão (apólices/PA) contadas do funil */
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
+    /* PERSISTÊNCIA / PT-B (07/09): lê o Extrato Consolidado de Comissão (PAV/PANCEC/%) */
+    ok('Persistência: parse do Extrato (PAV/PANCEC/%) + detector + view + simulador', (()=>{ const EXT="Extrato Consolidado de Comissão\nMês / Ano: Jan/26 (Mensal) Período: 20/12/2025 a 20/01/2026\nAgência: 288 Island\nTipo de Atividade: Master Franqueado B (MFB)\nCPD: 000000\nComissão Bruta 10.000,00\nVr. Líquido de Impostos 9.000,00\nPAV Mês Atual 100.000,00\nPANCEC Mês Atual 125.000,00\n% Persistência PAV/PANCEC Mês Atual 80,00\n"; const secs=pxComParse(EXT); const s0=secs[0]||{}; return secs.length===1&&s0.pav===100000&&s0.pancec===125000&&s0.persist===80&&s0.bruta===10000&&s0.cpd==='000000'&&relDetectar(EXT)==='persistencia'&&typeof viewPersistencia==='function'&&HUB_VIEWS.includes('persistencia'); })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
     ok('ficha: mudar a etapa redesenha o quadro atrás (não fica travado)', String(mudarEtapa).indexOf('render()')>=0 && String(mudarEtapa).indexOf('setTimeout')>=0);
 
@@ -15004,7 +15100,7 @@ function abrirAjustesVisual(){
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
