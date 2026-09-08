@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.9 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.10 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -11217,6 +11217,7 @@ const MSG_TEMPLATES={
   abordagem:{titulo:'Abordagem (não atendeu)', texto:'Oi {primeiro}, tudo bem? Tentei te ligar mas não consegui falar. Quando tiver um minutinho me chama por aqui? Tenho uma orientação rápida sobre sua proteção. Obrigado!'},
   antecipar_boleto:{titulo:'Antecipar boleto', texto:'Oi {primeiro}! Passando pra lembrar do boleto da sua apólice {apolice}. Se quiser, te envio pra adiantar e manter tudo em dia — te ajudo?'},
   agradece_indicacao:{titulo:'Agradecer indicação', texto:'Oi {primeiro}, muito obrigado pela confiança e pela indicação! 🙏 Fico à disposição sempre que precisar. Um abraço!'},
+  win_back:{titulo:'Reaproximar → nova apólice', texto:'Oi {primeiro}, tudo bem? 😊 Faz um tempinho que a gente não conversa e passei aqui pra saber como você está. Muita coisa pode ter mudado no seu momento de vida — que tal reservarmos uns 15min por vídeo pra revisar sua proteção e ver o que dá pra melhorar? Me diz o melhor dia pra você. Um abraço!'},
   resumo_coberturas:{titulo:'Resumo de coberturas', texto:'Oi {primeiro}! Segue um resumo da sua proteção hoje:\n{coberturas}\nSe quiser, marcamos uns minutos pra revisar se está tudo no tamanho certo. Um abraço!'}
 };
 let MSGP_CTX=null;
@@ -11374,6 +11375,23 @@ function cartFunilInfo(negs){ if(!negs||!negs.length) return {no:false,etapaLabe
   const viv=negs.filter(n=>!encOf(n).includes(n.etapa)); const pick=viv[0]||negs[0];
   let ult=null,nTouch=0; negs.forEach(n=>{ const d=cartUltToque(n); if(d&&(!ult||d>ult)) ult=d; nTouch+=((n.interacoes||[]).filter(i=>i&&i.k!=='etapa').length); });
   return {no:true,etapaLabel:pick?(ET_LABEL[pick.etapa]||pick.etapa):'',funil:pick&&(pick.funil||'nn'),ultimoToque:ult,nTouch}; }
+/* GC-07 · WIN-BACK ("Tentar Nova Apólice"): varre a carteira e acha oportunidades
+   PARADAS pra reaproximar com msg-pronta PT-A. "Parada" = cliente que NÃO está
+   sendo trabalhado agora: sem negócio aberto no funil, OU com negócio cujo último
+   toque passou do limite (configurável, padrão 90 dias). Critério é o que o
+   benchmark pede: "critério de parada configurável; msg com nome; editável". */
+let WB_DIAS=90;
+try{ const _w=JSON.parse(localStorage.getItem('crmlp_winback_v1')||'null'); if(_w&&+_w.dias>0) WB_DIAS=+_w.dias; }catch(_){}
+function wbSalvar(){ try{ localStorage.setItem('crmlp_winback_v1',JSON.stringify({dias:WB_DIAS})); }catch(_){} }
+function wbSetDias(v){ WB_DIAS=Math.max(1,Math.min(3650,parseInt(v,10)||90)); wbSalvar(); }
+function cartDiasSemToque(nf){ return nf&&nf.ultimoToque?atDiasAtraso(nf.ultimoToque):null; }
+/* parado = sem negócio (nunca trabalhado) OU negócio com último toque >= limite */
+function cartParado(nf,dias){ dias=dias||WB_DIAS; if(!nf||!nf.no) return true; const d=cartDiasSemToque(nf); return d!=null&&d>=dias; }
+function cartWinbackLista(dias){ dias=dias||WB_DIAS; const idx=cartNegIndex();
+  return cartVis().map(c=>{ const nf=cartFunilInfo(cartNegsDe(c,idx)); return {c,nf,dias:cartDiasSemToque(nf)}; })
+    .filter(x=>cartParado(x.nf,dias))
+    .sort((a,b)=>{ const da=a.dias==null?1e9:a.dias, db=b.dias==null?1e9:b.dias; return db-da; }); }
+window.wbSetDias=wbSetDias;
 function viewCartClientes(){ const q=normKey(CART_Q);
   fxReg('cart',FCART,'viewCartClientes');
   const _af=document.activeElement?document.activeElement.id:'';  // devolve o foco pro campo certo após o re-render
@@ -11393,7 +11411,7 @@ function viewCartClientes(){ const q=normKey(CART_Q);
        responde quando a carga trouxe o detalhe — senão o "sem HC" listaria a
        carteira inteira e viraria abordagem inventada. */
     if(gset.size){ const g=new Set(cartGaps(c).map(x=>x[0])); if(![...gset].every(k=>g.has(k))) return false; }
-    if(fset.size){ const has={atraso:rd.atrasos.length>0,statust:rd.statust.length>0,pendencia:rd.pendencias.length>0,niver:dN!=null&&dN<=JANELA_DIAS,nofunil:nf.no,semneg:!nf.no};
+    if(fset.size){ const has={atraso:rd.atrasos.length>0,statust:rd.statust.length>0,pendencia:rd.pendencias.length>0,niver:dN!=null&&dN<=JANELA_DIAS,nofunil:nf.no,semneg:!nf.no,parada:cartParado(nf)};
       if(![...fset].every(k=>has[k])) return false; }
     return true;
   });
@@ -11416,14 +11434,14 @@ function viewCartClientes(){ const q=normKey(CART_Q);
       <td style="padding:8px 10px;text-align:center">${n||'—'}</td>
       <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.pm)}</td>
       <td style="padding:8px 10px;text-align:right">R$ ${cartFmt(c.cob.cs)}</td>
-      <td style="padding:4px 6px;text-align:center"><button class="btn btn-s btn-mini" style="min-height:44px" onclick="event.stopPropagation();cartNovoNegocioUI('${esc(c.ref)}','bc')" title="Abrir negócio no funil Base de Clientes">➕</button></td></tr>`; }).join('');
+      <td style="padding:4px 6px;text-align:center;white-space:nowrap"><button class="btn btn-s btn-mini" style="min-height:44px" onclick="event.stopPropagation();msgProntaCarteira('${esc(c.ref)}','win_back')" title="Tentar nova apólice — mensagem de reaproximação (win-back)">🔄</button> <button class="btn btn-s btn-mini" style="min-height:44px" onclick="event.stopPropagation();cartNovoNegocioUI('${esc(c.ref)}','bc')" title="Abrir negócio no funil Base de Clientes">➕</button></td></tr>`; }).join('');
   $('#main').innerHTML=`<h1 class="pg">Clientes</h1>
     <div class="sub">${cartVis().length} cliente(s) · ${pxRotulo()}${CART.importadoEm?' · importado em '+CART.importadoEm:''}. Clique num cliente pra ver apólices e coberturas.</div>
     ${cartVis().length?`<input id="cart-q" placeholder="Buscar por nome ou e-mail…" value="${esc(CART_Q)}" oninput="CART_Q=this.value;viewCartClientes()" style="width:100%;max-width:420px;margin:6px 0 8px;padding:9px 12px;border:1px solid var(--linha);border-radius:9px">
     <div class="toolbar" style="gap:6px;flex-wrap:wrap;margin:0 0 12px;align-items:center">
       ${fchip('atraso','⏰ Atraso','em atraso no relatório')}${fchip('statust','⏳ Status T','proposta no Status T')}${fchip('pendencia','📋 Pendência','pendência de emissão')}${fchip('niver','🎂 Aniversário','aniversário nos próximos '+JANELA_DIAS+' dias')}
       <span style="width:1px;height:20px;background:var(--linha)"></span>
-      ${fchip('nofunil','🟢 No funil','já tem um negócio/oportunidade aberto no funil')}${fchip('semneg','⚪ Sem negócio','ainda sem oportunidade no funil — não trabalhado')}
+      ${fchip('nofunil','🟢 No funil','já tem um negócio/oportunidade aberto no funil')}${fchip('semneg','⚪ Sem negócio','ainda sem oportunidade no funil — não trabalhado')}${fchip('parada','🔄 Reaproximar','win-back: sem negócio aberto ou parado há '+WB_DIAS+'+ dias — alvo de nova apólice')}
       <span style="width:1px;height:20px;background:var(--linha)"></span>
       ${achip('1','1 apólice')}${achip('2+','2+ apólices')}
       ${(()=>{ const lps=[...new Set(cartVis().map(c=>c.lp).filter(Boolean))].sort(); return lps.length>1?`<span style="width:1px;height:20px;background:var(--linha)"></span>`+lps.map(l=>`<button class="sheet-chip ${FCART.lp===l?'on':''}" onclick="FCART.lp=FCART.lp==='${esc(l)}'?'':'${esc(l)}';viewCartClientes()" title="Clientes cuja LP no relatório da MFB é ${esc(l)}">👤 ${esc(l)}</button>`).join(''):''; })()}
@@ -11454,7 +11472,7 @@ function cartNiverProx(dias){ return cartVis().map(c=>({c,d:lpDiasAte(c.nascimen
 function cartRadarLista(){ return cartVis().map(c=>({c,rad:cartRadar(c)})).filter(x=>cartRadarTemAcao(x.rad)); }
 function viewCartOportunidades(){
   if(!cartVis().length){ $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1><div class="sub">Ganchos de contato e venda extraídos da carteira.</div>`+cartVazio(); return; }
-  const nivers=cartNiverProx(30), radar=cartRadarLista();
+  const nivers=cartNiverProx(30), radar=cartRadarLista(), winback=cartWinbackLista(WB_DIAS);
   const card=(t,v,s)=>`<div style="flex:1;min-width:150px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:14px 16px">
     <div style="font-size:12px;color:var(--muted)">${t}</div><div style="font-size:22px;font-weight:800;margin-top:4px">${v}</div>${s?`<div style="font-size:11px;color:var(--muted);margin-top:2px">${s}</div>`:''}</div>`;
   const comGap=cartVis().filter(c=>cartGaps(c).length).length;
@@ -11483,15 +11501,26 @@ function viewCartOportunidades(){
   const tbl=(titulo,head2,corpo)=>`<h3 style="margin:18px 0 8px">${titulo}</h3>
     <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px">${head2}</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead><tbody>${corpo}</tbody></table></div>`;
+  /* GC-07: seção win-back — a varredura das oportunidades paradas, com botão de msg pronta */
+  const wbRow=({c,nf,dias})=>{ const motivo=nf.no?(dias!=null?'parada há '+dias+'d · '+esc(nf.etapaLabel):'sem toque recente · '+esc(nf.etapaLabel)):'sem negócio aberto';
+    const acoes=`<button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(c.ref)}','win_back')" title="Tentar nova apólice — mensagem de reaproximação">🔄 Nova apólice</button> `+cartBtnsContato(c);
+    return rowCliente(c,`<td style="padding:8px 10px">${motivo}</td>`,acoes); };
+  const wbHTML=winback.length?winback.map(wbRow).join('')
+    :`<tr><td colspan="4" style="padding:14px;text-align:center;color:var(--muted)">Nenhum cliente parado com esse critério — a base está sendo trabalhada. 👏</td></tr>`;
+  const wbSec=`<h3 style="margin:18px 0 8px">🔄 Reaproximar — nova apólice <span style="font-weight:400;font-size:12px;color:var(--muted)">— parados sem negócio aberto ou sem toque há</span> <input type="number" min="1" value="${WB_DIAS}" onchange="wbSetDias(this.value);render()" style="width:70px;padding:4px 8px;border:1px solid var(--linha);border-radius:8px;font-size:12px"> <span style="font-weight:400;font-size:12px;color:var(--muted)">dias · ${winback.length}</span></h3>
+    <div style="overflow:auto;border:1px solid var(--linha);border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:9px 10px">Cliente</th><th style="padding:9px 10px">Situação</th><th style="padding:9px 10px">Contato</th><th style="padding:9px 10px;text-align:right">Ações</th></tr></thead><tbody>${wbHTML}</tbody></table></div>`;
   $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1>
     <div class="sub">Ganchos de contato e venda extraídos da carteira — nada aqui foi digitado à mão.</div>
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px">
       ${card('Aniversários 30d',nivers.length,'da carteira, data real')}
       ${card('No radar da semana',radar.length,'atraso · Status T · pendência')}
+      ${card('Reaproximar',winback.length,'parados · nova apólice')}
       ${card('Com gap de cobertura',comGap,'ao menos 1 proteção zerada')}
       ${card('Uma apólice só',mono,'candidatos a 2ª apólice')}</div>
     ${tbl('🎂 Aniversários — próximos 30 dias','Quando',niverHTML)}
     ${tbl('📡 Radar do relatório semanal','Situação',radarHTML)}
+    ${wbSec}
     <h3 style="margin:18px 0 8px">💡 Gaps de cobertura <span style="font-weight:400;font-size:12px;color:var(--muted)">— clique num gap pra ver quem está sem (maiores CS primeiro)</span></h3>
     ${cartSemDetalheCob()
       ? `<div class="card" style="padding:12px 14px;font-size:12.5px;line-height:1.65;color:var(--muted)">
@@ -14532,6 +14561,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* GC-07 (08/09): win-back — parado (sem negócio OU sem toque >= limite), template e sweep */
+    ok('GC-07: win-back acha parados (sem negócio + parado) com critério configurável e template', (()=>{ const _c=S.contatos,_k=CART.clientes,_w=WB_DIAS; try{ WB_DIAS=90;
+      const semNeg={no:false}, recente=cartFunilInfo([{funil:'bc',etapa:'Contato',interacoes:[{k:'nota',dia:hojeISO()}]}]), antigo=cartFunilInfo([{funil:'bc',etapa:'Contato',interacoes:[{k:'nota',dia:isoAddDias(hojeISO(),-200)}]}]);
+      return cartParado(semNeg)&&!cartParado(recente)&&cartParado(antigo)&&!!MSG_TEMPLATES.win_back&&typeof cartWinbackLista==='function'&&/\{primeiro\}/.test(MSG_TEMPLATES.win_back.texto); } finally{ S.contatos=_c; CART.clientes=_k; WB_DIAS=_w; } })());
     /* PERSISTÊNCIA / PT-B (07/09): lê o Extrato Consolidado de Comissão (PAV/PANCEC/%) */
     ok('Persistência: parse do Extrato (PAV/PANCEC/%) + detector + view + simulador', (()=>{ const EXT="Extrato Consolidado de Comissão\nMês / Ano: Jan/26 (Mensal) Período: 20/12/2025 a 20/01/2026\nAgência: 288 Island\nTipo de Atividade: Master Franqueado B (MFB)\nCPD: 000000\nComissão Bruta 10.000,00\nVr. Líquido de Impostos 9.000,00\nPAV Mês Atual 100.000,00\nPANCEC Mês Atual 125.000,00\n% Persistência PAV/PANCEC Mês Atual 80,00\n"; const secs=pxComParse(EXT); const s0=secs[0]||{}; return secs.length===1&&s0.pav===100000&&s0.pancec===125000&&s0.persist===80&&s0.bruta===10000&&s0.cpd==='000000'&&relDetectar(EXT)==='persistencia'&&typeof viewPersistencia==='function'&&HUB_VIEWS.includes('persistencia'); })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
