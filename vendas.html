@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.12 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.13 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2839,10 +2839,14 @@ function tarGcalAcaoHTML(c,t){
 function tarWaMsg(c,t){
   if(!c||!t||!t.quando) return '';
   const nome=String(c.nome||'').trim().split(' ')[0];
+  const eu=user(); const ass=eu&&eu.nome?eu.nome.split(' ')[0]:'';
+  const abre=nome?'Oi, '+nome+'! ':'Oi! ';
+  /* GC-25: tarefa de LEMBRETE de reunião → mensagem de lembrete (usa a data da REUNIÃO, não a do lembrete) */
+  if(t.lembrarReuniao&&t.lembrarReuniao.quando){ const lr=t.lembrarReuniao; const lq=diaSemanaBR(lr.quando)+', '+dataBR(lr.quando)+(lr.hora?' às '+lr.hora:'');
+    return abre+'Passando pra lembrar da nossa reunião: '+lq+'. Posso confirmar? Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:''); }
   const tipo=t.tipo==='reuniao'?'nossa reunião':t.tipo==='ligar'?'nossa ligação':'nosso compromisso';
   const quando=diaSemanaBR(t.quando)+', '+dataBR(t.quando)+(t.hora?' às '+t.hora:'');
-  const eu=user(); const ass=eu&&eu.nome?eu.nome.split(' ')[0]:'';
-  return (nome?'Oi, '+nome+'! ':'Oi! ')+'Confirmando '+tipo+(t.tit&&t.tipo!=='reuniao'&&t.tipo!=='ligar'?' ('+t.tit+')':'')+': '+quando+'. Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:'');
+  return abre+'Confirmando '+tipo+(t.tit&&t.tipo!=='reuniao'&&t.tipo!=='ligar'?' ('+t.tit+')':'')+': '+quando+'. Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:'');
 }
 function tarWaHref(c,t){ const m=tarWaMsg(c,t); if(!m) return ''; return cartWaUrl(c&&c.telefone,m)||''; }
 function tarWaAcaoHTML(c,t){ const h=tarWaHref(c,t); return h?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(h)}" target="_blank" rel="noopener" title="Enviar o compromisso ao cliente pelo WhatsApp (texto pronto)">💬 enviar</a>`:''; }
@@ -2859,6 +2863,19 @@ window.tarCriar = (cid,tipo,tit,quando,hora,notas) => {
   toast(c.nome.split(' ')[0]+': '+tarNomeTipo(t.tipo)+' em '+(t.quando===hojeISO()?'hoje':dataBR(t.quando)),true);
   return t;
 };
+/* GC-25 · LEMBRETE FLEXÍVEL DE REUNIÃO: ao agendar a reunião, cria uma tarefa
+   de lembrete PRO CLIENTE na véspera ou no dia — derruba no-show. A tarefa é um
+   WhatsApp cuja mensagem pronta (tarWaMsg) lembra da data da reunião. */
+function tarAgendarLembrete(cid,meetQuando,meetHora,modo){ const c=tarContato(cid); if(!c||!meetQuando||!modo||modo==='nao') return null;
+  let rem = modo==='vespera'? isoAddDias(meetQuando,-1) : meetQuando;
+  if(rem<hojeISO()) rem=hojeISO();          /* véspera no passado → lembra hoje, nunca cria tarefa vencida */
+  const t={id:uid(),tipo:'whats',tit:'Lembrete da reunião '+dataBR(meetQuando),quando:rem,hora:'',feito:null,notas:'',
+           lembrarReuniao:{quando:meetQuando,hora:meetHora||''},criadoEm:new Date().toISOString(),por:S.activeUser};
+  tarefasDe(c).push(t);
+  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Lembrete p/ cliente ('+(modo==='vespera'?'véspera':'no dia')+') — reunião '+dataBR(meetQuando),dia:hojeISO(),ts:t.criadoEm,por:S.activeUser});
+  return t;
+}
+window.tarAgendarLembrete=tarAgendarLembrete;
 window.tarConcluir = (cid,tid) => {
   const c=tarContato(cid); if(!c) return;
   const t=tarefasDe(c).find(x=>x.id===tid); if(!t||t.feito) return;
@@ -2889,8 +2906,12 @@ window.tarRemover = (cid,tid) => {
 window.tarNovaDoDrawer = () => {
   const c=ct(); if(!c) return;
   const tipo=$('#tarTipo').value, tit=$('#tarTit').value, quando=$('#tarData').value, hora=$('#tarHora').value;
+  const lembrar=(($('#tarLembrar')||{}).value)||'nao';
   if(!quando){ toast('Escolha a data da próxima atividade'); return; }
-  tarCriar(c.id,tipo,tit,quando,hora);
+  const t=tarCriar(c.id,tipo,tit,quando,hora);
+  /* GC-25: só reunião gera lembrete pro cliente */
+  if(t&&tipo==='reuniao'&&lembrar!=='nao'){ tarAgendarLembrete(c.id,quando,hora,lembrar); salvar(); render();
+    toast('Lembrete do cliente agendado — '+(lembrar==='vespera'?'véspera':'no dia'),true); }
 };
 window.tarAtalho = (cid,dias,tipo) => {
   const c=tarContato(cid); if(!c) return;
@@ -3595,10 +3616,11 @@ function tarBlocoDrawer(c){
   let h = abertas.length ? abertas.map(linha).join('')
         : `<div style="font-size:12.5px;color:var(--muted);padding:2px 0 8px">Nenhuma atividade marcada. Todo negócio vivo devia ter a próxima combinada.</div>`;
   h += `<div class="linha-form" style="margin-top:10px;align-items:center">
-      <select id="tarTipo" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" style="flex:0 0 150px">${TAR_TIPOS.map(t=>`<option value="${t[0]}">${t[1]} ${t[2]}</option>`).join('')}</select>
+      <select id="tarTipo" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" onchange="var _l=document.getElementById('tarLembrar');if(_l)_l.style.display=this.value==='reuniao'?'':'none'" style="flex:0 0 150px">${TAR_TIPOS.map(t=>`<option value="${t[0]}">${t[1]} ${t[2]}</option>`).join('')}</select>
       <input id="tarTit" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" placeholder="O que fazer (ex.: retomar a proposta)" onkeydown="if(event.key==='Enter')tarNovaDoDrawer()">
       <input id="tarData" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" type="date" value="${esc(isoAddDias(hojeISO(),1))}" style="flex:0 0 150px">
       <input id="tarHora" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" type="time" style="flex:0 0 110px">
+      <select id="tarLembrar" data-so-leitura="lido no +marcar — lembrete de reunião pro cliente (GC-25)" title="Lembrar o cliente da reunião — derruba no-show" style="flex:0 0 168px;display:none"><option value="nao">🔔 Sem lembrete</option><option value="vespera">🔔 Lembrar na véspera</option><option value="dia">🔔 Lembrar no dia</option></select>
       <button class="btn btn-p btn-mini" onclick="tarNovaDoDrawer()">+ marcar</button>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);align-items:center">rápido:
@@ -14615,6 +14637,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* GC-25 (08/09): lembrete flexível de reunião (véspera/no dia) com msg pronta pro cliente */
+    ok('GC-25: agendar reunião gera tarefa de lembrete pro cliente (véspera) com msg da data da reunião', (()=>{ const _c=S.contatos; try{ const c={id:'g25',nome:'Cli Teste',telefone:'81999998888',tarefas:[],interacoes:[]}; S.contatos=[c]; const t=tarAgendarLembrete('g25','2026-12-10','15:00','vespera'); const msg=t?tarWaMsg(c,t):''; return !!t&&t.quando==='2026-12-09'&&t.tipo==='whats'&&t.lembrarReuniao&&t.lembrarReuniao.quando==='2026-12-10'&&/lembrar/i.test(msg)&&/10\/12/.test(msg)&&tarAgendarLembrete('g25','2026-12-10','','nao')===null; } finally{ S.contatos=_c; } })());
     /* GC-29 (08/09): resumo do TA — nome nunca abordado = sem nenhum resultado logado */
     ok('GC-29: SitPlan acha nomes nunca abordados (sem resultado logado) e sabe puxar pra lista', (()=>{ const frio={interacoes:[]}, ligou={interacoes:[{k:'lig_atendida',dia:hojeISO()}]}, zap={interacoes:[{k:'whatsapp',dia:hojeISO()}]}, soEtapa={interacoes:[{k:'etapa',para:'TA',dia:hojeISO()}]}; return typeof spPuxarNaoAbord==='function'&&typeof spNaoAbordados==='function'&&!spAbordado(frio)&&spAbordado(ligou)&&spAbordado(zap)&&!spAbordado(soEtapa); })());
     /* GC-38 (08/09): autoassinatura no fim de toda mensagem pronta (vazia = sem rabo) */
