@@ -6922,10 +6922,44 @@ function bindAll(){
     const dark = cur ? cur === 'dark' : matchMedia('(prefers-color-scheme:dark)').matches;
     document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
   });
-  on('btExport','click', () => {
-    const b = new Blob([JSON.stringify(Object.assign({tipo:'revisao-prudential'}, state), null, 1)], {type:'application/json'});
+  /* SALVAR-NO-DRIVE-V1 (08/09): a revisão salva ia pro Downloads. Agora, se o
+     navegador suportar (File System Access), escolhe UMA vez a pasta do Google
+     Drive e passa a salvar lá, em subpasta POR CLIENTE (revisao_AAAA-MM-DD_HHMM
+     .json). Sem suporte / sem permissão / cancelou → cai no download de sempre
+     (zero regressão). O handle da pasta fica no IndexedDB (escolhe 1x só). */
+  const _FSADB='crm_revisao_fsa';
+  function _fsaIdb(){ return new Promise((res,rej)=>{ const r=indexedDB.open(_FSADB,1); r.onupgradeneeded=()=>r.result.createObjectStore('h'); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+  async function _fsaGet(){ try{ const db=await _fsaIdb(); return await new Promise(res=>{ const t=db.transaction('h').objectStore('h').get('dir'); t.onsuccess=()=>res(t.result||null); t.onerror=()=>res(null); }); }catch(_){ return null; } }
+  async function _fsaSet(h){ try{ const db=await _fsaIdb(); await new Promise(res=>{ const t=db.transaction('h','readwrite'); t.objectStore('h').put(h,'dir'); t.oncomplete=()=>res(); t.onerror=()=>res(); }); }catch(_){} }
+  async function _fsaPerm(h){ try{ if(!h||!h.queryPermission) return false; const o={mode:'readwrite'}; if((await h.queryPermission(o))==='granted') return true; return (await h.requestPermission(o))==='granted'; }catch(_){ return false; } }
+  function _revToast(msg,ok){ try{ const d=document.createElement('div'); d.textContent=msg; d.setAttribute('style','position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;background:'+(ok?'#065f46':'#7f1d1d')+';color:#fff;padding:10px 16px;border-radius:10px;font:600 13px system-ui;box-shadow:0 6px 24px rgba(0,0,0,.25)'); document.body.appendChild(d); setTimeout(()=>d.remove(),3400); }catch(_){} }
+  function _revSlug(nome){ return String(nome||'Cliente').replace(/\s+/g,' ').trim().replace(/[\/\\:*?"<>|]/g,'-')||'Cliente'; }
+  function _revArq(){ const d=new Date(),z=n=>String(n).padStart(2,'0'); return 'revisao_'+d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+'.json'; }
+  async function _salvarNoDrive(text,cliente){
+    if(!window.showDirectoryPicker) return false;
+    let dir=await _fsaGet();
+    if(dir && !(await _fsaPerm(dir))) dir=null;
+    if(!dir){
+      if(!confirm('Escolha UMA vez a pasta do Google Drive pras revisões (ex.: CRM Life Planner ▸ Histórico de Clientes). Depois eu salvo lá sozinho, por cliente.\n\nCancelar = baixar como antes.')) return false;
+      try{ dir=await window.showDirectoryPicker({mode:'readwrite',id:'crmRevisoes'}); }catch(_){ return false; }
+      if(!dir || !(await _fsaPerm(dir))) return false;
+      await _fsaSet(dir);
+    }
+    try{
+      const sub=await dir.getDirectoryHandle(_revSlug(cliente),{create:true});
+      const fh=await sub.getFileHandle(_revArq(),{create:true});
+      const w=await fh.createWritable(); await w.write(text); await w.close();
+      return true;
+    }catch(e){ console.warn('[revisão] salvar no Drive falhou:',e); return false; }
+  }
+  on('btExport','click', async () => {
+    const text = JSON.stringify(Object.assign({tipo:'revisao-prudential'}, state), null, 1);
+    const cliente = (state.cliente&&state.cliente.nome)||'Cliente';
+    let ok=false; try{ ok = await _salvarNoDrive(text, cliente); }catch(_){ ok=false; }
+    if(ok){ _revToast('✓ Revisão salva no Drive · '+cliente, true); return; }
+    const b = new Blob([text], {type:'application/json'});
     const u = URL.createObjectURL(b), a2 = document.createElement('a');
-    a2.href = u; a2.download = 'revisao-' + (state.cliente.nome||'cliente').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') + '.json';
+    a2.href = u; a2.download = 'revisao-' + (cliente).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') + '.json';
     a2.click(); URL.revokeObjectURL(u);
   });
   on('btImport','click', () => {
