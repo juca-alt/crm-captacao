@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.11 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.12 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4679,8 +4679,17 @@ function addRec(){
 
 /* ═══════════════════ MÓDULO: SITPLAN & TA (sessão de discagem datada) ═══════════════════ */
 /* Default = HOJE (TA diário na unidade); terça/sexta são atalhos, nunca amarras. */
-let SP_DATA=null, SP_TAB='todos';
+let SP_DATA=null, SP_TAB='todos', SP_RESUMO=false;
 function spData(){ if(!SP_DATA) SP_DATA=hojeISO(); return SP_DATA; }
+/* GC-29 · abordado = tem PELO MENOS um resultado de contato registrado (ligação,
+   WhatsApp, etc.). "Não abordado" = nome que está no funil e nunca foi tocado. */
+function spAbordado(c){ return interacoesDe(c).some(i=>RES_BY_K[i.k]); }
+function spNaoAbordados(){ return meusContatos().filter(c=>!ETAPAS_ENCERR.includes(c.etapa)&&!spAbordado(c))
+  .sort((a,b)=>(estrelasDe(b)-estrelasDe(a))||a.nome.localeCompare(b.nome)); }
+/* puxa os nomes nunca abordados (quentes primeiro) que ainda não estão na lista do dia */
+function spPuxarNaoAbord(){ const D=spData(); const fora=spNaoAbordados().filter(c=>c.sitplan!==D).slice(0,12);
+  if(!fora.length){ toast('Nenhum nome não abordado fora da lista deste dia',false); return; }
+  fora.forEach(c=>{ c.sitplan=D; }); salvar(); toast(fora.length+' nome(s) não abordado(s) na lista de '+dataBR(D),true); render(); }
 function spSet(d){ SP_DATA=d||hojeISO(); SP_TAB='todos'; render(); }
 function spTab(t){ SP_TAB=t; render(); }
 function spKpis(D){
@@ -4813,9 +4822,30 @@ function viewSitplan(){
   const foraDaLista=meusContatos().filter(c=>c.sitplan!==D && !ETAPAS_ENCERR.includes(c.etapa))
     .sort((a,b)=>{ const pa=['SitPlan','TA'].includes(a.etapa)?0:1, pb=['SitPlan','TA'].includes(b.etapa)?0:1; return pa-pb || a.nome.localeCompare(b.nome); });
   const kpi=(lbl,num,sub,destaque)=>`<div class="kpi" style="min-width:118px${destaque?';border:1.5px solid var(--azul-borda);background:var(--azul-claro)':''}"><div class="num">${num}</div><div class="lbl">${lbl}</div>${sub?`<div style="font-size:10.5px;color:var(--muted)">${sub}</div>`:''}</div>`;
+  /* GC-29: Meu SitPlan — resumo do TA + nomes nunca abordados (tópico dobrável) */
+  const _meus=meusContatos(), _ativos=_meus.filter(c=>!ETAPAS_ENCERR.includes(c.etapa));
+  const _cold=spNaoAbordados(), _andamento=_ativos.length-_cold.length;
+  const _agend=_ativos.filter(c=>c.sitplan&&c.sitplan>=hoje).length;
+  const _coldFora=_cold.filter(c=>c.sitplan!==D).length;
+  const resumoTA=`<details class="card" style="padding:0;margin:8px 0"${SP_RESUMO?' open':''} ontoggle="SP_RESUMO=this.open">
+    <summary style="padding:12px 14px;cursor:pointer;font-weight:700">🧭 Meu SitPlan — resumo do TA <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${_ativos.length} no funil · <b style="color:var(--verm)">${_cold.length} nunca abordados</b> · ${_andamento} em andamento · ${_agend} agendados</span></summary>
+    <div style="padding:0 14px 14px">
+    ${_cold.length? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Nomes que você tem no funil mas <b>nunca abordou</b> (quentes primeiro). Puxe pra lista de discagem e comece.</div>
+      ${_coldFora?`<button class="btn btn-p btn-mini" style="min-height:44px;margin-bottom:8px" onclick="spPuxarNaoAbord()">➕ Puxar os ${Math.min(12,_coldFora)} mais quentes p/ ${D===hoje?'hoje':dataBR(D)}</button>`:''}
+      <div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Etapa</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px;text-align:right">Ação</th></tr></thead>
+      <tbody>${_cold.slice(0,50).map(c=>`<tr style="border-top:1px solid var(--linha)">
+        <td style="padding:6px 9px"><b class="clicavel" onclick="abrirContato('${esc(c.id)}')" style="cursor:pointer">${esc(c.nome)}</b>${isQuente(c)?' 🔥':''}</td>
+        <td style="padding:6px 9px">${badgeEtapa(c.etapa)}</td>
+        <td style="padding:6px 9px">${esc(c.telefone||'—')}${waHref(c.telefone)?` <a href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener" style="text-decoration:none">💬</a>`:''}</td>
+        <td style="padding:4px 9px;text-align:right">${c.sitplan===D?'<span style="font-size:11px;color:var(--muted)">na lista</span>':`<button class="btn btn-s btn-mini" style="min-height:44px" onclick="spAdd('${esc(c.id)}')" title="Pôr na lista deste dia">➕ lista</button>`}</td></tr>`).join('')}</tbody></table></div>
+      ${_cold.length>50?`<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando 50 de ${_cold.length}.</div>`:''}`
+    : `<div style="font-size:13px;color:var(--muted);padding:6px 0">🎉 Todo mundo do funil já foi abordado ao menos uma vez — sem nomes esquecidos.</div>`}
+    </div></details>`;
   $('#main').innerHTML=`
     <h1 class="pg">SitPlan &amp; TA</h1>
     <div class="sub">Sessão de discagem por data — navegue entre datas pra revisitar quem não foi alcançado e reagendar.</div>
+    ${resumoTA}
     <div class="toolbar" style="align-items:center;flex-wrap:wrap">
       <button class="btn btn-s btn-mini" onclick="spSet(isoAddDias(spData(),-1))" title="dia anterior">‹</button>
       <input type="date" value="${esc(D)}" onchange="spSet(this.value)" style="max-width:160px">
@@ -14585,6 +14615,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* GC-29 (08/09): resumo do TA — nome nunca abordado = sem nenhum resultado logado */
+    ok('GC-29: SitPlan acha nomes nunca abordados (sem resultado logado) e sabe puxar pra lista', (()=>{ const frio={interacoes:[]}, ligou={interacoes:[{k:'lig_atendida',dia:hojeISO()}]}, zap={interacoes:[{k:'whatsapp',dia:hojeISO()}]}, soEtapa={interacoes:[{k:'etapa',para:'TA',dia:hojeISO()}]}; return typeof spPuxarNaoAbord==='function'&&typeof spNaoAbordados==='function'&&!spAbordado(frio)&&spAbordado(ligou)&&spAbordado(zap)&&!spAbordado(soEtapa); })());
     /* GC-38 (08/09): autoassinatura no fim de toda mensagem pronta (vazia = sem rabo) */
     ok('GC-38: autoassinatura entra no fim da mensagem quando setada e some quando vazia', (()=>{ const _a=ASSINAT; try{ ASSINAT='— Gabi'; const comp=msgProntaTexto('abordagem'); ASSINAT=''; const vazio=msgComAssinatura('Oi'); return typeof abrirAssinatura==='function'&&/\n\n— Gabi$/.test(comp)&&vazio==='Oi'&&CFG_SECOES.some(s=>s.itens.some(i=>i.acao==='abrirAssinatura()')); } finally{ ASSINAT=_a; } })());
     /* GC-07 (08/09): win-back — parado (sem negócio OU sem toque >= limite), template e sweep */
