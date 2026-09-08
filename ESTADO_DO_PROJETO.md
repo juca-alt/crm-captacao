@@ -2,6 +2,12 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 08/09 noite — DANIEL: isolamento do cockpit + conector MCP v2.1 (PR #174 + deploy crm-mcp v3)
+- **Bug real achado com o Daniel logado:** `carteira.html` embutia a carteira do Gustavo (143 cli/196 apólices, snapshot 28/07, com telefone/e-mail — PII em repo público) e, na 1ª abertura com tabela vazia, **semeava essa carteira na conta de quem abrisse**. Aconteceu às 21:39 de 08/09: 143/196 linhas com `_src=cockpit-2026-07-28` entraram em `carteira_clientes/apolices` com `dono=souzacruzdaniel@gmail.com`. Painel TA 2.0 estava certo (os 7 contatos são dele).
+- **ISOLA-COCKPIT-V1 (PR #174, main cc2fee0):** snapshot e seed removidos; filas "Onde agir hoje", ABCD e profissão calculadas do dado vivo; filtro `dono=eq.<logado>` (escopo Pipe X `todos` abre pra delegação); estado vazio orientado; título por usuário; sessão herdada (cockpit e painel-lp) prioriza o login do app e descarta `lp_sess` de outro usuário. Portão 4/4 verde; Pages servindo `f77954bd68f7`.
+- **Conector MCP:** token antigo revogado, token novo emitido (insert do hash direto — `mcp_session_issue` exige JWT de admin, não roda pelo MCP). `crm-mcp` **v2.1 (deploy v3)**: `busca` em `listar_contatos` filtra por `dados->>nome` (antes quebrava com 42883). Provas ao vivo: quem_sou_eu=Daniel · 7 contatos dele · busca "Piquet" (meu) = 0 · token adulterado recusado · 15 atrasos dele. Fonte da função agora versionada em `supabase/functions/crm-mcp/index.ts`.
+- **PENDENTE (dado real, precisa de OK):** apagar as 143/196 linhas semeadas na conta do Daniel (`dono='souzacruzdaniel@gmail.com' and dados->>'_src'='cockpit-2026-07-28'`) e subir a carteira REAL dele (Subir relatório → Carteira de Clientes, logado como ele).
+
 ## 📸 Snapshot — 07/09 noite → 09/09/2026 · **v6.4 → v7.24** · 32 PRs (#141→#172), todos no ar
 
 **Estado em 30 s:** `main d4a55ea`, v7.24 servida (hash conferido a cada merge: `3c37b86d`). Worktree `crm-wt-rp`, branch por feature, merge direto de ajustes (regra 04/09). Próxima sessão = **base do Daniel + MCP dele**.
