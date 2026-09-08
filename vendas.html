@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.13 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.14 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2648,7 +2648,7 @@ const REUN_BY_K=Object.fromEntries(REUN_DESFECHOS.map(d=>[d.k,d]));
 
 /* Aplicação PURA da parte que mexe no negócio, para o self-check conseguir
    afirmar a regra sem abrir modal nenhum. */
-function reunAplicar(c,t,k,novaData){
+function reunAplicar(c,t,k,novaData,notas){
   const d=REUN_BY_K[k]; if(!c||!t||!d) return null;
   /* guarda de idempotência: tarefa já finalizada não é finalizada de novo.
      Sem isso, um duplo-clique ou um caminho que chame duas vezes moveria a
@@ -2675,6 +2675,10 @@ function reunAplicar(c,t,k,novaData){
   }
   interacoesDe(c).push({id:uid(),k:'reuniao',l:'Reunião '+d.l.toLowerCase()+(marca.remarcadaPara?(' para '+dataBR(marca.remarcadaPara)):''),
                         dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  /* GC-44: anotações da reunião → ficam no registro da tarefa (vão pro Google Agenda)
+     e entram na linha do tempo do contato como uma nota. */
+  if(notas&&String(notas).trim()){ const _nt=String(notas).trim(); t.notas=_nt;
+    interacoesDe(c).push({id:uid(),k:'nota',l:'📝 Anotações da reunião: '+_nt,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
   return marca;
 }
 
@@ -2735,6 +2739,10 @@ function reunFinalizar(cid,tid){
     <div class="sub">${esc(c.nome)} · ${esc(t.tit||'Reunião')} · marcada para ${dataBR(t.quando)}${dias>0?` · <b style="color:var(--verm)">${dias} dia(s) sem desfecho</b>`:''}</div>
     <div style="display:flex;flex-direction:column;gap:5px;margin-top:12px">${REUN_DESFECHOS.map(op).join('')}</div>
     <div id="reun_extra" style="margin-top:12px"></div>
+    <div style="margin-top:12px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">📝 Anotações da reunião <span style="font-weight:400">— o que foi conversado, objeções, próximos passos (entra na ficha e no Google Agenda)</span></label>
+      <textarea id="reun_notas" placeholder="Ex.: topou revisar; 2 filhos; preocupado com aposentadoria…" style="width:100%;min-height:70px;font-size:13px">${esc(t.notas||'')}</textarea>
+    </div>
     <div style="display:flex;gap:8px;margin-top:16px;align-items:center">
       <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button>
       <button class="btn btn-p" onclick="reunSalvar('${esc(cid)}','${esc(tid)}')">Registrar</button>
@@ -2778,7 +2786,8 @@ function reunSalvar(cid,tid){
     const tipo=($('#reun_ptipo')||{}).value||'ligar';
     prox={tipo, tit:(($('#reun_ptit')||{}).value||'').trim()||tarNomeTipo(tipo), quando};
   }
-  const m=reunAplicar(c,t,k,novaData);
+  const notas=($('#reun_notas')||{}).value||'';   /* GC-44 */
+  const m=reunAplicar(c,t,k,novaData,notas);
   if(prox) tarefasDe(c).push({id:uid(),tipo:prox.tipo,tit:prox.tit,quando:prox.quando,hora:'',feito:null,notas:'',criadoEm:hojeISO(),por:S.activeUser});
   salvar(); atClose(); render();
   toast(m&&m.para!==m.de ? `${c.nome.split(' ')[0]}: ${LBLE(m.de)} → ${LBLE(m.para)}` : 'Reunião finalizada', true);
@@ -14637,6 +14646,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* GC-44 (08/09): anotações da reunião entram na ficha (t.notas) e na timeline ao finalizar */
+    ok('GC-44: finalizar reunião com anotações grava na tarefa e cria nota na linha do tempo', (()=>{ const c={id:'g44',nome:'Reun Teste',etapa:'OI/FF',funil:'nn',interacoes:[],tarefas:[]}; const t={id:'tt',tipo:'reuniao',quando:'2026-01-01',feito:null,notas:'',interacoes:[]}; c.tarefas.push(t); const n0=interacoesDe(c).length; reunAplicar(c,t,'sem_avanco',null,'cliente pediu proposta enxuta'); return t.notas==='cliente pediu proposta enxuta'&&interacoesDe(c).some(i=>i.k==='nota'&&/Anota/.test(i.l)&&/enxuta/.test(i.l))&&interacoesDe(c).length===n0+2; })());
     /* GC-25 (08/09): lembrete flexível de reunião (véspera/no dia) com msg pronta pro cliente */
     ok('GC-25: agendar reunião gera tarefa de lembrete pro cliente (véspera) com msg da data da reunião', (()=>{ const _c=S.contatos; try{ const c={id:'g25',nome:'Cli Teste',telefone:'81999998888',tarefas:[],interacoes:[]}; S.contatos=[c]; const t=tarAgendarLembrete('g25','2026-12-10','15:00','vespera'); const msg=t?tarWaMsg(c,t):''; return !!t&&t.quando==='2026-12-09'&&t.tipo==='whats'&&t.lembrarReuniao&&t.lembrarReuniao.quando==='2026-12-10'&&/lembrar/i.test(msg)&&/10\/12/.test(msg)&&tarAgendarLembrete('g25','2026-12-10','','nao')===null; } finally{ S.contatos=_c; } })());
     /* GC-29 (08/09): resumo do TA — nome nunca abordado = sem nenhum resultado logado */
