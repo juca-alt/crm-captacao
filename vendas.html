@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.22 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.23 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2314,7 +2314,51 @@ function nnOrdenar(cs){
   if(NN_ORD==='pa')        return a.sort((x,y)=>paDe(y)-paDe(x));
   if(NN_ORD==='rec')       return a.sort((x,y)=>String(y._upd||'').localeCompare(String(x._upd||'')));
   if(NN_ORD==='aleatoria') return a.sort((x,y)=>(NN_SEED[x.id]||0)-(NN_SEED[y.id]||0));
-  return a;   // livre: não mexe
+  return nnOrdenarLivre(a);   // livre: ordem manual (c.ord)
+}
+/* FUNIL-ORDEM-V1 (09/09): "Livre (arrasto)" agora É livre de verdade. A ordem manual vive em
+   c.ord (no próprio contato → jsonb, sem migration, sincroniza). Quem não tem ord fica embaixo,
+   na ordem natural. Estável: empate mantém a posição de origem. */
+function nnOrdenarLivre(cs){
+  return cs.map((c,i)=>({c,i,o:(c.ord!=null&&isFinite(+c.ord))?+c.ord:Infinity}))
+           .sort((x,y)=>(x.o-y.o)||(x.i-y.i)).map(x=>x.c);
+}
+/* população da coluna = mesmo funil + mesma etapa, TODAS (inclusive as filtradas fora da tela),
+   na ordem livre de hoje. Reordenar reescreve c.ord na coluna inteira → os cards escondidos por
+   filtro mantêm a posição relativa: a ordem é independente do filtro. */
+function funColuna(c,etapa){ const f=(c&&c.funil)||'nn';
+  return nnOrdenarLivre((S.contatos||[]).filter(x=>((x.funil||'nn')===f)&&x.etapa===etapa)); }
+function funOrdemInserir(c,etapa,antesId){
+  if(!c) return; const col=funColuna(c,etapa).filter(x=>x.id!==c.id);
+  let i=antesId?col.findIndex(x=>x.id===antesId):-1; if(i<0) i=col.length;
+  col.splice(i,0,c); col.forEach((x,k)=>{ x.ord=k; });
+}
+/* ⬆⬇ da ficha (celular, onde não há arrasto) */
+function funOrdemMover(id,dir){
+  const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return;
+  const col=funColuna(c,c.etapa); const i=col.findIndex(x=>x.id===c.id), j=i+dir;
+  if(i<0||j<0||j>=col.length){ toast(dir<0?'Já está no topo da coluna':'Já está no fim da coluna'); return; }
+  col.splice(i,1); col.splice(j,0,c); col.forEach((x,k)=>{ x.ord=k; });
+  NN_ORD='livre'; salvar(); if(typeof renderDrawer==='function') renderDrawer(); render();
+  toast(c.nome.split(' ')[0]+': '+(dir<0?'subiu':'desceu')+' na coluna',true);
+}
+window.funOrdemMover=funOrdemMover;
+/* arrasto ao vivo: o card sobe/desce na coluna conforme o cursor (um sobe, o outro desce) */
+function funDragPosicionar(col,e){
+  const d=document.querySelector('.nncard.dragging'); if(!d) return;
+  const cards=[...col.querySelectorAll('.nncard')].filter(x=>x!==d);
+  const alvo=cards.find(x=>{ const r=x.getBoundingClientRect(); return e.clientY < r.top + r.height/2; });
+  if(alvo){ if(d.nextSibling!==alvo) col.insertBefore(d,alvo); }
+  else if(col.lastElementChild!==d) col.appendChild(d);
+}
+/* drop: mesma coluna = só reordena (grava); coluna diferente = muda a etapa E cai na posição */
+function funDropCard(id,col,mover){
+  const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return;
+  const d=col.querySelector('.nncard[data-id="'+id+'"]')||document.querySelector('.nncard.dragging');
+  let antesId=null; if(d){ let n=d.nextElementSibling; while(n&&!n.classList.contains('nncard')) n=n.nextElementSibling; antesId=n?n.dataset.id:null; }
+  const etapa=col.dataset.etapa;
+  if(c.etapa===etapa){ funOrdemInserir(c,etapa,antesId); NN_ORD='livre'; salvar(); toast('Ordem da coluna salva',true); requestAnimationFrame(()=>setTimeout(render,0)); return; }
+  mover(id,etapa,d,col,antesId);
 }
 function nnOrdSelect(){ return `<select onchange="nnOrdSet(this.value)" title="Ordem dos cards dentro de cada coluna" style="max-width:170px">${NN_ORDS.map(([k,l])=>`<option value="${k}"${NN_ORD===k?' selected':''}>↕ ${l}</option>`).join('')}</select>`; }
 /* ═══ ATALHO DE ETAPA NO CELULAR (01/09) ═══════════════════════════════════
@@ -3124,18 +3168,19 @@ function wireNnBoard(){
     card.addEventListener('dragend',()=>{ dragId=null; card.classList.remove('dragging'); });
   });
   document.querySelectorAll('.nnboard .nncol[data-etapa]').forEach(col=>{
-    col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); });
+    col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); funDragPosicionar(col,e); });   /* FUNIL-ORDEM-V1 */
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
-    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) nnMoveEtapa(dragId,col.dataset.etapa,document.querySelector('.nncard.dragging')||document.querySelector('.nncard[data-id="'+dragId+'"]'),col); });
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) funDropCard(dragId,col,nnMoveEtapa); });
   });
 }
-function nnMoveEtapa(id,etapa,cardEl,colEl){
+function nnMoveEtapa(id,etapa,cardEl,colEl,antesId){
   const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
   const de=c.etapa; c.etapa=etapa;
+  funOrdemInserir(c,etapa,antesId||null); if(antesId) NN_ORD='livre';   /* FUNIL-ORDEM-V1: cai onde soltou */
   /* UI otimista: o card vai pra coluna nova NA HORA, antes de salvar e de
      re-renderizar o quadro inteiro. Antes, salvar()+render() rodavam primeiro e
      o card só aparecia no destino depois — era esse o engasgo ao arrastar. */
-  if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); colEl.appendChild(cardEl); }
+  if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); if(!colEl.contains(cardEl)) colEl.appendChild(cardEl); }
   logEtapa(c,de,etapa); const _auto=funAutoDelivery(c); salvar();
   toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁 (peça recomendações)`:`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
   NN_FOCUS='';
@@ -3245,18 +3290,19 @@ function wireBcBoard(){
     card.addEventListener('dragend',()=>{ dragId=null; card.classList.remove('dragging'); });
   });
   document.querySelectorAll('.nnboard .nncol[data-etapa]').forEach(col=>{
-    col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); });
+    col.addEventListener('dragover',e=>{ e.preventDefault(); col.classList.add('drop'); funDragPosicionar(col,e); });   /* FUNIL-ORDEM-V1 */
     col.addEventListener('dragleave',()=>col.classList.remove('drop'));
-    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) bcMoveEtapa(dragId,col.dataset.etapa,document.querySelector('.nncard.dragging')||document.querySelector('.nncard[data-id="'+dragId+'"]'),col); });
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); if(dragId&&col.dataset.etapa) funDropCard(dragId,col,bcMoveEtapa); });
   });
 }
-function bcMoveEtapa(id,etapa,cardEl,colEl){
+function bcMoveEtapa(id,etapa,cardEl,colEl,antesId){
   const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
   const de=c.etapa; c.etapa=etapa;
+  funOrdemInserir(c,etapa,antesId||null); if(antesId) NN_ORD='livre';   /* FUNIL-ORDEM-V1: cai onde soltou */
   /* UI otimista: o card vai pra coluna nova NA HORA, antes de salvar e de
      re-renderizar o quadro inteiro. Antes, salvar()+render() rodavam primeiro e
      o card só aparecia no destino depois — era esse o engasgo ao arrastar. */
-  if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); colEl.appendChild(cardEl); }
+  if(cardEl&&colEl){ const v=colEl.querySelector('.nncol-vazia'); if(v) v.remove(); if(!colEl.contains(cardEl)) colEl.appendChild(cardEl); }
   logEtapa(c,de,etapa); const _auto=funAutoDelivery(c); salvar();
   toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁 (peça recomendações)`:`${c.nome.split(' ')[0]}: ${de} → ${etapa}`,true);
   BC_FOCUS='';
@@ -4384,6 +4430,11 @@ function renderDrawer(){
       </div>
 
       <div class="sec">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 10px">
+          <span style="font-size:12px;color:var(--muted)">Posição na coluna do funil:</span>
+          <button class="btn btn-s btn-mini" style="min-height:44px" onclick="funOrdemMover('${esc(c.id)}',-1)" title="Subir uma posição na coluna (ordem livre)">⬆ subir</button>
+          <button class="btn btn-s btn-mini" style="min-height:44px" onclick="funOrdemMover('${esc(c.id)}',1)" title="Descer uma posição na coluna (ordem livre)">⬇ descer</button>
+        </div>
         <h3>SitPlan / lista de discagem</h3>
         <div style="font-size:12.5px;margin-bottom:8px">${c.sitplan? `Na lista de <b>${dataBR(c.sitplan)}</b> (${diaSemanaBR(c.sitplan)})` : 'Fora da lista de discagem.'}</div>
         <div class="linha-form" style="align-items:center;flex-wrap:wrap;gap:6px">
@@ -14704,6 +14755,17 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('GC-29: SitPlan acha nomes nunca abordados (sem resultado logado) e sabe puxar pra lista', (()=>{ const frio={interacoes:[]}, ligou={interacoes:[{k:'lig_atendida',dia:hojeISO()}]}, zap={interacoes:[{k:'whatsapp',dia:hojeISO()}]}, soEtapa={interacoes:[{k:'etapa',para:'TA',dia:hojeISO()}]}; return typeof spPuxarNaoAbord==='function'&&typeof spNaoAbordados==='function'&&!spAbordado(frio)&&spAbordado(ligou)&&spAbordado(zap)&&!spAbordado(soEtapa); })());
     /* GC-38 (08/09): autoassinatura no fim de toda mensagem pronta (vazia = sem rabo) */
     ok('GC-38: autoassinatura entra no fim da mensagem quando setada e some quando vazia', (()=>{ const _a=ASSINAT; try{ ASSINAT='— Gabi'; const comp=msgProntaTexto('abordagem'); ASSINAT=''; const vazio=msgComAssinatura('Oi'); return typeof abrirAssinatura==='function'&&/\n\n— Gabi$/.test(comp)&&vazio==='Oi'&&CFG_SECOES.some(s=>s.itens.some(i=>i.acao==='abrirAssinatura()')); } finally{ ASSINAT=_a; } })());
+    /* FUNIL-ORDEM-V1 (09/09): ordem manual na coluna, independente de filtro */
+    ok('FUNIL-ORDEM-V1: soltar na mesma coluna grava c.ord na coluna inteira; filtrado-fora mantém posição; outra coluna intacta; ⬆⬇', (()=>{ const _c=S.contatos,_o=NN_ORD; try{ NN_ORD='livre';
+      const A={id:'oA',nome:'A',funil:'nn',etapa:'TA'},B={id:'oB',nome:'B',funil:'nn',etapa:'TA'},C={id:'oC',nome:'C',funil:'nn',etapa:'TA'},X={id:'oX',nome:'X',funil:'nn',etapa:'OI/FF'};
+      S.contatos=[A,B,C,X];
+      funOrdemInserir(C,'TA','oA');
+      const o1=nnOrdenar([A,B,C]).map(x=>x.id).join(',');
+      const o2=nnOrdenar([A,C]).map(x=>x.id).join(',');
+      const semX=X.ord==null;
+      const col=funColuna(A,'TA'); const i=col.findIndex(x=>x.id==='oA'); col.splice(i,1); col.splice(i+1,0,A); col.forEach((x,k)=>{ x.ord=k; });
+      const o3=nnOrdenar([A,B,C]).map(x=>x.id).join(',');
+      return o1==='oC,oA,oB' && o2==='oC,oA' && semX && o3==='oC,oB,oA'; } finally{ S.contatos=_c; NN_ORD=_o; } })());
     /* GC-07 (08/09): win-back — parado (sem negócio OU sem toque >= limite), template e sweep */
     ok('GC-07: win-back acha parados (sem negócio + parado) com critério configurável e template', (()=>{ const _c=S.contatos,_k=CART.clientes,_w=WB_DIAS; try{ WB_DIAS=90;
       const semNeg={no:false}, recente=cartFunilInfo([{funil:'bc',etapa:'Contato',interacoes:[{k:'nota',dia:hojeISO()}]}]), antigo=cartFunilInfo([{funil:'bc',etapa:'Contato',interacoes:[{k:'nota',dia:isoAddDias(hojeISO(),-200)}]}]);
