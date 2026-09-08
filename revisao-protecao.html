@@ -347,6 +347,14 @@ i.mix-t{background:var(--laranja)}
 .ck-t{flex:1;font-size:.86rem;font-weight:600}
 .ck-s{font-size:.68rem;color:var(--muted);white-space:nowrap}
 .ck-l:has(input:checked) .ck-s{color:var(--good-text)}
+/* CK-ORDEM-V1: arrastar ⠿ / ▲▼ — a ordem do Checkout é a do cliente */
+.ck-gr{cursor:grab;color:var(--axis);user-select:none;font-size:.95rem;flex:0 0 auto}
+.ck-l.ck-drag{opacity:.35}
+.ck-gp{display:block;font-size:.62rem;font-weight:600;color:var(--muted);letter-spacing:.02em;margin-top:1px}
+.ck-mv{display:flex;gap:2px;flex:0 0 auto}
+.ck-mv button{border:1px solid var(--ring);background:var(--surface2);color:var(--ink2);border-radius:7px;width:30px;height:30px;cursor:pointer;font-size:.7rem;padding:0;line-height:1}
+.ck-mv button:disabled{opacity:.3;cursor:default}
+.ck-fix{opacity:.85}
 </style>
 <style id="curadoria-css">
 /* curadoria: controles só no console, nunca no material do cliente */
@@ -1806,6 +1814,18 @@ function selfTest(){
         chk('MS arquivo · as seções da MS entram no arquivo gerado pro cliente', /Como fica sua proteção com a Mudança de Seguro/.test(arq) && /O que você passa a pagar/.test(arq));
         chk('MS arquivo · conteúdo do arquivo sem comissão/caixa/FYC/agenciamento', !/comiss|caixa 1|fyc|agenciamento/i.test(arq.replace(/<style[\s\S]*?<\/style>/gi, '')));
       } finally { state.show = JSON.parse(_sh); try{ renderApresenta(); }catch(_){} } }
+    /* CK-ORDEM-V1: a ordem do Checkout é a da apresentação (e do arquivo, que nasce dela) */
+    { const _ui = JSON.stringify(state.ui||{}), _sh2 = JSON.stringify(state.show); try{
+        Object.assign(state.show, {mspaga:true, consol:true, mscli:true});
+        state.ui = Object.assign({}, state.ui, {ordemBlocos:['mspaga','consol','mscli']});
+        renderApresenta();
+        const ord = [...$('apresenta').querySelectorAll('section.apsec')].map(s => s.dataset.sk);
+        chk('CK ordem · ordemBlocos manda na apresentação (mspaga → consol → mscli)', ord.indexOf('mspaga') >= 0 && ord.indexOf('mspaga') < ord.indexOf('consol') && ord.indexOf('consol') < ord.indexOf('mscli'));
+        chk('CK ordem · chave do Checkout vira chave da seção (familia→fam, apolices→apol, anexos juntos, alerta fixo)', ckSk('familia') === 'fam' && ckSk('apolices') === 'apol' && ckSk('anxdg') === 'anexos' && ckSk('glos') === 'anexos' && ckSk('alerta') === null && ckSk('mscli') === 'mscli');
+        renderCheckout();
+        const rows = [...document.querySelectorAll('#ckOrd .ck-l[draggable]')].map(e => e.dataset.ckK);
+        chk('CK ordem · o Checkout desenha as linhas na mesma ordem', rows.indexOf('mspaga') >= 0 && rows.indexOf('mspaga') < rows.indexOf('consol') && rows.indexOf('consol') < rows.indexOf('mscli'));
+      } finally { state.ui = JSON.parse(_ui); state.show = JSON.parse(_sh2); try{ renderCheckout(); renderApresenta(); }catch(_){} } }
     }catch(e){ total++; bad.push('MS multi · exceção no cálculo: ' + (e && e.message)); }
     finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; state.ui = g.ui; }
   }
@@ -6937,6 +6957,49 @@ function ckPreset(p){
   }));
   save(); pintaBlocos(); renderCheckout();
 }
+/* CK-ORDEM-V1 (08/09): o Checkout vira a régua da ORDEM, não só do liga/desliga.
+   Arrastar (ou ▲▼ no celular) grava em state.ui.ordemBlocos — a MESMA ordem que
+   ordenarSecoes já aplica na apresentação e no arquivo (que nasce dela). Chave do
+   Checkout → chave da seção (data-sk): quase sempre igual; as que divergem estão
+   em CK_SK. Tópico sem seção própria (alerta abre sempre, assinatura fecha sempre,
+   benefício em vida vive dentro dos ativos) fica em "fixos": só liga/desliga. */
+const CK_SK = {familia:'fam', apolices:'apol', anxipca:'anexos', glos:'anexos', anxdg:'anexos', anxinv:'anexos', anxfra:'anexos', anxcir:'anexos', alerta:null, assin:null, emvida:null};
+function ckSk(sh){ return (sh in CK_SK) ? CK_SK[sh] : sh; }
+/* ordem NATURAL do construtor (renderApresenta): sem arraste, o Checkout já nasce
+   na ordem em que o cliente vê — senão a lista mentiria até o 1º arraste. */
+const CK_NATURAL = ['risco','consol','como','carteira','fam','apol','prop','nec','novas','ab','mscli','msmigra','mspaga','mscomp','planos','comp','muda','anexos','recado','produtos'];
+function ckOrdemAtual(){
+  /* ordem efetiva: rank em ordemBlocos → ordem natural do construtor → ordem dos grupos */
+  const ordem=(state.ui&&state.ui.ordemBlocos)||[];
+  const rank=sh=>{ const sk=ckSk(sh); if(!sk) return 1e6; const i=ordem.indexOf(sk); if(i>=0) return i; const n=CK_NATURAL.indexOf(sk); return n<0?1e6:1e3+n; };
+  const lista=[]; CK_GRUPOS.forEach(([nome,chaves],gi)=>chaves.forEach((sh,ii)=>{ if(ckExiste(sh)) lista.push({sh,grupo:nome,gi,ii}); }));
+  return lista.sort((a,b)=>(rank(a.sh)-rank(b.sh))||(a.gi-b.gi)||(a.ii-b.ii));
+}
+function ckGravarOrdem(chaves){
+  /* distinct das chaves de SEÇÃO, na ordem das linhas (os anexos andam juntos: vale a 1ª linha deles) */
+  const seen=new Set(), out=[];
+  chaves.forEach(sh=>{ const sk=ckSk(sh); if(sk&&!seen.has(sk)){ seen.add(sk); out.push(sk); } });
+  state.ui=state.ui||{}; state.ui.ordemBlocos=out; save();
+  renderCheckout(); pintaBlocos();
+  if(document.body.classList.contains('modo-apresenta')) renderApresenta();
+}
+function ckMove(sh,dir){
+  const ord=ckOrdemAtual().filter(x=>ckSk(x.sh)).map(x=>x.sh);
+  const i=ord.indexOf(sh), j=i+dir; if(i<0||j<0||j>=ord.length) return;
+  ord.splice(i,1); ord.splice(j,0,sh); ckGravarOrdem(ord);
+}
+window.ckMove=ckMove;
+let _dragCk=null;
+function ligaDragCheckout(){
+  const box=$('ckOrd'); if(!box) return;
+  [].slice.call(box.querySelectorAll('.ck-l[draggable]')).forEach(it=>{
+    it.addEventListener('dragstart',e=>{ _dragCk=it; it.classList.add('ck-drag'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',it.dataset.ckK||''); }catch(_){} });
+    it.addEventListener('dragend',()=>{ it.classList.remove('ck-drag'); _dragCk=null; });
+    it.addEventListener('dragover',e=>{ const d=_dragCk; if(!d||d===it) return; e.preventDefault();
+      const r=it.getBoundingClientRect(); box.insertBefore(d, ((e.clientY-r.top)/(r.height||1)>0.5)?it.nextSibling:it); });
+    it.addEventListener('drop',e=>{ e.preventDefault(); ckGravarOrdem([].slice.call(box.querySelectorAll('.ck-l[draggable]')).map(x=>x.dataset.ckK)); });
+  });
+}
 function renderCheckout(){
   /* MS-APRESENTA-V1: revisão salva antes desta versão não tem as chaves da MS — liga o
      padrão sem sobrescrever escolha já feita (só quando a chave não existe). */
@@ -6945,18 +7008,20 @@ function renderCheckout(){
   const box=$('ckLista'); if(!box) return;
   const dst=$('ckDestino'); if(dst) dst.innerHTML=ckDestinoHTML();
   let ligados=0, total=0;
-  box.innerHTML = CK_GRUPOS.map(([nome,chaves])=>{
-    const itens=chaves.filter(ckExiste);
-    if(!itens.length) return '';
-    const linhas=itens.map(sh=>{
-      const on=!!state.show[sh]; total++; if(on) ligados++;
-      return `<label class="ck-l">
-        <span class="sw"><input type="checkbox" data-ck="${sh}" ${on?'checked':''}><i></i></span>
-        <span class="ck-t">${esc(ckRotulo(sh))}</span>
-        <span class="ck-s">${on?'vai para o cliente':'fica só com você'}</span></label>`;
-    }).join('');
-    return `<div class="card"><h2 style="font-size:.86rem">${esc(nome)}</h2><div class="ck-g">${linhas}</div></div>`;
-  }).join('');
+  const todos=ckOrdemAtual();
+  const ordenaveis=todos.filter(x=>ckSk(x.sh)), fixos=todos.filter(x=>!ckSk(x.sh));
+  const linha=(x,i,n,ord)=>{ const sh=x.sh, on=!!state.show[sh]; total++; if(on) ligados++;
+    return `<div class="ck-l${ord?'':' ck-fix'}"${ord?` draggable="true" data-ck-k="${esc(sh)}"`:''}>
+      ${ord?`<span class="ck-gr" title="arraste para ordenar">⠿</span>`:''}
+      <label class="sw" style="margin:0"><input type="checkbox" data-ck="${esc(sh)}" ${on?'checked':''}><i></i></label>
+      <span class="ck-t" onclick="ckSet('${esc(sh)}', !state.show['${esc(sh)}'])">${esc(ckRotulo(sh))}<small class="ck-gp">${esc(x.grupo)}</small></span>
+      <span class="ck-s">${on?'vai para o cliente':'fica só com você'}</span>
+      ${ord?`<span class="ck-mv"><button type="button" title="subir" ${i===0?'disabled':''} onclick="ckMove('${esc(sh)}',-1)">▲</button><button type="button" title="descer" ${i===n-1?'disabled':''} onclick="ckMove('${esc(sh)}',1)">▼</button></span>`:''}
+    </div>`; };
+  box.innerHTML = `<div class="card"><h2 style="font-size:.86rem">A ordem do cliente <small class="mini" style="font-weight:500">— arraste ⠿ ou use ▲▼ · esta é a ordem da apresentação e do arquivo</small></h2>
+      <div class="ck-g" id="ckOrd">${ordenaveis.map((x,i)=>linha(x,i,ordenaveis.length,true)).join('')}</div></div>`
+    + (fixos.length?`<div class="card"><h2 style="font-size:.86rem">Fixos <small class="mini" style="font-weight:500">— sem lugar na ordem: o alerta abre sempre, a assinatura fecha sempre, o benefício em vida vive dentro dos ativos</small></h2>
+      <div class="ck-g">${fixos.map((x,i)=>linha(x,i,fixos.length,false)).join('')}</div></div>`:'');
   const r=$('ckResumo');
   if(r) r.innerHTML = `<b>${ligados}</b> de ${total} blocos vão para o cliente`;
   box.querySelectorAll('[data-ck]').forEach(el=>el.onchange=()=>ckSet(el.dataset.ck, el.checked));
@@ -6964,6 +7029,7 @@ function renderCheckout(){
   const g=$('ckGerar'); if(g) g.onclick=()=>{ const b=$('btEnviar'); if(b) b.click(); };
   const a=$('ckApresentar'); if(a) a.onclick=()=>{ const b=$('btApresenta'); if(b) b.click(); };
   const pd=$('ckPdf'); if(pd) pd.onclick=()=>{ const b=$('btPrint'); if(b) b.click(); };
+  ligaDragCheckout();
 }
 
 function render(){
