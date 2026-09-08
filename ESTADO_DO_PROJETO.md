@@ -2,6 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 📸 Snapshot — 07/09 noite → 09/09/2026 · **v6.4 → v7.24** · 32 PRs (#141→#172), todos no ar
+
+**Estado em 30 s:** `main d4a55ea`, v7.24 servida (hash conferido a cada merge: `3c37b86d`). Worktree `crm-wt-rp`, branch por feature, merge direto de ajustes (regra 04/09). Próxima sessão = **base do Daniel + MCP dele**.
+
+### O que entrou
+- **Backlog Seabra (noite 07/09, autônomo) v7.0→v7.15:** menu reorg; PT-A motor de mensagem pronta (+autoassinatura); funil BC redesenhado + 1ª automação (Apólice Emitida→Delivery); Metas ampliadas (emissão/PA, trimestre); módulo **Persistência** (Extrato de Comissão + simulador de cancelamento); GC-07 win-back; GC-10/28/33 status e lente do recomendante; GC-29 resumo do TA; GC-25 lembrete de reunião; GC-44 anotações de reunião.
+- **Organizar cards/leads/clientes:** v7.16 PESSOA-CAMPOS-V1 (acessador único na porta, promover lossless) · v7.24 FICHA-PESSOA-V1 (o mesmo bloco "quem é a pessoa" nas 3 fichas). Frente concluída.
+- **Revisão de Proteção:** v7.17 salva no Drive por cliente (`Histórico de Clientes/<Cliente>/`, File System Access) · v7.18 **MS bate com a Prudential** (prêmio capturado usado direto — Daniel 622,70) · v7.19–v7.22 lado do cliente: apresentação com MS, cards de valor selecionáveis (uma conta = A×B global), Checkout = régua da ordem, simulador de CS na frente do cliente, modo cliente = documento + simulador vivo, detalhes do ativo abrem no arquivo, 0 comissão no material.
+- **v7.23** ordem manual dos cards no funil (c.ord, arrasto ao vivo, independente de filtro).
+- **Acervo:** plano WhatsApp Meta (congelado) no Drive/Notion; benchmark Global CRM gitignorado (repo público).
+
+### Provas
+Portão em cada PR (36 telas × {375,1280} × {cheia,vazia}, lpSelfCheck 0, +~15 invariantes); `revisao-protecao.html` (fora do portão) conferido no navegador (selfTest 45/45) + hash servido; Pages byte-exato a cada merge.
+
+### Pendências
+- Extensão WhatsApp no CRM (reusa `fichaPessoaHtml`) · GC-36/50/32 em standby (decisão dele) · WhatsApp Meta congelado · plano novo/combo já coberto pelos cards genéricos.
+- **Daniel:** passar a limpo a base dele no CRM e fechar o conector MCP (Path A, crm-mcp v2 no ar; falta ele plugar + provas ao vivo).
+
 ## 📸 Snapshot — 04/09/2026 noite → 05/09 madrugada · **v5.1 → v6.4** · 14 PRs (#127→#140), todos no ar
 
 **Estado em 30 s:** `main b0496eb`, v6.4 servida (hash conferido a cada merge). Sessão longa no Mac com worktree `crm-wt-rp` (branch por feature). A partir do #135 os ajustes entraram **direto** por regra dele ("segue mergeando direto o que for ajuste"); regra de negócio, dado real e RLS continuam esperando OK.
