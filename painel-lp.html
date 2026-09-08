@@ -837,16 +837,21 @@ async function sbLogin(email,pass){
 const SESS_LOCAL="lp_sess";
 const SESS_APP="sb-cjieobmdpqcupzdpckef-auth-token"; // chave padrão do supabase-js
 function readSess(){
-  for(const k of [SESS_LOCAL,SESS_APP]){
+  /* ISOLA-COCKPIT-V1: o login do APP (supabase-js) manda; lp_sess é cache e é descartado se for de OUTRO usuário. */
+  let app=null;
+  for(const k of [SESS_APP,SESS_LOCAL]){
     try{
       const raw=safeGet(k); if(!raw)continue;
       let j=JSON.parse(raw);
       if(j&&j.currentSession)j=j.currentSession;
       if(j&&j.session)j=j.session;
-      if(j&&j.access_token&&j.refresh_token)return{key:k,sess:j};
+      if(!(j&&j.access_token&&j.refresh_token))continue;
+      const em=(j.user&&j.user.email)||"";
+      if(!app){app={key:k,sess:j,email:em};continue;}
+      if(k===SESS_LOCAL&&em&&app.email&&em!==app.email){try{localStorage.removeItem(SESS_LOCAL);}catch(e){}}
     }catch(e){}
   }
-  return null;
+  return app;
 }
 function sessOk(sess){return (sess.expires_at||0)*1000>Date.now()+60000;}
 async function refreshSess(entry){
