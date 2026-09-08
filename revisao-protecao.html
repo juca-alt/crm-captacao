@@ -355,6 +355,20 @@ i.mix-t{background:var(--laranja)}
 .ck-mv button{border:1px solid var(--ring);background:var(--surface2);color:var(--ink2);border-radius:7px;width:30px;height:30px;cursor:pointer;font-size:.7rem;padding:0;line-height:1}
 .ck-mv button:disabled{opacity:.3;cursor:default}
 .ck-fix{opacity:.85}
+/* MS-SIM-V1: simulador do cliente */
+.sim-hd{display:grid;grid-template-columns:1fr auto 110px;gap:10px;font-size:.62rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 6px}
+.sim-row{display:grid;grid-template-columns:1fr auto 110px;gap:10px;align-items:center;padding:10px 6px;border-top:1px solid var(--grid)}
+.sim-row.off{opacity:.55}
+.sim-n b{font-size:.9rem}
+.sim-c{display:flex;align-items:center;justify-content:flex-end}
+.sim-cs{display:inline-flex;align-items:center;gap:4px}
+.sim-in{width:118px;text-align:right}
+.sim-bt{width:34px;height:34px;border:1px solid var(--ring);background:var(--surface2);color:var(--ink);border-radius:9px;cursor:pointer;font-size:1.05rem;line-height:1;padding:0}
+.sim-bt:active{background:var(--azul-soft)}
+.sim-p{text-align:right;font-size:.9rem}
+.sim-per{font-size:.65rem;font-weight:500}
+.sim-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:12px;border-top:1px dashed var(--ring)}
+@media (max-width:640px){.sim-hd{display:none}.sim-row{grid-template-columns:1fr;gap:6px}.sim-c{justify-content:flex-start}.sim-p{text-align:left}}
 </style>
 <style id="curadoria-css">
 /* curadoria: controles só no console, nunca no material do cliente */
@@ -1301,7 +1315,16 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
 
     <h2 class="sec secx" data-sec="s2"><span class="cx">▾</span>2 · O que migra da apólice de origem</h2>
     <div class="sec-b" data-secb="s2">
-    <div class="card blk" data-blk="ms-migra" data-show="msmigra">
+    <!-- MS-SIM-V1: simulador simples, estilo venda, pra brincar de capital NA FRENTE do cliente.
+         Sem comissão, sem Δ por cobertura: só o que muda no valor final do resultado. -->
+    <div class="card blk" data-blk="ms-simcli">
+      <div class="blk-h"><span class="ico">◎</span><div class="tt"><h2>Simule com o cliente</h2>
+        <p class="sub">Ajuste o capital de cada cobertura — na apólice nova ou no que migra — e veja o valor final na hora. O que não migra continua na apólice atual, nada é reduzido.</p></div>
+        <span class="blk-cx">▾</span></div>
+      <div class="blk-b"><div id="msSimCli"></div></div>
+    </div>
+
+    <div class="card blk so-consultor" data-blk="ms-migra" data-show="msmigra">
       <div class="blk-h"><span class="ico">⇄</span><div class="tt"><h2>Cobertura a cobertura</h2>
         <p class="sub">A MS transforma parte do temporário em vitalício e leva as opcionais pelo <b>capital corrigido por IPCA</b>.
         O que fica não é perdido: continua na apólice de origem. Por isso deixar CS para trás <b>não é redução de capital</b> — e não é substituição.</p></div>
@@ -1826,6 +1849,17 @@ function selfTest(){
         const rows = [...document.querySelectorAll('#ckOrd .ck-l[draggable]')].map(e => e.dataset.ckK);
         chk('CK ordem · o Checkout desenha as linhas na mesma ordem', rows.indexOf('mspaga') >= 0 && rows.indexOf('mspaga') < rows.indexOf('consol') && rows.indexOf('consol') < rows.indexOf('mscli'));
       } finally { state.ui = JSON.parse(_ui); state.show = JSON.parse(_sh2); try{ renderCheckout(); renderApresenta(); }catch(_){} } }
+    /* MS-SIM-V1: prêmio capturado escala com o CS (base = CS capturado); no CS capturado é exato */
+    state.ms = Object.assign({}, state.ms, {origem:'A1', extras:['A2'], prod:'WH10', csVit:70000, preVit:288.96,
+      mig:{'t-dg':288604.45}, alvos:{}, novas:[], taxaNv:{'t-dg':100}, taxaNvCs:{}, preVitCs:0, off:false});
+    const Ra = msCalc(), la = (Ra.linhas||[]).find(l => l.c.id === 't-dg');
+    chk('MS sim · no CS capturado o prêmio é exatamente o capturado (100,00) e a base fica gravada', la && Math.abs(la.preNv - 100) < 0.01 && Math.abs((state.ms.taxaNvCs||{})['t-dg'] - 288604.45) < 1);
+    state.ms.mig = {'t-dg':144302.22}; state.ms.alvos = {'t-dg':144302.22};
+    const Rb = msCalc(), lb = (Rb.linhas||[]).find(l => l.c.id === 't-dg');
+    chk('MS sim · metade do CS → metade do prêmio (escala pela base capturada)', lb && Math.abs(lb.preNv - 50) < 0.05);
+    state.ms.csVit = 140000; const Rc = msCalc();
+    chk('MS sim · dobrar o vitalício dobra o prêmio digitado da prévia (288,96 → 577,92)', Math.abs(Rc.preVit - 577.92) < 0.05);
+    chk('MS sim · simulador do cliente desenha e não fala de comissão/caixa/FYC', typeof msRenderSimCli === 'function' && (() => { msRenderSimCli(Rc); const t = ($('msSimCli')||{}).textContent || ''; return t.length > 0 && /Apólice nova/.test(t) && !/comiss|caixa|fyc|efici|agenciamento/i.test(t); })());
     }catch(e){ total++; bad.push('MS multi · exceção no cálculo: ' + (e && e.message)); }
     finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; state.ui = g.ui; }
   }
@@ -4060,7 +4094,7 @@ function renderFoot(){
     <div class="tile"><div class="k">Capital de morte proposto</div><div class="v">${fmt0(cA.MQC.cap)}</div></div>
     <div class="tile"><div class="k">% da renda</div><div class="v">${renda ? pct(tA/renda*100) : '—'}</div></div>` : ''}
     ${(()=>{ const R=(typeof abMs==='function')?abMs():null; const on=state.show.msmigra!==false||state.show.mspaga!==false; return R&&on ? `<div class="tile b"><div class="k">MS · apólice nova</div><div class="v">${fmt(vper(R.nova*(1+MS_IOF)))}<span style="font-size:.65rem;font-weight:500">${lbPer()}</span></div></div>` : ''; })()}
-    <span class="right badge" style="background:${st.bad.length ? 'var(--crit-soft)' : 'var(--good-soft)'};color:${st.bad.length ? 'var(--crit)' : 'var(--good-text)'}">motor: ${st.bad.length ? '✗ '+st.bad.length+' divergência(s)' : '✓ '+st.ok+'/'+st.total+' capturas do app'}</span>`;
+    <span class="right badge" title="${esc(st.bad.length ? st.bad.join(' · ') : 'todos os checks do motor passaram')}" style="background:${st.bad.length ? 'var(--crit-soft)' : 'var(--good-soft)'};color:${st.bad.length ? 'var(--crit)' : 'var(--good-text)'}">motor: ${st.bad.length ? '✗ '+st.bad.length+' divergência(s)' : '✓ '+st.ok+'/'+st.total+' capturas do app'}</span>`;
   $('footTiles').insertAdjacentHTML('beforeend', `<button class="btn sm foot-tgl" onclick="footToggle()" title="Esconder a barra de baixo (volta pelo botão ▤ no canto)">⌄ esconder</button>`);
   footAplicar();
   $('motorBadge').textContent = st.bad.length ? 'motor com divergência, ver console' : 'motor conferido contra '+st.total+' capturas reais do app em '+(D.validacao ? D.validacao.data : '');
@@ -6265,7 +6299,8 @@ function msPreNovoInfo(c, cs){
      família → 0) e SUBESTIMAVA linha com teto (Invalidez 350k saía 13,13 no
      lugar de 20,48). Bater com o oficial da Prudential = usar o prêmio
      capturado como está. (Só entra com cs>0, já garantido acima.) */
-  if(t!=null && isFinite(t) && t>0) return {liq: t, fonte:'prévia'};
+  /* MS-SIM-V1: escala pelo CS em que o prêmio foi capturado (taxaNvCs); no CS capturado é exato */
+  if(t!=null && isFinite(t) && t>0){ const ref=+((state.ms.taxaNvCs||{})[c.id])||0; return {liq: ref>0 ? t*(cs/ref) : t, fonte:'prévia'}; }
   const fam=msFamDe(c);
   const m=msTarifar(fam, c.cod, c.classe, cs);
   if(m && m.liq!=null) return {liq:m.liq, fonte:'motor', selo:m.selo, code:m.code, prazoCaiu:m.prazoCaiu, prazoPedido:m.prazoPedido, capAjustado:m.capAjustado};
@@ -6318,7 +6353,11 @@ function msCalc(){
   const classeOrig=(principal&&principal.classe)||[...new Set(cobs.map(c=>String(c.classe||'').trim()).filter(Boolean))][0]||'ST';
   const vitM = csVit>0 ? msTarifar(P.fam, null, classeOrig, csVit, P.prazo) : {erro:'defina o capital do vitalício'};
   const preVitDig=+state.ms.preVit||0;
-  const preVit = preVitDig>0 ? preVitDig : ((vitM&&vitM.liq!=null)?vitM.liq:0);
+  /* MS-SIM-V1: o prêmio digitado da prévia vale pro csVit em que foi digitado (preVitCs);
+     mudar o capital no simulador escala o prêmio na mesma proporção. Sem ref → grava a atual. */
+  let preVitRef=+state.ms.preVitCs||0;
+  if(preVitDig>0 && !(preVitRef>0) && csVit>0){ state.ms.preVitCs=csVit; preVitRef=csVit; }
+  const preVit = preVitDig>0 ? (preVitRef>0 ? preVitDig*(csVit/preVitRef) : preVitDig) : ((vitM&&vitM.liq!=null)?vitM.liq:0);
   const preVitInfo = preVitDig>0 ? {fonte:'prévia'}
                    : (vitM&&vitM.liq!=null) ? Object.assign({fonte:'motor'},vitM)
                    : {fonte:'faltando', motivo:(vitM&&vitM.erro)||''};
@@ -6340,6 +6379,8 @@ function msCalc(){
     const trava=msTravaMS(c), teto=trava?csVit*trava.mult:Infinity;
     const tetoAplicado = trava && csNova>teto+0.5;
     if(tetoAplicado){ csNova=Math.max(0,teto); migCS=Math.min(migCS,csNova); }
+    /* MS-SIM-V1: guarda pra qual CS o prêmio capturado vale (base da escala do simulador); só quando ainda não há */
+    if(+state.ms.taxaNv[c.id]>0 && csNova>0){ state.ms.taxaNvCs=state.ms.taxaNvCs||{}; if(!(+state.ms.taxaNvCs[c.id]>0)) state.ms.taxaNvCs[c.id]=csNova; }
     const preNvI=msPreNovoInfo(c,csNova);
     const preNv=preNvI.liq;
     const preOrFica=((c.cap||0)-migCS)*msTaxa(c);
@@ -6464,7 +6505,7 @@ function msRenderMig(R){
       <td class="num">${msBRL(l.preOrMig)}</td>
       <td class="so-consultor"><input class="csin" data-msnv="${esc(c.id)}" value="${state.ms.taxaNv[c.id]!=null?msBRL(state.ms.taxaNv[c.id]):''}" placeholder="prêmio novo"></td>
       <td class="num">${preNvTxt}</td>
-      <td class="num" style="color:${l.dCli>0.005?'var(--crit)':'var(--good-text)'}">${l.dCli>0.005?'+':''}${msBRL(l.dCli)}</td>
+      <td class="num so-consultor" style="color:${l.dCli>0.005?'var(--crit)':'var(--good-text)'}">${l.dCli>0.005?'+':''}${msBRL(l.dCli)}</td>
       <td class="num so-consultor">${(l.fyc*100).toFixed(0)}%</td>
       <td class="num so-consultor">${l.on?msBRL(l.caixa):'—'}</td>
       <td class="num so-consultor" style="min-width:96px">${free?'<span class="pill p-free">de graça</span>':(l.ef>0?l.ef.toFixed(1)+' <span class="mini">R$/R$</span>':'—')}
@@ -6474,7 +6515,7 @@ function msRenderMig(R){
   const preOrVit = R.principal ? R.csVit*msTaxa(R.principal) : 0;
   $('msTabMig').innerHTML =
    `<thead><tr><th>cobertura</th><th class="num">CS na origem</th><th class="so-consultor">migra</th><th class="so-consultor">CS que migra</th><th class="so-consultor">CS na nova</th>
-    <th class="num">custa hoje</th><th class="so-consultor">prêmio novo</th><th class="num">na nova</th><th class="num">Δ cliente</th>
+    <th class="num">custa hoje</th><th class="so-consultor">prêmio novo</th><th class="num">na nova</th><th class="num so-consultor">Δ cliente</th>
     <th class="num so-consultor">FYC</th><th class="num so-consultor">caixa 1º ano</th><th class="num so-consultor">eficiência</th></tr></thead>
     <tbody>
       ${R.principal?`<tr class="dest"><td><b>${esc(R.P.n)}</b> <span class="pill p-vit">vitalício novo</span><div class="cd">sai do ${esc(R.principal.cod||'temporário')}</div></td>
@@ -6484,14 +6525,14 @@ function msRenderMig(R){
         <td class="num">${msBRL(preOrVit)}</td>
         <td class="so-consultor"><input class="csin" data-msvitpre="1" value="${(+state.ms.preVit||0)>0?msBRL(state.ms.preVit):''}" placeholder="${R.preVit>0?msBRL(R.preVit):'prêmio novo'}" title="Prêmio mensal do vitalício. Vazio = o motor calcula; digite para usar o valor da prévia."></td>
         <td class="num">${R.preVit>0?msBRL(R.preVit)+msFonteTag(R.preVitInfo):`<span class="mini" title="${esc((R.preVitInfo||{}).motivo||'')}">sem tarifa</span>`}</td>
-        <td class="num" style="color:${R.preVit-preOrVit>0.005?'var(--crit)':'var(--good-text)'}">${R.preVit>0?(R.preVit-preOrVit>0?'+':'')+msBRL(R.preVit-preOrVit):'—'}</td>
+        <td class="num so-consultor" style="color:${R.preVit-preOrVit>0.005?'var(--crit)':'var(--good-text)'}">${R.preVit>0?(R.preVit-preOrVit>0?'+':'')+msBRL(R.preVit-preOrVit):'—'}</td>
         <td class="num so-consultor">${(R.P.fyc*100).toFixed(0)}%</td>
         <td class="num so-consultor">${R.preVit>0?msBRL(R.preVit*R.P.fyc*12+R.preVit*(1+MS_IOF)):'—'}</td>
         <td class="num mini so-consultor">é a razão de existir da MS</td></tr>`:''}
       ${rows}
       <tr class="tot"><td>total das opcionais</td><td class="so-consultor"></td><td class="so-consultor"></td><td class="so-consultor"></td><td class="so-consultor num">${msBRL(R.linhas.reduce((a,l)=>a+l.csNova,0))}</td>
         <td class="num">${msBRL(somaOr)}</td><td class="so-consultor"></td><td class="num">${msBRL(somaNv)}</td>
-        <td class="num">${somaNv-somaOr>0?'+':''}${msBRL(somaNv-somaOr)}</td><td class="so-consultor"></td>
+        <td class="num so-consultor">${somaNv-somaOr>0?'+':''}${msBRL(somaNv-somaOr)}</td><td class="so-consultor"></td>
         <td class="num so-consultor">${msBRL(R.linhas.reduce((a,l)=>a+(l.on?l.caixa:0),0))}</td><td class="so-consultor"></td></tr>
     </tbody>`;
   const cort=R.linhas.filter(l=>l.on&&isFinite(l.ef)&&l.dCli>0.005).sort((a,b)=>a.ef-b.ef);
@@ -6663,6 +6704,84 @@ function msRenderCliente(R){
   $('msCliAtivo').innerHTML = msCliAtivoHTML(R);
 }
 
+/* ---------- 2.5 · SIMULADOR DO CLIENTE (MS-SIM-V1) ----------
+   Estilo venda: uma linha por cobertura com −10% / capital / +10%, toggle de "entra"
+   e o prêmio por mês. Tudo grava nos MESMOS campos do console (csVit, mig, alvos,
+   novas) e passa pelo mesmo msCalc — o valor final é o do resultado, por construção.
+   Nada de comissão, caixa, FYC ou Δ por cobertura. */
+function msSimSet(tipo,id,v){ v=Math.max(0,+v||0); const R=msCalc(); if(!R) return;
+  if(tipo==='vit'){ const teto=(R.principal&&R.principal.cap)||Infinity; state.ms.csVit=Math.min(v,teto); }
+  else if(tipo==='mig'){ const c=R.cobsProc.find(x=>x.id===id); if(!c) return;
+    if(v>0){ state.ms.mig[c.id]=Math.min(v,c.cap||0); state.ms.alvos[c.id]=v; } else { delete state.ms.mig[c.id]; delete state.ms.alvos[c.id]; } }
+  else if(tipo==='nova'){ const n=(state.ms.novas||[]).find(x=>x.id===id); if(n) n.cap=v; }
+  save(); renderMS(); }
+function msSimStep(tipo,id,pct){ const R=msCalc(); if(!R) return; let cur=0;
+  if(tipo==='vit') cur=R.csVit; else { const l=(R.linhas||[]).find(x=>x.c.id===id); cur=l?l.csNova:0; }
+  let v=Math.round(cur*(1+pct)/1000)*1000;
+  if(pct>0&&v<=cur) v=cur+1000; if(pct<0&&v>=cur) v=Math.max(0,cur-1000);
+  msSimSet(tipo,id,v); }
+function msSimTog(id,on){ const R=msCalc(); if(!R) return; const c=R.cobsProc.find(x=>x.id===id); if(!c) return;
+  if(on){ state.ms.mig[c.id]=c.cap||0; delete state.ms.alvos[c.id]; } else { delete state.ms.mig[c.id]; delete state.ms.alvos[c.id]; }
+  save(); renderMS(); }
+function msSimPrazos(){ const f=$('msSimFam'), p=$('msSimPrazo'); if(!f||!p) return;
+  const prod=(typeof PRODS!=='undefined')&&PRODS[f.value]; const pz=(prod&&prod.prazos)||[];
+  p.innerHTML=pz.map(z=>`<option value="${z}">${z} anos</option>`).join(''); }
+function msSimAdd(){ const f=$('msSimFam'), p=$('msSimPrazo'), c=$('msSimCap'); if(!f||!f.value) return;
+  const cap=moneyParse(c?c.value:'0'); if(!(cap>0)){ if(c) c.focus(); return; }
+  msAddNova(f.value, p?+p.value:0, cap); }
+window.msSimSet=msSimSet; window.msSimStep=msSimStep; window.msSimTog=msSimTog; window.msSimAdd=msSimAdd; window.msSimPrazos=msSimPrazos;
+function msRenderSimCli(R){
+  const box=$('msSimCli'); if(!box) return;
+  const b=v=>msBRL((v||0)*(1+MS_IOF));
+  const num=(id,tipo,v)=>`<span class="sim-cs">
+      <button type="button" class="sim-bt" onclick="msSimStep('${tipo}','${esc(id)}',-0.1)" title="−10%">−</button>
+      <input class="csin sim-in" value="${msBRL0(v)}" onchange="msSimSet('${tipo}','${esc(id)}',moneyParse(this.value))">
+      <button type="button" class="sim-bt" onclick="msSimStep('${tipo}','${esc(id)}',0.1)" title="+10%">+</button></span>`;
+  const linha=(nome,sub,ctrl,premio,off)=>`<div class="sim-row${off?' off':''}">
+      <div class="sim-n"><b>${nome}</b>${sub?`<div class="mini" style="color:var(--ink2)">${sub}</div>`:''}</div>
+      <div class="sim-c">${ctrl}</div>
+      <div class="sim-p">${premio}</div></div>`;
+  const pm=v=>`<b>R$ ${b(v)}</b><div class="mini">por mês</div>`;
+  let h='';
+  if(R.principal){
+    h+=linha(esc((R.P&&R.P.n)||'Vitalício novo')+' <span class="pill p-vit">não vence</span>',
+      'sai do temporário · até '+msBRL0(R.principal.cap||0),
+      num('vit','vit',R.csVit), R.preVit>0?pm(R.preVit):'<span class="mini">informe o prêmio da prévia</span>', false);
+  }
+  (R.linhas||[]).forEach(l=>{ const c=l.c;
+    if(l.ehNova){
+      h+=linha(esc(c.nome||c.cod||'')+' <span class="pill p-vit">nova</span>',
+        `<a href="#" onclick="msRemoverNova('${esc(c.id)}');return false" style="color:var(--crit)">remover</a>`,
+        num(c.id,'nova',l.csNova), l.csNova>0?pm(l.preNv):'—', false);
+    } else {
+      const fica=(c.cap||0)-l.migCS;
+      const sub=(l.on?('tinha '+msBRL0(c.cap||0)+(fica>0.5?' · '+msBRL0(fica)+' continua na atual':''))
+                     :('continua na apólice atual · '+msBRL0(c.cap||0)))
+                +(l.trava?' · máx. '+msBRL0(R.csVit*l.trava.mult)+' na nova':'');
+      const tog=`<label class="sw" style="margin-right:8px" title="${l.on?'tirar da apólice nova (continua na atual)':'levar para a apólice nova'}"><input type="checkbox" ${l.on?'checked':''} onchange="msSimTog('${esc(c.id)}',this.checked)"><i></i></label>`;
+      h+=linha(esc(c.nome||c.cod||''), sub, tog+(l.on?num(c.id,'mig',l.csNova):''),
+        (l.on&&l.csNova>0)?pm(l.preNv):'<span class="mini">—</span>', !l.on);
+    }
+  });
+  const fams=msFamsAdicionaveis(), fam0=fams[0], prazos=(fam0&&fam0.prazos)||[];
+  const add=fams.length?`<div class="sim-add">
+      <select id="msSimFam" onchange="msSimPrazos()">${fams.map(p=>`<option value="${esc(p.fam)}">${esc(p.nome||p.fam)}</option>`).join('')}</select>
+      <select id="msSimPrazo">${prazos.map(z=>`<option value="${z}">${z} anos</option>`).join('')}</select>
+      <input id="msSimCap" class="csin" placeholder="capital" style="width:120px">
+      <button type="button" class="btn sm pri" onclick="msSimAdd()">+ adicionar cobertura</button></div>`:'';
+  const hojeB=(R.hoje||0)*(1+MS_IOF), dif=R.bruto-hojeB;
+  const fica=(R.origPor||[]).reduce((a,o)=>a+(o.v||0),0);
+  box.innerHTML=`<div class="grid g4" style="margin-bottom:12px">
+      <div class="tile"><div class="k">Hoje</div><div class="v">R$ ${msBRL(hojeB)}<span class="sim-per">/mês</span></div></div>
+      <div class="tile a"><div class="k">Apólice nova</div><div class="v">R$ ${b(R.nova)}<span class="sim-per">/mês</span></div></div>
+      <div class="tile b"><div class="k">O que fica</div><div class="v">R$ ${b(fica)}<span class="sim-per">/mês</span></div></div>
+      <div class="tile good"><div class="k">Total</div><div class="v">R$ ${msBRL(R.bruto)}<span class="sim-per">/mês</span></div><div class="d">${dif>=0?'+':'−'} R$ ${msBRL(Math.abs(dif))} vs hoje</div></div>
+    </div>
+    <div class="sim-hd"><span>Cobertura</span><span>Capital na apólice nova</span><span>por mês</span></div>
+    ${h}${add}
+    <p class="mini" style="margin-top:8px">Simulação: os valores seguem a prévia da Prudential e escalam com o capital. O que não migra continua na apólice atual — nada é reduzido.</p>`;
+}
+
 /* ---------- 4 · regras ---------- */
 function msRenderRegras(R){
   const m=msMeses(R.or.emissao||R.or.inicio||'');
@@ -6722,7 +6841,7 @@ function renderMS(){
     /* mesmo desligada, o select de origem tem que RECEBER: escolher aqui religa */
     if(sel && !sel.dataset.on){ sel.dataset.on='1'; sel.onchange=()=>{ aplicarDestino(sel.value,'ms-origem'); save(); render(); }; }
     if(sel && state.ms && state.ms.off) sel.value='';
-    ['msSemaforo','msTriagem','msTabMig','msAvisos','msTiles','msTabApol','msComparador','msRegras','msFechamento','msCliTiles','msCliMuda','msCliAtivo']
+    ['msSemaforo','msTriagem','msTabMig','msAvisos','msTiles','msTabApol','msComparador','msRegras','msFechamento','msCliTiles','msCliMuda','msCliAtivo','msSimCli']
       .forEach(id=>{ const e=$(id); if(e) e.innerHTML=''; });
     const sm=$('msSemaforo'); if(sm) sm.innerHTML = (state.ms&&state.ms.off&&aps.length)
       ? `<div class="semaf sf-warn"><span class="big">▲</span><div>Mudança de Seguro desligada<br><span style="font-weight:500;font-size:.76rem">No <a href="#" onclick="irCheckout();return false">Checkout</a>, marque uma apólice como <b>origem da MS</b> — ou escolha a origem aqui em cima.</span></div></div>`
@@ -6740,7 +6859,7 @@ function renderMS(){
   if(pr) pr.value=state.ms.prod;
   const cv=$('msCsVit'); if(cv && document.activeElement!==cv) cv.value=msBRL(R.csVit);
   const pv=$('msPreVit'); if(pv && document.activeElement!==pv) pv.value=msBRL(R.preVit);
-  msRenderTriagem(R); msRenderMig(R); msRenderCliente(R); msRenderResultado(R); msRenderSims(R); msRenderRegras(R); msRenderFech(R);
+  msRenderTriagem(R); msRenderMig(R); msRenderSimCli(R); msRenderCliente(R); msRenderResultado(R); msRenderSims(R); msRenderRegras(R); msRenderFech(R);
   msLiga(); msLigaSecoes();
 }
 /* as seções (h2.sec) dobram levando os blocos junto — mesma mecânica do
@@ -6870,7 +6989,11 @@ function msLiga(){
   });
   document.querySelectorAll('[data-msnv]').forEach(el=>el.onchange=()=>{
     const v=moneyParse(el.value);
-    if(v>0) state.ms.taxaNv[el.dataset.msnv]=v; else delete state.ms.taxaNv[el.dataset.msnv];
+    if(v>0){ state.ms.taxaNv[el.dataset.msnv]=v;
+      /* MS-SIM-V1: o prêmio capturado vale pro CS desta linha AGORA — é a base da escala do simulador */
+      const R=msCalc(), l=R&&(R.linhas||[]).find(x=>x.c.id===el.dataset.msnv);
+      state.ms.taxaNvCs=state.ms.taxaNvCs||{}; state.ms.taxaNvCs[el.dataset.msnv]=(l&&l.csNova>0)?l.csNova:0; }
+    else { delete state.ms.taxaNv[el.dataset.msnv]; if(state.ms.taxaNvCs) delete state.ms.taxaNvCs[el.dataset.msnv]; }
     save(); renderMS();
   });
   /* capital NA APOLICE NOVA, por linha. Acima do que migra vira aumento. */
@@ -6909,12 +7032,12 @@ function msLiga(){
   const setCsVit=v=>{ const R0=msCalc(), teto=(R0&&R0.principal)?(R0.principal.cap||0):Infinity;
                       state.ms.csVit=Math.max(0,Math.min(v,teto)); };   /* nao da pra converter mais do que existe no temporario */
   lig($('msCsVit'),  el=>setCsVit(moneyParse(el.value)));
-  lig($('msPreVit'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); });
+  lig($('msPreVit'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); state.ms.preVitCs=+state.ms.csVit||0; });
   /* os mesmos dois campos, agora tambem dentro da linha do vitalicio — e ali
      que ele procura ("eu boto o CS novo a ser migrado"), ao lado das outras
      coberturas. Mesmo estado, duas portas. */
   lig(document.querySelector('[data-msvitcs]'),  el=>setCsVit(moneyParse(el.value)));
-  lig(document.querySelector('[data-msvitpre]'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); });
+  lig(document.querySelector('[data-msvitpre]'), el=>{ state.ms.preVit=Math.max(0,moneyParse(el.value)); state.ms.preVitCs=+state.ms.csVit||0; });
   document.querySelectorAll('[data-mspreset]').forEach(b=>b.onclick=()=>{
     const R=msCalc(); if(!R) return; const p=b.dataset.mspreset;
     R.cobsProc.filter(c=>c!==R.principal).forEach(c=>{
