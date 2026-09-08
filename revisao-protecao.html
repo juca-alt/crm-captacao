@@ -200,6 +200,13 @@ body.modo-apresenta #apresenta{display:block}
 body.modo-apresenta nav.steps{display:none}
 #apresenta .no-print{display:none!important}
 body.modo-cliente .so-consultor{display:none!important}
+/* MODO-CLIENTE-V2: o cliente vê o MESMO documento da apresentação (seleção e ordem do Checkout),
+   só que com o simulador da MS vivo dentro. O console (#app) e as abas somem. */
+body.modo-cliente #app{display:none}
+body.modo-cliente #apresenta{display:block}
+body.modo-cliente nav.steps{display:none}
+#apresenta .sim-ap{margin-top:14px}
+#apresenta .sim-ap-t{font-weight:800;margin:18px 0 6px}
 .hide{display:none!important}
 h2.sec{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:800;margin:32px 0 4px;padding-bottom:7px;border-bottom:1px solid var(--grid)}
 
@@ -1168,6 +1175,14 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
       </div>
     </div>
 
+    <!-- CLI-VALORES-V1: cards de valor pro cliente — plano novo, MS ou os dois (mesma seleção do bloco da MS) -->
+    <div class="card blk" data-blk="cli-valores" data-show="clivalores">
+      <div class="blk-h"><span class="ico">◆</span><div class="tt"><h2>Quanto você passa a pagar</h2>
+        <p class="sub">Os cards de valor que vão pro cliente: Hoje · Plano novo · Apólice nova (MS) · O que fica · Total. Escolha quais mostrar — vale pra plano novo, Mudança de Seguro ou a combinação dos dois.</p></div>
+        <label class="blk-sw"><input type="checkbox" data-sw="clivalores"> na apresentação</label><span class="blk-cx">▾</span></div>
+      <div class="blk-b"><div id="cliValores"></div></div>
+    </div>
+
     <div class="card blk" data-blk="ab" data-show="ab">
       <div class="blk-h"><span class="ico">⇄</span><div class="tt"><h2>Como é hoje e como fica</h2>
         <p class="sub">Comparação 1 a 1 da apólice atual com <b>uma</b> proposta — para mandar pronto, ou para fechar a mudança na frente do cliente.</p></div>
@@ -1860,6 +1875,33 @@ function selfTest(){
     state.ms.csVit = 140000; const Rc = msCalc();
     chk('MS sim · dobrar o vitalício dobra o prêmio digitado da prévia (288,96 → 577,92)', Math.abs(Rc.preVit - 577.92) < 0.05);
     chk('MS sim · simulador do cliente desenha e não fala de comissão/caixa/FYC', typeof msRenderSimCli === 'function' && (() => { msRenderSimCli(Rc); const t = ($('msSimCli')||{}).textContent || ''; return t.length > 0 && /Apólice nova/.test(t) && !/comiss|caixa|fyc|efici|agenciamento/i.test(t); })());
+    /* CLI-VALORES-V1 + EMVIDA-SECAO-V1: cards iguais pra MS/plano/combo; benefício em vida vira seção */
+    { const _sh3 = JSON.stringify(state.show), _ui3 = JSON.stringify(state.ui||{}), _cen3 = JSON.stringify(state.cen||[]), _hoje3 = JSON.stringify(state.hoje); try{
+        state.ms = Object.assign({}, state.ms, {origem:'A1', extras:['A2'], prod:'WH10', csVit:70000, preVit:288.96, mig:{'t-dg':288604.45}, alvos:{}, novas:[], taxaNv:{}, taxaNvCs:{}, preVitCs:0, off:false});
+        state.cen = [];
+        const D1 = cliValoresDados();
+        chk('CLI valores · só MS: cards hoje/Apólice nova/fica/total (sem "Plano novo") e total = fica + MS nova', !!D1 && D1.temMs && !D1.temPlano && Math.abs(D1.total - (D1.fica + D1.msnova)) < 0.01 && cliCardsDisp(D1).map(c => c[0]).join(',') === 'hoje,msnova,fica,total');
+        chk('CLI valores · o total é o mesmo "Como fica" do A×B (uma conta só)', (() => { const d = abDados(); return !!d && Math.abs(d.tB - D1.total) < 0.01; })());
+        state.hoje = Object.assign({}, state.hoje, {apolices:[{num:'V1', emissao:'2024-01-01', per:'mes', idadeEmissao:44, cob:[{id:'v1c1', cod:'WV10G', nome:'Vida e Saúde', cap:100000, pre:300, grupo:'MQC_VIT', classe:'Standard'}]}]});
+        state.ms.off = true;
+        Object.assign(state.show, {emvida:true});
+        renderApresenta();
+        chk('EMVIDA · marcar "Benefício em vida" no Checkout vira seção no material', $('apresenta').innerHTML.indexOf('data-sk="emvida"') >= 0 && ckSk('emvida') === 'emvida');
+        /* ATIVO-DETAILS-V1: no arquivo (sem JS) o detalhe do ativo tem que abrir por <details> nativo */
+        Object.assign(state.show, {carteira:true});
+        const _arq2 = htmlParaCliente();
+        chk('ARQUIVO · detalhes do ativo viram <details> nativo (abrem sem JS)', !/ativo-card/.test(_arq2) || (/class="atvd"/.test(_arq2) && !/class="ativo-det"/.test(_arq2)));
+      } finally { state.show = JSON.parse(_sh3); state.ui = JSON.parse(_ui3); state.cen = JSON.parse(_cen3); state.hoje = JSON.parse(_hoje3); try{ renderApresenta(); }catch(_){} } }
+    /* MODO-CLIENTE-V2: modo cliente = documento da apresentação + simulador VIVO; o arquivo gerado nunca leva o simulador */
+    { const _sh4 = JSON.stringify(state.show), _cli = document.body.classList.contains('modo-cliente'), _ga = !!window._gerandoArquivo; try{
+        state.ms = Object.assign({}, state.ms, {origem:'A1', extras:['A2'], prod:'WH10', csVit:70000, preVit:288.96, mig:{'t-dg':288604.45}, alvos:{}, novas:[], taxaNv:{}, taxaNvCs:{}, preVitCs:0, off:false});
+        Object.assign(state.show, {mscli:true});
+        document.body.classList.add('modo-cliente'); window._gerandoArquivo = false;
+        renderApresenta();
+        chk('MODO CLIENTE · o documento traz o simulador vivo dentro de "Como fica sua proteção"', !!document.querySelector('#apresenta section[data-sk="mscli"] #msSimCliAp .sim-row'));
+        window._gerandoArquivo = true; renderApresenta();
+        chk('MODO CLIENTE · o arquivo gerado NÃO leva o simulador', !document.querySelector('#apresenta #msSimCliAp'));
+      } finally { window._gerandoArquivo = _ga; if (!_cli) document.body.classList.remove('modo-cliente'); state.show = JSON.parse(_sh4); try{ renderApresenta(); }catch(_){} } }
     }catch(e){ total++; bad.push('MS multi · exceção no cálculo: ' + (e && e.message)); }
     finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; state.ui = g.ui; }
   }
@@ -1954,7 +1996,7 @@ const VAZIO = () => ({
         familia:true, emvida:true, nec:true,
         planos:true, comp:true, muda:true, recado:true, glos:false, anxdg:false, anxinv:false, anxfra:false, anxcir:false,
         carteira:true, produtos:false, ab:true, novas:false, anxipca:false, assin:true,
-        mscli:true, msmigra:true, mspaga:true, mscomp:false},
+        mscli:true, msmigra:true, mspaga:true, mscomp:false, clivalores:true},
   fechado:{},
   /* MS-ETAPA5: leitura da etapa 2 + decisões. Nada aqui é redigitado. */
   ms:{origem:'', prod:'WV20', csVit:0, preVit:0, alvos:{}, mig:{}, taxaNv:{}, novas:[], sims:[]},
@@ -5244,6 +5286,9 @@ function renderApresenta(){
     if (_ct) h += sec('Carteira de proteção','carteira') + `<div class="card">${_ct}</div>`; }
   /* FAM_APRESENTA_V1: família (pizzas + detalhe por segurado) no doc do cliente */
   if (mostra('familia')){ const _fh = familiaApresentaHTML(); if (_fh) h += sec('Sua família','fam') + `<div class="card">${_fh}</div>`; }
+  /* EMVIDA-SECAO-V1 (08/09): o Checkout oferecia "Benefício em vida" e o construtor não
+     desenhava nada — a função do doc do cliente já existia (emVidaApresentaHTML). */
+  if (mostra('emvida')){ const _e = emVidaApresentaHTML(); if (_e) h += sec('Benefício em vida (doença grave)','emvida') + `<div class="card">${_e}</div>`; }
   /* ATIVO_BENEF_V1: o benefício em vida deixou de ser seção solta — ele é
      característica do ativo e agora vive DENTRO de cada ativo, na Carteira. */
   /* grupo familiar: a seção do doc do cliente é a `Sua família` (FAM_APRESENTA_V1), logo abaixo */
@@ -5317,14 +5362,23 @@ function renderApresenta(){
   if (mostra('novas') && temHoje && (!blocoOculto('novas-tl') || !blocoOculto('novas-rx'))){
     h += sec('Linha do tempo e lacunas','novas') + `<div class="card">${novasVisoesHTML()}</div>`; }
   if (mostra('ab')){ const _ab = abHTML(); if (_ab) h += sec('Como é hoje e como fica','ab') + `<div class="card">${_ab}</div>`; }
+  /* CLI-VALORES-V1 (08/09): cards de valor selecionáveis pra plano novo / combinação. Quando é só
+     MS e "Como fica sua proteção" (mscli) está ligado, os cards já saem lá — não duplica. */
+  if (mostra('clivalores')){ const _D = cliValoresDados();
+    if (_D && !(_D.temMs && !_D.temPlano && mostra('mscli'))) h += sec('Quanto você passa a pagar','clivalores') + `<div class="card">${cliValoresTilesHTML(_D)}</div>`; }
 
   /* MS-APRESENTA-V1 (08/09): o Checkout já oferecia msmigra/mspaga/mscomp, mas este
      construtor nunca lia as chaves — marcar não aparecia nem na apresentação nem no
      arquivo (que nasce daqui). Uma fonte (msCalc via abMs) e os mesmos builders do
      console. Sem comissão/caixa/FYC: material do cliente. */
   const RM = (typeof abMs === 'function') ? abMs() : null;
+  /* MODO-CLIENTE-V2: no modo cliente o documento é o mesmo da apresentação, mas o simulador
+     da MS entra VIVO (editável). Nunca no arquivo gerado (_gerandoArquivo). */
+  const _simVivo = !!RM && document.body.classList.contains('modo-cliente') && !window._gerandoArquivo;
+  const _simBox = `<div class="mini sim-ap-t">Simule comigo — ajuste os capitais e veja o valor final na hora</div><div id="msSimCliAp" class="sim-ap"></div>`;
   if (RM){
-    if (mostra('mscli')) h += sec('Como fica sua proteção com a Mudança de Seguro','mscli') + `<div class="card">${msCliTilesHTML(RM)}${msCliAtivoHTML(RM)}</div>`;
+    if (mostra('mscli')) h += sec('Como fica sua proteção com a Mudança de Seguro','mscli') + `<div class="card">${msCliTilesHTML(RM)}${msCliAtivoHTML(RM)}${_simVivo ? _simBox : ''}</div>`;
+    else if (_simVivo) h += sec('Simule comigo','mssim') + `<div class="card">${_simBox}</div>`;
     if (mostra('msmigra')){ const _m = msCliMudaHTML(RM); if (_m) h += sec('O que muda, cobertura a cobertura','msmigra') + `<div class="card">${_m}</div>`; }
     if (mostra('mspaga')) h += sec('O que você passa a pagar','mspaga') + `<div class="card">${msCliPagaHTML(RM)}</div>`;
     if (mostra('mscomp')) h += sec('Mudança de Seguro ou não fazer nada','mscomp') + `<div class="card">${msCliCompHTML(RM)}</div>`;
@@ -5391,6 +5445,7 @@ function renderApresenta(){
     <p class="disc">Simulação para fins de apresentação. Valores sujeitos a análise e aceitação pela Prudential do Brasil. As coberturas, garantias, franquias, carências e exclusões constam das condições gerais dos produtos e da apólice, este resumo não as substitui.</p></div>`;
 
   $('apresenta').innerHTML = ordenarSecoes(h);
+  if (_simVivo){ try{ msRenderSimCli(RM, 'msSimCliAp'); }catch(e){ console.warn('[modo cliente] simulador:', e); } }
   /* o sumário lê as seções já montadas, então entra depois — e some no cliente */
   /* o sumário é para o consultor: vale no console E no modo apresentação (é ali que
      ele monta o que vai sair). Só não existe no modo cliente nem no arquivo gerado. */
@@ -5418,7 +5473,8 @@ const SUM_NOME = {como:'Como funciona sua proteção atual', carteira:'Carteira 
   produtos:'Produtos e coberturas', risco:'Alerta de risco', alerta:'Alerta', prop:'Proposta × emitido',
   emvida:'Benefício em vida', glos:'Glossário',
   mscli:'Mudança de Seguro — como fica', msmigra:'O que muda, cobertura a cobertura',
-  mspaga:'O que você passa a pagar', mscomp:'Mudança de Seguro ou não fazer nada'};
+  mspaga:'O que você passa a pagar', mscomp:'Mudança de Seguro ou não fazer nada',
+  clivalores:'Quanto você passa a pagar'};
 /* a chave da seção (data-sk) é a mesma chave de state.show na maioria dos blocos;
    estas poucas divergem porque a seção nasce de outro bloco */
 const SUM_SHOW = {fam:'familia', anexos:null};
@@ -6173,10 +6229,10 @@ function msAddNova(fam, prazo, cap){
   const pz=(p.prazos||[]).includes(+prazo)?+prazo:(p.prazos||[])[0];
   if(!Array.isArray(state.ms.novas)) state.ms.novas=[];
   state.ms.novas.push({id:'nv'+uid(), fam, prazo:pz, cap:Math.max(0,+cap||0)});
-  save(); renderMS();
+  msSimRefresh();
 }
 function msRemoverNova(id){
-  state.ms.novas=(state.ms.novas||[]).filter(n=>n.id!==id); save(); renderMS();
+  state.ms.novas=(state.ms.novas||[]).filter(n=>n.id!==id); msSimRefresh();
 }
 window.msAddNova=msAddNova; window.msRemoverNova=msRemoverNova;
 /* o produto principal temporário é o que a MS converte */
@@ -6643,14 +6699,47 @@ function msRenderResultado(R){
    (Hoje · Apólice nova · O que fica · Total, mensal com IOF), como era → como fica
    cobertura a cobertura, e o produto NOVO vitalício como ATIVO (mesmo card do
    Patrimônio, via apólice sintética → ativosVitalicios → ativoCardHTML). */
-const MS_CLI_CARDS=[
-  ['hoje','Hoje','o que paga hoje', R=>R.hoje],
-  ['nova','Apólice nova','com a Mudança de Seguro', R=>R.nova],
-  ['fica','O que fica','nas apólices atuais', R=>(R.origPor||[]).reduce((a,o)=>a+(o.v||0),0)],
-  ['total','Total','quanto passa a pagar', R=>R.liq]
+/* ═══ CLI-VALORES-V1 (08/09): cards de valor selecionáveis — IGUAIS pra MS, plano novo ou
+   combinação. Uma seleção (state.ui.cliCards) e uma conta só: a mesma do "Como é hoje e
+   como fica" global — destino de cada apólice (fica/sai/MS) + o que fica da MS + plano. */
+const CLI_CARDS=[
+  ['hoje','Hoje','o que paga hoje'],
+  ['plano','Plano novo','a proposta nova'],
+  ['msnova','Apólice nova','com a Mudança de Seguro'],
+  ['fica','O que fica','nas apólices atuais'],
+  ['total','Total','quanto passa a pagar']
 ];
-function msCliSel(){ const s=state.ms&&state.ms.cliSel; return Array.isArray(s)&&s.length?s:['hoje','nova','fica','total']; }
-function msCliTog(k){ const s=new Set(msCliSel()); s.has(k)?s.delete(k):s.add(k); state.ms.cliSel=[...s]; if(typeof save==='function')save(); if(typeof renderMS==='function')renderMS(); }
+function cliValoresDados(){
+  const aps=state.hoje.apolices||[], R=(typeof abMs==='function')?abMs():null, cen=(typeof abCen==='function')?abCen():null;
+  if(!R && !cen) return null;
+  const msNums=new Set(R?R.aps.map(a=>String(a.num||'')):[]);
+  const ficam=aps.filter(a=>abApolEstado(a.num)!=='sai' && !msNums.has(String(a.num||'')));
+  const liq=its=>(its||[]).reduce((t,x)=>t+(+x.pre||0),0);
+  const hoje=liq(itensDe(aps))*(1+IOF);
+  const fica=(liq(itensDe(ficam))+liq(msItensFicam(R)))*(1+IOF);
+  const msnova=liq(msItensNova(R))*(1+IOF);
+  const plano=cen?totalCen(cen):0;          /* totalCen já vem bruto */
+  const total=fica+msnova+plano;
+  return {hoje, plano, msnova, fica, total, dif:total-hoje, temPlano:!!cen, temMs:!!R, cen, R};
+}
+function cliCardsSel(){ const s=state.ui&&state.ui.cliCards; if(Array.isArray(s)&&s.length) return s;
+  const m=state.ms&&state.ms.cliSel; if(Array.isArray(m)&&m.length) return m.map(k=>k==='nova'?'msnova':k);   /* seleção antiga da MS migra */
+  return CLI_CARDS.map(c=>c[0]); }
+function cliCardTog(k){ const s=new Set(cliCardsSel()); s.has(k)?s.delete(k):s.add(k); state.ui=state.ui||{}; state.ui.cliCards=[...s]; if(typeof save==='function')save(); if(typeof render==='function')render(); }
+window.cliCardTog=cliCardTog;
+function cliCardsDisp(D){ return CLI_CARDS.filter(([k])=> k==='plano'?D.temPlano : k==='msnova'?D.temMs : true); }
+function cliValoresTogglesHTML(D){ const sel=cliCardsSel();
+  return `<div class="so-consultor no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span class="mini">mostrar pro cliente:</span>`+
+    cliCardsDisp(D).map(([k,l])=>`<button type="button" style="border:1px solid var(--linha);border-radius:8px;padding:3px 10px;font-size:.72rem;background:${sel.includes(k)?'var(--azul-claro,#eef4ff)':'transparent'};cursor:pointer" onclick="cliCardTog('${k}')">${sel.includes(k)?'✓ ':''}${l}</button>`).join('')+`</div>`; }
+function cliValoresTilesHTML(D){ const sel=cliCardsSel();
+  const it=cliCardsDisp(D).filter(([k])=>sel.includes(k)); if(!it.length) return '';
+  const cls={plano:'a', msnova:'a', fica:'b', total:'good'};
+  return `<div class="grid g4">`+it.map(([k,l,d])=>`<div class="tile ${cls[k]||''}"><div class="k">${l}</div><div class="v">R$ ${msBRL(D[k])}<span style="font-size:.6rem;font-weight:500">/mês</span></div><div class="d">${k==='total'?((D.dif>=0?'+':'−')+' R$ '+msBRL(Math.abs(D.dif))+' vs hoje'):(d+' · com IOF')}</div></div>`).join('')+`</div>`; }
+function renderCliValores(){ const box=$('cliValores'); if(!box) return; const D=cliValoresDados();
+  box.innerHTML = D ? cliValoresTogglesHTML(D)+cliValoresTilesHTML(D)
+    : `<div class="mini" style="color:var(--muted)">Sem proposta nova nem Mudança de Seguro em jogo — os cards aparecem quando houver um dos dois.</div>`; }
+/* a porta antiga da MS continua funcionando: mesma seleção, chave migrada */
+function msCliTog(k){ cliCardTog(k==='nova'?'msnova':k); }
 window.msCliTog=msCliTog;
 /* vitalício NOVO da MS como ativo — apólice sintética herda toda a lógica de valorização */
 function msAtivoNovo(R){
@@ -6665,13 +6754,9 @@ function msAtivoNovo(R){
 }
 /* builders PUROS — uma fonte só pro console (#app) E pra apresentação/arquivo (renderApresenta).
    Duas verdades foi exatamente o que fez "marco e não aparece". Nada aqui tem comissão/caixa/FYC. */
-function msCliTogglesHTML(){ const sel=msCliSel();
-  return `<div class="so-consultor no-print" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center"><span class="mini">mostrar pro cliente:</span>`+
-    MS_CLI_CARDS.map(([k,l])=>`<button type="button" style="border:1px solid var(--linha);border-radius:8px;padding:3px 10px;font-size:.72rem;background:${sel.includes(k)?'var(--azul-claro,#eef4ff)':'transparent'};cursor:pointer" onclick="msCliTog('${k}')">${sel.includes(k)?'✓ ':''}${l}</button>`).join('')+`</div>`; }
-function msCliTilesHTML(R){ const sel=msCliSel(), bruto=v=>(v||0)*(1+MS_IOF);
-  const it=MS_CLI_CARDS.filter(([k])=>sel.includes(k)); if(!it.length) return '';
-  return `<div class="grid g4">`+it.map(([k,l,d,f])=>{ const cls=k==='nova'?'a':k==='fica'?'b':k==='total'?'good':'';
-    return `<div class="tile ${cls}"><div class="k">${l}</div><div class="v">R$ ${msBRL(bruto(f(R)))}<span style="font-size:.6rem;font-weight:500">/mês</span></div><div class="d">${d} · com IOF</div></div>`; }).join('')+`</div>`; }
+/* a MS usa os MESMOS cards genéricos (CLI-VALORES-V1): só-MS = hoje/nova/fica/total; combo ganha "Plano novo" */
+function msCliTogglesHTML(){ const D=cliValoresDados(); return D?cliValoresTogglesHTML(D):''; }
+function msCliTilesHTML(R){ const D=cliValoresDados(); return D?cliValoresTilesHTML(D):''; }
 function msCliMudaHTML(R){ const muda=[];
   if(R.principal) muda.push([esc((R.P&&R.P.n)||'Vitalício novo'), 'Temporário '+msBRL0(R.principal.cap||0)+' — vence e some', 'Vira vitalício de '+msBRL0(R.csVit)+' — não vence, vira patrimônio']);
   (R.linhas||[]).filter(l=>l.on&&!l.ehNova).forEach(l=>{ const fica=(l.c.cap||0)-l.migCS;
@@ -6709,12 +6794,14 @@ function msRenderCliente(R){
    e o prêmio por mês. Tudo grava nos MESMOS campos do console (csVit, mig, alvos,
    novas) e passa pelo mesmo msCalc — o valor final é o do resultado, por construção.
    Nada de comissão, caixa, FYC ou Δ por cobertura. */
+/* MODO-CLIENTE-V2: qualquer mexida no simulador refaz o console e, se o cliente está vendo o documento, o documento */
+function msSimRefresh(){ save(); renderMS(); if(document.body.classList.contains('modo-cliente')) renderApresenta(); }
 function msSimSet(tipo,id,v){ v=Math.max(0,+v||0); const R=msCalc(); if(!R) return;
   if(tipo==='vit'){ const teto=(R.principal&&R.principal.cap)||Infinity; state.ms.csVit=Math.min(v,teto); }
   else if(tipo==='mig'){ const c=R.cobsProc.find(x=>x.id===id); if(!c) return;
     if(v>0){ state.ms.mig[c.id]=Math.min(v,c.cap||0); state.ms.alvos[c.id]=v; } else { delete state.ms.mig[c.id]; delete state.ms.alvos[c.id]; } }
   else if(tipo==='nova'){ const n=(state.ms.novas||[]).find(x=>x.id===id); if(n) n.cap=v; }
-  save(); renderMS(); }
+  msSimRefresh(); }
 function msSimStep(tipo,id,pct){ const R=msCalc(); if(!R) return; let cur=0;
   if(tipo==='vit') cur=R.csVit; else { const l=(R.linhas||[]).find(x=>x.c.id===id); cur=l?l.csNova:0; }
   let v=Math.round(cur*(1+pct)/1000)*1000;
@@ -6722,7 +6809,7 @@ function msSimStep(tipo,id,pct){ const R=msCalc(); if(!R) return; let cur=0;
   msSimSet(tipo,id,v); }
 function msSimTog(id,on){ const R=msCalc(); if(!R) return; const c=R.cobsProc.find(x=>x.id===id); if(!c) return;
   if(on){ state.ms.mig[c.id]=c.cap||0; delete state.ms.alvos[c.id]; } else { delete state.ms.mig[c.id]; delete state.ms.alvos[c.id]; }
-  save(); renderMS(); }
+  msSimRefresh(); }
 function msSimPrazos(){ const f=$('msSimFam'), p=$('msSimPrazo'); if(!f||!p) return;
   const prod=(typeof PRODS!=='undefined')&&PRODS[f.value]; const pz=(prod&&prod.prazos)||[];
   p.innerHTML=pz.map(z=>`<option value="${z}">${z} anos</option>`).join(''); }
@@ -6730,8 +6817,8 @@ function msSimAdd(){ const f=$('msSimFam'), p=$('msSimPrazo'), c=$('msSimCap'); 
   const cap=moneyParse(c?c.value:'0'); if(!(cap>0)){ if(c) c.focus(); return; }
   msAddNova(f.value, p?+p.value:0, cap); }
 window.msSimSet=msSimSet; window.msSimStep=msSimStep; window.msSimTog=msSimTog; window.msSimAdd=msSimAdd; window.msSimPrazos=msSimPrazos;
-function msRenderSimCli(R){
-  const box=$('msSimCli'); if(!box) return;
+function msRenderSimCli(R, boxId){
+  const box=$(boxId||'msSimCli'); if(!box) return;
   const b=v=>msBRL((v||0)*(1+MS_IOF));
   const num=(id,tipo,v)=>`<span class="sim-cs">
       <button type="button" class="sim-bt" onclick="msSimStep('${tipo}','${esc(id)}',-0.1)" title="−10%">−</button>
@@ -7062,7 +7149,7 @@ const CK_GRUPOS = [
   ['Necessidade',           ['nec']],
   ['Carteira de hoje',      ['apolices','familia','novas','carteira','como','consol','emvida','prop']],
   ['Mudança de Seguro',     ['mscli','msmigra','mspaga','mscomp']],
-  ['Nova proposta',         ['planos','ab','comp','muda','recado']],
+  ['Nova proposta',         ['clivalores','planos','ab','comp','muda','recado']],
   ['Anexos e fechamento',   ['anxipca','assin','glos','anxdg','anxinv','anxfra','anxcir','produtos']]
 ];
 const CK_ESSENCIAL = ['alerta','nec','apolices','consol','como','planos','comp','muda','recado','assin','mscli'];
@@ -7086,11 +7173,11 @@ function ckPreset(p){
    Checkout → chave da seção (data-sk): quase sempre igual; as que divergem estão
    em CK_SK. Tópico sem seção própria (alerta abre sempre, assinatura fecha sempre,
    benefício em vida vive dentro dos ativos) fica em "fixos": só liga/desliga. */
-const CK_SK = {familia:'fam', apolices:'apol', anxipca:'anexos', glos:'anexos', anxdg:'anexos', anxinv:'anexos', anxfra:'anexos', anxcir:'anexos', alerta:null, assin:null, emvida:null};
+const CK_SK = {familia:'fam', apolices:'apol', anxipca:'anexos', glos:'anexos', anxdg:'anexos', anxinv:'anexos', anxfra:'anexos', anxcir:'anexos', alerta:null, assin:null};
 function ckSk(sh){ return (sh in CK_SK) ? CK_SK[sh] : sh; }
 /* ordem NATURAL do construtor (renderApresenta): sem arraste, o Checkout já nasce
    na ordem em que o cliente vê — senão a lista mentiria até o 1º arraste. */
-const CK_NATURAL = ['risco','consol','como','carteira','fam','apol','prop','nec','novas','ab','mscli','msmigra','mspaga','mscomp','planos','comp','muda','anexos','recado','produtos'];
+const CK_NATURAL = ['risco','consol','como','carteira','emvida','fam','apol','prop','nec','novas','ab','clivalores','mscli','msmigra','mspaga','mscomp','planos','comp','muda','anexos','recado','produtos'];
 function ckOrdemAtual(){
   /* ordem efetiva: rank em ordemBlocos → ordem natural do construtor → ordem dos grupos */
   const ordem=(state.ui&&state.ui.ordemBlocos)||[];
@@ -7126,7 +7213,7 @@ function ligaDragCheckout(){
 function renderCheckout(){
   /* MS-APRESENTA-V1: revisão salva antes desta versão não tem as chaves da MS — liga o
      padrão sem sobrescrever escolha já feita (só quando a chave não existe). */
-  if (state.show){ ['mscli','msmigra','mspaga'].forEach(k => { if (state.show[k] == null) state.show[k] = true; });
+  if (state.show){ ['mscli','msmigra','mspaga','clivalores'].forEach(k => { if (state.show[k] == null) state.show[k] = true; });
     if (state.show.mscomp == null) state.show.mscomp = false; }
   const box=$('ckLista'); if(!box) return;
   const dst=$('ckDestino'); if(dst) dst.innerHTML=ckDestinoHTML();
@@ -7143,7 +7230,7 @@ function renderCheckout(){
     </div>`; };
   box.innerHTML = `<div class="card"><h2 style="font-size:.86rem">A ordem do cliente <small class="mini" style="font-weight:500">— arraste ⠿ ou use ▲▼ · esta é a ordem da apresentação e do arquivo</small></h2>
       <div class="ck-g" id="ckOrd">${ordenaveis.map((x,i)=>linha(x,i,ordenaveis.length,true)).join('')}</div></div>`
-    + (fixos.length?`<div class="card"><h2 style="font-size:.86rem">Fixos <small class="mini" style="font-weight:500">— sem lugar na ordem: o alerta abre sempre, a assinatura fecha sempre, o benefício em vida vive dentro dos ativos</small></h2>
+    + (fixos.length?`<div class="card"><h2 style="font-size:.86rem">Fixos <small class="mini" style="font-weight:500">— sem lugar na ordem: o alerta abre sempre, a assinatura fecha sempre</small></h2>
       <div class="ck-g">${fixos.map((x,i)=>linha(x,i,fixos.length,false)).join('')}</div></div>`:'');
   const r=$('ckResumo');
   if(r) r.innerHTML = `<b>${ligados}</b> de ${total} blocos vão para o cliente`;
@@ -7161,6 +7248,8 @@ function render(){
   renderCheckout();
   renderCarteira(); /* curadoria: preview da carteira no console */
   renderAB();
+  renderCliValores();   /* CLI-VALORES-V1 */
+  if (document.body.classList.contains('modo-cliente')) try{ renderApresenta(); }catch(e){ console.warn('[modo cliente]', e); }   /* MODO-CLIENTE-V2 */
   renderNovas();
   { const _bi = $('ipcaOut'); if (_bi) _bi.innerHTML = ipcaTabelaHTML(); }
   { const _ap = $('assinPrev'); if (_ap) _ap.textContent =
@@ -7357,6 +7446,7 @@ function iniciais(n){ return (n||'').trim().split(/\s+/).map(w => w[0]).filter(B
 function htmlParaCliente(){
   const eraCli = document.body.classList.contains('modo-cliente');
   document.body.classList.add('modo-cliente');
+  window._gerandoArquivo = true;   /* MODO-CLIENTE-V2: o arquivo nunca leva o simulador vivo */
   renderApresenta();
   const tmp = document.createElement('div');
   tmp.innerHTML = $('apresenta').innerHTML;
@@ -7364,6 +7454,7 @@ function htmlParaCliente(){
   tmp.querySelectorAll('.cur-x,.ativo-gr,.prod-ck,.prod-gr,.cur-dica,.perfilbar').forEach(e => e.remove());
   tmp.querySelectorAll('.cur-off').forEach(e => e.remove());
   if (!eraCli) document.body.classList.remove('modo-cliente');
+  window._gerandoArquivo = false;
   renderApresenta();
 
   /* limpeza */
@@ -7385,6 +7476,19 @@ function htmlParaCliente(){
         td.appendChild(sp);
       });
     });
+  });
+
+  /* ATIVO-DETAILS-V1 (08/09): os detalhes do ativo (benefício em vida, atualização do capital,
+     resgate, simulação) abriam por ativoTog (JS) — no arquivo sem JS ficavam presos. Viram
+     <details> nativo, igual às cartas. Vale também pro card de risco, que usa o mesmo padrão. */
+  tmp.querySelectorAll('.ativo-card, .risco-card').forEach(c => {
+    const d = c.querySelector('.ativo-det'); if (!d) return;
+    const det = document.createElement('details'); det.className = 'atvd';
+    const sum = document.createElement('summary'); sum.textContent = 'ver detalhes'; det.appendChild(sum);
+    while (d.firstChild) det.appendChild(d.firstChild);
+    d.replaceWith(det);
+    const bt = c.querySelector('.as-mais'); if (bt) bt.remove();
+    c.classList.remove('open');
   });
 
   /* cartas: "como funciona" vira <details> nativo */
@@ -7505,6 +7609,13 @@ details.sec[open] .sn{background:var(--azul);color:#fff}
 details.sec[open] .sx{transform:rotate(45deg);margin-top:-4px}
 .secb{padding:14px 12px 16px;background:var(--page)}
 
+/* ATIVO-DETAILS-V1: detalhes do ativo abrem sem JS */
+details.atvd{margin-top:8px;border-top:1px solid var(--grid);padding-top:4px}
+details.atvd>summary{list-style:none;cursor:pointer;color:var(--roxo,#7c3aed);font-weight:700;font-size:.76rem;padding:9px 0;min-height:40px;display:flex;align-items:center;gap:6px}
+details.atvd>summary::-webkit-details-marker{display:none}
+details.atvd>summary::before{content:'▸';font-size:.72rem}
+details.atvd[open]>summary::before{content:'▾'}
+details.atvd>*:not(summary){margin-top:8px}
 details.sitd{margin-top:4px}
 details.sitd>summary{list-style:none;cursor:pointer;color:var(--azul);font-weight:700;font-size:.76rem;padding:9px 0;min-height:40px;display:flex;align-items:center;gap:6px}
 details.sitd>summary::-webkit-details-marker{display:none}
@@ -8043,6 +8154,7 @@ if (__E && (!__seeded || state.demo)){
 bindCliente(); bindNec(); bindAll(); renderAnexos();
 document.body.classList.toggle('modo-cliente', !!state.ui.cliente);
 $('btCliente').classList.toggle('on', !!state.ui.cliente);
+if (state.ui.cliente) try{ renderApresenta(); }catch(_){}   /* MODO-CLIENTE-V2: abriu já no modo cliente → documento pronto */
 $('btPeriodo').textContent = perAno() ? 'Anual' : 'Mensal';
 $('btPeriodo').classList.toggle('on', perAno());
 render();
