@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.10 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.11 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -10384,7 +10384,8 @@ function viewModulos(){
 const CFG_SECOES=[
   {titulo:'Trabalho', itens:[
     {view:'metas',        ic:'🎯', titulo:'Metas',            desc:'Quanto você quer fazer por semana e por mês. É o único número do app que você digita.'},
-    {view:'config-funil', ic:'🛠️', titulo:'Funil & Etapas',   desc:'O nome de cada etapa dos dois funis, sem mexer no id de fábrica.'}
+    {view:'config-funil', ic:'🛠️', titulo:'Funil & Etapas',   desc:'O nome de cada etapa dos dois funis, sem mexer no id de fábrica.'},
+    {acao:'abrirAssinatura()', ic:'✍️', titulo:'Autoassinatura', desc:'A assinatura da assistente no fim de toda mensagem pronta do WhatsApp.', tag:'⚙ abre um painel'}
   ]},
   {titulo:'Aparência', itens:[
     {acao:'abrirAjustesVisual()', ic:'🎨', titulo:'Ajustes de visual', desc:'Cor de destaque, densidade da lista e o jeito da barra lateral.', tag:'⚙ abre um painel'},
@@ -11221,7 +11222,12 @@ const MSG_TEMPLATES={
   resumo_coberturas:{titulo:'Resumo de coberturas', texto:'Oi {primeiro}! Segue um resumo da sua proteção hoje:\n{coberturas}\nSe quiser, marcamos uns minutos pra revisar se está tudo no tamanho certo. Um abraço!'}
 };
 let MSGP_CTX=null;
-function msgProntaTexto(key){ const t=MSG_TEMPLATES[key]||MSG_TEMPLATES.aniversario; return msgPreencher(t.texto,MSGP_CTX||{}); }
+/* GC-38 · AUTOASSINATURA da assistente: vai no fim de TODA mensagem pronta (PT-A).
+   Personalizável em Configurações; vazio = não assina (honesto, sem rabo pendurado). */
+let ASSINAT=''; try{ ASSINAT=localStorage.getItem('crmlp_assinatura_v1')||''; }catch(_){}
+function msgAssinatura(){ return String(ASSINAT||'').trim(); }
+function msgComAssinatura(txt){ const a=msgAssinatura(); return a?String(txt||'').replace(/\s+$/,'')+'\n\n'+a:String(txt||''); }
+function msgProntaTexto(key){ const t=MSG_TEMPLATES[key]||MSG_TEMPLATES.aniversario; return msgComAssinatura(msgPreencher(t.texto,MSGP_CTX||{})); }
 function msgProntaTroca(key){ const ta=document.getElementById('msgpTxt'); if(ta) ta.value=msgProntaTexto(key); }
 function msgProntaEnviar(){ const ta=document.getElementById('msgpTxt'); const txt=ta?ta.value:''; const tel=(MSGP_CTX&&MSGP_CTX.tel)||''; const url=cartWaUrl(tel,txt);
   if(!url){ toast('Sem telefone válido pra este contato — copie a mensagem e envie manualmente.',false); return; }
@@ -11248,6 +11254,24 @@ function msgPronta(ctx,key){ MSGP_CTX=ctx||{}; const cur=MSG_TEMPLATES[key]?key:
   </div>`);
 }
 window.msgPronta=msgPronta; window.msgProntaTroca=msgProntaTroca; window.msgProntaEnviar=msgProntaEnviar; window.msgProntaCopiar=msgProntaCopiar;
+/* GC-38: editor da autoassinatura (aberto pelo card em Configurações) */
+function abrirAssinatura(){ const old=document.getElementById('assinModal'); if(old) old.remove();
+  document.body.insertAdjacentHTML('beforeend',`
+  <div id="assinModal" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:1300;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div class="card" style="width:min(460px,94vw);padding:18px" onclick="event.stopPropagation()">
+      <h3 style="margin:0 0 6px">✍️ Autoassinatura da assistente</h3>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Vai no fim de <b>toda mensagem pronta</b> do WhatsApp. Ex.: <i>— Gabi, assistente do Gustavo · SeguroComJucá</i>. Deixe vazio pra não assinar.</div>
+      <textarea id="assinTxt" placeholder="— Seu nome, assistente do…" style="width:100%;min-height:90px;font-size:14px">${esc(ASSINAT)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-p" style="min-height:44px" onclick="assinSalvar()">Salvar</button>
+        <button class="btn btn-ghost" style="min-height:44px;margin-left:auto" onclick="document.getElementById('assinModal').remove()">Fechar</button>
+      </div>
+    </div>
+  </div>`);
+  const ta=document.getElementById('assinTxt'); if(ta) ta.focus();
+}
+function assinSalvar(){ const ta=document.getElementById('assinTxt'); ASSINAT=ta?ta.value:''; try{ localStorage.setItem('crmlp_assinatura_v1',ASSINAT); }catch(_){} toast('Autoassinatura salva',true); const m=document.getElementById('assinModal'); if(m) m.remove(); }
+window.abrirAssinatura=abrirAssinatura; window.assinSalvar=assinSalvar;
 /* resumo curto das coberturas do cliente da carteira, pro template pos_regularizacao/revisão */
 function msgCoberturasResumo(c){ if(!c) return 'sua proteção atual'; const p=[]; const cob=c.cob||{};
   if(cob.cs) p.push(brlCurto(cob.cs)+' de capital'); if(cob.renda) p.push('renda de '+brlCurto(cob.renda));
@@ -14561,6 +14585,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* GC-38 (08/09): autoassinatura no fim de toda mensagem pronta (vazia = sem rabo) */
+    ok('GC-38: autoassinatura entra no fim da mensagem quando setada e some quando vazia', (()=>{ const _a=ASSINAT; try{ ASSINAT='— Gabi'; const comp=msgProntaTexto('abordagem'); ASSINAT=''; const vazio=msgComAssinatura('Oi'); return typeof abrirAssinatura==='function'&&/\n\n— Gabi$/.test(comp)&&vazio==='Oi'&&CFG_SECOES.some(s=>s.itens.some(i=>i.acao==='abrirAssinatura()')); } finally{ ASSINAT=_a; } })());
     /* GC-07 (08/09): win-back — parado (sem negócio OU sem toque >= limite), template e sweep */
     ok('GC-07: win-back acha parados (sem negócio + parado) com critério configurável e template', (()=>{ const _c=S.contatos,_k=CART.clientes,_w=WB_DIAS; try{ WB_DIAS=90;
       const semNeg={no:false}, recente=cartFunilInfo([{funil:'bc',etapa:'Contato',interacoes:[{k:'nota',dia:hojeISO()}]}]), antigo=cartFunilInfo([{funil:'bc',etapa:'Contato',interacoes:[{k:'nota',dia:isoAddDias(hojeISO(),-200)}]}]);
