@@ -1769,6 +1769,18 @@ function selfTest(){
     chk('Destino · sem origem a MS desliga (msCalc devolve null)', state.ms.off===true && msCalc()===null && abDestino('A1')==='fica');
     aplicarDestino('A1','ms-origem');
     chk('Destino · escolher origem religa a MS', state.ms.off===false && !!msCalc());
+    /* MS-PREVIA-PREMIO-V1 (08/09): prêmio capturado (taxaNv) entra DIRETO — inclui
+       cobertura nova (cap sintético 0) e linha com teto (era o furo do Daniel:
+       nova sumia e Invalidez saía reescalada). */
+    state.ms = Object.assign({}, state.ms, {origem:'A1', extras:['A2'], prod:'WH10', csVit:70000, preVit:288.96,
+      mig:{'t-pd':227208.91}, alvos:{'t-pd':500000},
+      novas:[{id:'nv-brb', fam:'BRB', prazo:5, cap:300000}],
+      taxaNv:{'t-pd':20.48, 'nv-brb':96.34}, off:false});
+    const R2 = msCalc();
+    const li2 = id => (R2.linhas||[]).find(l => l.c.id === id);
+    chk('MS prévia · Invalidez com teto usa o prêmio capturado 20,48 (não reescala p/ 13,x)', li2('t-pd') && Math.abs(li2('t-pd').preNv - 20.48) < 0.01);
+    chk('MS prévia · cobertura NOVA (cap 0) usa o prêmio capturado 96,34 (não some do total)', li2('nv-brb') && Math.abs(li2('nv-brb').preNv - 96.34) < 0.01);
+    chk('MS prévia · a apólice nova soma os prêmios capturados (mín. 288,96 + 20,48 + 96,34)', R2.nova >= 288.96 + 20.48 + 96.34 - 0.01);
     }catch(e){ total++; bad.push('MS multi · exceção no cálculo: ' + (e && e.message)); }
     finally{ const g = JSON.parse(guard); state.hoje = g.hoje; state.ms = g.ms; state.cliente = g.cliente; state.ui = g.ui; }
   }
@@ -6186,7 +6198,14 @@ function msFamDe(c){ return (c && c.fam) || (typeof famDeNome==='function' ? fam
 function msPreNovoInfo(c, cs){
   if(!(cs>0)) return {liq:0, fonte:'zero'};
   const t=state.ms.taxaNv[c.id];
-  if(t!=null && isFinite(t) && t>0 && c.cap>0) return {liq: cs*(t/c.cap), fonte:'prévia'};
+  /* MS-PREVIA-PREMIO-V1 (08/09): taxaNv É o PRÊMIO capturado da prévia oficial
+     pra ESTA linha, na composição atual — usar direto. O código antigo derivava
+     uma taxa (t/c.cap) e reescalava por cs: isso ZERAVA as coberturas NOVAS
+     (cap sintético 0 → a guarda c.cap>0 pulava a prévia → o motor não tarifa a
+     família → 0) e SUBESTIMAVA linha com teto (Invalidez 350k saía 13,13 no
+     lugar de 20,48). Bater com o oficial da Prudential = usar o prêmio
+     capturado como está. (Só entra com cs>0, já garantido acima.) */
+  if(t!=null && isFinite(t) && t>0) return {liq: t, fonte:'prévia'};
   const fam=msFamDe(c);
   const m=msTarifar(fam, c.cod, c.classe, cs);
   if(m && m.liq!=null) return {liq:m.liq, fonte:'motor', selo:m.selo, code:m.code, prazoCaiu:m.prazoCaiu, prazoPedido:m.prazoPedido, capAjustado:m.capAjustado};
