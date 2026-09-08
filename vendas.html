@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.23 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.24 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -417,6 +417,12 @@
      "fechava" e continuava ocupando 390px. Fechar pela CLASSE resolve no mérito. */
   .drawer-body .sec.sec-fechada > :not(h3){display:none}
   .drawer-body .sec.sec-fechada{padding-bottom:10px}
+  /* FICHA-PESSOA-V1: bloco "quem é a pessoa", igual nas 3 fichas */
+  .fp{display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+  .fp-l{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+  .fp-k{flex:0 0 100px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  .fp-v{flex:1;min-width:0;word-break:break-word}
+  @media (max-width:600px){ .fp-k{flex-basis:100%} }
   .drawer-body .sec.sec-fechada h3.sec-h{margin-bottom:0}
   .pl-r{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600}
   .ct-estados{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
@@ -4339,6 +4345,10 @@ function renderDrawer(){
           onclick="drwSecsTodas(this.dataset.abrir==='1')"
           title="Abre ou fecha todos os tópicos desta ficha">⌄ Expandir tudo</button>
       </div>
+      <div class="sec"><details open>
+        <summary style="cursor:pointer;font-weight:700;font-size:14px">👤 Quem é a pessoa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(fichaPessoaResumo(c,'card'))}</span></summary>
+        <div style="margin-top:8px">${fichaPessoaHtml(c,'card')}</div>
+      </details></div>
       ${drwIrmaosHtml(c)}
       ${drwCarteiraHtml(c)}
       ${drwPessoaHtml(c)}
@@ -8742,7 +8752,8 @@ function pFilhos(o){ return _pf(o&&o.filhos, o&&o.perfil&&o.perfil.filhos); }
 function pRecomendante(o){ return _pf(o&&o.recomendante); }
 /* união de TODOS os telefones da pessoa, deduplicada pela chave telKey */
 function pTels(o){ if(!o) return [];
-  const raw=[o.telefone,o.celular,o.telComercial,o.tel,o.cel].concat(Array.isArray(o.telefones_alt)?o.telefones_alt:[],Array.isArray(o.telefonesExtra)?o.telefonesExtra:[]);
+  /* celular primeiro: é o número do WhatsApp (pTel = principal); cards só têm telefone, nada muda pra eles */
+  const raw=[o.celular,o.cel,o.telefone,o.tel,o.telComercial].concat(Array.isArray(o.telefones_alt)?o.telefones_alt:[],Array.isArray(o.telefonesExtra)?o.telefonesExtra:[]);
   const seen=new Set(), out=[];
   raw.forEach(t=>{ if(t==null||t==='') return; const k=telKey(t)||String(t).replace(/\D/g,''); if(k&&!seen.has(k)){ seen.add(k); out.push(String(t).trim()); } });
   return out; }
@@ -8755,6 +8766,55 @@ function pessoaLeadToCard(b){ return { id:'bn'+Date.now(), lp:S.activeUser, funi
   idade:b.idade||'', profissao:b.cargo||'', cidade:b.cidade||'', renda_estimada:b.renda_estimada||'',
   estado_civil:b.estado_civil||'', filhos:b.filhos||'', email:b.email||'', trilha:b.trilha||'',
   notas:b.notas||'', criadoEm:hojeISO(), sitplan:null }; }
+
+/* ═══ FICHA-PESSOA-V1 (09/09): o MESMO bloco "quem é a pessoa" nas 3 fichas — card do funil,
+   lead do estoque, cliente da carteira — lendo a camada PESSOA-CAMPOS-V1. Só leitura (nada de
+   campo morto), só mostra o que existe. Situação (funil + carteira) é achada pelas chaves da
+   pessoa, então o mesmo humano aparece igual onde quer que você abra. É o bloco que a extensão
+   do WhatsApp vai reusar. */
+function fichaPessoaSituacao(o,tipo){
+  const out={funil:null, cart:null};
+  const nomeFunil=f=>(typeof funilNome==='function')?funilNome(f):String(f||'');
+  try{
+    if(tipo==='card'){ out.funil={etapa:ET_LABEL[o.etapa]||o.etapa, funil:o.funil||'nn', ult:cartUltToque(o)}; }
+    else if(tipo==='cliente'){ const nf=cartFunilInfo(cartNegsDe(o,cartNegIndex())); if(nf.no) out.funil={etapa:nf.etapaLabel, funil:nf.funil||'nn', ult:nf.ultimoToque}; }
+    else { let ct=null; if(o.funil_contato_id) ct=(S.contatos||[]).find(x=>x.id===o.funil_contato_id)||null;
+           if(!ct){ const negs=cliNegociosDe(o); ct=(negs&&negs[0])||null; }
+           if(ct) out.funil={etapa:ET_LABEL[ct.etapa]||ct.etapa, funil:ct.funil||'nn', ult:cartUltToque(ct)}; }
+    if(out.funil) out.funil.funilNome=nomeFunil(out.funil.funil);
+  }catch(_){}
+  try{
+    if(tipo==='cliente'){ const aps=cartApolicesDoCliente(o); out.cart={n:aps.length, cs:(o.cob&&o.cob.cs)||0, pm:(o.cob&&o.cob.pm)||0}; }
+    else { const d=clienteDe(o,{semNegocios:true}); if(d&&(d.cli||(d.aps&&d.aps.length))) out.cart={n:(d.aps||[]).length, cs:d.cs||0, pm:d.pm||0}; }
+  }catch(_){}
+  return out;
+}
+function fichaPessoaResumo(o,tipo){ if(!o) return ''; const p=[]; const pr=pProfissao(o), id=pIdade(o), ci=pCidade(o);
+  if(pr) p.push(String(pr)); if(id) p.push(id+' anos'); if(ci) p.push(String(ci));
+  const s=fichaPessoaSituacao(o,tipo);
+  if(s.cart&&s.cart.n) p.push('🛡 '+s.cart.n+' apólice'+(s.cart.n>1?'s':'')); else if(s.funil) p.push('🎯 '+s.funil.etapa);
+  return p.join(' · '); }
+function fichaPessoaHtml(o,tipo){
+  if(!o) return '';
+  const tels=pTels(o), email=pEmail(o), nasc=pNascimento(o), idade=pIdade(o), sexo=pSexo(o);
+  const prof=pProfissao(o), cid=pCidade(o), renda=pRendaPessoal(o), civ=pEstadoCivil(o), fil=pFilhos(o);
+  const rec=pRecomendante(o), ctx=_pf(o.contexto, tipo==='card'?o.origem:null), tri=_pf(o.trilha);
+  const s=fichaPessoaSituacao(o,tipo);
+  const linha=(ico,rot,itens)=>{ const it=(itens||[]).filter(Boolean); return it.length?`<div class="fp-l"><span class="fp-k">${ico} ${rot}</span><span class="fp-v">${it.join(' · ')}</span></div>`:''; };
+  const fmtRenda=v=>{ const n=Number(v); return (isFinite(n)&&n>0)?'renda '+brlCurto(n)+'/mês':''; };
+  const fmtFil=v=>{ if(v==null||v==='') return ''; if(Array.isArray(v)) return v.length?v.length+' filho'+(v.length>1?'s':''):''; const t=String(v).toLowerCase(); if(t==='sim') return 'com filhos'; if(t==='nao'||t==='não') return 'sem filhos'; const n=Number(v); return isFinite(n)?(n>0?n+' filho'+(n>1?'s':''):'sem filhos'):esc(String(v)); };
+  const ult=(s.funil&&s.funil.ult)?'últ. toque '+dataBR(s.funil.ult):'';
+  const h=[
+    linha('👤','Identidade',[idade?idade+' anos':'', nasc?'nasc. '+dataBR(nasc):'', (sexo&&sexo!=='—')?esc(String(sexo)):'']),
+    linha('📞','Contato',tels.map(t=>esc(telBR(t))).concat([email?esc(String(email)):''])),
+    linha('💼','Perfil',[prof?esc(String(prof)):'', cid?esc(String(cid)):'', fmtRenda(renda), civ?esc(String(civ)):'', fmtFil(fil)]),
+    linha('🤝','Origem',[rec?'rec. '+esc(String(rec)):'', ctx?esc(String(ctx)):'', tri?esc(String(tri)):'']),
+    linha('🎯','Funil', s.funil?[esc(String(s.funil.etapa)), (s.funil.funil&&s.funil.funil!=='nn')?esc(String(s.funil.funilNome||s.funil.funil)):'', ult]:['sem negócio aberto']),
+    linha('🛡','Carteira', s.cart?[s.cart.n+' apólice'+(s.cart.n===1?'':'s'), s.cart.cs?'CS '+brlCurto(s.cart.cs):'', s.cart.pm?brlCurto(s.cart.pm)+'/mês':'']:['não é cliente da carteira'])
+  ].join('');
+  return `<div class="fp" data-fp="${esc(tipo||'')}">${h}</div>`;
+}
+window.fichaPessoaHtml=fichaPessoaHtml; window.fichaPessoaResumo=fichaPessoaResumo;
 
 /* ════ INGESTÃO SNAPSHOT POR LP — preserva status_* por chave (P0, inegociável) ════
    - substitui as listas SÓ dos LPs presentes no arquivo (outros LPs intactos);
@@ -11738,7 +11798,8 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
       const pr=cartPerfilResumo(c.ref);
       const cobRes=[cob.cs?'CS '+brlCurto(cob.cs):'',cob.pm?brlCurto(cob.pm)+'/mês':'',gaps.length?'sem '+gaps.map(g=>g[1]).join('/'):''].filter(Boolean).join(' · ');
       const bl=(k,t,res,corpo)=>iniBloco(k,t,res,corpo).replace('class="ini-bl','class="ini-bl cf-bl');
-      return (radItens.length?bl('cf-radar','📡 No relatório da semana',radItens.map(i=>i.t).join(' · '),radHTML.replace(/<h3[^>]*>.*?<\/h3>/,'')):'')
+      return bl('cf-quem','👤 Quem é a pessoa',fichaPessoaResumo(c,'cliente')||'—',fichaPessoaHtml(c,'cliente'))
+        +(radItens.length?bl('cf-radar','📡 No relatório da semana',radItens.map(i=>i.t).join(' · '),radHTML.replace(/<h3[^>]*>.*?<\/h3>/,'')):'')
         +bl('cf-neg','Negócios e emissão',negs||emis?[negs?negs+' negócio(s)':'',emis?emis+' na emissão':''].filter(Boolean).join(' · '):'nenhum negócio aberto',cliCardHtml(dcli,{modo:'carteira'}))
         +bl('cf-perfil','👨‍👩‍👧 Pessoa e família',pr.length?pr.slice(0,2).join(' · '):'nada anotado',cartPerfilHtml(c).replace(/<h3[^>]*>.*?<\/h3>/,''))
         +`<div class="ini-bl cf-bl${iniAberto('cf-cob')?'':' fechado'}" data-ini="cf-cob"><button class="ini-h" onclick="iniToggle('cf-cob')" aria-expanded="${iniAberto('cf-cob')?'true':'false'}"><span class="ini-car">${iniAberto('cf-cob')?'▾':'▸'}</span><span class="ini-t">Coberturas vigentes</span><span class="ini-res">${esc(cobRes)}</span></button><div class="ini-b">`; })()}
@@ -12518,6 +12579,8 @@ function bnUndoBarra(){ return (_bnUndoCels&&_bnUndoCels.length)
   : ''; }
 function bnEditorHtml(c){
   return `<div class="card" style="padding:12px;background:var(--bg)">
+    <details open style="margin-bottom:10px"><summary style="cursor:pointer;font-weight:700;font-size:13px">👤 Quem é a pessoa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(fichaPessoaResumo(c,'lead'))}</span></summary>
+      <div style="margin-top:8px">${fichaPessoaHtml(c,'lead')}</div></details>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px">
       <label>Nome<input id="bne-nome" value="${esc(c.nome)}"></label>
       <label>Contexto (sufixo do nome)<input id="bne-ctx" value="${esc(c.contexto||'')}" placeholder="ex.: Faculdade, MED Radiologista"></label>
@@ -14755,6 +14818,18 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('GC-29: SitPlan acha nomes nunca abordados (sem resultado logado) e sabe puxar pra lista', (()=>{ const frio={interacoes:[]}, ligou={interacoes:[{k:'lig_atendida',dia:hojeISO()}]}, zap={interacoes:[{k:'whatsapp',dia:hojeISO()}]}, soEtapa={interacoes:[{k:'etapa',para:'TA',dia:hojeISO()}]}; return typeof spPuxarNaoAbord==='function'&&typeof spNaoAbordados==='function'&&!spAbordado(frio)&&spAbordado(ligou)&&spAbordado(zap)&&!spAbordado(soEtapa); })());
     /* GC-38 (08/09): autoassinatura no fim de toda mensagem pronta (vazia = sem rabo) */
     ok('GC-38: autoassinatura entra no fim da mensagem quando setada e some quando vazia', (()=>{ const _a=ASSINAT; try{ ASSINAT='— Gabi'; const comp=msgProntaTexto('abordagem'); ASSINAT=''; const vazio=msgComAssinatura('Oi'); return typeof abrirAssinatura==='function'&&/\n\n— Gabi$/.test(comp)&&vazio==='Oi'&&CFG_SECOES.some(s=>s.itens.some(i=>i.acao==='abrirAssinatura()')); } finally{ ASSINAT=_a; } })());
+    /* FICHA-PESSOA-V1 (09/09): o mesmo bloco nas 3 fichas, lendo os 3 fichários; sem vazamento de undefined */
+    ok('FICHA-PESSOA-V1: "quem é a pessoa" lê lead/card/cliente igual (profissão, cidade, telefone, renda, civil, filhos) sem undefined', (()=>{ const _c=S.contatos; try{ S.contatos=[];
+      const base={nome:'Ana Silva',telefone:'(81) 99999-0000',email:'ana@x.com',idade:41};
+      const lead=Object.assign({},base,{cargo:'Dentista',cidade:'Recife',renda_estimada:9000,estado_civil:'Casado(a)',filhos:'sim',recomendante:'Fulano',contexto:'clube',trilha:'seguro'});
+      const card=Object.assign({},base,{id:'fpc',funil:'nn',etapa:'TA',profissao:'Dentista',cidade:'Recife',renda_estimada:9000,estado_civil:'Casado(a)',filhos:'sim',recomendante:'Fulano',interacoes:[]});
+      const cli=Object.assign({},base,{ref:'ana silva',celular:'81999990000',perfil:{profissao:'Dentista',estadoCivil:'Casado(a)'},cob:{cs:500000,pm:300},cidade:'Recife'});
+      const hs=[fichaPessoaHtml(lead,'lead'),fichaPessoaHtml(card,'card'),fichaPessoaHtml(cli,'cliente')];
+      const okTodos=hs.every(h=>/Dentista/.test(h)&&/Recife/.test(h)&&/99999-0000/.test(h)&&/ana@x\.com/.test(h)&&/41 anos/.test(h)&&!/undefined|null|NaN/.test(h));
+      const okLead=/renda R\$ 9/.test(hs[0])&&/com filhos/.test(hs[0])&&/rec\. Fulano/.test(hs[0]);
+      const okCard=/TA/.test(hs[1]);
+      const okCli=/CS R\$ 500/.test(hs[2])&&/300/.test(hs[2]);
+      return okTodos&&okLead&&okCard&&okCli&&fichaPessoaResumo(lead,'lead').indexOf('Dentista')===0; } finally{ S.contatos=_c; } })());
     /* FUNIL-ORDEM-V1 (09/09): ordem manual na coluna, independente de filtro */
     ok('FUNIL-ORDEM-V1: soltar na mesma coluna grava c.ord na coluna inteira; filtrado-fora mantém posição; outra coluna intacta; ⬆⬇', (()=>{ const _c=S.contatos,_o=NN_ORD; try{ NN_ORD='livre';
       const A={id:'oA',nome:'A',funil:'nn',etapa:'TA'},B={id:'oB',nome:'B',funil:'nn',etapa:'TA'},C={id:'oC',nome:'C',funil:'nn',etapa:'TA'},X={id:'oX',nome:'X',funil:'nn',etapa:'OI/FF'};
