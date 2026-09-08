@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.8 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.9 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1255,7 +1255,7 @@
       <button class="tb-link tb-so-mob" id="tb-mais" onclick="tbMais()" title="Mais ações" aria-label="Mais ações">⋯</button>
       <button class="tb-link" id="tb-mais-rapido" onclick="maisRapido()" title="Adicionar rápido: contato, negócio, nome no Estoque, tarefa, evento…">＋ Adicionar</button>
       <span id="px-escopo"></span>
-      <span class="tag">PipeX · v7.8 · Vendas LP</span>
+      <span class="tag">PipeX · v7.9 · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='index.html'" title="Ir para o CRM de Captação">⇄ Captação</button>
@@ -1277,7 +1277,7 @@
     </div></div>
 
     <div class="rodape">
-      <span>CRM SeguroComJucá · Vendas LP v7.8 — celular e desktop, cada um no seu formato.</span>
+      <span>CRM SeguroComJucá · Vendas LP v7.9 — celular e desktop, cada um no seu formato.</span>
       <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
     </div>
   </main>
@@ -12780,9 +12780,17 @@ fxSheetReg('rec',()=>({titulo:'Filtros das Recomendações',
   inputs:[{k:'cid',l:'Cidade'},{k:'min',l:'Mín. de nomes por rec.',extra:'type="number" min="2"'}],
   limpar:()=>recFiltroLimpar(),
   ver:()=>'Ver recomendações'}));
+/* GC-10 (08/09): status do PRÓPRIO recomendante na base — priorize ligar pra rec de quem já fez N/PC.
+   Índice 1×/render por nome normalizado; prioridade cliente > funil > estoque. */
+function recStatusIndex(){ const m=new Map();
+  (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>{ const k=normKey(b.nome); if(k&&!m.has(k)) m.set(k,{txt:(typeof BN_EST_LABEL!=='undefined'&&BN_EST_LABEL[b.estagio])||b.estagio||'no estoque',cls:'b-cinza',ico:'📇'}); });
+  (S.contatos||[]).forEach(c=>{ const k=normKey(c.nome); if(k) m.set(k,{txt:(ET_LABEL[c.etapa]||c.etapa),cls:(ET_BADGE[c.etapa]||'b-cinza'),ico:'🎯'}); });
+  (typeof CART!=='undefined'&&CART.clientes||[]).forEach(c=>{ const k=c.ref||normKey(c.nome); if(k) m.set(k,{txt:'já é cliente',cls:'b-verde',ico:'🛡️'}); });
+  return m; }
 function viewBnRecs(){
   fxReg('rec',BNR,'viewBnRecs');
   const all=bnVivos().filter(b=>(b.recomendante||'').trim());
+  const _ridx=recStatusIndex();
   const cnt=t=>all.filter(b=>b.trilha===t).length;
   const TABS=[['all','Todas',all.length],['seguro','Seguro',cnt('seguro')],['recrutamento','Recrutamento',cnt('recrutamento')]];
   let lista=BNR.tab==='all'? all.slice() : all.filter(b=>b.trilha===BNR.tab);
@@ -12861,6 +12869,8 @@ function viewBnRecs(){
           <span style="font-size:12px;color:var(--muted);width:14px">${ab?'▾':'▸'}</span>
           <span style="font-weight:800;font-size:15px">🙌 ${esc(n)}</span>
           <span style="font-size:12px;font-weight:700;color:var(--muted);background:var(--bg);padding:2px 9px;border-radius:8px">${groups[n].length}</span>
+          ${(()=>{ const st=_ridx.get(normKey(n)); return st?`<span class="badge ${st.cls}" style="font-size:10.5px" title="Status do recomendante na sua base — priorize quem já fez N/PC">${st.ico} ${esc(st.txt)}</span>`:''; })()}
+          ${BNR.recom!==n?`<button class="btn btn-ghost btn-mini" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();BNR.recom='${esc(jsq(n))}';viewBnRecs()" title="Ver só as recomendações deste recomendante">👁 só este</button>`:''}
           ${!ab? `<span style="font-size:11.5px;color:var(--muted);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(groups[n].slice(0,4).map(b=>b.nome).join(' · '))}${groups[n].length>4?' …':''}</span>`:''}
         </div>
         ${ab? `<div style="display:flex;flex-direction:column;gap:6px">${groups[n].map(row).join('')}</div>`:''}
@@ -14520,6 +14530,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('BC v7.6: ganho aponta pra Venda ganha (emitida) e concluir entrega devolve pra Ativos', funEtapaGanho('bc')==='Venda ganha'&&typeof bcConcluirEntrega==='function'&&BC_DELIVERY==='Delivery'&&BC_EMITIDA==='Venda ganha');
     /* METAS-V7.7 (07/09): trimestre + metas de emissão (apólices/PA) contadas do funil */
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
+    /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
+    ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
     /* PERSISTÊNCIA / PT-B (07/09): lê o Extrato Consolidado de Comissão (PAV/PANCEC/%) */
     ok('Persistência: parse do Extrato (PAV/PANCEC/%) + detector + view + simulador', (()=>{ const EXT="Extrato Consolidado de Comissão\nMês / Ano: Jan/26 (Mensal) Período: 20/12/2025 a 20/01/2026\nAgência: 288 Island\nTipo de Atividade: Master Franqueado B (MFB)\nCPD: 000000\nComissão Bruta 10.000,00\nVr. Líquido de Impostos 9.000,00\nPAV Mês Atual 100.000,00\nPANCEC Mês Atual 125.000,00\n% Persistência PAV/PANCEC Mês Atual 80,00\n"; const secs=pxComParse(EXT); const s0=secs[0]||{}; return secs.length===1&&s0.pav===100000&&s0.pancec===125000&&s0.persist===80&&s0.bruta===10000&&s0.cpd==='000000'&&relDetectar(EXT)==='persistencia'&&typeof viewPersistencia==='function'&&HUB_VIEWS.includes('persistencia'); })());
     ok('bc: a etapa extinta não volta nem pela cfg do servidor', (()=>{ const _c=JSON.parse(JSON.stringify(FUNIL_CFG)); try{ FUNIL_CFG.bc.push({id:'Pendência/Atraso',label:'Pendência/Atraso',cor:'verm',prob:10}); rebuildFunilLp(); return !ETAPAS_BC.includes('Pendência/Atraso'); } finally{ FUNIL_CFG=_c; rebuildFunilLp(); } })());
