@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.15 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.16 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -8667,6 +8667,44 @@ function pessoaChaves(o,camposNome,camposTel){
 }
 function recKey(rec,keys){ for(const k of keys){ const v=normKey(rec[k]); if(v) return v; } return ''; }
 
+/* ═══ PESSOA-CAMPOS-V1 (08/09): campo único da PESSOA na PORTA ═══════════════
+   A mesma pessoa mora em 3 fichários com nomes de campo diferentes:
+     • lead (estoque/recs): cargo, cidade, renda_estimada, estado_civil, filhos, telefones_alt
+     • card (funil):        profissao, telefone
+     • cliente (carteira):  perfil.profissao, celular/telefone/telComercial, nascimento
+   Renomear quebraria dado já salvo (Supabase jsonb + localStorage). Então um
+   ACESSADOR ÚNICO lê qualquer um dos três — normalizador na PORTA, mesma lição
+   da carteira. Conceitos DIFERENTES NÃO se fundem: renda_estimada (renda pessoal
+   do lead) ≠ cob.renda (cobertura de renda da apólice); pm/cs do NEGÓCIO ≠ da
+   APÓLICE. É a base que a ficha única e a extensão do WhatsApp vão consumir. */
+function _pf(){ for(let i=0;i<arguments.length;i++){ const x=arguments[i]; if(x!=null&&x!==''&&x!=='—') return x; } return null; }
+function pNome(o){ return (o&&(o.nome||o.segurado))||''; }
+function pIdade(o){ const v=o&&o.idade; return (v!=null&&v!=='')?(Number(v)||null):null; }
+function pNascimento(o){ return _pf(o&&o.nascimento, o&&o.nasc); }
+function pSexo(o){ return _pf(o&&o.sexo); }
+function pEmail(o){ return _pf(o&&o.email); }
+function pProfissao(o){ return _pf(o&&o.profissao, o&&o.cargo, o&&o.perfil&&o.perfil.profissao); }
+function pCidade(o){ return _pf(o&&o.cidade, o&&o.perfil&&o.perfil.cidade); }
+function pRendaPessoal(o){ return _pf(o&&o.renda_estimada, o&&o.renda, o&&o.dados&&o.dados.renda); }  /* ≠ cob.renda (cobertura) */
+function pEstadoCivil(o){ return _pf(o&&o.estado_civil, o&&o.civil, o&&o.perfil&&o.perfil.estadoCivil); }
+function pFilhos(o){ return _pf(o&&o.filhos, o&&o.perfil&&o.perfil.filhos); }
+function pRecomendante(o){ return _pf(o&&o.recomendante); }
+/* união de TODOS os telefones da pessoa, deduplicada pela chave telKey */
+function pTels(o){ if(!o) return [];
+  const raw=[o.telefone,o.celular,o.telComercial,o.tel,o.cel].concat(Array.isArray(o.telefones_alt)?o.telefones_alt:[],Array.isArray(o.telefonesExtra)?o.telefonesExtra:[]);
+  const seen=new Set(), out=[];
+  raw.forEach(t=>{ if(t==null||t==='') return; const k=telKey(t)||String(t).replace(/\D/g,''); if(k&&!seen.has(k)){ seen.add(k); out.push(String(t).trim()); } });
+  return out; }
+function pTel(o){ return pTels(o)[0]||null; }
+/* promover lead → card SEM perder dado (era o vazamento do bnPromover): carrega
+   os campos estruturados, não só nome/tel/idade/profissão. */
+function pessoaLeadToCard(b){ return { id:'bn'+Date.now(), lp:S.activeUser, funil:'nn', nome:b.nome,
+  telefone:b.telefone||'', telefones_alt:Array.isArray(b.telefones_alt)?b.telefones_alt.slice():[],
+  etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'', contexto:b.contexto||'',
+  idade:b.idade||'', profissao:b.cargo||'', cidade:b.cidade||'', renda_estimada:b.renda_estimada||'',
+  estado_civil:b.estado_civil||'', filhos:b.filhos||'', email:b.email||'', trilha:b.trilha||'',
+  notas:b.notas||'', criadoEm:hojeISO(), sitplan:null }; }
+
 /* ════ INGESTÃO SNAPSHOT POR LP — preserva status_* por chave (P0, inegociável) ════
    - substitui as listas SÓ dos LPs presentes no arquivo (outros LPs intactos);
    - item que reaparece: mantém status_*, _entrou; reseta _resolvido; atualiza dados;
@@ -11349,7 +11387,7 @@ function msgProntaCarteira(ref,key,extra){ const c=(cartVis()||[]).find(x=>x.ref
 window.msgProntaCarteira=msgProntaCarteira;
 /* ctx de um contato do FUNIL (usa clienteDe pra puxar coberturas quando ele é cliente da carteira) */
 function msgCtxContato(c){ let cob='sua proteção atual'; try{ const cd=clienteDe(c); if(cd&&cd.cli) cob=msgCoberturasResumo(cd.cli); else if(cd&&cd.pm) cob=msgCoberturasResumo({cob:{pm:cd.pm,cs:cd.cs}}); }catch(_){}
-  return {nome:c&&c.nome, sexo:c&&c.sexo, tel:c&&c.telefone, coberturas:cob}; }
+  return {nome:c&&c.nome, sexo:c&&c.sexo, tel:pTel(c)||(c&&c.telefone), coberturas:cob}; }
 function msgProntaContato(id,key){ const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c){ toast('Contato não encontrado',false); return; } msgPronta(msgCtxContato(c),key); }
 window.msgProntaContato=msgProntaContato;
 
@@ -12479,10 +12517,7 @@ function bnSalvarEdicao(id){
 function bnPromover(id){
   const b=bnPor(id); if(!b) return;
   if(b.funil_contato_id && S.contatos.some(x=>x.id===b.funil_contato_id)){ abrirContato(b.funil_contato_id); return; }
-  const c={id:'bn'+Date.now(), lp:S.activeUser, funil:'nn', nome:b.nome, telefone:b.telefone||'',
-    etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'',
-    idade:b.idade||'', profissao:b.cargo||'', notas:[b.notas,b.contexto&&('ctx: '+b.contexto),(b.telefones_alt||[]).length&&('outros tel: '+b.telefones_alt.join(', '))].filter(Boolean).join(' | '),
-    criadoEm:hojeISO(), sitplan:null};
+  const c=pessoaLeadToCard(b);   /* PESSOA-CAMPOS-V1: carrega TUDO (cidade, renda, civil, filhos, email, trilha), não só nome/tel/idade/profissão */
   S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id;
   salvar(); bnSalvar(); render(); toast(b.nome.split(' ')[0]+' agora é contato do funil ✓',true);
 }
@@ -14651,6 +14686,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* PESSOA-CAMPOS-V1 (08/09): acessador único lê os 3 fichários; promover lead→card é lossless; renda pessoal ≠ cobertura */
+    ok('PESSOA-CAMPOS-V1: campo único lê lead/card/cliente, promover não perde dado e não funde renda pessoal com cobertura', (()=>{
+      const lead={nome:'Ana Silva',cargo:'Dentista',cidade:'Recife',renda_estimada:9000,estado_civil:'casado',filhos:'2',email:'ana@x.com',telefone:'(81) 99999-0000',telefones_alt:['81 3000-1111'],recomendante:'Fulano',contexto:'clube',trilha:'seguro',idade:41};
+      const cli={nome:'Ana Silva',perfil:{profissao:'Dentista',estadoCivil:'casado'},celular:'81999990000',telComercial:'8130001111',nascimento:'1985-03-10',cob:{renda:500000}};
+      const acc = pProfissao(lead)==='Dentista'&&pProfissao(cli)==='Dentista'&&pCidade(lead)==='Recife'&&pRendaPessoal(lead)===9000&&pEstadoCivil(cli)==='casado'&&pFilhos(lead)==='2'&&pEmail(lead)==='ana@x.com'&&pIdade(lead)===41&&pNascimento(cli)==='1985-03-10'&&pRecomendante(lead)==='Fulano'&&pTels(lead).length===2&&pTels(cli).length===2&&pTel(cli)!=null;
+      const card=pessoaLeadToCard(lead);
+      const loss = card.cidade==='Recife'&&card.renda_estimada===9000&&card.estado_civil==='casado'&&card.filhos==='2'&&card.email==='ana@x.com'&&card.recomendante==='Fulano'&&card.contexto==='clube'&&card.trilha==='seguro'&&pProfissao(card)==='Dentista'&&pTels(card).length===2;
+      return acc&&loss&&pRendaPessoal(cli)==null; })());
     /* GC-33 (08/09): lente "de cliente" nas Recomendações — recomendante que virou cliente (🛡️) */
     ok('GC-33: recomendante que já é cliente é detectável pra lente "de cliente" das Recomendações', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Ana Fã',ref:'ana fa',cob:{pm:1}})]; const idx=recStatusIndex(); const cli=idx.get(normKey('Ana Fã')); return !!cli&&cli.ico==='🛡️'&&!idx.get(normKey('Ze Ninguem'))&&('soCli' in BNR)&&typeof recFiltrosAtivos==='function'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
     /* GC-44 (08/09): anotações da reunião entram na ficha (t.notas) e na timeline ao finalizar */
