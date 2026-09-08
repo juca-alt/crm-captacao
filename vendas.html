@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.14 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.15 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -12816,7 +12816,7 @@ async function bnResultadoDesfazer(id){
    abrir/fechar. `abertos` guarda quem está EXPANDIDO; `modo` decide o padrão
    (recolhido é o default: com 300+ recomendantes a tela era uma rolagem sem
    fim). A escolha fica por aparelho, como as colunas. */
-let BNR={tab:'all',recom:'',busca:'',trilha:'',estagio:'',pri:'',tel:'',cid:'',ord:'qtd',min:'',pop:'',sort:'',dir:1};
+let BNR={tab:'all',recom:'',busca:'',trilha:'',estagio:'',pri:'',tel:'',cid:'',ord:'qtd',min:'',pop:'',sort:'',dir:1,soCli:false};
 const BNR_CAMPOS=['busca','trilha','estagio','pri','tel','cid','min'];
 /* Modo TABELA das Recomendações (item 2.2): a planilha do Estoque já existia —
    catálogo de colunas, edição na célula, ordenação por cabeçalho e ações em
@@ -12881,8 +12881,8 @@ function recTabelaHtml(l,row){
 function recTgl(n){ const i=RECP.abertos.indexOf(n); if(i>=0) RECP.abertos.splice(i,1); else RECP.abertos.push(n);
   recPrefSalvar(); viewBnRecs(); }
 function recTodos(abrir){ RECP.modo=abrir?'aberto':'fechado'; RECP.abertos=[]; recPrefSalvar(); viewBnRecs(); }
-function recFiltroLimpar(){ BNR_CAMPOS.forEach(k=>BNR[k]=''); BNR.recom=''; viewBnRecs(); }
-function recFiltrosAtivos(){ return BNR_CAMPOS.filter(k=>k!=='busca'&&BNR[k]).length+(BNR.recom?1:0); }
+function recFiltroLimpar(){ BNR_CAMPOS.forEach(k=>BNR[k]=''); BNR.recom=''; BNR.soCli=false; viewBnRecs(); }
+function recFiltrosAtivos(){ return BNR_CAMPOS.filter(k=>k!=='busca'&&BNR[k]).length+(BNR.recom?1:0)+(BNR.soCli?1:0); }
 /* spec do sheet de filtros das Recomendações (celular) */
 fxSheetReg('rec',()=>({titulo:'Filtros das Recomendações',
   grupos:[
@@ -12905,6 +12905,9 @@ function viewBnRecs(){
   fxReg('rec',BNR,'viewBnRecs');
   const all=bnVivos().filter(b=>(b.recomendante||'').trim());
   const _ridx=recStatusIndex();
+  /* GC-33: recomendante que já virou cliente = 🛡️ no índice de status (GC-10). A lente "de cliente" isola esses. */
+  const _recomEhCli=nome=>{ const st=_ridx.get(normKey((nome||'').trim())); return !!st&&st.ico==='🛡️'; };
+  const _cliRecomSet=new Set(all.filter(b=>_recomEhCli(b.recomendante)).map(b=>b.recomendante.trim()));
   const cnt=t=>all.filter(b=>b.trilha===t).length;
   const TABS=[['all','Todas',all.length],['seguro','Seguro',cnt('seguro')],['recrutamento','Recrutamento',cnt('recrutamento')]];
   let lista=BNR.tab==='all'? all.slice() : all.filter(b=>b.trilha===BNR.tab);
@@ -12919,6 +12922,7 @@ function viewBnRecs(){
   if(BNR.tel==='com') lista=lista.filter(b=>b.telefone);
   if(BNR.tel==='sem') lista=lista.filter(b=>!b.telefone);
   if(BNR.cid){ const q=BNR.cid.toLowerCase(); lista=lista.filter(b=>(b.cidade||'').toLowerCase().includes(q)); }
+  if(BNR.soCli) lista=lista.filter(b=>_recomEhCli(b.recomendante));   /* GC-33: só recs de quem já é cliente */
   const groups={}; lista.forEach(b=>{ const k=b.recomendante.trim(); (groups[k]=groups[k]||[]).push(b); });
   if(BNR.min){ const m=Number(BNR.min)||0; Object.keys(groups).forEach(k=>{ if(groups[k].length<m) delete groups[k]; }); }
   const names=Object.keys(groups).sort((a,b)=> BNR.ord==='nome'? a.localeCompare(b,'pt-BR')
@@ -12947,6 +12951,7 @@ function viewBnRecs(){
       <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('rec')">🎛️ Filtros${recFiltrosAtivos()?' ('+recFiltrosAtivos()+')':''}</button>
       ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnRecs()" title="Recomendados de qual Life Planner"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">LP ${esc(String(u.nome).split(' ')[0])}</option>`).join('')}</select>`:''}
       <select onchange="BNR.recom=this.value;viewBnRecs()" style="max-width:280px"><option value="">Recomendante: todos (${recomSet.length})</option>${recomSet.map(r=>`<option ${BNR.recom===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
+      <button class="btn btn-mini ${BNR.soCli?'btn-p':'btn-s'}" onclick="BNR.soCli=!BNR.soCli;viewBnRecs()" title="Só recomendações de quem JÁ É seu cliente — seus fãs que indicam">🛡️ De cliente${_cliRecomSet.size?' ('+_cliRecomSet.size+')':''}</button>
       ${recFiltrosAtivos()? `<button class="btn btn-s btn-mini" onclick="recFiltroLimpar()">Limpar filtros (${recFiltrosAtivos()})</button>`:''}
     </div>
     <div class="toolbar" style="flex-wrap:wrap">
@@ -14646,6 +14651,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* GC-33 (08/09): lente "de cliente" nas Recomendações — recomendante que virou cliente (🛡️) */
+    ok('GC-33: recomendante que já é cliente é detectável pra lente "de cliente" das Recomendações', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Ana Fã',ref:'ana fa',cob:{pm:1}})]; const idx=recStatusIndex(); const cli=idx.get(normKey('Ana Fã')); return !!cli&&cli.ico==='🛡️'&&!idx.get(normKey('Ze Ninguem'))&&('soCli' in BNR)&&typeof recFiltrosAtivos==='function'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
     /* GC-44 (08/09): anotações da reunião entram na ficha (t.notas) e na timeline ao finalizar */
     ok('GC-44: finalizar reunião com anotações grava na tarefa e cria nota na linha do tempo', (()=>{ const c={id:'g44',nome:'Reun Teste',etapa:'OI/FF',funil:'nn',interacoes:[],tarefas:[]}; const t={id:'tt',tipo:'reuniao',quando:'2026-01-01',feito:null,notas:'',interacoes:[]}; c.tarefas.push(t); const n0=interacoesDe(c).length; reunAplicar(c,t,'sem_avanco',null,'cliente pediu proposta enxuta'); return t.notas==='cliente pediu proposta enxuta'&&interacoesDe(c).some(i=>i.k==='nota'&&/Anota/.test(i.l)&&/enxuta/.test(i.l))&&interacoesDe(c).length===n0+2; })());
     /* GC-25 (08/09): lembrete flexível de reunião (véspera/no dia) com msg pronta pro cliente */
