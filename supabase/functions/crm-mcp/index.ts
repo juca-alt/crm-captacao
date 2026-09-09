@@ -6,11 +6,14 @@
 // esse token do dono (role:authenticated) -> o RLS (dono/lp_email = jwt.email) confina.
 // service_role só resolve o token do conector e emite o token efêmero; NUNCA toca dado.
 // v2.1 (08/09/2026): busca em listar_contatos filtra por dados->>nome (jsonb não aceita ilike direto).
+// v2.2 (09/09/2026): importação em LOTE — criar_contatos_lote (até 200, um único INSERT, upsert idempotente
+//   por (dono,ref_base)) e atualizar_contatos_lote (merge por id). Resposta ENXUTA {criados/atualizados,erros}
+//   com Prefer return=minimal — NÃO ecoa os registros (o eco é o que estourava o limite de token do cliente).
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUB = "sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR";
-const SERVER = { name: "crm-seguros-lp", version: "2.1.0" };
+const SERVER = { name: "crm-seguros-lp", version: "2.2.0" };
 const PROTOCOL = "2024-11-05";
 
 const CORS = {
@@ -110,6 +113,8 @@ const TOOLS = [
   { name: "listar_contatos", description: "Lista os SEUS contatos/nomes (base LP). 'busca' filtra pelo nome. Só a sua base.", inputSchema: { type: "object", properties: { busca: { type: "string" }, limite: { type: "number" } } } },
   { name: "criar_contato", description: "Cria um novo contato na SUA base. Campos em 'dados' (nome, telefone, recomendante, etapa, obs).", inputSchema: { type: "object", properties: { dados: { type: "object" } }, required: ["dados"] } },
   { name: "atualizar_contato", description: "Atualiza um contato SEU pelo id. Só os campos de 'dados' que mudam (merge).", inputSchema: { type: "object", properties: { id: { type: "string" }, dados: { type: "object" } }, required: ["id", "dados"] } },
+  { name: "criar_contatos_lote", description: "Cria/atualiza VÁRIOS contatos de uma vez (até 200), num único INSERT. Idempotente por 'ref_base' (único por conta): reenviar o mesmo lote ATUALIZA em vez de duplicar. Resposta ENXUTA {criados, erros} — NÃO devolve os registros criados (isso pouparia token).", inputSchema: { type: "object", properties: { contatos: { type: "array", items: { type: "object", properties: { ref_base: { type: "string" }, dados: { type: "object" } } } } }, required: ["contatos"] } },
+  { name: "atualizar_contatos_lote", description: "Atualiza VÁRIOS contatos SEUS de uma vez (até 200), por id, fazendo merge dos campos de 'dados'. Resposta ENXUTA {atualizados, erros} — não devolve os registros.", inputSchema: { type: "object", properties: { atualizacoes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, dados: { type: "object" } }, required: ["id", "dados"] } } }, required: ["atualizacoes"] } },
   { name: "listar_substituicoes", description: "Lista as SUAS apólices em Substituição (clientes + apólices). Só a sua base.", inputSchema: { type: "object", properties: { limite: { type: "number" } } } },
   { name: "listar_atrasos", description: "Lista a SUA Lista de Atraso (apólices vencidas em tratativa). Só a sua base.", inputSchema: { type: "object", properties: { limite: { type: "number" } } } },
   { name: "atualizar_atraso", description: "Atualiza a tratativa/próximo contato de um item SEU da Lista de Atraso, pelo id.", inputSchema: { type: "object", properties: { id: { type: "number" }, tratativa: { type: "string" }, prox_contato: { type: "string" } }, required: ["id"] } },
@@ -142,6 +147,47 @@ async function callTool(name, args, ctx) {
       const out = await rest(`lp_contatos?id=eq.${encodeURIComponent(args.id)}`, ctx.access, { method: "PATCH", body: JSON.stringify({ dados: merged }) });
       await audit(ctx.access, ctx.dono, "atualizar_contato", "escrita", `lp_contatos:${args.id}`, { dados: args.dados });
       return out;
+    }
+    case "criar_contatos_lote": {
+      const arr = Array.isArray(args?.contatos) ? args.contatos : [];
+      if (!arr.length) return { criados: 0, erros: ["contatos vazio"] };
+      if (arr.length > 200) return { criados: 0, erros: ["máximo 200 por chamada"] };
+      const rows = arr.map((c) => {
+        const o = c || {};
+        const dados = (o.dados && typeof o.dados === "object") ? o.dados : (() => { const { ref_base, ...rest } = o; return rest; })();
+        return { dono: ctx.dono, ref_base: (o.ref_base != null && o.ref_base !== "") ? String(o.ref_base) : null, dados };
+      });
+      // um único INSERT ... ON CONFLICT (dono,ref_base) — resposta minimal (não ecoa os registros).
+      await rest(`lp_contatos?on_conflict=dono,ref_base`, ctx.access, {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows),
+      });
+      await audit(ctx.access, ctx.dono, "criar_contatos_lote", "escrita", "lp_contatos:lote", { n: rows.length });
+      return { criados: rows.length, erros: [] };
+    }
+    case "atualizar_contatos_lote": {
+      const arr = Array.isArray(args?.atualizacoes) ? args.atualizacoes : [];
+      if (!arr.length) return { atualizados: 0, erros: ["atualizacoes vazio"] };
+      if (arr.length > 200) return { atualizados: 0, erros: ["máximo 200 por chamada"] };
+      const ids = [...new Set(arr.map((a) => a && a.id).filter((x) => x != null).map(String))];
+      const inList = ids.map((x) => `"${x.replace(/["\\]/g, "")}"`).join(",");
+      const cur = ids.length ? await rest(`lp_contatos?id=in.(${inList})&select=id,dados`, ctx.access) : [];
+      const byId = new Map((cur || []).map((r) => [String(r.id), r.dados || {}]));
+      const rows = []; const erros = [];
+      for (const a of arr) {
+        const id = (a && a.id != null) ? String(a.id) : null;
+        if (!id || !byId.has(id)) { erros.push({ id: (a && a.id) ?? null, motivo: "não encontrado (RLS)" }); continue; }
+        rows.push({ dono: ctx.dono, id, dados: { ...byId.get(id), ...((a.dados && typeof a.dados === "object") ? a.dados : {}) } });
+      }
+      // um único upsert por (dono,id) com os dados já mesclados — resposta minimal.
+      if (rows.length) await rest(`lp_contatos?on_conflict=dono,id`, ctx.access, {
+        method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+        body: JSON.stringify(rows),
+      });
+      await audit(ctx.access, ctx.dono, "atualizar_contatos_lote", "escrita", "lp_contatos:lote", { n: rows.length, erros: erros.length });
+      return { atualizados: rows.length, erros };
     }
     case "listar_substituicoes": {
       const clientes = await rest(`subst_clientes?select=*&limit=${lim}`, ctx.access);
