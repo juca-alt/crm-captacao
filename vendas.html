@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.24 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.25 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2865,8 +2865,8 @@ function tarGcalUrl(c,t){
   const dia=t.quando.replace(/-/g,'');
   const hh=(t.hora||'09:00').split(':');
   const ini=dia+'T'+String(hh[0]).padStart(2,'0')+String(hh[1]||'00').padStart(2,'0')+'00';
-  const fimH=(Number(hh[0])+1)%24;
-  const fim=dia+'T'+String(fimH).padStart(2,'0')+String(hh[1]||'00').padStart(2,'0')+'00';
+  const fimMin=(Number(hh[0])*60+Number(hh[1]||0)+(Number(t.dur)||60))%(24*60);
+  const fim=dia+'T'+String(Math.floor(fimMin/60)).padStart(2,'0')+String(fimMin%60).padStart(2,'0')+'00';
   const tit=tarNomeTipo(t.tipo)+' · '+(c?c.nome:'');
   const det=tarEventoDescricao(c,t);
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(tit)+
@@ -2887,8 +2887,12 @@ function tarGcalAcaoHTML(c,t){
     const jaTem=!!(t&&t.gcalId);
     return `<button class="btn btn-s btn-mini" onclick="gcalCriarReuniaoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (etapa + cor)':'Criar na sua Agenda Google com a etapa no título + cor'}">📅${jaTem?'↻':'＋'}</button>`;
   }
+  if(t&&t.quando&&GCAL.conectado){
+    const jaTem=!!t.gcalId;
+    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (direto, sem abrir tela)':'Gravar na sua Agenda Google (direto, sem abrir tela)'}">📅${jaTem?'↻':'＋'}</button>`;
+  }
   const gc=tarGcalUrl(c,t);
-  return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido">📅</a>`:'';
+  return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido (conecte a Agenda em Agenda &amp; Tarefas pra gravar direto)">📅</a>`:'';
 }
 /* ═══ COMPROMISSO-WA-V1 (04/09) ════════════════════════════════════════════
    Pedido dele: na atividade agendada, um botão que manda ao cliente, pelo
@@ -2911,10 +2915,10 @@ function tarWaHref(c,t){ const m=tarWaMsg(c,t); if(!m) return ''; return cartWaU
 function tarWaAcaoHTML(c,t){ const h=tarWaHref(c,t); return h?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(h)}" target="_blank" rel="noopener" title="Enviar o compromisso ao cliente pelo WhatsApp (texto pronto)">💬 enviar</a>`:''; }
 /* ── mutadores ── */
 function tarContato(cid){ return (S.contatos||[]).find(c=>String(c.id)===String(cid)); }
-window.tarCriar = (cid,tipo,tit,quando,hora,notas) => {
+window.tarCriar = (cid,tipo,tit,quando,hora,notas,dur) => {
   const c=tarContato(cid); if(!c) return null;
   const t={id:uid(), tipo:tipo||'follow', tit:String(tit||'').trim()||tarNomeTipo(tipo),
-           quando:quando||hojeISO(), hora:hora||'', feito:null, notas:notas||'',
+           quando:quando||hojeISO(), hora:hora||'', dur:Number(dur)||60, feito:null, notas:notas||'',
            criadoEm:new Date().toISOString(), por:S.activeUser};
   tarefasDe(c).push(t);
   interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa criada: '+t.tit,dia:hojeISO(),ts:t.criadoEm,por:S.activeUser});
@@ -2965,9 +2969,12 @@ window.tarRemover = (cid,tid) => {
 window.tarNovaDoDrawer = () => {
   const c=ct(); if(!c) return;
   const tipo=$('#tarTipo').value, tit=$('#tarTit').value, quando=$('#tarData').value, hora=$('#tarHora').value;
+  const dur=(($('#tarDur')||{}).value)||'60';
   const lembrar=(($('#tarLembrar')||{}).value)||'nao';
   if(!quando){ toast('Escolha a data da próxima atividade'); return; }
-  const t=tarCriar(c.id,tipo,tit,quando,hora);
+  const t=tarCriar(c.id,tipo,tit,quando,hora,'',dur);
+  /* TAR-GCAL-DIRETO-V1 (08/09): com hora marcada e Agenda conectada, grava direto no Google — sem abrir tela. */
+  if(t&&hora&&GCAL.conectado) gcalCriarEventoDaTarefa(c.id,t.id,{silencioso:true});
   /* GC-25: só reunião gera lembrete pro cliente */
   if(t&&tipo==='reuniao'&&lembrar!=='nao'){ tarAgendarLembrete(c.id,quando,hora,lembrar); salvar(); render();
     toast('Lembrete do cliente agendado — '+(lembrar==='vespera'?'véspera':'no dia'),true); }
@@ -3681,6 +3688,7 @@ function tarBlocoDrawer(c){
       <input id="tarTit" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" placeholder="O que fazer (ex.: retomar a proposta)" onkeydown="if(event.key==='Enter')tarNovaDoDrawer()">
       <input id="tarData" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" type="date" value="${esc(isoAddDias(hojeISO(),1))}" style="flex:0 0 150px">
       <input id="tarHora" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" type="time" style="flex:0 0 110px">
+      <select id="tarDur" data-so-leitura="lido no +marcar — duração do compromisso, vai pro Google Agenda (TAR-GCAL-DIRETO-V1)" title="Duração — define o fim do evento na sua Agenda Google" style="flex:0 0 96px"><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60" selected>1 h</option><option value="90">1h30</option><option value="120">2 h</option></select>
       <select id="tarLembrar" data-so-leitura="lido no +marcar — lembrete de reunião pro cliente (GC-25)" title="Lembrar o cliente da reunião — derruba no-show" style="flex:0 0 168px;display:none"><option value="nao">🔔 Sem lembrete</option><option value="vespera">🔔 Lembrar na véspera</option><option value="dia">🔔 Lembrar no dia</option></select>
       <button class="btn btn-p btn-mini" onclick="tarNovaDoDrawer()">+ marcar</button>
     </div>
@@ -8435,11 +8443,33 @@ function gcalNovo(preNome,preDesc){
    Só tipo:'reuniao'. Etapa fora do mapa: cria com título cru, sem cor, e loga.
    Respeita evento com título ajustado à mão (prefixo não-canônico). */
 const _gcalReuniaoBusy={};
-function tarReuniaoInterval(t){ // início/fim ISO local a partir de quando+hora (1h padrão)
+function tarReuniaoInterval(t){ // início/fim ISO local a partir de quando+hora+dur (60 min padrão)
   const dia=(t&&t.quando)||hojeISO();
   const hh=String((t&&t.hora)||'09:00').split(':');
   const h=Number(hh[0])||9, m=Number(hh[1])||0, p2=n=>String(n).padStart(2,'0');
-  return { ini:dia+'T'+p2(h)+':'+p2(m)+':00', fim:dia+'T'+p2((h+1)%24)+':'+p2(m)+':00' };
+  const dur=Math.max(5,Number(t&&t.dur)||60);
+  const fimMin=(h*60+m+dur)%(24*60);
+  return { ini:dia+'T'+p2(h)+':'+p2(m)+':00', fim:dia+'T'+p2(Math.floor(fimMin/60))+':'+p2(fimMin%60)+':00' };
+}
+/* TAR-GCAL-DIRETO-V1 (08/09): qualquer atividade com hora entra na Agenda Google pela API
+   (reunião segue o caminho dela, com etapa + cor). Sem abrir tela; sincroniza se já tem evento. */
+async function gcalCriarEventoDaTarefa(cid,tid,op){
+  op=op||{};
+  const c=tarContato(cid); if(!c){ if(!op.silencioso) toast('Contato não encontrado — atualize',false); return; }
+  const t=tarefasDe(c).find(x=>x.id===tid); if(!t){ if(!op.silencioso) toast('Tarefa não encontrada — atualize',false); return; }
+  if(t.tipo==='reuniao') return gcalCriarReuniaoDaTarefa(cid,tid);
+  const chave=cid+'/'+tid; if(_gcalReuniaoBusy[chave]) return; _gcalReuniaoBusy[chave]=true;
+  try{
+    const titulo=tarNomeTipo(t.tipo)+' · '+(c.nome||'');
+    const {ini,fim}=tarReuniaoInterval(t);
+    const body={ summary:titulo, description:tarEventoDescricao(c,t), start:{dateTime:ini,timeZone:GCAL_TZ}, end:{dateTime:fim,timeZone:GCAL_TZ} };
+    if(t.gcalId){ await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),body,{sendUpdates:'none'}); toast('Agenda atualizada: '+titulo,true); }
+    else{ const ev=await gcalApi('POST','',body,{sendUpdates:'none'}); if(ev&&ev.id){ t.gcalId=ev.id; salvar(); }
+      interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na agenda Google: '+titulo,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+      toast('Gravado na sua Agenda Google: '+titulo+' · '+(t.hora||'')+' ('+(t.dur||60)+' min)',true); }
+    render(); gcalCarregar();
+  }catch(e){ toast('Não consegui gravar na agenda: '+(e&&e.message||e),false); }
+  finally{ delete _gcalReuniaoBusy[chave]; }
 }
 async function gcalCriarReuniaoDaTarefa(cid,tid){
   const c=tarContato(cid); if(!c){ toast('Contato não encontrado — atualize',false); return; }
