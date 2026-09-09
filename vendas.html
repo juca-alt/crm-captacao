@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.27 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.28 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6113,6 +6113,118 @@ function subPostec(a){
   const dia=(a.dia!=null&&a.dia>=1&&a.dia<=31)?a.dia:(a.venc?atParseISO(a.venc).getDate():null);
   if(dia==null) return null;
   return {dia, pos:pcPosicao(dia,em), melhor:pcMelhorDia(em), pgto:pcClassifica(dia,em)};
+}
+
+/* ═══ COMPONENTE SIMULADOR POSTECIPAÇÃO (PC-2) — widget reusável ═══════════════
+   Usa SÓ o motor PC-1. pcSimuladorHtml(o) é PURO: mesmo input -> mesmo HTML em
+   qualquer host (standalone PC-3 ou embutido num card PC-4). Interatividade
+   (grid clicável) via pcSimMount/pcSimSet. UI conforme o artefato, mobile-first. */
+const PC_MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function pcFmtCurto(iso){ if(!iso) return '—'; const p=String(iso).split('-'); return p[2]+'/'+(PC_MES[(+p[1])-1]||p[1]); }
+function pcFmtBR(iso){ if(!iso) return '—'; const p=String(iso).split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function pcDiaDe(iso){ const d=atParseISO(iso); return (d&&!isNaN(+d))?d.getDate():null; }
+function pcSimCalc(o){
+  o=o||{}; const venc=o.vencAberto, de=pcDiaDe(o.emissao);
+  if(de==null||!venc) return null;
+  const curDay=(o.diaAtual!=null?+o.diaAtual:pcDiaDe(venc));
+  const best=pcMelhorDia(de);
+  const curClass=(curDay!=null)?pcClassifica(curDay,de):null;
+  const pcAtual=(curDay!=null)?pcProximaCobranca(curDay,de,venc):null;
+  const pcBest=pcProximaCobranca(best,de,venc);
+  const novo=(o.novoDia!=null&&o.novoDia>=1&&o.novoDia<=31)?+o.novoDia:null;
+  const novoClass=novo?pcClassifica(novo,de):null;
+  const pcNovo=novo?pcProximaCobranca(novo,de,venc):null;
+  const dd=(a,b)=>(a&&b)?Math.round((atParseISO(a)-atParseISO(b))/86400000):null;
+  return {de,curDay,best,curClass,pcAtual,pcBest,novo,novoClass,pcNovo,ganhoBest:dd(pcBest,pcAtual),ganhoNovo:dd(pcNovo,pcAtual)};
+}
+function pcSimCss(){ return `<style id="pcsim-css">
+.pcsim{display:flex;flex-direction:column;gap:12px}
+.pcsim-verdict{display:flex;gap:16px;align-items:center;padding:16px 18px;flex-wrap:wrap}
+.pcsim-best{text-align:center;background:var(--verde-claro,#e3f2e9);border:1px solid var(--verde,#157f4b);border-radius:14px;padding:12px 18px;min-width:118px}
+.pcsim-best-k{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--verde,#157f4b);font-weight:700}
+.pcsim-best-v{font-size:46px;font-weight:800;line-height:1;color:var(--verde,#157f4b)}
+.pcsim-best-s{font-size:11px;color:var(--verde,#157f4b);opacity:.85}
+.pcsim-copy{flex:1;min-width:200px}
+.pcsim-copy h3{font-size:16px;margin:0 0 4px}
+.pcsim-copy p{margin:0;color:var(--muted);font-size:13.5px}
+.pcsim-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--linha);overflow:hidden;padding:0}
+@media(max-width:560px){.pcsim-tiles{grid-template-columns:1fr}.pcsim-verdict{padding:14px}}
+.pcsim-tile{background:var(--card,#fff);padding:12px 16px}
+.pcsim-k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+.pcsim-v{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pcsim-flow{font-variant-numeric:tabular-nums}
+.pcsim-arrow{color:var(--azul);font-weight:700}
+.pcsim-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600}
+.pcsim-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pcsim-pill.g{color:var(--verde,#157f4b);background:var(--verde-claro,#e3f2e9)}
+.pcsim-pill.w{color:var(--amar,#a9640f);background:var(--amar-claro,#faedd7)}
+.pcsim-gain{color:var(--verde,#157f4b);font-weight:600;font-size:13px}
+.pcsim-gain.neg{color:var(--amar,#a9640f)}
+.pcsim-grid-wrap{padding:14px 16px}
+.pcsim-grid-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:10px}
+.pcsim-legend{display:inline-flex;gap:10px;align-items:center}
+.pcsim-legend i{width:12px;height:12px;border-radius:4px;display:inline-block;margin-right:3px;vertical-align:-1px}
+.pcsim-legend i.g{background:var(--verde-claro,#e3f2e9);border:1px solid var(--verde,#157f4b)}
+.pcsim-legend i.w{background:var(--amar-claro,#faedd7);border:1px solid var(--amar,#a9640f)}
+.pcsim-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:7px}
+.pcsim-day{border:1px solid var(--linha);border-radius:10px;background:var(--fundo);padding:8px 6px;text-align:center;cursor:pointer;font:inherit;color:var(--ink)}
+.pcsim-day.g{background:var(--verde-claro,#e3f2e9);border-color:var(--verde,#157f4b)}
+.pcsim-day.w{background:var(--amar-claro,#faedd7);border-color:var(--amar,#a9640f)}
+.pcsim-day.sel{box-shadow:0 0 0 2px var(--azul);border-color:var(--azul)}
+.pcsim-day.dead{opacity:.4;cursor:not-allowed;border-style:dashed;background:transparent}
+.pcsim-dn{font-size:19px;font-weight:700;line-height:1}
+.pcsim-dc{font-size:10px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.pcsim-tags{display:flex;gap:3px;justify-content:center;flex-wrap:wrap;margin-top:5px;min-height:14px}
+.pcsim-tag{font-size:8px;font-weight:700;text-transform:uppercase;padding:2px 4px;border-radius:4px;line-height:1;color:#fff}
+.pcsim-tag.best{background:var(--verde,#157f4b)}
+.pcsim-tag.now{background:var(--azul)}
+.pcsim-tag.anchor{background:var(--muted)}
+.pcsim-erro{padding:16px;color:var(--muted);font-size:13px}
+</style>`; }
+function pcSimuladorHtml(o){
+  o=o||{}; const host=o.host||'pcsim'; const c=pcSimCalc(o);
+  if(!c) return `<div class="pcsim"><div class="pcsim-erro card">Informe a data de emissão e o vencimento em aberto pra simular.</div></div>`;
+  const pill=cls=> cls? `<span class="pcsim-pill ${cls==='postecipado'?'g':'w'}">${cls}</span>` : `<span class="pcsim-pill">—</span>`;
+  const gain=v=> v==null?'' : `<span class="pcsim-gain${v<0?' neg':''}">${v>=0?'+':''}${v} dias</span>`;
+  const antecip=c.curClass==='antecipado';
+  const titulo=antecip?`Dá pra postecipar — leve o vencimento pro dia ${c.best}.`:`Já está postecipada.`;
+  const texto=antecip
+    ? `Hoje está <b>antecipada</b> (paga antes de usar a cobertura). Mudar pro dia <b>${c.best}</b> torna <b>postecipada</b> e joga a próxima cobrança de ${pcFmtCurto(c.pcAtual)} pra <b>${pcFmtCurto(c.pcBest)}</b>${(c.ganhoBest>0)?` — ganho de <b>${c.ganhoBest} dias</b>`:''}.`
+    : `O dia atual (${c.curDay}) já paga <b>depois</b> do início da cobertura. O dia <b>${c.best}</b> é o ponto máximo de postecipação (próxima cobrança em ${pcFmtCurto(c.pcBest)}).`;
+  let grid='';
+  for(let d=1;d<=31;d++){
+    const cls=pcClassifica(d,c.de), pc=pcProximaCobranca(d,c.de,o.vencAberto), dead=!pc;
+    let tags=''; if(d===c.best) tags+=`<span class="pcsim-tag best">melhor</span>`;
+    if(d===c.curDay) tags+=`<span class="pcsim-tag now">atual</span>`;
+    if(d===c.de) tags+=`<span class="pcsim-tag anchor">emissão</span>`;
+    const tag=dead?'div':'button', attr=dead?'':` type="button" onclick="pcSimSet('${esc(host)}',${d})"`;
+    grid+=`<${tag} class="pcsim-day ${cls==='postecipado'?'g':'w'}${d===c.novo?' sel':''}${dead?' dead':''}"${attr}><div class="pcsim-dn">${d}</div><div class="pcsim-dc">${pc?pcFmtCurto(pc):'—'}</div><div class="pcsim-tags">${tags}</div></${tag}>`;
+  }
+  const testado=c.novo
+    ? `<div class="pcsim-k">Dia testado (${c.novo}) → regra</div><div class="pcsim-v">${pill(c.novoClass)} ${gain(c.ganhoNovo)}</div>`
+    : `<div class="pcsim-k">Dia testado</div><div class="pcsim-v" style="color:var(--muted);font-weight:400;font-size:13px">clique num dia no ciclo</div>`;
+  const pcNovoTxt=c.pcNovo?pcFmtCurto(c.pcNovo):(antecip?pcFmtCurto(c.pcBest):'—');
+  return `<div class="pcsim" id="${esc(host)}-box">
+    <div class="pcsim-verdict card">
+      <div class="pcsim-best"><div class="pcsim-best-k">Melhor dia</div><div class="pcsim-best-v">${c.best}</div><div class="pcsim-best-s">posição 16 · postecipado</div></div>
+      <div class="pcsim-copy"><h3>${titulo}</h3><p>${texto}</p></div>
+    </div>
+    <div class="pcsim-tiles card">
+      <div class="pcsim-tile"><div class="pcsim-k">Situação atual (dia ${c.curDay!=null?c.curDay:'—'})</div><div class="pcsim-v">${pill(c.curClass)}</div></div>
+      <div class="pcsim-tile">${testado}</div>
+      <div class="pcsim-tile"><div class="pcsim-k">Próxima cobrança</div><div class="pcsim-v pcsim-flow"><span>${pcFmtCurto(c.pcAtual)}</span><span class="pcsim-arrow">→</span><span>${pcNovoTxt}</span></div></div>
+    </div>
+    <div class="pcsim-grid-wrap card">
+      <div class="pcsim-grid-head"><span>Ciclo — clique num dia pra testar</span><span class="pcsim-legend"><span><i class="g"></i>postecipado</span><span><i class="w"></i>antecipado</span></span></div>
+      <div class="pcsim-grid">${grid}</div>
+    </div>
+  </div>`;
+}
+const PC_SIM_STATE={};
+function pcSimEnsureCss(){ try{ if(!document.getElementById('pcsim-css')){ const d=document.createElement('div'); d.innerHTML=pcSimCss(); const s=d.firstElementChild; if(s) document.head.appendChild(s); } }catch(_){}
+}
+function pcSimMount(host,o){ pcSimEnsureCss(); PC_SIM_STATE[host]=Object.assign({},o,{host}); const el=document.getElementById(host); if(el) el.innerHTML=pcSimuladorHtml(PC_SIM_STATE[host]); return PC_SIM_STATE[host]; }
+function pcSimSet(host,novoDia){ const st=PC_SIM_STATE[host]; if(!st) return; st.novoDia=(st.novoDia===novoDia?null:novoDia); const el=document.getElementById(host); if(el) el.innerHTML=pcSimuladorHtml(st); if(typeof st.onChange==='function') try{ st.onChange(st.novoDia); }catch(_){}
 }
 /* próxima data (após `fromISO`) cujo dia-do-mês seja `dia` — respeita meses de 28/29/30/31 sozinho */
 function subProxData(fromISO,dia){ if(!fromISO) return ''; const d=atParseISO(fromISO); for(let i=0;i<62;i++){ d.setDate(d.getDate()+1); if(d.getDate()===dia) return subISO(d); } return ''; }
@@ -14007,6 +14119,13 @@ function lpSelfCheck(){
       ok('pc Davi: ganho = 25 dias', pcGanhoDias(10,emD,vD)===25);
     }
     ok('pc: subPostec delega ao motor (melhor/pos/pgto)', (function(){ const r=subPostec({emissao:'2023-05-29',dia:10}); return !!r&&r.melhor===13&&r.pos===pcPosicao(10,29)&&r.pgto==='postecipado'; })());
+    /* PC-2: componente Simulador (widget reusável) — render puro/determinístico, usa só o motor */
+    { const inp={emissao:'2026-01-21',vencAberto:'2026-09-10',diaAtual:10,novoDia:5,host:'t'};
+      const h1=pcSimuladorHtml(inp), h2=pcSimuladorHtml(inp);
+      ok('pc-2: render determinístico (mesmo input -> mesmo HTML)', h1===h2&&h1.length>200);
+      ok('pc-2: mostra melhor dia (Davi=5) e o grid 1-31', h1.indexOf('>5<')>=0&&(h1.match(/pcsim-day/g)||[]).length===31);
+      ok('pc-2: dia inexistente vira célula morta (em29,venc set: dia31 indisponível)', pcSimuladorHtml({emissao:'2023-05-29',vencAberto:'2025-09-01',host:'t'}).indexOf('pcsim-day')>=0 && /pcsim-day[^"]*dead/.test(pcSimuladorHtml({emissao:'2023-05-29',vencAberto:'2025-09-01',host:'t'})));
+      ok('pc-2: sem dados essenciais -> aviso, sem quebrar', pcSimuladorHtml({}).indexOf('pcsim-erro')>=0); }
     /* CARD-CLIENTE-V1 (03/09): uma leitura derivada da pessoa, e o ciclo emitida → entregue → apólice na base.
        Tudo em cima de cópias: CART, EM e S voltam ao que eram no fim (Livro de Erros #17). */
     { const _c0=CART.clientes, _a0=CART.apolices, _e0=EM.itens, _s0=S.contatos, _r0=CART_REMOTE; let _ls=null; try{ _ls=localStorage.getItem(CART_CHAVE); }catch(_){}
