@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.28 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.29 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6226,6 +6226,34 @@ function pcSimEnsureCss(){ try{ if(!document.getElementById('pcsim-css')){ const
 function pcSimMount(host,o){ pcSimEnsureCss(); PC_SIM_STATE[host]=Object.assign({},o,{host}); const el=document.getElementById(host); if(el) el.innerHTML=pcSimuladorHtml(PC_SIM_STATE[host]); return PC_SIM_STATE[host]; }
 function pcSimSet(host,novoDia){ const st=PC_SIM_STATE[host]; if(!st) return; st.novoDia=(st.novoDia===novoDia?null:novoDia); const el=document.getElementById(host); if(el) el.innerHTML=pcSimuladorHtml(st); if(typeof st.onChange==='function') try{ st.onChange(st.novoDia); }catch(_){}
 }
+/* PC-3: aba standalone "Simulador — Melhor dia de vencimento" — monta o componente
+   PC-2 com 3 inputs MANUAIS (sem importar/login). Gancho de "puxar da apólice" fica
+   como próximo passo (quando o login persistir). */
+function viewPcSimulador(){
+  const st=PC_SIM_STATE['pcsim-standalone']||{};
+  const field=(id,lbl,hint,tipo,val,extra)=>`<div style="display:flex;flex-direction:column;gap:6px">
+    <label for="${id}" style="font-size:12.5px;font-weight:600;color:var(--muted)">${lbl}${hint?` <span style="font-weight:400;font-size:11px">${hint}</span>`:''}</label>
+    <input id="${id}" type="${tipo}" ${extra||''} value="${esc(val==null?'':val)}" oninput="pcSimStandaloneChange()" style="font-family:inherit;font-size:15px;padding:10px 11px;border:1px solid var(--linha);border-radius:9px;background:var(--fundo);color:var(--ink);width:100%"></div>`;
+  $('#main').innerHTML=`<h1 class="pg">Simulador — Melhor dia de vencimento</h1>
+    <div class="sub" style="color:var(--muted);font-size:13px;margin:-4px 0 12px">Réplica validada da planilha oficial da Prudential (Diretoria de Operações). Postecipado × antecipado, próxima cobrança e ganho de dias — preencha os 3 campos, sem precisar importar nada.</div>
+    <div class="card" style="padding:14px 16px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px" class="pcsim-inputs">
+        ${field('pcsim-i-emissao','Data de emissão','(dia âncora da vigência)','date',st.emissao)}
+        ${field('pcsim-i-venc','Venc. do próximo prêmio','(define o dia atual)','date',st.vencAberto)}
+        ${field('pcsim-i-novo','Novo dia de vencimento','(testar, 1–31)','number',st.novoDia,'min="1" max="31"')}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">↺ Puxar direto de uma apólice: em breve (depende do login do portal ficar salvo).</div>
+    </div>
+    <div id="pcsim-standalone"></div>`;
+  pcSimStandaloneChange();
+}
+function pcSimStandaloneChange(){
+  const g=id=>{ const el=document.getElementById(id); return el?el.value:''; };
+  const nv=parseInt(g('pcsim-i-novo'),10);
+  pcSimMount('pcsim-standalone',{ emissao:g('pcsim-i-emissao'), vencAberto:g('pcsim-i-venc'),
+    novoDia:(isFinite(nv)?nv:null),
+    onChange:d=>{ const el=document.getElementById('pcsim-i-novo'); if(el) el.value=(d==null?'':d); } });
+}
 /* próxima data (após `fromISO`) cujo dia-do-mês seja `dia` — respeita meses de 28/29/30/31 sozinho */
 function subProxData(fromISO,dia){ if(!fromISO) return ''; const d=atParseISO(fromISO); for(let i=0;i<62;i++){ d.setDate(d.getDate()+1); if(d.getDate()===dia) return subISO(d); } return ''; }
 
@@ -10733,6 +10761,7 @@ const HUB_SECOES=[
     {view:'persistencia', ic:'📉', titulo:'Persistência',        desc:'PAV/PANCEC e % de persistência por mês (Extrato de Comissão) + simulador de cancelamento.', mod:'backoffice'}
   ]},
   {titulo:'Referência', itens:[
+    {view:'pc-simulador', ic:'🗓️', titulo:'Melhor dia de vencimento', desc:'Simulador de postecipação: postecipado × antecipado, próxima cobrança e ganho de dias. Réplica validada da planilha oficial da Prudential.'}
   ]}
 ];
 const HUB_VIEWS=HUB_SECOES.flatMap(s=>s.itens.map(i=>i.view)).filter(Boolean);
@@ -13620,7 +13649,7 @@ const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo','prud-funil':'Prud. Demais','mfo-funil':'MFO','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
-  revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice'};
+  revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice', 'pc-simulador':'Melhor dia de vencimento'};
 function renderTituloTopo(){
   const el=$('#tbTitulo'); if(!el) return;
   const btn=document.querySelector('.sidebar .nav-btn.ativo');
@@ -13735,6 +13764,7 @@ function render(){
   else if(VIEW==='contatos') viewContatos();
   else if(VIEW==='planos') viewPlanos();
   else if(VIEW==='subst') viewSubst();
+  else if(VIEW==='pc-simulador') viewPcSimulador();
   else if(VIEW==='lp-atrasos') viewLpAtrasos();
   else if(VIEW==='lp-pendencias') viewLpPendencias();
   else if(VIEW==='solicitacoes') viewSolicitacoes();
@@ -15619,7 +15649,7 @@ function abrirAjustesVisual(){
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','config-funil'];
 
 /* FLUIDEZ-V2:JS-CARTOES
