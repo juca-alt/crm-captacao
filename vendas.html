@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.26 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.27 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6079,13 +6079,40 @@ function subPag(ref){ return SUB.pagamentos.find(p=>p.ref===ref); }
    VALIDADO 24/08 contra os PROTOCOLOS DE EXECUÇÃO REAL da Prudential (bate 3/3): emissão 20 -> dia 4,
    emissão 30 -> dia 14, emissão 20 -> dia 4. (Uma estimativa de chat da assistente dizia "dia 15" p/
    a emissão 30, mas o protocolo executado confirmou dia 14 = esta fórmula. Não há ajuste de fim de mês.) */
+/* MOTOR-POSTECIPACAO-V1 (PC-1) — FONTE UNICA, validado contra a planilha OFICIAL
+   "Simulador Melhor dia de vencimento.xlsx" (Diretoria de Operacoes Prudential) + caso Davi.
+   Ciclo de 31 posicoes ancorado no DIA DA EMISSAO (posicao 1 = dia da emissao). Funcoes PURAS (sem DOM).
+   posicao(dia)=((dia-emissao) mod 31)+1 · postecipado=pos 1-16 · antecipado=17-31
+   melhor_dia = dia na posicao 16 = ((emissao+14) mod 31)+1   (emissao 20->4, 30->14, 31->15)
+   proxima_cobranca(dia): dia>melhor -> mes do venc em aberto; senao -> mes seguinte;
+   dia inexistente no mes alvo -> null (indisponivel, ex.: dia 31 em setembro).
+   ganho_dias = proxima(melhor) - proxima(dia_atual). NAO duplicar esta logica. */
+const PC_CICLO=31;
+function pcDiasNoMes(ano,mes){ return new Date(ano, mes, 0).getDate(); }   /* mes 1-12 */
+function pcPosicao(dia, emissaoDia){ const d=+dia, em=+emissaoDia;
+  if(!(d>=1&&d<=31)||!(em>=1&&em<=31)) return null;
+  return ((((d-em)%PC_CICLO)+PC_CICLO)%PC_CICLO)+1; }
+function pcClassifica(dia, emissaoDia){ const p=pcPosicao(dia,emissaoDia); return p==null?null:(p<=16?'postecipado':'antecipado'); }
+function pcMelhorDia(emissaoDia){ const em=+emissaoDia; return (em>=1&&em<=31)?(((em+14)%PC_CICLO)+1):null; }
+function pcProximaCobranca(dia, emissaoDia, vencAbertoISO){ const d=+dia;
+  const melhor=pcMelhorDia(emissaoDia); if(!(d>=1&&d<=31)||melhor==null) return null;
+  const va=atParseISO(vencAbertoISO); if(!va||isNaN(+va)) return null;
+  let ano=va.getFullYear(), mes=va.getMonth()+1;                 /* mes ancora = mes do venc em aberto */
+  if(!(d>melhor)){ mes++; if(mes>12){ mes=1; ano++; } }          /* dia <= melhor -> mes seguinte */
+  if(d>pcDiasNoMes(ano,mes)) return null;                        /* dia nao existe no mes alvo -> indisponivel */
+  return ano+'-'+String(mes).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
+function pcGanhoDias(diaAtual, emissaoDia, vencAbertoISO){
+  const pa=pcProximaCobranca(diaAtual, emissaoDia, vencAbertoISO);
+  const pm=pcProximaCobranca(pcMelhorDia(emissaoDia), emissaoDia, vencAbertoISO);
+  if(!pa||!pm) return null;
+  return Math.round((atParseISO(pm)-atParseISO(pa))/86400000); }
+/* subPostec: adaptador do card de Substituicao -> usa o motor unico (mesma forma de retorno de antes). */
 function subPostec(a){
   if(!a||!a.emissao) return null;
   const em=atParseISO(a.emissao).getDate();
   const dia=(a.dia!=null&&a.dia>=1&&a.dia<=31)?a.dia:(a.venc?atParseISO(a.venc).getDate():null);
   if(dia==null) return null;
-  const off=(((dia-em)%31)+31)%31, pos=off+1, melhor=(((em+14)%31)+1);
-  return {dia,pos,melhor,pgto:pos<=16?'postecipado':'antecipado'};
+  return {dia, pos:pcPosicao(dia,em), melhor:pcMelhorDia(em), pgto:pcClassifica(dia,em)};
 }
 /* próxima data (após `fromISO`) cujo dia-do-mês seja `dia` — respeita meses de 28/29/30/31 sozinho */
 function subProxData(fromISO,dia){ if(!fromISO) return ''; const d=atParseISO(fromISO); for(let i=0;i<62;i++){ d.setDate(d.getDate()+1); if(d.getDate()===dia) return subISO(d); } return ''; }
@@ -13966,6 +13993,20 @@ function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
   try{
+    /* PC-1: motor de postecipacao (fonte unica) — casos da planilha oficial + Davi */
+    { const T1='2025-09-01', em1=29;
+      ok('pc: melhor dia emissao 29 = 13', pcMelhorDia(29)===13);
+      ok('pc: melhor dia emissao 20/30/31 = 4/14/15 (planilha)', pcMelhorDia(20)===4&&pcMelhorDia(30)===14&&pcMelhorDia(31)===15);
+      ok('pc: classifica dia13 postecipado / dia14 antecipado (em29)', pcClassifica(13,em1)==='postecipado'&&pcClassifica(14,em1)==='antecipado');
+      ok('pc: proxima dia1->01/10, dia13->13/10, dia14->14/09 (em29,venc01/09)', pcProximaCobranca(1,em1,T1)==='2025-10-01'&&pcProximaCobranca(13,em1,T1)==='2025-10-13'&&pcProximaCobranca(14,em1,T1)==='2025-09-14');
+      ok('pc: dia29->29/09, dia30->30/09, dia31->indisponivel', pcProximaCobranca(29,em1,T1)==='2025-09-29'&&pcProximaCobranca(30,em1,T1)==='2025-09-30'&&pcProximaCobranca(31,em1,T1)===null);
+    }
+    { const emD=21, vD='2026-09-10';   /* Davi — apolice 002105592 */
+      ok('pc Davi: melhor=5 e dia atual 10 antecipado', pcMelhorDia(emD)===5&&pcClassifica(10,emD)==='antecipado');
+      ok('pc Davi: proxima(10)=10/09 e proxima(5)=05/10', pcProximaCobranca(10,emD,vD)==='2026-09-10'&&pcProximaCobranca(5,emD,vD)==='2026-10-05');
+      ok('pc Davi: ganho = 25 dias', pcGanhoDias(10,emD,vD)===25);
+    }
+    ok('pc: subPostec delega ao motor (melhor/pos/pgto)', (function(){ const r=subPostec({emissao:'2023-05-29',dia:10}); return !!r&&r.melhor===13&&r.pos===pcPosicao(10,29)&&r.pgto==='postecipado'; })());
     /* CARD-CLIENTE-V1 (03/09): uma leitura derivada da pessoa, e o ciclo emitida → entregue → apólice na base.
        Tudo em cima de cópias: CART, EM e S voltam ao que eram no fim (Livro de Erros #17). */
     { const _c0=CART.clientes, _a0=CART.apolices, _e0=EM.itens, _s0=S.contatos, _r0=CART_REMOTE; let _ls=null; try{ _ls=localStorage.getItem(CART_CHAVE); }catch(_){}
