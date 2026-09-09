@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.25 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.26 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1356,6 +1356,10 @@ const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos', BC_DELI
    Reordena a cfg salva pro desenho novo, preservando rótulo/cor/prob que ele editou. */
 const BC_ORDER_V1=['Clientes Ativos','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Venda ganha','Delivery','Venda perdida'];
 const BC_ENC_V1={'Venda perdida':true};
+/* DELIVERY-POS-VENDA-V1 (09/09): Delivery é PÓS-VENDA (entrega da apólice impressa, UAU service).
+   A venda fecha em Apólice Emitida (bc:'Venda ganha'; lp:'EMISSÃO'→'DELIVERY'). Delivery NÃO soma
+   PA/pond no funil nem conta como venda — mas mantém a coluna. Fonte ÚNICA do "é pós-venda". */
+function ehPosVenda(etapa,funil){ return (funil==='bc') ? etapa===BC_DELIVERY : etapa==='DELIVERY'; }
 function bcRedesign(cfg){ if(!cfg||!Array.isArray(cfg.bc)) return false;
   const atual=cfg.bc.map(e=>e&&e.id).join('|');
   const jaOk = atual===BC_ORDER_V1.join('|') && cfg.bc.every(e=>!!e.enc===!!BC_ENC_V1[e.id]);
@@ -2555,7 +2559,7 @@ function funControlesHtml(rec,fluxo){
 }
 function nnNegocioHtml(lista,fluxo,ns,rec){
   /* BC: cliente ativo é a carteira inteira — dinheiro só conta a partir de Contato Agenda/Revisita */
-  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&(c.etapa===BC_ATIVOS||c.etapa===BC_EMITIDA||c.etapa===BC_DELIVERY)));
+  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&(c.etapa===BC_ATIVOS||c.etapa===BC_EMITIDA))&&!ehPosVenda(c.etapa,ns));
   const pa=somaPA(vivos), pm=somaPM(vivos), pond=paPonderado(vivos);
   const comValor=vivos.filter(c=>pmDe(c)>0).length;
   const mes=mesAtual();
@@ -3146,7 +3150,7 @@ function viewNnFunil(){
     const cs=nnOrdenar(funAplicaLente(lista,'nn').filter(c=>c.etapa===e));
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
-      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:''}
+      ${ehPosVenda(e,'nn')? (cs.length?`<div class="nncol-pa" style="opacity:.6;font-weight:500" title="Pós-venda — a venda já foi contada em Apólice Emitida; não soma no funil">📦 pós-venda</div>`:'') : (somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:'')}
       ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
@@ -3264,7 +3268,7 @@ function viewBcFunil(){
     const cs=nnOrdenar(funAplicaLente(lista,'bc').filter(c=>c.etapa===e));
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
-      ${somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:''}
+      ${ehPosVenda(e,'bc')? (cs.length?`<div class="nncol-pa" style="opacity:.6;font-weight:500" title="Pós-venda — a venda já foi contada em Apólice Emitida; não soma no funil">📦 pós-venda</div>`:'') : (somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:'')}
       ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
