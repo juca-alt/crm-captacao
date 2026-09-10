@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.30 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.31 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -5990,6 +5990,7 @@ function viewSubstCliente(cliRef){
         <div style="height:7px;background:var(--fundo);border-radius:99px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${subCorVar(col)}"></div></div>
         <div style="font-size:11px;color:${col==='red'?subCorVar(col):'var(--muted)'};margin-top:3px">Limite: ${atFmtBR(subISO(subLimiteDt(er)))}</div></div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">${pstg}${(pc&&pc.pos===16&&a.podePostergar==null)?`<span style="font-size:12px;color:var(--verde);font-weight:600" title="A apólice já paga no melhor dia possível (float máximo, pos 16/16). Não há o que postergar — a alavanca agora é o pagamento.">✓ já na melhor data (dia ${pc.melhor})</span>`:`<button class="btn btn-ghost" style="font-size:12px;padding:4px 10px" onclick="subPostergar('${esc(a.ref)}')">${(pc&&a.podePostergar==null)?('Postergar → dia '+pc.melhor):'Postergação'}</button>`}</div>
+      ${a.emissao?`<button class="btn btn-ghost" style="width:100%;font-size:12px;margin-top:8px" onclick="subSimularModal('${esc(a.ref)}')">🗓️ Simular postecipação</button>`:''}
       <div style="display:flex;gap:6px;margin-top:8px"><button class="btn btn-s" style="flex:1;font-size:12px" onclick="subBoleto('${esc(a.ref)}')">Registrar boleto</button><button class="btn btn-p" style="flex:1;font-size:12px" onclick="subPagarRapido('${esc(a.ref)}')">Marcar pago</button></div></div>`;
   }).join('');
 
@@ -6272,6 +6273,39 @@ function subPostergar(apoRef){
     <label style="font-size:12.5px;font-weight:600">Nova data de vencimento (se postergar)</label>
     <input id="subpg_data" type="date" value="${a.dataPostergada||sug||''}" style="width:100%;margin-top:5px">
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="subSalvarPostergar()">Salvar</button></div>`);
+}
+/* PC-4: embed do simulador (PC-2) em modal REUSÁVEL — 3 inputs (pré-preenchidos, editáveis)
+   + widget completo (grid, próxima cobrança, ganho). Serve ao card de Substituição (emissão+venc
+   já vêm) e à Lista de Atraso (venc vem do vencido; emissão o usuário digita/consulta). */
+function pcSimModal(o){
+  o=o||{}; if(typeof pcSimEnsureCss==='function') pcSimEnsureCss();
+  const inp=(id,lbl,tipo,val,extra)=>`<div style="display:flex;flex-direction:column;gap:4px"><label for="${id}" style="font-size:11.5px;font-weight:600;color:var(--muted)">${lbl}</label><input id="${id}" type="${tipo}" ${extra||''} value="${esc(val==null?'':val)}" oninput="pcSimModalChange()" style="font-family:inherit;font-size:14px;padding:8px 9px;border:1px solid var(--linha);border-radius:8px;background:var(--fundo);color:var(--ink)"></div>`;
+  atModal(`<h3 style="margin:0 0 4px">${esc(o.titulo||'Simulador de postecipação')}</h3>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Regra da planilha oficial da Prudential. ${o.emissao?'':'Informe a data de emissão pra simular.'}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px">
+      ${inp('pcsm-emissao','Data de emissão','date',o.emissao)}
+      ${inp('pcsm-venc','Venc. do próximo prêmio','date',o.vencAberto)}
+      ${inp('pcsm-novo','Novo dia (testar)','number',o.novoDia,'min="1" max="31"')}
+    </div>
+    <div id="pcsim-modal-box"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button class="btn btn-ghost" onclick="atClose()">Fechar</button>
+      ${o.postergarRef?`<button class="btn btn-p" onclick="atClose();subPostergar('${esc(o.postergarRef)}')">Postergar</button>`:''}
+    </div>`);
+  pcSimModalChange();
+}
+function pcSimModalChange(){
+  const g=id=>{ const el=document.getElementById(id); return el?el.value:''; };
+  const nv=parseInt(g('pcsm-novo'),10);
+  pcSimMount('pcsim-modal-box',{ emissao:g('pcsm-emissao'), vencAberto:g('pcsm-venc'),
+    novoDia:(isFinite(nv)?nv:null),
+    onChange:d=>{ const el=document.getElementById('pcsm-novo'); if(el) el.value=(d==null?'':d); } });
+}
+/* Substituição: abre com emissão+venc da apólice + ação Postergar. */
+function subSimularModal(apoRef){
+  const a=subApo(apoRef); if(!a) return;
+  pcSimModal({ emissao:a.emissao, vencAberto:a.venc, novoDia:(a.dia!=null?a.dia:null),
+    titulo:'Simulador — '+(a.numero||'apólice'), postergarRef:apoRef });
 }
 function subSetPg(v){ _subPg=v; ['sim','nao','na'].forEach(k=>{ const el=document.getElementById('subpg_'+k); if(el){ el.className='btn btn-ghost'; } });
   const alvo=document.getElementById(v===true?'subpg_sim':v===false?'subpg_nao':'subpg_na'); if(alvo) alvo.className='btn btn-p'; }
@@ -9739,6 +9773,7 @@ function viewLpAtrasos(){
       <button class="btn btn-p btn-mini" onclick="atColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s btn-mini" onclick="atExportar()" title="Baixa em CSV exatamente o que está filtrado nesta tela — abre no Excel e no Google Sheets">⬇︎ Exportar</button>
       <button class="btn btn-s btn-mini" onclick="atNovo()">＋ Adicionar</button>
+      <button class="btn btn-s btn-mini" onclick="pcSimModal({titulo:'Simulador — Melhor dia de vencimento'})" title="Postecipar joga o vencimento pra frente e reduz os dias de atraso (BO-04). Informe emissão e vencimento da apólice.">🗓️ Simular postecipação</button>
     </div>
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
       <th style="padding:6px 8px">Atraso</th><th>Apólice</th><th>Segurado / Resp.</th><th>LP</th><th>Vence</th><th>Prêmio</th><th>Motivo</th><th>Bola · trava</th><th>Status</th></tr></thead><tbody>
@@ -14159,6 +14194,7 @@ function lpSelfCheck(){
       ok('pc-2: mostra melhor dia (Davi=5) e o grid 1-31', h1.indexOf('>5<')>=0&&(h1.match(/pcsim-day/g)||[]).length===31);
       ok('pc-2: dia inexistente vira célula morta (em29,venc set: dia31 indisponível)', pcSimuladorHtml({emissao:'2023-05-29',vencAberto:'2025-09-01',host:'t'}).indexOf('pcsim-day')>=0 && /pcsim-day[^"]*dead/.test(pcSimuladorHtml({emissao:'2023-05-29',vencAberto:'2025-09-01',host:'t'})));
       ok('pc-2: sem dados essenciais -> aviso, sem quebrar', pcSimuladorHtml({}).indexOf('pcsim-erro')>=0); }
+    ok('pc-4: modal reusável + hosts (Substituição/Lista de Atraso) plugam o componente', typeof pcSimModal==='function' && typeof pcSimModalChange==='function' && typeof subSimularModal==='function');
     /* CARD-CLIENTE-V1 (03/09): uma leitura derivada da pessoa, e o ciclo emitida → entregue → apólice na base.
        Tudo em cima de cópias: CART, EM e S voltam ao que eram no fim (Livro de Erros #17). */
     { const _c0=CART.clientes, _a0=CART.apolices, _e0=EM.itens, _s0=S.contatos, _r0=CART_REMOTE; let _ls=null; try{ _ls=localStorage.getItem(CART_CHAVE); }catch(_){}
