@@ -9,11 +9,14 @@
 // v2.2 (09/09/2026): importação em LOTE — criar_contatos_lote (até 200, um único INSERT, upsert idempotente
 //   por (dono,ref_base)) e atualizar_contatos_lote (merge por id). Resposta ENXUTA {criados/atualizados,erros}
 //   com Prefer return=minimal — NÃO ecoa os registros (o eco é o que estourava o limite de token do cliente).
+// v2.3 (11/09/2026): MAPA & LOCAIS — buscar_local (geocoder OpenStreetMap, server-side) e definir_locais
+//   (grava dados.locais=[{tipo,nome,end,lat,lng}] no contato, geocodificando o que vier sem coordenada;
+//   mesmo formato que o app lê na ficha, no evento da Agenda e no Mapa de locais).
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUB = "sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR";
-const SERVER = { name: "crm-seguros-lp", version: "2.2.0" };
+const SERVER = { name: "crm-seguros-lp", version: "2.3.0" };
 const PROTOCOL = "2024-11-05";
 
 const CORS = {
@@ -102,6 +105,30 @@ async function ctxFor(token) {
   return { dono, access };
 }
 
+// ── geocoder (OpenStreetMap/Nominatim; sem chave; 1 req/s por política) ──
+const GEO_UA = "crm-segurocomjuca/2.3 (contato: juca@segurocomjuca.com)";
+function geoNorm(x) {
+  const a = x.address || {};
+  const nome = (x.namedetails && x.namedetails.name) || x.name || String(x.display_name || "").split(",")[0];
+  const end = [a.road ? (a.road + (a.house_number ? ", " + a.house_number : "")) : "", a.suburb || a.neighbourhood || "", a.city || a.town || a.municipality || a.village || "", a.state || ""].filter(Boolean).join(" · ");
+  return { nome: String(nome || "").trim(), end, lat: +x.lat, lng: +x.lon, src: "osm" };
+}
+async function geoBuscar(q, limite = 6) {
+  const u = `https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&namedetails=1&countrycodes=br&limit=${limite}&accept-language=pt-BR&q=${encodeURIComponent(q)}`;
+  const r = await fetch(u, { headers: { "User-Agent": GEO_UA, Accept: "application/json" } });
+  if (!r.ok) throw new Error("OpenStreetMap " + r.status);
+  const jx = await r.json();
+  return (Array.isArray(jx) ? jx : []).map(geoNorm).filter((x) => x.nome);
+}
+const LOC_TIPOS = new Set(["trabalho", "casa", "outro"]);
+function locChave(l) { if (l.lat != null && l.lng != null && isFinite(+l.lat) && isFinite(+l.lng)) return (+l.lat).toFixed(4) + "," + (+l.lng).toFixed(4); return String(l.nome || l.end || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim(); }
+function locAdd(dados, l) {
+  const arr = Array.isArray(dados.locais) ? dados.locais.slice() : [];
+  const k = locChave(l); if (arr.some((x) => locChave(x) === k)) return arr;
+  arr.push({ tipo: LOC_TIPOS.has(l.tipo) ? l.tipo : "trabalho", nome: String(l.nome || "").trim(), end: String(l.end || "").trim(), lat: (l.lat != null && isFinite(+l.lat)) ? +l.lat : null, lng: (l.lng != null && isFinite(+l.lng)) ? +l.lng : null, src: l.src || "mcp" });
+  return arr;
+}
+
 async function audit(access, dono, ferramenta, acao, alvo, detalhe, ok = true) {
   try {
     await rest(`lp_mcp_audit`, access, { method: "POST", body: JSON.stringify({ dono, ferramenta, acao, alvo, detalhe, ok }) });
@@ -115,6 +142,8 @@ const TOOLS = [
   { name: "atualizar_contato", description: "Atualiza um contato SEU pelo id. Só os campos de 'dados' que mudam (merge).", inputSchema: { type: "object", properties: { id: { type: "string" }, dados: { type: "object" } }, required: ["id", "dados"] } },
   { name: "criar_contatos_lote", description: "Cria/atualiza VÁRIOS contatos de uma vez (até 200), num único INSERT. Idempotente por 'ref_base' (único por conta): reenviar o mesmo lote ATUALIZA em vez de duplicar. Resposta ENXUTA {criados, erros} — NÃO devolve os registros criados (isso pouparia token).", inputSchema: { type: "object", properties: { contatos: { type: "array", items: { type: "object", properties: { ref_base: { type: "string" }, dados: { type: "object" } } } } }, required: ["contatos"] } },
   { name: "atualizar_contatos_lote", description: "Atualiza VÁRIOS contatos SEUS de uma vez (até 200), por id, fazendo merge dos campos de 'dados'. Resposta ENXUTA {atualizados, erros} — não devolve os registros.", inputSchema: { type: "object", properties: { atualizacoes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, dados: { type: "object" } }, required: ["id", "dados"] } } }, required: ["atualizacoes"] } },
+  { name: "buscar_local", description: "Acha hospital, clínica, empresa ou endereço (OpenStreetMap, Brasil) e devolve nome, endereço e coordenadas — pra confirmar antes de gravar em definir_locais.", inputSchema: { type: "object", properties: { q: { type: "string" }, limite: { type: "number" } }, required: ["q"] } },
+  { name: "definir_locais", description: "Grava LOCAIS (trabalho/casa/outro) em contatos SEUS, por id (até 100). Cada item: {id, tipo:'trabalho'|'casa'|'outro', nome, end?, lat?, lng?}. Sem lat/lng, geocodifica 'nome + end' sozinho (OpenStreetMap). Faz merge: não duplica local igual. É o que aparece na ficha, vai pro evento da Agenda e pro Mapa de locais. Resposta ENXUTA {atualizados, sem_coordenada, erros}.", inputSchema: { type: "object", properties: { locais: { type: "array", items: { type: "object", properties: { id: { type: "string" }, tipo: { type: "string" }, nome: { type: "string" }, end: { type: "string" }, lat: { type: "number" }, lng: { type: "number" } }, required: ["id", "nome"] } } }, required: ["locais"] } },
   { name: "listar_substituicoes", description: "Lista as SUAS apólices em Substituição (clientes + apólices). Só a sua base.", inputSchema: { type: "object", properties: { limite: { type: "number" } } } },
   { name: "listar_atrasos", description: "Lista a SUA Lista de Atraso (apólices vencidas em tratativa). Só a sua base.", inputSchema: { type: "object", properties: { limite: { type: "number" } } } },
   { name: "atualizar_atraso", description: "Atualiza a tratativa/próximo contato de um item SEU da Lista de Atraso, pelo id.", inputSchema: { type: "object", properties: { id: { type: "number" }, tratativa: { type: "string" }, prox_contato: { type: "string" } }, required: ["id"] } },
@@ -188,6 +217,38 @@ async function callTool(name, args, ctx) {
       });
       await audit(ctx.access, ctx.dono, "atualizar_contatos_lote", "escrita", "lp_contatos:lote", { n: rows.length, erros: erros.length });
       return { atualizados: rows.length, erros };
+    }
+    case "buscar_local": {
+      const q = String(args?.q || "").trim(); if (q.length < 3) return { resultados: [], aviso: "digite pelo menos 3 letras" };
+      return { resultados: await geoBuscar(q, Math.min(Number(args?.limite) || 6, 10)) };
+    }
+    case "definir_locais": {
+      const arr = Array.isArray(args?.locais) ? args.locais : [];
+      if (!arr.length) return { atualizados: 0, erros: ["locais vazio"] };
+      if (arr.length > 100) return { atualizados: 0, erros: ["máximo 100 por chamada"] };
+      const ids = [...new Set(arr.map((a) => a && a.id).filter((x) => x != null).map(String))];
+      const inList = ids.map((x) => `"${x.replace(/["\\]/g, "")}"`).join(",");
+      const cur = ids.length ? await rest(`lp_contatos?id=in.(${inList})&select=id,dados`, ctx.access) : [];
+      const byId = new Map((cur || []).map((r) => [String(r.id), r.dados || {}]));
+      const erros = []; const semCoord = []; const tocados = new Set(); const cacheGeo = new Map();
+      for (const a of arr) {
+        const id = (a && a.id != null) ? String(a.id) : null;
+        if (!id || !byId.has(id)) { erros.push({ id: (a && a.id) ?? null, motivo: "não encontrado (RLS)" }); continue; }
+        const l = { tipo: a.tipo, nome: String(a.nome || "").trim(), end: String(a.end || "").trim(), lat: a.lat, lng: a.lng, src: "mcp" };
+        if (!l.nome) { erros.push({ id, motivo: "sem nome do local" }); continue; }
+        if (l.lat == null || l.lng == null) {
+          const q = [l.nome, l.end].filter(Boolean).join(", ");
+          let hit = cacheGeo.get(q);
+          if (hit === undefined) { try { hit = (await geoBuscar(q, 1))[0] || null; } catch { hit = null; } cacheGeo.set(q, hit); await new Promise((r) => setTimeout(r, 1100)); }
+          if (hit) { l.lat = hit.lat; l.lng = hit.lng; if (!l.end) l.end = hit.end; l.src = "osm"; } else semCoord.push({ id, nome: l.nome });
+        }
+        const dados = byId.get(id); const novo = locAdd(dados, l);
+        if (novo.length !== (Array.isArray(dados.locais) ? dados.locais.length : 0)) { byId.set(id, { ...dados, locais: novo }); tocados.add(id); }
+      }
+      const rows = [...tocados].map((id) => ({ dono: ctx.dono, id, dados: byId.get(id) }));
+      if (rows.length) await rest(`lp_contatos?on_conflict=dono,id`, ctx.access, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(rows) });
+      await audit(ctx.access, ctx.dono, "definir_locais", "escrita", "lp_contatos:locais", { n: rows.length, sem_coordenada: semCoord.length, erros: erros.length });
+      return { atualizados: rows.length, sem_coordenada: semCoord, erros };
     }
     case "listar_substituicoes": {
       const clientes = await rest(`subst_clientes?select=*&limit=${lim}`, ctx.access);
