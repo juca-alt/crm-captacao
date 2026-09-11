@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.45.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.46 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -705,6 +705,11 @@
   .nncol-head{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#3c4657}
   .nncol-head .qt{font-size:10.5px;font-weight:700;background:#e2e8f0;color:var(--muted);padding:2px 8px;border-radius:20px}
   .nncard{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;box-shadow:var(--sombra);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
+  .et-status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .et-status-row select,.fun-status-sel{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--linha);border-radius:7px;background:#fff;color:var(--ink)}
+  .fc-st{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);flex:1;min-width:180px}
+  .fc-st input{flex:1;min-width:120px;font:inherit;font-size:11.5px;border:1px solid var(--linha);background:#fff;border-radius:6px;padding:3px 6px;color:var(--ink)}
   .nncard.td-lift{opacity:.35;border-style:dashed} .td-ghost{position:fixed;z-index:400;pointer-events:none;opacity:.95;transform:scale(1.03) rotate(1.5deg);box-shadow:0 12px 30px rgba(16,30,54,.28)} body.td-on{overflow:hidden;touch-action:none}
   .nncard:hover{border-color:var(--azul-borda)}
   .nncard.dragging{opacity:.4}
@@ -1428,6 +1433,25 @@ const FUN_BADGE={cinza:'b-cinza',azul:'b-azul',amarelo:'b-amarelo',roxo:'b-roxo'
 const FUN_COR={cinza:'#5b6770',azul:'var(--azul)',amarelo:'var(--amarelo)',roxo:'var(--roxo)',verde:'var(--verde)',verm:'var(--verm)'};
 function funFabMat(){ const m={}; for(const f of Object.keys(FUNIL_FAB)) m[f]=FUNIL_FAB[f].map(x=>({id:x[0],label:x[0],cor:x[1],prob:x[2],enc:!!x[3]})); return m; }
 function funCfgValida(c){ return c&&Array.isArray(c.lp)&&Array.isArray(c.bc)&&c.lp.every(e=>e&&e.id)&&c.bc.every(e=>e&&e.id); }
+/* STATUS-ETAPA-V1 (11/09): status DENTRO da etapa ("Delay OI", "Remarcou"…). A lista de status de cada
+   etapa mora na cfg do funil (FUNIL_CFG[f][i].status), editada pelo admin em Funil & Etapas e salva junto
+   (app_settings lp_funil_cfg). O contato guarda c.status; status que não existe mais na etapa é ignorado
+   (não some do dado, só não vale); mudar de etapa limpa. Status que começa com "Delay" vira tipo de Delay
+   no Painel TA. Filtro por status em todos os funis (FUN_STATUS por funil). */
+function etCfgKey(f){ return (!f||f==='nn')?'lp':f; }
+function etStatusOpts(c){ const arr=(FUNIL_CFG&&FUNIL_CFG[etCfgKey(c&&c.funil)])||[]; const e=arr.find(x=>x&&x.id===(c&&c.etapa)); return (e&&Array.isArray(e.status))?e.status.map(x=>String(x||'').trim()).filter(Boolean):[]; }
+function etStatusDe(c){ const s=c&&String(c.status||'').trim(); return (s&&etStatusOpts(c).includes(s))?s:''; }
+function etStatusTodos(){ const out=[]; Object.keys(FUNIL_CFG||{}).forEach(f=>(FUNIL_CFG[f]||[]).forEach(e=>((e&&e.status)||[]).forEach(x=>{ const s=String(x||'').trim(); if(s&&!out.includes(s)) out.push(s); }))); return out; }
+function etStatusChip(c){ const s=etStatusDe(c); return s?`<span class="nc-status" title="Status nesta etapa">⚑ ${esc(s)}</span>`:''; }
+function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; const s=etStatusDe(c);
+  return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)"><option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
+function etSetStatus(v){ const c=ct(); if(!c) return; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return; const de=etStatusDe(c); if(de===v) return;
+  if(v) c.status=v; else delete c.status;
+  interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar(); renderDrawer(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); }
+let FUN_STATUS={};
+function funStatusSel(ns){ const opts=etStatusTodos(); if(!opts.length) return ''; const v=FUN_STATUS[ns]||'';
+  return `<select class="fun-status-sel" title="Filtrar pelo status dentro da etapa" onchange="FUN_STATUS['${ns}']=this.value;render()"><option value="">⚑ Status: todos</option>${opts.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select>`; }
 const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos', BC_DELIVERY='Delivery', BC_EMITIDA='Venda ganha';
 /* BC-REDESIGN-V1 (07/09): Delivery vai pro FIM (pós-Apólice Emitida) e volta pra Clientes Ativos;
    Oportunidade Perdida deixa de ser coluna do fluxo (fica como encerramento, marcável em qualquer etapa).
@@ -2686,6 +2710,7 @@ let FUN_LENTE={nn:'',bc:''};
 function funLente(ns){ const v=FUN_LENTE[ns]||''; return FUN_LENTES[v]?v:''; }
 function funSetLente(ns,v){ FUN_LENTE[ns]=(funLente(ns)===v)?'':v; render(); }
 function funAplicaLente(lista,ns){
+  const st=FUN_STATUS[ns]||''; if(st) lista=lista.filter(c=>etStatusDe(c)===st);   /* STATUS-ETAPA-V1 */
   const l=funLente(ns); if(!l) return lista;
   return lista.filter(FUN_LENTES[l].teste);
 }
@@ -3216,6 +3241,7 @@ function nnCard(c){
     ${(()=>{ const t=negTitulo(c); return t?`<div class="nc-oq" title="O que se vende neste negócio (${esc(negTituloFonte(c))})">${esc(t)}</div>`:''; })()}
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(telBR(c.telefone))}</div>
+    ${etStatusChip(c)}
     ${cliChipsHtml(clienteDe(c,{semNegocios:true}))}
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
@@ -3295,7 +3321,7 @@ function viewNnFunil(){
   const _pos = NN_FOCUS ? null : funScrollSalvar();
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
-    <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}
+    <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}${funStatusSel('nn')}
     <span class="nn-dica" style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
@@ -3313,7 +3339,7 @@ function viewNnFunil(){
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
   };
-  if(NN_MODE==='lista'){ body=nnLista(lista); }
+  if(NN_MODE==='lista'){ body=nnLista(funAplicaLente(lista,'nn')); }
   else {
     const nEnc=lista.filter(c=>ETAPAS_ENCERR.includes(c.etapa)).length;
     const focoEnc=ETAPAS_ENCERR.includes(NN_FOCUS);
@@ -3396,7 +3422,7 @@ function fxLista(fid){ return S.contatos.filter(c=>c.funil===fid && (isMaster()|
 function viewFunilExtra(fid){
   const meta=fxMeta(fid), M=ETAPAS_MAP[fid]||{fluxo:[],enc:[]};
   const lista=fxLista(fid);
-  const colDe=e=>{ const cs=nnOrdenar(lista.filter(c=>c.etapa===e));
+  const colDe=e=>{ const cs=nnOrdenar(funAplicaLente(lista,fid).filter(c=>c.etapa===e));
     return `<div class="nncol${M.enc.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
       ${somaPA(cs)?`<div class="nncol-pa" title="Soma do prêmio anual desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:''}
@@ -3405,7 +3431,7 @@ function viewFunilExtra(fid){
   const body='<div class="nnboard">'+M.fluxo.concat(M.enc).map(colDe).join('')+'</div>';
   $('#main').innerHTML=`<h1 class="pg">${esc(meta[2])} ${esc(meta[1])}</h1>
     <div class="sub">${esc(meta[3])}. Funil novo em construção — arraste o card pra mudar a etapa (no celular, toque e mude no perfil).</div>
-    <div class="nn-toolbar"><span style="font-size:12px;color:var(--muted)">${lista.length} negócio(s) neste funil</span><span style="flex:1"></span>
+    <div class="nn-toolbar"><span style="font-size:12px;color:var(--muted)">${lista.length} negócio(s) neste funil</span>${funStatusSel(fid)}<span style="flex:1"></span>
       <button class="btn btn-p btn-mini" onclick="openNovoContato('${esc(fid)}')">➕ Novo negócio</button></div>
     ${body}`;
   wireNnBoard();
@@ -3509,7 +3535,7 @@ function bcMoveEtapa(id,etapa,cardEl,colEl,antesId){
   requestAnimationFrame(()=>setTimeout(render,0));
 }
 /* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
-function logEtapa(c,de,para){ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
+function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
 /* GC-08 (07/09): registrar um toque/status manual na jornada da rec/contato */
 let JORNADA_TUDO=false;
 function jornadaAddNota(){ const c=S.contatos.find(x=>x.id===CONTATO); if(!c) return; const el=document.getElementById('jornadaNota'); const t=el?(el.value||'').trim():''; if(!t){ if(el) el.focus(); return; }
@@ -4568,6 +4594,7 @@ function renderDrawer(){
           </select></h3>
         <div id="drwFunilBox"></div>
         ${drwStepperHtml(c)}
+        ${etStatusSelHtml(c)}
         <div style="font-size:11px;color:var(--muted);margin-top:8px">Toque pra mover · fica registrado na hora.</div>
       </div>
 
@@ -13437,6 +13464,7 @@ function taRecDeCliente(c){ return taRecDeClienteDe(c,taCliIdx()); }
 const TA_DELAY_ETAPAS={'OI/FF':'OI','P/C':'P/C','C2':'C2','Agendada Revisita':'Revisita','DELIVERY':'Delivery'};
 function taDelayTipo(c){ if(!c) return null; const hoje=hojeISO();
   if(spEhFunil(c)){
+    const st=etStatusDe(c); if(/^delay/i.test(st)) return st;   /* STATUS-ETAPA-V1: "Delay X" marcado à mão */
     const its=interacoesDe(c).filter(i=>RES_BY_K[i.k]); const ult=its.length?its[its.length-1]:null;
     if(ult&&ult.k==='pediu_retornar'&&!(c.sitplan&&c.sitplan>=hoje)) return 'Retornar';
     const et=TA_DELAY_ETAPAS[c.etapa]; if(!et) return null;
@@ -13446,7 +13474,8 @@ function taDelayTipo(c){ if(!c) return null; const hoje=hojeISO();
   if(u&&u.res==='nao_atendeu'&&!(c.ta_dia&&c.ta_dia>=hoje)&&c.estagio!=='descartado') return 'Não atendeu';
   if(c.ta_dia&&c.ta_dia<hoje&&!(c.hist||[]).some(x=>x.tipo==='ta'&&x.dia===c.ta_dia)&&c.estagio!=='descartado') return 'Ficou pra trás';
   return null; }
-const TA_DELAY_TIPOS=['OI','P/C','C2','Revisita','Delivery','Retornar','Não atendeu','Ficou pra trás'];
+const TA_DELAY_TIPOS_BASE=['OI','P/C','C2','Revisita','Delivery','Retornar','Não atendeu','Ficou pra trás'];
+function taDelayTipos(){ return [...TA_DELAY_TIPOS_BASE, ...etStatusTodos().filter(s=>/^delay/i.test(s)&&!TA_DELAY_TIPOS_BASE.includes(s))]; }   /* STATUS-ETAPA-V1 */
 function taPoolDe(k){ return k==='delay'? [...bnVivos(),...meusContatos()] : bnVivos(); }
 const TA_SMART={
   base:       {ic:'📇', label:'Toda a base',        base:c=>c.estagio!=='descartado'},
@@ -13579,7 +13608,7 @@ function taFiltrados(){
 fxSheetReg('ta',()=>({titulo:'Filtros do Painel TA',
   grupos:[
     {k:'res',t:'Resultado de hoje',opts:[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]})))},
-    {k:'delay',t:'Delay de',opts:TA_DELAY_TIPOS.map(t=>({v:t,l:t}))},
+    {k:'delay',t:'Delay de',opts:taDelayTipos().map(t=>({v:t,l:t}))},
     {k:'trilha',t:'Trilha',opts:BN_TRILHAS.map(t=>({v:t,l:t}))},
     {k:'estagio',t:'Estágio',opts:BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))},
     {k:'pri',t:'Prioridade',opts:[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}]},
@@ -13670,7 +13699,7 @@ function viewBnTa(){
         <div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-s btn-mini" style="flex:1" onclick="taNovaLista()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="flex:1" onclick="taListaDoFiltro()" title="Salva a lista filtrada atual">＋ Do filtro</button></div>
       </div>
       <div class="ta-sec ta-filtros"><h3 style="display:flex;align-items:center;gap:6px">Filtros ${taFiltrosAtivos()?`<span class="ct" style="color:var(--azul)">${taFiltrosAtivos()} ativo${taFiltrosAtivos()>1?'s':''}</span>`:''}<span style="flex:1"></span>${taFiltrosAtivos()?`<button class="btn btn-s btn-mini" style="min-height:28px;font-size:11px" onclick="taFiltroLimpar()">Limpar</button>`:''}</h3>
-        ${taSmartKey()==='delay'?taGrupo('Delay de',taResumoCsv('delay',TA_DELAY_TIPOS.map(t=>({v:t,l:t}))),taChips('delay',TA_DELAY_TIPOS.map(t=>({v:t,l:t}))),true):''}
+        ${taSmartKey()==='delay'?taGrupo('Delay de',taResumoCsv('delay',taDelayTipos().map(t=>({v:t,l:t}))),taChips('delay',taDelayTipos().map(t=>({v:t,l:t}))),true):''}
         ${taGrupo('Estágio',taResumoCsv('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),taChips('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),!!FTA.estagio)}
         ${taGrupo('Telefone',taResumoCsv('fone',[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}]),taChips('fone',[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}]),!!FTA.fone)}
         ${taGrupo('Indicado por',taResumoCsv('reccli',[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}]),taChips('reccli',[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}]),!!FTA.reccli)}
@@ -14728,6 +14757,7 @@ function funRowHtml(e,i,arr){ const last=i===arr.length-1, n=funNeg(e.id);
     <div class="fc-mid">
       <div class="fc-lr"><span class="fc-swl" style="background:${FUN_COR[e.cor]}"></span><input class="fc-lbl" value="${esc(e.label)}" aria-label="Rótulo" oninput="funSetLabel(${i},this.value)"></div>
       <div class="fc-meta"><span class="fc-idtag">🔒 ${esc(e.id)}</span><span class="fc-sws">${sws}</span><span class="fc-prob">prob <input type="number" min="0" max="100" step="5" value="${e.prob}" oninput="funSetProb(${i},this.value)">%</span><button class="fc-enc" aria-pressed="${!!e.enc}" onclick="funToggleEnc(${i})">${e.enc?'⬤ encerramento':'○ no fluxo'}</button></div>
+      <div class="fc-meta"><span class="fc-st" title="Status possíveis DENTRO desta etapa, separados por vírgula. Aparecem no card, na ficha e nos filtros.">⚑ status: <input value="${esc((e.status||[]).join(', '))}" placeholder="ex.: Delay OI, Remarcou" ${isMaster()?'':'disabled'} oninput="funSetStatus(${i},this.value)"></span></div>
     </div>
     <div class="fc-rr"><button class="fc-del" title="Excluir" onclick="funAskDel(${i})">🗑</button><span class="fc-cnt">${n} neg.</span></div>
   </div>`; }
@@ -14747,6 +14777,7 @@ function funRenderInv(){ const arr=FUNIL_CFG[FUN_edit], fluxo=arr.filter(e=>!e.e
 function funSetLabel(i,v){ FUNIL_CFG[FUN_edit][i].label=v; funApply(); funRenderPreview(); funRenderInv();
   const r=document.querySelectorAll('#funcfg-rows .fc-row')[i]; if(r) r.classList.toggle('ed',funEditado(FUN_edit,i)); }
 function funSetCor(i,c){ FUNIL_CFG[FUN_edit][i].cor=c; funApply(); funRenderRows(); funRenderPreview(); }
+function funSetStatus(i,v){ if(!isMaster()) return; const arr=String(v||'').split(/[,;]/).map(x=>x.trim()).filter(Boolean); if(arr.length) FUNIL_CFG[FUN_edit][i].status=arr; else delete FUNIL_CFG[FUN_edit][i].status; funApply(); funRenderPreview(); }
 function funSetProb(i,v){ let n=Math.max(0,Math.min(100,parseInt(v||'0',10)||0)); FUNIL_CFG[FUN_edit][i].prob=n; funApply(); funRenderPreview(); funRenderInv();
   const r=document.querySelectorAll('#funcfg-rows .fc-row')[i]; if(r) r.classList.toggle('ed',funEditado(FUN_edit,i)); }
 function funToggleEnc(i){ FUNIL_CFG[FUN_edit][i].enc=!FUNIL_CFG[FUN_edit][i].enc; funApply(); funRenderRows(); funRenderPreview(); funRenderInv(); }
@@ -15111,6 +15142,14 @@ function lpSelfCheck(){
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
     ok('SEGURANÇA-V1: não existe botão de zerar/apagar base na tela; zerarContatos (se chamada) só limpa cache local', (()=>{ const t=zerarContatos.toString(); return !document.querySelector('[onclick*="zerarContatos"]') && !t.includes('S.contatos=[]') && !t.includes('salvar()'); })());
     ok('DRAG-TOUCH-V1: o board dos funis tem arrasto por toque (segurar e arrastar) e cards sem seleção de texto', typeof wireTouchDrag==='function' && String(wireNnBoard).includes('wireTouchDrag') && String(wireBcBoard).includes('wireTouchDrag') && (()=>{ const d=document.createElement('div'); d.className='nncard'; document.body.appendChild(d); const u=getComputedStyle(d).userSelect||getComputedStyle(d).webkitUserSelect; d.remove(); return u==='none'; })());
+    ok('STATUS-ETAPA-V1: status vem da cfg da etapa; inválido é ignorado; mudar etapa limpa; card mostra chip; "Delay X" vira tipo de Delay no Painel TA; filtra o funil', (()=>{ const arr=FUNIL_CFG.lp; if(!arr||!arr.length) return false; const e=arr[0], bk=e.status; e.status=['Delay OI','Remarcou']; const c={id:'zz-st',nome:'Zz St',telefone:'',funil:'nn',etapa:e.id,status:'Delay OI',interacoes:[],recs:[],hist:[]}; S.contatos.push(c);
+      try{ const okOpts=etStatusOpts(c).length===2&&etStatusDe(c)==='Delay OI'; const okInv=etStatusDe({funil:'nn',etapa:e.id,status:'Xyz'})==='';
+        let okChip=false; try{ okChip=nnCard(c).includes('nc-status'); }catch(_){ okChip=false; }
+        const okDelay=taDelayTipo(c)==='Delay OI'&&taDelayTipos().includes('Delay OI');
+        const bkF=FUN_STATUS.nn; FUN_STATUS.nn='Remarcou'; const okFiltro=funAplicaLente([{funil:'nn',etapa:e.id,status:'Remarcou'},{funil:'nn',etapa:e.id}],'nn').length===1; FUN_STATUS.nn=bkF||'';
+        logEtapa(c,e.id,'__x'); const okLimpa=!c.status;
+        return okOpts&&okInv&&okChip&&okDelay&&okFiltro&&okLimpa; }
+      finally{ S.contatos=S.contatos.filter(x=>x!==c); if(bk===undefined) delete e.status; else e.status=bk; } })());
     ok('ESCOPO na porta: carregadores dos módulos filtram por escLinhaOk', ['atCarregar','bfCarregar','soCarregar','emCarregar','exCarregar'].every(f=>String(window[f]||'').includes('escLinhaOk')));
     ok('VARREDURA: painel existe e função de disparo diário existe', typeof varHtml==='function' && typeof varDiariaSeNecessario==='function' && varHtml().includes('Varredura diária'));
     ok('SITPLAN-FONTES: a busca do SitPlan lista funil, Estoque e clientes da carteira', String(viewSitplan.toString()).includes('· Cliente') && String(spAddPorNome.toString()).includes("tag==='Cliente'"));
