@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.40 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.40.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1619,7 +1619,7 @@ function salvar(){
     c._upd=_now;
   });
   _lpcLast={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) _lpcLast[String(c.id)]=JSON.stringify(c); });
-  localStorage.setItem(CHAVE, JSON.stringify(S));
+  try{ localStorage.setItem(CHAVE, JSON.stringify(S)); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); }
   if(typeof lpcAgendarPush==='function') lpcAgendarPush();
 }
 
@@ -4908,6 +4908,12 @@ function spSugestao(k){ // coaching contextual por KPI (aprendizado Global-CRM)
 }
 function spAdd(id){ if(!id) return; const c=S.contatos.find(x=>x.id===id); if(!c) return; c.sitplan=spData(); salvar(); toast(`${c.nome.split(' ')[0]} na lista de ${dataBR(spData())}`,true); render(); }
 function spReag(id,iso){ const c=S.contatos.find(x=>x.id===id); if(!c) return; c.sitplan=iso; salvar(); toast(`${c.nome.split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
+/* busca com sugestões (o <select> com 1.000+ nomes era inviável): casa 'Nome · Etapa' no funil ou 'Nome · Estoque' */
+function spAddPorNome(txt){ const t=String(txt||'').trim(); if(!t){ toast('Digite um nome',false); return; } const D=spData();
+  const nome=t.split(' · ')[0].trim().toLowerCase(), tag=(t.split(' · ')[1]||'').trim();
+  if(tag==='Estoque'||!tag){ const b=bnVivos().find(c=>(c.nome||'').trim().toLowerCase()===nome&&c.ta_dia!==D); if(b){ b.ta_dia=D; bnSalvar(); toast(b.nome.split(' ')[0]+' na lista de '+dataBR(D)+' (Estoque) ✓',true); render(); const el=$('#sp-add'); if(el) el.value=''; return; } }
+  const f=meusContatos().find(c=>(c.nome||'').trim().toLowerCase()===nome&&c.sitplan!==D); if(f){ spAdd(f.id); const el=$('#sp-add'); if(el) el.value=''; return; }
+  toast('Não achei esse nome (já está na lista?)',false); }
 function spReagBn(id,iso){ const c=bnPor(id); if(!c) return; c.ta_dia=iso; bnSalvar(); toast(`${String(c.nome||'').split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
 function spPuxarEstoque(){ const D=spData(); const l=bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&c.estagio==='lista_ta').slice(0,12); l.forEach(c=>{ c.ta_dia=D; }); bnSalvar(); toast(l.length+' nome(s) do Estoque na lista de '+dataBR(D),true); render(); }
 /* ═══ MODO FOCO · sessão de discagem (01/09) ════════════════════════════════
@@ -5092,10 +5098,9 @@ function viewSitplan(){
         <button class="${SP_TAB==='com'?'on':''}" onclick="spTab('com')">Com resultado (${comRes.length})</button>
       </div>
       <span style="flex:1"></span>
-      <select onchange="spAdd(this.value);this.value=''" style="max-width:230px">
-        <option value="">➕ Adicionar à lista deste dia…</option>
-        ${foraDaLista.map(c=>`<option value="${esc(c.id)}">${esc(c.nome)} · ${esc(c.etapa)}${c.sitplan?(' (lista '+dataBR(c.sitplan)+')'):''}</option>`).join('')}
-      </select>
+      <input id="sp-add" data-so-leitura="lido no clique de Adicionar (spAddPorNome)" list="sp-cand" style="max-width:300px" placeholder="➕ Adicionar à lista deste dia… (digite o nome)">
+      <datalist id="sp-cand">${foraDaLista.slice(0,300).map(c=>`<option value="${esc(c.nome)} · ${esc(c.etapa)}"></option>`).join('')}${bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&(c.estagio==='lista_ta'||c.estagio==='estoque')).slice(0,400).map(c=>`<option value="${esc(c.nome)} · Estoque"></option>`).join('')}</datalist>
+      <button class="btn btn-p btn-mini" onclick="spAddPorNome($('#sp-add').value)">Adicionar</button>
     </div>
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Contato</th><th>Etapa</th><th>ANCE</th><th>Resultado</th><th>Reagendar</th>
@@ -9840,7 +9845,7 @@ function viewLpAtrasos(){
       <button class="btn btn-p" onclick="atColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s" onclick="atNovo()" style="margin-left:8px">＋ Adicionar</button>
       <button class="btn btn-ghost" onclick="atExemplo()" style="margin-left:8px">Ver exemplo</button></div>`; return; }
-  const todosAtivos=AT.itens.filter(r=>!r.resolvido_em);
+  const todosAtivos=AT.itens.filter(escLinhaOk).filter(r=>!r.resolvido_em);   /* ESCOPO-UNICO */
   /* CARDS-SEGUEM-FILTRO (02/09): igual à emissão — cards seguem LP e busca; lentes ficam de fora */
   const ativos=todosAtivos.filter(r=>atRecorte(r));
   const recorteOn=!!(FAT.lp||FAT.q);
@@ -10545,12 +10550,13 @@ async function soSalvarFicha(id){ const s=SO.itens.find(x=>String(x.id)===String
   s.status=st; s.resultado=v('sof_res')||null; s.protocolo=v('sof_prot')||null; await soGravar(s); atClose(); render(); toast('Salvo',true); }
 function viewSolicitacoes(){
   const hoje=atHojeLocal(), mes=atHojeISO().slice(0,7);
-  const abertas=SO.itens.filter(s=>s.status==='aberta'), semRet=abertas.filter(s=>soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS);
-  const doMes=SO.itens.filter(s=>String(s.aberta_em||'').slice(0,7)===mes);
+  const SOV=SO.itens.filter(escLinhaOk);   /* ESCOPO-UNICO */
+  const abertas=SOV.filter(s=>s.status==='aberta'), semRet=abertas.filter(s=>soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS);
+  const doMes=SOV.filter(s=>String(s.aberta_em||'').slice(0,7)===mes);
   const porV=doMes.filter(s=>s.aberta_por==='victor').length, porG=doMes.filter(s=>s.aberta_por==='gustavo').length;
   const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   const kpiLente=(on,liga,l,n,sb)=>`<button class="kpi kpi-lente${on?' on':''}" onclick="${liga}"><div class="lbl">${l}</div><div class="num">${n}</div><div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estas':sb}</div></button>`;
-  const lista=SO.itens.filter(s=>{ if(FSO.status==='aberta'&&s.status!=='aberta') return false; if(FSO.status==='sem_retorno'&&!(s.status==='aberta'&&soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS)) return false; if(FSO.status&&FSO.status!=='aberta'&&FSO.status!=='sem_retorno'&&FSO.status!=='todas'&&s.status!==FSO.status) return false;
+  const lista=SOV.filter(s=>{ if(FSO.status==='aberta'&&s.status!=='aberta') return false; if(FSO.status==='sem_retorno'&&!(s.status==='aberta'&&soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS)) return false; if(FSO.status&&FSO.status!=='aberta'&&FSO.status!=='sem_retorno'&&FSO.status!=='todas'&&s.status!==FSO.status) return false;
       if(FSO.q){ const q=normKey(FSO.q); if(normKey(s.segurado).indexOf(q)<0&&String(s.apolice||'').indexOf(FSO.q.replace(/\D/g,'')||'§')<0) return false; } return true; })
     .sort((a,b)=>{ const pa=a.prazo||'9999', pb=b.prazo||'9999'; return pa.localeCompare(pb)||String(b.aberta_em).localeCompare(String(a.aberta_em)); });
   const hojeISO=atHojeISO();
@@ -10853,7 +10859,7 @@ function viewBeneficios(){
     <div class="card" style="text-align:center;padding:34px">Nenhum caso ainda. Quando um segurado avisar um evento coberto, abra o caso aqui antes de mandar qualquer documento.<br><br>
       <button class="btn btn-p" onclick="bfNovo()">🩹 Abrir benefício</button>
       <button class="btn btn-ghost" onclick="bfExemplo()" style="margin-left:8px">Ver exemplo</button></div>`; return; }
-  const ativos=BF.itens.filter(bfAtivo);
+  const ativos=BF.itens.filter(escLinhaOk).filter(bfAtivo);   /* ESCOPO-UNICO: vendo como X, só o que é de X */
   const maisVelho=ativos.reduce((mx,r)=>{ const d=bfDiasAberto(r,hoje); return d!=null&&d>mx?d:mx; },0);
   const exVenc=ativos.reduce((s,r)=>s+bfExigVencidas(r,hojeISO).length,0), exAb=ativos.reduce((s,r)=>s+bfExigAbertas(r).length,0);
   const parados=ativos.filter(r=>bfParado(r,hoje)), mudos=ativos.filter(bfMudo);
@@ -10905,7 +10911,7 @@ const HUB_SECOES=[
     {view:'cart-visao',        ic:'📊', titulo:'Visão da Carteira',   desc:'Panorama da carteira ativa: clientes, apólices, prêmio e capital segurado.', mod:'carteira'},
     {view:'cart-clientes',     ic:'🗂️', titulo:'Clientes (carteira)', desc:'Sua base: apólices, coberturas, aniversário e perfil de cada cliente.', mod:'carteira', cnt:()=>cartVis().length},
     {view:'cart-oportunidades',ic:'💡', titulo:'Oportunidades',       desc:'Aniversários, gaps de cobertura e cruzamento com o relatório da semana.', mod:'carteira'},
-    {view:'beneficios',        ic:'🩹', titulo:'Benefícios (sinistro)', desc:'Acompanhamento de sinistro/benefício, do aviso ao pagamento.', mod:'beneficios', cnt:()=>(BF.itens||[]).filter(bfAtivo).length}
+    {view:'beneficios',        ic:'🩹', titulo:'Benefícios (sinistro)', desc:'Acompanhamento de sinistro/benefício, do aviso ao pagamento.', mod:'beneficios', cnt:()=>(BF.itens||[]).filter(escLinhaOk).filter(bfAtivo).length}
   ]},
   {titulo:'Prospecção', itens:[
     {view:'bn-dups', ic:'🔀', titulo:'Duplicatas',           desc:'Fila de possíveis duplicados no Estoque de Nomes — você decide juntar.', cnt:()=>BN.dups.filter(d=>!d.decisao).length}
@@ -10920,11 +10926,11 @@ const HUB_SECOES=[
     {view:'placed',       ic:'🎯', titulo:'Controle de PLACED',   desc:'Onde a MFB bate em cada leitura (Clube 3W, PTC 2027): simulador, fila de resgate e meta reversa.', mod:'placed'}
   ]},
   {titulo:'BackOffice Prudential', itens:[
-    {view:'lp-atrasos',   ic:'⏰', titulo:'Lista de Atraso',      desc:'Prêmio em atraso: dias, motivo, script de cobrança e o estado de cada caso.', mod:'backoffice', cnt:()=>(AT.itens||[]).filter(r=>!r.resolvido_em).length},
+    {view:'lp-atrasos',   ic:'⏰', titulo:'Lista de Atraso',      desc:'Prêmio em atraso: dias, motivo, script de cobrança e o estado de cada caso.', mod:'backoffice', cnt:()=>(AT.itens||[]).filter(escLinhaOk).filter(r=>!r.resolvido_em).length},
     {view:'emissao-diaria',ic:'📈', titulo:'Emissão Diária',       desc:'O painel do BI da Prudential, com os seus números: PA e apólices emitidas por dia, plano × real, cycle time, estoque e aging.', mod:'backoffice'},
     {view:'apolices-detalhado',ic:'📑', titulo:'Detalhado por Apólice', desc:'Uma linha por apólice, no formato do BI: LP, cliente, evento, nº, PA, prêmio, CS. Filtra por ano/mês de emissão e LP.', mod:'backoffice'},
     {view:'lp-pendencias',ic:'📌', titulo:'Pendências de Emissão',desc:'Propostas pendentes, AFYC represado e a janela de compensation.', mod:'backoffice', cnt:()=>(EM.itens||[]).filter(emAtivo).length},
-    {view:'solicitacoes', ic:'📨', titulo:'Solicitações',         desc:'Pedidos à assessoria com prazo, dono e retorno; texto pronto pro WhatsApp.', mod:'backoffice', cnt:()=>(SO.itens||[]).filter(s=>s.status==='aberta').length},
+    {view:'solicitacoes', ic:'📨', titulo:'Solicitações',         desc:'Pedidos à assessoria com prazo, dono e retorno; texto pronto pro WhatsApp.', mod:'backoffice', cnt:()=>(SO.itens||[]).filter(escLinhaOk).filter(s=>s.status==='aberta').length},
     {view:'lp-statust',   ic:'🅣', titulo:'Status T',             desc:'Apólices emitidas na janela dos 30 dias / 2º prêmio.', mod:'backoffice', cnt:()=>lpAtivos('statust').length},
     {view:'subst',        ic:'🔁', titulo:'Substituições',        desc:'Controle de substituição e postecipação, apólice antiga × nova.', mod:'backoffice'},
     {view:'persistencia', ic:'📉', titulo:'Persistência',        desc:'PAV/PANCEC e % de persistência por mês (Extrato de Comissão) + simulador de cancelamento.', mod:'backoffice'}
@@ -12413,9 +12419,17 @@ function bnSalvar(){
     if(_bnLast[k]===j) return; if(_bnLast[k]===undefined&&c._upd) return; c._upd=now; });
   _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); });
   _bnRecCountCache=null; // nomes podem ter mudado → recontar os "rec" embutidos
-  localStorage.setItem(BN_CHAVE,JSON.stringify(BN));
+  /* QUOTA-V1 (11/09): o cache guarda só os MEUS nomes (linha de outro dono vem do servidor a cada abertura).
+     Com 6.5k linhas o localStorage estourava a cota, o setItem lançava no meio da carga e os 1.368 do Daniel
+     nunca chegavam à memória. Falha de cota agora avisa uma vez e NUNCA derruba a carga. */
+  try{ const eu=(typeof escEu==='function'?escEu():'')||''; const meus=BN.contatos.filter(c=>!c._dono||!eu||c._dono===eu);
+    localStorage.setItem(BN_CHAVE,JSON.stringify({contatos:meus,dups:BN.dups})); }
+  catch(e){ lsQuotaAviso(e); }
   bnAgendarPush();
 }
+let _lsQuotaAvisado=false;
+function lsQuotaAviso(e){ console.warn('localStorage: não coube (cota) — dado segue na memória e no servidor',e&&e.name);
+  if(_lsQuotaAvisado) return; _lsQuotaAvisado=true; try{ toast('⚠️ Cache do navegador cheio — nada perdido: o dado está no servidor. Um "Começar do zero" limpa o cache.',false); }catch(_){} }
 
 /* ── sync com lp_contatos (funil:'bn'), merge por maior _upd ── */
 let _bnPrev={},_bnTimer=null,_bnRemoteLoaded=false;
@@ -12546,6 +12560,8 @@ function escRegOkDe(o, rec){ /* PURA: registro (com _dono e talvez lp) cabe no e
   if(o.lp && !lp && !o.padrao) return false;                            /* sub-rótulo (Rebeca): só o que tem o rótulo dela */
   return true; }
 function escRegOk(rec){ return escRegOkDe(escAtual(),rec); }
+/* linha de módulo (backoffice/benefícios): dono = lp_email, rótulo = lp/lp_servico */
+function escLinhaOk(r){ if(!logado()||!r) return true; return escRegOkDe(escAtual(),{_dono:r.lp_email||r.dono||null, lp:r.lp||r.lp_servico||null}); }
 function escSet(id){ ESC.sel=id; try{ localStorage.setItem(ESC_CHAVE,id); }catch(_){}
   const o=escAtual(); PX.escopo=(o.id==='todos')?'todos':(o.id==='meu')?'meu':(o.lp||'meu');
   try{ localStorage.setItem(PX_CHAVE,JSON.stringify(PX)); }catch(_){}
@@ -14934,6 +14950,9 @@ function lpSelfCheck(){
       const r=lpcRowOut('k1',{nome:'Zz',_dono:'daniel@x'},{funil:'bn'}); const r2=lpcRowOut('k2',{nome:'Zz'});
       return r.dono==='daniel@x'&&!('_dono' in r.dados)&&r.dados.funil==='bn'&&r.id==='k1'&&(!logado()? !('dono' in r2):true); })());
     ok('LISTAS 11/09: ordem = Toda a base, Rec (com telefone), Recomendações, Delay, Rec (sem fone)… sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='comfone'&&k[2]==='recs'&&k[3]==='delay'&&k[4]==='recsemfone'&&!k.includes('oi')&&!k.includes('prontos'); })());
+    ok('ESCOPO em módulos: linha de outro dono some quando opero como X; deslogado passa tudo', (()=>{ const P=PERFIL,E=ESC,D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=['d@x']; ESC={sel:'dono:d@x',rotulos:[{rotulo:'daniel',dono_email:'d@x'},{rotulo:'gustavo',dono_email:'a@x'}],perfis:{}};
+      const a=escLinhaOk({lp_email:'d@x',lp:'Daniel'}), b=escLinhaOk({lp_email:'a@x',lp:'Gustavo'}); PERFIL=null; const c=escLinhaOk({lp_email:'a@x',lp:'Gustavo'}); return a&&!b&&c; } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
+    ok('QUOTA: falha de cota no cache não derruba bnSalvar/salvar (comportamento, não texto — erro #50)', (()=>{ const st=Storage.prototype.setItem; const av=_lsQuotaAvisado; try{ Storage.prototype.setItem=function(){ const e=new Error('q'); e.name='QuotaExceededError'; throw e; }; bnSalvar(); salvar(); return true; }catch(e){ return false; } finally{ Storage.prototype.setItem=st; _lsQuotaAvisado=av; } })());
     ok('VER-COMO-V2: operando como um LP, os módulos são os DELE (funis extras desligados) e o painel admin some', (()=>{
       const P=PERFIL, E=ESC, D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=['d@x']; ESC={sel:'dono:d@x',rotulos:[{rotulo:'daniel',dono_email:'d@x'}],perfis:{'d@x':{papel:'lp',modulos:{}}}};
         return modOn('funis_extra')===false && modOn('carteira')===true && !!delegAtivo(); } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
