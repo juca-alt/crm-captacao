@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.31 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.32 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6246,7 +6246,10 @@ function viewPcSimulador(){
         ${field('pcsim-i-venc','Venc. do próximo prêmio','(define o dia atual)','date',st.vencAberto)}
         ${field('pcsim-i-novo','Novo dia de vencimento','(testar, 1–31)','number',st.novoDia,'min="1" max="31"')}
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">↺ Puxar direto de uma apólice: em breve (depende do login do portal ficar salvo).</div>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--azul)">📋 Colar apólice (espelho da Prudential) — preenche emissão e vencimento sozinho</summary>
+        <textarea id="pcsim-colar" oninput="pcSimColarApolice(true)" placeholder="Cole aqui o espelho da apólice (Detalhes da Apólice no portal, ou o PDF)… — ao colar, já preenche emissão e vencimento" style="width:100%;height:110px;margin-top:8px;font-size:12px;font-family:ui-monospace,monospace;padding:8px;border:1px solid var(--linha);border-radius:8px;background:var(--fundo);color:var(--ink)"></textarea>
+        <div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="btn btn-s btn-mini" onclick="pcSimColarApolice()">Ler apólice</button></div>
+      </details>
     </div>
     <div id="pcsim-standalone"></div>`;
   pcSimStandaloneChange();
@@ -6257,6 +6260,24 @@ function pcSimStandaloneChange(){
   pcSimMount('pcsim-standalone',{ emissao:g('pcsim-i-emissao'), vencAberto:g('pcsim-i-venc'),
     novoDia:(isFinite(nv)?nv:null),
     onChange:d=>{ const el=document.getElementById('pcsim-i-novo'); if(el) el.value=(d==null?'':d); } });
+}
+/* PC-4c: colar o espelho da apólice no standalone -> reusa o parser existente (subExtrai/subSplitEspelhos)
+   pra preencher emissão + vencimento. Colar (manual), não importar do portal. */
+function pcSimColarApolice(silent){
+  const txt=(((document.getElementById('pcsim-colar')||{}).value)||'');
+  if(txt.trim().length<20){ if(!silent) toast('Cole o espelho da apólice primeiro'); return; }
+  let r=null;
+  try{
+    const blocos=(typeof subSplitEspelhos==='function')?subSplitEspelhos(txt):[{txt}];
+    for(const b of (blocos||[])){ const x=(typeof subExtrai==='function')?subExtrai((b&&b.txt)||txt):null; if(x&&(x.emissao||x.venc)){ r=x; break; } }
+    if(!r&&typeof subExtrai==='function') r=subExtrai(txt);
+  }catch(_){}
+  if(!r||(!r.emissao&&!r.venc)){ if(!silent) toast('Não achei emissão/vencimento no texto colado'); return; }
+  const e=document.getElementById('pcsim-i-emissao'), v=document.getElementById('pcsim-i-venc');
+  if(r.emissao&&e) e.value=r.emissao;
+  if(r.venc&&v) v.value=r.venc;
+  pcSimStandaloneChange();
+  if(!silent) toast('Apólice '+(r.numero||'')+' lida'+(r.emissao?' · emissão '+atFmtBR(r.emissao):'')+(r.venc?' · venc '+atFmtBR(r.venc):''),true);
 }
 /* próxima data (após `fromISO`) cujo dia-do-mês seja `dia` — respeita meses de 28/29/30/31 sozinho */
 function subProxData(fromISO,dia){ if(!fromISO) return ''; const d=atParseISO(fromISO); for(let i=0;i<62;i++){ d.setDate(d.getDate()+1); if(d.getDate()===dia) return subISO(d); } return ''; }
@@ -14195,6 +14216,7 @@ function lpSelfCheck(){
       ok('pc-2: dia inexistente vira célula morta (em29,venc set: dia31 indisponível)', pcSimuladorHtml({emissao:'2023-05-29',vencAberto:'2025-09-01',host:'t'}).indexOf('pcsim-day')>=0 && /pcsim-day[^"]*dead/.test(pcSimuladorHtml({emissao:'2023-05-29',vencAberto:'2025-09-01',host:'t'})));
       ok('pc-2: sem dados essenciais -> aviso, sem quebrar', pcSimuladorHtml({}).indexOf('pcsim-erro')>=0); }
     ok('pc-4: modal reusável + hosts (Substituição/Lista de Atraso) plugam o componente', typeof pcSimModal==='function' && typeof pcSimModalChange==='function' && typeof subSimularModal==='function');
+    ok('pc-4c: colar apólice no standalone reusa o parser de espelho (subExtrai)', typeof pcSimColarApolice==='function' && typeof subExtrai==='function');
     /* CARD-CLIENTE-V1 (03/09): uma leitura derivada da pessoa, e o ciclo emitida → entregue → apólice na base.
        Tudo em cima de cópias: CART, EM e S voltam ao que eram no fim (Livro de Erros #17). */
     { const _c0=CART.clientes, _a0=CART.apolices, _e0=EM.itens, _s0=S.contatos, _r0=CART_REMOTE; let _ls=null; try{ _ls=localStorage.getItem(CART_CHAVE); }catch(_){}
