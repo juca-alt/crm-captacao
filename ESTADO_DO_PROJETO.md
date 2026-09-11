@@ -4,11 +4,11 @@
 
 ## 10-11/09/2026 — Painel TA nativo · Estágio único · Escopo único (RLS unificada) · SitPlan unificado · listas do método · auditoria das bases
 
-**Estado em 30s:** `main` — **v7.43.4 no ar**. Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
+**Estado em 30s:** `main` — **v7.46 no ar** (PRs #210–#214: SEGURANÇA-V1/V2 + varredura diária 02:00, DRAG-TOUCH no iPhone, STATUS-ETAPA-V1). Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
 
 **Prompt pra próxima sessão:**
 ```
-Sessão CRM Visão LP — retomar. v7.43.4 no ar (FUNDAÇÃO V1: servidor manda + fila PEND; ID-NA-PORTA). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
+Sessão CRM Visão LP — retomar. v7.46 no ar (FUNDAÇÃO V1 servidor manda + fila PEND; SEGURANÇA-V1/V2 c/ varredura diária pg_cron 02:00; DRAG-TOUCH-V1 no iPhone; STATUS-ETAPA-V1 = status dentro da etapa, cfg do admin em Funil & Etapas, filtro nos funis, 'Delay X' alimenta o Painel TA — ELE AINDA PRECISA CADASTRAR OS STATUS). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
 ```
 
 ### O que entrou (tudo no ar, PRs #186–#196)
