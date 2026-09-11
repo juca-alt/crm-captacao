@@ -1,0 +1,3 @@
+-- SEGURANÇA-V2 + VARREDURA DIÁRIA (11/09/2026, aplicadas): view subst_postecipacao security_invoker=true; EXECUTE em funções do public
+-- sai de PUBLIC/anon (só authenticated/service_role); tabela lp_varredura_log (RLS: só admin lê); função lp_varredura_diaria(origem)
+-- (SECURITY DEFINER) audita segurança/integridade/performance e grava; pg_cron 'lp_varredura_diaria_2am' = '0 5 * * *' UTC (02:00 Recife).

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.44.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.45 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -7784,7 +7784,7 @@ function exRecToRow(r){ const row={lp_email:EM_EMAIL}; ['proposta','apolice','se
 async function exCarregar(){
   EX_REMOTE=await emRemoteOn();
   if(EX_REMOTE){ try{ const {data,error}=await sb.from(EX_TABLE).select('*'); if(error) throw error;
-    EX.itens=(data||[]).map(exRowToRec); EX.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null; exSalvarLocal(); return;
+    EX.itens=(data||[]).map(exRowToRec).filter(escLinhaOk); EX.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null; exSalvarLocal(); return;
   }catch(e){ console.warn('EX load remoto falhou → local',e); EX_REMOTE=false; } }
   try{ const raw=localStorage.getItem(EX_CHAVE); if(raw){ const o=JSON.parse(raw); EX.itens=Array.isArray(o.itens)?o.itens:[]; EX.carregadoEm=o.carregadoEm||null; } }catch(e){}
 }
@@ -9595,7 +9595,7 @@ function atRecToRow(r){ return { lp_email:AT_EMAIL, apolice:r.apolice, lp_servic
 async function atCarregar(){
   AT_REMOTE=await atRemoteOn();
   if(AT_REMOTE){ try{ const {data,error}=await sb.from(AT_TABLE).select('*'); if(error) throw error;
-    AT.itens=(data||[]).map(atRowToRec);
+    AT.itens=(data||[]).map(atRowToRec).filter(escLinhaOk);   /* ESCOPO na porta (11/09) */
     AT.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null;
     atSalvarLocal(); return;
   }catch(e){ console.warn('AT load remoto falhou → local',e); AT_REMOTE=false; } }
@@ -10260,7 +10260,7 @@ function emRecToRow(r){ const row={ lp_email:EM_EMAIL }; ['proposta','apolice','
 async function emCarregar(){
   EM_REMOTE=await emRemoteOn();
   if(EM_REMOTE){ try{ const {data,error}=await sb.from(EM_TABLE).select('*'); if(error) throw error;
-    EM.itens=(data||[]).map(emRowToRec); EM.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null; emSalvarLocal(); return;
+    EM.itens=(data||[]).map(emRowToRec).filter(escLinhaOk); EM.carregadoEm=(data||[]).reduce((mx,r)=>((r.origem_relatorio||'')>mx?r.origem_relatorio:mx),'')||null; emSalvarLocal(); return;
   }catch(e){ console.warn('EM load remoto falhou → local',e); EM_REMOTE=false; } }
   try{ const raw=localStorage.getItem(EM_CHAVE); if(raw){ const o=JSON.parse(raw); EM.itens=Array.isArray(o.itens)?o.itens:[]; EM.carregadoEm=o.carregadoEm||null; } }catch(e){ console.warn('EM load local',e); }
 }
@@ -10574,7 +10574,7 @@ function soRot(opts,v){ return boRot(opts,v); }
 async function soRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ SO_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
 async function soCarregar(){
   SO_REMOTE=await soRemoteOn();
-  if(SO_REMOTE){ try{ const {data,error}=await sb.from(SO_TABLE).select('*').order('aberta_em',{ascending:false}); if(error) throw error; SO.itens=data||[]; soSalvarLocal(); return; }catch(e){ console.warn('SO load remoto falhou → local',e); SO_REMOTE=false; } }
+  if(SO_REMOTE){ try{ const {data,error}=await sb.from(SO_TABLE).select('*').order('aberta_em',{ascending:false}); if(error) throw error; SO.itens=(data||[]).filter(escLinhaOk); soSalvarLocal(); return; }   /* ESCOPO na porta */catch(e){ console.warn('SO load remoto falhou → local',e); SO_REMOTE=false; } }
   try{ const raw=localStorage.getItem(SO_CHAVE); if(raw){ const o=JSON.parse(raw); SO.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
 }
 function soSalvarLocal(){ try{ localStorage.setItem(SO_CHAVE,JSON.stringify(SO)); }catch(e){} }
@@ -10733,7 +10733,7 @@ async function bfCarregar(){
   if(BF_REMOTE){ try{
     const [c,d,x,e]=await Promise.all([sb.from(BF_TABLE).select('*'),sb.from('beneficio_documentos').select('*'),sb.from('beneficio_exigencias').select('*'),sb.from('beneficio_eventos').select('*').order('ocorrido_em')]);
     [c,d,x,e].forEach(r=>{ if(r.error) throw r.error; });
-    BF.itens=(c.data||[]).map(r=>{ const id=String(r.id); r.documentos=(d.data||[]).filter(q=>String(q.beneficio_id)===id); r.exigencias=(x.data||[]).filter(q=>String(q.beneficio_id)===id); r.eventos=(e.data||[]).filter(q=>String(q.beneficio_id)===id); r.valor_pago=r.valor_pago!=null?Number(r.valor_pago):null; return r; });
+    BF.itens=(c.data||[]).filter(escLinhaOk).map(r=>{   /* ESCOPO na porta (11/09) */ const id=String(r.id); r.documentos=(d.data||[]).filter(q=>String(q.beneficio_id)===id); r.exigencias=(x.data||[]).filter(q=>String(q.beneficio_id)===id); r.eventos=(e.data||[]).filter(q=>String(q.beneficio_id)===id); r.valor_pago=r.valor_pago!=null?Number(r.valor_pago):null; return r; });
     bfSalvarLocal(); return;
   }catch(e){ console.warn('BF load remoto falhou → local',e); BF_REMOTE=false; } }
   try{ const raw=localStorage.getItem(BF_CHAVE); if(raw){ const o=JSON.parse(raw); BF.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
@@ -12677,7 +12677,8 @@ function escSet(id){ ESC.sel=id; try{ localStorage.setItem(ESC_CHAVE,id); }catch
   const o=escAtual(); PX.escopo=(o.id==='todos')?'todos':(o.id==='meu')?'meu':(o.lp||'meu');
   try{ localStorage.setItem(PX_CHAVE,JSON.stringify(PX)); }catch(_){}
   if(typeof aplicarGates==='function') aplicarGates(); render(); toast('Vendo e operando: '+o.nome,true);
-  if(o.dono&&o.dono!==escEu()) bnGarantirDono(o.dono).then(()=>{ if(typeof render==='function') render(); }); }
+  if(o.dono&&o.dono!==escEu()) bnGarantirDono(o.dono).then(()=>{ if(typeof render==='function') render(); });
+  if(typeof sincronizarDados==='function') sincronizarDados();   /* ESCOPO na porta: recarrega os módulos já filtrados */ }
 function delegAtivo(){ if(!logado()) return null; const o=escAtual(); return (o.dono&&o.dono!==escEu())?o.dono:null; }
 /* e-mail DONO das linhas que este usuário lê/grava */
 function delegDono(email){ return delegAtivo()||email||DELEG.eu; }
@@ -12700,6 +12701,7 @@ async function perfilCarregar(){
     const md=s.session.user.user_metadata||{};
     PERFIL.email=email; PERFIL.nome=md.full_name||md.name||md.nome||(email.split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase()));
     if(!DELEG.eu){ try{ await delegCarregar(); }catch(_){} }   /* v7.35.1: delegações rodaram sem sessão → refaz agora que há e-mail */
+    setTimeout(()=>{ try{ varDiariaSeNecessario(); }catch(_){} },4000);
   }catch(e){ console.warn('lp_perfis: sem perfil remoto → defaults',e); }
 }
 function aplicarGates(){
@@ -14123,6 +14125,16 @@ function viewLpAdm(){
   admCarregar().then(()=>{ $('#main').innerHTML=admHtml(); });
   $('#main').innerHTML='<h1 class="pg">Painel Master · Acessos</h1><div class="card" style="padding:14px">Carregando…</div>';
 }
+/* VARREDURA DIÁRIA (11/09): o banco roda `lp_varredura_diaria()` às 02:00 (pg_cron) e grava em lp_varredura_log.
+   O admin vê o último resultado aqui; o app também dispara uma rodada por dia no 1º acesso do admin (redundância). */
+let VAR={ultima:null};
+async function varCarregar(){ if(!sb||!souAdm()) return; try{ const r=await sb.from('lp_varredura_log').select('quando,origem,achados,alertas').order('quando',{ascending:false}).limit(1); if(!r.error&&r.data&&r.data[0]) VAR.ultima=r.data[0]; }catch(_){} }
+async function varRodarAgora(){ if(!sb||!souAdm()) return; try{ toast('Rodando varredura…',true); const r=await sb.rpc('lp_varredura_diaria',{p_origem:'app'}); if(r.error) throw r.error; await varCarregar(); render(); toast('Varredura concluída · '+(r.data&&r.data.alertas||0)+' alerta(s)',true); }catch(e){ toast('Varredura falhou: '+(e.message||e),false); } }
+async function varDiariaSeNecessario(){ if(!sb||!souAdm()) return; try{ const h=hojeISO(); let ult=null; try{ ult=localStorage.getItem('crmlp_var_dia'); }catch(_){} if(ult===h) return; await varCarregar(); const q=VAR.ultima&&String(VAR.ultima.quando||'').slice(0,10); if(q===h){ try{ localStorage.setItem('crmlp_var_dia',h); }catch(_){} return; } const r=await sb.rpc('lp_varredura_diaria',{p_origem:'app'}); if(!r.error){ try{ localStorage.setItem('crmlp_var_dia',h); }catch(_){} await varCarregar(); } }catch(_){} }
+function varHtml(){ const u=VAR.ultima; const sev=x=>x==='ALERTA'?'b-verm':x==='aviso'?'b-amarelo':x==='info'?'b-cinza':'b-verde';
+  return `<details class="card" style="padding:0;margin-top:14px" ${u&&u.alertas?'open':''}><summary style="padding:12px 14px;cursor:pointer;font-weight:700">🛡️ Varredura diária (segurança · integridade · performance) <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${u?('última '+String(u.quando).slice(0,16).replace('T',' ')+' · '+u.origem+' · '):'ainda não rodou · '}<b style="color:${u&&u.alertas?'var(--verm)':'var(--verde,#157f4b)'}">${u?u.alertas+' alerta(s)':''}</b></span></summary>
+    <div style="padding:0 14px 14px"><div style="font-size:12px;color:var(--muted);margin-bottom:8px">Roda sozinha todo dia às 02:00 no banco (pg_cron) e no 1º acesso do admin. <button class="btn btn-s btn-mini" onclick="varRodarAgora()">Rodar agora</button></div>
+    ${u?`<table style="width:100%;font-size:12.5px"><tbody>${(u.achados||[]).map(a=>`<tr><td style="width:70px"><span class="badge ${sev(a.sev)}">${esc(a.sev)}</span></td><td>${esc(a.chave)}</td><td style="color:var(--muted)">${esc(String(a.valor||''))}</td></tr>`).join('')}</tbody></table>`:''}</div></details>`; }
 function admHtml(){
   const eu=(PERFIL&&PERFIL.email)||'';
   const card=p=>{ const m=admMods(p), donos=admDonosDe(p.email), assist=admAssistentesDe(p.email), ativo=admAtivo(p);
@@ -14403,7 +14415,7 @@ function render(){
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
   else if(VIEW==='bn-recs') viewBnRecs();
-  else if(VIEW==='lp-adm') viewLpAdm();
+  else if(VIEW==='lp-adm'){ viewLpAdm(); try{ const m=$('#main'); if(m&&souAdm()) m.insertAdjacentHTML('beforeend',varHtml()); }catch(_){} }
   else viewInicio();
   /* O card "Base de Nomes" saiu daqui em 01/09 a pedido dele: a tela de abrir
      e pra decidir o que fazer agora, e cinco numeros de estoque empurravam o
@@ -15073,6 +15085,8 @@ function lpSelfCheck(){
       return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
     ok('SEGURANÇA-V1: não existe botão de zerar/apagar base na tela; zerarContatos (se chamada) só limpa cache local', (()=>{ const t=zerarContatos.toString(); return !document.querySelector('[onclick*="zerarContatos"]') && !t.includes('S.contatos=[]') && !t.includes('salvar()'); })());
+    ok('ESCOPO na porta: carregadores dos módulos filtram por escLinhaOk', ['atCarregar','bfCarregar','soCarregar','emCarregar','exCarregar'].every(f=>String(window[f]||'').includes('escLinhaOk')));
+    ok('VARREDURA: painel existe e função de disparo diário existe', typeof varHtml==='function' && typeof varDiariaSeNecessario==='function' && varHtml().includes('Varredura diária'));
     ok('SITPLAN-FONTES: a busca do SitPlan lista funil, Estoque e clientes da carteira', String(viewSitplan.toString()).includes('· Cliente') && String(spAddPorNome.toString()).includes("tag==='Cliente'"));
     ok('SEGURANÇA-V1: teto de exclusão por push existe e é pequeno', typeof LPC_DEL_MAX==='number' && LPC_DEL_MAX<=50);
     ok('FUNDAÇÃO V1.4: merge do servidor não marca pendente (só edição local marca)', (()=>{ const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ BN.contatos=[{id:'Zzm1',nome:'Zz',_dono:'x'}]; _bnLast={}; bnSalvar(); PEND.bn={}; BN.contatos=[{id:'Zzm1',nome:'Zz servidor',_dono:'x'}]; bnSalvar({doServidor:true}); const a=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzm1',nome:'Zz editado',_dono:'x'}]; bnSalvar(); const b=!!PEND.bn['Zzm1']; return a&&b; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
