@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.47.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.48 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1859,8 +1859,11 @@ function nomeAtual(){ return logado()?(PERFIL.nome||PERFIL.email||'Você'):user(
 function logado(){ return (typeof PERFIL!=='undefined') && !!PERFIL; }
 function isMaster(){ if(logado()) return PERFIL.papel==='admin'; return user().papel.startsWith('Master'); }
 /* Logado: mostra tudo que carregou (a RLS já trouxe só o do dono). Deslogado: filtro demo por LP. */
-function meusContatos(){ return S.contatos.filter(c=>(!c.funil||c.funil==='nn') && (logado()? escRegOk(c) : (isMaster()||c.lp===S.activeUser))); }
-function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && (logado()? escRegOk(c) : (isMaster()||c.lp===S.activeUser))); }
+/* ESCOPO-TUDO-V1 (11/09): 'tarefas de leads do Daniel no meu perfil' — Agenda/Início/Metas/busca/funis extras liam
+   S.contatos com 'master ou logado' (= todo mundo). UMA porta: escVisivel(c). Nada se mistura. */
+function escVisivel(c){ if(!c) return false; return logado()? escRegOk(c) : (isMaster()||c.lp===S.activeUser); }
+function meusContatos(){ return S.contatos.filter(c=>(!c.funil||c.funil==='nn') && escVisivel(c)); }
+function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && escVisivel(c)); }
 function etapasDe(c){ const f=c&&c.funil; if(f&&ETAPAS_MAP[f]) return ETAPAS_MAP[f].ids; return f==='bc'?ETAPAS_BC:ETAPAS; }
 /* Funil errado era beco sem saida: o card so mostra as etapas da esteira em que
    o contato ESTA, e a unica saida era apagar e recriar — perdendo historico e
@@ -2453,7 +2456,7 @@ function viewInicio(){
   if(isMaster()){
     bLp=iniBloco('lp','Funil por Life Planner',`${S.users.length} LP(s)`,
       S.users.map(u=>{
-        const l=S.contatos.filter(c=>c.lp===u.id&&c.funil!=='bc'); const p=contagens(l);
+        const l=S.contatos.filter(c=>escVisivel(c)&&c.lp===u.id&&c.funil!=='bc'); const p=contagens(l);
         return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px dashed var(--linha)">
           <span class="avatar" style="background:${esc(u.cor)};width:26px;height:26px;font-size:10px">${esc(iniciais(u.nome))}</span>
           <b style="min-width:90px">${esc(u.nome.split(' ')[0])}</b>
@@ -2841,7 +2844,7 @@ function diasEntreISO(a,b){
   return Math.round((new Date(pb[0],pb[1]-1,pb[2]) - new Date(pa[0],pa[1]-1,pa[2]))/86400000);
 }
 /* todos os contatos do LP (os DOIS funis: a agenda é uma só) */
-function contatosDoLp(){ return (S.contatos||[]).filter(c=>isMaster()||logado()||c.lp===S.activeUser); }
+function contatosDoLp(){ return (S.contatos||[]).filter(escVisivel); }
 /* ═══ REUNIÃO A FINALIZAR V1 (31/08) ════════════════════════════════════════
    Trazido do estudo do LP Business, que separa "pendente de finalização" de
    "próximos" — e na base dele havia reunião pendente acumulada desde março.
@@ -3424,7 +3427,7 @@ function nnMoveEtapa(id,etapa,cardEl,colEl,antesId){
    "deixa existindo, depois evoluo". A população é c.funil===fid. */
 const FUNIS_EXTRA=[['vg','Vida em Grupo','👥','venda de seguro corporativo — já com clientes rodando'],['prud','Prud. Demais','🧩','produtos complementares da Prudential (Primeira Proteção, Proteção Em Vida, Seg. Viagem)'],['mfo','MFO','🏦','oportunidades que surgem de outros serviços']];
 function fxMeta(fid){ return FUNIS_EXTRA.find(x=>x[0]===fid)||[fid,fid,'📈','']; }
-function fxLista(fid){ return S.contatos.filter(c=>c.funil===fid && (isMaster()||logado()||c.lp===S.activeUser)); }
+function fxLista(fid){ return S.contatos.filter(c=>c.funil===fid && escVisivel(c)); }
 function viewFunilExtra(fid){
   const meta=fxMeta(fid), M=ETAPAS_MAP[fid]||{fluxo:[],enc:[]};
   const lista=fxLista(fid);
@@ -5382,7 +5385,7 @@ function mtRealizado(){
       if(i.k==='etapa'&&i.para==='N') n++;
     });
   });
-  (S.contatos||[]).filter(c=>(isMaster()||logado()||c.lp===S.activeUser)).forEach(c=>{
+  (S.contatos||[]).filter(escVisivel).forEach(c=>{
     const g=MT_GANHO[funilDe(c)]||MT_GANHO.nn;
     if(interacoesDe(c).some(i=>i.k==='etapa'&&i.para===g&&mtNoPeriodo(i.dia))){ emit++; pa+=(typeof paDe==='function'?(paDe(c)||0):0); }
   });
@@ -13963,7 +13966,7 @@ fxSheetReg('rec',()=>({titulo:'Filtros das Recomendações',
    Índice 1×/render por nome normalizado; prioridade cliente > funil > estoque. */
 function recStatusIndex(){ const m=new Map();
   (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>{ const k=normKey(b.nome); if(k&&!m.has(k)) m.set(k,{txt:(typeof BN_EST_LABEL!=='undefined'&&BN_EST_LABEL[b.estagio])||b.estagio||'no estoque',cls:'b-cinza',ico:'📇'}); });
-  (S.contatos||[]).forEach(c=>{ const k=normKey(c.nome); if(k) m.set(k,{txt:(ET_LABEL[c.etapa]||c.etapa),cls:(ET_BADGE[c.etapa]||'b-cinza'),ico:'🎯'}); });
+  (S.contatos||[]).filter(escVisivel).forEach(c=>{ const k=normKey(c.nome); if(k) m.set(k,{txt:(ET_LABEL[c.etapa]||c.etapa),cls:(ET_BADGE[c.etapa]||'b-cinza'),ico:'🎯'}); });
   (typeof CART!=='undefined'&&CART.clientes||[]).forEach(c=>{ const k=c.ref||normKey(c.nome); if(k) m.set(k,{txt:'já é cliente',cls:'b-verde',ico:'🛡️'}); });
   return m; }
 function viewBnRecs(){
@@ -14538,7 +14541,7 @@ function lpkMatches(q){
       .forEach(c=>out.push({t:'bn',id:c.id,nome:c.nome,sub:[c.cargo,c.cidade,BN_EST_LABEL[c.estagio]].filter(Boolean).join(' · ')||'Estoque de Nomes',tag:'📦 Estoque'}));
   }
   if(LPK_SCOPE==='all'||LPK_SCOPE==='funil'){
-    (S.contatos||[]).filter(c=>c.lp===S.activeUser&&hit([c.nome,c.telefone,c.profissao,c.notas]))
+    (S.contatos||[]).filter(c=>escVisivel(c)&&hit([c.nome,c.telefone,c.profissao,c.notas]))
       .slice(0,LPK_SCOPE==='funil'?14:6)
       .forEach(c=>out.push({t:'funil',id:c.id,nome:c.nome,sub:[(c.funil==='bc'?'Base de Clientes':'Novos Negócios'),c.etapa,c.telefone].filter(Boolean).join(' · '),tag:'🎯 '+(c.etapa||'Funil')}));
   }
@@ -15193,6 +15196,9 @@ function lpSelfCheck(){
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
     ok('SEGURANÇA-V1: não existe botão de zerar/apagar base na tela; zerarContatos (se chamada) só limpa cache local', (()=>{ const t=zerarContatos.toString(); return !document.querySelector('[onclick*="zerarContatos"]') && !t.includes('S.contatos=[]') && !t.includes('salvar()'); })());
     ok('DRAG-TOUCH-V1: o board dos funis tem arrasto por toque (segurar e arrastar) e cards sem seleção de texto', typeof wireTouchDrag==='function' && String(wireNnBoard).includes('wireTouchDrag') && String(wireBcBoard).includes('wireTouchDrag') && (()=>{ const d=document.createElement('div'); d.className='nncard'; document.body.appendChild(d); const u=getComputedStyle(d).userSelect||getComputedStyle(d).webkitUserSelect; d.remove(); return u==='none'; })());
+    ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
+        S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
+        const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
     ok('BF-HISTORICO-V1: Benefícios tem KPI de pagos e chip Histórico (encerrados não somem)', (()=>{ const bk=BF.itens; BF.itens=[{id:'z1',situacao:'pago',valor_pago:100,segurado:'Zz',lp:'Gustavo'}]; try{ const V=VIEW; viewBeneficios(); const h=$('#main').innerHTML; return h.includes('Pagos (histórico)')&&h.includes('Histórico (1)'); } finally{ BF.itens=bk; } })());
     ok('CARTEIRA-SEGURA-V1: persistir carteira nunca zera o servidor por foto local vazia e bloqueia exclusão em massa fora do import', (()=>{ const a=cartPersistPlano({cli:[],apo:[],svCli:['x'],svApo:[],completo:false}).erro; const b=cartPersistPlano({cli:[{ref:'1'}],apo:[],svCli:Array.from({length:40},(_,i)=>'r'+i),svApo:[],completo:false}).erro; const c=cartPersistPlano({cli:[{ref:'1'}],apo:[],svCli:Array.from({length:40},(_,i)=>'r'+i),svApo:[],completo:true}); const d=cartPersistPlano({cli:[{ref:'1'}],apo:[{chave:'k'}],svCli:['1','2'],svApo:['k','z'],completo:false}); return !!a&&!!b&&!c.erro&&c.delCli.length===40&&!d.erro&&d.delCli.join()==='2'&&d.delApo.join()==='z'&&!String(cartPersistRemoto).includes('.delete().eq(\'dono\',me);'); })());
     ok('CFG-SALVAR-V2: salvar cfg do funil é com debounce, manda atualizado_em e fica pendente até conseguir', typeof funCfgSalvarAgora==='function' && String(funCfgSalvar).includes('setTimeout') && String(funCfgSalvarAgora).includes('atualizado_em') && String(funCfgSalvarAgora).includes('_funCfgPend=true'));
