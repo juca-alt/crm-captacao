@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.42 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.43 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1639,8 +1639,9 @@ function salvar(){
     const k=String(c.id), j=JSON.stringify(c);
     if(_lpcLast[k]===j) return;                 // não mudou
     if(_lpcLast[k]===undefined && c._upd) return; // 1º snapshot pós-boot: não recarimbar
-    c._upd=_now;
+    c._upd=_now; PEND.lpc[k]=1;                   /* FUNDAÇÃO V1: editado aqui → pendente até o push confirmar */
   });
+  pendSalvar();
   _lpcLast={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) _lpcLast[String(c.id)]=JSON.stringify(c); });
   try{ localStorage.setItem(CHAVE, JSON.stringify(S)); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); }
   if(typeof lpcAgendarPush==='function') lpcAgendarPush();
@@ -1656,6 +1657,36 @@ const LPC_T='lp_contatos';
 let LPC_REMOTE=false, _lpcTimer=null, _lpcPrev={};
 async function lpcRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); return !!(data&&data.session); }catch(e){ return false; } }
 function _lpcSnap(){ const m={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) m[String(c.id)]=JSON.stringify(c); }); return m; }
+/* ═══ FUNDAÇÃO DE DADOS V1 (11/09) — servidor manda, cache descartável, fila de pendentes ═══
+   O app nasceu "local primeiro" (1 usuário, offline). Com 3 donos + delegação + RLS, a cópia local
+   virou uma segunda verdade que brigava com o servidor (97 nomes, nomes voltando pro funil, testes
+   apagados que ficavam, 95 do Daniel, vazamento sem dono). Regra nova, uma só:
+     · o que o servidor devolveu É a base; a cópia local só serve pra abrir rápido;
+     · a ÚNICA exceção é o que este aparelho editou e ainda NÃO conseguiu subir (fila PEND) —
+       esse vence até o push confirmar; criado local sem _dono também é pendente por definição;
+     · em carga COMPLETA, o que não voltou do servidor e não está pendente SAI (foi apagado/movido lá);
+     · a fila persiste no aparelho e retenta ao voltar a conexão e a cada minuto.
+   `fundMerge` é PURA e tem invariantes. */
+const PEND_CHAVE='crmlp_pend_v1';
+let PEND={bn:{},lpc:{}};
+try{ const o=JSON.parse(localStorage.getItem(PEND_CHAVE)||'null'); if(o&&typeof o==='object'){ PEND.bn=o.bn||{}; PEND.lpc=o.lpc||{}; } }catch(_){}
+function pendSalvar(){ try{ localStorage.setItem(PEND_CHAVE,JSON.stringify(PEND)); }catch(_){} }
+function pendMarcar(fila,ids){ (ids||[]).forEach(id=>{ PEND[fila][String(id)]=1; }); pendSalvar(); }
+function pendLimpar(fila,ids){ (ids||[]).forEach(id=>{ delete PEND[fila][String(id)]; }); pendSalvar(); }
+function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).length; }
+function fundMerge(locais, remotos, pend, completo){
+  const out=new Map((remotos||[]).map(c=>[String(c.id),c]));       /* servidor manda */
+  (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id);
+    const pendente=!!(pend&&pend[k]);                               /* só o que está na FILA vence (criado aqui entra na fila ao salvar); local sem dono e fora da fila = fantasma de versão antiga → sai na carga completa */
+    if(pendente){ out.set(k,c); return; }                           /* o que este aparelho deve ao servidor vence */
+    if(!out.has(k) && !completo) out.set(k,c);                      /* carga parcial: não apaga o que não voltou */
+  });
+  return [...out.values()];
+}
+let _pendTimer=null;
+function pendRetentar(){ if(!pendTotal()||!LPC_REMOTE) return; if(typeof bnPush==='function') bnPush(); if(typeof lpcPush==='function') lpcPush(); }
+window.addEventListener('online',()=>setTimeout(pendRetentar,1500));
+_pendTimer=setInterval(pendRetentar,60000);
 /* FLUIDEZ-V1:LPC-2VOLTAS
    O merge é EXATAMENTE o de antes — só saiu de dentro do carregador para poder
    ser chamado nos dois caminhos. */
@@ -1677,14 +1708,9 @@ function _lpcMergeBn(remotosBn,completo){
   if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn,!!completo);
   _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
 }
-function _lpcMergeFunis(remotos){
-  if(remotos.length){
-    const porId=new Map(remotos.map(c=>[String(c.id),c]));
-    (S.contatos||[]).forEach(c=>{
-      const k=String(c.id), r=porId.get(k);
-      if(!r || String(c._upd||'')>String(r._upd||'')) porId.set(k,c); // local mais novo (ou só local) vence
-    });
-    S.contatos=[...porId.values()];
+function _lpcMergeFunis(remotos,completo){
+  if(remotos.length||completo){
+    S.contatos=fundMerge(S.contatos,remotos,PEND.lpc,completo!==false);   /* FUNDAÇÃO V1: servidor manda; pendente vence */
     normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
     salvar();
   }
@@ -1722,11 +1748,11 @@ async function lpcCarregar(){
       if(error) throw error;
       const todos=(data||[]).map(lpcComDono).filter(Boolean);
       _lpcMergeBn(todos.filter(c=>c.funil==='bn'),true);   /* carga única = completa */
-      _lpcMergeFunis(todos.filter(c=>c.funil!=='bn'));
+      _lpcMergeFunis(todos.filter(c=>c.funil!=='bn'),true);
       return;
     }
 
-    _lpcMergeFunis(funis);
+    _lpcMergeFunis(funis,true);
     if(typeof agendarRender==='function') agendarRender();
     /* Estoque em segundo plano, em páginas de 1000 e com ordem estável.
        Sem .range() o PostgREST corta em db_max_rows (10.000 neste projeto) e o
@@ -1766,7 +1792,8 @@ async function lpcPush(){
     Object.keys(_lpcPrev).forEach(k=>{ if(!(k in atual)) mortos.push(k); });
     if(rows.length){ const r=await sb.from(LPC_T).upsert(rows,{onConflict:'dono,id'}); if(r.error) throw r.error; }
     if(mortos.length){ const r=await sb.from(LPC_T).delete().in('id',mortos); if(r.error) throw r.error; }
-    _lpcPrev=atual;
+    _lpcPrev=atual; pendLimpar('lpc',rows.map(x=>x.id)); pendLimpar('lpc',mortos);
+    rows.forEach(x=>{ const c=(S.contatos||[]).find(y=>String(y.id)===String(x.id)); if(c&&!c._dono&&x.dono) c._dono=x.dono; });   /* confirmado: agora tem dono */
   }catch(e){ console.warn('lp_contatos: push falhou (retenta no próximo salvar)',e); }
 }
 function zerarContatos(){ if(confirm('Apagar TODOS os contatos e começar do zero pra uso real? (metas e perfis ficam)')){ S.contatos=[]; salvar(); render(); toast('Base zerada — bom trabalho! Crie o primeiro contato em ➕ Novo contato',true); } }
@@ -4323,6 +4350,11 @@ function drwPessoaHtml(c){
         </div>
         <div style="flex:1;min-width:160px;padding-bottom:4px">${recomendanteChip(c)||`<span style="font-size:11.5px;color:var(--muted)">Sem recomendante registrado.</span>`}</div>
       </div>
+      ${logado()?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
+        <div style="flex:1;min-width:200px"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Dono (LP)</label>
+          ${souAdm()?`<select id="pes_lp" data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" style="width:100%">${escRotulosTodos().map(r=>`<option value="${esc(r.rotulo)}" ${escLpNorm(r.rotulo)===escLpNorm(escRotuloDe(c))?'selected':''}>${esc(r.rotulo)}</option>`).join('')}</select>`:`<input value="${esc(escRotuloDe(c)||'—')}" disabled style="width:100%" title="Só o admin muda o dono">`}</div>
+        <div style="flex:1;min-width:160px;padding-bottom:4px;font-size:11.5px;color:var(--muted)">${souAdm()?'Trocar o dono move este lead pra base dele.':'Quem é o dono desta base.'}</div>
+      </div>`:''}
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-p btn-mini" onclick="pessoaSalvarDados('${esc(c.id)}')">Salvar</button>
         <span style="font-size:11.5px;color:var(--muted)">${n?`O que você mudar aqui vale para as ${n+1} oportunidades desta pessoa.`:'Esta pessoa tem só esta oportunidade.'}</span>
@@ -4342,9 +4374,19 @@ function pessoaSalvarDados(id){
   const idade=v('pes_idade'); if(idade!==undefined) c.idade=idade?Number(idade):null;
   const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec||'';
   const n=pessoaPropagar(c);
+  const lpNovo=v('pes_lp'); const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
   salvar(); renderDrawer(); render();
   toast(n?`Salvo — vale para as ${n+1} oportunidades desta pessoa`:'Salvo',true);
+  if(lpMudou&&souAdm()) ctMoverDono(c,lpNovo).then(ok=>{ if(ok){ toast(String(c.nome||'').split(' ')[0]+' → base de '+lpNovo+' ✓',true); render(); } });
 }
+/* Mover um lead do funil pra outra base (só admin): apaga a linha do dono antigo e sobe no novo. */
+async function ctMoverDono(c,rotulo){ const r=escRotulosTodos().find(x=>escLpNorm(x.rotulo)===escLpNorm(rotulo)); if(!c||!r) return false;
+  const donoAntigo=escDonoDe(c);
+  c.lp=escLpNorm(r.rotulo); c._dono=r.dono; c._upd=new Date().toISOString();
+  if(LPC_REMOTE&&sb&&donoAntigo&&donoAntigo!==r.dono){ try{ const del=await sb.from(LPC_T).delete().eq('dono',donoAntigo).eq('id',c.id); if(del.error) throw del.error;
+      const up=await sb.from(LPC_T).upsert([lpcRowOut(String(c.id),{...c})],{onConflict:'dono,id'}); if(up.error) throw up.error; }
+    catch(e){ console.warn('ctMoverDono',e); toast('Não consegui mover no servidor: '+(e.message||e),false); return false; } }
+  _lpcPrev=_lpcSnap(); salvar(); return true; }
 
 function drwIrmaosHtml(c){
   const irmaos=pessoaIrmaos(c); if(!irmaos.length) return '';
@@ -12440,7 +12482,8 @@ let _bnLast={};
 function bnSalvar(){
   const now=new Date().toISOString();
   BN.contatos.forEach(c=>{ if(!c||!c.id) return; const k=c.id,j=JSON.stringify(c);
-    if(_bnLast[k]===j) return; if(_bnLast[k]===undefined&&c._upd) return; c._upd=now; });
+    if(_bnLast[k]===j) return; if(_bnLast[k]===undefined&&c._upd) return; c._upd=now; PEND.bn[String(k)]=1; });
+  pendSalvar();
   _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); });
   _bnRecCountCache=null; // nomes podem ter mudado → recontar os "rec" embutidos
   /* QUOTA-V1 (11/09): o cache guarda só os MEUS nomes (linha de outro dono vem do servidor a cada abertura).
@@ -12465,10 +12508,7 @@ function bnSemOsApagados(locais, remotos, completo){ if(!completo) return locais
   const ids=new Set((remotos||[]).map(c=>String(c.id)));
   return (locais||[]).filter(c=>!c._dono||ids.has(String(c.id))); }
 function bnMergeRemoto(remotos,completo){
-  const porId=new Map(remotos.map(c=>[String(c.id),c]));
-  bnSemOsApagados(BN.contatos,remotos,completo).forEach(c=>{ const r=porId.get(String(c.id));
-    if(!r||String(c._upd||'')>String(r._upd||'')) porId.set(String(c.id),c); });
-  BN.contatos=[...porId.values()];
+  BN.contatos=fundMerge(BN.contatos,remotos,PEND.bn,!!completo);   /* FUNDAÇÃO V1: servidor manda; pendente vence */
   _bnPrev=_bnSnap(); bnSalvar(); render();
 }
 function bnAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_bnTimer); _bnTimer=setTimeout(bnPush,2000); }
@@ -12485,7 +12525,8 @@ async function bnPush(){
     for(let i=0;i<rows.length;i+=400){
       const r=await sb.from(LPC_T).upsert(rows.slice(i,i+400),{onConflict:'dono,id'}); if(r.error) throw r.error;
     }
-    _bnPrev=atual;
+    _bnPrev=atual; pendLimpar('bn',rows.map(x=>x.id));
+    rows.forEach(x=>{ const c=bnPor(x.id); if(c&&!c._dono&&x.dono) c._dono=x.dono; });   /* confirmado: agora tem dono */
   }catch(e){ console.warn('bn: push falhou (retenta no próximo salvar)',e); }
 }
 
@@ -14958,13 +14999,15 @@ function lpSelfCheck(){
        os invariantes garantem que continuam existindo e preservando a regra
        "local mais novo vence". */
     ok('boot: merge dos funis existe e é função', typeof _lpcMergeFunis==='function'&&typeof _lpcMergeBn==='function');
-    ok('boot: local mais novo vence o remoto', (()=>{
-      const guardaS=S.contatos, guardaPrev=_lpcPrev;
-      S.contatos=[{id:'__t1',nome:'local',_upd:'2026-08-16T10:00:00Z',funil:'nn'}];
-      _lpcMergeFunis([{id:'__t1',nome:'remoto',_upd:'2026-01-01T00:00:00Z',funil:'nn'}]);
-      const venceu=S.contatos.find(c=>c.id==='__t1').nome==='local';
-      S.contatos=guardaS; _lpcPrev=guardaPrev; salvar();   // não deixa lixo no aparelho
-      return venceu; })());
+    ok('boot (FUNDAÇÃO V1): servidor manda no merge dos funis; só o PENDENTE vence, mesmo sendo mais antigo', (()=>{
+      const guardaS=S.contatos, guardaPrev=_lpcPrev, guardaPend=JSON.parse(JSON.stringify(PEND));
+      try{
+        S.contatos=[{id:'__t1',nome:'local',_upd:'2026-08-16T10:00:00Z',funil:'nn',_dono:'x'},{id:'__t2',nome:'local pend',_upd:'2000-01-01T00:00:00Z',funil:'nn',_dono:'x'}];
+        PEND.lpc={'__t2':1};
+        _lpcMergeFunis([{id:'__t1',nome:'remoto',_upd:'2026-01-01T00:00:00Z',funil:'nn',_dono:'x'},{id:'__t2',nome:'remoto',_upd:'2026-01-01T00:00:00Z',funil:'nn',_dono:'x'}],true);
+        const a=S.contatos.find(c=>c.id==='__t1'), b=S.contatos.find(c=>c.id==='__t2');
+        return a&&a.nome==='remoto' && b&&b.nome==='local pend';
+      } finally{ S.contatos=guardaS; _lpcPrev=guardaPrev; PEND=guardaPend; pendSalvar(); salvar(); } })());
     /* o esqueleto é HTML estático dentro do #main; quem o remove é o innerHTML
        do 1º render. O que o invariante pode afirmar em qualquer momento é que
        ele nunca sobra JUNTO com o conteúdo pintado. */
@@ -14996,6 +15039,14 @@ function lpSelfCheck(){
       const ops=escOpcoesDe('juca@x',['daniel@x'],[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}],'Gustavo');
       return ops.map(o=>o.id).join(',')==='meu,lp:rebeca,dono:daniel@x,todos' && ops[2].nome==='Daniel' && ops[1].lp==='Rebeca'; })());
     ok('ESCOPO-UNICO: sem delegação nem rótulo extra, só "meu" (sem Pipe X)', escOpcoesDe('a@x',[],[{rotulo:'gustavo',dono_email:'a@x'}],'Gustavo').length===1);
+    ok('FUNDAÇÃO V1: servidor manda — remoto substitui local não-pendente; pendente vence; carga completa apaga o que não voltou; parcial não apaga', (()=>{
+      const loc=[{id:'a',nome:'A local',_dono:'x',_upd:'2099'},{id:'b',nome:'B pend',_dono:'x'},{id:'c',nome:'C novo local'},{id:'d',nome:'D sumiu',_dono:'x'}];
+      const rem=[{id:'a',nome:'A servidor',_dono:'x',_upd:'2000'},{id:'b',nome:'B servidor',_dono:'x'},{id:'e',nome:'E só servidor',_dono:'x'}];
+      const r1=fundMerge(loc,rem,{b:1},true), m1=new Map(r1.map(c=>[c.id,c.nome]));
+      const r2=fundMerge(loc,rem,{b:1},false), m2=new Map(r2.map(c=>[c.id,c.nome]));
+      return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
+          && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
+    ok('FUNDAÇÃO V1: salvar marca pendente e o push confirmado limpa', (()=>{ const p=JSON.parse(JSON.stringify(PEND)); try{ PEND.bn={}; pendMarcar('bn',['z1','z2']); pendLimpar('bn',['z1']); return Object.keys(PEND.bn).join('')==='z2'; } finally{ PEND=p; pendSalvar(); } })());
     ok('DONO-V1: registro sem dono gravado é MEU — não aparece no escopo de outro dono', (()=>{ const dan={id:'dono:d@x',dono:'d@x',lp:'Daniel',padrao:true,eu:'a@x'}, meu={id:'meu',dono:'a@x',lp:'Gustavo',padrao:true,eu:'a@x'}; return !escRegOkDe(dan,{nome:'x'}) && escRegOkDe(meu,{nome:'x'}) && escRegOkDe(dan,{_dono:'d@x'}); })());
     ok('DONO-V1: editor tem Recomendante primeiro e o campo Dono (LP) quando logado; fichaPessoaHtml mostra o dono', (()=>{ const P=PERFIL,E=ESC,D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=[]; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'a@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
       const h=bnEditorHtml({id:'Zz1',nome:'Zz',estagio:'estoque'}); const f=fichaPessoaHtml({nome:'Zz',_dono:'d@x'},'lead'); return h.indexOf('id="bne-rec"')<h.indexOf('id="bne-est"') && h.includes('id="bne-lp"') && f.includes('Dono (LP)') && f.includes('Daniel'); } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
