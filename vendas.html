@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.38 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.39 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1637,14 +1637,14 @@ function lpcSemOsDoEstoque(lista, remotosBn){
   const ids=new Set((remotosBn||[]).map(c=>String(c&&c.id)));
   return (lista||[]).filter(c=>!ids.has(String(c&&c.id)));
 }
-function _lpcMergeBn(remotosBn){
+function _lpcMergeBn(remotosBn,completo){
   // Base de Nomes (funil:'bn') vive em outro store: 5k+ nomes não podem inchar
   // S.contatos nem aparecer nos funis NN/BC — rota pro merge próprio do módulo BN.
   if(remotosBn.length&&Array.isArray(S.contatos)){
     const antes=S.contatos.length; S.contatos=lpcSemOsDoEstoque(S.contatos,remotosBn);
     if(S.contatos.length!==antes){ salvar(); _lpcPrev=_lpcSnap(); if(typeof agendarRender==='function') agendarRender(); }
   }
-  if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn);
+  if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn,!!completo);
   _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
 }
 function _lpcMergeFunis(remotos){
@@ -1691,7 +1691,7 @@ async function lpcCarregar(){
       const {data,error}=await sb.from(LPC_T).select('id,dono,dados');
       if(error) throw error;
       const todos=(data||[]).map(lpcComDono).filter(Boolean);
-      _lpcMergeBn(todos.filter(c=>c.funil==='bn'));
+      _lpcMergeBn(todos.filter(c=>c.funil==='bn'),true);   /* carga única = completa */
       _lpcMergeFunis(todos.filter(c=>c.funil!=='bn'));
       return;
     }
@@ -1709,7 +1709,7 @@ async function lpcCarregar(){
            motivo o recorte for ignorado e a mesma página voltar, o laço para em
            vez de baixar 3 MB para sempre — a franquia de dados dele não é
            lugar para um loop otimista. O teto de páginas é a segunda rede. */
-        const bn=[], PAG=1000, MAX_PAG=60, vistos=new Set();
+        const bn=[], PAG=1000, MAX_PAG=60, vistos=new Set(); let completo=false;
         for(let pag=0; pag<MAX_PAG; pag++){
           const de=pag*PAG;
           const r=await sb.from(LPC_T).select('id,dono,dados').eq('dados->>funil','bn').order('id').range(de,de+PAG-1);
@@ -1717,11 +1717,11 @@ async function lpcCarregar(){
           const linhas=(r.data||[]);
           let novos=0;
           linhas.forEach(x=>{ const k=String(x.id); if(vistos.has(k)) return; vistos.add(k); const d=lpcComDono(x); if(d){ bn.push(d); novos++; } });
-          if(linhas.length<PAG) break;
+          if(linhas.length<PAG){ completo=true; break; }
           if(!novos){ console.warn('Base de Nomes: o servidor devolveu a mesma página — paginação interrompida em',bn.length,'nomes'); break; }
           if(pag===MAX_PAG-1) console.warn('Base de Nomes: teto de',MAX_PAG*PAG,'nomes atingido — o restante entra no próximo sync');
         }
-        _lpcMergeBn(bn);
+        _lpcMergeBn(bn,completo);
         if(typeof agendarRender==='function') agendarRender();
       }catch(e){ console.warn('Base de Nomes remota falhou → segue com o cache local do aparelho',e); }
     })();
@@ -12413,9 +12413,15 @@ function bnSalvar(){
 /* ── sync com lp_contatos (funil:'bn'), merge por maior _upd ── */
 let _bnPrev={},_bnTimer=null,_bnRemoteLoaded=false;
 function _bnSnap(){ const m={}; BN.contatos.forEach(c=>{ if(c&&c.id) m[c.id]=JSON.stringify(c); }); return m; }
-function bnMergeRemoto(remotos){
+/* SERVIDOR-MANDA-V1 (11/09): registro que JÁ veio do servidor antes (tem _dono) e não voltou
+   nesta carga = foi apagado lá → sai do cache local. Só quando a carga veio COMPLETA (senão uma
+   página perdida apagaria metade do Estoque). Criado local e nunca confirmado (sem _dono) fica. PURA. */
+function bnSemOsApagados(locais, remotos, completo){ if(!completo) return locais;
+  const ids=new Set((remotos||[]).map(c=>String(c.id)));
+  return (locais||[]).filter(c=>!c._dono||ids.has(String(c.id))); }
+function bnMergeRemoto(remotos,completo){
   const porId=new Map(remotos.map(c=>[String(c.id),c]));
-  BN.contatos.forEach(c=>{ const r=porId.get(String(c.id));
+  bnSemOsApagados(BN.contatos,remotos,completo).forEach(c=>{ const r=porId.get(String(c.id));
     if(!r||String(c._upd||'')>String(r._upd||'')) porId.set(String(c.id),c); });
   BN.contatos=[...porId.values()];
   _bnPrev=_bnSnap(); bnSalvar(); render();
@@ -13259,7 +13265,8 @@ const TA_DELAY_TIPOS=['OI','P/C','C2','Revisita','Delivery','Retornar','Não ate
 function taPoolDe(k){ return k==='delay'? [...bnVivos(),...meusContatos()] : bnVivos(); }
 const TA_SMART={
   base:       {ic:'📇', label:'Toda a base',        base:c=>c.estagio!=='descartado'},
-  prontos:    {ic:'🎯', label:'Prontos p/ ligar',   base:c=>c.estagio==='lista_ta'&&taTemFone(c)&&(c.trilha||'seguro')!=='recrutamento'},
+  comfone:    {ic:'📞', label:'Rec (com telefone)', base:c=>taTemFone(c)&&(c.estagio==='estoque'||c.estagio==='lista_ta')&&(c.trilha||'seguro')!=='recrutamento'},
+  recs:       {ic:'🙌', label:'Recomendações',      base:c=>taTemFone(c)&&!!(c.recomendante||'').trim()&&!!(c.nome||'').trim()&&c.estagio!=='descartado'&&c.estagio!=='cliente'},
   delay:      {ic:'⏳', label:'Delay',              base:c=>!!taDelayTipo(c)},
   recsemfone: {ic:'📵', label:'Rec (sem fone)',     base:c=>!taTemFone(c)&&!!(c.recomendante||'').trim()&&c.estagio!=='descartado'&&c.estagio!=='cliente'},
   clientes:   {ic:'⭐', label:'Clientes (carteira)', base:c=>taEhCliente(c)},
@@ -14908,7 +14915,9 @@ function lpSelfCheck(){
     ok('ESCOPO-UNICO: o upsert leva o dono da linha e não devolve _dono pro jsonb', (()=>{
       const r=lpcRowOut('k1',{nome:'Zz',_dono:'daniel@x'},{funil:'bn'}); const r2=lpcRowOut('k2',{nome:'Zz'});
       return r.dono==='daniel@x'&&!('_dono' in r.dados)&&r.dados.funil==='bn'&&r.id==='k1'&&(!logado()? !('dono' in r2):true); })());
-    ok('DELAY-V1: ordem das listas = Toda a base, Prontos, Delay, Rec (sem fone)… e sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='prontos'&&k[2]==='delay'&&k[3]==='recsemfone'&&!k.includes('oi'); })());
+    ok('LISTAS 11/09: ordem = Toda a base, Rec (com telefone), Recomendações, Delay, Rec (sem fone)… sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='comfone'&&k[2]==='recs'&&k[3]==='delay'&&k[4]==='recsemfone'&&!k.includes('oi')&&!k.includes('prontos'); })());
+    ok('RECOMENDAÇÕES = nome + telefone + recomendante', TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'',estagio:'estoque'}));
+    ok('SERVIDOR-MANDA Estoque: apagado no servidor sai do cache (só carga completa); criado local sem _dono fica', (()=>{ const loc=[{id:'a',_dono:'x'},{id:'b',_dono:'x'},{id:'c'}]; const rem=[{id:'a'}]; const r1=bnSemOsApagados(loc,rem,true).map(c=>c.id).join(''); const r2=bnSemOsApagados(loc,rem,false).map(c=>c.id).join(''); return r1==='ac'&&r2==='abc'; })());
     ok('DELAY-V1: delay do Estoque = não atendeu sem nova data, ou ficou pra trás; com data futura não é delay', (()=>{
       const h=hojeISO(), ontem=isoAddDias(h,-1), amanha=isoAddDias(h,1);
       return taDelayTipo({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:ontem})==='Não atendeu'
@@ -14923,7 +14932,7 @@ function lpSelfCheck(){
     ok('PAINEL-TA: listas inteligentes são puras e coerentes com o estágio', (()=>{
       const z=[{id:'a',estagio:'lista_ta',telefone:'81999990000',trilha:'seguro'},{id:'b',estagio:'lista_ta',telefone:'',trilha:'seguro'},{id:'c',estagio:'oi_agendado',telefone:'81999990001'},{id:'d',estagio:'cliente'},{id:'e',estagio:'descartado'}];
       const f=k=>z.filter(TA_SMART[k].base).map(x=>x.id).join('');
-      return f('prontos')==='a'&&f('base')==='abcd'&&f('descartados')==='e'; })());
+      return f('comfone')==='a'&&f('base')==='abcd'&&f('descartados')==='e'; })());
     ok('PAINEL-TA foco: a fila é quem ainda não tem resultado hoje', (()=>{
       const hoje=hojeISO(); const q=[{id:'x',hist:[{tipo:'ta',dia:hoje,res:'atendeu'}]},{id:'y',hist:[]},{id:'z'}];
       return taFocoFilaDe(q).map(c=>c.id).join('')==='yz'; })());
