@@ -4,11 +4,11 @@
 
 ## 10-11/09/2026 — Painel TA nativo · Estágio único · Escopo único (RLS unificada) · SitPlan unificado · listas do método · auditoria das bases
 
-**Estado em 30s:** `main c347691` — **v7.43 no ar**. Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
+**Estado em 30s:** `main` — **v7.43.4 no ar**. Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
 
 **Prompt pra próxima sessão:**
 ```
-Sessão CRM Visão LP — retomar. main c347691, v7.43 no ar (FUNDAÇÃO V1: servidor manda + fila PEND). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
+Sessão CRM Visão LP — retomar. v7.43.4 no ar (FUNDAÇÃO V1: servidor manda + fila PEND; ID-NA-PORTA). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
 ```
 
 ### O que entrou (tudo no ar, PRs #186–#196)
@@ -24,6 +24,7 @@ Sessão CRM Visão LP — retomar. main c347691, v7.43 no ar (FUNDAÇÃO V1: ser
 - **v7.41.1 (#201):** densidade compacta anulava a safe-area da topbar no iPhone (barra sob o relógio) — regra do celular cobre as duas densidades.
 - **v7.42 DONO-V1 (#202):** sem dono gravado = MEU (não vaza pro 'vendo: X'); `bnGarantirDono` busca a base do outro dono do servidor ao escolher no seletor; linha 'Dono (LP)' em toda ficha; editor do Estoque com Recomendante 1º + select Dono (admin move de base: `bnMoverDono`); Painel TA 'sem recomendante' explícito; linha do SitPlan abre a ficha.
 - **v7.43 FUNDAÇÃO DE DADOS V1 (#203):** `fundMerge` pura — servidor manda; só a fila `PEND` (editado neste aparelho e não confirmado) vence; carga completa apaga o que não voltou (fantasmas locais); parcial não apaga. Fila persistida, retenta online/60s. Fim do 'local mais novo vence'. `ctMoverDono` + Dono (LP) editável (admin) na ficha do funil. **Diagnóstico:** a raiz de todos os bugs da rodada era a camada 'local primeiro'; não precisa reconstruir o app.
+- **v7.43.1–.4 (#205–#208):** 1ª foto e merge do servidor NUNCA marcam pendente (só edição local); pendente igual ao servidor se limpa; faixa 'homologação' removida; **ID-NA-PORTA**: o import do MCP gravava `dados` sem `id` → os 1.575 do Daniel viravam UM registro no app (chave undefined) — `lpcComDono` usa o id da coluna, trigger garante `dados.id`, backfill rodado (banco 100% com id, 0 colisões entre donos). Conferido ao vivo: Daniel 1.370 Estoque + 219 funil na conta do Gustavo.
 - **v7.41 FICHA-UX-V2 (#199):** ficha do contato do Estoque redesenhada (cabeçalho avatar/nome/badges/ações, grupos dobráveis com resumo, rótulo em cima, alvos ≥42px, rodapé fixo; mesmos ids bne-*).
 
 ### Livro de erros (custaram tempo)
@@ -31,6 +32,8 @@ Sessão CRM Visão LP — retomar. main c347691, v7.43 no ar (FUNDAÇÃO V1: ser
 2. **Rótulo do Daniel (v7.37.1):** `pxMeu()` vinha do perfil DEMO ('Gustavo') → o "Meu" do Daniel esconderia os 1.371 dele. Regra: identidade/rótulo vem do banco (`lp_rotulo_dono`), nunca do demo.
 3. **"Só local vence"** devolvia pro NN o que o servidor moveu pro Estoque → regra "servidor manda" (funis e Estoque), sempre condicionada a carga COMPLETA.
 4. **Smart keys `sm:` resetadas** pela guarda de "lista nomeada inexistente". Invariante de `<details>` não pode depender do `ontoggle`.
+8. **`dados` sem `id`** (import do MCP): o app indexa pelo JSON → todos colapsam num registro. Regra: chave da linha entra no objeto NA PORTA (erro #48 de novo) e o trigger garante no banco.
+9. **Merge do servidor tratado como edição local** → tudo pendente. Regra: só edição do usuário marca pendente; merges passam `{doServidor:true}`.
 6. **localStorage tem cota (~5 MB):** com 2 donos no Estoque o cache estourou e o setItem lançou DENTRO da carga → dado do servidor descartado em silêncio. Regra: cache só do próprio dono; todo setItem em try; carga nunca depende do cache.
 5. **Clientes = 614:** flag `estagio='cliente'` da carga de 04/08 (569 "CLIENTE ATIVO" da planilha) ≠ carteira real (146). Cliente = está na carteira.
 
