@@ -2,7 +2,28 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 08/09 noite — DANIEL: isolamento do cockpit + conector MCP v2.1 (PR #174 + deploy crm-mcp v3)
+## 09-10/09/2026 — Victor login · Mistura de bases (limpeza+trava) · Delivery pós-venda · Postecipação PC-1..PC-4+colar · saudação Daniel · crm-mcp em lote
+
+**Estado em 30s:** `main 8ed4bf8` — v7.31 no ar; **v7.32 = PR #184 aberto** (colar apólice, portão verde, aguarda OK de merge). crm-mcp **v2.2** no ar (deploy v4). Supabase playground = PRODUÇÃO. Portão = **37 telas** × {375,1280} × {cheia,vazia}.
+
+### O que entrou (no ar, salvo indicado)
+- **Victor login destravado** — não tinha conta em `auth.users` (signup off ⇒ "Entrar com Google" dava erro). Provisionada a conta de auth (email confirmado + identidade), espelhando a do Daniel (uid 964bbe10). Entra por Google **ou** senha temp `VictorCRM#2026`. E-mail `vfigueiredo.solucoes@gmail.com` confirmado pelo Gustavo.
+- **Mistura de bases (Gustavo/Rebeca/Daniel)** — contaminação REAL achada: o import MFB não separava por LP e o RLS não amarra rótulo⟷dono. **Limpeza rodada** (vendas_atrasos double-count desfeito: 15 espelhos apagados + 21 roteadas; pendências/emitidas/solicitações roteadas; 4 órfãos invisíveis recuperados; 108 rótulos normalizados; 9 contatos do Daniel re-rotulados; placed do Daniel apagado). **Trava NO AR** (migration `lp_trava_anti_mistura_v1`: tabela `lp_rotulo_dono` + trigger **normalizador** `trg_norm_dono` em vendas_atrasos/emissao_pendencias/emissao_emitidas/solicitacoes/beneficios). Verificação: **0 mismatch** (só subst_apolices=6, intencional/cliente-level). Plano completo: scratchpad/PLANO_ANTI_MISTURA.md. ⚠️ **melhor_dia emissão 30 = 14 (planilha), NÃO 15.**
+- **Delivery pós-venda** (v7.26, PR #177) — fora das somas do funil (BC+LP), mantém a coluna; venda conta em **Apólice Emitida**. Helper único `ehPosVenda`.
+- **Saudação do Daniel** (v7.30, PR #181) — usava `user()` demo (mostrava "Gustavo"); agora `nomeAtual()` (PERFIL da sessão).
+- **crm-mcp em lote** (v2.2, deploy v4, verify_jwt=false) — `criar_contatos_lote` (até 200, 1 INSERT, upsert idempotente `(dono,ref_base)`) + `atualizar_contatos_lote` (merge por id), resposta **enxuta** `{criados/atualizados,erros}` (Prefer return=minimal, não ecoa). Migration `lp_contatos.ref_base` + índice único. **Daniel já usa** (prompt entregue no chat).
+- **Postecipação (motor validado contra a planilha oficial + caso Davi):** PC-1 motor único `pcPosicao/pcClassifica/pcMelhorDia/pcProximaCobranca/pcGanhoDias` (PR #178); PC-2 componente `pcSimuladorHtml` (#179); PC-3 aba standalone "Melhor dia de vencimento" em Módulos→Referência (#180); PC-4 embed em **Substituição** (card) + **Lista de Atraso** (topo) via `pcSimModal` (#183); **colar apólice** no standalone reusando `subExtrai` (#184, aberto).
+
+### Provas
+Portão em cada PR (37 telas, lpSelfCheck 0 com os testes de PC-1/2/4/4c, funSelfCheck 0); hash servido conferido nos deploys (Delivery/PC-1 via `--servido`); idempotência do mcp e da trava provadas por SQL; contaminação zerada por INV-1.
+
+### Pendências (o que a próxima sessão pega)
+- **PR #184** (colar apólice) aberto, portão verde — aguarda OK de merge.
+- **PC-5** — view SQL `subst_postecipacao` idempotente: melhor_dia com correção fim-de-mês + colunas `proxima_cobranca`/`proxima_cobranca_melhor`/`ganho_dias`. Ler `pg_get_viewdef` ANTES; preservar off_dias/pgto_situacao/semaforo/veredito; apólice de teste 002105592.
+- **Perfil "ver como"** — seletor no cartão do nome (Daniel/Victor/Pipe X=todos/Juca=meu) pro admin logado. `togglePerfilMenu` hoje retorna cedo quando logado; reusar PX.escopo/DELEG. **Decidir: só ver × operar/gravar como ele** (write-as = dado real).
+- **Daniel** subir a carteira real dele. **Substituição** (6 apólices Daniel sob juca) deixada de propósito (cliente-level/misto — mover a árvore cliente→apólice→pagamento junto se um dia for reatribuir).
+
+
 - **Bug real achado com o Daniel logado:** `carteira.html` embutia a carteira do Gustavo (143 cli/196 apólices, snapshot 28/07, com telefone/e-mail — PII em repo público) e, na 1ª abertura com tabela vazia, **semeava essa carteira na conta de quem abrisse**. Aconteceu às 21:39 de 08/09: 143/196 linhas com `_src=cockpit-2026-07-28` entraram em `carteira_clientes/apolices` com `dono=souzacruzdaniel@gmail.com`. Painel TA 2.0 estava certo (os 7 contatos são dele).
 - **ISOLA-COCKPIT-V1 (PR #174, main cc2fee0):** snapshot e seed removidos; filas "Onde agir hoje", ABCD e profissão calculadas do dado vivo; filtro `dono=eq.<logado>` (escopo Pipe X `todos` abre pra delegação); estado vazio orientado; título por usuário; sessão herdada (cockpit e painel-lp) prioriza o login do app e descarta `lp_sess` de outro usuário. Portão 4/4 verde; Pages servindo `f77954bd68f7`.
 - **Conector MCP:** token antigo revogado, token novo emitido (insert do hash direto — `mcp_session_issue` exige JWT de admin, não roda pelo MCP). `crm-mcp` **v2.1 (deploy v3)**: `busca` em `listar_contatos` filtra por `dados->>nome` (antes quebrava com 42883). Provas ao vivo: quem_sou_eu=Daniel · 7 contatos dele · busca "Piquet" (meu) = 0 · token adulterado recusado · 15 atrasos dele. Fonte da função agora versionada em `supabase/functions/crm-mcp/index.ts`.
