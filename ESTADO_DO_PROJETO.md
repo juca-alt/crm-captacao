@@ -4,11 +4,11 @@
 
 ## 10-11/09/2026 — Painel TA nativo · Estágio único · Escopo único (RLS unificada) · SitPlan unificado · listas do método · auditoria das bases
 
-**Estado em 30s:** `main 46f0204` — **v7.41 no ar**. Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
+**Estado em 30s:** `main c347691` — **v7.43 no ar**. Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
 
 **Prompt pra próxima sessão:**
 ```
-Sessão CRM Visão LP — retomar. main 46f0204, v7.41 no ar. Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
+Sessão CRM Visão LP — retomar. main c347691, v7.43 no ar (FUNDAÇÃO V1: servidor manda + fila PEND). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
 ```
 
 ### O que entrou (tudo no ar, PRs #186–#196)
@@ -21,6 +21,9 @@ Sessão CRM Visão LP — retomar. main 46f0204, v7.41 no ar. Ler memória crm-l
 - **v7.38/.39/.39.1/.40 listas do método:** Toda a base · Rec (com telefone) · Recomendações · Delay (`taDelayTipo`, filtro por tipo, inclui funil) · Rec (sem fone) · Clientes (carteira, `taEhCliente`) · Rec de cliente 💎 · Descartados. "OIs agendados" sai: agendou → `bnLevarProFunil('OI/FF')`. Cards de KPI fora; "Hoje" fora do card. SERVIDOR-MANDA no Estoque (`bnSemOsApagados`, só carga completa). Filtros dobráveis c/ resumo. `MODS.funis_extra` off pro LP. VER-COMO-V2: modo "vendo: X" aplica os módulos DELE e esconde o painel admin.
 - **Banco (OK dele):** 7 rótulos 'gustavo'→'daniel' em contatos do Daniel; 115 contatos de funil do Gustavo com estágio; apagados 3 'Davi Teste' (Daniel+Victor) e 'lista de atrasos' (Victor).
 - **v7.40.1 QUOTA-V1 (#198):** o localStorage do Gustavo estourou a cota com 6.5k linhas → exceção no meio da carga → os 1.368 do Daniel nunca chegavam à memória (servidor devolvia todos). Cache guarda só os MEUS nomes; falha de cota avisa e não derruba. `escLinhaOk`: Benefícios/Atraso/Solicitações respeitam o escopo. SitPlan: busca em vez do select gigante.
+- **v7.41.1 (#201):** densidade compacta anulava a safe-area da topbar no iPhone (barra sob o relógio) — regra do celular cobre as duas densidades.
+- **v7.42 DONO-V1 (#202):** sem dono gravado = MEU (não vaza pro 'vendo: X'); `bnGarantirDono` busca a base do outro dono do servidor ao escolher no seletor; linha 'Dono (LP)' em toda ficha; editor do Estoque com Recomendante 1º + select Dono (admin move de base: `bnMoverDono`); Painel TA 'sem recomendante' explícito; linha do SitPlan abre a ficha.
+- **v7.43 FUNDAÇÃO DE DADOS V1 (#203):** `fundMerge` pura — servidor manda; só a fila `PEND` (editado neste aparelho e não confirmado) vence; carga completa apaga o que não voltou (fantasmas locais); parcial não apaga. Fila persistida, retenta online/60s. Fim do 'local mais novo vence'. `ctMoverDono` + Dono (LP) editável (admin) na ficha do funil. **Diagnóstico:** a raiz de todos os bugs da rodada era a camada 'local primeiro'; não precisa reconstruir o app.
 - **v7.41 FICHA-UX-V2 (#199):** ficha do contato do Estoque redesenhada (cabeçalho avatar/nome/badges/ações, grupos dobráveis com resumo, rótulo em cima, alvos ≥42px, rodapé fixo; mesmos ids bne-*).
 
 ### Livro de erros (custaram tempo)
