@@ -171,6 +171,66 @@ Exports acima · Google como identidade (opcional) · Sylvio no ar · migration 
 
 ---
 
+## 📸 Snapshot — 04/09/2026, fim de tarde · **v5.0 NO AR (PR #126)** · Controle de PLACED virou módulo · numeração curta
+
+**Estado em 30 s:** `main` = `f9968fb`, **v5.0** (a partir daqui a versão é curta: 5.0, 5.1, 5.2… — pedido dele), Pages conferido por hash nos dois arquivos. Barra de cima diz **PipeX** (era ISLAND). Aprovado no chat depois de ver no localhost; ele foi usar a Revisão em reunião.
+
+### O que entrou
+- **Controle de PLACED** em Módulos: engine do `controleplaced.html` portada 1:1 (funções `pl*`), estado em **`placed_estado`** (jsonb por dono, RLS = jwt email, migration aplicada), cache local sem login, exemplo inventado, **+10 invariantes de aceite** (ago/26 85,3 · set/26 86,1 · PTC 84,5 · 2+4 → 88,7 · ~57 novas). Base real da MFB semeada **direto no banco** (nomes reais nunca no repo). Os 3 pontos [a confirmar] do prompt: (1) não há tabela de propostas com status do portal → jsonb, importação do extrato fica pra depois; (2) o módulo grava só o próprio estado; (3) defasagem 3 é parâmetro.
+- **Revisão**: "Como é hoje e como fica" lê o **destino do Checkout** e inclui a **MS** na mesma visão (o que fica na origem + apólice nova), sem depender de cenário · MS com **duplicar simulação** e **"usar no cliente"** · barra de baixo segue os blocos (Planos/MS desligados = cards somem) · textos de apoio fora, iframe mais alto, **buraco de 120px** sob a barra de perfil (padding do `.wrap`) removido.
+- Portão: **31 telas** × 4 cenários verde; reconhece versão curta.
+
+### Pendências novas (registradas)
+- Revisar **valores e cálculos das previsões de resgate** nas apresentações (pedido dele).
+- LP Business: cotação completa e recalibrar DT/TM/FI; PLACED: importar extrato do portal; 8 alvos <44px no PLACED a 375; frase do "como fica" quando só a MS está ligada.
+
+---
+
+## 📸 Snapshot — 04/09/2026, tarde · **v0.49.0 NO AR** · PRs #122 → #125 mergeados com OK dele · LP Business conferido ao vivo
+
+**Estado em 30 s:** `main` = `0e6a793`+ (v0.49.0), Pages conferido por hash nos dois arquivos. ⚠️ A cadeia #113→#121 já tinha sido mergeada por outra sessão (main estava em v0.48.1) — este snapshot corrige o anterior. Tudo abaixo subiu com o OK explícito dele ("pode mergear" / "já manda no ar").
+
+### O que entrou hoje (Revisão de Proteção + CRM)
+- **#122** · mínimo do remanescente **por produto** (DT/TM 60 mil, TP 1 mi) · **MS com várias apólices** (origem + extras que emprestam opcionais) · **teto vinculado à básica da nova** (Invalidez 5×, Perda de Autonomia 2×, DG sem teto — confirmado na prévia real do Sylvio).
+- **#123** · "Doenças Graves MDL Opc 5-G" (DDMRG) tarifa como **Modular 2.0 (DIMR)**, não como o genérico (a linha "reduzia" 170→105; na prévia custa 238) · **o destino de cada apólice vive no Checkout** (fica · sai · origem da MS · empresta opcionais), uma escolha lida pela comparação A×B e pela MS; MS desligável.
+- **#124 · v0.49.0** · **módulo "Montagem de planos"** no hub Módulos: escolhe o cliente (funil, carteira ou novo) e abre a calculadora da Revisão já com ele (`?nome=&nasc=&sexo=&renda=&aba=prop&novo=1`) · **barra de baixo liga/desliga** + card "MS · apólice nova" · linha com teto mostra "fica na origem X".
+- **#125** · selos do motor depois do LP Business (abaixo) — ✅ mergeado, `main b996b36`.
+
+### LP Business ao vivo (app nativo `com.prudential.growsales`, controle de tela) — homem 41, Standard, IMC 25
+| cobertura | LP | motor | |
+|---|---|---|---|
+| Vida e Saúde 20 anos 100k | 284,04 | 284,04 | ✅ ao centavo |
+| Renda Hospitalar diária 100 · Quebra de Ossos 100k · Perda de Autonomia 100k | 8,30 · 32,23 · 10,22 | 8,27 · 32,11 · 10,18 | ✅ (0,4% = IOF?) |
+| **Temporário Decrescente 20a 100k** | **36,75** | 45,87 | ❌ motor +25% |
+| **Temporário 30a 100k** | **127,28** | 142,95 | ❌ +12% |
+| **Renda Familiar 30a renda 1.000** | **131,23** | 149,46 | ❌ +14% |
+DT/TM/FI viraram selo **divergente** (a MS avisa "confirme na prévia"); as 7 capturas ficam em `DATA.capturas_lp_2026_09_04`. Não dava pra conferir DG/Cirurgia/Funeral/Invalidez/AB no formulário simplificado. Registrado no Notion (Motor de tarifa + Playbook MS) e em `kb_regras_negocio` MS-005/MS-007.
+
+### Lições
+- **#55** — constante "de exemplo" virando regra (1 mi do TP como piso de todo temporário). Limite vem do catálogo.
+- **#56** — nome do espelho ≠ nome do catálogo ("MDL" × "Modular"): tabela de nomes precisa dos apelidos que o relatório usa, e o selo *planilha* tem que aparecer na linha.
+- **#57** — "já tá tudo no ar?" não se responde de cabeça: conferir `gh pr list` + hash do Pages (hoje a resposta era "não, faltava o #123").
+
+### Falta dele / próximo
+- Rodar o Sylvio no ar com "Atualizar app"; no Checkout marcar 001685973 como origem e 001687182 como "empresta opcionais".
+- Próxima rodada no LP Business: cotação **completa** por contato (DG, Cirurgia, Funeral, Invalidez, AB) e recalibrar DT/TM/FI.
+- Continuam abertos: migration `lp_perfis_nome_ativo`, 3 textos de cobrança, CPF/extensão, config-funil <44px.
+
+---
+
+## 📸 Snapshot — 04/09/2026 · **Revisão de Proteção · MS: o mínimo do remanescente é o do PRODUTO que fica** (PR #122, independente da cadeia)
+
+Caso Sylvio (origem **Temporário Decrescente**): a triagem da Mudança de Seguro comparava o remanescente com **1.000.000 fixo** e mandava pro DOC0013133 sem precisar. O piso de 1 mi é só do Temporário Preferencial; Temporário e Decrescente têm **60.000** (`csmin` do catálogo). `msMinProduto()` lê o catálogo e o teste diz o nome do produto; fora do catálogo = aviso âmbar. `msEhTemporario` reconhece TP/TM/DT pela família. `selfTest` +5 invariantes (11/11), provados quebrando (3 falhas com o fixo de volta). Regra corrigida no **Notion (Playbook MS)** e em **`kb_regras_negocio` MS-005**. **✅ MERGEADO com OK dele 04/09 — `main 4d04b26`, Pages servindo `revisao-protecao.html` byte a byte (sha `ac90db36b711`). Worktree `crm-wt-rp` removido.**
+
+**2ª parte (mesmo PR, `5bfe6b4`) — a MS junta VÁRIAS apólices e respeita o teto da básica.** Prévia real do Sylvio: temporário decrescente da 001685973 → Vida e Saúde 360 (70k) **e** o DG Modular vem da 001687182. App: `state.ms.extras` (caixas na triagem), a origem é a apólice do temporário que converte, as outras emprestam **só opcionais**; cada cobertura carrega `_ap`/`_div` (prêmio pela periodicidade da própria apólice); **teto vinculado à básica da nova** `MS_TRAVA={PI:5,PD:5,AB:5,PA:2}` — DG sem teto (288k migrou com básica de 70k); "o que fica" e a coluna (B) por apólice. `selfTest` 19/19 (+8 sobre fixture no formato do caso), provado quebrando. 375: 0 estouro, caixa 44px. **Playbook corrigido:** dizia que o 5× "não vale para a MS" — a prévia real provou que vale (regra 4 + 4b no Notion; MS-007 no banco).
+
+**3ª parte — PR #123 (branch `ms-dg-modular`, aberto, aguarda OK).** (a) Revisando o Sylvio no ar ele pegou o DG Modular "reduzindo" (170,44 → 105,70): o nome do espelho "Doenças Graves MDL Opc 5-G" (DDMRG) caía no genérico DDR; agora "MDL" sem "EXC" → DIMR (Modular 2.0), motor 241,42 × prévia 238,09. (b) Pedido dele: **o destino de cada apólice vai pro Checkout** — card com quatro destinos (fica · sai pro plano novo · origem da MS · empresta opcionais à MS), uma escolha lida pela comparação A×B e pela MS; **MS desligada** (`state.ms.off`) quando ninguém é origem, e a etapa 4 avisa em vez de escolher sozinha; o bloco "Como é hoje e como fica" só mostra a escolha. `selfTest` 24/24. 375: 0 estouro, botões 44px.
+
+### Lição
+- **#55 — Constante "de exemplo" virando regra.** O 1 mi era o exemplo do playbook (TP) e ficou como piso de todo temporário. *Regra:* limite de produto vem do catálogo, nunca de literal no código.
+
+---
+
 ## 📸 Snapshot — 03/09/2026, fechamento · **v0.45.0 + PR #121** · o portão rodou de ponta a ponta como UM comando; nada da cadeia foi mergeado
 
 **Estado em 30 s:** `main` = `d37b628` / **v0.42.1 no ar** (conferido pelo CONTEÚDO servido: sha `e2701bbcc925` do Pages = `main:vendas.html`, byte a byte). **#113 → #120 seguem todos ABERTOS** — ele não mergeou nada. Dos 5 itens do prompt dele, só o 2 (portão) era destravável; os outros 4 continuam presos nele (merge, migration, textos, CPF/extensão). Cadeia agora: **#113 → #114 → #115 → #116 → #117 → #119 → #120 → #121**.
