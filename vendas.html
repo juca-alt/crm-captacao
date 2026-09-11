@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.46 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.46.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -7832,7 +7832,7 @@ let EX={itens:[],carregadoEm:null}; let EX_REMOTE=false; let _exPend=null;
 function exChave(r){ return (r&&(r.apolice||r.proposta))||''; }
 function exMes(r){ return r&&r.dt_assinatura?String(r.dt_assinatura).slice(0,7):null; }
 function exRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
-function exRecToRow(r){ const row={lp_email:EM_EMAIL}; ['proposta','apolice','segurado','resp_pagamento','status_apolice','dt_assinatura','emissao','motivo_cancelamento','motivo_uw','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','origem_relatorio','periodo_ini','periodo_fim','nomes_conferir'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.nomes_conferir=!!r.nomes_conferir; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
+function exRecToRow(r){ const row={lp_email:escEmailDoLp(r&&r.lp, EM_EMAIL)}; ['proposta','apolice','segurado','resp_pagamento','status_apolice','dt_assinatura','emissao','motivo_cancelamento','motivo_uw','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','origem_relatorio','periodo_ini','periodo_fim','nomes_conferir'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.nomes_conferir=!!r.nomes_conferir; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
 async function exCarregar(){
   EX_REMOTE=await emRemoteOn();
   if(EX_REMOTE){ try{ const {data,error}=await sb.from(EX_TABLE).select('*'); if(error) throw error;
@@ -7841,9 +7841,10 @@ async function exCarregar(){
   try{ const raw=localStorage.getItem(EX_CHAVE); if(raw){ const o=JSON.parse(raw); EX.itens=Array.isArray(o.itens)?o.itens:[]; EX.carregadoEm=o.carregadoEm||null; } }catch(e){}
 }
 function exSalvarLocal(){ try{ localStorage.setItem(EX_CHAVE,JSON.stringify(EX)); }catch(e){} }
-async function exUpsertRemoto(recs){ if(!EX_REMOTE||!sb||!recs.length) return; const rows=recs.filter(exChave).map(exRecToRow);
-  const {data,error}=await sb.from(EX_TABLE).upsert(rows,{onConflict:'lp_email,chave'}).select('id,chave'); if(error) throw error;
-  (data||[]).forEach(d=>{ const r=EX.itens.find(x=>exChave(x)===d.chave); if(r) r.id=d.id; }); exSalvarLocal(); }
+async function exUpsertRemoto(recs){ if(!EX_REMOTE||!sb||!recs.length) return {data:[],falhas:[]}; const rows=recs.filter(exChave).map(exRecToRow);
+  const {data,falhas}=await impUpsertPorDono(EX_TABLE, rows, r=>r.chave||r.apolice||r.proposta);
+  (data||[]).forEach(d=>{ const r=EX.itens.find(x=>exChave(x)===d.chave); if(r) r.id=d.id; }); exSalvarLocal();
+  if(falhas.length&&!data.length) throw new Error(impFalhasMsg(falhas)); return {data,falhas}; }
 
 /* ── parser ───────────────────────────────────────────────────────────────
    Aceita os DOIS jeitos de colar: (a) o texto do PDF/tela, em que cada proposta
@@ -7977,7 +7978,7 @@ async function exAplicarUI(){
   EX.carregadoEm=origem; exSalvarLocal(); if(upEm.length) emSalvarLocal();
   impRegistrar('emitidas', origem, st);
   let msg='';
-  if(EX_REMOTE){ try{ await exUpsertRemoto(upEx); if(upEm.length) await emUpsertRemoto(upEm); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('EX upsert',e); } }
+  if(EX_REMOTE){ try{ const r1=await exUpsertRemoto(upEx); const r2=upEm.length?await emUpsertRemoto(upEm):{falhas:[]}; const fl=[...(r1.falhas||[]),...(r2.falhas||[])]; msg=fl.length?' · PARCIAL: '+impFalhasMsg(fl):' · sincronizado'; if(fl.length) toast('⚠️ '+impFalhasMsg(fl),false); }catch(e){ msg=' · só neste aparelho (falha no servidor: '+(e&&e.message||e)+')'; console.error('EX upsert',e); toast('⚠️ Nada subiu pro servidor: '+(e&&e.message||e),false); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
   /* 4 · PLACED lê daqui */
   const pl=plSincronizarEmitidas();
@@ -9643,7 +9644,7 @@ async function atRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.au
    o relatório novo → a apólice caía em "sumiu" E entrava de novo como nova. Chave
    normalizada nas DUAS pontas mata a duplicata e o falso "sumiu" na origem. */
 function atRowToRec(row){ return { id:row.id, apolice:atNormApolice(row.apolice||''), lp_servico:row.lp_servico||'', segurado:row.segurado||'', resp_pagto:row.resp_pagto||'', premio:row.premio!=null?Number(row.premio):null, vencido_em:row.vencido_em||null, pago_ate:row.pago_ate||null, forma_pagto:row.forma_pagto||'', celular:row.celular||'', motivo_recusa:row.motivo_recusa||'', tratativa:row.tratativa||'', prox_contato:row.prox_contato||null, resolvido_em:row.resolvido_em||null, responsavel:row.responsavel||'', origem_relatorio:row.origem_relatorio||null, bola_com:row.bola_com||null, ultima_acao:row.ultima_acao||'', ultima_acao_em:row.ultima_acao_em||null, proxima_acao:row.proxima_acao||'', proxima_acao_prazo:row.proxima_acao_prazo||null, autorizacao_contato:row.autorizacao_contato||null, protocolo:row.protocolo||'', status:row.status||'' }; }
-function atRecToRow(r){ return { lp_email:AT_EMAIL, apolice:r.apolice, lp_servico:r.lp_servico||null, segurado:r.segurado||'', resp_pagto:r.resp_pagto||null, premio:r.premio!=null?r.premio:null, vencido_em:r.vencido_em||null, pago_ate:r.pago_ate||null, forma_pagto:r.forma_pagto||null, celular:r.celular||null, motivo_recusa:r.motivo_recusa||null, tratativa:r.tratativa||null, prox_contato:r.prox_contato||null, resolvido_em:r.resolvido_em||null, responsavel:r.responsavel||null, origem_relatorio:r.origem_relatorio||null, bola_com:r.bola_com||null, ultima_acao:r.ultima_acao||null, ultima_acao_em:r.ultima_acao_em||null, proxima_acao:r.proxima_acao||null, proxima_acao_prazo:r.proxima_acao_prazo||null, autorizacao_contato:r.autorizacao_contato||null, protocolo:r.protocolo||null, status:r.status||atDerivarStatus(r) }; }
+function atRecToRow(r){ return { lp_email:escEmailDoLp(r&&r.lp_servico, AT_EMAIL), apolice:r.apolice, lp_servico:r.lp_servico||null, segurado:r.segurado||'', resp_pagto:r.resp_pagto||null, premio:r.premio!=null?r.premio:null, vencido_em:r.vencido_em||null, pago_ate:r.pago_ate||null, forma_pagto:r.forma_pagto||null, celular:r.celular||null, motivo_recusa:r.motivo_recusa||null, tratativa:r.tratativa||null, prox_contato:r.prox_contato||null, resolvido_em:r.resolvido_em||null, responsavel:r.responsavel||null, origem_relatorio:r.origem_relatorio||null, bola_com:r.bola_com||null, ultima_acao:r.ultima_acao||null, ultima_acao_em:r.ultima_acao_em||null, proxima_acao:r.proxima_acao||null, proxima_acao_prazo:r.proxima_acao_prazo||null, autorizacao_contato:r.autorizacao_contato||null, protocolo:r.protocolo||null, status:r.status||atDerivarStatus(r) }; }
 async function atCarregar(){
   AT_REMOTE=await atRemoteOn();
   if(AT_REMOTE){ try{ const {data,error}=await sb.from(AT_TABLE).select('*'); if(error) throw error;
@@ -10308,7 +10309,7 @@ function emDiff(existing,recs){
 /* ── camada de dados (igual ao at*) ── */
 async function emRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ EM_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
 function emRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
-function emRecToRow(r){ const row={ lp_email:EM_EMAIL }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio','nomes_corrigidos'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
+function emRecToRow(r){ const row={ lp_email:escEmailDoLp(r&&r.lp, EM_EMAIL) }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio','nomes_corrigidos'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
 async function emCarregar(){
   EM_REMOTE=await emRemoteOn();
   if(EM_REMOTE){ try{ const {data,error}=await sb.from(EM_TABLE).select('*'); if(error) throw error;
@@ -10317,9 +10318,10 @@ async function emCarregar(){
   try{ const raw=localStorage.getItem(EM_CHAVE); if(raw){ const o=JSON.parse(raw); EM.itens=Array.isArray(o.itens)?o.itens:[]; EM.carregadoEm=o.carregadoEm||null; } }catch(e){ console.warn('EM load local',e); }
 }
 function emSalvarLocal(){ try{ localStorage.setItem(EM_CHAVE,JSON.stringify(EM)); }catch(e){} }
-async function emUpsertRemoto(recs){ if(!EM_REMOTE||!sb||!recs.length) return; const rows=recs.filter(r=>emChave(r)).map(emRecToRow); if(!rows.length) return;
-  const {data,error}=await sb.from(EM_TABLE).upsert(rows,{onConflict:'lp_email,chave'}).select('id,chave'); if(error) throw error;
-  (data||[]).forEach(d=>{ const r=EM.itens.find(x=>emChave(x)===d.chave); if(r) r.id=d.id; }); emSalvarLocal(); }
+async function emUpsertRemoto(recs){ if(!EM_REMOTE||!sb||!recs.length) return {data:[],falhas:[]}; const rows=recs.filter(r=>emChave(r)).map(emRecToRow); if(!rows.length) return {data:[],falhas:[]};
+  const {data,falhas}=await impUpsertPorDono(EM_TABLE, rows, r=>r.chave||r.apolice||r.proposta);
+  (data||[]).forEach(d=>{ const r=EM.itens.find(x=>emChave(x)===d.chave); if(r) r.id=d.id; }); emSalvarLocal();
+  if(falhas.length&&!data.length) throw new Error(impFalhasMsg(falhas)); return {data,falhas}; }
 async function emPatch(chave,patch){ const r=EM.itens.find(x=>emChave(x)===chave); if(!r) return; Object.assign(r,patch); emSalvarLocal();
   if(EM_REMOTE&&sb){ try{ await emUpsertRemoto([r]); }catch(e){ console.error('EM patch remoto',e); toast('Não consegui salvar no servidor',false); } } }
 
@@ -10451,7 +10453,7 @@ async function emAplicarUI(){ const p=_emPend; if(!p) return; const origem=atHoj
   EM.carregadoEm=origem;
   impRegistrar('emissao', origem, {atualizadas:p.updates.length, novas:p.novos.length, sumiram:p.sumiram.length});
   emSalvarLocal(); let msg='';
-  if(EM_REMOTE){ try{ await emUpsertRemoto(up); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('EM upsert',e); } }
+  if(EM_REMOTE){ try{ const r1=await emUpsertRemoto(up); const fl=(r1&&r1.falhas)||[]; msg=fl.length?' · PARCIAL: '+impFalhasMsg(fl):' · sincronizado'; if(fl.length) toast('⚠️ '+impFalhasMsg(fl),false); }catch(e){ msg=' · só neste aparelho (falha no servidor: '+(e&&e.message||e)+')'; console.error('EM upsert',e); toast('⚠️ Nada subiu pro servidor: '+(e&&e.message||e),false); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
   atClose(); render(); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${p.novos.length} nova(s), ${p.sumiram.length} sumiram${msg}`,true);
 }
@@ -10792,7 +10794,7 @@ async function bfCarregar(){
 }
 function bfSalvarLocal(){ try{ localStorage.setItem(BF_CHAVE,JSON.stringify(BF)); }catch(e){} }
 function bfLocalId(id){ return !id||String(id).startsWith('loc_')||String(id).startsWith('ex_'); }
-function bfRowCaso(r){ const row={ lp_email:BF_EMAIL }; ['segurado','apolice','lp','tipo_evento','descricao_evento','data_evento','data_aviso','data_abertura','protocolo','situacao','bola_com','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','valor_pago','data_pagamento','observacao'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.apolice=r.apolice||''; row.tipo_evento=r.tipo_evento||'outro'; row.situacao=r.situacao||'montagem'; row.atualizado_em=new Date().toISOString(); if(!bfLocalId(r.id)) row.id=r.id; return row; }
+function bfRowCaso(r){ const row={ lp_email:escEmailDoLp(r&&r.lp, BF_EMAIL) }; ['segurado','apolice','lp','tipo_evento','descricao_evento','data_evento','data_aviso','data_abertura','protocolo','situacao','bola_com','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','valor_pago','data_pagamento','observacao'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.apolice=r.apolice||''; row.tipo_evento=r.tipo_evento||'outro'; row.situacao=r.situacao||'montagem'; row.atualizado_em=new Date().toISOString(); if(!bfLocalId(r.id)) row.id=r.id; return row; }
 function bfRowFilho(tab,r,q){ const row={ beneficio_id:r.id }; const campos={ beneficio_documentos:['item','estado','solicitado_em','recebido_em','anexado_em','observacao','ordem'], beneficio_exigencias:['descricao','recebida_em','prazo','respondida_em','situacao','observacao'], beneficio_eventos:['ocorrido_em','autor','tipo','texto'] }[tab]; campos.forEach(k=>{ row[k]=(q[k]===''||q[k]===undefined)?null:q[k]; }); if(!bfLocalId(q.id)) row.id=q.id; return row; }
 function bfAcha(id){ return BF.itens.find(x=>String(x.id)===String(id)); }
 /* grava o caso (pai); se ainda era local, troca o id nos filhos também */
@@ -12671,6 +12673,18 @@ async function delegCarregar(){
    Escolher Daniel = ver a base dele E gravar como ele (dono=daniel, faixa âmbar). */
 const ESC_CHAVE='crmlp_escopo_v1';
 let ESC={sel:null,rotulos:[],perfis:{}};
+/* IMPORT-DONO-V1 (11/09): relatório do MFB traz apólices de VÁRIOS LPs; quem sobe (Victor) não é o dono.
+   Cada linha vai pro dono do seu LP (lp_rotulo_dono: 'Daniel'→daniel, 'Gustavo'/'Rebeca'→juca); sem rótulo
+   conhecido cai no dono da sessão. Upsert por dono: um dono barrado pela RLS não derruba os outros, e o
+   erro aparece na tela. Linhas repetidas (clique duplo) são unificadas antes — o Postgres rejeita a mesma
+   chave duas vezes no mesmo upsert e antes isso derrubava a subida INTEIRA em silêncio. */
+function escEmailDoLp(lp, fallback){ const p=escLpNorm(String(lp||'').trim().split(/\s+/)[0]||''); if(p){ const r=(ESC.rotulos||[]).find(x=>escLpNorm(x.rotulo)===p); if(r&&r.dono_email) return r.dono_email; } return fallback||''; }
+function impDedupe(rows, chaveDe){ const m=new Map(); rows.forEach(r=>{ const k=(r.lp_email||'')+'|'+(chaveDe(r)||''); m.set(k,r); }); return [...m.values()]; }
+async function impUpsertPorDono(tabela, rows, chaveDe){ rows=impDedupe(rows,chaveDe); const grupos={}; rows.forEach(r=>{ (grupos[r.lp_email||'']=grupos[r.lp_email||'']||[]).push(r); });
+  const data=[], falhas=[];
+  for(const dono of Object.keys(grupos)){ const {data:d,error}=await sb.from(tabela).upsert(grupos[dono],{onConflict:'lp_email,chave'}).select('id,chave'); if(error) falhas.push({dono,n:grupos[dono].length,erro:error.message||String(error)}); else (d||[]).forEach(x=>data.push(x)); }
+  return {data,falhas}; }
+function impFalhasMsg(falhas){ return falhas.map(f=>`${escRotuloDe({_dono:f.dono})||f.dono}: ${f.n} linha(s) não subiram (${/row-level security|policy/i.test(f.erro)?'sem permissão pra gravar nesse dono':f.erro})`).join(' · '); }
 function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
 function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
 function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
@@ -15142,6 +15156,11 @@ function lpSelfCheck(){
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
     ok('SEGURANÇA-V1: não existe botão de zerar/apagar base na tela; zerarContatos (se chamada) só limpa cache local', (()=>{ const t=zerarContatos.toString(); return !document.querySelector('[onclick*="zerarContatos"]') && !t.includes('S.contatos=[]') && !t.includes('salvar()'); })());
     ok('DRAG-TOUCH-V1: o board dos funis tem arrasto por toque (segurar e arrastar) e cards sem seleção de texto', typeof wireTouchDrag==='function' && String(wireNnBoard).includes('wireTouchDrag') && String(wireBcBoard).includes('wireTouchDrag') && (()=>{ const d=document.createElement('div'); d.className='nncard'; document.body.appendChild(d); const u=getComputedStyle(d).userSelect||getComputedStyle(d).webkitUserSelect; d.remove(); return u==='none'; })());
+    ok('IMPORT-DONO-V1: linha do relatório vai pro dono do SEU LP (rótulo→e-mail), sem rótulo cai no da sessão; dedupe por (dono,chave) antes do upsert', (()=>{ const bk=ESC.rotulos; ESC.rotulos=[{rotulo:'daniel',dono_email:'d@x'},{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'rebeca',dono_email:'j@x'}];
+      try{ const a=escEmailDoLp('Daniel','s@x')==='d@x', b=escEmailDoLp('Rebeca Souza','s@x')==='j@x', c=escEmailDoLp('Fulano','s@x')==='s@x', d=escEmailDoLp('','s@x')==='s@x';
+        const dd=impDedupe([{lp_email:'j@x',chave:'1'},{lp_email:'j@x',chave:'1'},{lp_email:'d@x',chave:'1'}],r=>r.chave); const e=dd.length===2;
+        const f=String(exRecToRow).includes('escEmailDoLp')&&String(emRecToRow).includes('escEmailDoLp')&&String(exUpsertRemoto).includes('impUpsertPorDono')&&String(emUpsertRemoto).includes('impUpsertPorDono');
+        return a&&b&&c&&d&&e&&f; } finally{ ESC.rotulos=bk; } })());
     ok('STATUS-ETAPA-V1: status vem da cfg da etapa; inválido é ignorado; mudar etapa limpa; card mostra chip; "Delay X" vira tipo de Delay no Painel TA; filtra o funil', (()=>{ const arr=FUNIL_CFG.lp; if(!arr||!arr.length) return false; const e=arr[0], bk=e.status; e.status=['Delay OI','Remarcou']; const c={id:'zz-st',nome:'Zz St',telefone:'',funil:'nn',etapa:e.id,status:'Delay OI',interacoes:[],recs:[],hist:[]}; S.contatos.push(c);
       try{ const okOpts=etStatusOpts(c).length===2&&etStatusDe(c)==='Delay OI'; const okInv=etStatusDe({funil:'nn',etapa:e.id,status:'Xyz'})==='';
         let okChip=false; try{ okChip=nnCard(c).includes('nc-status'); }catch(_){ okChip=false; }
