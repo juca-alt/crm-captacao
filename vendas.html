@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.49 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.50 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -710,6 +710,23 @@
   .et-status-row select,.fun-status-sel{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--linha);border-radius:7px;background:#fff;color:var(--ink)}
   .fc-st{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);flex:1;min-width:180px}
   .fc-st input{flex:1;min-width:120px;font:inherit;font-size:11.5px;border:1px solid var(--linha);background:#fff;border-radius:6px;padding:3px 6px;color:var(--ink)}
+  .loc-wrap{margin-top:10px}
+  .loc-chip{display:inline-flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid var(--linha);border-radius:999px;padding:4px 4px 4px 10px;font-size:12px;margin:0 6px 6px 0;max-width:100%}
+  .loc-chip b{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .loc-chip .x{border:0;background:transparent;cursor:pointer;color:var(--muted);font-size:13px;min-width:28px;min-height:28px;border-radius:999px}
+  .loc-busca{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .loc-busca input{flex:1;min-width:180px}
+  .loc-res{border:1px solid var(--linha);border-radius:10px;background:#fff;margin-top:6px;overflow:hidden}
+  .loc-res button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:9px 11px;font:inherit;font-size:13px;cursor:pointer;border-top:1px solid var(--linha);min-height:44px}
+  .loc-res button:first-child{border-top:0}.loc-res button:hover{background:var(--azul-claro)}
+  .loc-res small{display:block;color:var(--muted);font-size:11.5px}
+  #mapa-el{height:58vh;min-height:320px;border-radius:12px;border:1px solid var(--linha);background:#e8eef7;z-index:0}
+  .mapa-grid{display:grid;grid-template-columns:1fr 340px;gap:12px}
+  @media(max-width:900px){.mapa-grid{grid-template-columns:1fr}#mapa-el{height:48vh}}
+  .mapa-loc{border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-bottom:6px;cursor:pointer;background:#fff}
+  .mapa-loc.on{border-color:var(--azul);background:var(--azul-claro)}
+  .mapa-loc .n{font-weight:650}.mapa-loc .s{font-size:11.5px;color:var(--muted)}
+  .mapa-pin{background:var(--azul);color:#fff;border-radius:999px;font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
   .nncard.td-lift{opacity:.35;border-style:dashed} .td-ghost{position:fixed;z-index:400;pointer-events:none;opacity:.95;transform:scale(1.03) rotate(1.5deg);box-shadow:0 12px 30px rgba(16,30,54,.28)} body.td-on{overflow:hidden;touch-action:none}
   .nncard:hover{border-color:var(--azul-borda)}
   .nncard.dragging{opacity:.4}
@@ -1292,6 +1309,7 @@
       <button class="nav-btn sub" data-view="sitplan" onclick="irPara('sitplan')"><span class="ic">🗓️</span><span class="lbl">SitPlan</span><span class="cnt" id="cnt-sitplan"></span></button>
       <!-- PAINEL-TA-NATIVO-V1 (10/09): o Painel de TA 2.0 (painel-lp.html, arquivo à parte) virou ESTA view, nativa — mesmo store, sem reload. -->
       <button class="nav-btn sub" data-view="bn-ta" onclick="irPara('bn-ta')"><span class="ic">🧭</span><span class="lbl">Painel TA</span><span class="cnt" id="cnt-bn-ta"></span></button>
+      <button class="nav-btn sub" data-view="mapa" onclick="irPara('mapa')"><span class="ic">🗺️</span><span class="lbl">Mapa de locais</span></button>
     </div>
 
     <!-- nós OCULTOS: telas que moram em Módulos mas cujos contadores o render ainda escreve (guardado por if(el)) -->
@@ -3066,7 +3084,7 @@ function tarGcalUrl(c,t){
   const tit=tarNomeTipo(t.tipo)+' · '+(c?c.nome:'');
   const det=tarEventoDescricao(c,t);
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(tit)+
-         '&dates='+ini+'/'+fim+'&details='+encodeURIComponent(det);
+         '&dates='+ini+'/'+fim+'&details='+encodeURIComponent(det)+(locTexto(locPrincipal(c))?'&location='+encodeURIComponent(locTexto(locPrincipal(c))):'');
 }
 /* descrição do evento (reaproveitada pelo link-template e pela criação via API):
    título livre / telefone / Etapa: <id de fábrica> / notas / assinatura. */
@@ -4436,6 +4454,7 @@ function drwPessoaHtml(c){
           ${souAdm()?`<select id="pes_lp" data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" style="width:100%">${escRotulosTodos().map(r=>`<option value="${esc(r.rotulo)}" ${escLpNorm(r.rotulo)===escLpNorm(escRotuloDe(c))?'selected':''}>${esc(r.rotulo)}</option>`).join('')}</select>`:`<input value="${esc(escRotuloDe(c)||'—')}" disabled style="width:100%" title="Só o admin muda o dono">`}</div>
         <div style="flex:1;min-width:160px;padding-bottom:4px;font-size:11.5px;color:var(--muted)">${souAdm()?'Trocar o dono move este lead pra base dele.':'Quem é o dono desta base.'}</div>
       </div>`:''}
+      ${locWidgetHtml('ct:'+c.id,c)}
       <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
         <button class="btn btn-p btn-mini" onclick="pessoaSalvarDados('${esc(c.id)}')">Salvar</button>
         <span style="font-size:11.5px;color:var(--muted)">${n?`O que você mudar aqui vale para as ${n+1} oportunidades desta pessoa.`:'Esta pessoa tem só esta oportunidade.'}</span>
@@ -8960,7 +8979,7 @@ async function gcalCriarEventoDaTarefa(cid,tid,op){
   try{
     const titulo=tarNomeTipo(t.tipo)+' · '+(c.nome||'');
     const {ini,fim}=tarReuniaoInterval(t);
-    const body={ summary:titulo, description:tarEventoDescricao(c,t), start:{dateTime:ini,timeZone:GCAL_TZ}, end:{dateTime:fim,timeZone:GCAL_TZ} };
+    const body={ summary:titulo, description:tarEventoDescricao(c,t), location:locTexto(locPrincipal(c))||undefined, start:{dateTime:ini,timeZone:GCAL_TZ}, end:{dateTime:fim,timeZone:GCAL_TZ} };   /* MAPA-V1: local de trabalho vai no evento */
     if(t.gcalId){ await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),body,{sendUpdates:'none'}); toast('Agenda atualizada: '+titulo,true); }
     else{ const ev=await gcalApi('POST','',body,{sendUpdates:'none'}); if(ev&&ev.id){ t.gcalId=ev.id; salvar(); }
       interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na agenda Google: '+titulo,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
@@ -8995,7 +9014,7 @@ async function gcalCriarReuniaoDaTarefa(cid,tid){
     }
     // ── criar novo ──
     const {ini,fim}=tarReuniaoInterval(t);
-    const body={ summary: alvo||tituloCru, description: tarEventoDescricao(c,t),
+    const body={ summary: alvo||tituloCru, description: tarEventoDescricao(c,t), location:locTexto(locPrincipal(c))||undefined,
       start:{dateTime:ini, timeZone:GCAL_TZ}, end:{dateTime:fim, timeZone:GCAL_TZ} };
     if(alvo) body.colorId=REUNIAO_COLOR_ID;
     const ev=await gcalApi('POST','',body,{sendUpdates:'none'});
@@ -9337,6 +9356,7 @@ function fichaPessoaHtml(o,tipo){
     linha('📞','Contato',tels.map(t=>esc(telBR(t))).concat([email?esc(String(email)):''])),
     linha('💼','Perfil',[prof?esc(String(prof)):'', cid?esc(String(cid)):'', fmtRenda(renda), civ?esc(String(civ)):'', fmtFil(fil)]),
     linha('🤝','Origem',[rec?'rec. '+esc(String(rec)):'rec. —', ctx?esc(String(ctx)):'', tri?esc(String(tri)):'']),
+    linha('📍','Locais',(typeof locDe==='function'?locDe(o):[]).map(l=>esc((LOC_TIPOS[l.tipo]||'')+': '+(l.nome||l.end)))),
     (typeof logado==='function'&&logado())? linha('👤','Dono (LP)',[esc(escRotuloDe(o)||'—')]) : '',
     linha('🎯','Funil', s.funil?[esc(String(s.funil.etapa)), (s.funil.funil&&s.funil.funil!=='nn')?esc(String(s.funil.funilNome||s.funil.funil)):'', ult]:['sem negócio aberto']),
     linha('🛡','Carteira', s.cart?[s.cart.n+' apólice'+(s.cart.n===1?'':'s'), s.cart.cs?'CS '+brlCurto(s.cart.cs):'', s.cart.pm?brlCurto(s.cart.pm)+'/mês':'']:['não é cliente da carteira'])
@@ -11071,6 +11091,7 @@ const HUB_SECOES=[
     {view:'beneficios',        ic:'🩹', titulo:'Benefícios (sinistro)', desc:'Acompanhamento de sinistro/benefício, do aviso ao pagamento.', mod:'beneficios', cnt:()=>(BF.itens||[]).filter(escLinhaOk).filter(bfAtivo).length}
   ]},
   {titulo:'Prospecção', itens:[
+    {view:'mapa',    ic:'🗺️', titulo:'Mapa de locais',      desc:'Hospitais, clínicas, empresas e casas de leads e clientes — quem está em cada lugar.'},
     {view:'bn-dups', ic:'🔀', titulo:'Duplicatas',           desc:'Fila de possíveis duplicados no Estoque de Nomes — você decide juntar.', cnt:()=>BN.dups.filter(d=>!d.decisao).length}
   ]},
   {titulo:'Operação', itens:[
@@ -13270,6 +13291,7 @@ function bnEditorHtml(c){
      +f('Filhos',`<select id="bne-fi"><option value="">—</option><option ${bnFilhosStr2(c)==='sim'?'selected':''} value="sim">Sim</option><option ${bnFilhosStr2(c)==='nao'?'selected':''} value="nao">Não</option></select>`)
      +f('Renda estimada (R$/mês)',`<input id="bne-renda" type="number" min="0" step="500" value="${esc(c.renda_estimada||'')}">`)
      +f('Empresa · Cargo',`<input id="bne-emp" value="${esc([c.empresa,c.cargo].filter(Boolean).join(' · '))}" placeholder="Empresa · Cargo">`,true),false)}
+    ${locWidgetHtml('bn:'+c.id,c)}
     ${grp('n','📝 Notas',(c.notas||'').slice(0,60),f('Notas',`<input id="bne-not" value="${esc(c.notas||'')}" placeholder="o que vale lembrar antes de ligar">`,true),!!(c.notas||'').trim())}
     <div class="bne-foot">
       <button class="btn btn-p" onclick="bnSalvarEdicao('${esc(c.id)}')">💾 Salvar</button>
@@ -14374,7 +14396,7 @@ async function admUpsert(row){ const r=await sb.from('lp_perfis').upsert(row,{on
 async function admDesdelegar(dono,para){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:dono,delegado_email:para}); if(r.error){ toast('Falhou: '+r.error.message,false); return; } toast('Delegação removida',true); viewLpAdm(); }
 
 const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',sitplan:'SitPlan',metas:'Metas',contatos:'Contatos',
-  'bn-estoque':'Estoque de Nomes','bn-ta':'Painel TA','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
+  'bn-estoque':'Estoque de Nomes','bn-ta':'Painel TA',mapa:'Mapa de locais','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo','prud-funil':'Prud. Demais','mfo-funil':'MFO','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
@@ -14515,7 +14537,8 @@ function render(){
   else if(VIEW==='bn-ta') viewBnTa();
   else if(VIEW==='bn-dups') viewBnDups();
   else if(VIEW==='bn-recs') viewBnRecs();
-  else if(VIEW==='lp-adm'){ viewLpAdm(); try{ const m=$('#main'); if(m&&souAdm()) m.insertAdjacentHTML('beforeend',varHtml()); }catch(_){} }
+  else if(VIEW==='mapa') viewMapa();
+  else if(VIEW==='lp-adm'){ viewLpAdm(); try{ const m=$('#main'); if(m&&souAdm()) m.insertAdjacentHTML('beforeend',varHtml()+geoKeyHtml()); }catch(_){} }
   else viewInicio();
   /* O card "Base de Nomes" saiu daqui em 01/09 a pedido dele: a tela de abrir
      e pra decidir o que fazer agora, e cinco numeros de estoque empurravam o
@@ -15202,6 +15225,10 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('MAPA-V1: locais puros (add/dedupe/principal=trabalho), evento da Agenda leva o local, tela mapa registrada, widget na ficha e no Estoque', (()=>{ const c={id:'zl',nome:'Zz'}; const a=locAddPuro(c,{tipo:'casa',nome:'Casa',end:'Rua A',lat:-8.05,lng:-34.9}); const b=locAddPuro(c,{tipo:'trabalho',nome:'Hospital X',end:'Av B',lat:-8.06,lng:-34.91}); const d=!locAddPuro(c,{tipo:'outro',nome:'Hospital X',lat:-8.06001,lng:-34.91001}); const okP=locPrincipal(c).nome==='Hospital X'&&locTexto(locPrincipal(c))==='Hospital X, Av B'; const okG=mapaGrupos([{c,l:c.locais[0]},{c,l:c.locais[1]},{c:{id:'z2'},l:{...c.locais[1]}}])[0].pessoas.length===2;
+      const okEv=String(gcalCriarEventoDaTarefa).includes('location:locTexto(locPrincipal(c))')&&String(gcalCriarReuniaoDaTarefa).includes('location:locTexto(locPrincipal(c))')&&tarGcalUrl(c,{quando:'2026-09-15',hora:'10:00'}).includes('&location=');
+      const okView=typeof viewMapa==='function'&&VIEWS_CONHECIDAS.includes('mapa')&&HUB_SECOES.some(sx=>sx.itens.some(i=>i.view==='mapa'))&&!!document.querySelector('.nav-btn[data-view="mapa"]');
+      const okW=String(drwPessoaHtml).includes("locWidgetHtml('ct:'")&&String(bnEditorHtml).includes("locWidgetHtml('bn:'"); const okN=geoNormNominatim({name:'Real Hospital Português',lat:'-8.05',lon:'-34.9',address:{road:'Av. Agamenon',house_number:'4760',suburb:'Paissandu',city:'Recife',state:'Pernambuco'}}); return a&&b&&d&&okP&&okG&&okEv&&okView&&okW&&okN.nome==='Real Hospital Português'&&okN.end.includes('Paissandu')&&okN.lat===-8.05; })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
     ok('BF-HISTORICO-V1: Benefícios tem KPI de pagos e chip Histórico (encerrados não somem)', (()=>{ const bk=BF.itens; BF.itens=[{id:'z1',situacao:'pago',valor_pago:100,segurado:'Zz',lp:'Gustavo'}]; try{ const V=VIEW; viewBeneficios(); const h=$('#main').innerHTML; return h.includes('Pagos (histórico)')&&h.includes('Histórico (1)'); } finally{ BF.itens=bk; } })());
@@ -16302,6 +16329,84 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
    própria — cada item chama a função de origem (openNovoContato, bnNovo, tarCriar,
    gcalNovo, soNova, atNovo). Item de módulo desligado no perfil não aparece. */
 (function(){ try{ const m=(document.title||'').match(/v\d+(\.\d+)*/); if(m) document.querySelectorAll('.ver-auto').forEach(e=>e.textContent=m[0]); }catch(_){} })();
+/* ═══ MAPA-V1 (11/09) — LOCAIS de leads/clientes + MAPA ══════════════════════════════════════════
+   Pedido dele: "visito muitos médicos; hospitais concentram gente; quero o local de trabalho/casa de leads e
+   clientes por etapa/status, o local já indo pro evento da Agenda, e uma visão de mapa com bolinhas por
+   hospital/clínica/empresa (tinha isso no Pipedrive)". Dado: c.locais=[{tipo,nome,end,lat,lng,src}] em
+   contatos do funil e do Estoque (vai no JSON, sem migração). Geocoder: OpenStreetMap (Nominatim) sem chave;
+   com chave do Google (Config → Administração) usa Places. Mapa: Leaflet + tiles OSM, carregado só na tela. */
+const LOC_TIPOS={trabalho:'Trabalho',casa:'Casa',outro:'Outro'};
+function locDe(c){ return (c&&Array.isArray(c.locais))?c.locais.filter(l=>l&&(l.nome||l.end)):[]; }
+function locPrincipal(c){ const ls=locDe(c); return ls.find(l=>l.tipo==='trabalho')||ls[0]||null; }
+function locTexto(l){ return l?[l.nome,l.end].filter(Boolean).join(', '):''; }
+function locChave(l){ if(!l) return ''; if(l.lat!=null&&l.lng!=null&&isFinite(+l.lat)&&isFinite(+l.lng)) return (+l.lat).toFixed(4)+','+(+l.lng).toFixed(4); return normKey(l.nome||l.end||''); }
+function locAddPuro(c,l){ if(!c||!l||!(l.nome||l.end)) return false; if(!Array.isArray(c.locais)) c.locais=[]; const k=locChave(l); if(c.locais.some(x=>locChave(x)===k)) return false;
+  c.locais.push({tipo:LOC_TIPOS[l.tipo]?l.tipo:'outro',nome:String(l.nome||'').trim(),end:String(l.end||'').trim(),lat:(l.lat!=null&&isFinite(+l.lat))?+l.lat:null,lng:(l.lng!=null&&isFinite(+l.lng))?+l.lng:null,src:l.src||''}); return true; }
+function locAlvo(alvo){ const m=String(alvo).match(/^(ct|bn):(.+)$/); if(!m) return {c:null}; if(m[1]==='bn') return {c:bnPor(m[2]),salvar:()=>{ pendMarcar('bn',[m[2]]); bnSalvar(); }}; return {c:tarContato(m[2]),salvar:()=>salvar()}; }
+function locWidgetHtml(alvo,c){ const ls=locDe(c), a=esc(alvo), aj=esc(jsq(alvo));
+  return `<div class="loc-wrap" id="loc-w-${a}"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">📍 Locais (trabalho · casa) — entra no evento da Agenda e no Mapa</label>
+    <div>${ls.map((l,i)=>`<span class="loc-chip"><b>${esc(LOC_TIPOS[l.tipo]||'Outro')}</b><span title="${esc(l.end||'')}">${esc(l.nome||l.end)}</span><button class="x" title="Tirar" onclick="locRemover('${aj}',${i})">✕</button></span>`).join('')||'<span style="font-size:11.5px;color:var(--muted)">Nenhum local ainda.</span>'}</div>
+    <div class="loc-busca" style="margin-top:6px"><select id="loc-tipo-${a}" data-so-leitura="lido ao escolher o resultado (locEscolher)" style="flex:0 0 auto">${Object.keys(LOC_TIPOS).map(k=>`<option value="${k}">${LOC_TIPOS[k]}</option>`).join('')}</select>
+      <input id="loc-q-${a}" placeholder="Hospital, clínica, empresa ou endereço…" autocomplete="off" data-so-leitura="busca ao digitar (locBuscar)" oninput="locBuscaDeb('${aj}')"></div>
+    <div class="loc-res" id="loc-res-${a}" hidden></div></div>`; }
+let _locT={}, _locRes={};
+function locBuscaDeb(alvo){ clearTimeout(_locT[alvo]); _locT[alvo]=setTimeout(()=>locBuscar(alvo),550); }
+async function locBuscar(alvo){ const inp=document.getElementById('loc-q-'+alvo), box=document.getElementById('loc-res-'+alvo); if(!inp||!box) return; const q=inp.value.trim(); if(q.length<3){ box.hidden=true; return; }
+  box.hidden=false; box.innerHTML='<button disabled>Buscando…</button>';
+  try{ const rs=await geoBuscar(q); if(inp.value.trim()!==q) return; _locRes[alvo]=rs;
+    box.innerHTML=rs.length?rs.map((r,i)=>`<button onclick="locEscolher('${esc(jsq(alvo))}',${i})">${esc(r.nome)}<small>${esc(r.end)}</small></button>`).join(''):'<button disabled>Nada encontrado — tente com bairro ou cidade</button>'; }
+  catch(e){ box.innerHTML='<button disabled>Busca de endereço indisponível agora</button>'; console.warn('geo',e); } }
+function locEscolher(alvo,i){ const r=(_locRes[alvo]||[])[i]; if(!r) return; const {c,salvar:sv}=locAlvo(alvo); if(!c) return; const sel=document.getElementById('loc-tipo-'+alvo); const l={...r,tipo:sel?sel.value:'trabalho'};
+  if(locAddPuro(c,l)){ sv(); toast('📍 '+(l.nome||l.end)+' salvo',true); } locRefresh(alvo,c); }
+function locRemover(alvo,i){ const {c,salvar:sv}=locAlvo(alvo); if(!c||!Array.isArray(c.locais)) return; c.locais.splice(i,1); sv(); locRefresh(alvo,c); }
+function locRefresh(alvo,c){ const w=document.getElementById('loc-w-'+alvo); if(w) w.outerHTML=locWidgetHtml(alvo,c); }
+function geoGoogleKey(){ try{ return localStorage.getItem('crmlp_gmaps_key')||''; }catch(_){ return ''; } }
+function geoGoogleKeySet(v){ try{ v=String(v||'').trim(); if(v) localStorage.setItem('crmlp_gmaps_key',v); else localStorage.removeItem('crmlp_gmaps_key'); }catch(_){} toast(v?'Chave do Google Maps guardada neste aparelho':'Voltou pro OpenStreetMap',true); }
+function geoNormNominatim(x){ const a=x.address||{}; const nome=(x.namedetails&&x.namedetails.name)||x.name||String(x.display_name||'').split(',')[0];
+  const end=[a.road?(a.road+(a.house_number?', '+a.house_number:'')):'', a.suburb||a.neighbourhood||'', a.city||a.town||a.municipality||a.village||'', a.state||''].filter(Boolean).join(' · ');
+  return {nome:String(nome||'').trim(),end,lat:+x.lat,lng:+x.lon,src:'osm'}; }
+async function geoBuscar(q){ const k=geoGoogleKey();
+  if(k){ const r=await fetch('https://places.googleapis.com/v1/places:searchText',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':k,'X-Goog-FieldMask':'places.displayName,places.formattedAddress,places.location'},body:JSON.stringify({textQuery:q,languageCode:'pt-BR',regionCode:'BR',maxResultCount:6})});
+    if(!r.ok) throw new Error('Google Places '+r.status); const j=await r.json(); return (j.places||[]).map(p=>({nome:(p.displayName&&p.displayName.text)||'',end:p.formattedAddress||'',lat:p.location&&p.location.latitude,lng:p.location&&p.location.longitude,src:'google'})).filter(x=>x.nome); }
+  const u='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&namedetails=1&countrycodes=br&limit=6&accept-language=pt-BR&q='+encodeURIComponent(q);
+  const r=await fetch(u,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('OpenStreetMap '+r.status); const j=await r.json(); return (Array.isArray(j)?j:[]).map(geoNormNominatim).filter(x=>x.nome); }
+function geoKeyHtml(){ return `<div class="card" style="padding:12px 14px;margin-top:12px"><h3 style="margin:0 0 6px">🗺️ Busca de endereços (Mapa de locais)</h3>
+  <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sem chave usa o OpenStreetMap (grátis). Com uma chave da Google Maps Platform (Places API), a busca fica com a qualidade do Google Agenda. A chave fica só neste aparelho.</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="gmaps-key" placeholder="Chave da Google Maps Platform (opcional)" value="${esc(geoGoogleKey())}" style="flex:1;min-width:220px"><button class="btn btn-p btn-mini" onclick="geoGoogleKeySet(document.getElementById('gmaps-key').value)">Guardar</button></div></div>`; }
+/* ── a tela do mapa ── */
+let MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:''}; let _mapa=null, _mapaQT=null;
+function mapaPontos(){ const out=[]; const add=(c,origem,abrir)=>{ locDe(c).forEach(l=>{ if(l.lat==null||l.lng==null) return; if(MAPA_F.tipo&&l.tipo!==MAPA_F.tipo) return; out.push({c,l,origem,abrir}); }); };
+  (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(MAPA_F.funil&&MAPA_F.funil!=='bn'&&(c.funil||'nn')!==MAPA_F.funil) return; if(MAPA_F.funil==='bn') return; if(MAPA_F.etapa&&c.etapa!==MAPA_F.etapa) return; if(MAPA_F.status&&etStatusDe(c)!==MAPA_F.status) return; add(c,'funil',`abrirContato('${esc(jsq(String(c.id)))}')`); });
+  if((!MAPA_F.funil||MAPA_F.funil==='bn')&&!MAPA_F.etapa&&!MAPA_F.status) (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>add(b,'estoque',`taFichaAbrir('${esc(jsq(String(b.id)))}')`));
+  if(MAPA_F.q){ const q=normKey(MAPA_F.q); return out.filter(p=>normKey(p.c.nome||'').includes(q)||normKey((p.l.nome||'')+' '+(p.l.end||'')).includes(q)); }
+  return out; }
+function mapaGrupos(pts){ const m=new Map(); pts.forEach(p=>{ const k=locChave(p.l); if(!m.has(k)) m.set(k,{k,nome:p.l.nome||p.l.end,end:p.l.end,lat:p.l.lat,lng:p.l.lng,pessoas:[]}); m.get(k).pessoas.push(p); }); return [...m.values()].sort((a,b)=>b.pessoas.length-a.pessoas.length); }
+function mapaQDeb(){ clearTimeout(_mapaQT); _mapaQT=setTimeout(()=>{ viewMapa(); const i=document.getElementById('mapa-q'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },300); }
+function mapaFoco(k){ MAPA_F.sel=(MAPA_F.sel===k?'':k); viewMapa(); }
+function viewMapa(){ const pts=mapaPontos(), gr=mapaGrupos(pts);
+  const sel=(id,opts,v,rot)=>`<select onchange="MAPA_F.${id}=this.value;viewMapa()" title="${rot}" style="flex:0 1 auto;width:auto;min-width:140px;max-width:100%"><option value="">${rot}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===v?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
+  const etapas=[...new Set((S.contatos||[]).filter(escVisivel).map(c=>c.etapa).filter(Boolean))].map(e=>[e,ET_LABEL[e]||e]);
+  const funis=[['nn','Novos Negócios'],['bc','Base de Clientes'],['bn','Estoque de Nomes']].concat(Object.keys(ETAPAS_MAP||{}).filter(f=>!['nn','bc'].includes(f)).map(f=>[f,((typeof fxMeta==='function'&&fxMeta(f))||{}).nome||f]));
+  const pessoaLinha=p=>`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px dashed var(--linha)"><a href="#" onclick="event.preventDefault();${p.abrir}" style="font-weight:600">${esc(p.c.nome)}</a>${p.origem==='funil'?badgeEtapa(p.c.etapa):'<span class="badge b-cinza">Estoque</span>'}${etStatusChip(p.c)}<span style="font-size:11px;color:var(--muted)">${esc(LOC_TIPOS[p.l.tipo]||'')}${p.c.telefone?' · '+esc(telBR(p.c.telefone)):''}</span></div>`;
+  $('#main').innerHTML=`<h1 class="pg">Mapa de locais</h1><div class="sub">${pts.length} pessoa(s) em ${gr.length} local(is) — hospitais, clínicas, empresas e casas cadastrados na ficha. Toque no local pra ver quem está lá e abrir a ficha.</div>
+    <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="mapa-q" placeholder="Buscar pessoa ou local…" value="${esc(MAPA_F.q)}" oninput="MAPA_F.q=this.value;mapaQDeb()" style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
+      ${sel('funil',funis,MAPA_F.funil,'Todos os funis')}${sel('etapa',etapas,MAPA_F.etapa,'Todas as etapas')}${sel('status',etStatusTodos().map(x=>[x,x]),MAPA_F.status,'Todos os status')}${sel('tipo',Object.entries(LOC_TIPOS),MAPA_F.tipo,'Trabalho e casa')}
+    </div>
+    <div class="mapa-grid"><div id="mapa-el"></div><div id="mapa-lista" style="max-height:58vh;overflow:auto">${gr.map(g=>`<div class="mapa-loc${MAPA_F.sel===g.k?' on':''}" onclick="mapaFoco('${esc(jsq(g.k))}')"><div class="n">📍 ${esc(g.nome)} <span class="badge b-azul">${g.pessoas.length}</span></div><div class="s">${esc(g.end||'')}</div>${MAPA_F.sel===g.k?`<div style="margin-top:6px" onclick="event.stopPropagation()">${g.pessoas.map(pessoaLinha).join('')}</div>`:''}</div>`).join('')||'<div class="vazio" style="padding:20px">Nenhum local com esse filtro. Abra a ficha de um lead ou cliente, em "Dados da pessoa", e adicione o local de trabalho.</div>'}</div></div>`;
+  mapaDesenhar(gr); }
+function mapaLeaflet(cb){ if(window.L){ cb(); return; }
+  if(!document.getElementById('leaflet-css')){ const l=document.createElement('link'); l.id='leaflet-css'; l.rel='stylesheet'; l.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(l); }
+  const ex=document.getElementById('leaflet-js'); if(ex){ ex.addEventListener('load',cb); return; }
+  const sc=document.createElement('script'); sc.id='leaflet-js'; sc.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'; sc.onload=cb;
+  sc.onerror=()=>{ const el=document.getElementById('mapa-el'); if(el) el.innerHTML='<div class="vazio" style="padding:20px">Mapa indisponível agora (sem internet?). A lista ao lado continua valendo.</div>'; }; document.head.appendChild(sc); }
+function mapaDesenhar(gr){ if(!document.getElementById('mapa-el')) return; mapaLeaflet(()=>{ try{ const el=document.getElementById('mapa-el'); if(!el||!window.L||VIEW!=='mapa') return; if(_mapa){ try{ _mapa.remove(); }catch(_){} _mapa=null; }
+    _mapa=L.map(el,{scrollWheelZoom:true}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_mapa);
+    const pts=gr.filter(g=>g.lat!=null&&g.lng!=null); if(!pts.length){ _mapa.setView([-8.05,-34.9],11); return; }
+    const b=[]; pts.forEach(g=>{ const sz=g.pessoas.length>9?34:28; const ic=L.divIcon({className:'',html:`<div class="mapa-pin" style="width:${sz}px;height:${sz}px">${g.pessoas.length}</div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
+      const m=L.marker([g.lat,g.lng],{icon:ic}).addTo(_mapa); m.bindTooltip(`${esc(g.nome)} · ${g.pessoas.length}`); m.on('click',()=>mapaFoco(g.k)); b.push([g.lat,g.lng]); });
+    const sel=pts.find(g=>g.k===MAPA_F.sel); if(sel) _mapa.setView([sel.lat,sel.lng],15); else if(b.length===1) _mapa.setView(b[0],14); else _mapa.fitBounds(b,{padding:[30,30]});
+  }catch(e){ console.warn('mapa',e); } }); }
 function maisRapidoFechar(){ const b=document.getElementById('mais-rapido-bd'); if(b) b.remove(); }
 function maisModDe(view){ const k=Object.keys(MODS||{}).find(k=>(MODS[k].views||[]).includes(view)); return k?modOn(k):true; }
 function maisRapidoItens(){
@@ -16505,7 +16610,7 @@ function abrirAjustesVisual(){
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
-  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','config-funil'];
+  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','config-funil','mapa'];
 /* PAINEL-TA-NATIVO-V1: vendas.html#view=bn-ta&q=Nome abre direto a tela (é o que o
    painel-lp.html, agora só um redirect, manda). O hash é consumido e limpo. */
 (function(){ try{
