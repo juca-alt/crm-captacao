@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.37.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.38 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -13044,6 +13044,13 @@ function bnPromover(id){
   S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id;
   salvar(); bnSalvar(); render(); toast(b.nome.split(' ')[0]+' agora é contato do funil ✓',true);
 }
+/* Agendou no TA → o nome vira lead do funil NN na etapa dada (OI/FF). Se já tem lead, só move a etapa. */
+function bnLevarProFunil(b,etapa){ try{
+  let c=b.funil_contato_id? (S.contatos||[]).find(x=>x.id===b.funil_contato_id) : null;
+  if(!c){ c=pessoaLeadToCard(b); S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id; }
+  if(etapa&&c.etapa!==etapa&&!ETAPAS_ENCERR.includes(c.etapa)){ c.etapa=etapa; }
+  salvar(); toast(String(b.nome||'').split(' ')[0]+' → funil em '+etapa+' ✓',true); return c;
+}catch(e){ console.warn('bnLevarProFunil',e); return null; } }
 function bnLote(acao){
   const ids=[...FBN.sel]; if(!ids.length) return;
   ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
@@ -13177,8 +13184,8 @@ let BNTA={lista:'hoje'};
 /* Filtros 2.0 na lista de TA: a lista é a ferramenta de trabalho do dia, então
    ela precisa das mesmas lentes do Estoque (multi-seleção + ordenar + colunas).
    `res` é o filtro do dia: pendente ou um dos resultados já registrados. */
-let FTA={busca:'',trilha:'',estagio:'',pri:'',res:'',cid:'',prof:'',idmin:'',idmax:'',rmin:'',fone:'',rec:'',sort:'',dir:1,pop:'',sel:new Set(),recem:new Set()};
-const FTA_CAMPOS=['busca','trilha','estagio','pri','res','cid','prof','idmin','idmax','rmin','fone','rec'];
+let FTA={busca:'',trilha:'',estagio:'',pri:'',res:'',cid:'',prof:'',idmin:'',idmax:'',rmin:'',fone:'',rec:'',reccli:'',delay:'',sort:'',dir:1,pop:'',sel:new Set(),recem:new Set()};
+const FTA_CAMPOS=['busca','trilha','estagio','pri','res','cid','prof','idmin','idmax','rmin','fone','rec','reccli','delay'];
 function taFiltroLimpar(){ FTA_CAMPOS.forEach(k=>FTA[k]=''); FTA.recem.clear(); viewBnTa(); }
 function taFiltrosAtivos(){ return FTA_CAMPOS.filter(k=>k!=='busca'&&FTA[k]).length; }
 /* colunas extras da planilha do TA — reusa o catálogo do Estoque (BN_COLS) */
@@ -13219,25 +13226,58 @@ function taResBtnsHtml(c){ const r=taResHoje(c), id=esc(jsq(c.id));
    mesmo segundo. Listas inteligentes = recortes puros por estágio (a cola do
    ESTAGIO-UNICO-V1). "hoje" e as listas nomeadas continuam sendo as de trabalho. */
 function taTemFone(c){ return String(c.telefone||'').replace(/\D/g,'').length>=10; }
+/* CLIENTES-REAIS-V1 (11/09): "Clientes" no Painel TA = quem está na CARTEIRA (cruzamento por nome ou
+   telefone), não o flag `estagio='cliente'` da carga de 04/08 (569 "CLIENTE ATIVO" da planilha, só 118 na
+   carteira real). "Rec de cliente" = indicado por alguém que É cliente da carteira — ouro do TA. */
+let _taCli=null;
+function taCliIdx(){ if(_taCli) return _taCli; const nomes=new Set(), tels=new Set();
+  (typeof cartVis==='function'?cartVis():[]).forEach(c=>{ const k=normKey(c.nome); if(k) nomes.add(k); [c.celular,c.telefone,c.telComercial].forEach(t=>{ const d=String(t||'').replace(/\D/g,'').replace(/^55/,''); if(d.length>=10) tels.add(d.slice(-9)); }); });
+  return _taCli={nomes,tels}; }
+function taEhClienteDe(c,idx){ if(!c) return false; if(idx.nomes.has(normKey(c.nome))) return true;
+  const d=String(c.telefone||'').replace(/\D/g,'').replace(/^55/,''); return d.length>=10&&idx.tels.has(d.slice(-9)); }
+function taRecDeClienteDe(c,idx){ const r=normKey((c&&c.recomendante)||''); return !!r && idx.nomes.has(r); }
+function taEhCliente(c){ return taEhClienteDe(c,taCliIdx()); }
+function taRecDeCliente(c){ return taRecDeClienteDe(c,taCliIdx()); }
+/* DELAY-V1 (11/09): "Delay" junta TODA remarcação pendente, de qualquer origem — OI/FF, P/C, C2,
+   Revisita, Delivery (funil, com tarefa atrasada ou data de lista passada sem resultado), "pediu para
+   retornar" sem nova data, e no Estoque quem não atendeu / ficou pra trás. PURA por contato.
+   "OIs agendados" saiu: agendou = o lead já vai pro funil em OI/FF (bnLevarProFunil).
+   "Rec (sem fone)" = recomendações que chegaram sem telefone e precisam ser trabalhadas. */
+const TA_DELAY_ETAPAS={'OI/FF':'OI','P/C':'P/C','C2':'C2','Agendada Revisita':'Revisita','DELIVERY':'Delivery'};
+function taDelayTipo(c){ if(!c) return null; const hoje=hojeISO();
+  if(spEhFunil(c)){
+    const its=interacoesDe(c).filter(i=>RES_BY_K[i.k]); const ult=its.length?its[its.length-1]:null;
+    if(ult&&ult.k==='pediu_retornar'&&!(c.sitplan&&c.sitplan>=hoje)) return 'Retornar';
+    const et=TA_DELAY_ETAPAS[c.etapa]; if(!et) return null;
+    const atras=tarefasDe(c).some(t=>tarSituacao(t)==='atrasada'), passou=!!(c.sitplan&&c.sitplan<hoje&&!ultimoResultado(c,c.sitplan));
+    return (atras||passou)?et:null; }
+  const h=(c.hist||[]).filter(x=>x.tipo==='ta'); const u=h.length?h[h.length-1]:null;
+  if(u&&u.res==='nao_atendeu'&&!(c.ta_dia&&c.ta_dia>=hoje)&&c.estagio!=='descartado') return 'Não atendeu';
+  if(c.ta_dia&&c.ta_dia<hoje&&!(c.hist||[]).some(x=>x.tipo==='ta'&&x.dia===c.ta_dia)&&c.estagio!=='descartado') return 'Ficou pra trás';
+  return null; }
+const TA_DELAY_TIPOS=['OI','P/C','C2','Revisita','Delivery','Retornar','Não atendeu','Ficou pra trás'];
+function taPoolDe(k){ return k==='delay'? [...bnVivos(),...meusContatos()] : bnVivos(); }
 const TA_SMART={
-  prontos:    {ic:'🎯', label:'Prontos p/ ligar',   base:c=>c.estagio==='lista_ta'&&taTemFone(c)&&(c.trilha||'seguro')!=='recrutamento'},
-  oi:         {ic:'📅', label:'OIs agendados',      base:c=>c.estagio==='oi_agendado'},
-  semfone:    {ic:'⛏', label:'SitPlan (sem fone)', base:c=>!taTemFone(c)&&(c.estagio==='estoque'||c.estagio==='lista_ta')&&(c.trilha||'seguro')!=='recrutamento'},
-  clientes:   {ic:'⭐', label:'Clientes',           base:c=>c.estagio==='cliente'},
   base:       {ic:'📇', label:'Toda a base',        base:c=>c.estagio!=='descartado'},
+  prontos:    {ic:'🎯', label:'Prontos p/ ligar',   base:c=>c.estagio==='lista_ta'&&taTemFone(c)&&(c.trilha||'seguro')!=='recrutamento'},
+  delay:      {ic:'⏳', label:'Delay',              base:c=>!!taDelayTipo(c)},
+  recsemfone: {ic:'📵', label:'Rec (sem fone)',     base:c=>!taTemFone(c)&&!!(c.recomendante||'').trim()&&c.estagio!=='descartado'&&c.estagio!=='cliente'},
+  clientes:   {ic:'⭐', label:'Clientes (carteira)', base:c=>taEhCliente(c)},
+  reccli:     {ic:'💎', label:'Rec de cliente',     base:c=>taRecDeCliente(c)&&c.estagio!=='descartado'},
   descartados:{ic:'🗑', label:'Descartados',        base:c=>c.estagio==='descartado'}
 };
 function taSmartKey(){ return String(BNTA.lista||'').startsWith('sm:')? BNTA.lista.slice(3) : null; }
 function taListaTrabalho(){ return !taSmartKey(); }            /* hoje/nomeada = dá pra tirar/adicionar */
 function taRegistradosHoje(){ const hoje=hojeISO(); return bnVivos().reduce((n,c)=>n+(c.hist||[]).filter(h=>h.tipo==='ta'&&h.dia===hoje).length,0) + meusContatos().reduce((n,c)=>n+interacoesDe(c).filter(i=>i.dia===hoje&&RES_BY_K[i.k]&&RES_BY_K[i.k].lig).length,0); }
 function taDaLista(){ const hoje=hojeISO(), k=taSmartKey();
-  if(k&&TA_SMART[k]) return bnVivos().filter(TA_SMART[k].base);
+  if(k&&TA_SMART[k]) return taPoolDe(k).filter(TA_SMART[k].base);
   if(BNTA.lista==='hoje'){ const l=spListaDoDia(hoje); return [...l.bn,...l.fun]; }
   return bnVivos().filter(c=>(c.listas||[]).includes(BNTA.lista)); }
-function taKpisHtml(){
-  const v=bnVivos(), n=k=>v.filter(TA_SMART[k].base).length;
+function taKpisHtml(){ return ''; /* 11/09: 'tira esses cards' — as contagens já estão no card Listas */ }
+function taKpisHtml_antigo(){
+  const v=bnVivos(), n=k=>taPoolDe(k).filter(TA_SMART[k].base).length;
   const card=(k,val,lbl)=>`<div class="kpi" style="cursor:pointer;min-width:132px;${k&&BNTA.lista==='sm:'+k?'border-color:var(--azul);box-shadow:0 0 0 2px var(--azul-claro,#eef4ff)':''}" ${k?`onclick="BNTA.lista='sm:${k}';FTA.sel.clear();FTA.recem.clear();viewBnTa()"`:''}><div class="num">${val}</div><div style="font-size:12px;color:var(--muted)">${lbl}</div></div>`;
-  return `<div class="kpis" style="margin-bottom:10px">${card('prontos',n('prontos'),'Prontos p/ ligar')}${card('oi',n('oi'),'OIs agendados')}${card('semfone',n('semfone'),'SitPlan (sem fone)')}${card('clientes',n('clientes'),'Clientes')}${card(null,taRegistradosHoje(),'TAs registrados hoje')}${card('base',v.length,'Base total')}</div>`;
+  return `<div class="kpis" style="margin-bottom:10px">${card('prontos',n('prontos'),'Prontos p/ ligar')}${card('delay',n('delay'),'⏳ Delay')}${card('recsemfone',n('recsemfone'),'📵 Rec (sem fone)')}${card('clientes',n('clientes'),'Clientes (carteira)')}${card('reccli',n('reccli'),'💎 Rec de cliente')}${card(null,taRegistradosHoje(),'TAs registrados hoje')}${card('base',v.length,'Base total')}</div>`;
 }
 /* WhatsApp com a mensagem pronta (o painel antigo tinha; o {eu} vem do perfil da sessão) */
 const TA_WA_TPL={
@@ -13332,6 +13372,8 @@ function taFiltrados(){
   if(FTA.cid){ const q=FTA.cid.toLowerCase(); l=l.filter(c=>(c.cidade||'').toLowerCase().includes(q)); }
   if(FTA.fone){ const s=csvSet(FTA.fone); if(s.size===1) l=l.filter(c=>s.has('sim')?taTemFone(c):!taTemFone(c)); }
   if(FTA.rec){ const q=FTA.rec.toLowerCase(); l=l.filter(c=>(c.recomendante||'').trim().toLowerCase()===q); }
+  if(FTA.delay){ const s=csvSet(FTA.delay); l=l.filter(c=>s.has(taDelayTipo(c)||'')); }
+  if(FTA.reccli==='sim') l=l.filter(taRecDeCliente); else if(FTA.reccli==='nao') l=l.filter(c=>(c.recomendante||'').trim()&&!taRecDeCliente(c));
   if(FTA.prof){ const q=FTA.prof.toLowerCase(); l=l.filter(c=>((c.cargo||'')+' '+(c.empresa||'')).toLowerCase().includes(q)); }
   if(FTA.idmin) l=l.filter(c=>Number(c.idade)>=Number(FTA.idmin));
   if(FTA.idmax) l=l.filter(c=>c.idade!=null&&Number(c.idade)<=Number(FTA.idmax));
@@ -13342,13 +13384,15 @@ function taFiltrados(){
                               : k==='civil_cod'? bnCivilCod(c) : c[k]);
 }
 /* spec do sheet de filtros do TA (celular) */
-fxSheetReg('ta',()=>({titulo:'Filtros da Lista de TA',
+fxSheetReg('ta',()=>({titulo:'Filtros do Painel TA',
   grupos:[
     {k:'res',t:'Resultado de hoje',opts:[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]})))},
+    {k:'delay',t:'Delay de',opts:TA_DELAY_TIPOS.map(t=>({v:t,l:t}))},
     {k:'trilha',t:'Trilha',opts:BN_TRILHAS.map(t=>({v:t,l:t}))},
     {k:'estagio',t:'Estágio',opts:BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))},
     {k:'pri',t:'Prioridade',opts:[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}]},
-    {k:'fone',t:'Telefone',opts:[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}]}],
+    {k:'fone',t:'Telefone',opts:[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}]},
+    {k:'reccli',t:'Indicado por',opts:[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}]}],
   inputs:[{k:'prof',l:'Profissão/empresa'},{k:'rec',l:'Recomendante'},{k:'cid',l:'Cidade'},
     {k:'idmin',l:'Idade ≥',extra:'type="number"'},{k:'idmax',l:'Idade ≤',extra:'type="number"'},
     {k:'rmin',l:'Renda ≥ (R$/mês)',extra:'type="number" step="1000"'}],
@@ -13406,7 +13450,7 @@ function taRecsHtml(lista){ const map={}; lista.forEach(c=>{ const k=(c.recomend
       <div class="ta-recmini"><div><b>${o.trab}</b>a trabalhar</div><div><b>${o.fone}</b>com fone</div><div><b>${pct}%</b>alcançável</div></div>
       <div class="ta-meter"><i style="width:${pct}%"></i></div><div style="font-size:11px;color:var(--muted);display:flex;justify-content:space-between"><span>toque para filtrar a lista</span><span>→</span></div></div>`; }).join('')}</div>`; }
 function viewBnTa(){
-  fxReg('ta',FTA,'viewBnTa');
+  fxReg('ta',FTA,'viewBnTa'); _taCli=null;
   const hoje=hojeISO();
   const nomes=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   if(BNTA.lista!=='hoje'&&!taSmartKey()&&!nomes.includes(BNTA.lista)) BNTA.lista='hoje';
@@ -13421,7 +13465,7 @@ function viewBnTa(){
   const navItem=(id,ic,label,n,on)=>`<button class="ta-nav${on?' on':''}" onclick="taListaSet('${esc(jsq(id))}')"><span class="ic">${ic}</span><span class="lbl">${esc(label)}</span><span class="ct">${n}</span></button>`;
   const lateral=`<aside class="ta-side">
       <div class="ta-sec"><h3>Listas</h3>
-        ${Object.keys(TA_SMART).map(k=>navItem('sm:'+k,TA_SMART[k].ic,TA_SMART[k].label,vivos.filter(TA_SMART[k].base).length,BNTA.lista==='sm:'+k)).join('')}
+        ${Object.keys(TA_SMART).map(k=>navItem('sm:'+k,TA_SMART[k].ic,TA_SMART[k].label,taPoolDe(k).filter(TA_SMART[k].base).length,BNTA.lista==='sm:'+k)).join('')}
       </div>
       <div class="ta-sec"><h3>Listas de TA</h3>
         ${navItem('hoje','📅','Hoje',emHoje.length,BNTA.lista==='hoje')}
@@ -13429,12 +13473,14 @@ function viewBnTa(){
         <div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-s btn-mini" style="flex:1" onclick="taNovaLista()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="flex:1" onclick="taListaDoFiltro()" title="Salva a lista filtrada atual">＋ Do filtro</button></div>
       </div>
       <div class="ta-sec"><h3>Filtros</h3>
-        <label class="ta-lbl">Trilha</label>${taChips('trilha',BN_TRILHAS.map(t=>({v:t,l:t==='seguro'?'Seguro':'Recrut.'})))}
+        ${taSmartKey()==='delay'?`<label class="ta-lbl">Delay de</label>${taChips('delay',TA_DELAY_TIPOS.map(t=>({v:t,l:t})))}`:''}
+        ${souAdm()?`<label class="ta-lbl">Trilha</label>${taChips('trilha',BN_TRILHAS.map(t=>({v:t,l:t==='seguro'?'Seguro':'Recrut.'})))}`:''}
         <label class="ta-lbl">Estágio</label>${taChips('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
         <label class="ta-lbl">Telefone</label>${taChips('fone',[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}])}
         <label class="ta-lbl">Prioridade</label>${taChips('pri',[{v:'1',l:'🔥 Alta'},{v:'2',l:'Normal'},{v:'3',l:'Baixa'}])}
         ${trab?`<label class="ta-lbl">Resultado de hoje</label>${taChips('res',[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]}))))}`:''}
         <label class="ta-lbl">Profissão</label><select onchange="FTA.prof=this.value;viewBnTa()"><option value="">Todas as profissões</option>${opt(cargos,FTA.prof||'')}</select>
+        <label class="ta-lbl">Indicado por</label>${taChips('reccli',[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}])}
         <label class="ta-lbl">Recomendante</label><select onchange="FTA.rec=this.value;viewBnTa()"><option value="">Todos os recomendantes</option>${opt(recs,FTA.rec||'')}</select>
         <label class="ta-lbl">Idade</label><div style="display:flex;gap:6px"><input type="number" placeholder="≥" value="${esc(FTA.idmin)}" onchange="FTA.idmin=this.value;viewBnTa()"><input type="number" placeholder="≤" value="${esc(FTA.idmax)}" onchange="FTA.idmax=this.value;viewBnTa()"></div>
         <label class="ta-lbl">Renda ≥ (R$/mês)</label><input type="number" step="1000" value="${esc(FTA.rmin)}" onchange="FTA.rmin=this.value;viewBnTa()">
@@ -13443,7 +13489,7 @@ function viewBnTa(){
       </div></aside>`;
   const linha=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'',c.origem&&c.origem!=='—'?c.origem:''].filter(Boolean).join(' · ')||'—':[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const pri=c.prioridade==1?'var(--verm)':c.prioridade==3?'var(--muted)':'transparent';
-    const badge=fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`;
+    const badge=(fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`)+(smk==='delay'?` <span class="badge b-amarelo">⏳ ${esc(taDelayTipo(c)||'')}</span>`:'');
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
     const acoes=`<div class="ta-acts">${taTemFone(c)?`<a class="ta-ib" title="Ligar" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" title="WhatsApp" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun?`<button class="ta-ib" title="Tirar de Hoje" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" title="Mover / listas" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" title="Foco a partir daqui" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>`;
     const res=trab?`<td onclick="event.stopPropagation()">${taResBtnsHtml(c)}</td>`:'';
@@ -13476,7 +13522,7 @@ function viewBnTa(){
         <button class="btn btn-s btn-mini" onclick="taExportCsv()">⬇ CSV</button>
         ${taFocoFila().length?`<button class="btn btn-p btn-mini" onclick="taFocoAbrir()">▶ Foco nesta lista</button>`:''}
       </div>
-      <div class="ta-listas-mob">${navItem('hoje','📅','Hoje',emHoje.length,BNTA.lista==='hoje')}${Object.keys(TA_SMART).map(k=>navItem('sm:'+k,TA_SMART[k].ic,TA_SMART[k].label,vivos.filter(TA_SMART[k].base).length,BNTA.lista==='sm:'+k)).join('')}${nomes.map(n=>navItem(n,'📋',n,vivos.filter(c=>(c.listas||[]).includes(n)).length,BNTA.lista===n)).join('')}<button class="ta-nav" onclick="taNovaLista()"><span class="ic">＋</span><span class="lbl">Nova lista</span></button></div>
+      <div class="ta-listas-mob">${navItem('hoje','📅','Hoje',emHoje.length,BNTA.lista==='hoje')}${Object.keys(TA_SMART).map(k=>navItem('sm:'+k,TA_SMART[k].ic,TA_SMART[k].label,taPoolDe(k).filter(TA_SMART[k].base).length,BNTA.lista==='sm:'+k)).join('')}${nomes.map(n=>navItem(n,'📋',n,vivos.filter(c=>(c.listas||[]).includes(n)).length,BNTA.lista===n)).join('')}<button class="ta-nav" onclick="taNovaLista()"><span class="ic">＋</span><span class="lbl">Nova lista</span></button></div>
       <div class="ta-search"><span>🔎</span><input type="search" placeholder="Buscar contato — nome, empresa, telefone, quem indicou…" value="${esc(FTA.busca)}" oninput="FTA.busca=this.value;taBuscaTimer()">${FTA.busca?`<button class="btn btn-s btn-mini" onclick="FTA.busca='';viewBnTa()">✕</button>`:''}</div>
       ${trab?`<div class="toolbar" style="gap:6px"><input id="bnta-add" data-so-leitura="lido no clique de Adicionar (bnTaAddPorNome)" list="bnta-cand" style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'a Hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)"><datalist id="bnta-cand">${vivos.filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hoje : !(c.listas||[]).includes(BNTA.lista))).slice(0,400).map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}"></option>`).join('')}</datalist><button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
         ${BNTA.lista!=='hoje'?`<button class="btn btn-s btn-mini" onclick="taListaRenomear('${esc(jsq(BNTA.lista))}')">Renomear</button><button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(jsq(BNTA.lista))}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}</div>`:''}
@@ -13537,7 +13583,7 @@ async function bnResultado(id,res){
   const h={tipo:'ta',res,dia:hojeISO(),ts:new Date().toISOString(),estAntes:c.estagio,revAntes:!!c.precisa_revisao};
   (c.hist=c.hist||[]).push(h);
   FTA.recem.add(id);            // segura a linha na tela pra dar tempo de desfazer
-  if(res==='agendou') c.estagio='oi_agendado';
+  if(res==='agendou'){ c.estagio='oi_agendado'; bnLevarProFunil(c,'OI/FF'); }   /* DELAY-V1: agendou = já é lead no funil, na etapa certa */
   else if(res==='recusou') c.estagio='descartado';
   else if(res==='numero_errado'){ c.precisa_revisao=true; c.estagio='estoque'; }
   bnSalvar(); render();
@@ -14862,10 +14908,22 @@ function lpSelfCheck(){
     ok('ESCOPO-UNICO: o upsert leva o dono da linha e não devolve _dono pro jsonb', (()=>{
       const r=lpcRowOut('k1',{nome:'Zz',_dono:'daniel@x'},{funil:'bn'}); const r2=lpcRowOut('k2',{nome:'Zz'});
       return r.dono==='daniel@x'&&!('_dono' in r.dados)&&r.dados.funil==='bn'&&r.id==='k1'&&(!logado()? !('dono' in r2):true); })());
+    ok('DELAY-V1: ordem das listas = Toda a base, Prontos, Delay, Rec (sem fone)… e sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='prontos'&&k[2]==='delay'&&k[3]==='recsemfone'&&!k.includes('oi'); })());
+    ok('DELAY-V1: delay do Estoque = não atendeu sem nova data, ou ficou pra trás; com data futura não é delay', (()=>{
+      const h=hojeISO(), ontem=isoAddDias(h,-1), amanha=isoAddDias(h,1);
+      return taDelayTipo({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:ontem})==='Não atendeu'
+          && taDelayTipo({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:amanha})===null
+          && taDelayTipo({hist:[],ta_dia:ontem})==='Ficou pra trás' && taDelayTipo({hist:[],ta_dia:h})===null
+          && taDelayTipo({hist:[{tipo:'ta',res:'atendeu',dia:ontem}],ta_dia:ontem})===null; })());
+    ok('REC-SEM-FONE: só quem tem recomendante e não tem telefone', TA_SMART.recsemfone.base({recomendante:'Zz',telefone:'',estagio:'estoque'}) && !TA_SMART.recsemfone.base({recomendante:'',telefone:'',estagio:'estoque'}) && !TA_SMART.recsemfone.base({recomendante:'Zz',telefone:'81999990000',estagio:'estoque'}));
+    ok('CLIENTES-REAIS: cliente = está na carteira (nome ou telefone); rec de cliente = recomendante está na carteira', (()=>{
+      const idx={nomes:new Set([normKey('Zz Cli Teste')]),tels:new Set(['999990001'])};
+      return taEhClienteDe({nome:'zz cli teste'},idx) && taEhClienteDe({nome:'Outro',telefone:'+55 81 99999-0001'},idx) && !taEhClienteDe({nome:'Ninguém',telefone:'81999990002',estagio:'cliente'},idx)
+          && taRecDeClienteDe({recomendante:'ZZ CLI TESTE'},idx) && !taRecDeClienteDe({recomendante:'Zz Rec Fulano'},idx) && !taRecDeClienteDe({},idx); })());
     ok('PAINEL-TA: listas inteligentes são puras e coerentes com o estágio', (()=>{
       const z=[{id:'a',estagio:'lista_ta',telefone:'81999990000',trilha:'seguro'},{id:'b',estagio:'lista_ta',telefone:'',trilha:'seguro'},{id:'c',estagio:'oi_agendado',telefone:'81999990001'},{id:'d',estagio:'cliente'},{id:'e',estagio:'descartado'}];
       const f=k=>z.filter(TA_SMART[k].base).map(x=>x.id).join('');
-      return f('prontos')==='a'&&f('oi')==='c'&&f('semfone')==='b'&&f('clientes')==='d'&&f('base')==='abcd'&&f('descartados')==='e'; })());
+      return f('prontos')==='a'&&f('base')==='abcd'&&f('descartados')==='e'; })());
     ok('PAINEL-TA foco: a fila é quem ainda não tem resultado hoje', (()=>{
       const hoje=hojeISO(); const q=[{id:'x',hist:[{tipo:'ta',dia:hoje,res:'atendeu'}]},{id:'y',hist:[]},{id:'z'}];
       return taFocoFilaDe(q).map(c=>c.id).join('')==='yz'; })());
