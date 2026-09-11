@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.43.4 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.44 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1361,7 +1361,7 @@
 
     <div class="rodape">
       <span>CRM SeguroComJucá · Vendas LP v7.9 — celular e desktop, cada um no seu formato.</span>
-      <button onclick="zerarContatos()">Começar do zero (apagar contatos)</button>
+      <button onclick="zerarContatos()">Limpar cache do aparelho (recarrega do servidor)</button>
     </div>
   </main>
 </div>
@@ -1790,6 +1790,7 @@ async function lpcCarregar(){
     })();
   }catch(e){ console.warn('lp_contatos: load remoto falhou → segue local',e); LPC_REMOTE=false; }
 }
+const LPC_DEL_MAX=20;   /* SEGURANÇA-V1: teto de exclusões por push */
 function lpcAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_lpcTimer); _lpcTimer=setTimeout(lpcPush,1500); }
 async function lpcPush(){
   if(!LPC_REMOTE||!sb) return;
@@ -1798,12 +1799,22 @@ async function lpcPush(){
     Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]))); });
     Object.keys(_lpcPrev).forEach(k=>{ if(!(k in atual)) mortos.push(k); });
     if(rows.length){ const r=await sb.from(LPC_T).upsert(rows,{onConflict:'dono,id'}); if(r.error) throw r.error; }
-    if(mortos.length){ const r=await sb.from(LPC_T).delete().in('id',mortos); if(r.error) throw r.error; }
+    /* SEGURANÇA-V1: delete só por (dono,id) da linha que ESTE aparelho conhecia, e nunca em massa —
+       acima de LPC_DEL_MAX numa rodada é sintoma (cache zerado, bug), não intenção: registra e NÃO apaga. */
+    if(mortos.length>LPC_DEL_MAX){ console.warn('lp_contatos: '+mortos.length+' exclusões numa rodada — bloqueado por segurança (máx '+LPC_DEL_MAX+')'); toast('⚠️ Bloqueei uma exclusão em massa ('+mortos.length+'). Nada foi apagado no servidor.',false); mortos.length=0; }
+    if(mortos.length){ const porDono={}; mortos.forEach(k=>{ let d=null; try{ d=JSON.parse(_lpcPrev[k])._dono||null; }catch(_){} d=d||escEu()||''; (porDono[d]=porDono[d]||[]).push(k); });
+      for(const d of Object.keys(porDono)){ const r=await sb.from(LPC_T).delete().eq('dono',d).in('id',porDono[d]); if(r.error) throw r.error; } }
     _lpcPrev=atual; pendLimpar('lpc',rows.map(x=>x.id)); pendLimpar('lpc',mortos);
     rows.forEach(x=>{ const c=(S.contatos||[]).find(y=>String(y.id)===String(x.id)); if(c&&!c._dono&&x.dono) c._dono=x.dono; });   /* confirmado: agora tem dono */
   }catch(e){ console.warn('lp_contatos: push falhou (retenta no próximo salvar)',e); }
 }
-function zerarContatos(){ if(confirm('Apagar TODOS os contatos e começar do zero pra uso real? (metas e perfis ficam)')){ S.contatos=[]; salvar(); render(); toast('Base zerada — bom trabalho! Crie o primeiro contato em ➕ Novo contato',true); } }
+/* SEGURANÇA-V1 (11/09): este botão zerava S.contatos e o push apagava TUDO no servidor (o diff via 'mortos'
+   virava DELETE em massa — inclusive nas linhas do Daniel, visíveis por delegação). Agora ele só limpa o
+   CACHE deste aparelho e recarrega do servidor. Apagar dado real é ação explícita por registro, nunca em massa. */
+function zerarContatos(){
+  if(!confirm('Limpar o cache deste aparelho e recarregar tudo do servidor?\n\nNada é apagado no servidor. Edições que ainda não subiram serão perdidas'+(pendTotal()?' ('+pendTotal()+' pendente'+(pendTotal()>1?'s':'')+')':'')+'.')) return;
+  try{ [CHAVE,BN_CHAVE,PEND_CHAVE,'crmlp_carteira_v1','crmlp_subst_v1','crmlp_beneficios_v1','crmlp_import_log_v1'].forEach(k=>{ try{ localStorage.removeItem(k); }catch(_){} }); }catch(_){}
+  location.reload(); }
 
 /* ═══════════════════ HELPERS ═══════════════════ */
 const $=s=>document.querySelector(s);
@@ -15056,6 +15067,8 @@ function lpSelfCheck(){
       const r2=fundMerge(loc,rem,{b:1},false), m2=new Map(r2.map(c=>[c.id,c.nome]));
       return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
+    ok('SEGURANÇA-V1: "Começar do zero" não zera S.contatos nem chama salvar() (só cache local)', (()=>{ const t=zerarContatos.toString(); return !t.includes('S.contatos=[]') && !t.includes('salvar()') && t.includes('location.reload'); })());
+    ok('SEGURANÇA-V1: teto de exclusão por push existe e é pequeno', typeof LPC_DEL_MAX==='number' && LPC_DEL_MAX<=50);
     ok('FUNDAÇÃO V1.4: merge do servidor não marca pendente (só edição local marca)', (()=>{ const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ BN.contatos=[{id:'Zzm1',nome:'Zz',_dono:'x'}]; _bnLast={}; bnSalvar(); PEND.bn={}; BN.contatos=[{id:'Zzm1',nome:'Zz servidor',_dono:'x'}]; bnSalvar({doServidor:true}); const a=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzm1',nome:'Zz editado',_dono:'x'}]; bnSalvar(); const b=!!PEND.bn['Zzm1']; return a&&b; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
     ok('FUNDAÇÃO V1.1: pendente igual ao servidor deixa de ser pendente; 1ª foto não marca', (()=>{
       const pend={a:1,b:1}; const r=fundMerge([{id:'a',nome:'A',_dono:'x',_upd:'1'},{id:'b',nome:'B local',_dono:'x'}],[{id:'a',nome:'A',_dono:'x',_upd:'2'},{id:'b',nome:'B srv',_dono:'x'}],pend,true);

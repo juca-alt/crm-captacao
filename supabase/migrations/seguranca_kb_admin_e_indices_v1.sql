@@ -1,0 +1,4 @@
+-- SEGURANÇA-V1 (11/09/2026, aplicada): kb_regras_negocio / kb_tabelas_calculo / kb_scripts_cobranca tinham
+-- policy de ESCRITA `true` pra qualquer autenticado (Daniel/Victor podiam alterar regras, tabelas de cálculo e scripts).
+-- Escrita agora = lp_sou_admin(); leitura = crm_autorizado(). Também: índices em lp_contatos (dono, funil), (funil, estagio) e lp_interacoes (dono, contato_id).
+-- Reverter: recriar as policies com `true` (não recomendado).
