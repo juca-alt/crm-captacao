@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.39.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.40 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -417,6 +417,13 @@
   .ta-nav:hover{background:var(--bg)} .ta-nav.on{background:var(--azul-claro,#eef4ff);color:var(--azul)}
   .ta-nav .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .ta-nav .ct{font-size:11.5px;color:var(--muted);font-weight:700}
   .ta-lbl{display:block;font-size:11px;font-weight:700;color:var(--muted);margin:8px 0 4px}
+  .ta-side{max-height:calc(100vh - 96px);overflow:auto;scrollbar-width:thin}
+  .ta-grp{border-top:1px solid var(--linha)} .ta-grp:first-of-type{border-top:0}
+  .ta-grp summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;padding:4px 0}
+  .ta-grp summary::-webkit-details-marker{display:none}
+  .ta-grp-t{font-size:12.5px;font-weight:700;flex:0 0 auto} .ta-grp-r{flex:1;min-width:0;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+  .ta-grp[open] .ta-grp-r{display:none} .ta-grp-c{font-size:11px;color:var(--muted);transition:transform .15s} .ta-grp[open] .ta-grp-c{transform:rotate(180deg)}
+  .ta-grp-b{padding:2px 0 10px}
   .ta-sec input,.ta-sec select{width:100%;min-height:36px;border:1px solid var(--linha);border-radius:8px;padding:6px 8px;background:var(--bg);font-size:13px}
   .ta-chips{display:flex;flex-wrap:wrap;gap:5px}
   .ta-chip{display:inline-flex;align-items:center;min-height:30px;padding:3px 10px;border-radius:999px;border:1px solid var(--linha);background:var(--bg);font-size:12px;font-weight:600;cursor:pointer}
@@ -12449,6 +12456,7 @@ async function bnPush(){
    o default abaixo. A blindagem de DADOS é o RLS; aqui é visibilidade de UI. */
 const MODS={
   bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-ta','bn-dups','bn-recs'], grp:'sp'},
+  funis_extra:{label:'Funis extras (Vida em Grupo, Prud. Demais, MFO)', def:false, views:['vg-funil','prud-funil','mfo-funil']},   /* 11/09: desligado por padrão pro LP (Daniel) */
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
@@ -12496,6 +12504,7 @@ async function delegCarregar(){
     const {data,error}=await sb.from('lp_delegacoes').select('dono_email,modulos').eq('delegado_email',DELEG.eu); if(error) throw error;
     DELEG.donos=(data||[]).map(d=>d.dono_email);
     try{ const r2=await sb.from('lp_rotulo_dono').select('rotulo,dono_email'); if(!r2.error) ESC.rotulos=r2.data||[]; }catch(_){}
+    try{ const r3=await sb.from('lp_perfis').select('email,papel,modulos'); if(!r3.error){ ESC.perfis={}; (r3.data||[]).forEach(x=>{ ESC.perfis[x.email]={papel:x.papel,modulos:x.modulos||{}}; }); } }catch(_){}
     try{ const sv=localStorage.getItem(ESC_CHAVE); if(sv) ESC.sel=sv; }catch(_){}
   }catch(e){ console.warn('lp_delegacoes: sem delegação →  dados próprios',e); }
 }
@@ -12506,7 +12515,7 @@ async function delegCarregar(){
    "Pipe X · todos/Daniel/Rebeca" da topbar e os filtros "LP:" do Estoque/Recs.
    Escolher Daniel = ver a base dele E gravar como ele (dono=daniel, faixa âmbar). */
 const ESC_CHAVE='crmlp_escopo_v1';
-let ESC={sel:null,rotulos:[]};
+let ESC={sel:null,rotulos:[],perfis:{}};
 function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
 function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
 function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
@@ -12540,7 +12549,7 @@ function escRegOk(rec){ return escRegOkDe(escAtual(),rec); }
 function escSet(id){ ESC.sel=id; try{ localStorage.setItem(ESC_CHAVE,id); }catch(_){}
   const o=escAtual(); PX.escopo=(o.id==='todos')?'todos':(o.id==='meu')?'meu':(o.lp||'meu');
   try{ localStorage.setItem(PX_CHAVE,JSON.stringify(PX)); }catch(_){}
-  render(); toast('Vendo e operando: '+o.nome,true); }
+  if(typeof aplicarGates==='function') aplicarGates(); render(); toast('Vendo e operando: '+o.nome,true); }
 function delegAtivo(){ if(!logado()) return null; const o=escAtual(); return (o.dono&&o.dono!==escEu())?o.dono:null; }
 /* e-mail DONO das linhas que este usuário lê/grava */
 function delegDono(email){ return delegAtivo()||email||DELEG.eu; }
@@ -12549,6 +12558,9 @@ function delegFaixa(){ const a=delegAtivo(); if(!a) return ''; const o=escAtual(
 let PERFIL=null; // {email,papel,modulos} — null = deslogado/sem linha → defaults
 function souAdm(){ return !!(PERFIL&&PERFIL.papel==='admin'); }
 function modOn(k){ if(!PERFIL) return true;              // sem login = modo local do dono: tudo visível
+  /* VER-COMO-V2 (11/09): operando como outro dono, a tela mostra os MÓDULOS DELE (o que ele enxerga), não os do admin */
+  const alvo=(typeof delegAtivo==='function'&&delegAtivo())? (ESC.perfis||{})[delegAtivo()] : null;
+  if(alvo){ if(alvo.papel==='admin') return true; const m=alvo.modulos; if(m&&k in m) return !!m[k]; return MODS[k]?MODS[k].def:true; }
   if(souAdm()) return true; const m=PERFIL.modulos; if(m&&k in m) return !!m[k]; return MODS[k]?MODS[k].def:true; }
 async function perfilCarregar(){
   if(!sb) return; try{
@@ -12563,7 +12575,7 @@ async function perfilCarregar(){
   }catch(e){ console.warn('lp_perfis: sem perfil remoto → defaults',e); }
 }
 function aplicarGates(){
-  const adm=$('#nav-lpadm'); if(adm) adm.style.display=souAdm()?'':'none';
+  const adm=$('#nav-lpadm'); if(adm) adm.style.display=(souAdm()&&!(typeof delegAtivo==='function'&&delegAtivo()))?'':'none';   /* vendo como outro: painel admin some da tela */
   Object.keys(MODS).forEach(k=>{
     const on=modOn(k);
     (MODS[k].views||[]).forEach(v=>{ document.querySelectorAll(`.nav-btn[data-view="${v}"]`).forEach(b=>b.style.display=on?'':'none'); });
@@ -13411,6 +13423,12 @@ fxSheetReg('ta',()=>({titulo:'Filtros do Painel TA',
    tabela com avatar (desktop) ou cards (celular) · ⋯ mover/listas · ficha em modal. */
 let TAV={seg:'lista',ficha:null,menu:null};
 function taChipToggle(k,v){ const st=csvSet(FTA[k]); st.has(v)?st.delete(v):st.add(v); FTA[k]=[...st].join(','); viewBnTa(); }
+/* FILTROS-DOBRAVEIS (11/09, norte de UX): cada grupo encolhe e estende; fechado mostra o resumo do que
+   está marcado; abre sozinho quando tem valor. O card de Filtros deixou de ter 1.500px de altura. */
+let TA_ABERTOS=new Set();
+function taResumoCsv(k,opts){ const st=csvSet(FTA[k]); if(!st.size) return ''; return opts.filter(o=>st.has(o.v)).map(o=>o.l).join(', '); }
+function taGrupo(titulo,resumo,html,temValor){ const id='g:'+titulo; const aberto=!!temValor||TA_ABERTOS.has(id);
+  return `<details class="ta-grp" ${aberto?'open':''} ontoggle="this.open?TA_ABERTOS.add('${esc(jsq(id))}'):TA_ABERTOS.delete('${esc(jsq(id))}')"><summary><span class="ta-grp-t">${esc(titulo)}</span><span class="ta-grp-r">${esc(resumo||'todos')}</span><span class="ta-grp-c">▾</span></summary><div class="ta-grp-b">${html}</div></details>`; }
 function taChips(k,opts){ const st=csvSet(FTA[k]); return `<div class="ta-chips">${opts.map(o=>`<span class="ta-chip${st.has(o.v)?' on':''}" onclick="taChipToggle('${k}','${esc(jsq(o.v))}')">${esc(o.l)}</span>`).join('')}</div>`; }
 function taAvatar(c){ const n=String(c.nome||'?'); let h=0; for(let i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))>>>0; return `<span class="avatar" style="background:hsl(${h%360} 45% 45%)">${esc(iniciais(n))}</span>`; }
 function taRenda(v){ if(v==null||v==='') return '—'; v=+v; return v>=1000?'R$ '+Math.round(v/1000)+'k':'R$ '+v; }
@@ -13479,20 +13497,20 @@ function viewBnTa(){
         ${nomes.map(n=>navItem(n,'📋',n,vivos.filter(c=>(c.listas||[]).includes(n)).length,BNTA.lista===n)).join('')||''}
         <div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-s btn-mini" style="flex:1" onclick="taNovaLista()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="flex:1" onclick="taListaDoFiltro()" title="Salva a lista filtrada atual">＋ Do filtro</button></div>
       </div>
-      <div class="ta-sec"><h3>Filtros</h3>
-        ${taSmartKey()==='delay'?`<label class="ta-lbl">Delay de</label>${taChips('delay',TA_DELAY_TIPOS.map(t=>({v:t,l:t})))}`:''}
-        ${souAdm()?`<label class="ta-lbl">Trilha</label>${taChips('trilha',BN_TRILHAS.map(t=>({v:t,l:t==='seguro'?'Seguro':'Recrut.'})))}`:''}
-        <label class="ta-lbl">Estágio</label>${taChips('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
-        <label class="ta-lbl">Telefone</label>${taChips('fone',[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}])}
-        <label class="ta-lbl">Prioridade</label>${taChips('pri',[{v:'1',l:'🔥 Alta'},{v:'2',l:'Normal'},{v:'3',l:'Baixa'}])}
-        ${trab?`<label class="ta-lbl">Resultado de hoje</label>${taChips('res',[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]}))))}`:''}
-        <label class="ta-lbl">Profissão</label><select onchange="FTA.prof=this.value;viewBnTa()"><option value="">Todas as profissões</option>${opt(cargos,FTA.prof||'')}</select>
-        <label class="ta-lbl">Indicado por</label>${taChips('reccli',[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}])}
-        <label class="ta-lbl">Recomendante</label><select onchange="FTA.rec=this.value;viewBnTa()"><option value="">Todos os recomendantes</option>${opt(recs,FTA.rec||'')}</select>
-        <label class="ta-lbl">Idade</label><div style="display:flex;gap:6px"><input type="number" placeholder="≥" value="${esc(FTA.idmin)}" onchange="FTA.idmin=this.value;viewBnTa()"><input type="number" placeholder="≤" value="${esc(FTA.idmax)}" onchange="FTA.idmax=this.value;viewBnTa()"></div>
-        <label class="ta-lbl">Renda ≥ (R$/mês)</label><input type="number" step="1000" value="${esc(FTA.rmin)}" onchange="FTA.rmin=this.value;viewBnTa()">
-        <label class="ta-lbl">Cidade</label><input type="search" value="${esc(FTA.cid)}" onchange="FTA.cid=this.value;viewBnTa()">
-        <button class="btn btn-s btn-mini" style="width:100%;margin-top:8px" onclick="taFiltroLimpar()">Limpar filtros${taFiltrosAtivos()?' ('+taFiltrosAtivos()+')':''}</button>
+      <div class="ta-sec ta-filtros"><h3 style="display:flex;align-items:center;gap:6px">Filtros ${taFiltrosAtivos()?`<span class="ct" style="color:var(--azul)">${taFiltrosAtivos()} ativo${taFiltrosAtivos()>1?'s':''}</span>`:''}<span style="flex:1"></span>${taFiltrosAtivos()?`<button class="btn btn-s btn-mini" style="min-height:28px;font-size:11px" onclick="taFiltroLimpar()">Limpar</button>`:''}</h3>
+        ${taSmartKey()==='delay'?taGrupo('Delay de',taResumoCsv('delay',TA_DELAY_TIPOS.map(t=>({v:t,l:t}))),taChips('delay',TA_DELAY_TIPOS.map(t=>({v:t,l:t}))),true):''}
+        ${taGrupo('Estágio',taResumoCsv('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),taChips('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),!!FTA.estagio)}
+        ${taGrupo('Telefone',taResumoCsv('fone',[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}]),taChips('fone',[{v:'sim',l:'Com fone'},{v:'nao',l:'Sem fone'}]),!!FTA.fone)}
+        ${taGrupo('Indicado por',taResumoCsv('reccli',[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}]),taChips('reccli',[{v:'sim',l:'💎 Cliente da carteira'},{v:'nao',l:'Outro recomendante'}]),!!FTA.reccli)}
+        ${trab?taGrupo('Resultado de hoje',taResumoCsv('res',[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]})))),taChips('res',[{v:'pendente',l:'⏳ Pendente'}].concat(BN_RES.map(r=>({v:r[0],l:r[1]})))),!!FTA.res):''}
+        ${taGrupo('Prioridade',taResumoCsv('pri',[{v:'1',l:'🔥 Alta'},{v:'2',l:'Normal'},{v:'3',l:'Baixa'}]),taChips('pri',[{v:'1',l:'🔥 Alta'},{v:'2',l:'Normal'},{v:'3',l:'Baixa'}]),!!FTA.pri)}
+        ${souAdm()?taGrupo('Trilha',taResumoCsv('trilha',BN_TRILHAS.map(t=>({v:t,l:t==='seguro'?'Seguro':'Recrut.'}))),taChips('trilha',BN_TRILHAS.map(t=>({v:t,l:t==='seguro'?'Seguro':'Recrut.'}))),!!FTA.trilha):''}
+        ${taGrupo('Mais filtros',[FTA.prof?'prof. '+FTA.prof:'',FTA.rec?'rec. '+FTA.rec:'',FTA.idmin||FTA.idmax?'idade '+(FTA.idmin||'')+'–'+(FTA.idmax||''):'',FTA.rmin?'renda ≥ '+FTA.rmin:'',FTA.cid?FTA.cid:''].filter(Boolean).join(' · ')||'profissão, recomendante, idade, renda, cidade',
+          `<label class="ta-lbl">Profissão</label><select onchange="FTA.prof=this.value;viewBnTa()"><option value="">Todas as profissões</option>${opt(cargos,FTA.prof||'')}</select>
+           <label class="ta-lbl">Recomendante</label><select onchange="FTA.rec=this.value;viewBnTa()"><option value="">Todos os recomendantes</option>${opt(recs,FTA.rec||'')}</select>
+           <label class="ta-lbl">Idade</label><div style="display:flex;gap:6px"><input type="number" placeholder="≥" value="${esc(FTA.idmin)}" onchange="FTA.idmin=this.value;viewBnTa()"><input type="number" placeholder="≤" value="${esc(FTA.idmax)}" onchange="FTA.idmax=this.value;viewBnTa()"></div>
+           <label class="ta-lbl">Renda ≥ (R$/mês)</label><input type="number" step="1000" value="${esc(FTA.rmin)}" onchange="FTA.rmin=this.value;viewBnTa()">
+           <label class="ta-lbl">Cidade</label><input type="search" value="${esc(FTA.cid)}" onchange="FTA.cid=this.value;viewBnTa()">`,!!(FTA.prof||FTA.rec||FTA.idmin||FTA.idmax||FTA.rmin||FTA.cid))}
       </div></aside>`;
   const linha=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'',c.origem&&c.origem!=='—'?c.origem:''].filter(Boolean).join(' · ')||'—':[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const pri=c.prioridade==1?'var(--verm)':c.prioridade==3?'var(--muted)':'transparent';
@@ -14916,6 +14934,10 @@ function lpSelfCheck(){
       const r=lpcRowOut('k1',{nome:'Zz',_dono:'daniel@x'},{funil:'bn'}); const r2=lpcRowOut('k2',{nome:'Zz'});
       return r.dono==='daniel@x'&&!('_dono' in r.dados)&&r.dados.funil==='bn'&&r.id==='k1'&&(!logado()? !('dono' in r2):true); })());
     ok('LISTAS 11/09: ordem = Toda a base, Rec (com telefone), Recomendações, Delay, Rec (sem fone)… sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='comfone'&&k[2]==='recs'&&k[3]==='delay'&&k[4]==='recsemfone'&&!k.includes('oi')&&!k.includes('prontos'); })());
+    ok('VER-COMO-V2: operando como um LP, os módulos são os DELE (funis extras desligados) e o painel admin some', (()=>{
+      const P=PERFIL, E=ESC, D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=['d@x']; ESC={sel:'dono:d@x',rotulos:[{rotulo:'daniel',dono_email:'d@x'}],perfis:{'d@x':{papel:'lp',modulos:{}}}};
+        return modOn('funis_extra')===false && modOn('carteira')===true && !!delegAtivo(); } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
+    ok('FILTROS-DOBRAVEIS: grupo fechado mostra o resumo; com valor abre sozinho', (()=>{ const l=FTA.estagio, ab=TA_ABERTOS; TA_ABERTOS=new Set(); FTA.estagio='cliente'; const h=taGrupo('Estágio',taResumoCsv('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),'x',true); FTA.estagio=''; const h2=taGrupo('Estágio','','x',false); FTA.estagio=l; TA_ABERTOS=ab; return h.includes(' open')&&h.includes('Cliente')&&!h2.includes(' open')&&h2.includes('todos'); })());
     ok('HOJE fora do card: o Painel TA abre em Rec (com telefone) e só mostra Hoje quando o SitPlan manda', (()=>{ const l=BNTA.lista; BNTA.lista='sm:comfone'; const ok=!String(viewBnTa.toString()).includes("navItem('hoje','📅','Hoje',"); BNTA.lista=l; return ok; })());
     ok('RECOMENDAÇÕES = nome + telefone + recomendante', TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'',estagio:'estoque'}));
     ok('SERVIDOR-MANDA Estoque: apagado no servidor sai do cache (só carga completa); criado local sem _dono fica', (()=>{ const loc=[{id:'a',_dono:'x'},{id:'b',_dono:'x'},{id:'c'}]; const rem=[{id:'a'}]; const r1=bnSemOsApagados(loc,rem,true).map(c=>c.id).join(''); const r2=bnSemOsApagados(loc,rem,false).map(c=>c.id).join(''); return r1==='ac'&&r2==='abc'; })());
