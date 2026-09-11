@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.43 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.43.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1633,12 +1633,12 @@ function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.p
    o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
 let _lpcLast={};
 function salvar(){
-  const _now=new Date().toISOString();
+  const _now=new Date().toISOString(), _primeiraFoto=Object.keys(_lpcLast).length===0;
   (S.contatos||[]).forEach(c=>{
     if(!c||c.id==null) return;
     const k=String(c.id), j=JSON.stringify(c);
     if(_lpcLast[k]===j) return;                 // não mudou
-    if(_lpcLast[k]===undefined && c._upd) return; // 1º snapshot pós-boot: não recarimbar
+    if(_primeiraFoto) return;                     // v7.43.1: 1ª foto pós-boot nunca marca nem recarimba
     c._upd=_now; PEND.lpc[k]=1;                   /* FUNDAÇÃO V1: editado aqui → pendente até o push confirmar */
   });
   pendSalvar();
@@ -1676,6 +1676,9 @@ function pendLimpar(fila,ids){ (ids||[]).forEach(id=>{ delete PEND[fila][String(
 function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).length; }
 function fundMerge(locais, remotos, pend, completo){
   const out=new Map((remotos||[]).map(c=>[String(c.id),c]));       /* servidor manda */
+  /* v7.43.1: pendente cujo conteúdo (sem carimbos) é IGUAL ao do servidor não deve nada → deixa de ser pendente */
+  const semCarimbo=o=>{ const x={...o}; delete x._upd; delete x._dono; return JSON.stringify(x); };
+  if(pend) (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id); const r=out.get(k); if(pend[k]&&r&&semCarimbo(r)===semCarimbo(c)) delete pend[k]; });
   (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id);
     const pendente=!!(pend&&pend[k]);                               /* só o que está na FILA vence (criado aqui entra na fila ao salvar); local sem dono e fora da fila = fantasma de versão antiga → sai na carga completa */
     if(pendente){ out.set(k,c); return; }                           /* o que este aparelho deve ao servidor vence */
@@ -12481,8 +12484,9 @@ function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(ra
 let _bnLast={};
 function bnSalvar(){
   const now=new Date().toISOString();
+  const primeiraFoto=Object.keys(_bnLast).length===0;   /* v7.43.1: a 1ª foto após abrir NUNCA marca pendente (linhas antigas sem _upd viravam 5.136 pendentes = 3 MB de push) */
   BN.contatos.forEach(c=>{ if(!c||!c.id) return; const k=c.id,j=JSON.stringify(c);
-    if(_bnLast[k]===j) return; if(_bnLast[k]===undefined&&c._upd) return; c._upd=now; PEND.bn[String(k)]=1; });
+    if(_bnLast[k]===j) return; if(primeiraFoto) return; c._upd=now; PEND.bn[String(k)]=1; });
   pendSalvar();
   _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); });
   _bnRecCountCache=null; // nomes podem ter mudado → recontar os "rec" embutidos
@@ -13237,7 +13241,7 @@ function bnNovo(nome){ // nome opcional (⌘K passa pronto; o botão do Estoque 
   const c={id:'N'+Date.now(),lp:S.activeUser,listas:[],nome:String(nome).trim(),telefone:null,email:null,empresa:null,cargo:null,
     trilha:'seguro',tipo:null,estagio:'estoque',recomendante:null,cidade:null,prioridade:null,
     notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[],criadoEm:hojeISO()};
-  BN.contatos.unshift(c); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
+  BN.contatos.unshift(c); pendMarcar('bn',[c.id]); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
 }
 
 /* ── FERRAMENTA: REC EMBUTIDO NO NOME (achado #5 — P1 do handoff) ──────────
@@ -15046,6 +15050,10 @@ function lpSelfCheck(){
       const r2=fundMerge(loc,rem,{b:1},false), m2=new Map(r2.map(c=>[c.id,c.nome]));
       return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
+    ok('FUNDAÇÃO V1.1: pendente igual ao servidor deixa de ser pendente; 1ª foto não marca', (()=>{
+      const pend={a:1,b:1}; const r=fundMerge([{id:'a',nome:'A',_dono:'x',_upd:'1'},{id:'b',nome:'B local',_dono:'x'}],[{id:'a',nome:'A',_dono:'x',_upd:'2'},{id:'b',nome:'B srv',_dono:'x'}],pend,true);
+      const ok1=!pend.a&&pend.b===1&&r.find(c=>c.id==='b').nome==='B local';
+      const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ _bnLast={}; PEND.bn={}; BN.contatos=[{id:'Zzp1',nome:'Zz'}]; bnSalvar(); const ok2=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzp1',nome:'Zz mudou'}]; bnSalvar(); const ok3=!!PEND.bn['Zzp1']; return ok1&&ok2&&ok3; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
     ok('FUNDAÇÃO V1: salvar marca pendente e o push confirmado limpa', (()=>{ const p=JSON.parse(JSON.stringify(PEND)); try{ PEND.bn={}; pendMarcar('bn',['z1','z2']); pendLimpar('bn',['z1']); return Object.keys(PEND.bn).join('')==='z2'; } finally{ PEND=p; pendSalvar(); } })());
     ok('DONO-V1: registro sem dono gravado é MEU — não aparece no escopo de outro dono', (()=>{ const dan={id:'dono:d@x',dono:'d@x',lp:'Daniel',padrao:true,eu:'a@x'}, meu={id:'meu',dono:'a@x',lp:'Gustavo',padrao:true,eu:'a@x'}; return !escRegOkDe(dan,{nome:'x'}) && escRegOkDe(meu,{nome:'x'}) && escRegOkDe(dan,{_dono:'d@x'}); })());
     ok('DONO-V1: editor tem Recomendante primeiro e o campo Dono (LP) quando logado; fichaPessoaHtml mostra o dono', (()=>{ const P=PERFIL,E=ESC,D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=[]; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'a@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
