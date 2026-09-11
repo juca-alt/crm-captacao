@@ -1,0 +1,3 @@
+-- ID-NA-PORTA-V1 (11/09/2026, aplicada): trigger lp_norm_estagio passa a garantir dados.id := id;
+-- backfill: update lp_contatos set dados = dados || jsonb_build_object('id', id) where coalesce(dados->>'id','')='' or dados->>'id'<>id;
+-- Motivo: criar_contatos_lote (crm-mcp) gravava dados sem id → no app os 1.575 do Daniel viravam UM registro.
