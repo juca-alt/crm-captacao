@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.41.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.42 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -436,6 +436,7 @@
   .ta-nav:hover{background:var(--bg)} .ta-nav.on{background:var(--azul-claro,#eef4ff);color:var(--azul)}
   .ta-nav .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .ta-nav .ct{font-size:11.5px;color:var(--muted);font-weight:700}
   .ta-lbl{display:block;font-size:11px;font-weight:700;color:var(--muted);margin:8px 0 4px}
+  .sp-row:hover{background:var(--bg)}
   .ta-side{max-height:calc(100vh - 96px);overflow:auto;scrollbar-width:thin}
   .ta-grp{border-top:1px solid var(--linha)} .ta-grp:first-of-type{border-top:0}
   .ta-grp summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:40px;cursor:pointer;padding:4px 0}
@@ -5128,8 +5129,8 @@ function viewSitplan(){
       <th>Contato</th><th>Etapa</th><th>ANCE</th><th>Resultado</th><th>Reagendar</th>
     </tr></thead><tbody>
     ${listaTab.map(c=>{ const ur=ultimoResultado(c,D);
-      return `<tr>
-        <td><b class="clicavel" onclick="abrirContato('${esc(c.id)}')" style="cursor:pointer">${esc(c.nome)}</b>${isQuente(c)?' 🔥':''}<br>
+      return `<tr class="sp-row" style="cursor:pointer" title="Abrir a ficha do lead (editar etapa, dados, tarefas)" onclick="if(!event.target.closest('select,button,a,input')) abrirContato('${esc(c.id)}')">
+        <td><b class="clicavel" style="cursor:pointer;color:var(--azul);text-decoration:underline dotted">${esc(c.nome)}</b> <span style="font-size:11px;color:var(--muted)">✎ ficha</span>${isQuente(c)?' 🔥':''}<br>
           <span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone||'—')}${esc(c.origem?(' · '+c.origem):'')}</span>
           ${waHref(c.telefone)?` <a href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener" title="Abrir WhatsApp" style="text-decoration:none">💬</a>`:''}</td>
         <td>${badgeEtapa(c.etapa)}</td>
@@ -9205,7 +9206,8 @@ function fichaPessoaHtml(o,tipo){
     linha('👤','Identidade',[idade?idade+' anos':'', nasc?'nasc. '+dataBR(nasc):'', (sexo&&sexo!=='—')?esc(String(sexo)):'']),
     linha('📞','Contato',tels.map(t=>esc(telBR(t))).concat([email?esc(String(email)):''])),
     linha('💼','Perfil',[prof?esc(String(prof)):'', cid?esc(String(cid)):'', fmtRenda(renda), civ?esc(String(civ)):'', fmtFil(fil)]),
-    linha('🤝','Origem',[rec?'rec. '+esc(String(rec)):'', ctx?esc(String(ctx)):'', tri?esc(String(tri)):'']),
+    linha('🤝','Origem',[rec?'rec. '+esc(String(rec)):'rec. —', ctx?esc(String(ctx)):'', tri?esc(String(tri)):'']),
+    (typeof logado==='function'&&logado())? linha('👤','Dono (LP)',[esc(escRotuloDe(o)||'—')]) : '',
     linha('🎯','Funil', s.funil?[esc(String(s.funil.etapa)), (s.funil.funil&&s.funil.funil!=='nn')?esc(String(s.funil.funilNome||s.funil.funil)):'', ult]:['sem negócio aberto']),
     linha('🛡','Carteira', s.cart?[s.cart.n+' apólice'+(s.cart.n===1?'':'s'), s.cart.cs?'CS '+brlCurto(s.cart.cs):'', s.cart.pm?brlCurto(s.cart.pm)+'/mês':'']:['não é cliente da carteira'])
   ].join('');
@@ -12555,11 +12557,11 @@ let ESC={sel:null,rotulos:[],perfis:{}};
 function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
 function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
 function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
-  const out=[{id:'meu',nome:'Meu · '+escCap(meuLp||'minha base'),dono:eu,lp:meuLp?escCap(meuLp):null,padrao:true}];   /* padrao: linha SEM rótulo é minha; sem meuLp = sem filtro de rótulo */
+  const out=[{id:'meu',nome:'Meu · '+escCap(meuLp||'minha base'),dono:eu,lp:meuLp?escCap(meuLp):null,padrao:true,eu}];   /* padrao: linha SEM rótulo é minha; sem meuLp = sem filtro de rótulo */
   (rotulos||[]).filter(r=>r.dono_email===eu && escLpNorm(r.rotulo)!==escLpNorm(meuLp))
-    .forEach(r=>out.push({id:'lp:'+escLpNorm(r.rotulo),nome:escCap(r.rotulo),dono:eu,lp:escCap(r.rotulo),padrao:false}));  /* só o que tem o rótulo dela */
+    .forEach(r=>out.push({id:'lp:'+escLpNorm(r.rotulo),nome:escCap(r.rotulo),dono:eu,lp:escCap(r.rotulo),padrao:false,eu}));  /* só o que tem o rótulo dela */
   (donos||[]).filter(d=>d&&d!==eu).forEach(d=>{ const r=(rotulos||[]).find(x=>x.dono_email===d);
-    out.push({id:'dono:'+d,nome:r?escCap(r.rotulo):d.split('@')[0],dono:d,lp:r?escCap(r.rotulo):null,padrao:true}); });
+    out.push({id:'dono:'+d,nome:r?escCap(r.rotulo):d.split('@')[0],dono:d,lp:r?escCap(r.rotulo):null,padrao:true,eu}); });
   if(out.length>1) out.push({id:'todos',nome:'Pipe X · tudo que vejo',dono:null,lp:null});
   return out; }
 function escEu(){ return DELEG.eu||(PERFIL&&PERFIL.email)||''; }   /* v7.35.1: a sessão pode chegar depois do loader de delegações */
@@ -12576,18 +12578,40 @@ function escAtual(){ const ops=escOpcoes();
   return ops.find(o=>o.id===sel)||ops[0]; }
 function escRegOkDe(o, rec){ /* PURA: registro (com _dono e talvez lp) cabe no escopo? */
   if(!o||o.id==='todos') return true;
-  const d=rec&&rec._dono; if(d&&o.dono&&d!==o.dono) return false;       /* linha de outro dono (dono do escopo desconhecido = não exclui; v7.35.1: eu vazio escondia 5.139 nomes) */
+  const d=(rec&&rec._dono)||o.eu||null;                                  /* DONO-V1: sem dono gravado = MEU (criado local, ainda não confirmado) — nunca vaza pra outro escopo */
+  if(d&&o.dono&&d!==o.dono) return false;                                 /* linha de outro dono (dono do escopo desconhecido = não exclui; v7.35.1: eu vazio escondia 5.139 nomes) */
   const lp=rec&&rec.lp;
   if(o.lp && lp && escLpNorm(lp)!==escLpNorm(o.lp)) return false;       /* rótulo contradiz (Rebeca × Gustavo sob juca) */
   if(o.lp && !lp && !o.padrao) return false;                            /* sub-rótulo (Rebeca): só o que tem o rótulo dela */
   return true; }
 function escRegOk(rec){ return escRegOkDe(escAtual(),rec); }
+/* DONO-V1: o dono e o rótulo (LP) de QUALQUER registro, num lugar só. Sem dono gravado = eu. */
+function escDonoDe(rec){ return (rec&&rec._dono)||escEu()||null; }
+function escRotuloDe(rec){ if(rec&&rec.lp) return escCap(rec.lp); const d=escDonoDe(rec); const r=(ESC.rotulos||[]).find(x=>x.dono_email===d); if(r) return escCap(r.rotulo); if(d===escEu()) return escCap(escMeuLp()||''); return d?String(d).split('@')[0]:''; }
+function escRotulosTodos(){ return (ESC.rotulos||[]).map(r=>({rotulo:escCap(r.rotulo),dono:r.dono_email})).sort((a,b)=>a.rotulo.localeCompare(b.rotulo,'pt-BR')); }
+/* Garantia: escolhi um dono e a base dele não está na memória (carga anterior falhou, cache só guarda o meu)
+   → busca direto do servidor, paginado, e mescla. Sem depender de reload. */
+async function bnGarantirDono(d){ if(!d||!LPC_REMOTE||!sb) return; if(BN.contatos.some(c=>c._dono===d)) return;
+  try{ const bn=[], PAG=1000; let completo=false;
+    for(let pag=0;pag<20;pag++){ const de=pag*PAG; const r=await sb.from(LPC_T).select('id,dono,dados').eq('dono',d).eq('dados->>funil','bn').order('id').range(de,de+PAG-1); if(r.error) throw r.error;
+      (r.data||[]).forEach(x=>{ const o=lpcComDono(x); if(o) bn.push(o); }); if((r.data||[]).length<PAG){ completo=true; break; } }
+    if(bn.length){ bnMergeRemoto(bn,false); toast(bn.length+' nomes de '+escRotuloDe(bn[0])+' carregados do servidor',true); }
+  }catch(e){ console.warn('bnGarantirDono',e); toast('Não consegui carregar a base dele agora',false); } }
+/* Mover um contato do Estoque pra outra base (só admin): apaga a linha do dono antigo e sobe no novo. */
+async function bnMoverDono(c,rotulo){ const r=escRotulosTodos().find(x=>escLpNorm(x.rotulo)===escLpNorm(rotulo)); if(!c||!r) return false;
+  const donoAntigo=escDonoDe(c);
+  c.lp=escLpNorm(r.rotulo); c._dono=r.dono; c._upd=new Date().toISOString();
+  if(LPC_REMOTE&&sb&&donoAntigo&&donoAntigo!==r.dono){ try{ const del=await sb.from(LPC_T).delete().eq('dono',donoAntigo).eq('id',c.id); if(del.error) throw del.error;
+      const up=await sb.from(LPC_T).upsert([lpcRowOut(c.id,{...c},{funil:'bn'})],{onConflict:'dono,id'}); if(up.error) throw up.error; }
+    catch(e){ console.warn('bnMoverDono',e); toast('Não consegui mover no servidor: '+(e.message||e),false); return false; } }
+  bnSalvar(); return true; }
 /* linha de módulo (backoffice/benefícios): dono = lp_email, rótulo = lp/lp_servico */
 function escLinhaOk(r){ if(!logado()||!r) return true; return escRegOkDe(escAtual(),{_dono:r.lp_email||r.dono||null, lp:r.lp||r.lp_servico||null}); }
 function escSet(id){ ESC.sel=id; try{ localStorage.setItem(ESC_CHAVE,id); }catch(_){}
   const o=escAtual(); PX.escopo=(o.id==='todos')?'todos':(o.id==='meu')?'meu':(o.lp||'meu');
   try{ localStorage.setItem(PX_CHAVE,JSON.stringify(PX)); }catch(_){}
-  if(typeof aplicarGates==='function') aplicarGates(); render(); toast('Vendo e operando: '+o.nome,true); }
+  if(typeof aplicarGates==='function') aplicarGates(); render(); toast('Vendo e operando: '+o.nome,true);
+  if(o.dono&&o.dono!==escEu()) bnGarantirDono(o.dono).then(()=>{ if(typeof render==='function') render(); }); }
 function delegAtivo(){ if(!logado()) return null; const o=escAtual(); return (o.dono&&o.dono!==escEu())?o.dono:null; }
 /* e-mail DONO das linhas que este usuário lê/grava */
 function delegDono(email){ return delegAtivo()||email||DELEG.eu; }
@@ -13062,9 +13086,10 @@ function bnEditorHtml(c){
     </div>
     <details class="bne-grp" open><summary><span class="bne-grp-t">👤 Quem é a pessoa</span><span class="bne-grp-r">${esc(fichaPessoaResumo(c,'lead'))}</span><span class="bne-grp-c">▾</span></summary><div style="padding:6px 0 10px">${fichaPessoaHtml(c,'lead')}</div></details>
     ${grp('q','🎯 Qualificação do TA',qualR,
-      f('Estágio',`<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select>`)
+      f('Recomendante',`<input id="bne-rec" value="${esc(c.recomendante||'')}" placeholder="quem indicou (vazio = sem recomendante)">`)
+     +(logado()? f('Dono (LP)', souAdm()? `<select id="bne-lp">${escRotulosTodos().map(r=>`<option value="${esc(r.rotulo)}" ${escLpNorm(r.rotulo)===escLpNorm(escRotuloDe(c))?'selected':''}>${esc(r.rotulo)}</option>`).join('')}</select>` : `<input value="${esc(escRotuloDe(c)||'—')}" disabled title="Só o admin muda o dono">`) : '')
+     +f('Estágio',`<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select>`)
      +f('Prioridade',`<select id="bne-pri"><option value="">—</option><option ${String(c.prioridade)==='1'?'selected':''} value="1">🔥 P1 · Alta</option><option ${String(c.prioridade)==='2'?'selected':''} value="2">P2 · Normal</option><option ${String(c.prioridade)==='3'?'selected':''} value="3">P3 · Baixa</option></select>`)
-     +f('Recomendante',`<input id="bne-rec" value="${esc(c.recomendante||'')}" placeholder="quem indicou">`)
      +f('Trilha',`<select id="bne-tri">${BN_TRILHAS.map(t=>`<option ${c.trilha===t?'selected':''} value="${t}">${t==='seguro'?'Seguro':'Recrutamento'}</option>`).join('')}</select>`),true)}
     ${grp('c','📞 Contato',contatoR,
       f('Nome',`<input id="bne-nome" value="${esc(c.nome)}">`)
@@ -13104,7 +13129,9 @@ function bnSalvarEdicao(id){
   c.renda_estimada=$('#bne-renda').value?Number($('#bne-renda').value):null;
   c.cidade=$('#bne-cid').value.trim()||null; c.email=$('#bne-mail').value.trim()||null;
   { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); c.empresa=ec[0]||null; c.cargo=ec[1]||null; }
+  const lpSel=$('#bne-lp'); const lpNovo=lpSel&&lpSel.value; const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
   FBN.edit=null; bnSalvar(); render(); toast('Salvo',true);
+  if(lpMudou&&souAdm()) bnMoverDono(c,lpNovo).then(ok=>{ if(ok){ toast(String(c.nome||'').split(' ')[0]+' → base de '+lpNovo+' ✓',true); render(); } });
 }
 /* A base ACIONÁVEL no resto do app: um clique cria o contato no funil de
    Novos Negócios (tela Contatos), carregando nome/telefone/qualificação. */
@@ -13581,7 +13608,7 @@ function viewBnTa(){
   const card=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'','funil'].filter(Boolean).join(' · '):[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const badge=fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`;
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
-    const chips=[c.idade!=null?'🎂 '+c.idade:'', c.renda_estimada?'💰 '+taRenda(c.renda_estimada):'', c.cidade?'📍 '+esc(c.cidade):'', (c.recomendante||'').trim()?'👤 <b>'+esc(c.recomendante)+'</b>':''].filter(Boolean);
+    const chips=[c.idade!=null?'🎂 '+c.idade:'', c.renda_estimada?'💰 '+taRenda(c.renda_estimada):'', c.cidade?'📍 '+esc(c.cidade):'', (c.recomendante||'').trim()?'👤 <b>'+esc(c.recomendante)+'</b>':'<span style="color:var(--muted)">👤 sem recomendante</span>', (logado()&&escAtual().id==='todos')?'🏷️ '+esc(escRotuloDe(c)):''].filter(Boolean);
     return `<div class="ta-card" onclick="${abrir}">
       <div class="ta-card-h"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()">${taAvatar(c)}<div style="flex:1;min-width:0"><div class="ta-nm">${esc(c.nome)}</div><div class="ta-sub">${esc(sub)}</div></div>${badge}</div>
       ${chips.length?`<div class="ta-chips" style="margin:6px 0 0">${chips.map(x=>'<span class="ta-chip">'+x+'</span>').join('')}</div>`:''}
@@ -14969,6 +14996,9 @@ function lpSelfCheck(){
       const ops=escOpcoesDe('juca@x',['daniel@x'],[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}],'Gustavo');
       return ops.map(o=>o.id).join(',')==='meu,lp:rebeca,dono:daniel@x,todos' && ops[2].nome==='Daniel' && ops[1].lp==='Rebeca'; })());
     ok('ESCOPO-UNICO: sem delegação nem rótulo extra, só "meu" (sem Pipe X)', escOpcoesDe('a@x',[],[{rotulo:'gustavo',dono_email:'a@x'}],'Gustavo').length===1);
+    ok('DONO-V1: registro sem dono gravado é MEU — não aparece no escopo de outro dono', (()=>{ const dan={id:'dono:d@x',dono:'d@x',lp:'Daniel',padrao:true,eu:'a@x'}, meu={id:'meu',dono:'a@x',lp:'Gustavo',padrao:true,eu:'a@x'}; return !escRegOkDe(dan,{nome:'x'}) && escRegOkDe(meu,{nome:'x'}) && escRegOkDe(dan,{_dono:'d@x'}); })());
+    ok('DONO-V1: editor tem Recomendante primeiro e o campo Dono (LP) quando logado; fichaPessoaHtml mostra o dono', (()=>{ const P=PERFIL,E=ESC,D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=[]; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'a@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
+      const h=bnEditorHtml({id:'Zz1',nome:'Zz',estagio:'estoque'}); const f=fichaPessoaHtml({nome:'Zz',_dono:'d@x'},'lead'); return h.indexOf('id="bne-rec"')<h.indexOf('id="bne-est"') && h.includes('id="bne-lp"') && f.includes('Dono (LP)') && f.includes('Daniel'); } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
     ok('ESCOPO-UNICO v7.37.1: rótulo do Meu vem do mapa do banco, não do perfil demo (caso Daniel)', (()=>{
       const rot=[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}];
       const ok1=escMeuLpDe('daniel@x',rot,'Daniel Souza')==='daniel' && escMeuLpDe('daniel@x',rot,'Gustavo')==='daniel';   /* 1 rótulo: é ele, seja qual for o nome */
