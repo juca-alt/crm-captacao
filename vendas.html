@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.37 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.37.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -12504,7 +12504,7 @@ let ESC={sel:null,rotulos:[]};
 function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
 function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
 function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
-  const out=[{id:'meu',nome:'Meu · '+escCap(meuLp||'minha base'),dono:eu,lp:meuLp?escCap(meuLp):null,padrao:true}];   /* padrao: linha SEM rótulo é minha */
+  const out=[{id:'meu',nome:'Meu · '+escCap(meuLp||'minha base'),dono:eu,lp:meuLp?escCap(meuLp):null,padrao:true}];   /* padrao: linha SEM rótulo é minha; sem meuLp = sem filtro de rótulo */
   (rotulos||[]).filter(r=>r.dono_email===eu && escLpNorm(r.rotulo)!==escLpNorm(meuLp))
     .forEach(r=>out.push({id:'lp:'+escLpNorm(r.rotulo),nome:escCap(r.rotulo),dono:eu,lp:escCap(r.rotulo),padrao:false}));  /* só o que tem o rótulo dela */
   (donos||[]).filter(d=>d&&d!==eu).forEach(d=>{ const r=(rotulos||[]).find(x=>x.dono_email===d);
@@ -12512,7 +12512,14 @@ function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
   if(out.length>1) out.push({id:'todos',nome:'Pipe X · tudo que vejo',dono:null,lp:null});
   return out; }
 function escEu(){ return DELEG.eu||(PERFIL&&PERFIL.email)||''; }   /* v7.35.1: a sessão pode chegar depois do loader de delegações */
-function escOpcoes(){ return escOpcoesDe(escEu(), DELEG.donos, ESC.rotulos, (typeof pxMeu==='function'?pxMeu():'')); }
+/* v7.37.1: o rótulo do MEU escopo vem do mapa do banco (lp_rotulo_dono), NÃO do perfil demo
+   (pxMeu() devolvia 'Gustavo' pro Daniel logado → o "Meu" dele excluiria os 1.371 nomes rotulados 'daniel').
+   Regra: rótulos sob o meu dono → se só um, é ele; se vários, o que casa com o 1º nome do perfil; senão nenhum (sem filtro de rótulo). PURA. */
+function escMeuLpDe(eu, rotulos, nome){ const meus=(rotulos||[]).filter(r=>r.dono_email===eu).map(r=>String(r.rotulo||'').trim()).filter(Boolean);
+  if(!meus.length) return null; if(meus.length===1) return meus[0];
+  const p=String(nome||'').trim().split(/\s+/)[0]||''; const m=meus.find(r=>escLpNorm(r)===escLpNorm(p)); return m||null; }
+function escMeuLp(){ return escMeuLpDe(escEu(), ESC.rotulos, (PERFIL&&PERFIL.nome)||''); }
+function escOpcoes(){ return escOpcoesDe(escEu(), DELEG.donos, ESC.rotulos, escMeuLp()); }
 function escAtual(){ const ops=escOpcoes();
   let sel=ESC.sel; if(!sel||!ops.some(o=>o.id===sel)) sel=(souAdm()||!DELEG.donos.length)?'meu':'dono:'+DELEG.donos[0];  /* Victor cai direto na base delegada */
   return ops.find(o=>o.id===sel)||ops[0]; }
@@ -14839,6 +14846,12 @@ function lpSelfCheck(){
       const ops=escOpcoesDe('juca@x',['daniel@x'],[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}],'Gustavo');
       return ops.map(o=>o.id).join(',')==='meu,lp:rebeca,dono:daniel@x,todos' && ops[2].nome==='Daniel' && ops[1].lp==='Rebeca'; })());
     ok('ESCOPO-UNICO: sem delegação nem rótulo extra, só "meu" (sem Pipe X)', escOpcoesDe('a@x',[],[{rotulo:'gustavo',dono_email:'a@x'}],'Gustavo').length===1);
+    ok('ESCOPO-UNICO v7.37.1: rótulo do Meu vem do mapa do banco, não do perfil demo (caso Daniel)', (()=>{
+      const rot=[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}];
+      const ok1=escMeuLpDe('daniel@x',rot,'Daniel Souza')==='daniel' && escMeuLpDe('daniel@x',rot,'Gustavo')==='daniel';   /* 1 rótulo: é ele, seja qual for o nome */
+      const ok2=escMeuLpDe('juca@x',rot,'Gustavo Melo')==='gustavo' && escMeuLpDe('juca@x',rot,'Zé')===null && escMeuLpDe('victor@x',rot,'Victor')===null;
+      const opD=escOpcoesDe('daniel@x',[],rot,escMeuLpDe('daniel@x',rot,'Gustavo'))[0];
+      return ok1&&ok2&&escRegOkDe(opD,{_dono:'daniel@x',lp:'daniel'})&&escRegOkDe(opD,{_dono:'daniel@x'}); })());
     ok('ESCOPO-UNICO v7.35.1: dono do escopo vazio NUNCA esconde linha com dono (caso dos 97)', escRegOkDe({id:'meu',dono:'',lp:'Gustavo',padrao:true},{_dono:'juca@x'}) && escRegOkDe(escOpcoesDe('',[],[],'Gustavo')[0],{_dono:'juca@x',lp:null}));
     ok('ESCOPO-UNICO: registro só cabe no escopo se o dono bate e o rótulo não contradiz', (()=>{
       const meu={id:'meu',dono:'juca@x',lp:'Gustavo',padrao:true}, reb={id:'lp:rebeca',dono:'juca@x',lp:'Rebeca',padrao:false}, dan={id:'dono:daniel@x',dono:'daniel@x',lp:'Daniel',padrao:true}, todos={id:'todos'};
