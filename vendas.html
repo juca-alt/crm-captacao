@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.43.3 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.43.4 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1632,13 +1632,13 @@ function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.p
    carimba `_upd` no contato que MUDOU (base do merge entre aparelhos) e agenda
    o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
 let _lpcLast={};
-function salvar(){
-  const _now=new Date().toISOString(), _primeiraFoto=Object.keys(_lpcLast).length===0;
+function salvar(opts){
+  const _now=new Date().toISOString(), _primeiraFoto=Object.keys(_lpcLast).length===0, _doServidor=!!(opts&&opts.doServidor);
   (S.contatos||[]).forEach(c=>{
     if(!c||c.id==null) return;
     const k=String(c.id), j=JSON.stringify(c);
     if(_lpcLast[k]===j) return;                 // não mudou
-    if(_primeiraFoto) return;                     // v7.43.1: 1ª foto pós-boot nunca marca nem recarimba
+    if(_primeiraFoto||_doServidor) return;        // v7.43.1/.4: 1ª foto e merge do servidor nunca marcam nem recarimbam
     c._upd=_now; PEND.lpc[k]=1;                   /* FUNDAÇÃO V1: editado aqui → pendente até o push confirmar */
   });
   pendSalvar();
@@ -1706,7 +1706,7 @@ function _lpcMergeBn(remotosBn,completo){
   // S.contatos nem aparecer nos funis NN/BC — rota pro merge próprio do módulo BN.
   if(remotosBn.length&&Array.isArray(S.contatos)){
     const antes=S.contatos.length; S.contatos=lpcSemOsDoEstoque(S.contatos,remotosBn);
-    if(S.contatos.length!==antes){ salvar(); _lpcPrev=_lpcSnap(); if(typeof agendarRender==='function') agendarRender(); }
+    if(S.contatos.length!==antes){ salvar({doServidor:true}); _lpcPrev=_lpcSnap(); if(typeof agendarRender==='function') agendarRender(); }
   }
   if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn,!!completo);
   _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
@@ -1715,7 +1715,7 @@ function _lpcMergeFunis(remotos,completo){
   if(remotos.length||completo){
     S.contatos=fundMerge(S.contatos,remotos,PEND.lpc,completo!==false);   /* FUNDAÇÃO V1: servidor manda; pendente vence */
     normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
-    salvar();
+    salvar({doServidor:true});
   }
   _lpcPrev=_lpcSnap();
   lpcAgendarPush(); // sobe o resultado do merge (e o 1º sync de uma base só-local)
@@ -12486,11 +12486,11 @@ function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(ra
 
 /* persistência: carimba _upd só em quem mudou (mesma mecânica do salvar()) */
 let _bnLast={};
-function bnSalvar(){
-  const now=new Date().toISOString();
+function bnSalvar(opts){
+  const now=new Date().toISOString(), doServidor=!!(opts&&opts.doServidor);   /* v7.43.4: merge do servidor NÃO é edição local */
   const primeiraFoto=Object.keys(_bnLast).length===0;   /* v7.43.1: a 1ª foto após abrir NUNCA marca pendente (linhas antigas sem _upd viravam 5.136 pendentes = 3 MB de push) */
   BN.contatos.forEach(c=>{ if(!c||!c.id) return; const k=c.id,j=JSON.stringify(c);
-    if(_bnLast[k]===j) return; if(primeiraFoto) return; c._upd=now; PEND.bn[String(k)]=1; });
+    if(_bnLast[k]===j) return; if(primeiraFoto||doServidor) return; c._upd=now; PEND.bn[String(k)]=1; });
   pendSalvar();
   _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); });
   _bnRecCountCache=null; // nomes podem ter mudado → recontar os "rec" embutidos
@@ -12517,7 +12517,7 @@ function bnSemOsApagados(locais, remotos, completo){ if(!completo) return locais
   return (locais||[]).filter(c=>!c._dono||ids.has(String(c.id))); }
 function bnMergeRemoto(remotos,completo){
   BN.contatos=fundMerge(BN.contatos,remotos,PEND.bn,!!completo);   /* FUNDAÇÃO V1: servidor manda; pendente vence */
-  _bnPrev=_bnSnap(); bnSalvar(); render();
+  _bnPrev=_bnSnap(); bnSalvar({doServidor:true}); render();
 }
 function bnAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_bnTimer); _bnTimer=setTimeout(bnPush,2000); }
 async function bnPush(){
@@ -15056,6 +15056,7 @@ function lpSelfCheck(){
       const r2=fundMerge(loc,rem,{b:1},false), m2=new Map(r2.map(c=>[c.id,c.nome]));
       return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
+    ok('FUNDAÇÃO V1.4: merge do servidor não marca pendente (só edição local marca)', (()=>{ const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ BN.contatos=[{id:'Zzm1',nome:'Zz',_dono:'x'}]; _bnLast={}; bnSalvar(); PEND.bn={}; BN.contatos=[{id:'Zzm1',nome:'Zz servidor',_dono:'x'}]; bnSalvar({doServidor:true}); const a=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzm1',nome:'Zz editado',_dono:'x'}]; bnSalvar(); const b=!!PEND.bn['Zzm1']; return a&&b; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
     ok('FUNDAÇÃO V1.1: pendente igual ao servidor deixa de ser pendente; 1ª foto não marca', (()=>{
       const pend={a:1,b:1}; const r=fundMerge([{id:'a',nome:'A',_dono:'x',_upd:'1'},{id:'b',nome:'B local',_dono:'x'}],[{id:'a',nome:'A',_dono:'x',_upd:'2'},{id:'b',nome:'B srv',_dono:'x'}],pend,true);
       const ok1=!pend.a&&pend.b===1&&r.find(c=>c.id==='b').nome==='B local';
