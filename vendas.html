@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.44 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.44.2 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1361,7 +1361,7 @@
 
     <div class="rodape">
       <span>CRM SeguroComJucá · Vendas LP v7.9 — celular e desktop, cada um no seu formato.</span>
-      <button onclick="zerarContatos()">Limpar cache do aparelho (recarrega do servidor)</button>
+      <!-- 11/09: botão de zerar/limpar saiu do rodapé a pedido dele. Limpar cache = "Atualizar app" no menu ⋯ -->
     </div>
   </main>
 </div>
@@ -4996,6 +4996,11 @@ function spAddPorNome(txt){ const t=String(txt||'').trim(); if(!t){ toast('Digit
   const nome=t.split(' · ')[0].trim().toLowerCase(), tag=(t.split(' · ')[1]||'').trim();
   if(tag==='Estoque'||!tag){ const b=bnVivos().find(c=>(c.nome||'').trim().toLowerCase()===nome&&c.ta_dia!==D); if(b){ b.ta_dia=D; bnSalvar(); toast(b.nome.split(' ')[0]+' na lista de '+dataBR(D)+' (Estoque) ✓',true); render(); const el=$('#sp-add'); if(el) el.value=''; return; } }
   const f=meusContatos().find(c=>(c.nome||'').trim().toLowerCase()===nome&&c.sitplan!==D); if(f){ spAdd(f.id); const el=$('#sp-add'); if(el) el.value=''; return; }
+  /* SITPLAN-FONTES (11/09): cliente da carteira também entra no planejamento — vira/acha o registro no Estoque (estágio cliente) */
+  if(tag==='Cliente'||!tag){ const cli=(typeof cartVis==='function'?cartVis():[]).find(c=>String(c.nome||'').trim().toLowerCase()===nome);
+    if(cli){ let b=bnVivos().find(x=>normKey(x.nome)===normKey(cli.nome));
+      if(!b){ b={id:'N'+Date.now(),listas:[],nome:cli.nome,telefone:cli.celular||cli.telefone||null,email:cli.email||null,trilha:'seguro',estagio:'cliente',recomendante:null,hist:[],criadoEm:hojeISO(),origem:'carteira'}; BN.contatos.unshift(b); pendMarcar('bn',[b.id]); }
+      b.ta_dia=D; bnSalvar(); toast(String(b.nome).split(' ')[0]+' (cliente) na lista de '+dataBR(D)+' ✓',true); render(); const el=$('#sp-add'); if(el) el.value=''; return; } }
   toast('Não achei esse nome (já está na lista?)',false); }
 function spReagBn(id,iso){ const c=bnPor(id); if(!c) return; c.ta_dia=iso; bnSalvar(); toast(`${String(c.nome||'').split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
 function spPuxarEstoque(){ const D=spData(); const l=bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&c.estagio==='lista_ta').slice(0,12); l.forEach(c=>{ c.ta_dia=D; }); bnSalvar(); toast(l.length+' nome(s) do Estoque na lista de '+dataBR(D),true); render(); }
@@ -5182,7 +5187,7 @@ function viewSitplan(){
       </div>
       <span style="flex:1"></span>
       <input id="sp-add" data-so-leitura="lido no clique de Adicionar (spAddPorNome)" list="sp-cand" style="max-width:300px" placeholder="➕ Adicionar à lista deste dia… (digite o nome)">
-      <datalist id="sp-cand">${foraDaLista.slice(0,300).map(c=>`<option value="${esc(c.nome)} · ${esc(c.etapa)}"></option>`).join('')}${bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&(c.estagio==='lista_ta'||c.estagio==='estoque')).slice(0,400).map(c=>`<option value="${esc(c.nome)} · Estoque"></option>`).join('')}</datalist>
+      <datalist id="sp-cand">${foraDaLista.slice(0,300).map(c=>`<option value="${esc(c.nome)} · ${esc(c.etapa)}"></option>`).join('')}${bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&(c.estagio==='lista_ta'||c.estagio==='estoque')).slice(0,400).map(c=>`<option value="${esc(c.nome)} · Estoque"></option>`).join('')}${(typeof cartVis==='function'?cartVis():[]).slice(0,400).map(c=>`<option value="${esc(c.nome)} · Cliente"></option>`).join('')}</datalist>
       <button class="btn btn-p btn-mini" onclick="spAddPorNome($('#sp-add').value)">Adicionar</button>
     </div>
     <div class="card" style="padding:6px 10px"><table><thead><tr>
@@ -14340,7 +14345,7 @@ function render(){
     const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
   { const ca=$('#cnt-agenda'); if(ca){ const n=agendaContagem(); ca.textContent=n.total||''; ca.style.color=n.atrasadas?'var(--verm)':''; } }
   { const cs=$('#cnt-sitplan'); if(cs){ const l=spListaDoDia(hojeISO()); cs.textContent=([...l.fun,...l.bn].filter(c=>!taResHoje(c)).length)||''; } }
-  { const csp=$('#cnt-sp'); if(csp) csp.textContent=bnVivos().length? bnVivos().length.toLocaleString('pt-BR'):''; }
+  { const csp=$('#cnt-sp'); if(csp) csp.textContent=''; }   /* 11/09: número ao lado de 'SitPlan & TA' era o total do Estoque — redundante */
   if(VIEW==='bn-estoque'||VIEW==='bn-recs'||VIEW==='bn-dups'){ ['est-toggle','est-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#est-caret'); if(c) c.textContent='▴'; }
   else if(VIEW&&VIEW.startsWith('bn-')){ ['sp-toggle','sp-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#sp-caret'); if(c) c.textContent='▴'; }
   /* mesma ideia para os grupos novos: quem está numa tela do BackOffice ou da
@@ -15067,7 +15072,8 @@ function lpSelfCheck(){
       const r2=fundMerge(loc,rem,{b:1},false), m2=new Map(r2.map(c=>[c.id,c.nome]));
       return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
-    ok('SEGURANÇA-V1: "Começar do zero" não zera S.contatos nem chama salvar() (só cache local)', (()=>{ const t=zerarContatos.toString(); return !t.includes('S.contatos=[]') && !t.includes('salvar()') && t.includes('location.reload'); })());
+    ok('SEGURANÇA-V1: não existe botão de zerar/apagar base na tela; zerarContatos (se chamada) só limpa cache local', (()=>{ const t=zerarContatos.toString(); return !document.querySelector('[onclick*="zerarContatos"]') && !t.includes('S.contatos=[]') && !t.includes('salvar()'); })());
+    ok('SITPLAN-FONTES: a busca do SitPlan lista funil, Estoque e clientes da carteira', String(viewSitplan.toString()).includes('· Cliente') && String(spAddPorNome.toString()).includes("tag==='Cliente'"));
     ok('SEGURANÇA-V1: teto de exclusão por push existe e é pequeno', typeof LPC_DEL_MAX==='number' && LPC_DEL_MAX<=50);
     ok('FUNDAÇÃO V1.4: merge do servidor não marca pendente (só edição local marca)', (()=>{ const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ BN.contatos=[{id:'Zzm1',nome:'Zz',_dono:'x'}]; _bnLast={}; bnSalvar(); PEND.bn={}; BN.contatos=[{id:'Zzm1',nome:'Zz servidor',_dono:'x'}]; bnSalvar({doServidor:true}); const a=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzm1',nome:'Zz editado',_dono:'x'}]; bnSalvar(); const b=!!PEND.bn['Zzm1']; return a&&b; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
     ok('FUNDAÇÃO V1.1: pendente igual ao servidor deixa de ser pendente; 1ª foto não marca', (()=>{
