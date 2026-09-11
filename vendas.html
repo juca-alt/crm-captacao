@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.35 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.35.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1869,7 +1869,7 @@ function renderTopo(){
     const lp=$('#listaPerfis'); if(lp) lp.innerHTML=ops.map(x=>`
     <button class="perfil-item" onclick="trocarPerfil('${esc(x.id)}')">
       <span class="avatar" style="background:${x.id==='todos'?'#555':x.id==='meu'?'#0b3d91':'#0a8754'}">${esc(x.id==='todos'?'PX':iniciais(x.nome))}</span>
-      <span><span class="nm">${esc(x.nome)}</span><br><span class="pp">${esc(x.id==='todos'?'tudo que a delegação deixa ver':x.dono===DELEG.eu?'minha conta':'conta de '+x.dono)}</span></span>
+      <span><span class="nm">${esc(x.nome)}</span><br><span class="pp">${esc(x.id==='todos'?'tudo que a delegação deixa ver':x.dono===escEu()?'minha conta':'conta de '+x.dono)}</span></span>
       ${x.id===o.id?'<span class="check">✓</span>':''}
     </button>`).join('');
     return; }
@@ -12444,13 +12444,14 @@ function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
     out.push({id:'dono:'+d,nome:r?escCap(r.rotulo):d.split('@')[0],dono:d,lp:r?escCap(r.rotulo):null,padrao:true}); });
   if(out.length>1) out.push({id:'todos',nome:'Pipe X · tudo que vejo',dono:null,lp:null});
   return out; }
-function escOpcoes(){ return escOpcoesDe(DELEG.eu, DELEG.donos, ESC.rotulos, (typeof pxMeu==='function'?pxMeu():'')); }
+function escEu(){ return DELEG.eu||(PERFIL&&PERFIL.email)||''; }   /* v7.35.1: a sessão pode chegar depois do loader de delegações */
+function escOpcoes(){ return escOpcoesDe(escEu(), DELEG.donos, ESC.rotulos, (typeof pxMeu==='function'?pxMeu():'')); }
 function escAtual(){ const ops=escOpcoes();
   let sel=ESC.sel; if(!sel||!ops.some(o=>o.id===sel)) sel=(souAdm()||!DELEG.donos.length)?'meu':'dono:'+DELEG.donos[0];  /* Victor cai direto na base delegada */
   return ops.find(o=>o.id===sel)||ops[0]; }
 function escRegOkDe(o, rec){ /* PURA: registro (com _dono e talvez lp) cabe no escopo? */
   if(!o||o.id==='todos') return true;
-  const d=rec&&rec._dono; if(d&&d!==o.dono) return false;              /* linha de outro dono */
+  const d=rec&&rec._dono; if(d&&o.dono&&d!==o.dono) return false;       /* linha de outro dono (dono do escopo desconhecido = não exclui; v7.35.1: eu vazio escondia 5.139 nomes) */
   const lp=rec&&rec.lp;
   if(o.lp && lp && escLpNorm(lp)!==escLpNorm(o.lp)) return false;       /* rótulo contradiz (Rebeca × Gustavo sob juca) */
   if(o.lp && !lp && !o.padrao) return false;                            /* sub-rótulo (Rebeca): só o que tem o rótulo dela */
@@ -12460,7 +12461,7 @@ function escSet(id){ ESC.sel=id; try{ localStorage.setItem(ESC_CHAVE,id); }catch
   const o=escAtual(); PX.escopo=(o.id==='todos')?'todos':(o.id==='meu')?'meu':(o.lp||'meu');
   try{ localStorage.setItem(PX_CHAVE,JSON.stringify(PX)); }catch(_){}
   render(); toast('Vendo e operando: '+o.nome,true); }
-function delegAtivo(){ if(!logado()) return null; const o=escAtual(); return (o.dono&&o.dono!==DELEG.eu)?o.dono:null; }
+function delegAtivo(){ if(!logado()) return null; const o=escAtual(); return (o.dono&&o.dono!==escEu())?o.dono:null; }
 /* e-mail DONO das linhas que este usuário lê/grava */
 function delegDono(email){ return delegAtivo()||email||DELEG.eu; }
 function delegTrocar(d){ if(!DELEG.donos.includes(d)) return; escSet('dono:'+d); }
@@ -12478,6 +12479,7 @@ async function perfilCarregar(){
     PERFIL=data||{email,papel:'lp',modulos:{}};
     const md=s.session.user.user_metadata||{};
     PERFIL.email=email; PERFIL.nome=md.full_name||md.name||md.nome||(email.split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase()));
+    if(!DELEG.eu){ try{ await delegCarregar(); }catch(_){} }   /* v7.35.1: delegações rodaram sem sessão → refaz agora que há e-mail */
   }catch(e){ console.warn('lp_perfis: sem perfil remoto → defaults',e); }
 }
 function aplicarGates(){
@@ -14683,6 +14685,7 @@ function lpSelfCheck(){
       const ops=escOpcoesDe('juca@x',['daniel@x'],[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}],'Gustavo');
       return ops.map(o=>o.id).join(',')==='meu,lp:rebeca,dono:daniel@x,todos' && ops[2].nome==='Daniel' && ops[1].lp==='Rebeca'; })());
     ok('ESCOPO-UNICO: sem delegação nem rótulo extra, só "meu" (sem Pipe X)', escOpcoesDe('a@x',[],[{rotulo:'gustavo',dono_email:'a@x'}],'Gustavo').length===1);
+    ok('ESCOPO-UNICO v7.35.1: dono do escopo vazio NUNCA esconde linha com dono (caso dos 97)', escRegOkDe({id:'meu',dono:'',lp:'Gustavo',padrao:true},{_dono:'juca@x'}) && escRegOkDe(escOpcoesDe('',[],[],'Gustavo')[0],{_dono:'juca@x',lp:null}));
     ok('ESCOPO-UNICO: registro só cabe no escopo se o dono bate e o rótulo não contradiz', (()=>{
       const meu={id:'meu',dono:'juca@x',lp:'Gustavo',padrao:true}, reb={id:'lp:rebeca',dono:'juca@x',lp:'Rebeca',padrao:false}, dan={id:'dono:daniel@x',dono:'daniel@x',lp:'Daniel',padrao:true}, todos={id:'todos'};
       const rJ={_dono:'juca@x'}, rJg={_dono:'juca@x',lp:'gustavo'}, rJreb={_dono:'juca@x',lp:'rebeca'}, rD={_dono:'daniel@x',lp:'daniel'}, rDsem={_dono:'daniel@x'}, rLocal={};
