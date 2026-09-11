@@ -4,11 +4,11 @@
 
 ## 10-11/09/2026 — Painel TA nativo · Estágio único · Escopo único (RLS unificada) · SitPlan unificado · listas do método · auditoria das bases
 
-**Estado em 30s:** `main 6419200` — **v7.40 no ar** (Pages EXATAMENTE). Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
+**Estado em 30s:** `main 46f0204` — **v7.41 no ar**. Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
 
 **Prompt pra próxima sessão:**
 ```
-Sessão CRM Visão LP — retomar. main 6419200, v7.40 no ar. Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
+Sessão CRM Visão LP — retomar. main 46f0204, v7.41 no ar. Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
 ```
 
 ### O que entrou (tudo no ar, PRs #186–#196)
@@ -20,12 +20,15 @@ Sessão CRM Visão LP — retomar. main 6419200, v7.40 no ar. Ler memória crm-l
 - **v7.37/.1 SITPLAN-UNIFICADO (opção 1):** `spListaDoDia` = funil (`c.sitplan`) + Estoque (`ta_dia`); resultado gravado onde o contato mora; SitPlan planeja, Painel TA executa; Lista do Dia sai do hub. Rótulo do "Meu" vem do banco (`escMeuLpDe`).
 - **v7.38/.39/.39.1/.40 listas do método:** Toda a base · Rec (com telefone) · Recomendações · Delay (`taDelayTipo`, filtro por tipo, inclui funil) · Rec (sem fone) · Clientes (carteira, `taEhCliente`) · Rec de cliente 💎 · Descartados. "OIs agendados" sai: agendou → `bnLevarProFunil('OI/FF')`. Cards de KPI fora; "Hoje" fora do card. SERVIDOR-MANDA no Estoque (`bnSemOsApagados`, só carga completa). Filtros dobráveis c/ resumo. `MODS.funis_extra` off pro LP. VER-COMO-V2: modo "vendo: X" aplica os módulos DELE e esconde o painel admin.
 - **Banco (OK dele):** 7 rótulos 'gustavo'→'daniel' em contatos do Daniel; 115 contatos de funil do Gustavo com estágio; apagados 3 'Davi Teste' (Daniel+Victor) e 'lista de atrasos' (Victor).
+- **v7.40.1 QUOTA-V1 (#198):** o localStorage do Gustavo estourou a cota com 6.5k linhas → exceção no meio da carga → os 1.368 do Daniel nunca chegavam à memória (servidor devolvia todos). Cache guarda só os MEUS nomes; falha de cota avisa e não derruba. `escLinhaOk`: Benefícios/Atraso/Solicitações respeitam o escopo. SitPlan: busca em vez do select gigante.
+- **v7.41 FICHA-UX-V2 (#199):** ficha do contato do Estoque redesenhada (cabeçalho avatar/nome/badges/ações, grupos dobráveis com resumo, rótulo em cima, alvos ≥42px, rodapé fixo; mesmos ids bne-*).
 
 ### Livro de erros (custaram tempo)
 1. **97 nomes (v7.35):** `delegCarregar` rodou antes da sessão restaurar → `DELEG.eu=''` → escopo "Meu" com dono vazio excluía toda linha com dono. Regra: escopo NUNCA pode ser mais restritivo que "meu" por falta de dado; dono desconhecido não exclui.
 2. **Rótulo do Daniel (v7.37.1):** `pxMeu()` vinha do perfil DEMO ('Gustavo') → o "Meu" do Daniel esconderia os 1.371 dele. Regra: identidade/rótulo vem do banco (`lp_rotulo_dono`), nunca do demo.
 3. **"Só local vence"** devolvia pro NN o que o servidor moveu pro Estoque → regra "servidor manda" (funis e Estoque), sempre condicionada a carga COMPLETA.
 4. **Smart keys `sm:` resetadas** pela guarda de "lista nomeada inexistente". Invariante de `<details>` não pode depender do `ontoggle`.
+6. **localStorage tem cota (~5 MB):** com 2 donos no Estoque o cache estourou e o setItem lançou DENTRO da carga → dado do servidor descartado em silêncio. Regra: cache só do próprio dono; todo setItem em try; carga nunca depende do cache.
 5. **Clientes = 614:** flag `estagio='cliente'` da carga de 04/08 (569 "CLIENTE ATIVO" da planilha) ≠ carteira real (146). Cliente = está na carteira.
 
 ### Auditoria das bases (11/09)
