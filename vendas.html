@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.48.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.49 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3083,7 +3083,10 @@ function tarGcalAcaoHTML(c,t){
     const jaTem=!!(t&&t.gcalId);
     return `<button class="btn btn-s btn-mini" onclick="gcalCriarReuniaoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (etapa + cor)':'Criar na sua Agenda Google com a etapa no título + cor'}">📅${jaTem?'↻':'＋'}</button>`;
   }
-  if(t&&t.quando&&GCAL.conectado){
+  /* GCAL-SEM-TELA-V1 (11/09): o token do Google dura 1h; expirado, GCAL.conectado ficava false e o botão
+     caía no link que ABRE a tela do Google. Agora toda atividade com data vai pela API (gcalApi renova o
+     token sozinho, com login_hint); o link-template só sobra como último recurso se a API falhar. */
+  if(t&&t.quando){
     const jaTem=!!t.gcalId;
     return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (direto, sem abrir tela)':'Gravar na sua Agenda Google (direto, sem abrir tela)'}">📅${jaTem?'↻':'＋'}</button>`;
   }
@@ -8963,7 +8966,7 @@ async function gcalCriarEventoDaTarefa(cid,tid,op){
       interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na agenda Google: '+titulo,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
       toast('Gravado na sua Agenda Google: '+titulo+' · '+(t.hora||'')+' ('+(t.dur||60)+' min)',true); }
     render(); gcalCarregar();
-  }catch(e){ toast('Não consegui gravar na agenda: '+(e&&e.message||e),false); }
+  }catch(e){ toast('Não consegui gravar direto na agenda ('+(e&&e.message||e)+') — abrindo o Google preenchido',false); try{ const u=tarGcalUrl(c,t); if(u) window.open(u,'_blank','noopener'); }catch(_){} }
   finally{ delete _gcalReuniaoBusy[chave]; }
 }
 async function gcalCriarReuniaoDaTarefa(cid,tid){
@@ -15199,6 +15202,7 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
     ok('BF-HISTORICO-V1: Benefícios tem KPI de pagos e chip Histórico (encerrados não somem)', (()=>{ const bk=BF.itens; BF.itens=[{id:'z1',situacao:'pago',valor_pago:100,segurado:'Zz',lp:'Gustavo'}]; try{ const V=VIEW; viewBeneficios(); const h=$('#main').innerHTML; return h.includes('Pagos (histórico)')&&h.includes('Histórico (1)'); } finally{ BF.itens=bk; } })());
     ok('CARTEIRA-SEGURA-V1: persistir carteira nunca zera o servidor por foto local vazia e bloqueia exclusão em massa fora do import', (()=>{ const a=cartPersistPlano({cli:[],apo:[],svCli:['x'],svApo:[],completo:false}).erro; const b=cartPersistPlano({cli:[{ref:'1'}],apo:[],svCli:Array.from({length:40},(_,i)=>'r'+i),svApo:[],completo:false}).erro; const c=cartPersistPlano({cli:[{ref:'1'}],apo:[],svCli:Array.from({length:40},(_,i)=>'r'+i),svApo:[],completo:true}); const d=cartPersistPlano({cli:[{ref:'1'}],apo:[{chave:'k'}],svCli:['1','2'],svApo:['k','z'],completo:false}); return !!a&&!!b&&!c.erro&&c.delCli.length===40&&!d.erro&&d.delCli.join()==='2'&&d.delApo.join()==='z'&&!String(cartPersistRemoto).includes('.delete().eq(\'dono\',me);'); })());
