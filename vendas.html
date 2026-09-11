@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.34 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.35 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1618,6 +1618,13 @@ function _lpcMergeFunis(remotos){
   _lpcPrev=_lpcSnap();
   lpcAgendarPush(); // sobe o resultado do merge (e o 1º sync de uma base só-local)
 }
+/* ESCOPO-UNICO-V1 (10/09): o `dono` da linha viaja com o registro (`_dono`). Antes o app
+   descartava a coluna e só sobrava o rótulo `lp` do JSON — 5.138 nomes sem rótulo viravam
+   "gustavo" na tela. `_dono` NÃO vai de volta pro jsonb (lpcRowOut tira) e decide a coluna
+   `dono` do upsert: editar um nome do Daniel grava na linha do Daniel, não cria cópia minha. */
+function lpcComDono(x){ if(!x||!x.dados) return null; if(x.dono) x.dados._dono=x.dono; return x.dados; }
+function lpcRowOut(k,d,extra){ const dados={...d,...(extra||{})}; const dono=dados._dono||(typeof delegAtivo==='function'?delegAtivo():null); delete dados._dono;
+  const row={id:k,dados}; if(dono) row.dono=dono; return row; }
 async function lpcCarregar(){
   LPC_REMOTE=await lpcRemoteOn();
   if(!LPC_REMOTE) return;
@@ -1632,15 +1639,15 @@ async function lpcCarregar(){
        antigo — uma query só, sem filtro, com o mesmo merge. */
     let funis=null;
     try{
-      const r=await sb.from(LPC_T).select('id,dados').or('dados->>funil.is.null,dados->>funil.neq.bn');
+      const r=await sb.from(LPC_T).select('id,dono,dados').or('dados->>funil.is.null,dados->>funil.neq.bn');
       if(r.error) throw r.error;
-      funis=(r.data||[]).map(x=>x.dados).filter(Boolean);
+      funis=(r.data||[]).map(lpcComDono).filter(Boolean);
     }catch(e){ console.warn('lp_contatos: filtro por funil indisponível → carga única',e); funis=null; }
 
     if(funis===null){
-      const {data,error}=await sb.from(LPC_T).select('id,dados');
+      const {data,error}=await sb.from(LPC_T).select('id,dono,dados');
       if(error) throw error;
-      const todos=(data||[]).map(r=>r.dados).filter(Boolean);
+      const todos=(data||[]).map(lpcComDono).filter(Boolean);
       _lpcMergeBn(todos.filter(c=>c.funil==='bn'));
       _lpcMergeFunis(todos.filter(c=>c.funil!=='bn'));
       return;
@@ -1662,11 +1669,11 @@ async function lpcCarregar(){
         const bn=[], PAG=1000, MAX_PAG=60, vistos=new Set();
         for(let pag=0; pag<MAX_PAG; pag++){
           const de=pag*PAG;
-          const r=await sb.from(LPC_T).select('id,dados').eq('dados->>funil','bn').order('id').range(de,de+PAG-1);
+          const r=await sb.from(LPC_T).select('id,dono,dados').eq('dados->>funil','bn').order('id').range(de,de+PAG-1);
           if(r.error) throw r.error;
           const linhas=(r.data||[]);
           let novos=0;
-          linhas.forEach(x=>{ const k=String(x.id); if(vistos.has(k)) return; vistos.add(k); if(x.dados){ bn.push(x.dados); novos++; } });
+          linhas.forEach(x=>{ const k=String(x.id); if(vistos.has(k)) return; vistos.add(k); const d=lpcComDono(x); if(d){ bn.push(d); novos++; } });
           if(linhas.length<PAG) break;
           if(!novos){ console.warn('Base de Nomes: o servidor devolveu a mesma página — paginação interrompida em',bn.length,'nomes'); break; }
           if(pag===MAX_PAG-1) console.warn('Base de Nomes: teto de',MAX_PAG*PAG,'nomes atingido — o restante entra no próximo sync');
@@ -1682,7 +1689,7 @@ async function lpcPush(){
   if(!LPC_REMOTE||!sb) return;
   try{
     const atual=_lpcSnap(), rows=[], mortos=[];
-    Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]) rows.push({id:k,dados:JSON.parse(atual[k])}); });
+    Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]))); });
     Object.keys(_lpcPrev).forEach(k=>{ if(!(k in atual)) mortos.push(k); });
     if(rows.length){ const r=await sb.from(LPC_T).upsert(rows,{onConflict:'dono,id'}); if(r.error) throw r.error; }
     if(mortos.length){ const r=await sb.from(LPC_T).delete().in('id',mortos); if(r.error) throw r.error; }
@@ -1703,8 +1710,8 @@ function nomeAtual(){ return logado()?(PERFIL.nome||PERFIL.email||'Você'):user(
 function logado(){ return (typeof PERFIL!=='undefined') && !!PERFIL; }
 function isMaster(){ if(logado()) return PERFIL.papel==='admin'; return user().papel.startsWith('Master'); }
 /* Logado: mostra tudo que carregou (a RLS já trouxe só o do dono). Deslogado: filtro demo por LP. */
-function meusContatos(){ return S.contatos.filter(c=>(!c.funil||c.funil==='nn') && (isMaster()||logado()||c.lp===S.activeUser)); }
-function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && (isMaster()||logado()||c.lp===S.activeUser)); }
+function meusContatos(){ return S.contatos.filter(c=>(!c.funil||c.funil==='nn') && (logado()? escRegOk(c) : (isMaster()||c.lp===S.activeUser))); }
+function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && (logado()? escRegOk(c) : (isMaster()||c.lp===S.activeUser))); }
 function etapasDe(c){ const f=c&&c.funil; if(f&&ETAPAS_MAP[f]) return ETAPAS_MAP[f].ids; return f==='bc'?ETAPAS_BC:ETAPAS; }
 /* Funil errado era beco sem saida: o card so mostra as etapas da esteira em que
    o contato ESTA, e a unica saida era apagar e recriar — perdendo historico e
@@ -1831,7 +1838,7 @@ function toast(msg,ok){ const t=document.createElement('div'); t.className='toas
 /* ═══════════════════ PERFIL ═══════════════════ */
 function togglePerfilMenu(ev){
   ev.stopPropagation();
-  if(logado()) return;   // logado: identidade é a da sessão (RLS); sem troca de perfil demo
+  if(logado()&&escOpcoes().length<2) return;   // logado sem delegação/rótulo: nada pra trocar
   const m=$('#perfilMenu'), b=$('#btnPerfil');
   m.classList.toggle('aberto');
   if(m.classList.contains('aberto')&&b){            // popover ancorado no cartão do usuário
@@ -1842,6 +1849,7 @@ function togglePerfilMenu(ev){
 }
 document.addEventListener('click',()=> $('#perfilMenu').classList.remove('aberto'));
 function trocarPerfil(id){
+  if(logado()){ escSet(id); $('#perfilMenu').classList.remove('aberto'); return; }
   S.activeUser=id; salvar();
   render();
   toast(`Perfil ativo: ${user().nome.split(' ')[0]} (${user().papel}) — troca instantânea`);
@@ -1852,8 +1860,20 @@ function renderTopo(){
     : user();
   $('#avTop').textContent=iniciais(u.nome); $('#avTop').style.background=u.cor;
   $('#nomeTop').textContent=u.nome; $('#papelTop').textContent=u.papel;
-  const chip=$('#btnPerfil'); if(chip){ const car=chip.querySelector('span:last-child'); if(car) car.style.display=logado()?'none':''; chip.style.cursor=logado()?'default':'pointer'; }
-  if(logado()){ const lp=$('#listaPerfis'); if(lp) lp.innerHTML=''; return; }
+  if(logado()){ const ops=escOpcoes(), o=escAtual(), tem=ops.length>1;
+    const chip=$('#btnPerfil'); if(chip){ const car=chip.querySelector('span:last-child'); if(car) car.style.display=tem?'':'none'; chip.style.cursor=tem?'pointer':'default'; }
+    if(o.id!=='meu') $('#papelTop').textContent='vendo: '+o.nome;
+    { const ch=$('#btnPerfil'); if(ch){ const outro=!!delegAtivo(); ch.style.background=outro?'#a9640f':''; ch.style.boxShadow=outro?'0 0 0 2px #f5c869 inset':''; ch.title=outro?('Você está VENDO e OPERANDO a base de '+o.nome+'. O que gravar é dele. Clique pra trocar.'):'Trocar a base que você vê e opera'; } }
+    const t=document.querySelector('#perfilMenu .titulo'); if(t) t.textContent='Base que você vê e opera';
+    const rp=document.querySelector('#perfilMenu .rodape-menu'); if(rp) rp.textContent='Trocar aqui muda o Estoque, o Painel TA, a Carteira, o BackOffice e o dono do que você gravar.';
+    const lp=$('#listaPerfis'); if(lp) lp.innerHTML=ops.map(x=>`
+    <button class="perfil-item" onclick="trocarPerfil('${esc(x.id)}')">
+      <span class="avatar" style="background:${x.id==='todos'?'#555':x.id==='meu'?'#0b3d91':'#0a8754'}">${esc(x.id==='todos'?'PX':iniciais(x.nome))}</span>
+      <span><span class="nm">${esc(x.nome)}</span><br><span class="pp">${esc(x.id==='todos'?'tudo que a delegação deixa ver':x.dono===DELEG.eu?'minha conta':'conta de '+x.dono)}</span></span>
+      ${x.id===o.id?'<span class="check">✓</span>':''}
+    </button>`).join('');
+    return; }
+  const chip=$('#btnPerfil'); if(chip){ const car=chip.querySelector('span:last-child'); if(car) car.style.display=''; chip.style.cursor='pointer'; }
   $('#listaPerfis').innerHTML = S.users.map(x=>`
     <button class="perfil-item" onclick="trocarPerfil('${esc(x.id)}')">
       <span class="avatar" style="background:${esc(x.cor)}">${esc(iniciais(x.nome))}</span>
@@ -8046,7 +8066,7 @@ function pxLps(){ const set=new Set(['Gustavo','Rebeca','Daniel']);
   (CART.clientes||[]).forEach(c=>{ if(c.lp) set.add(c.lp); }); (EX.itens||[]).forEach(r=>{ if(r.lp) set.add(r.lp); }); (EM.itens||[]).forEach(r=>{ if(r.lp) set.add(r.lp); });
   return [...set].filter(x=>x!==pxMeu()).sort(); }
 function pxPintar(){ const el=document.getElementById('px-escopo'); if(!el) return;
-  if(!(typeof isMaster==='function'&&isMaster())){ el.innerHTML=''; return; }
+  if(logado()||!(typeof isMaster==='function'&&isMaster())){ el.innerHTML=''; return; }   /* ESCOPO-UNICO-V1: logado, o seletor é o do cartão do nome */
   const e=PX.escopo; const lps=pxLps();
   el.innerHTML=`<select class="px-sel" onchange="pxSet(this.value)" title="Escopo do que você vê na Carteira, Pendências, Emitidas, Emissão Diária e Resumo MF. 'Meu' = só a sua base; 'Pipe X' = todos os LPs da MFB.">
     <option value="meu"${e==='meu'?' selected':''}>👤 Meu</option><option value="todos"${e==='todos'?' selected':''}>🌐 Pipe X · todos</option>
@@ -12245,6 +12265,7 @@ function bnCsvSet(v){ return new Set(String(v||'').split(',').map(x=>x.trim()).f
    importada). Perfil não-Master só vê o que é dele; Master vê tudo e pode
    filtrar por LP (FBN.lp). A separação ENTRE CONTAS já é o RLS por dono. */
 function bnVivos(){ const m=isMaster();
+  if(logado()) return BN.contatos.filter(b=>!b.merged_into && escRegOk(b));   /* ESCOPO-UNICO-V1: dono da linha + rótulo, um seletor só */
   return BN.contatos.filter(b=>!b.merged_into &&
     (m? (!FBN.lp||(b.lp||'gustavo')===FBN.lp) : (b.lp||'gustavo')===S.activeUser)); }
 function bnPor(id){ return BN.contatos.find(b=>b.id===id); }
@@ -12342,7 +12363,7 @@ async function bnPush(){
   if(!_bnRemoteLoaded){ bnAgendarPush(); return; }
   try{
     const atual=_bnSnap(), rows=[];
-    Object.keys(atual).forEach(k=>{ if(atual[k]!==_bnPrev[k]) rows.push({id:k,dados:{...JSON.parse(atual[k]),funil:'bn'}}); });
+    Object.keys(atual).forEach(k=>{ if(atual[k]!==_bnPrev[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]),{funil:'bn'})); });
     for(let i=0;i<rows.length;i+=400){
       const r=await sb.from(LPC_T).upsert(rows.slice(i,i+400),{onConflict:'dono,id'}); if(r.error) throw r.error;
     }
@@ -12401,14 +12422,49 @@ async function delegCarregar(){
   try{ const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return; DELEG.eu=s.session.user.email||'';
     const {data,error}=await sb.from('lp_delegacoes').select('dono_email,modulos').eq('delegado_email',DELEG.eu); if(error) throw error;
     DELEG.donos=(data||[]).map(d=>d.dono_email);
-    if(DELEG.donos.length){ let sv=null; try{ sv=localStorage.getItem(DELEG_CHAVE); }catch(_){}
-      DELEG.ativo=(sv&&DELEG.donos.includes(sv))?sv:DELEG.donos[0]; }
+    try{ const r2=await sb.from('lp_rotulo_dono').select('rotulo,dono_email'); if(!r2.error) ESC.rotulos=r2.data||[]; }catch(_){}
+    try{ const sv=localStorage.getItem(ESC_CHAVE); if(sv) ESC.sel=sv; }catch(_){}
   }catch(e){ console.warn('lp_delegacoes: sem delegação →  dados próprios',e); }
 }
-/* e-mail DONO das linhas que este usuário lê/grava no BackOffice */
-function delegDono(email){ return DELEG.ativo||email||DELEG.eu; }
-function delegTrocar(d){ if(!DELEG.donos.includes(d)) return; DELEG.ativo=d; try{ localStorage.setItem(DELEG_CHAVE,d); }catch(_){} location.reload(); }
-function delegFaixa(){ if(!DELEG.ativo) return ''; return `<div class="imp-faixa" style="margin-bottom:8px">🤝 Você está trabalhando na carteira de <b>${esc(DELEG.ativo)}</b> — o que você gravar aqui é dele.${DELEG.donos.length>1?' <select onchange="delegTrocar(this.value)" style="margin-left:6px">'+DELEG.donos.map(d=>`<option${d===DELEG.ativo?' selected':''}>${esc(d)}</option>`).join('')+'</select>':''}</div>`; }
+/* ═══ ESCOPO-UNICO-V1 (10/09) ═══════════════════════════════════════════════
+   UM seletor só, no cartão do nome: a base que você VÊ e OPERA. Opções = o mapa
+   `lp_rotulo_dono` que já existe no banco (Gustavo/Rebeca → juca, Daniel → daniel)
+   + as delegações recebidas + "Pipe X" (tudo que a RLS deixa ver). Substitui o
+   "Pipe X · todos/Daniel/Rebeca" da topbar e os filtros "LP:" do Estoque/Recs.
+   Escolher Daniel = ver a base dele E gravar como ele (dono=daniel, faixa âmbar). */
+const ESC_CHAVE='crmlp_escopo_v1';
+let ESC={sel:null,rotulos:[]};
+function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
+function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
+function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
+  const out=[{id:'meu',nome:'Meu · '+escCap(meuLp||'minha base'),dono:eu,lp:meuLp?escCap(meuLp):null,padrao:true}];   /* padrao: linha SEM rótulo é minha */
+  (rotulos||[]).filter(r=>r.dono_email===eu && escLpNorm(r.rotulo)!==escLpNorm(meuLp))
+    .forEach(r=>out.push({id:'lp:'+escLpNorm(r.rotulo),nome:escCap(r.rotulo),dono:eu,lp:escCap(r.rotulo),padrao:false}));  /* só o que tem o rótulo dela */
+  (donos||[]).filter(d=>d&&d!==eu).forEach(d=>{ const r=(rotulos||[]).find(x=>x.dono_email===d);
+    out.push({id:'dono:'+d,nome:r?escCap(r.rotulo):d.split('@')[0],dono:d,lp:r?escCap(r.rotulo):null,padrao:true}); });
+  if(out.length>1) out.push({id:'todos',nome:'Pipe X · tudo que vejo',dono:null,lp:null});
+  return out; }
+function escOpcoes(){ return escOpcoesDe(DELEG.eu, DELEG.donos, ESC.rotulos, (typeof pxMeu==='function'?pxMeu():'')); }
+function escAtual(){ const ops=escOpcoes();
+  let sel=ESC.sel; if(!sel||!ops.some(o=>o.id===sel)) sel=(souAdm()||!DELEG.donos.length)?'meu':'dono:'+DELEG.donos[0];  /* Victor cai direto na base delegada */
+  return ops.find(o=>o.id===sel)||ops[0]; }
+function escRegOkDe(o, rec){ /* PURA: registro (com _dono e talvez lp) cabe no escopo? */
+  if(!o||o.id==='todos') return true;
+  const d=rec&&rec._dono; if(d&&d!==o.dono) return false;              /* linha de outro dono */
+  const lp=rec&&rec.lp;
+  if(o.lp && lp && escLpNorm(lp)!==escLpNorm(o.lp)) return false;       /* rótulo contradiz (Rebeca × Gustavo sob juca) */
+  if(o.lp && !lp && !o.padrao) return false;                            /* sub-rótulo (Rebeca): só o que tem o rótulo dela */
+  return true; }
+function escRegOk(rec){ return escRegOkDe(escAtual(),rec); }
+function escSet(id){ ESC.sel=id; try{ localStorage.setItem(ESC_CHAVE,id); }catch(_){}
+  const o=escAtual(); PX.escopo=(o.id==='todos')?'todos':(o.id==='meu')?'meu':(o.lp||'meu');
+  try{ localStorage.setItem(PX_CHAVE,JSON.stringify(PX)); }catch(_){}
+  render(); toast('Vendo e operando: '+o.nome,true); }
+function delegAtivo(){ if(!logado()) return null; const o=escAtual(); return (o.dono&&o.dono!==DELEG.eu)?o.dono:null; }
+/* e-mail DONO das linhas que este usuário lê/grava */
+function delegDono(email){ return delegAtivo()||email||DELEG.eu; }
+function delegTrocar(d){ if(!DELEG.donos.includes(d)) return; escSet('dono:'+d); }
+function delegFaixa(){ const a=delegAtivo(); if(!a) return ''; const o=escAtual(); return `<div class="imp-faixa" style="margin-bottom:8px">🤝 Você está vendo e operando a base de <b>${esc(o.nome)}</b> (${esc(a)}) — o que você gravar aqui é dele. <button class="btn btn-s btn-mini" onclick="escSet('meu')">Voltar pra minha</button></div>`; }
 let PERFIL=null; // {email,papel,modulos} — null = deslogado/sem linha → defaults
 function souAdm(){ return !!(PERFIL&&PERFIL.papel==='admin'); }
 function modOn(k){ if(!PERFIL) return true;              // sem login = modo local do dono: tudo visível
@@ -12546,7 +12602,7 @@ function viewBnEstoque(){
       ${bnMultiHtml('estagio','Estágios',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]})))}
       ${bnMultiHtml('pri','Prioridade',[{v:'1',l:'P1'},{v:'2',l:'P2'},{v:'3',l:'P3'}])}
       <select onchange="FBN.tel=this.value;viewBnEstoque()"><option value="">Telefone: tanto faz</option><option ${FBN.tel==='com'?'selected':''} value="com">Com telefone</option><option ${FBN.tel==='sem'?'selected':''} value="sem">Só nome</option></select>
-      ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnEstoque()"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">${esc(u.nome.split(' ')[0])}</option>`).join('')}</select>`:''}
+      ${isMaster()&&!logado()? `<select onchange="FBN.lp=this.value;viewBnEstoque()"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">${esc(u.nome.split(' ')[0])}</option>`).join('')}</select>`:''}
       <button class="btn btn-p btn-mini" onclick="bnNovo()">➕ Novo nome</button>
       ${bnRecCount()? `<button class="btn btn-s btn-mini" onclick="bnRecScan()" title="Extrair recomendante embutido no nome (com preview — nada aplica sozinho)">🪄 Rec no nome (${bnRecCount()})</button>`:''}
       <label class="btn btn-s btn-mini" style="cursor:pointer">⬆️ Importar<input type="file" multiple accept=".json,.csv" style="display:none" onchange="bnImportarArquivos(this)"></label>
@@ -13120,7 +13176,7 @@ function taFocoTimer(){ if(!TA_FOCO.on) return; const el=document.getElementById
 async function taFocoFechar(){ if(!TA_FOCO.on) return; clearInterval(TA_FOCO.tick); TA_FOCO.on=false;
   document.querySelectorAll('#spFoco').forEach(e=>e.remove()); document.body.classList.remove('foco-on');
   const n=TA_FOCO.worked.size;
-  if(n&&LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_sitplan').insert({data:hojeISO(),contatos_trabalhados:n,promovidos:TA_FOCO.promov,notas:'Sessão Modo Foco · Painel TA'}); if(r.error) throw r.error; }
+  if(n&&LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_sitplan').insert({data:hojeISO(),contatos_trabalhados:n,promovidos:TA_FOCO.promov,notas:'Sessão Modo Foco · Painel TA',dono:delegDono()}); if(r.error) throw r.error; }
     catch(e){ console.warn('lp_sitplan: sessão não gravada',e); } }
   render(); if(n) toast('Sessão fechada · '+n+' trabalhado'+(n===1?'':'s')+(LPC_REMOTE?' (SitPlan salvo)':''),true); }
 function taFocoPular(){ TA_FOCO.i++; taFocoPinta(); }
@@ -13322,7 +13378,7 @@ async function bnResultado(id,res){
   else if(res==='recusou') c.estagio='descartado';
   else if(res==='numero_errado'){ c.precisa_revisao=true; c.estagio='estoque'; }
   bnSalvar(); render();
-  if(LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_interacoes').insert({contato_id:id,tipo:'ta',resultado:res}).select('id').single();
+  if(LPC_REMOTE&&sb){ try{ const r=await sb.from('lp_interacoes').insert({contato_id:id,tipo:'ta',resultado:res,dono:delegDono()}).select('id').single();
       if(r.error) throw r.error; if(r.data&&r.data.id!=null){ h.rid=r.data.id; bnSalvar(); } }
     catch(e){ console.warn('lp_interacoes: falhou (fica só no hist local)',e); } }
 }
@@ -13472,7 +13528,7 @@ function viewBnRecs(){
         <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.nome)}</div>
         <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc([b.contexto,b.cidade,b.idade&&(b.idade+' anos'),b.telefone].filter(Boolean).join(' · ')||'—')}</div>
       </div>
-      ${isMaster()&&!FBN.lp?`<span style="font-size:10.5px;font-weight:700;color:var(--muted);background:var(--bg);border:1px solid var(--linha);border-radius:7px;padding:1px 6px;white-space:nowrap">LP ${esc(bnLpLabel(b.lp))}</span>`:''}
+      ${isMaster()&&!logado()&&!FBN.lp?`<span style="font-size:10.5px;font-weight:700;color:var(--muted);background:var(--bg);border:1px solid var(--linha);border-radius:7px;padding:1px 6px;white-space:nowrap">LP ${esc(bnLpLabel(b.lp))}</span>`:''}
       <span style="font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">${esc(b.trilha||'')}</span>
       ${bnBadgeEst(b.estagio)}
     </div>`;
@@ -13483,7 +13539,7 @@ function viewBnRecs(){
       ${TABS.map(([k,lb,n])=>`<button class="btn btn-mini ${BNR.tab===k?'btn-p':'btn-s'}" onclick="BNR.tab='${k}';BNR.recom='';viewBnRecs()">${lb} <b style="opacity:.75">${n}</b></button>`).join('')}
       <input type="search" style="max-width:210px" placeholder="Buscar nome ou recomendante…" value="${esc(BNR.busca)}" oninput="BNR.busca=this.value;viewBnRecs()">
       <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('rec')">🎛️ Filtros${recFiltrosAtivos()?' ('+recFiltrosAtivos()+')':''}</button>
-      ${isMaster()? `<select onchange="FBN.lp=this.value;viewBnRecs()" title="Recomendados de qual Life Planner"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">LP ${esc(String(u.nome).split(' ')[0])}</option>`).join('')}</select>`:''}
+      ${isMaster()&&!logado()? `<select onchange="FBN.lp=this.value;viewBnRecs()" title="Recomendados de qual Life Planner"><option value="">LP: todos</option>${S.users.map(u=>`<option ${FBN.lp===u.id?'selected':''} value="${esc(u.id)}">LP ${esc(String(u.nome).split(' ')[0])}</option>`).join('')}</select>`:''}
       <select onchange="BNR.recom=this.value;viewBnRecs()" style="max-width:280px"><option value="">Recomendante: todos (${recomSet.length})</option>${recomSet.map(r=>`<option ${BNR.recom===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
       <button class="btn btn-mini ${BNR.soCli?'btn-p':'btn-s'}" onclick="BNR.soCli=!BNR.soCli;viewBnRecs()" title="Só recomendações de quem JÁ É seu cliente — seus fãs que indicam">🛡️ De cliente${_cliRecomSet.size?' ('+_cliRecomSet.size+')':''}</button>
       ${recFiltrosAtivos()? `<button class="btn btn-s btn-mini" onclick="recFiltroLimpar()">Limpar filtros (${recFiltrosAtivos()})</button>`:''}
@@ -14623,6 +14679,19 @@ function lpSelfCheck(){
       const g=document.getElementById('sp-group');
       return !!g && !!g.querySelector('.nav-btn[data-view="bn-ta"]') && !document.querySelector('.sidebar [onclick*="painel-lp.html"]');
     })());
+    ok('ESCOPO-UNICO: opções = meu + rótulos sob mim + delegações + Pipe X', (()=>{
+      const ops=escOpcoesDe('juca@x',['daniel@x'],[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}],'Gustavo');
+      return ops.map(o=>o.id).join(',')==='meu,lp:rebeca,dono:daniel@x,todos' && ops[2].nome==='Daniel' && ops[1].lp==='Rebeca'; })());
+    ok('ESCOPO-UNICO: sem delegação nem rótulo extra, só "meu" (sem Pipe X)', escOpcoesDe('a@x',[],[{rotulo:'gustavo',dono_email:'a@x'}],'Gustavo').length===1);
+    ok('ESCOPO-UNICO: registro só cabe no escopo se o dono bate e o rótulo não contradiz', (()=>{
+      const meu={id:'meu',dono:'juca@x',lp:'Gustavo',padrao:true}, reb={id:'lp:rebeca',dono:'juca@x',lp:'Rebeca',padrao:false}, dan={id:'dono:daniel@x',dono:'daniel@x',lp:'Daniel',padrao:true}, todos={id:'todos'};
+      const rJ={_dono:'juca@x'}, rJg={_dono:'juca@x',lp:'gustavo'}, rJreb={_dono:'juca@x',lp:'rebeca'}, rD={_dono:'daniel@x',lp:'daniel'}, rDsem={_dono:'daniel@x'}, rLocal={};
+      return escRegOkDe(meu,rJ)&&escRegOkDe(meu,rJg)&&!escRegOkDe(meu,rJreb)&&!escRegOkDe(meu,rD)&&escRegOkDe(meu,rLocal)
+          && escRegOkDe(reb,rJreb)&&!escRegOkDe(reb,rJ)&&!escRegOkDe(reb,rJg)&&!escRegOkDe(reb,rD)
+          && escRegOkDe(dan,rD)&&escRegOkDe(dan,rDsem)&&!escRegOkDe(dan,rJ)&&escRegOkDe(todos,rD)&&escRegOkDe(todos,rJ); })());
+    ok('ESCOPO-UNICO: o upsert leva o dono da linha e não devolve _dono pro jsonb', (()=>{
+      const r=lpcRowOut('k1',{nome:'Zz',_dono:'daniel@x'},{funil:'bn'}); const r2=lpcRowOut('k2',{nome:'Zz'});
+      return r.dono==='daniel@x'&&!('_dono' in r.dados)&&r.dados.funil==='bn'&&r.id==='k1'&&(!logado()? !('dono' in r2):true); })());
     ok('PAINEL-TA: listas inteligentes são puras e coerentes com o estágio', (()=>{
       const z=[{id:'a',estagio:'lista_ta',telefone:'81999990000',trilha:'seguro'},{id:'b',estagio:'lista_ta',telefone:'',trilha:'seguro'},{id:'c',estagio:'oi_agendado',telefone:'81999990001'},{id:'d',estagio:'cliente'},{id:'e',estagio:'descartado'}];
       const f=k=>z.filter(TA_SMART[k].base).map(x=>x.id).join('');
