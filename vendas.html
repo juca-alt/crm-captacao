@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.32 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.33 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1198,14 +1198,18 @@
     </div>
 
     <div class="sep"></div>
-    <!-- RECOMENDAÇÕES (no topo do fluxo, a pedido dele) -->
-    <button class="nav-btn" data-view="bn-recs" onclick="irPara('bn-recs')"><span class="ic">🙌</span><span class="lbl">Recomendações</span><span class="cnt" id="cnt-bn-recs"></span></button>
+    <!-- ESTOQUE-TOPO-V1 (10/09): Estoque de Nomes = baú geral, no nível principal (onde ficava Recomendações).
+         Recomendações = submódulo do Estoque (os nomes tratados e qualificados desse baú). -->
+    <button class="nav-grp modulo nav-grp-btn" id="est-toggle" onclick="toggleGrp('est')"><span class="ic">📦</span><span class="lbl">Estoque de Nomes</span><span class="cnt" id="cnt-bn"></span><span class="caret" id="est-caret">▴</span></button>
+    <div class="nav-grp-wrap" id="est-group">
+      <button class="nav-btn sub" data-view="bn-estoque" onclick="irPara('bn-estoque')"><span class="ic">🗃️</span><span class="lbl">Todos os nomes</span><span class="cnt" id="cnt-bn-todos"></span></button>
+      <button class="nav-btn sub" data-view="bn-recs" onclick="irPara('bn-recs')"><span class="ic">🙌</span><span class="lbl">Recomendações</span><span class="cnt" id="cnt-bn-recs"></span></button>
+    </div>
 
     <div class="sep"></div>
-    <!-- SITPLAN & TA (Estoque de Nomes fica AQUI) -->
+    <!-- SITPLAN & TA (o Estoque subiu pro nível principal em 10/09) -->
     <button class="nav-grp modulo nav-grp-btn fechado" id="sp-toggle" onclick="toggleGrp('sp')"><span class="ic">📞</span><span class="lbl">SitPlan &amp; TA</span><span class="cnt" id="cnt-sp"></span><span class="caret" id="sp-caret">▾</span></button>
     <div class="nav-grp-wrap fechado" id="sp-group">
-      <button class="nav-btn sub" data-view="bn-estoque" onclick="irPara('bn-estoque')"><span class="ic">📦</span><span class="lbl">Estoque de Nomes</span><span class="cnt" id="cnt-bn"></span></button>
       <button class="nav-btn sub" onclick="location.href='painel-lp.html'" title="Painel unificado de TA · SITPLAN · Recomendações (2.0) — sessão de foco com timer"><span class="ic">🧭</span><span class="lbl">Painel de TA 2.0</span></button>
       <button class="nav-btn sub" data-view="bn-ta" onclick="irPara('bn-ta')"><span class="ic">📞</span><span class="lbl">Lista de TA</span><span class="cnt" id="cnt-bn-ta"></span></button>
     </div>
@@ -1582,9 +1586,21 @@ function _lpcSnap(){ const m={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null)
 /* FLUIDEZ-V1:LPC-2VOLTAS
    O merge é EXATAMENTE o de antes — só saiu de dentro do carregador para poder
    ser chamado nos dois caminhos. */
+/* ESTAGIO-UNICO-V1 (10/09): o servidor é quem diz onde o contato mora (trigger
+   lp_norm_estagio + roteamento por etapa). Se um id voltou como funil:'bn', ele
+   NÃO pode continuar no cache local dos funis — senão "só local vence" e o nome
+   reaparece no NN pra sempre (caso Daniel: 1.368 nomes movidos pro Estoque). Pura. */
+function lpcSemOsDoEstoque(lista, remotosBn){
+  const ids=new Set((remotosBn||[]).map(c=>String(c&&c.id)));
+  return (lista||[]).filter(c=>!ids.has(String(c&&c.id)));
+}
 function _lpcMergeBn(remotosBn){
   // Base de Nomes (funil:'bn') vive em outro store: 5k+ nomes não podem inchar
   // S.contatos nem aparecer nos funis NN/BC — rota pro merge próprio do módulo BN.
+  if(remotosBn.length&&Array.isArray(S.contatos)){
+    const antes=S.contatos.length; S.contatos=lpcSemOsDoEstoque(S.contatos,remotosBn);
+    if(S.contatos.length!==antes){ salvar(); _lpcPrev=_lpcSnap(); if(typeof agendarRender==='function') agendarRender(); }
+  }
   if(remotosBn.length&&typeof bnMergeRemoto==='function') bnMergeRemoto(remotosBn);
   _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
 }
@@ -2293,7 +2309,7 @@ function toggleGrp(key){
              'pipe':['pipe-group','pipe-toggle'],'nn-et':['nn-etapas','nn-et-toggle'],
              'bc-et':['bc-etapas','bc-et-toggle'],
              'outros':['outros-group','outros-toggle'],'bo':['bo-group','bo-toggle'],
-             'sp':['sp-group','sp-toggle']}; // 'sp' FALTAVA: clicar em "SitPlan & TA" na lateral não fazia nada (v2 item 2)
+             'sp':['sp-group','sp-toggle'],'est':['est-group','est-toggle']}; // 'sp' FALTAVA: clicar em "SitPlan & TA" na lateral não fazia nada (v2 item 2)
   const m=map[key]; if(!m) return;
   const g=document.getElementById(m[0]), b=document.getElementById(m[1]); if(!g||!b) return;
   const fechado=g.classList.toggle('fechado');
@@ -13787,7 +13803,8 @@ function render(){
   { const ca=$('#cnt-agenda'); if(ca){ const n=agendaContagem(); ca.textContent=n.total||''; ca.style.color=n.atrasadas?'var(--verm)':''; } }
   { const cs=$('#cnt-sitplan'); if(cs){ const hoje=hojeISO(); cs.textContent=meusContatos().filter(c=>c.sitplan===hoje&&!ultimoResultado(c,hoje)).length||''; } }
   { const csp=$('#cnt-sp'); if(csp) csp.textContent=bnVivos().length? bnVivos().length.toLocaleString('pt-BR'):''; }
-  if(VIEW&&VIEW.startsWith('bn-')){ ['sp-toggle','sp-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#sp-caret'); if(c) c.textContent='▴'; }
+  if(VIEW==='bn-estoque'||VIEW==='bn-recs'||VIEW==='bn-dups'){ ['est-toggle','est-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#est-caret'); if(c) c.textContent='▴'; }
+  else if(VIEW&&VIEW.startsWith('bn-')){ ['sp-toggle','sp-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#sp-caret'); if(c) c.textContent='▴'; }
   /* mesma ideia para os grupos novos: quem está numa tela do BackOffice ou da
      Revisão não deve precisar reabrir "Outros módulos" a cada repintura */
   { const abrir=(ids,caret)=>{ ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); });
@@ -13801,7 +13818,7 @@ function render(){
   { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length+(EM.itens||[]).filter(emAtivo).length; cbo.textContent=n||''; }
     const cbf=$('#cnt-beneficios'); if(cbf) cbf.textContent=(BF.itens||[]).filter(bfAtivo).length||'';
     const cso=$('#cnt-solicitacoes'); if(cso) cso.textContent=(SO.itens||[]).filter(s=>s.status==='aberta').length||''; }
-  { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
+  { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||''; const cbt=$('#cnt-bn-todos'); if(cbt) cbt.textContent=bnVivos().length||'';
     const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
     const cr=$('#cnt-bn-recs'); if(cr) cr.textContent=bnVivos().filter(b=>(b.recomendante||'').trim()).length||'';
     const ct2=$('#cnt-bn-ta'); if(ct2) ct2.textContent=bnEmListaTa().length||'';
@@ -15054,7 +15071,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('funis extra: o funil Novos Negócios NÃO engole os contatos dos funis novos', (()=>{ const _c=S.contatos; try{ S.contatos=[{id:'zt',funil:'vg',etapa:'Oportunidade',lp:S.activeUser,nome:'Z',eventos:[],recs:[]}]; return meusContatos().length===0 && fxLista('vg').length===1; } finally{ S.contatos=_c; } })());
     /* MENU-REORG-V7 (07/09) */
     ok('menu v7: Clientes/Contatos/Benefícios/Duplicatas/Lista do dia moram em Módulos (hub) e têm título', ['contatos','cart-visao','cart-clientes','cart-oportunidades','beneficios','sitplan','bn-dups'].every(v=>HUB_VIEWS.includes(v)&&!!TITULO_VIEW[v]));
-    ok('menu v7: Recomendações é item próprio no topo e Estoque de Nomes fica em SitPlan & TA', !!document.querySelector('.sidebar .nav-btn[data-view="bn-recs"]') && !!document.querySelector('#sp-group .nav-btn[data-view="bn-estoque"]'));
+    ok('menu 10/09: Estoque de Nomes é grupo no nível principal e Recomendações é submódulo dele', !!document.querySelector('#est-group .nav-btn[data-view="bn-recs"]') && !!document.querySelector('#est-group .nav-btn[data-view="bn-estoque"]') && !document.querySelector('#sp-group .nav-btn[data-view="bn-estoque"]'));
+    ok('ESTAGIO-UNICO: contato roteado pro Estoque no servidor sai dos funis locais', (()=>{ const r=lpcSemOsDoEstoque([{id:'Zz1'},{id:'Zz2'}],[{id:'Zz2'}]); return r.length===1&&r[0].id==='Zz1'&&lpcSemOsDoEstoque([{id:'Zz1'}],[]).length===1; })());
     ok('menu v7: Carteira/Contatos saíram do menu lateral visível (só via Módulos)', !document.querySelector('#cli-group') && !document.querySelector('.sidebar .nav-btn[data-view="contatos"]:not([hidden])'));
     /* PT-A · MOTOR DE MENSAGEM-PRONTA (07/09) */
     ok('PT-A: preenche primeiro nome e some com placeholder desconhecido', msgPreencher('Feliz aniversário, {primeiro}! {xyz}',{nome:'joão paulo',sexo:'M'})==='Feliz aniversário, João!');
