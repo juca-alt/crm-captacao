@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.45 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.45.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -704,7 +704,8 @@
   .nncol.foco{box-shadow:0 0 0 2px var(--azul)}
   .nncol-head{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#3c4657}
   .nncol-head .qt{font-size:10.5px;font-weight:700;background:#e2e8f0;color:var(--muted);padding:2px 8px;border-radius:20px}
-  .nncard{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;box-shadow:var(--sombra)}
+  .nncard{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;box-shadow:var(--sombra);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .nncard.td-lift{opacity:.35;border-style:dashed} .td-ghost{position:fixed;z-index:400;pointer-events:none;opacity:.95;transform:scale(1.03) rotate(1.5deg);box-shadow:0 12px 30px rgba(16,30,54,.28)} body.td-on{overflow:hidden;touch-action:none}
   .nncard:hover{border-color:var(--azul-borda)}
   .nncard.dragging{opacity:.4}
   .nncard .nc-nome{font-weight:700;font-size:13px}
@@ -3335,7 +3336,30 @@ function viewNnFunil(){
   }
   funScrollRestaurar(_pos);
 }
+/* DRAG-TOUCH-V1 (11/09): no iPhone o drag nativo (dragstart/dragover) não existe — segurar o card virava
+   seleção de texto. Agora: segurar ~350ms → o card "levanta" e segue o dedo; soltar em cima de uma coluna
+   reordena (mesma coluna) ou muda a etapa (outra coluna), pelo MESMO funDropCard do desktop. */
+function wireTouchDrag(boardSel, mover){
+  const board=document.querySelector(boardSel); if(!board||!('ontouchstart' in window)) return;
+  board.querySelectorAll('.nncard').forEach(card=>{
+    let timer=null, ativo=false, ghost=null, colAtual=null, startY=0, startX=0;
+    const limpar=()=>{ clearTimeout(timer); timer=null; if(ghost){ ghost.remove(); ghost=null; } card.classList.remove('dragging','td-lift'); document.body.classList.remove('td-on'); document.querySelectorAll('.nncol.drop').forEach(c=>c.classList.remove('drop')); ativo=false; colAtual=null; };
+    card.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; const t=e.touches[0]; startX=t.clientX; startY=t.clientY;
+      timer=setTimeout(()=>{ ativo=true; card.classList.add('dragging','td-lift'); document.body.classList.add('td-on'); try{ navigator.vibrate&&navigator.vibrate(15); }catch(_){}
+        ghost=card.cloneNode(true); ghost.className='nncard td-ghost'; const r=card.getBoundingClientRect(); ghost.style.width=r.width+'px'; ghost.style.left=r.left+'px'; ghost.style.top=r.top+'px'; document.body.appendChild(ghost); ghost.dataset.dx=String(t.clientX-r.left); ghost.dataset.dy=String(t.clientY-r.top); },350); },{passive:true});
+    card.addEventListener('touchmove',e=>{ const t=e.touches[0]; if(!ativo){ if(Math.abs(t.clientX-startX)>8||Math.abs(t.clientY-startY)>8){ clearTimeout(timer); timer=null; } return; }
+      e.preventDefault(); if(ghost){ ghost.style.left=(t.clientX-(+ghost.dataset.dx))+'px'; ghost.style.top=(t.clientY-(+ghost.dataset.dy))+'px'; }
+      const el=document.elementFromPoint(t.clientX,t.clientY); const col=el&&el.closest('.nncol[data-etapa]');
+      if(col){ if(colAtual&&colAtual!==col) colAtual.classList.remove('drop'); colAtual=col; col.classList.add('drop'); funDragPosicionar(col,{clientY:t.clientY}); }
+      /* rolagem lateral/vertical do board com o dedo perto da borda */
+      const br=board.getBoundingClientRect(); if(t.clientX>br.right-40) board.scrollLeft+=12; else if(t.clientX<br.left+40) board.scrollLeft-=12;
+      if(t.clientY>innerHeight-90) window.scrollBy(0,10); else if(t.clientY<110) window.scrollBy(0,-10); },{passive:false});
+    const fim=()=>{ if(ativo&&colAtual&&colAtual.dataset.etapa){ const id=card.dataset.id; const col=colAtual; limpar(); funDropCard(id,col,mover); return; } limpar(); };
+    card.addEventListener('touchend',fim); card.addEventListener('touchcancel',limpar);
+  });
+}
 function wireNnBoard(){
+  wireTouchDrag('.nnboard',nnMoveEtapa);
   let dragId=null;
   document.querySelectorAll('.nnboard .nncard').forEach(card=>{
     card.addEventListener('dragstart',e=>{ dragId=card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
@@ -3458,6 +3482,7 @@ function viewBcFunil(){
   funScrollRestaurar(_pos);
 }
 function wireBcBoard(){
+  wireTouchDrag('.nnboard',bcMoveEtapa);
   let dragId=null;
   document.querySelectorAll('.nnboard .nncard').forEach(card=>{
     card.addEventListener('dragstart',e=>{ dragId=card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; });
@@ -15085,6 +15110,7 @@ function lpSelfCheck(){
       return m1.get('a')==='A servidor'&&m1.get('b')==='B pend'&&!m1.has('c')&&!m1.has('d')&&m1.get('e')==='E só servidor'&&r1.length===3
           && m2.get('c')==='C novo local'&&m2.get('d')==='D sumiu'&&r2.length===5; })());
     ok('SEGURANÇA-V1: não existe botão de zerar/apagar base na tela; zerarContatos (se chamada) só limpa cache local', (()=>{ const t=zerarContatos.toString(); return !document.querySelector('[onclick*="zerarContatos"]') && !t.includes('S.contatos=[]') && !t.includes('salvar()'); })());
+    ok('DRAG-TOUCH-V1: o board dos funis tem arrasto por toque (segurar e arrastar) e cards sem seleção de texto', typeof wireTouchDrag==='function' && String(wireNnBoard).includes('wireTouchDrag') && String(wireBcBoard).includes('wireTouchDrag') && (()=>{ const d=document.createElement('div'); d.className='nncard'; document.body.appendChild(d); const u=getComputedStyle(d).userSelect||getComputedStyle(d).webkitUserSelect; d.remove(); return u==='none'; })());
     ok('ESCOPO na porta: carregadores dos módulos filtram por escLinhaOk', ['atCarregar','bfCarregar','soCarregar','emCarregar','exCarregar'].every(f=>String(window[f]||'').includes('escLinhaOk')));
     ok('VARREDURA: painel existe e função de disparo diário existe', typeof varHtml==='function' && typeof varDiariaSeNecessario==='function' && varHtml().includes('Varredura diária'));
     ok('SITPLAN-FONTES: a busca do SitPlan lista funil, Estoque e clientes da carteira', String(viewSitplan.toString()).includes('· Cliente') && String(spAddPorNome.toString()).includes("tag==='Cliente'"));
