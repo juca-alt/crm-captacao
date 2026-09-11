@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.43.2 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.43.3 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1724,7 +1724,11 @@ function _lpcMergeFunis(remotos,completo){
    descartava a coluna e só sobrava o rótulo `lp` do JSON — 5.138 nomes sem rótulo viravam
    "gustavo" na tela. `_dono` NÃO vai de volta pro jsonb (lpcRowOut tira) e decide a coluna
    `dono` do upsert: editar um nome do Daniel grava na linha do Daniel, não cria cópia minha. */
-function lpcComDono(x){ if(!x||!x.dados) return null; if(x.dono) x.dados._dono=x.dono; return x.dados; }
+function lpcComDono(x){ if(!x||!x.dados) return null; if(x.dono) x.dados._dono=x.dono;
+  /* ID-NA-PORTA-V1 (11/09): a coluna `id` é a verdade; o import do MCP gravava `dados` sem `id` → os 1.575 do
+     Daniel viravam UM registro (chave 'undefined'). Normalizador na porta (erro #48). */
+  if(x.id!=null && (x.dados.id==null || String(x.dados.id)!==String(x.id))) x.dados.id=String(x.id);
+  return x.dados; }
 function lpcRowOut(k,d,extra){ const dados={...d,...(extra||{})}; const dono=dados._dono||(typeof delegAtivo==='function'?delegAtivo():null); delete dados._dono;
   const row={id:k,dados}; if(dono) row.dono=dono; return row; }
 async function lpcCarregar(){
@@ -12636,7 +12640,8 @@ function escRotuloDe(rec){ if(rec&&rec.lp) return escCap(rec.lp); const d=escDon
 function escRotulosTodos(){ return (ESC.rotulos||[]).map(r=>({rotulo:escCap(r.rotulo),dono:r.dono_email})).sort((a,b)=>a.rotulo.localeCompare(b.rotulo,'pt-BR')); }
 /* Garantia: escolhi um dono e a base dele não está na memória (carga anterior falhou, cache só guarda o meu)
    → busca direto do servidor, paginado, e mescla. Sem depender de reload. */
-async function bnGarantirDono(d){ if(!d||!LPC_REMOTE||!sb) return; if(BN.contatos.some(c=>c._dono===d)) return;
+async function bnGarantirDono(d){ if(!d||!LPC_REMOTE||!sb) return;
+  try{ const q=await sb.from(LPC_T).select('id',{count:'exact',head:true}).eq('dono',d).eq('dados->>funil','bn'); const nSrv=q.count||0, nLoc=BN.contatos.filter(c=>c._dono===d).length; if(q.error||nLoc>=nSrv) return; }catch(_){ return; }   /* v7.43.3: compara com o servidor (3 antigos não são 'carregado') */
   try{ const bn=[], PAG=1000; let completo=false;
     for(let pag=0;pag<20;pag++){ const de=pag*PAG; const r=await sb.from(LPC_T).select('id,dono,dados').eq('dono',d).eq('dados->>funil','bn').order('id').range(de,de+PAG-1); if(r.error) throw r.error;
       (r.data||[]).forEach(x=>{ const o=lpcComDono(x); if(o) bn.push(o); }); if((r.data||[]).length<PAG){ completo=true; break; } }
@@ -15043,6 +15048,7 @@ function lpSelfCheck(){
       const ops=escOpcoesDe('juca@x',['daniel@x'],[{rotulo:'gustavo',dono_email:'juca@x'},{rotulo:'rebeca',dono_email:'juca@x'},{rotulo:'daniel',dono_email:'daniel@x'}],'Gustavo');
       return ops.map(o=>o.id).join(',')==='meu,lp:rebeca,dono:daniel@x,todos' && ops[2].nome==='Daniel' && ops[1].lp==='Rebeca'; })());
     ok('ESCOPO-UNICO: sem delegação nem rótulo extra, só "meu" (sem Pipe X)', escOpcoesDe('a@x',[],[{rotulo:'gustavo',dono_email:'a@x'}],'Gustavo').length===1);
+    ok('ID-NA-PORTA: linha sem id no JSON ganha o id da coluna; ids diferentes não colapsam', (()=>{ const a=lpcComDono({id:'mcp-1',dono:'d',dados:{nome:'A'}}), b=lpcComDono({id:'mcp-2',dono:'d',dados:{nome:'B',id:'errado'}}); return a.id==='mcp-1'&&b.id==='mcp-2'&&fundMerge([],[a,b],{},true).length===2; })());
     ok('FUNDAÇÃO V1: servidor manda — remoto substitui local não-pendente; pendente vence; carga completa apaga o que não voltou; parcial não apaga', (()=>{
       const loc=[{id:'a',nome:'A local',_dono:'x',_upd:'2099'},{id:'b',nome:'B pend',_dono:'x'},{id:'c',nome:'C novo local'},{id:'d',nome:'D sumiu',_dono:'x'}];
       const rem=[{id:'a',nome:'A servidor',_dono:'x',_upd:'2000'},{id:'b',nome:'B servidor',_dono:'x'},{id:'e',nome:'E só servidor',_dono:'x'}];
