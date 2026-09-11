@@ -2,6 +2,40 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 10-11/09/2026 — Painel TA nativo · Estágio único · Escopo único (RLS unificada) · SitPlan unificado · listas do método · auditoria das bases
+
+**Estado em 30s:** `main 6419200` — **v7.40 no ar** (Pages EXATAMENTE). Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
+
+**Prompt pra próxima sessão:**
+```
+Sessão CRM Visão LP — retomar. main 6419200, v7.40 no ar. Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
+```
+
+### O que entrou (tudo no ar, PRs #186–#196)
+- **PC-5 (v7.32→#186):** view `subst_postecipacao` com `posicao/proxima_cobranca/proxima_cobranca_melhor/ganho_dias` (funções SQL `pc_melhor_dia`/`pc_proxima_cobranca` = motor do app). Postecipação FECHADA.
+- **v7.33 ESTAGIO-UNICO:** trigger `lp_norm_estagio` em `lp_contatos` (sem funil→bn; sem estágio→derivado da etapa). Base do Daniel roteada por etapa: 1.371 → Estoque (SitPlan/TA), 219 ficam no NN (OI/FF em diante) com estágio. `lpcSemOsDoEstoque`. Menu: Estoque de Nomes no nível principal, Recomendações submódulo.
+- **v7.34 PAINEL-TA-NATIVO:** `painel-lp.html` virou redirect; Painel TA = view `bn-ta` (store BN). Modo Foco do TA c/ timer, grava `lp_sitplan`. Rota `#view=<tela>&q=`.
+- **v7.35/.1 ESCOPO-UNICO:** UM seletor no cartão do nome (Meu · Rebeca · Daniel · Pipe X, do mapa `lp_rotulo_dono`) dirige Estoque/Painel TA/funis/Carteira/BackOffice E a gravação (`lpcRowOut` leva o dono). **RLS de lp_contatos/lp_interacoes/lp_sitplan unificada** (`dono IN lp_donos_visiveis()`). Topbar Pipe X e filtros "LP:" saem logado. Cartão âmbar "vendo: X".
+- **v7.36:** Painel TA com a ESTRUTURA do 2.0 (coluna Listas/Listas de TA/Filtros; tabela c/ avatar; ⋯ mover/listas; ficha em modal; cards no celular). "Todos os nomes" sai do menu.
+- **v7.37/.1 SITPLAN-UNIFICADO (opção 1):** `spListaDoDia` = funil (`c.sitplan`) + Estoque (`ta_dia`); resultado gravado onde o contato mora; SitPlan planeja, Painel TA executa; Lista do Dia sai do hub. Rótulo do "Meu" vem do banco (`escMeuLpDe`).
+- **v7.38/.39/.39.1/.40 listas do método:** Toda a base · Rec (com telefone) · Recomendações · Delay (`taDelayTipo`, filtro por tipo, inclui funil) · Rec (sem fone) · Clientes (carteira, `taEhCliente`) · Rec de cliente 💎 · Descartados. "OIs agendados" sai: agendou → `bnLevarProFunil('OI/FF')`. Cards de KPI fora; "Hoje" fora do card. SERVIDOR-MANDA no Estoque (`bnSemOsApagados`, só carga completa). Filtros dobráveis c/ resumo. `MODS.funis_extra` off pro LP. VER-COMO-V2: modo "vendo: X" aplica os módulos DELE e esconde o painel admin.
+- **Banco (OK dele):** 7 rótulos 'gustavo'→'daniel' em contatos do Daniel; 115 contatos de funil do Gustavo com estágio; apagados 3 'Davi Teste' (Daniel+Victor) e 'lista de atrasos' (Victor).
+
+### Livro de erros (custaram tempo)
+1. **97 nomes (v7.35):** `delegCarregar` rodou antes da sessão restaurar → `DELEG.eu=''` → escopo "Meu" com dono vazio excluía toda linha com dono. Regra: escopo NUNCA pode ser mais restritivo que "meu" por falta de dado; dono desconhecido não exclui.
+2. **Rótulo do Daniel (v7.37.1):** `pxMeu()` vinha do perfil DEMO ('Gustavo') → o "Meu" do Daniel esconderia os 1.371 dele. Regra: identidade/rótulo vem do banco (`lp_rotulo_dono`), nunca do demo.
+3. **"Só local vence"** devolvia pro NN o que o servidor moveu pro Estoque → regra "servidor manda" (funis e Estoque), sempre condicionada a carga COMPLETA.
+4. **Smart keys `sm:` resetadas** pela guarda de "lista nomeada inexistente". Invariante de `<details>` não pode depender do `ontoggle`.
+5. **Clientes = 614:** flag `estagio='cliente'` da carga de 04/08 (569 "CLIENTE ATIVO" da planilha) ≠ carteira real (146). Cliente = está na carteira.
+
+### Auditoria das bases (11/09)
+Outras tabelas SEM mistura (só subst_apolices juca/lp=Daniel 6, intencional). Daniel 1.590 = 1.371 Estoque + 219 funil. Caso deixado: Ana Cecilia (NN etapa SitPlan c/ estágio cliente que ele mesmo setou). RLS provada como juca: vê 1.590 do Daniel, 0 do Victor.
+
+### Pendências
+- Gustavo conferir LOGADO (seletor, Painel TA, SitPlan, Delay, filtros). Daniel: "Atualizar app" e conferir o Estoque dele.
+- Daniel subir a carteira real. Extensão WhatsApp no CRM. Opcional: "Organizar painel" do 2.0.
+- Victor: seu escopo padrão cai na base delegada (juca); os 3 nomes próprios dele só aparecem em "Meu".
+
 ## 09-10/09/2026 — Victor login · Mistura de bases (limpeza+trava) · Delivery pós-venda · Postecipação PC-1..PC-4+colar · saudação Daniel · crm-mcp em lote
 
 **Estado em 30s:** `main 8ed4bf8` — v7.31 no ar; **v7.32 = PR #184 aberto** (colar apólice, portão verde, aguarda OK de merge). crm-mcp **v2.2** no ar (deploy v4). Supabase playground = PRODUÇÃO. Portão = **37 telas** × {375,1280} × {cheia,vazia}.
