@@ -14,11 +14,15 @@
 //   mesmo formato que o app lê na ficha, no evento da Agenda e no Mapa de locais).
 // v2.4 (11/09/2026): ROTINAS por local — definir_locais aceita rotinas:[{dias,turno,ini,fim,obs}] ("sexta de manhã");
 //   local que já existe recebe as rotinas novas (merge, sem duplicar).
+// v2.5 (11/09/2026, auditoria): definir_locais geocodifica PRIMEIRO (teto 25 sem coordenada por chamada, pra não
+//   estourar o tempo da função), relê `dados` logo antes de gravar (sem sobrescrever edição feita no app no meio
+//   do caminho), grava só o campo locais, e limita tamanhos (nome/end/obs 120, 10 rotinas/local, 20 locais/contato,
+//   lat/lng em faixa, hora HH:MM).
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const PUB = "sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR";
-const SERVER = { name: "crm-seguros-lp", version: "2.4.0" };
+const SERVER = { name: "crm-seguros-lp", version: "2.5.0" };
 const PROTOCOL = "2024-11-05";
 
 const CORS = {
@@ -126,25 +130,29 @@ const LOC_TIPOS = new Set(["trabalho", "casa", "outro"]);
 function locChave(l) { if (l.lat != null && l.lng != null && isFinite(+l.lat) && isFinite(+l.lng)) return (+l.lat).toFixed(4) + "," + (+l.lng).toFixed(4); return String(l.nome || l.end || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim(); }
 const LOC_DIAS = ["seg", "ter", "qua", "qui", "sex", "sab", "dom"];
 const LOC_TURNOS = new Set(["manha", "tarde", "noite"]);
+const S120 = (v) => String(v || "").trim().slice(0, 120);
+const HORA = (v) => (/^\d{2}:\d{2}$/.test(String(v || "").trim()) ? String(v).trim() : "");
 function rotNorm(r) {
   if (!r) return null;
   const dias = [...new Set((Array.isArray(r.dias) ? r.dias : String(r.dias || "").split(/[,\s\/]+/)).map((x) => String(x || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").slice(0, 3)).filter((x) => LOC_DIAS.includes(x)))];
   const turno = LOC_TURNOS.has(String(r.turno || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")) ? String(r.turno).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : "";
-  const ini = String(r.ini || "").trim(), fim = String(r.fim || "").trim(), obs = String(r.obs || "").trim();
+  const ini = HORA(r.ini), fim = HORA(r.fim), obs = S120(r.obs);
   if (!dias.length && !turno && !ini && !obs) return null;
   return { dias, turno, ini, fim, obs };
 }
 const rotTxt = (r) => [r.dias.join("/"), r.turno, [r.ini, r.fim].filter(Boolean).join("-"), r.obs].filter(Boolean).join("|");
 function rotMerge(existentes, novas) {
   const arr = Array.isArray(existentes) ? existentes.slice() : []; let mudou = false;
-  (Array.isArray(novas) ? novas : []).map(rotNorm).filter(Boolean).forEach((r) => { if (!arr.some((x) => rotTxt(rotNorm(x) || { dias: [], turno: "", ini: "", fim: "", obs: "" }) === rotTxt(r))) { arr.push(r); mudou = true; } });
+  (Array.isArray(novas) ? novas : []).slice(0, 10).map(rotNorm).filter(Boolean).forEach((r) => { if (arr.length >= 10) return; if (!arr.some((x) => rotTxt(rotNorm(x) || { dias: [], turno: "", ini: "", fim: "", obs: "" }) === rotTxt(r))) { arr.push(r); mudou = true; } });
   return { arr, mudou };
 }
 function locAdd(dados, l) {
   const arr = Array.isArray(dados.locais) ? dados.locais.slice() : [];
   const k = locChave(l); const ix = arr.findIndex((x) => locChave(x) === k);
   if (ix >= 0) { const m = rotMerge(arr[ix].rotinas, l.rotinas); if (!m.mudou) return arr; arr[ix] = { ...arr[ix], rotinas: m.arr }; return arr; }
-  const novo = { tipo: LOC_TIPOS.has(l.tipo) ? l.tipo : "trabalho", nome: String(l.nome || "").trim(), end: String(l.end || "").trim(), lat: (l.lat != null && isFinite(+l.lat)) ? +l.lat : null, lng: (l.lng != null && isFinite(+l.lng)) ? +l.lng : null, src: l.src || "mcp" };
+  if (arr.length >= 20) return arr;   // teto de locais por contato
+  const okLat = l.lat != null && isFinite(+l.lat) && Math.abs(+l.lat) <= 90, okLng = l.lng != null && isFinite(+l.lng) && Math.abs(+l.lng) <= 180;
+  const novo = { tipo: LOC_TIPOS.has(l.tipo) ? l.tipo : "trabalho", nome: S120(l.nome), end: S120(l.end), lat: okLat ? +l.lat : null, lng: okLng ? +l.lng : null, src: l.src || "mcp" };
   const m = rotMerge([], l.rotinas); if (m.arr.length) novo.rotinas = m.arr;
   arr.push(novo); return arr;
 }
@@ -163,7 +171,7 @@ const TOOLS = [
   { name: "criar_contatos_lote", description: "Cria/atualiza VÁRIOS contatos de uma vez (até 200), num único INSERT. Idempotente por 'ref_base' (único por conta): reenviar o mesmo lote ATUALIZA em vez de duplicar. Resposta ENXUTA {criados, erros} — NÃO devolve os registros criados (isso pouparia token).", inputSchema: { type: "object", properties: { contatos: { type: "array", items: { type: "object", properties: { ref_base: { type: "string" }, dados: { type: "object" } } } } }, required: ["contatos"] } },
   { name: "atualizar_contatos_lote", description: "Atualiza VÁRIOS contatos SEUS de uma vez (até 200), por id, fazendo merge dos campos de 'dados'. Resposta ENXUTA {atualizados, erros} — não devolve os registros.", inputSchema: { type: "object", properties: { atualizacoes: { type: "array", items: { type: "object", properties: { id: { type: "string" }, dados: { type: "object" } }, required: ["id", "dados"] } } }, required: ["atualizacoes"] } },
   { name: "buscar_local", description: "Acha hospital, clínica, empresa ou endereço (OpenStreetMap, Brasil) e devolve nome, endereço e coordenadas — pra confirmar antes de gravar em definir_locais.", inputSchema: { type: "object", properties: { q: { type: "string" }, limite: { type: "number" } }, required: ["q"] } },
-  { name: "definir_locais", description: "Grava LOCAIS (trabalho/casa/outro) em contatos SEUS, por id (até 100). Cada item: {id, tipo:'trabalho'|'casa'|'outro', nome, end?, lat?, lng?, rotinas?:[{dias:['seg'..'dom'], turno:'manha'|'tarde'|'noite', ini:'08:00', fim:'12:00', obs}]}. Rotina = quando a pessoa está nesse local ('sexta de manhã'). Sem lat/lng, geocodifica 'nome + end' sozinho (OpenStreetMap). Faz merge: não duplica local igual; local existente recebe as rotinas novas. É o que aparece na ficha, vai pro evento da Agenda e pro Mapa de locais. Resposta ENXUTA {atualizados, sem_coordenada, erros}.", inputSchema: { type: "object", properties: { locais: { type: "array", items: { type: "object", properties: { id: { type: "string" }, tipo: { type: "string" }, nome: { type: "string" }, end: { type: "string" }, lat: { type: "number" }, lng: { type: "number" }, rotinas: { type: "array", items: { type: "object", properties: { dias: { type: "array", items: { type: "string" } }, turno: { type: "string" }, ini: { type: "string" }, fim: { type: "string" }, obs: { type: "string" } } } } }, required: ["id", "nome"] } } }, required: ["locais"] } },
+  { name: "definir_locais", description: "Grava LOCAIS (trabalho/casa/outro) em contatos SEUS, por id (até 100). Cada item: {id, tipo:'trabalho'|'casa'|'outro', nome, end?, lat?, lng?, rotinas?:[{dias:['seg'..'dom'], turno:'manha'|'tarde'|'noite', ini:'08:00', fim:'12:00', obs}]}. Rotina = quando a pessoa está nesse local ('sexta de manhã'). Sem lat/lng, geocodifica 'nome + end' sozinho (OpenStreetMap; no máximo 25 sem coordenada por chamada). Faz merge: não duplica local igual; local existente recebe as rotinas novas. É o que aparece na ficha, vai pro evento da Agenda e pro Mapa de locais. Resposta ENXUTA {atualizados, sem_coordenada, erros}.", inputSchema: { type: "object", properties: { locais: { type: "array", items: { type: "object", properties: { id: { type: "string" }, tipo: { type: "string" }, nome: { type: "string" }, end: { type: "string" }, lat: { type: "number" }, lng: { type: "number" }, rotinas: { type: "array", items: { type: "object", properties: { dias: { type: "array", items: { type: "string" } }, turno: { type: "string" }, ini: { type: "string" }, fim: { type: "string" }, obs: { type: "string" } } } } }, required: ["id", "nome"] } } }, required: ["locais"] } },
   { name: "listar_substituicoes", description: "Lista as SUAS apólices em Substituição (clientes + apólices). Só a sua base.", inputSchema: { type: "object", properties: { limite: { type: "number" } } } },
   { name: "listar_atrasos", description: "Lista a SUA Lista de Atraso (apólices vencidas em tratativa). Só a sua base.", inputSchema: { type: "object", properties: { limite: { type: "number" } } } },
   { name: "atualizar_atraso", description: "Atualiza a tratativa/próximo contato de um item SEU da Lista de Atraso, pelo id.", inputSchema: { type: "object", properties: { id: { type: "number" }, tratativa: { type: "string" }, prox_contato: { type: "string" } }, required: ["id"] } },
@@ -248,24 +256,34 @@ async function callTool(name, args, ctx) {
       if (arr.length > 100) return { atualizados: 0, erros: ["máximo 100 por chamada"] };
       const ids = [...new Set(arr.map((a) => a && a.id).filter((x) => x != null).map(String))];
       const inList = ids.map((x) => `"${x.replace(/["\\]/g, "")}"`).join(",");
-      const cur = ids.length ? await rest(`lp_contatos?id=in.(${inList})&select=id,dados`, ctx.access) : [];
-      const byId = new Map((cur || []).map((r) => [String(r.id), r.dados || {}]));
-      const erros = []; const semCoord = []; const tocados = new Set(); const cacheGeo = new Map();
+      const lerDados = async () => new Map(((ids.length ? await rest(`lp_contatos?id=in.(${inList})&select=id,dados`, ctx.access) : []) || []).map((r) => [String(r.id), r.dados || {}]));
+      const existe = await lerDados();
+      const erros = []; const semCoord = []; const cacheGeo = new Map(); const prontos = []; let geocodificados = 0;
+      // 1) validar + geocodificar PRIMEIRO (teto 25 sem coordenada por chamada: 1,1 s cada, pra não estourar o tempo da função)
       for (const a of arr) {
         const id = (a && a.id != null) ? String(a.id) : null;
-        if (!id || !byId.has(id)) { erros.push({ id: (a && a.id) ?? null, motivo: "não encontrado (RLS)" }); continue; }
-        const l = { tipo: a.tipo, nome: String(a.nome || "").trim(), end: String(a.end || "").trim(), lat: a.lat, lng: a.lng, src: "mcp", rotinas: a.rotinas };
+        if (!id || !existe.has(id)) { erros.push({ id: (a && a.id) ?? null, motivo: "não encontrado (RLS)" }); continue; }
+        const l = { tipo: a.tipo, nome: S120(a.nome), end: S120(a.end), lat: a.lat, lng: a.lng, src: "mcp", rotinas: a.rotinas };
         if (!l.nome) { erros.push({ id, motivo: "sem nome do local" }); continue; }
         if (l.lat == null || l.lng == null) {
           const q = [l.nome, l.end].filter(Boolean).join(", ");
           let hit = cacheGeo.get(q);
-          if (hit === undefined) { try { hit = (await geoBuscar(q, 1))[0] || null; } catch { hit = null; } cacheGeo.set(q, hit); await new Promise((r) => setTimeout(r, 1100)); }
+          if (hit === undefined) {
+            if (geocodificados >= 25) { erros.push({ id, motivo: "teto de 25 locais sem coordenada por chamada — mande o resto em outra chamada ou use buscar_local antes" }); continue; }
+            geocodificados++; try { hit = (await geoBuscar(q, 1))[0] || null; } catch { hit = null; } cacheGeo.set(q, hit); await new Promise((r) => setTimeout(r, 1100));
+          }
           if (hit) { l.lat = hit.lat; l.lng = hit.lng; if (!l.end) l.end = hit.end; l.src = "osm"; } else semCoord.push({ id, nome: l.nome });
         }
-        const dados = byId.get(id); const novo = locAdd(dados, l);
-        if (JSON.stringify(novo) !== JSON.stringify(Array.isArray(dados.locais) ? dados.locais : [])) { byId.set(id, { ...dados, locais: novo }); tocados.add(id); }
+        prontos.push({ id, l });
       }
-      const rows = [...tocados].map((id) => ({ dono: ctx.dono, id, dados: byId.get(id) }));
+      // 2) reler AGORA (o app pode ter editado o contato enquanto geocodificávamos) e mesclar só o campo locais
+      const byId = await lerDados(); const tocados = new Map();
+      for (const { id, l } of prontos) {
+        const dados = tocados.get(id) || byId.get(id); if (!dados) continue;
+        const novo = locAdd(dados, l);
+        if (JSON.stringify(novo) !== JSON.stringify(Array.isArray(dados.locais) ? dados.locais : [])) tocados.set(id, { ...dados, locais: novo });
+      }
+      const rows = [...tocados].map(([id, dados]) => ({ dono: ctx.dono, id, dados }));
       if (rows.length) await rest(`lp_contatos?on_conflict=dono,id`, ctx.access, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(rows) });
       await audit(ctx.access, ctx.dono, "definir_locais", "escrita", "lp_contatos:locais", { n: rows.length, sem_coordenada: semCoord.length, erros: erros.length });
       return { atualizados: rows.length, sem_coordenada: semCoord, erros };
