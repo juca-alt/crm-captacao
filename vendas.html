@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.51 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.51.1 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -11155,7 +11155,7 @@ function viewModulos(){
 const CFG_SECOES=[
   {titulo:'Trabalho', itens:[
     {view:'metas',        ic:'🎯', titulo:'Metas',            desc:'Quanto você quer fazer por semana e por mês. É o único número do app que você digita.'},
-    {view:'config-funil', ic:'🛠️', titulo:'Funil & Etapas',   desc:'O nome de cada etapa dos dois funis, sem mexer no id de fábrica.'},
+    {view:'config-funil', ic:'🛠️', titulo:'Funil & Etapas',   desc:'O nome de cada etapa dos dois funis, sem mexer no id de fábrica.', adm:true},   /* CFG-ADMIN-V1: config é GLOBAL (app_settings) → só admin */
     {acao:'abrirAssinatura()', ic:'✍️', titulo:'Autoassinatura', desc:'A assinatura da assistente no fim de toda mensagem pronta do WhatsApp.', tag:'⚙ abre um painel'}
   ]},
   {titulo:'Aparência', itens:[
@@ -14510,7 +14510,7 @@ function render(){
   if(VIEW==='inicio') viewInicio();
   else if(VIEW==='sitplan') viewSitplan();
   else if(VIEW==='metas') viewMetas();
-  else if(VIEW==='config-funil') viewFunilCfg();
+  else if(VIEW==='config-funil'){ if(logado()&&!souAdm()){ $('#main').innerHTML='<h1 class="pg">Funil & Etapas</h1><div class="sub">Configuração gerencial da unidade — só o administrador altera. As etapas e os status que você vê nos funis vêm daqui.</div>'; } else viewFunilCfg(); }   /* CFG-ADMIN-V1 */
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
   else if(VIEW==='cart-oportunidades') viewCartOportunidades();
@@ -14704,6 +14704,7 @@ function funCfgSalvar(){
 }
 async function funCfgSalvarAgora(){
   if(!_funCfgPend) return; if(!(sb&&typeof logado==='function'&&logado())) return;   /* fica pendente; a próxima sincronização tenta de novo */
+  if(!souAdm()){ _funCfgPend=false; return; }   /* CFG-ADMIN-V1: LP não sobe cfg global (o banco também barra) */
   _funCfgPend=false;
   try{ const {error}=await sb.from('app_settings').upsert({chave:'lp_funil_cfg',valor:FUNIL_CFG,atualizado_em:new Date().toISOString()},{onConflict:'chave'});
     if(error){ _funCfgPend=true; console.warn('funil cfg: app_settings',error); toast('Configuração do funil NÃO salvou no servidor: '+(error.message||''),false); } }
@@ -15231,6 +15232,7 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('CFG-ADMIN-V1: Funil & Etapas é só admin (card do hub com adm, tela bloqueada pra LP logado, LP não sobe cfg global)', (()=>{ const it=CFG_SECOES.flatMap(x=>x.itens).find(i=>i.view==='config-funil'); const P=PERFIL; try{ PERFIL={email:'d@x',papel:'lp'}; const src=String(funCfgSalvarAgora); return !!(it&&it.adm)&&!cfgCabe(it)&&src.includes('souAdm')&&[...document.scripts].map(x=>x.textContent).join('').includes('só o administrador altera'); } finally{ PERFIL=P; } })());
     ok('ROTINAS-V1: rotina por local (dias/turno/hora) normaliza, não duplica, filtra o mapa por dia+turno e aparece na ficha', (()=>{ const l={tipo:'trabalho',nome:'RHP',lat:-8,lng:-34}; const a=locRotinaAdd(l,{dias:['sex'],turno:'manha'}); const b=!locRotinaAdd(l,{dias:'sex',turno:'manha'}); const c=locRotinaAdd(l,{dias:['qua'],ini:'08:00',fim:'12:00',obs:'exame'}); const t=locRotinaTxt(l.rotinas[1]); const d=locRotinaBate(l,'sex','manha')&&!locRotinaBate(l,'sex','tarde')&&locRotinaBate(l,'qua','')&&!locRotinaBate({},'sex','')&&locRotinaBate({},'','');
       const c2={id:'zr',nome:'Zz',locais:[l]}; const h=fichaPessoaHtml(c2,'card'); return a&&b&&c&&t==='Qua · 08:00–12:00 · exame'&&d&&h.includes('Sex · manhã')&&!locRotinaNorm({dias:[],turno:'',ini:'',obs:''}); })());
     ok('MAPA-V1: locais puros (add/dedupe/principal=trabalho), evento da Agenda leva o local, tela mapa registrada, widget na ficha e no Estoque', (()=>{ const c={id:'zl',nome:'Zz'}; const a=locAddPuro(c,{tipo:'casa',nome:'Casa',end:'Rua A',lat:-8.05,lng:-34.9}); const b=locAddPuro(c,{tipo:'trabalho',nome:'Hospital X',end:'Av B',lat:-8.06,lng:-34.91}); const d=!locAddPuro(c,{tipo:'outro',nome:'Hospital X',lat:-8.06001,lng:-34.91001}); const okP=locPrincipal(c).nome==='Hospital X'&&locTexto(locPrincipal(c))==='Hospital X, Av B'; const okG=mapaGrupos([{c,l:c.locais[0]},{c,l:c.locais[1]},{c:{id:'z2'},l:{...c.locais[1]}}])[0].pessoas.length===2;
