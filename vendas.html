@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.53.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.54 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2387,7 +2387,7 @@ function viewInicio(){
       return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--linha);cursor:pointer" onclick="cartAbrir('${esc(jsq(c.ref))}')">
         <span class="dias-tag ${diasTagCls(d)}">${d===0?'hoje!':d===1?'amanhã':'em '+d+'d'}</span>
         <span style="flex:1;min-width:120px;font-weight:600">${esc(c.nome)}</span>
-        <span style="font-size:12px;color:var(--muted)">🎂 ${dataBR(c.nascimento).slice(0,5)}${c.idade!=null?' · faz '+(c.idade+1):''}</span>
+        <span style="font-size:12px;color:var(--muted)">🎂 ${dataBR(c.nascimento).slice(0,5)}${(mtIdade(c.nascimento)!=null)?' · faz '+(mtIdade(c.nascimento)+1):(c.idade!=null?' · faz '+(c.idade+1):'')}</span>
         <button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(jsq(c.ref))}','aniversario')" title="Mensagem de aniversário (editável antes de enviar)">💬</button></div>`; };
     const refHoje=new Set(nHoje.map(x=>x.c.ref)), refSem=new Set(nSem.map(x=>x.c.ref));
     const grp=(t,arr)=>arr.length?`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px">${t} · ${arr.length}</div>${arr.map(linha).join('')}`:'';
@@ -5600,7 +5600,7 @@ let SUB_REMOTE=false, SUB_EMAIL='', SUB_CLI=null, _subPend=null, _subCtx=null, _
 function subISO(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function subDDiff(a,b){ return Math.round((b-a)/864e5); }
 function subAddDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
-function subAddMonths(iso,n){ const d=atParseISO(iso); if(!d) return null; d.setMonth(d.getMonth()+n); return subISO(d); }
+function subAddMonths(iso,n){ const d=atParseISO(iso); if(!d) return null; const dia=d.getDate(); d.setDate(1); d.setMonth(d.getMonth()+n); d.setDate(Math.min(dia,pcDiasNoMes(d.getFullYear(),d.getMonth()+1))); return subISO(d); }   /* BUGS-V6 #4: 31/01 + 1 mês = 28/02, não 03/03 */
 function subFmtCurto(iso){ const p=String(iso||'').split('-'); return p.length>=3?(p[2]+'/'+p[1]):'—'; }
 function subIni(nome){ const p=String(nome||'?').trim().split(' '); return ((p[0][0]||'')+(p.length>1?p[p.length-1][0]:'')).toUpperCase(); }
 function subRef(n){ return String(n||'x').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g,'').slice(0,16)+Math.random().toString(36).slice(2,5); }
@@ -6412,7 +6412,7 @@ function pcGanhoDias(diaAtual, emissaoDia, vencAbertoISO){
 /* subPostec: adaptador do card de Substituicao -> usa o motor unico (mesma forma de retorno de antes). */
 function subPostec(a){
   if(!a||!a.emissao) return null;
-  const em=atParseISO(a.emissao).getDate();
+  const _dEm=atParseISO(a.emissao); if(!_dEm) return null; const em=_dEm.getDate();   /* BUGS-V6 #11 */
   const dia=(a.dia!=null&&a.dia>=1&&a.dia<=31)?a.dia:(a.venc?atParseISO(a.venc).getDate():null);
   if(dia==null) return null;
   return {dia, pos:pcPosicao(dia,em), melhor:pcMelhorDia(em), pgto:pcClassifica(dia,em)};
@@ -7124,7 +7124,8 @@ function plNorm(o){
 async function plCarregar(){
   PL_REMOTE=false;
   if(sb){ try{ const {data:ss}=await sb.auth.getSession(); if(ss&&ss.session){
-    const {data,error}=await sb.from(PL_TBL).select('dados').maybeSingle(); if(error) throw error;
+    const _em=(typeof delegDono==='function'?delegDono(ss.session.user.email):ss.session.user.email)||ss.session.user.email;
+    const {data,error}=await sb.from(PL_TBL).select('dados').eq('dono',_em).maybeSingle(); if(error) throw error;   /* BUGS-V6 #7: por dono (com delegação vinham 2 linhas) */
     PL_REMOTE=true; if(data&&data.dados){ PL=plNorm(data.dados); try{ localStorage.setItem(PL_CHAVE,JSON.stringify(PL)); }catch(e){} return; }
   } }catch(e){ console.warn('PLACED load remoto falhou → local',e); } }
   try{ const raw=localStorage.getItem(PL_CHAVE); if(raw) PL=plNorm(JSON.parse(raw)); }catch(e){}
@@ -7134,7 +7135,7 @@ function plSalvar(){
   if(!PL_REMOTE||!sb) return;
   clearTimeout(PL_SALVANDO);
   PL_SALVANDO=setTimeout(async()=>{ try{
-    const {data:ss}=await sb.auth.getSession(); const email=ss&&ss.session&&ss.session.user.email; if(!email) return;
+    const {data:ss}=await sb.auth.getSession(); const email0=ss&&ss.session&&ss.session.user.email; if(!email0) return; const email=(typeof delegDono==='function'?delegDono(email0):email0)||email0;   /* BUGS-V6 #7 */
     const r=await sb.from(PL_TBL).upsert({dono:email, dados:PL, atualizado:new Date().toISOString()},{onConflict:'dono'}); if(r.error) throw r.error;
   }catch(e){ console.warn('PLACED save falhou',e); toast('Não consegui gravar o PLACED no servidor'); } },600);
 }
@@ -7399,7 +7400,7 @@ function plHero(){
     `Leitura de <b>${plLblLong(PL.cfg.leitura)}</b> · lê propostas assinadas de<br>
      <b>${plDataIni(J.ini)}</b> a <b>${plDataFim(J.fim)}</b> (${PL.cfg.janela} meses, defasagem de ${PL.cfg.lag})
      ${temProj && PL.cfg.usarProj ? '<br><span class="chip proj" style="margin-top:7px">inclui meses projetados</span>':''}
-     ${vazios>0 ? `<br><span class="chip c" style="margin-top:7px">plJanela incompleta · ${vazios} ${vazios===1?'mês sem':'meses sem'} lançamento</span>`:''}`;
+     ${vazios>0 ? `<br><span class="chip c" style="margin-top:7px">janela incompleta · ${vazios} ${vazios===1?'mês sem':'meses sem'} lançamento</span>`:''}`;
 
   const lo=80, hi=100, px=v=>Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));
   const g=document.getElementById('pl-gauge');
@@ -7550,7 +7551,7 @@ function plLimpeza(){
   const p0=plPct(cur.e,cur.a);
   const abertosJ=PL.pend.filter(x=>!x.ok && J.ms.includes(x.m));
   const fila=abertosJ.filter(plResg)                       // só pendente + cancelada
-    .sort((x,y)=> (PL_TIPO[x.t].r-PL_TIPO[y.t].r) || (plK2n(x.m)-plK2n(y.m)) || x.n.localeCompare(y.n));
+    .sort((x,y)=> (((PL_TIPO[x.t]||PL_TIPO.not_taken||{r:9}).r)-((PL_TIPO[y.t]||PL_TIPO.not_taken||{r:9}).r)) || (plK2n(x.m)-plK2n(y.m)) || String(x.n||'').localeCompare(String(y.n||'')));
   const ntu =abertosJ.filter(x=>!plResg(x));               // NTU: perda definitiva
   const nPend=fila.filter(x=>x.t==='pendente').length, nCanc=fila.filter(x=>x.t==='cancelada').length;
 
@@ -7615,7 +7616,7 @@ function plMeta(){
     return;
   }
   const topo=`<div class="callout ${p>=PL.cfg.baixo?'w':'c'}" style="margin-top:0">
-      Leitura do PTC 2027 sai no relatório de <b>jan/27</b> e, com a defasagem de 3 meses, reflete assinaturas até <b>${plDataFim(J.fim)}</b> (plJanela ${plDataIni(J.ini)}–${plDataFim(J.fim)}).
+      Leitura do PTC 2027 sai no relatório de <b>jan/27</b> e, com a defasagem de 3 meses, reflete assinaturas até <b>${plDataFim(J.fim)}</b> (janela ${plDataIni(J.ini)}–${plDataFim(J.fim)}).
       Hoje projeta <b style="color:${fx.c}">${plF1(p)}%</b> (${cur.e}/${cur.a}) — <b>${fx.t.toLowerCase()}</b>. Faltam <b>${plFaltam(PL.cfg.alto,cur.e,cur.a)}</b> entregas pra 92%.</div>`;
 
   el.innerHTML=topo+`<div class="metaGrid">
@@ -7757,7 +7758,7 @@ function plConfig(){
 function plSetCfg(k,v){ PL_DIRTY=true;
   v=parseFloat(String(v).replace(',','.'));
   if(isNaN(v)) return plRender();
-  ({plJanela:()=>PL.cfg.janela=Math.max(1,Math.round(v)),
+  ({janela:()=>PL.cfg.janela=Math.max(1,Math.round(v)),
     lag:()=>PL.cfg.lag=Math.max(0,Math.round(v)),
     alto:()=>PL.cfg.alto=v, baixo:()=>PL.cfg.baixo=v,
     trocas:()=>PL.cfg.trocas=Math.max(0,Math.round(v))})[k]();
@@ -7769,8 +7770,8 @@ function plSetLeitura(k){ PL_DIRTY=true; PL.cfg.leitura=k; plRender(); }
 /* ---- histórico ---- */
 function plHistorico(){
   document.getElementById('pl-tabs').innerHTML = PL.lps.map(l=>
-    `<button class="plb ${PL.aba===l.id?'on':''}" onclick="S.aba='${l.id}';plRender()">${l.nome}</button>`).join('')
-    + `<button class="plb ${PL.aba==='all'?'on':''}" onclick="S.aba='all';plRender()">Consolidado MFB</button>`;
+    `<button class="plb ${PL.aba===l.id?'on':''}" onclick="plAba('${esc(jsq(l.id))}')">${esc(l.nome)}</button>`).join('')
+    + `<button class="plb ${PL.aba==='all'?'on':''}" onclick="plAba('all')">Consolidado MFB</button>`;
 
   const J=plJanela(PL.cfg.leitura);
   const de=plK2n('2025-09'), ate=plK2n('2027-06');
@@ -7795,7 +7796,7 @@ function plHistorico(){
     return;
   }
 
-  const lp=PL.lps.find(l=>l.id===PL.aba);
+  const lp=PL.lps.find(l=>l.id===PL.aba); if(!lp){ PL.aba='all'; }
   for(let n=Math.max(de,plK2n(lp.inicio)); n<=ate; n++){
     const m=plN2k(n), c=plCel(lp.id,m), dentro=J.ms.includes(m);
     const a=c?c.a||0:'', e=c?c.e||0:'';
@@ -7831,7 +7832,7 @@ function plSetMes(lp,m,campo,val){ PL_DIRTY=true;
 /* ---- plPendentes ---- */
 function plPendentes(){
   const J=plJanela(PL.cfg.leitura);
-  const ord=[...PL.pend].sort((x,y)=> x.ok-y.ok || (PL_TIPO[x.t].r-PL_TIPO[y.t].r) || plK2n(y.m)-plK2n(x.m) || x.n.localeCompare(y.n));
+  const ord=[...PL.pend].sort((x,y)=> x.ok-y.ok || (((PL_TIPO[x.t]||PL_TIPO.not_taken||{r:9}).r)-((PL_TIPO[y.t]||PL_TIPO.not_taken||{r:9}).r)) || plK2n(y.m)-plK2n(x.m) || String(x.n||'').localeCompare(String(y.n||'')));
   document.getElementById('pl-pendList').innerHTML = ord.length? ord.map(p=>{
     const lp=PL.lps.find(l=>l.id===p.lp);
     const dentro=J.ms.includes(p.m);
@@ -7850,10 +7851,10 @@ function plPendentes(){
   const selM=document.getElementById('pl-pMes');
   if(!selM.options.length){ for(let n=plK2n('2025-09');n<=plK2n('2027-06');n++){const k=plN2k(n);selM.innerHTML+=`<option value="${k}" ${k===PL_HOJE?'selected':''}>${plLbl(k)}</option>`;} }
 }
-function plTogglePend(id){ PL_DIRTY=true; const p=PL.pend.find(p=>p.id===id); p.ok=!p.ok; plRender(); }
+function plTogglePend(id){ const p=PL.pend.find(p=>String(p.id)===String(id)); if(!p) return; PL_DIRTY=true; p.ok=!p.ok; plRender(); }
 function plDelPend(id){ PL_DIRTY=true; PL.pend=PL.pend.filter(p=>p.id!==id); plRender(); }
 function plAddPend(){ PL_DIRTY=true;
-  const n=document.getElementById('pl-pNome').value.trim(); if(!n) return;
+  const n=document.getElementById('pl-pNome').value.trim(); if(!n) return; if(!PL.lps.length){ toast('Cadastre um LP antes de lançar pendente',false); return; }
   PL.pend.push({id:Date.now(), n, lp:document.getElementById('pl-pLp').value, m:document.getElementById('pl-pMes').value, t:document.getElementById('pl-pTipo').value, mot:'', ok:false});
   document.getElementById('pl-pNome').value=''; plRender();
 }
@@ -8702,8 +8703,8 @@ function mtCandidatos(){
     out.push({k:'funil:'+c.id, origem:'funil', nome:c.nome, nasc:c.nascimento||'', idade:c.idade!=null&&c.idade!==''?+c.idade:null,
               sexo:(String(c.sexo||'').toUpperCase().startsWith('F')?'F':'M'), renda:+c.renda_estimada||0, prof:c.profissao||'', cidade:c.cidade||'', extra:funilNome(funilDe(c))+' · '+(c.etapa||'')}); });
   (CART.clientes||[]).forEach(c=>{ if(!c||!c.nome) return;
-    out.push({k:'cart:'+(c.ref||c.nome), origem:'carteira', nome:c.nome, nasc:c.nascimento||'', idade:c.idade!=null?+c.idade:null,
-              sexo:'M', renda:0, prof:'', cidade:'', extra:'carteira'+(c.cob&&c.cob.pm?' · R$ '+brlCurto(c.cob.pm)+'/mês':'')}); });
+    out.push({k:'cart:'+(c.ref||c.nome), origem:'carteira', nome:c.nome, nasc:c.nascimento||'', idade:(mtIdade(c.nascimento)!=null?mtIdade(c.nascimento):(c.idade!=null?+c.idade:null)),
+              sexo:(String((cartPerfil(c.ref)||{}).sexo||c.sexo||'').toUpperCase().startsWith('F')?'F':'M'), renda:+((cartPerfil(c.ref)||{}).renda)||0, prof:(cartPerfil(c.ref)||{}).profissao||'', cidade:'', extra:'carteira'+(c.cob&&c.cob.pm?' · R$ '+brlCurto(c.cob.pm)+'/mês':'')}); });
   return out;
 }
 function mtIdade(nasc){ if(!/^\d{4}-\d{2}-\d{2}$/.test(nasc||'')) return null; const d=new Date(nasc+'T00:00:00'),h=new Date();
@@ -9520,7 +9521,8 @@ function lpDiasAte(data){ // aceita YYYY-MM-DD, MM-DD ou --MM-DD (aniversário s
   const da=nums[nums.length-1], mo=nums[nums.length-2];
   if(!mo||!da) return null;
   const hoje=new Date(); hoje.setHours(0,0,0,0);
-  let alvo=new Date(hoje.getFullYear(),mo-1,da);
+  const _bis=y=>(y%4===0&&y%100!==0)||y%400===0; const _da=(mo===2&&da===29&&!_bis(hoje.getFullYear()))?28:da;
+  let alvo=new Date(hoje.getFullYear(),mo-1,_da);   /* BUGS-V6 #15 */
   if(alvo<hoje) alvo=new Date(hoje.getFullYear()+1,mo-1,da);
   return Math.round((alvo-hoje)/86400000);
 }
@@ -10276,7 +10278,7 @@ function emDias(r,hoje){
   if(r.dias_pendentes==null) return null;
   if(!r.origem_relatorio) return r.dias_pendentes;
   const extra=Math.max(0,Math.round(((hoje||atHojeLocal())-atParseISO(r.origem_relatorio))/864e5));
-  return r.dias_pendentes+extra;
+  return Number(r.dias_pendentes)+extra;
 }
 function emNormLp(nome){ const n=String(nome||'').toUpperCase(); if(n.indexOf('DANIEL')>=0) return 'Daniel'; if(n.indexOf('REBECA')>=0) return 'Rebeca'; if(n.indexOf('GUSTAVO')>=0) return 'Gustavo'; return null; }
 function emNormContest(s){ const n=normKey(s); if(!n) return null; return /nao\s*medica/.test(n)?'nao_medica':/medica/.test(n)?'medica':null; }
@@ -10439,7 +10441,7 @@ async function emSalvarFicha(chave){
   const patch={ pendencia_descricao:v('em_pend')||null, status_tratativa:v('em_st')||null, bola_com:v('em_bola')||null,
     ultima_acao:v('em_ua')||null, ultima_acao_em:v('em_uae')||null, proxima_acao:v('em_pa')||null, proxima_acao_prazo:v('em_pap')||null,
     protocolo:v('em_prot')||null, observacao:v('em_obs')||null };
-  if(v('em_seg')) patch.segurado=v('em_seg'); patch.resp_pagamento=v('em_resp')||null; patch.nomes_corrigidos=!!(v('em_seg')||v('em_resp'));
+  { const segAntes=atTitleC(r.segurado||''), respAntes=atTitleC(r.resp_pagamento||''); const mudou=(v('em_seg')&&v('em_seg')!==segAntes)||((v('em_resp')||'')!==(respAntes||'')); if(mudou){ if(v('em_seg')) patch.segurado=v('em_seg'); patch.resp_pagamento=v('em_resp')||null; patch.nomes_corrigidos=true; } }   /* BUGS-V6 #3: só marca corrigido se o nome mudou de fato */
   const desf=$('#em_desf'); if(desf){ const o=desf.value; if(o==='emitida'||o==='cancelada'){ patch.desfecho=o; patch.desfecho_em=atHojeISO(); if(o==='emitida') patch.status_tratativa='resolvido'; }
     else if(o==='voltar'){ patch.saiu_do_relatorio_em=null; } }
   await emPatch(chave,patch); atClose(); render(); toast('Salvo',true);
@@ -10495,7 +10497,7 @@ function emPreviewLista(p){ p=p||(_emPend&&_emPend.p); if(!p||!_emPend) return; 
 async function emAplicarUI(){ const p=_emPend; if(!p) return; const origem=atHojeISO(); const up=[];
   p.updates.forEach(u=>{ const ex=EM.itens.find(x=>emChave(x)===u.chave); if(!ex) return; u.ch.forEach(c=>{ ex[c[0]]=c[2]; });
     /* upsert por proposta: só EM_CAMPOS_RELATORIO mudam; o que é do Victor não é tocado aqui */
-    ex.origem_relatorio=origem; ex.saiu_do_relatorio_em=null; if(u.reapareceu){ ex.desfecho=null; ex.desfecho_em=null; } up.push(ex); });
+    ex.origem_relatorio=origem; ex.saiu_do_relatorio_em=null; if(u.reapareceu&&ex.desfecho&&ex.desfecho_em&&ex.desfecho_em<isoAddDias(origem,-7)){ ex.desfecho=null; ex.desfecho_em=null; } else if(u.reapareceu&&ex.desfecho){ ex.reapareceu_em=origem; } up.push(ex); });   /* BUGS-V6 #5: desfecho recente (7d) não é apagado pelo lag do portal */
   p.novos.forEach(n=>{ const rec=Object.assign({id:null,pendencia_descricao:null,bola_com:null,status_tratativa:null,ultima_acao:null,ultima_acao_em:null,proxima_acao:null,proxima_acao_prazo:null,protocolo:null,observacao:null,saiu_do_relatorio_em:null,desfecho:null,desfecho_em:null},n,{origem_relatorio:origem}); EM.itens.push(rec); up.push(rec); });
   p.sumiram.forEach(s=>{ const ex=EM.itens.find(x=>emChave(x)===emChave(s)); if(!ex) return; ex.saiu_do_relatorio_em=new Date().toISOString(); up.push(ex); });
   EM.carregadoEm=origem;
@@ -10680,7 +10682,7 @@ async function soCarregar(){
   try{ const raw=localStorage.getItem(SO_CHAVE); if(raw){ const o=JSON.parse(raw); SO.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
 }
 function soSalvarLocal(){ try{ localStorage.setItem(SO_CHAVE,JSON.stringify(SO)); }catch(e){} }
-function soRow(s){ const row={}; ['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status'].forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }
+function soRow(s){ const row={}; ['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status'].forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 */
 async function soGravar(s){ const i=SO.itens.findIndex(x=>x.id===s.id); if(i>=0) SO.itens[i]=s; else SO.itens.unshift(s); soSalvarLocal();
   if(SO_REMOTE&&sb){ try{ const {data,error}=await sb.from(SO_TABLE).upsert([soRow(s)]).select('id'); if(error) throw error; if(data&&data[0]&&String(s.id).startsWith('loc_')){ s.id=data[0].id; soSalvarLocal(); } return true; }catch(e){ console.error('SO gravar',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
   return true; }
@@ -10833,8 +10835,8 @@ async function bfRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.au
 async function bfCarregar(){
   BF_REMOTE=await bfRemoteOn();
   if(BF_REMOTE){ try{
-    const [c,d,x,e]=await Promise.all([sb.from(BF_TABLE).select('*'),sb.from('beneficio_documentos').select('*'),sb.from('beneficio_exigencias').select('*'),sb.from('beneficio_eventos').select('*').order('ocorrido_em')]);
-    [c,d,x,e].forEach(r=>{ if(r.error) throw r.error; });
+    const _rs=await Promise.allSettled([sb.from(BF_TABLE).select('*'),sb.from('beneficio_documentos').select('*'),sb.from('beneficio_exigencias').select('*'),sb.from('beneficio_eventos').select('*').order('ocorrido_em')]);
+    const [c,d,x,e]=_rs.map((r,i)=>r.status==='fulfilled'&&!r.value.error?r.value:(i===0?(()=>{ throw (r.reason||r.value.error); })():{data:[]}));   /* BUGS-V6 #9: filho que falha não derruba o pai */
     BF.itens=(c.data||[]).filter(escLinhaOk).map(r=>{   /* ESCOPO na porta (11/09) */ const id=String(r.id); r.documentos=(d.data||[]).filter(q=>String(q.beneficio_id)===id); r.exigencias=(x.data||[]).filter(q=>String(q.beneficio_id)===id); r.eventos=(e.data||[]).filter(q=>String(q.beneficio_id)===id); r.valor_pago=r.valor_pago!=null?Number(r.valor_pago):null; return r; });
     bfSalvarLocal(); return;
   }catch(e){ console.warn('BF load remoto falhou → local',e); BF_REMOTE=false; } }
@@ -14509,7 +14511,7 @@ function render(){
     else if(VIEW==='revisao') abrir(['outros-toggle','outros-group'],'outros-caret');
     /* HUB-CONFIG: Configurações não é mais um grupo que abre e fecha — é
        um hub de cards, e o realce do item vive no irPara(). */ }
-  { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(r=>!r.resolvido_em).length+(EM.itens||[]).filter(emAtivo).length; cbo.textContent=n||''; }
+  { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(escLinhaOk).filter(r=>!r.resolvido_em).length+emVis().filter(emAtivo).length; cbo.textContent=n||''; }
     const cbf=$('#cnt-beneficios'); if(cbf) cbf.textContent=(BF.itens||[]).filter(bfAtivo).length||'';
     const cso=$('#cnt-solicitacoes'); if(cso) cso.textContent=(SO.itens||[]).filter(s=>s.status==='aberta').length||''; }
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
@@ -15243,6 +15245,7 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('BUGS-V6: PLACED abas/janela/robustez, subAddMonths clampa, desfecho recente preservado, nomes só marcados se mudaram, cnt-bo no escopo, 29/02, dias_pendentes numérico', (()=>{ const a=subAddMonths('2026-01-31',1)==='2026-02-28'&&subAddMonths('2026-03-31',1)==='2026-04-30'; const src=[...document.scripts].map(x=>x.textContent).join(''); const b=src.indexOf("S."+"aba=")<0&&String(plSetCfg).includes('janela:')&&!src.includes('plJanela'+' incompleta'); const c=String(plTogglePend).includes('if(!p) return'); const d=String(emDias).includes('Number(r.dias_pendentes)'); const e=String(soRow).includes('escEmailDoLp'); const f=lpDiasAte('--02-29')!==null; return a&&b&&c&&d&&e&&f; })());
     ok('IMPORT-DONO-V3: no import de emitidas, carteira/funil só pra linha do meu dono', String(exAplicarUI).includes('donoLinha!==meuDono'));
     ok('BUGS-V5: lp de contato novo vem do escopo; funis extras na ficha/resultado; meia-noite; undo restaura status; locRemover por objeto; nome null vira vazio; ids comparados como string', (()=>{ const a=typeof escLpNovo==='function'&&String(escLpNovo()).length>0; const vg=ETAPAS_MAP.vg?etapasDoFunil('vg')===ETAPAS_MAP.vg.ids:true; const iv=tarReuniaoInterval({quando:'2026-09-15',hora:'23:30',dur:60}); const b=iv.fim.startsWith('2026-09-16T00:30'); const u=tarGcalUrl({id:'x',nome:'Zz'},{quando:'2026-09-15',hora:'23:30',dur:60}).includes('/20260916T003000'); const n=normContato({id:'zn'}); const c=n.nome===''; const d=String(drwMoverFunil).includes("dest==='nn')?'nn':dest")&&String(registrarResultado).includes('etapasDe(c).includes(alvo0)')&&String(locRemover).includes('locDe(c)[i]')&&String(funAvancar).includes('stAntes')&&String(ctMoverDono).includes('Object.assign(c,antes)')&&String(bnLevarProFunil).includes('bnSalvar')&&!String(nnMoveEtapa).includes('x.id===id)'); return a&&vg&&b&&u&&c&&d; })());
     ok('HANDLERS-EXISTEM-V1: toda função chamada em onclick/onchange/oninput/onsubmit do fonte existe (pegou setLeitura/simSet no PLACED)', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join('\n')+document.body.innerHTML; const re=/on(?:click|change|input|submit|keydown|keyup|blur|focus|toggle)="(?:[^"]*?;)?\s*(?:event\.[a-zA-Z]+\(\);\s*)*([A-Za-z_$][\w$]*)\(/g; const falt=new Set(); let m; while((m=re.exec(src))){ const f=m[1]; if(['if','return','this','event','window','document','void','new','typeof','function','MAPA_F','FBF','FTA','NN_MODE','BC_MODE'].includes(f)) continue; if(typeof window[f]!=='function') falt.add(f); } window.__handlersFaltando=[...falt]; return falt.size===0; })());
