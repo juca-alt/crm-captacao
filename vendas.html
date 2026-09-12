@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.56 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.57 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1686,7 +1686,7 @@ function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.p
    carimba `_upd` no contato que MUDOU (base do merge entre aparelhos) e agenda
    o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
 let _lpcLast={};
-function salvar(opts){
+function salvar(opts){ if(window.CONTA_TROCANDO) return;
   const _now=new Date().toISOString(), _doServidor=!!(opts&&opts.doServidor);   /* BUGS-V7: a foto inicial é tirada em carregar(); 'primeira foto' aqui engolia a 1ª edição em cache vazio */
   (S.contatos||[]).forEach(c=>{
     if(!c||c.id==null) return;
@@ -1725,7 +1725,7 @@ function _lpcSnap(){ const m={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null)
 const PEND_CHAVE='crmlp_pend_v1';
 let PEND={bn:{},lpc:{}};
 try{ const o=JSON.parse(localStorage.getItem(PEND_CHAVE)||'null'); if(o&&typeof o==='object'){ PEND.bn=o.bn||{}; PEND.lpc=o.lpc||{}; } }catch(_){}
-function pendSalvar(){ try{ localStorage.setItem(PEND_CHAVE,JSON.stringify(PEND)); }catch(_){} }
+function pendSalvar(){ if(window.CONTA_TROCANDO) return; try{ localStorage.setItem(PEND_CHAVE,JSON.stringify(PEND)); }catch(_){} }
 function pendMarcar(fila,ids){ (ids||[]).forEach(id=>{ PEND[fila][String(id)]=1; }); pendSalvar(); }
 function pendLimpar(fila,ids){ (ids||[]).forEach(id=>{ delete PEND[fila][String(id)]; }); pendSalvar(); }
 function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).length; }
@@ -1742,7 +1742,7 @@ function fundMerge(locais, remotos, pend, completo){
   return [...out.values()];
 }
 let _pendTimer=null;
-async function pendRetentar(){ if(!pendTotal()) return; if(!LPC_REMOTE){ try{ LPC_REMOTE=await lpcRemoteOn(); }catch(_){} if(!LPC_REMOTE) return; if(typeof sincronizarDados==='function'){ sincronizarDados(); return; } }   /* ONLINE-VOLTA-V1: remoto caído volta sozinho */
+async function pendRetentar(){ if(!pendTotal()) return; if(navigator.onLine===false) return; if(!LPC_REMOTE){ try{ LPC_REMOTE=await lpcRemoteOn(); }catch(_){} if(!LPC_REMOTE) return; if(typeof sincronizarDados==='function'){ sincronizarDados(); return; } }   /* ONLINE-VOLTA-V1: remoto caído volta sozinho */
   if(typeof bnPush==='function') bnPush(); if(typeof lpcPush==='function') lpcPush(); }
 window.addEventListener('online',()=>setTimeout(pendRetentar,1500));
 _pendTimer=setInterval(pendRetentar,60000);
@@ -1866,11 +1866,11 @@ async function lpcPush(){
     const falhas=new Set();
     if(rows.length){
       /* CONTA-TROCOU-V1: linha de dono que esta sessão não enxerga (delegação) nunca sobe — sai da fila com aviso */
-      if(typeof logado==='function'&&logado()){ const vis=new Set([escEu(),...((DELEG&&DELEG.donos)||[])].filter(Boolean)); const fora=rows.filter(x=>x.dono&&!vis.has(x.dono)); if(fora.length){ console.warn('lp_contatos: '+fora.length+' linha(s) de outro dono ficaram fora do push',fora.map(x=>x.id)); fora.forEach(x=>falhas.add(String(x.id))); } }
+      if(typeof logado==='function'&&logado()){ const vis=new Set([escEu(),...((DELEG&&DELEG.donos)||[])].filter(Boolean)); const fora=rows.filter(x=>x.dono&&!vis.has(x.dono)); if(fora.length){ console.warn('lp_contatos: '+fora.length+' linha(s) de outro dono ficaram fora do push',fora.map(x=>x.id)); fora.forEach(x=>{ falhas.add(String(x.id)); PUSH_ERR[x.id]=5; }); } }   /* fora da delegação não é transitório: desiste já */
       const envia=rows.filter(x=>!falhas.has(String(x.id)));
       if(envia.length){ const r=await sb.from(LPC_T).upsert(envia,{onConflict:'dono,id'});
         if(r.error){ /* PUSH-RESILIENTE-V1: uma linha ruim não segura as outras — tenta 1 a 1 */ console.warn('lp_contatos: lote recusado, tentando linha a linha',r.error.message);
-          for(const x of envia){ const r1=await sb.from(LPC_T).upsert([x],{onConflict:'dono,id'}); if(r1.error){ falhas.add(String(x.id)); PUSH_ERR[x.id]=(PUSH_ERR[x.id]||0)+1; console.warn('lp_contatos: linha recusada',x.id,r1.error.message); } } } }
+          for(const x of envia){ const r1=await sb.from(LPC_T).upsert([x],{onConflict:'dono,id'}); if(r1.error){ falhas.add(String(x.id)); const rede=!navigator.onLine||/failed to fetch|network|load failed|fetch/i.test(String(r1.error.message||'')); if(rede){ console.warn('lp_contatos: sem rede, retenta depois'); envia.forEach(y=>falhas.add(String(y.id))); break; } PUSH_ERR[x.id]=(PUSH_ERR[x.id]||0)+1; console.warn('lp_contatos: linha recusada',x.id,r1.error.message); } } } }   /* erro de REDE nunca conta pra desistir */
     }
     /* SEGURANÇA-V1: delete só por (dono,id) da linha que ESTE aparelho conhecia, e nunca em massa —
        acima de LPC_DEL_MAX numa rodada é sintoma (cache zerado, bug), não intenção: registra e NÃO apaga. */
@@ -1886,7 +1886,7 @@ async function lpcPush(){
 /* SEGURANÇA-V1 (11/09): este botão zerava S.contatos e o push apagava TUDO no servidor (o diff via 'mortos'
    virava DELETE em massa — inclusive nas linhas do Daniel, visíveis por delegação). Agora ele só limpa o
    CACHE deste aparelho e recarrega do servidor. Apagar dado real é ação explícita por registro, nunca em massa. */
-const CONTA_CHAVES=['crmlp_v03_state','crmlp_bn_v1','crmlp_pend_v1','crmlp_carteira_v1','crmlp_subst_v1','crmlp_beneficios_v1','crmlp_import_log_v1','crmlp_emitidas_v1','crmlp_atrasos_v1','crmlp_emissao_v1','crmlp_solicitacoes_v1','crmlp_pipex_v1','crmlp_placed_v1','crmlp_gcal_tok','crmlp_escopo_v1','crmlp_deleg_ativo_v1','crmlp_relatorio_v1'];
+const CONTA_CHAVES=['crmlp_v03_state','crmlp_bn_v1','crmlp_pend_v1','crmlp_carteira_v1','crmlp_subst_v1','crmlp_beneficios_v1','crmlp_import_log_v1','crmlp_emitidas_v1','crmlp_atrasos_v1','crmlp_emissao_v1','crmlp_solicitacoes_v1','crmlp_pipex_v1','crmlp_placed_v1','crmlp_gcal_tok','crmlp_escopo_v1','crmlp_deleg_ativo_v1','crmlp_relatorio_v1','crmlp_persist_v1','crmlp_assinatura_v1','crmlp_rec_v1','crmlp_funil_v1'];
 function contaLimparCache(){ CONTA_CHAVES.forEach(k=>{ try{ localStorage.removeItem(k); }catch(_){} }); }
 async function sairDaConta(){ if(!confirm('Sair desta conta neste aparelho? O cache local é apagado'+(typeof pendTotal==='function'&&pendTotal()?' (há '+pendTotal()+' edição(ões) ainda não enviadas — sincronize antes)':'')+'.')) return; try{ if(sb) await sb.auth.signOut(); }catch(_){} contaLimparCache(); try{ localStorage.removeItem('crmlp_dono_v1'); }catch(_){} location.reload(); }
 function zerarContatos(){
@@ -12647,7 +12647,7 @@ function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(ra
 
 /* persistência: carimba _upd só em quem mudou (mesma mecânica do salvar()) */
 let _bnLast={};
-function bnSalvar(opts){
+function bnSalvar(opts){ if(window.CONTA_TROCANDO) return;
   const now=new Date().toISOString(), doServidor=!!(opts&&opts.doServidor);   /* v7.43.4: merge do servidor NÃO é edição local */
   BN.contatos.forEach(c=>{ if(!c||!c.id) return; const k=c.id,j=JSON.stringify(c);
     if(_bnLast[k]===j) return; if(doServidor) return; c._upd=now; PEND.bn[String(k)]=1; if(!c._dono&&typeof logado==='function'&&logado()){ const d=(typeof delegAtivo==='function'&&delegAtivo())||escEu(); if(d) c._dono=d; } });
@@ -12858,7 +12858,6 @@ async function perfilCarregar(){
     if(error) throw error;
     /* CONTA-TROCOU-V1 (12/09): outro e-mail neste aparelho → o cache (e a fila PEND) é do usuário anterior:
        limpa tudo e recarrega, senão a PEND do Gustavo sobe com dono do Daniel e o push inteiro é rejeitado. */
-    try{ const ant=localStorage.getItem('crmlp_dono_v1'); if(ant&&ant!==email){ contaLimparCache(); localStorage.setItem('crmlp_dono_v1',email); location.reload(); return; } localStorage.setItem('crmlp_dono_v1',email); }catch(_){}
     PERFIL=data||{email,papel:'lp',modulos:{}};
     const md=s.session.user.user_metadata||{};
     PERFIL.email=email; PERFIL.nome=md.full_name||md.name||md.nome||(email.split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase()));
@@ -15269,7 +15268,8 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
-    ok('MULTIUSUÁRIO-V8: troca de conta limpa cache; Sair existe; dono carimbado na edição; push resiliente (1 a 1, fora da delegação não sobe, teto 5); offline volta sozinho; boot espera delegações; sync enfileira; escAtual memo; prefs com try', (()=>{ const a=typeof contaLimparCache==='function'&&typeof sairDaConta==='function'&&CONTA_CHAVES.includes('crmlp_pend_v1')&&String(perfilCarregar).includes('crmlp_dono_v1'); const _src=[...document.scripts].map(x=>x.textContent).join(''); const b=_src.includes('DONO-NA-EDI'+'ÇÃO-V1')&&_src.split('c._dono=d; }').length>=3; const c=String(lpcPush).includes('linha a linha')&&String(lpcPush).includes('vis.has(x.dono)'); const d=String(pendRetentar).includes('lpcRemoteOn'); const e=[...document.scripts].map(x=>x.textContent).join('').includes('BOOT-DELEG-V1'); const f=String(sincronizarDados).includes('_syncPedido'); const g=typeof escAtualCalc==='function'&&String(escSet).includes('_escMemo=null'); const h=[funPrefSalvar,ctPrefSalvar,bnPrefSalvar,taPrefSalvar,recPrefSalvar].every(x=>String(x).includes('try{')); return a&&b&&c&&d&&e&&f&&g&&h; })());
+    ok('V9 (regressão V8): conta-trocou no boot antes dos loaders + trava de escrita; fora da delegação desiste já; erro de rede não conta; offline não sincroniza; persist/assinatura limpam', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); return src.includes('CONTA-TROCOU-V2')&&src.includes('function salvar(opts){ if(window.CONTA_TROCANDO) return;')&&String(pendSalvar).includes('CONTA_TROCANDO')&&String(lpcPush).includes('PUSH_ERR[x.id]=5')&&String(lpcPush).includes('sem rede')&&String(pendRetentar).includes('navigator.onLine===false')&&CONTA_CHAVES.includes('crmlp_persist_v1')&&!String(perfilCarregar).includes('crmlp_dono_v1'); })());
+    ok('MULTIUSUÁRIO-V8: troca de conta limpa cache; Sair existe; dono carimbado na edição; push resiliente (1 a 1, fora da delegação não sobe, teto 5); offline volta sozinho; boot espera delegações; sync enfileira; escAtual memo; prefs com try', (()=>{ const a=typeof contaLimparCache==='function'&&typeof sairDaConta==='function'&&CONTA_CHAVES.includes('crmlp_pend_v1')&&[...document.scripts].map(x=>x.textContent).join('').includes('crmlp_dono_v1'); const _src=[...document.scripts].map(x=>x.textContent).join(''); const b=_src.includes('DONO-NA-EDI'+'ÇÃO-V1')&&_src.split('c._dono=d; }').length>=3; const c=String(lpcPush).includes('linha a linha')&&String(lpcPush).includes('vis.has(x.dono)'); const d=String(pendRetentar).includes('lpcRemoteOn'); const e=[...document.scripts].map(x=>x.textContent).join('').includes('BOOT-DELEG-V1'); const f=String(sincronizarDados).includes('_syncPedido'); const g=typeof escAtualCalc==='function'&&String(escSet).includes('_escMemo=null'); const h=[funPrefSalvar,ctPrefSalvar,bnPrefSalvar,taPrefSalvar,recPrefSalvar].every(x=>String(x).includes('try{')); return a&&b&&c&&d&&e&&f&&g&&h; })());
     ok('BUGS-V7: salvar()/bnSalvar() marcam pendente mesmo com cache vazio (só doServidor não marca); status lembra a etapa; recursão do gcal com await; leaflet remove script em erro', (()=>{ const a=!String(salvar).includes('_primeiraFoto')&&!String(bnSalvar).includes('primeiraFoto'); const c={id:'zs7',etapa:'TA',status:'X',status_etapa:'OI/FF'}; const b=etStatusDe(c)===''; const d=String(gcalCriarEventoDaTarefa).includes('return await gcalCriarEventoDaTarefa'); const e=String(mapaLeaflet).includes('sc.remove()'); return a&&b&&d&&e; })());
     ok('BUGS-V6: PLACED abas/janela/robustez, subAddMonths clampa, desfecho recente preservado, nomes só marcados se mudaram, cnt-bo no escopo, 29/02, dias_pendentes numérico', (()=>{ const a=subAddMonths('2026-01-31',1)==='2026-02-28'&&subAddMonths('2026-03-31',1)==='2026-04-30'; const src=[...document.scripts].map(x=>x.textContent).join(''); const b=src.indexOf("S."+"aba=")<0&&String(plSetCfg).includes('janela:')&&!src.includes('plJanela'+' incompleta'); const c=String(plTogglePend).includes('if(!p) return'); const d=String(emDias).includes('Number(r.dias_pendentes)'); const e=String(soRow).includes('escEmailDoLp'); const f=lpDiasAte('--02-29')!==null; return a&&b&&c&&d&&e&&f; })());
     ok('IMPORT-DONO-V3: no import de emitidas, carteira/funil só pra linha do meu dono', String(exAplicarUI).includes('donoLinha!==meuDono'));
@@ -16904,6 +16904,8 @@ render();
 /* BOOT-LOADERS-V1 (02/09): a lista do boot e a do Sincronizar DIVERGIRAM — Emissão,
    Solicitações e Benefícios só carregavam no botão. Uma lista só, usada nos dois. */
 (async function(){ try{ if(typeof delegCarregar==='function') await delegCarregar(); }catch(_){}   /* BOOT-DELEG-V1: escopo decidido ANTES dos loaders (senão a 1ª pintura é da base errada e o cache guarda todos os donos) */
+  /* CONTA-TROCOU-V2: a checagem mora AQUI, antes de qualquer loader — no perfilCarregar corria em paralelo e o merge regravava o cache do usuário anterior antes do reload */
+  try{ const eu=(typeof DELEG!=='undefined'&&DELEG&&DELEG.eu)||''; if(eu){ const ant=localStorage.getItem('crmlp_dono_v1'); if(ant&&ant!==eu){ window.CONTA_TROCANDO=true; contaLimparCache(); localStorage.setItem('crmlp_dono_v1',eu); location.reload(); return; } localStorage.setItem('crmlp_dono_v1',eu); } }catch(_){}
   BOOT_LOADERS.forEach(function(f){
     try{ Promise.resolve(f()).then(agendarRender,function(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); agendarRender(); }); }
     catch(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); }
