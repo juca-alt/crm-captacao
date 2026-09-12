@@ -22,7 +22,7 @@
        apaga os caches antigos e assume o controle na hora.
    ═══════════════════════════════════════════════════════════════════════ */
 
-const VERSAO = 'crmlp-v2';
+const VERSAO = 'crmlp-v3';
 const CACHE = VERSAO;
 
 /* Nada é pré-cacheado na instalação de propósito: o app tem 550 KB e baixar
@@ -83,7 +83,8 @@ self.addEventListener('fetch', e => {
   e.respondWith((async () => {
     const c = await caches.open(CACHE);
     try {
-      const r = await fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }));   // v2: init num Request 'navigate' lançava TypeError
+      let r = await fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }));   // v2: init num Request 'navigate' lançava TypeError
+      if (r && r.redirected) r = new Response(r.body, { status: r.status, statusText: r.statusText, headers: r.headers });   // v3: resposta redirecionada não pode responder um navigate (Safari/Firefox)
       if (r && r.ok) c.put(req, r.clone());
       return r;
     } catch (_) {
