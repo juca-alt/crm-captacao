@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.54 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.55 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1464,13 +1464,14 @@ function funCfgValida(c){ return c&&Array.isArray(c.lp)&&Array.isArray(c.bc)&&c.
    no Painel TA. Filtro por status em todos os funis (FUN_STATUS por funil). */
 function etCfgKey(f){ return (!f||f==='nn')?'lp':f; }
 function etStatusOpts(c){ const arr=(FUNIL_CFG&&FUNIL_CFG[etCfgKey(c&&c.funil)])||[]; const e=arr.find(x=>x&&x.id===(c&&c.etapa)); return (e&&Array.isArray(e.status))?e.status.map(x=>String(x||'').trim()).filter(Boolean):[]; }
-function etStatusDe(c){ const s=c&&String(c.status||'').trim(); return (s&&etStatusOpts(c).includes(s))?s:''; }
+function etStatusDe(c){ const s=c&&String(c.status||'').trim(); if(s&&c.status_etapa&&c.status_etapa!==c.etapa) return '';   /* BUGS-V7: status marcado em outra etapa não vale (caminhos que mudam etapa sem logEtapa) */
+  return (s&&etStatusOpts(c).includes(s))?s:''; }
 function etStatusTodos(){ const out=[]; Object.keys(FUNIL_CFG||{}).forEach(f=>(FUNIL_CFG[f]||[]).forEach(e=>((e&&e.status)||[]).forEach(x=>{ const s=String(x||'').trim(); if(s&&!out.includes(s)) out.push(s); }))); return out; }
 function etStatusChip(c){ const s=etStatusDe(c); return s?`<span class="nc-status" title="Status nesta etapa">⚑ ${esc(s)}</span>`:''; }
 function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; const s=etStatusDe(c);
   return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)"><option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
 function etSetStatus(v){ const c=ct(); if(!c) return; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return; const de=etStatusDe(c); if(de===v) return;
-  if(v) c.status=v; else delete c.status;
+  if(v){ c.status=v; c.status_etapa=c.etapa; } else { delete c.status; delete c.status_etapa; }
   interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
   salvar(); renderDrawer(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); }
 let FUN_STATUS={};
@@ -1685,12 +1686,12 @@ function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.p
    o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
 let _lpcLast={};
 function salvar(opts){
-  const _now=new Date().toISOString(), _primeiraFoto=Object.keys(_lpcLast).length===0, _doServidor=!!(opts&&opts.doServidor);
+  const _now=new Date().toISOString(), _doServidor=!!(opts&&opts.doServidor);   /* BUGS-V7: a foto inicial é tirada em carregar(); 'primeira foto' aqui engolia a 1ª edição em cache vazio */
   (S.contatos||[]).forEach(c=>{
     if(!c||c.id==null) return;
     const k=String(c.id), j=JSON.stringify(c);
     if(_lpcLast[k]===j) return;                 // não mudou
-    if(_primeiraFoto||_doServidor) return;        // v7.43.1/.4: 1ª foto e merge do servidor nunca marcam nem recarimbam
+    if(_doServidor) return;                       // v7.43.4: merge do servidor nunca marca nem recarimba
     c._upd=_now; PEND.lpc[k]=1;                   /* FUNDAÇÃO V1: editado aqui → pendente até o push confirmar */
   });
   pendSalvar();
@@ -9001,7 +9002,7 @@ async function gcalCriarEventoDaTarefa(cid,tid,op){
       interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na agenda Google: '+titulo,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
       toast('Gravado na sua Agenda Google: '+titulo+' · '+(t.hora||'')+' ('+(t.dur||60)+' min)',true); }
     render(); gcalCarregar();
-  }catch(e){ if(t.gcalId&&/404|410|not found|deleted|resource has been/i.test(String(e&&e.message||e))){ delete t.gcalId; salvar(); delete _gcalReuniaoBusy[chave]; return gcalCriarEventoDaTarefa(cid,tid,op); }   /* BUGS-V5 #6 */
+  }catch(e){ if(t.gcalId&&/404|410|not found|deleted|resource has been/i.test(String(e&&e.message||e))){ delete t.gcalId; salvar(); delete _gcalReuniaoBusy[chave]; return await gcalCriarEventoDaTarefa(cid,tid,op); }   /* BUGS-V5 #6 */
     toast('Não consegui gravar direto na agenda ('+(e&&e.message||e)+') — abrindo o Google preenchido',false); try{ const u=tarGcalUrl(c,t); if(u) window.open(u,'_blank','noopener'); }catch(_){} }
   finally{ delete _gcalReuniaoBusy[chave]; }
 }
@@ -12630,9 +12631,8 @@ function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(ra
 let _bnLast={};
 function bnSalvar(opts){
   const now=new Date().toISOString(), doServidor=!!(opts&&opts.doServidor);   /* v7.43.4: merge do servidor NÃO é edição local */
-  const primeiraFoto=Object.keys(_bnLast).length===0;   /* v7.43.1: a 1ª foto após abrir NUNCA marca pendente (linhas antigas sem _upd viravam 5.136 pendentes = 3 MB de push) */
   BN.contatos.forEach(c=>{ if(!c||!c.id) return; const k=c.id,j=JSON.stringify(c);
-    if(_bnLast[k]===j) return; if(primeiraFoto||doServidor) return; c._upd=now; PEND.bn[String(k)]=1; });
+    if(_bnLast[k]===j) return; if(doServidor) return; c._upd=now; PEND.bn[String(k)]=1; });
   pendSalvar();
   _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); });
   _bnRecCountCache=null; // nomes podem ter mudado → recontar os "rec" embutidos
@@ -15245,6 +15245,7 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('BUGS-V7: salvar()/bnSalvar() marcam pendente mesmo com cache vazio (só doServidor não marca); status lembra a etapa; recursão do gcal com await; leaflet remove script em erro', (()=>{ const a=!String(salvar).includes('_primeiraFoto')&&!String(bnSalvar).includes('primeiraFoto'); const c={id:'zs7',etapa:'TA',status:'X',status_etapa:'OI/FF'}; const b=etStatusDe(c)===''; const d=String(gcalCriarEventoDaTarefa).includes('return await gcalCriarEventoDaTarefa'); const e=String(mapaLeaflet).includes('sc.remove()'); return a&&b&&d&&e; })());
     ok('BUGS-V6: PLACED abas/janela/robustez, subAddMonths clampa, desfecho recente preservado, nomes só marcados se mudaram, cnt-bo no escopo, 29/02, dias_pendentes numérico', (()=>{ const a=subAddMonths('2026-01-31',1)==='2026-02-28'&&subAddMonths('2026-03-31',1)==='2026-04-30'; const src=[...document.scripts].map(x=>x.textContent).join(''); const b=src.indexOf("S."+"aba=")<0&&String(plSetCfg).includes('janela:')&&!src.includes('plJanela'+' incompleta'); const c=String(plTogglePend).includes('if(!p) return'); const d=String(emDias).includes('Number(r.dias_pendentes)'); const e=String(soRow).includes('escEmailDoLp'); const f=lpDiasAte('--02-29')!==null; return a&&b&&c&&d&&e&&f; })());
     ok('IMPORT-DONO-V3: no import de emitidas, carteira/funil só pra linha do meu dono', String(exAplicarUI).includes('donoLinha!==meuDono'));
     ok('BUGS-V5: lp de contato novo vem do escopo; funis extras na ficha/resultado; meia-noite; undo restaura status; locRemover por objeto; nome null vira vazio; ids comparados como string', (()=>{ const a=typeof escLpNovo==='function'&&String(escLpNovo()).length>0; const vg=ETAPAS_MAP.vg?etapasDoFunil('vg')===ETAPAS_MAP.vg.ids:true; const iv=tarReuniaoInterval({quando:'2026-09-15',hora:'23:30',dur:60}); const b=iv.fim.startsWith('2026-09-16T00:30'); const u=tarGcalUrl({id:'x',nome:'Zz'},{quando:'2026-09-15',hora:'23:30',dur:60}).includes('/20260916T003000'); const n=normContato({id:'zn'}); const c=n.nome===''; const d=String(drwMoverFunil).includes("dest==='nn')?'nn':dest")&&String(registrarResultado).includes('etapasDe(c).includes(alvo0)')&&String(locRemover).includes('locDe(c)[i]')&&String(funAvancar).includes('stAntes')&&String(ctMoverDono).includes('Object.assign(c,antes)')&&String(bnLevarProFunil).includes('bnSalvar')&&!String(nnMoveEtapa).includes('x.id===id)'); return a&&vg&&b&&u&&c&&d; })());
@@ -15287,10 +15288,10 @@ function lpSelfCheck(){
     ok('SITPLAN-FONTES: a busca do SitPlan lista funil, Estoque e clientes da carteira', String(viewSitplan.toString()).includes('· Cliente') && String(spAddPorNome.toString()).includes("tag==='Cliente'"));
     ok('SEGURANÇA-V1: teto de exclusão por push existe e é pequeno', typeof LPC_DEL_MAX==='number' && LPC_DEL_MAX<=50);
     ok('FUNDAÇÃO V1.4: merge do servidor não marca pendente (só edição local marca)', (()=>{ const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ BN.contatos=[{id:'Zzm1',nome:'Zz',_dono:'x'}]; _bnLast={}; bnSalvar(); PEND.bn={}; BN.contatos=[{id:'Zzm1',nome:'Zz servidor',_dono:'x'}]; bnSalvar({doServidor:true}); const a=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzm1',nome:'Zz editado',_dono:'x'}]; bnSalvar(); const b=!!PEND.bn['Zzm1']; return a&&b; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
-    ok('FUNDAÇÃO V1.1: pendente igual ao servidor deixa de ser pendente; 1ª foto não marca', (()=>{
+    ok('FUNDAÇÃO V1.1 (rev. BUGS-V7): pendente igual ao servidor deixa de ser pendente; merge do servidor não marca; edição local (mesmo com cache vazio) marca', (()=>{
       const pend={a:1,b:1}; const r=fundMerge([{id:'a',nome:'A',_dono:'x',_upd:'1'},{id:'b',nome:'B local',_dono:'x'}],[{id:'a',nome:'A',_dono:'x',_upd:'2'},{id:'b',nome:'B srv',_dono:'x'}],pend,true);
       const ok1=!pend.a&&pend.b===1&&r.find(c=>c.id==='b').nome==='B local';
-      const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ _bnLast={}; PEND.bn={}; BN.contatos=[{id:'Zzp1',nome:'Zz'}]; bnSalvar(); const ok2=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzp1',nome:'Zz mudou'}]; bnSalvar(); const ok3=!!PEND.bn['Zzp1']; return ok1&&ok2&&ok3; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
+      const gL=_bnLast, gC=BN.contatos, gP=JSON.parse(JSON.stringify(PEND)); try{ _bnLast={}; PEND.bn={}; BN.contatos=[{id:'Zzp1',nome:'Zz'}]; bnSalvar({doServidor:true}); const ok2=Object.keys(PEND.bn).length===0; BN.contatos=[{id:'Zzp1',nome:'Zz mudou'}]; bnSalvar(); const ok3=!!PEND.bn['Zzp1']; _bnLast={}; PEND.bn={}; BN.contatos=[{id:'Zzp2',nome:'Novo em cache vazio'}]; bnSalvar(); const ok4=!!PEND.bn['Zzp2']; return ok1&&ok2&&ok3&&ok4; } finally{ _bnLast=gL; BN.contatos=gC; PEND=gP; pendSalvar(); } })());
     ok('FUNDAÇÃO V1: salvar marca pendente e o push confirmado limpa', (()=>{ const p=JSON.parse(JSON.stringify(PEND)); try{ PEND.bn={}; pendMarcar('bn',['z1','z2']); pendLimpar('bn',['z1']); return Object.keys(PEND.bn).join('')==='z2'; } finally{ PEND=p; pendSalvar(); } })());
     ok('DONO-V1: registro sem dono gravado é MEU — não aparece no escopo de outro dono', (()=>{ const dan={id:'dono:d@x',dono:'d@x',lp:'Daniel',padrao:true,eu:'a@x'}, meu={id:'meu',dono:'a@x',lp:'Gustavo',padrao:true,eu:'a@x'}; return !escRegOkDe(dan,{nome:'x'}) && escRegOkDe(meu,{nome:'x'}) && escRegOkDe(dan,{_dono:'d@x'}); })());
     ok('DONO-V1: editor tem Recomendante primeiro e o campo Dono (LP) quando logado; fichaPessoaHtml mostra o dono', (()=>{ const P=PERFIL,E=ESC,D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=[]; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'a@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
@@ -16457,7 +16458,7 @@ function mapaLeaflet(cb){ if(window.L){ cb(); return; }
   if(!document.getElementById('leaflet-css')){ const l=document.createElement('link'); l.id='leaflet-css'; l.rel='stylesheet'; l.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(l); }
   const ex=document.getElementById('leaflet-js'); if(ex){ ex.addEventListener('load',cb); return; }
   const sc=document.createElement('script'); sc.id='leaflet-js'; sc.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'; sc.onload=cb;
-  sc.onerror=()=>{ const el=document.getElementById('mapa-el'); if(el) el.innerHTML='<div class="vazio" style="padding:20px">Mapa indisponível agora (sem internet?). A lista ao lado continua valendo.</div>'; }; document.head.appendChild(sc); }
+  sc.onerror=()=>{ try{ sc.remove(); }catch(_){} const el=document.getElementById('mapa-el'); if(el) el.innerHTML='<div class="vazio" style="padding:20px">Mapa indisponível agora (sem internet?). A lista ao lado continua valendo.</div>'; }; document.head.appendChild(sc); }
 function mapaDesenhar(gr){ if(!document.getElementById('mapa-el')) return; mapaLeaflet(()=>{ try{ const el=document.getElementById('mapa-el'); if(!el||!window.L||VIEW!=='mapa') return;
     if(!_mapa||_mapaEl!==el){ if(_mapa){ try{ _mapa.remove(); }catch(_){} } _mapaEl=el; _mapa=L.map(el,{scrollWheelZoom:true}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_mapa); _mapaLayer=L.layerGroup().addTo(_mapa); }
     else { _mapaLayer.clearLayers(); _mapa.invalidateSize(); }
