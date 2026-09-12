@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.51.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.52 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2552,7 +2552,7 @@ function nnOrdenarLivre(cs){
    na ordem livre de hoje. Reordenar reescreve c.ord na coluna inteira → os cards escondidos por
    filtro mantêm a posição relativa: a ordem é independente do filtro. */
 function funColuna(c,etapa){ const f=(c&&c.funil)||'nn';
-  return nnOrdenarLivre((S.contatos||[]).filter(x=>((x.funil||'nn')===f)&&x.etapa===etapa)); }
+  return nnOrdenarLivre((S.contatos||[]).filter(x=>((x.funil||'nn')===f)&&x.etapa===etapa&&escVisivel(x))); }   /* ESCOPO-TUDO-V2: ordem não toca lead de outro dono */
 function funOrdemInserir(c,etapa,antesId){
   if(!c) return; const col=funColuna(c,etapa).filter(x=>x.id!==c.id);
   let i=antesId?col.findIndex(x=>x.id===antesId):-1; if(i<0) i=col.length;
@@ -3112,7 +3112,7 @@ function tarGcalAcaoHTML(c,t){
      token sozinho, com login_hint); o link-template só sobra como último recurso se a API falhar. */
   if(t&&t.quando){
     const jaTem=!!t.gcalId;
-    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (direto, sem abrir tela)':'Gravar na sua Agenda Google (direto, sem abrir tela)'}">📅${jaTem?'↻':'＋'}</button>`;
+    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="${jaTem?'Atualizar na sua Agenda Google (direto, sem abrir tela)':'Gravar na sua Agenda Google (direto, sem abrir tela)'}">📅${jaTem?'↻':'＋'}</button>`;
   }
   const gc=tarGcalUrl(c,t);
   return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido (conecte a Agenda em Agenda &amp; Tarefas pra gravar direto)">📅</a>`:'';
@@ -4014,7 +4014,7 @@ function cliEmissoesDe(pessoa){
   return out; }
 function cliNegociosDe(pessoa,excetoId){
   const ks=cartChaves(pessoa), pid=pessoa&&pessoa.pessoaId;
-  return (S.contatos||[]).filter(c=>{ if(excetoId&&String(c.id)===String(excetoId)) return false;
+  return (S.contatos||[]).filter(c=>{ if(excetoId&&String(c.id)===String(excetoId)) return false; if(!escVisivel(c)) return false;   /* ESCOPO-TUDO-V2 */
     if(pid&&c.pessoaId===pid) return true;
     const ck=pessoaChaves(c,['nome'],['telefone']); for(const k of ck){ if(ks.has(k)) return true; } return false; }); }
 function clienteDe(pessoa,opts){
@@ -4427,7 +4427,7 @@ function recomendanteChip(c,mini){
   return `<button class="badge ${r.cliente?'b-verde':'b-cinza'} rec-chip" title="${esc(tt)}" ${abre?`onclick="${abre}"`:''} style="border:0;font:inherit;font-size:${mini?'11px':'12px'};cursor:${abre?'pointer':'default'}">🙌 ${esc(r.nome)} · ${st}</button>`;
 }
 function recomendanteDatalist(){
-  const nomes=new Set(); (S.contatos||[]).forEach(c=>{ if(c.nome) nomes.add(c.nome); }); (CART.clientes||[]).forEach(c=>{ if(c.nome) nomes.add(c.nome); });
+  const nomes=new Set(); (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(c.nome) nomes.add(c.nome); }); cartVis().forEach(c=>{ if(c.nome) nomes.add(c.nome); });   /* ESCOPO-TUDO-V2 */
   return `<datalist id="pes_rec_lista">${[...nomes].sort().slice(0,400).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
 }
 function drwPessoaHtml(c){
@@ -8331,9 +8331,9 @@ function pxPintar(){ const el=document.getElementById('px-escopo'); if(!el) retu
     ${lps.map(l=>`<option value="${esc(l)}"${e===l?' selected':''}>👤 ${esc(l)}</option>`).join('')}</select>`; }
 function pxRotulo(){ const e=pxEscopo(); return e==='meu'?'só a minha base':e==='todos'?'Pipe X · todos os LPs':'LP '+e; }
 function cartVis(){ /* ESCOPO-TUDO-V1: carteira também passa pelo dono, não só pelo rótulo */ return (CART.clientes||[]).filter(c=>pxLpOk(c.lp)&&(!logado()||escRegOk({_dono:c._dono,lp:c.lp}))); }
-function cartApVis(){ return (CART.apolices||[]).filter(a=>pxLpOk(a.lp)); }
-function exVis(){ return (EX.itens||[]).filter(r=>pxLpOk(r.lp)); }
-function emVis(){ return (EM.itens||[]).filter(r=>pxLpOk(r.lp)); }
+function cartApVis(){ return (CART.apolices||[]).filter(a=>pxLpOk(a.lp)&&(!logado()||escRegOk({_dono:a._dono,lp:a.lp}))); }   /* ESCOPO-TUDO-V2 */
+function exVis(){ return (EX.itens||[]).filter(r=>pxLpOk(r.lp)&&escLinhaOk(r)); }
+function emVis(){ return (EM.itens||[]).filter(r=>pxLpOk(r.lp)&&escLinhaOk(r)); }
 window.pxSet=pxSet;
 
 
@@ -12176,7 +12176,7 @@ function viewCartVisao(){ const r=cartResumo();
 /* NO-FUNIL-V1 (07/09): o cliente da carteira JÁ tem negócio no funil? e qual o último toque?
    Índice montado 1× por render (chave de nome/telefone/pessoaId → negócios) pra não pagar O(n²). */
 function cartNegIndex(){ const m=new Map();
-  (S.contatos||[]).forEach(ct=>{ const ks=pessoaChaves(ct,['nome'],['telefone']); if(ct.pessoaId) ks.add('p:'+ct.pessoaId);
+  (S.contatos||[]).filter(escVisivel).forEach(ct=>{   /* ESCOPO-TUDO-V2 */ const ks=pessoaChaves(ct,['nome'],['telefone']); if(ct.pessoaId) ks.add('p:'+ct.pessoaId);
     ks.forEach(k=>{ if(!m.has(k)) m.set(k,[]); m.get(k).push(ct); }); });
   return m; }
 function cartNegsDe(c,idx){ const ks=cartChaves(c); if(c&&c.pessoaId) ks.add('p:'+c.pessoaId); const seen=new Set(),out=[];
@@ -12737,7 +12737,7 @@ let ESC={sel:null,rotulos:[],perfis:{}};
    conhecido cai no dono da sessão. Upsert por dono: um dono barrado pela RLS não derruba os outros, e o
    erro aparece na tela. Linhas repetidas (clique duplo) são unificadas antes — o Postgres rejeita a mesma
    chave duas vezes no mesmo upsert e antes isso derrubava a subida INTEIRA em silêncio. */
-function escEmailDoLp(lp, fallback){ const p=escLpNorm(String(lp||'').trim().split(/\s+/)[0]||''); if(p){ const r=(ESC.rotulos||[]).find(x=>escLpNorm(x.rotulo)===p); if(r&&r.dono_email) return r.dono_email; } return fallback||''; }
+function escEmailDoLp(lp, fallback){ const p=escLpNorm(String(lp||'').trim().split(/\s+/)[0]||''); if(p){ const r=(ESC.rotulos||[]).find(x=>escLpNorm(x.rotulo)===p); if(r&&r.dono_email) return r.dono_email; if((ESC.rotulos||[]).length) return ''; /* IMPORT-DONO-V2: rótulo desconhecido NÃO cai no dono da sessão — vira falha visível */ } return fallback||''; }
 function impDedupe(rows, chaveDe){ const m=new Map(); rows.forEach(r=>{ const k=(r.lp_email||'')+'|'+(chaveDe(r)||''); m.set(k,r); }); return [...m.values()]; }
 async function impUpsertPorDono(tabela, rows, chaveDe){ rows=impDedupe(rows,chaveDe); const grupos={}; rows.forEach(r=>{ (grupos[r.lp_email||'']=grupos[r.lp_email||'']||[]).push(r); });
   const data=[], falhas=[];
@@ -14578,7 +14578,7 @@ function lpkMatches(q){
       .forEach(c=>out.push({t:'funil',id:c.id,nome:c.nome,sub:[(c.funil==='bc'?'Base de Clientes':'Novos Negócios'),c.etapa,c.telefone].filter(Boolean).join(' · '),tag:'🎯 '+(c.etapa||'Funil')}));
   }
   if(LPK_SCOPE==='all'||LPK_SCOPE==='cart'){
-    (CART.clientes||[]).filter(c=>hit([c.nome,c.ref,c.email,c.celular,c.telefone]))
+    cartVis().filter(c=>hit([c.nome,c.ref,c.email,c.celular,c.telefone]))   /* ESCOPO-TUDO-V2 */
       .slice(0,LPK_SCOPE==='cart'?14:6)
       .forEach(c=>out.push({t:'cart',id:c.ref,nome:c.nome,sub:['Carteira',c.idade!=null?c.idade+' anos':null,c.celular||c.telefone].filter(Boolean).join(' · '),tag:'📁 Cliente'}));
   }
@@ -14693,11 +14693,11 @@ document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique
    aparecer no dia em que alguém reintroduzir a regra quebrada. */
 /* ═══════════════ FUNIL EDITÁVEL — TELA + PERSISTÊNCIA — FUNIL-CFG:TELA ═══════════════ */
 let FUN_edit='lp';
-function funNeg(id){ return (S.contatos||[]).filter(c=>c.etapa===id).length; }
+function funNeg(id){ return (S.contatos||[]).filter(c=>c.etapa===id&&escVisivel(c)).length; }
 /* CFG-SALVAR-V2 (11/09, auditoria): subia um upsert por TECLA (sem ordem garantida) e, sem perfil carregado,
    a edição ficava só no aparelho em silêncio. Agora: debounce, fica pendente até conseguir, manda
    atualizado_em (o servidor não tinha trigger → a data nunca andava e enganou o diagnóstico). */
-let _funCfgT=null, _funCfgPend=false;
+let _funCfgT=null, _funCfgPend=false, _funCfgFalhas=0;
 function funCfgSalvar(){
   try{ localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); }catch(_){}
   _funCfgPend=true; clearTimeout(_funCfgT); _funCfgT=setTimeout(funCfgSalvarAgora,700);
@@ -14707,8 +14707,8 @@ async function funCfgSalvarAgora(){
   if(!souAdm()){ _funCfgPend=false; return; }   /* CFG-ADMIN-V1: LP não sobe cfg global (o banco também barra) */
   _funCfgPend=false;
   try{ const {error}=await sb.from('app_settings').upsert({chave:'lp_funil_cfg',valor:FUNIL_CFG,atualizado_em:new Date().toISOString()},{onConflict:'chave'});
-    if(error){ _funCfgPend=true; console.warn('funil cfg: app_settings',error); toast('Configuração do funil NÃO salvou no servidor: '+(error.message||''),false); } }
-  catch(e){ _funCfgPend=true; console.warn('funil cfg salvar remoto',e); }
+    if(error){ _funCfgFalhas++; _funCfgPend=_funCfgFalhas<3; console.warn('funil cfg: app_settings',error); if(_funCfgFalhas===1||!_funCfgPend) toast('Configuração do funil NÃO salvou no servidor'+(_funCfgPend?'':' — desisti; vale a do servidor')+': '+(error.message||''),false); } else _funCfgFalhas=0; }
+  catch(e){ _funCfgFalhas++; _funCfgPend=_funCfgFalhas<3; console.warn('funil cfg salvar remoto',e); }
 }
 function funApply(){ rebuildFunilLp(); funCfgSalvar(); }
 function funEditado(f,i){ const e=FUNIL_CFG[f][i], fab=(FUNIL_FAB[f]||[])[i];
@@ -15232,6 +15232,9 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('ESCOPO-TUDO-V2 + IMPORT-DONO-V2: datalist/negócios/índices/busca/ordem da coluna/tarefa rápida passam pelo escopo; rótulo desconhecido não cai no dono da sessão; cfg desiste após 3 falhas; mapa reaproveita a instância', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); const okSrc=[recomendanteDatalist,cliNegociosDe,cartNegIndex,funNeg,maisTarefaAchar,funColuna].every(f=>String(f).includes('escVisivel'))&&String(cartApVis).includes('escRegOk')&&String(exVis).includes('escLinhaOk')&&String(emVis).includes('escLinhaOk');
+      const bk=ESC.rotulos; ESC.rotulos=[{rotulo:'gustavo',dono_email:'j@x'}]; let okLp=false; try{ okLp=escEmailDoLp('Fulano','s@x')===''&&escEmailDoLp('Gustavo','s@x')==='j@x'&&escEmailDoLp('','s@x')==='s@x'; } finally{ ESC.rotulos=bk; }
+      return okSrc&&okLp&&String(funCfgSalvarAgora).includes('_funCfgFalhas<3')&&String(mapaDesenhar).includes('_mapaLayer.clearLayers()'); })());
     ok('CFG-ADMIN-V1: Funil & Etapas é só admin (card do hub com adm, tela bloqueada pra LP logado, LP não sobe cfg global)', (()=>{ const it=CFG_SECOES.flatMap(x=>x.itens).find(i=>i.view==='config-funil'); const P=PERFIL; try{ PERFIL={email:'d@x',papel:'lp'}; const src=String(funCfgSalvarAgora); return !!(it&&it.adm)&&!cfgCabe(it)&&src.includes('souAdm')&&[...document.scripts].map(x=>x.textContent).join('').includes('só o administrador altera'); } finally{ PERFIL=P; } })());
     ok('ROTINAS-V1: rotina por local (dias/turno/hora) normaliza, não duplica, filtra o mapa por dia+turno e aparece na ficha', (()=>{ const l={tipo:'trabalho',nome:'RHP',lat:-8,lng:-34}; const a=locRotinaAdd(l,{dias:['sex'],turno:'manha'}); const b=!locRotinaAdd(l,{dias:'sex',turno:'manha'}); const c=locRotinaAdd(l,{dias:['qua'],ini:'08:00',fim:'12:00',obs:'exame'}); const t=locRotinaTxt(l.rotinas[1]); const d=locRotinaBate(l,'sex','manha')&&!locRotinaBate(l,'sex','tarde')&&locRotinaBate(l,'qua','')&&!locRotinaBate({},'sex','')&&locRotinaBate({},'','');
       const c2={id:'zr',nome:'Zz',locais:[l]}; const h=fichaPessoaHtml(c2,'card'); return a&&b&&c&&t==='Qua · 08:00–12:00 · exame'&&d&&h.includes('Sex · manhã')&&!locRotinaNorm({dias:[],turno:'',ini:'',obs:''}); })());
@@ -15243,14 +15246,14 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
     ok('BF-HISTORICO-V1: Benefícios tem KPI de pagos e chip Histórico (encerrados não somem)', (()=>{ const bk=BF.itens; BF.itens=[{id:'z1',situacao:'pago',valor_pago:100,segurado:'Zz',lp:'Gustavo'}]; try{ const V=VIEW; viewBeneficios(); const h=$('#main').innerHTML; return h.includes('Pagos (histórico)')&&h.includes('Histórico (1)'); } finally{ BF.itens=bk; } })());
     ok('CARTEIRA-SEGURA-V1: persistir carteira nunca zera o servidor por foto local vazia e bloqueia exclusão em massa fora do import', (()=>{ const a=cartPersistPlano({cli:[],apo:[],svCli:['x'],svApo:[],completo:false}).erro; const b=cartPersistPlano({cli:[{ref:'1'}],apo:[],svCli:Array.from({length:40},(_,i)=>'r'+i),svApo:[],completo:false}).erro; const c=cartPersistPlano({cli:[{ref:'1'}],apo:[],svCli:Array.from({length:40},(_,i)=>'r'+i),svApo:[],completo:true}); const d=cartPersistPlano({cli:[{ref:'1'}],apo:[{chave:'k'}],svCli:['1','2'],svApo:['k','z'],completo:false}); return !!a&&!!b&&!c.erro&&c.delCli.length===40&&!d.erro&&d.delCli.join()==='2'&&d.delApo.join()==='z'&&!String(cartPersistRemoto).includes('.delete().eq(\'dono\',me);'); })());
-    ok('CFG-SALVAR-V2: salvar cfg do funil é com debounce, manda atualizado_em e fica pendente até conseguir', typeof funCfgSalvarAgora==='function' && String(funCfgSalvar).includes('setTimeout') && String(funCfgSalvarAgora).includes('atualizado_em') && String(funCfgSalvarAgora).includes('_funCfgPend=true'));
+    ok('CFG-SALVAR-V2: salvar cfg do funil é com debounce, manda atualizado_em e fica pendente até conseguir', typeof funCfgSalvarAgora==='function' && String(funCfgSalvar).includes('setTimeout') && String(funCfgSalvarAgora).includes('atualizado_em') && String(funCfgSalvarAgora).includes('_funCfgFalhas'));
     ok('DONO-EXPLÍCITO: lpcRowOut e lp_dup_fila mandam dono; import não sobe linha sem dono; versão da barra vem do <title>', (()=>{ const r=lpcRowOut('k9',{nome:'Zz'}); const okRow=!escEu()||r.dono===escEu(); const okDup=String(_bnDupSync).includes('dono:'); const okImp=String(impUpsertPorDono).includes('sem dono'); const v=(document.title.match(/v\d+(\.\d+)*/)||[])[0]; const okVer=!v||[...document.querySelectorAll('.ver-auto')].every(e=>e.textContent===v); return okRow&&okDup&&okImp&&okVer; })());
     ok('JSQ nos handlers com dado de fora (ref/apólice/etapa): nenhum onclick com cartAbrir/atSalvarFicha/nnGoEtapa/bcGoEtapa/drwMoverFunil sem jsq', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join('\n'); const E="('${"+"esc("; const ruim=['cartAbrir'+E+'c.ref)}',"nnGoEtapa"+E+"e)}",'bcGoEtapa'+E+'e)}','drwMoverFunil'+E+'dest)}','atSalvarFicha'+E+'r.apolice)}']; return ruim.every(t=>src.indexOf(t)<0); })());
     ok('LP-ROTULO-PORTA-V1: lpcRowOut força dados.lp a ser rótulo do dono (Daniel nunca sai com lp=gustavo; juca aceita gustavo/rebeca; dono sem rótulo não mexe)', (()=>{ const bk=(typeof ESC!=='undefined')?ESC.rotulos:undefined; ESC.rotulos=[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'rebeca',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}];
       try{ const a=lpcRowOut('1',{lp:'gustavo',_dono:'d@x'}).dados.lp==='daniel', b=lpcRowOut('2',{lp:'rebeca',_dono:'j@x'}).dados.lp==='rebeca', c=lpcRowOut('3',{lp:'daniel',_dono:'j@x'}).dados.lp==='gustavo', d=lpcRowOut('4',{lp:'zz',_dono:'x@x'}).dados.lp==='zz'; return a&&b&&c&&d; } finally{ ESC.rotulos=bk; } })());
     ok('MAIS-TAREFA-V1: "Tarefa para um contato" do Adicionar rápido abre a busca (a folha não pode fechar antes)', (()=>{ document.querySelectorAll('#mais-rapido-bd').forEach(e=>e.remove()); try{ maisRapido(); const b=[...document.querySelectorAll('#mais-rapido-bd .mais-item')].find(x=>/Tarefa para um contato/.test(x.textContent)); if(!b) return true; b.click(); return !!document.getElementById('mais-q'); } finally{ maisRapidoFechar(); } })());
-    ok('IMPORT-DONO-V1: linha do relatório vai pro dono do SEU LP (rótulo→e-mail), sem rótulo cai no da sessão; dedupe por (dono,chave) antes do upsert', (()=>{ const bk=ESC.rotulos; ESC.rotulos=[{rotulo:'daniel',dono_email:'d@x'},{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'rebeca',dono_email:'j@x'}];
-      try{ const a=escEmailDoLp('Daniel','s@x')==='d@x', b=escEmailDoLp('Rebeca Souza','s@x')==='j@x', c=escEmailDoLp('Fulano','s@x')==='s@x', d=escEmailDoLp('','s@x')==='s@x';
+    ok('IMPORT-DONO-V1: linha do relatório vai pro dono do SEU LP (rótulo→e-mail), sem rótulo cai no da sessão, rótulo desconhecido vira falha; dedupe por (dono,chave) antes do upsert', (()=>{ const bk=ESC.rotulos; ESC.rotulos=[{rotulo:'daniel',dono_email:'d@x'},{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'rebeca',dono_email:'j@x'}];
+      try{ const a=escEmailDoLp('Daniel','s@x')==='d@x', b=escEmailDoLp('Rebeca Souza','s@x')==='j@x', c=escEmailDoLp('Fulano','s@x')==='' /* v2: rótulo desconhecido = falha visível */, d=escEmailDoLp('','s@x')==='s@x';
         const dd=impDedupe([{lp_email:'j@x',chave:'1'},{lp_email:'j@x',chave:'1'},{lp_email:'d@x',chave:'1'}],r=>r.chave); const e=dd.length===2;
         const f=String(exRecToRow).includes('escEmailDoLp')&&String(emRecToRow).includes('escEmailDoLp')&&String(exUpsertRemoto).includes('impUpsertPorDono')&&String(emUpsertRemoto).includes('impUpsertPorDono');
         return a&&b&&c&&d&&e&&f; } finally{ ESC.rotulos=bk; } })());
@@ -16405,10 +16408,10 @@ async function geoBuscar(q){ const k=geoGoogleKey();
   const u='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&namedetails=1&countrycodes=br&limit=6&accept-language=pt-BR&q='+encodeURIComponent(q);
   const r=await fetch(u,{headers:{'Accept':'application/json'}}); if(!r.ok) throw new Error('OpenStreetMap '+r.status); const j=await r.json(); return (Array.isArray(j)?j:[]).map(geoNormNominatim).filter(x=>x.nome); }
 function geoKeyHtml(){ return `<div class="card" style="padding:12px 14px;margin-top:12px"><h3 style="margin:0 0 6px">🗺️ Busca de endereços (Mapa de locais)</h3>
-  <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sem chave usa o OpenStreetMap (grátis). Com uma chave da Google Maps Platform (Places API), a busca fica com a qualidade do Google Agenda. A chave fica só neste aparelho.</div>
+  <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sem chave usa o OpenStreetMap (grátis). Com uma chave da Google Maps Platform (Places API), a busca fica com a qualidade do Google Agenda. A chave fica só neste aparelho — no Google Cloud, restrinja a chave por site (HTTP referrer = juca-alt.github.io) e só à Places API.</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="gmaps-key" placeholder="Chave da Google Maps Platform (opcional)" value="${esc(geoGoogleKey())}" style="flex:1;min-width:220px"><button class="btn btn-p btn-mini" onclick="geoGoogleKeySet(document.getElementById('gmaps-key').value)">Guardar</button></div></div>`; }
 /* ── a tela do mapa ── */
-let MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:'',dia:'',turno:''}; let _mapa=null, _mapaQT=null;
+let MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:'',dia:'',turno:''}; let _mapa=null, _mapaLayer=null, _mapaEl=null, _mapaQT=null;
 function mapaPontos(){ const out=[]; const dia=MAPA_F.dia==='hoje'?locDiaHoje(0):MAPA_F.dia==='amanha'?locDiaHoje(1):MAPA_F.dia; const add=(c,origem,abrir)=>{ locDe(c).forEach(l=>{ if(l.lat==null||l.lng==null) return; if(MAPA_F.tipo&&l.tipo!==MAPA_F.tipo) return; if(!locRotinaBate(l,dia,MAPA_F.turno)) return; out.push({c,l,origem,abrir}); }); };
   (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(MAPA_F.funil&&MAPA_F.funil!=='bn'&&(c.funil||'nn')!==MAPA_F.funil) return; if(MAPA_F.funil==='bn') return; if(MAPA_F.etapa&&c.etapa!==MAPA_F.etapa) return; if(MAPA_F.status&&etStatusDe(c)!==MAPA_F.status) return; add(c,'funil',`abrirContato('${esc(jsq(String(c.id)))}')`); });
   if((!MAPA_F.funil||MAPA_F.funil==='bn')&&!MAPA_F.etapa&&!MAPA_F.status) (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>add(b,'estoque',`taFichaAbrir('${esc(jsq(String(b.id)))}')`));
@@ -16417,6 +16420,7 @@ function mapaPontos(){ const out=[]; const dia=MAPA_F.dia==='hoje'?locDiaHoje(0)
 function mapaGrupos(pts){ const m=new Map(); pts.forEach(p=>{ const k=locChave(p.l); if(!m.has(k)) m.set(k,{k,nome:p.l.nome||p.l.end,end:p.l.end,lat:p.l.lat,lng:p.l.lng,pessoas:[]}); m.get(k).pessoas.push(p); }); return [...m.values()].sort((a,b)=>b.pessoas.length-a.pessoas.length); }
 function mapaQDeb(){ clearTimeout(_mapaQT); _mapaQT=setTimeout(()=>{ viewMapa(); const i=document.getElementById('mapa-q'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },300); }
 function mapaFoco(k){ MAPA_F.sel=(MAPA_F.sel===k?'':k); viewMapa(); }
+function mapaListaHtml(gr,pessoaLinha){ return gr.map(g=>`<div class="mapa-loc${MAPA_F.sel===g.k?' on':''}" onclick="mapaFoco('${esc(jsq(g.k))}')"><div class="n">📍 ${esc(g.nome)} <span class="badge b-azul">${g.pessoas.length}</span></div><div class="s">${esc(g.end||'')}</div>${MAPA_F.sel===g.k?`<div style="margin-top:6px" onclick="event.stopPropagation()">${g.pessoas.map(pessoaLinha).join('')}</div>`:''}</div>`).join('')||'<div class="vazio" style="padding:20px">Nenhum local com esse filtro. Abra a ficha de um lead ou cliente, em "Dados da pessoa", e adicione o local de trabalho.</div>'; }
 function viewMapa(){ const pts=mapaPontos(), gr=mapaGrupos(pts);
   const sel=(id,opts,v,rot)=>`<select onchange="MAPA_F.${id}=this.value;viewMapa()" title="${rot}" style="flex:0 1 auto;width:auto;min-width:140px;max-width:100%"><option value="">${rot}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===v?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
   const etapas=[...new Set((S.contatos||[]).filter(escVisivel).map(c=>c.etapa).filter(Boolean))].map(e=>[e,ET_LABEL[e]||e]);
@@ -16428,19 +16432,23 @@ function viewMapa(){ const pts=mapaPontos(), gr=mapaGrupos(pts);
       ${sel('funil',funis,MAPA_F.funil,'Todos os funis')}${sel('etapa',etapas,MAPA_F.etapa,'Todas as etapas')}${sel('status',etStatusTodos().map(x=>[x,x]),MAPA_F.status,'Todos os status')}${sel('tipo',Object.entries(LOC_TIPOS),MAPA_F.tipo,'Trabalho e casa')}
       ${sel('dia',[['hoje','Hoje'],['amanha','Amanhã']].concat(LOC_DIAS),MAPA_F.dia,'Qualquer dia')}${sel('turno',Object.entries(LOC_TURNOS),MAPA_F.turno,'Qualquer turno')}
     </div>
-    <div class="mapa-grid"><div id="mapa-el"></div><div id="mapa-lista" style="max-height:58vh;overflow:auto">${gr.map(g=>`<div class="mapa-loc${MAPA_F.sel===g.k?' on':''}" onclick="mapaFoco('${esc(jsq(g.k))}')"><div class="n">📍 ${esc(g.nome)} <span class="badge b-azul">${g.pessoas.length}</span></div><div class="s">${esc(g.end||'')}</div>${MAPA_F.sel===g.k?`<div style="margin-top:6px" onclick="event.stopPropagation()">${g.pessoas.map(pessoaLinha).join('')}</div>`:''}</div>`).join('')||'<div class="vazio" style="padding:20px">Nenhum local com esse filtro. Abra a ficha de um lead ou cliente, em "Dados da pessoa", e adicione o local de trabalho.</div>'}</div></div>`;
+    <div class="mapa-grid"><div id="mapa-el"></div><div id="mapa-lista" style="max-height:58vh;overflow:auto">${mapaListaHtml(gr,pessoaLinha)}</div></div>`;
+  /* MAPA-PERF-V1: o elemento do mapa é reaproveitado (o Leaflet não é recriado a cada tecla/clique) */
+  const slot=document.getElementById('mapa-el'); if(_mapaEl&&_mapa&&slot){ slot.replaceWith(_mapaEl); }
   mapaDesenhar(gr); }
 function mapaLeaflet(cb){ if(window.L){ cb(); return; }
   if(!document.getElementById('leaflet-css')){ const l=document.createElement('link'); l.id='leaflet-css'; l.rel='stylesheet'; l.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(l); }
   const ex=document.getElementById('leaflet-js'); if(ex){ ex.addEventListener('load',cb); return; }
   const sc=document.createElement('script'); sc.id='leaflet-js'; sc.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'; sc.onload=cb;
   sc.onerror=()=>{ const el=document.getElementById('mapa-el'); if(el) el.innerHTML='<div class="vazio" style="padding:20px">Mapa indisponível agora (sem internet?). A lista ao lado continua valendo.</div>'; }; document.head.appendChild(sc); }
-function mapaDesenhar(gr){ if(!document.getElementById('mapa-el')) return; mapaLeaflet(()=>{ try{ const el=document.getElementById('mapa-el'); if(!el||!window.L||VIEW!=='mapa') return; if(_mapa){ try{ _mapa.remove(); }catch(_){} _mapa=null; }
-    _mapa=L.map(el,{scrollWheelZoom:true}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_mapa);
+function mapaDesenhar(gr){ if(!document.getElementById('mapa-el')) return; mapaLeaflet(()=>{ try{ const el=document.getElementById('mapa-el'); if(!el||!window.L||VIEW!=='mapa') return;
+    if(!_mapa||_mapaEl!==el){ if(_mapa){ try{ _mapa.remove(); }catch(_){} } _mapaEl=el; _mapa=L.map(el,{scrollWheelZoom:true}); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(_mapa); _mapaLayer=L.layerGroup().addTo(_mapa); }
+    else { _mapaLayer.clearLayers(); _mapa.invalidateSize(); }
     const pts=gr.filter(g=>g.lat!=null&&g.lng!=null); if(!pts.length){ _mapa.setView([-8.05,-34.9],11); return; }
     const b=[]; pts.forEach(g=>{ const sz=g.pessoas.length>9?34:28; const ic=L.divIcon({className:'',html:`<div class="mapa-pin" style="width:${sz}px;height:${sz}px">${g.pessoas.length}</div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
-      const m=L.marker([g.lat,g.lng],{icon:ic}).addTo(_mapa); m.bindTooltip(`${esc(g.nome)} · ${g.pessoas.length}`); m.on('click',()=>mapaFoco(g.k)); b.push([g.lat,g.lng]); });
-    const sel=pts.find(g=>g.k===MAPA_F.sel); if(sel) _mapa.setView([sel.lat,sel.lng],15); else if(b.length===1) _mapa.setView(b[0],14); else _mapa.fitBounds(b,{padding:[30,30]});
+      const m=L.marker([g.lat,g.lng],{icon:ic}).addTo(_mapaLayer); m.bindTooltip(`${esc(g.nome)} · ${g.pessoas.length}`); m.on('click',()=>mapaFoco(g.k)); b.push([g.lat,g.lng]); });
+    /* enquadra DEPOIS do layout (o container acabou de voltar pro DOM; sem isso o fitBounds mede 0×0 e cai no zoom máximo) */
+    setTimeout(()=>{ try{ _mapa.invalidateSize(); const sel=pts.find(g=>g.k===MAPA_F.sel); if(sel) _mapa.setView([sel.lat,sel.lng],16); else if(b.length===1) _mapa.setView(b[0],15); else _mapa.fitBounds(b,{padding:[30,30],maxZoom:16}); }catch(_){} },60);
   }catch(e){ console.warn('mapa',e); } }); }
 function maisRapidoFechar(){ const b=document.getElementById('mais-rapido-bd'); if(b) b.remove(); }
 function maisModDe(view){ const k=Object.keys(MODS||{}).find(k=>(MODS[k].views||[]).includes(view)); return k?modOn(k):true; }
@@ -16477,7 +16485,7 @@ function maisRapido(){
 function maisTarefaAchar(q){
   q=normKey(q||''); if(!q) return [];
   const dig=q.replace(/\D/g,'');
-  return (S.contatos||[]).filter(c=>normKey(c.nome||'').indexOf(q)>=0||(dig.length>=4&&String(c.telefone||'').replace(/\D/g,'').indexOf(dig)>=0)).slice(0,8);
+  return (S.contatos||[]).filter(escVisivel).filter(c=>normKey(c.nome||'').indexOf(q)>=0||(dig.length>=4&&String(c.telefone||'').replace(/\D/g,'').indexOf(dig)>=0)).slice(0,8);   /* ESCOPO-TUDO-V2 */
 }
 let MAIS_TAR={cid:null,quando:null};
 function maisTarefa(){
