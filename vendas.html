@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.52.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.53 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1660,6 +1660,7 @@ function recAplicarDoNome(c){
 }
 function normContato(c){
   if(!c||typeof c!=='object') return c;
+  if(c.nome==null) c.nome='';   /* BUGS-V5: 40+ c.nome.split(' ') no app */
   if(c.funil==='bc'&&c.etapa===BC_ETAPA_EXTINTA) c.etapa=BC_ATIVOS;
   try{ recAplicarDoNome(c); }catch(_){}
   if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
@@ -1676,7 +1677,9 @@ function normContato(c){
   return c;
 }
 function normBase(){ (S&&S.contatos||[]).forEach(normContato); }
-function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); normBase(); }
+function carregar(){ try{ const raw=localStorage.getItem(CHAVE); S = raw? JSON.parse(raw) : seed(); }catch(e){ S = seed(); } if(!S||!Array.isArray(S.users)||!Array.isArray(S.contatos)||!S.users.length) S = seed(); normBase();
+  /* BUGS-V5 #2: foto inicial já aqui — a 1ª edição do usuário (antes da carga remota) marca PEND em vez de ser 'primeira foto' e sumir no merge */
+  try{ if(typeof _lpcLast!=='undefined'){ _lpcLast={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) _lpcLast[String(c.id)]=JSON.stringify(c); }); } }catch(_){} }
 /* salvar() = choke point de persistência dos contatos. Além do localStorage:
    carimba `_upd` no contato que MUDOU (base do merge entre aparelhos) e agenda
    o espelho no Supabase (lp_contatos) quando logado — ver bloco SYNC CONTATOS. */
@@ -1727,7 +1730,7 @@ function fundMerge(locais, remotos, pend, completo){
   const out=new Map((remotos||[]).map(c=>[String(c.id),c]));       /* servidor manda */
   /* v7.43.1: pendente cujo conteúdo (sem carimbos) é IGUAL ao do servidor não deve nada → deixa de ser pendente */
   const semCarimbo=o=>{ const x={...o}; delete x._upd; delete x._dono; return JSON.stringify(x); };
-  if(pend) (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id); const r=out.get(k); if(pend[k]&&r&&semCarimbo(r)===semCarimbo(c)) delete pend[k]; });
+  if(pend){ let mudou=false; (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id); const r=out.get(k); if(pend[k]&&r&&semCarimbo(r)===semCarimbo(c)){ delete pend[k]; mudou=true; } }); if(mudou&&typeof pendSalvar==='function') try{ pendSalvar(); }catch(_){} }   /* BUGS-V5 #13 */
   (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id);
     const pendente=!!(pend&&pend[k]);                               /* só o que está na FILA vence (criado aqui entra na fila ao salvar); local sem dono e fora da fila = fantasma de versão antiga → sai na carga completa */
     if(pendente){ out.set(k,c); return; }                           /* o que este aparelho deve ao servidor vence */
@@ -1782,6 +1785,8 @@ function lpcComDono(x){ if(!x||!x.dados) return null; if(x.dono) x.dados._dono=x
    dono era o Daniel → a varredura acusou 'rótulo contradiz dono' e a linha sumia da visão do dono. O dono
    (coluna, RLS) é a verdade; o rótulo `lp` tem que ser um dos rótulos DELE. Normaliza na porta de saída
    (todo upsert passa por lpcRowOut) + trigger no banco (lp_norm_lp_rotulo). */
+/* BUGS-V5 #1: contato novo nascia com lp='gustavo' (perfil demo) mesmo logado como Daniel → escondido do próprio dono até o sync. */
+function escLpNovo(){ try{ if(typeof logado==='function'&&logado()){ const o=escAtual(); const d=(o&&o.dono)||escEu(); const lp=(o&&o.lp)||escMeuLp()||S.activeUser; return escLpParaDono(d,lp)||lp; } }catch(_){} return S.activeUser; }
 function escLpParaDono(dono, lp){ const rs=((typeof ESC!=='undefined'&&ESC&&ESC.rotulos)||[]).filter(r=>r.dono_email===dono).map(r=>escLpNorm(r.rotulo)).filter(Boolean).sort(); if(!rs.length) return lp; const v=escLpNorm(lp); return (v&&rs.includes(v))?lp:rs[0]; }
 function lpcRowOut(k,d,extra){ const dados={...d,...(extra||{})}; const dono=dados._dono||(typeof delegAtivo==='function'?delegAtivo():null); delete dados._dono;
   const donoEf=dono||(typeof escEu==='function'?escEu():null); if(donoEf){ const nlp=escLpParaDono(donoEf,dados.lp); if(nlp!==dados.lp) dados.lp=nlp; }
@@ -1896,7 +1901,7 @@ function etapasDe(c){ const f=c&&c.funil; if(f&&ETAPAS_MAP[f]) return ETAPAS_MAP
 const FUNIS=[['nn','Novos Negócios'],['bc','Negócios Base de Clientes'],['vg','Vida em Grupo'],['prud','Prud. Demais'],['mfo','MFO']];
 function funilDe(c){ const f=c&&c.funil; return (f&&f!=='nn'&&FUNIL_FAB[f])?f:(f==='bc'?'bc':'nn'); }
 function funilNome(f){ const x=FUNIS.find(y=>y[0]===f); return x?x[1]:f; }
-function etapasDoFunil(f){ return f==='bc'?ETAPAS_BC:ETAPAS; }
+function etapasDoFunil(f){ if(f&&ETAPAS_MAP[f]) return ETAPAS_MAP[f].ids; return f==='bc'?ETAPAS_BC:ETAPAS; }   /* BUGS-V5 #3: funis extras */
 function etapaSugerida(c,dest){
   const mapa=dest==='bc'
     ? {'EMISSÃO':'Emissão Final','DELIVERY':'Delivery','Não':'Venda perdida','Prop. Cancelada':'Venda perdida','Apól. Cancelada':'Venda perdida'}
@@ -3085,8 +3090,8 @@ function tarGcalUrl(c,t){
   const dia=t.quando.replace(/-/g,'');
   const hh=(t.hora||'09:00').split(':');
   const ini=dia+'T'+String(hh[0]).padStart(2,'0')+String(hh[1]||'00').padStart(2,'0')+'00';
-  const fimMin=(Number(hh[0])*60+Number(hh[1]||0)+(Number(t.dur)||60))%(24*60);
-  const fim=dia+'T'+String(Math.floor(fimMin/60)).padStart(2,'0')+String(fimMin%60).padStart(2,'0')+'00';
+  const totMin=Number(hh[0])*60+Number(hh[1]||0)+(Number(t.dur)||60); const fimMin=totMin%(24*60); const diaFim=(totMin>=1440?isoAddDias(t.quando,1):t.quando).replace(/-/g,'');
+  const fim=diaFim+'T'+String(Math.floor(fimMin/60)).padStart(2,'0')+String(fimMin%60).padStart(2,'0')+'00';
   const tit=tarNomeTipo(t.tipo)+' · '+(c?c.nome:'');
   const det=tarEventoDescricao(c,t);
   return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(tit)+
@@ -3235,14 +3240,14 @@ function funAvancar(id,ev){
   if(ev){ ev.stopPropagation(); ev.preventDefault(); }
   const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
   const prox=funProxEtapa(c); if(!prox) return;
-  const de=c.etapa;
-  c.etapa=prox; logEtapa(c,de,prox);
+  const de=c.etapa, stAntes=c.status, ordAntes=c.ord;
+  c.etapa=prox; logEtapa(c,de,prox); try{ funOrdemInserir(c,prox,null); }catch(_){}
   const marca=interacoesDe(c).slice(-1)[0];   /* guarda QUAL registro foi este */
   const _autoAv=funAutoDelivery(c); const _autoMarca=_autoAv?interacoesDe(c).slice(-1)[0]:null;
   salvar();
   toastDesfazer(_autoAv?`${c.nome.split(' ')[0]}: apólice emitida → Delivery`:`${c.nome.split(' ')[0]}: ${LBLE(de)} → ${LBLE(prox)}`, ()=>{
     const v=S.contatos.find(x=>String(x.id)===String(id)); if(!v) return;
-    v.etapa=de;
+    v.etapa=de; if(stAntes!=null) v.status=stAntes; if(ordAntes!=null) v.ord=ordAntes;   /* BUGS-V5 #10 */
     if(_autoMarca&&_autoMarca.id){ const li2=interacoesDe(v); const j=li2.findIndex(x=>x.id===_autoMarca.id); if(j>=0) li2.splice(j,1); }
     /* APAGA o registro em vez de empilhar a volta. A taxa de passagem conta
        quem ALCANÇOU cada etapa lendo o histórico — se o toque errado ficasse
@@ -3434,7 +3439,7 @@ function wireNnBoard(){
   });
 }
 function nnMoveEtapa(id,etapa,cardEl,colEl,antesId){
-  const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
+  const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c||c.etapa===etapa) return;
   const de=c.etapa; c.etapa=etapa;
   funOrdemInserir(c,etapa,antesId||null); if(antesId) NN_ORD='livre';   /* FUNIL-ORDEM-V1: cai onde soltou */
   /* UI otimista: o card vai pra coluna nova NA HORA, antes de salvar e de
@@ -3557,7 +3562,7 @@ function wireBcBoard(){
   });
 }
 function bcMoveEtapa(id,etapa,cardEl,colEl,antesId){
-  const c=S.contatos.find(x=>x.id===id); if(!c||c.etapa===etapa) return;
+  const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c||c.etapa===etapa) return;
   const de=c.etapa; c.etapa=etapa;
   funOrdemInserir(c,etapa,antesId||null); if(antesId) NN_ORD='livre';   /* FUNIL-ORDEM-V1: cai onde soltou */
   /* UI otimista: o card vai pra coluna nova NA HORA, antes de salvar e de
@@ -3578,15 +3583,16 @@ function jornadaAddNota(){ const c=S.contatos.find(x=>x.id===CONTATO); if(!c) re
   interacoesDe(c).push({id:uid(),k:'nota',l:t,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); salvar(); renderDrawer(); toast('Status registrado na jornada',true); }
 window.jornadaAddNota=jornadaAddNota;
 function registrarResultado(id,k,dia){
-  const c=S.contatos.find(x=>x.id===id); const r=RES_BY_K[k]; if(!c||!r) return;
+  const c=S.contatos.find(x=>String(x.id)===String(id)); const r=RES_BY_K[k]; if(!c||!r) return;
   const it={id:uid(),k,l:r.l,dia:dia||hojeISO(),ts:new Date().toISOString(),por:S.activeUser};
   interacoesDe(c).push(it);
   if(r.lig) c.taTentativas=(c.taTentativas||0)+1;
   if(r.ta) c.taStatus=r.ta;
   let extra='';
   // funil BC não tem OI/FF etc. — "Agendou X" vira Agendada Revisita; "Sem interesse" vira Venda perdida
-  const alvo = c.funil==='bc' ? ({'OI/FF':'Agendada Revisita','P/C':'Agendada Revisita','C2':'Agendada Revisita','Não':'Venda perdida'}[r.etapa]||null) : r.etapa;
-  if(alvo && c.etapa!==alvo){ const de=c.etapa; c.etapa=alvo; it.de=de; it.para=alvo; extra=` · etapa ${de} → ${alvo}`; }
+  const alvo0 = c.funil==='bc' ? ({'OI/FF':'Agendada Revisita','P/C':'Agendada Revisita','C2':'Agendada Revisita','Não':'Venda perdida'}[r.etapa]||null) : r.etapa;
+  const alvo = (alvo0&&etapasDe(c).includes(alvo0)) ? alvo0 : null;   /* BUGS-V5 #4: etapa que não existe no funil do contato (VG/Prud/MFO) não é aplicada */
+  if(alvo && c.etapa!==alvo){ const de=c.etapa; c.etapa=alvo; it.de=de; it.para=alvo; extra=` · etapa ${de} → ${alvo}`; try{ funOrdemInserir(c,alvo,null); }catch(_){} }
   salvar();
   toast(`${c.nome.split(' ')[0]}: ${r.l}${extra}`,true);
   render();
@@ -4477,7 +4483,7 @@ function pessoaSalvarDados(id){
   const tel=v('pes_tel');   if(tel!==undefined) c.telefone=tel;
   const mail=v('pes_mail'); if(mail!==undefined) c.email=mail;
   const prof=v('pes_prof'); if(prof!==undefined) c.profissao=prof||'—';
-  const idade=v('pes_idade'); if(idade!==undefined) c.idade=idade?Number(idade):null;
+  const idade=v('pes_idade'); if(idade!==undefined) c.idade=(idade!==''&&isFinite(parseInt(idade,10)))?parseInt(idade,10):null;   /* BUGS-V5 #15 */
   const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec||'';
   const n=pessoaPropagar(c);
   const lpNovo=v('pes_lp'); const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
@@ -4487,11 +4493,11 @@ function pessoaSalvarDados(id){
 }
 /* Mover um lead do funil pra outra base (só admin): apaga a linha do dono antigo e sobe no novo. */
 async function ctMoverDono(c,rotulo){ const r=escRotulosTodos().find(x=>escLpNorm(x.rotulo)===escLpNorm(rotulo)); if(!c||!r) return false;
-  const donoAntigo=escDonoDe(c);
+  const donoAntigo=escDonoDe(c); const antes={lp:c.lp,_dono:c._dono,_upd:c._upd};
   c.lp=escLpNorm(r.rotulo); c._dono=r.dono; c._upd=new Date().toISOString();
-  if(LPC_REMOTE&&sb&&donoAntigo&&donoAntigo!==r.dono){ try{ const del=await sb.from(LPC_T).delete().eq('dono',donoAntigo).eq('id',c.id); if(del.error) throw del.error;
-      const up=await sb.from(LPC_T).upsert([lpcRowOut(String(c.id),{...c})],{onConflict:'dono,id'}); if(up.error) throw up.error; }
-    catch(e){ console.warn('ctMoverDono',e); toast('Não consegui mover no servidor: '+(e.message||e),false); return false; } }
+  if(LPC_REMOTE&&sb&&donoAntigo&&donoAntigo!==r.dono){ try{ const up=await sb.from(LPC_T).upsert([lpcRowOut(String(c.id),{...c})],{onConflict:'dono,id'}); if(up.error) throw up.error;
+      const del=await sb.from(LPC_T).delete().eq('dono',donoAntigo).eq('id',c.id); if(del.error) throw del.error; }
+    catch(e){ Object.assign(c,antes); console.warn('ctMoverDono',e); toast('Não consegui mover no servidor: '+(e.message||e),false); return false; } }   /* BUGS-V5 #8: grava no novo antes de apagar do antigo; erro → volta */
   _lpcPrev=_lpcSnap(); salvar(); return true; }
 
 function drwIrmaosHtml(c){
@@ -4801,7 +4807,7 @@ function renderDrawer(){
     </div>`;
   drwSecsWire();
 }
-function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); const _auto=funAutoDelivery(c); salvar(); renderDrawer(); toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁`:`${c.nome.split(' ')[0]}: ${de} → ${e}`,true);
+function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); try{ funOrdemInserir(c,e,null); }catch(_){} const _auto=funAutoDelivery(c); salvar(); renderDrawer(); toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁`:`${c.nome.split(' ')[0]}: ${de} → ${e}`,true);
   /* QUADRO-ACOMPANHA-V1 (04/09): mudar a etapa pela ficha deixava o quadro atrás na versão velha ("travado") — o card só andava na próxima tela. Agora o fundo redesenha junto, sem fechar a ficha. */
   setTimeout(()=>{ try{ render(); }catch(_){} },0); }
 function drwPedirFunil(dest){
@@ -4822,7 +4828,7 @@ function drwMoverFunil(dest){
   const c=ct(); if(!c||funilDe(c)===dest) return;
   const nova=(($('#drwFunilEt')||{}).value)||etapasDoFunil(dest)[0];
   const deF=funilNome(funilDe(c)), deE=c.etapa;
-  c.funil=(dest==='bc')?'bc':'nn'; c.etapa=nova;
+  c.funil=(!dest||dest==='nn')?'nn':dest; c.etapa=nova;   /* BUGS-V5 #3: VG/Prud/MFO não caem mais no NN */
   interacoesDe(c).push({id:uid(),k:'funil',l:`Funil: ${deF} → ${funilNome(dest)} (etapa ${deE} → ${nova})`,de:deE,para:nova,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
   salvar(); renderDrawer(); render();
   toast(`${c.nome.split(' ')[0]} → ${funilNome(dest)} · ${nova}`,true);
@@ -5078,8 +5084,8 @@ function spSugestao(k){ // coaching contextual por KPI (aprendizado Global-CRM)
   if(k.feitas&&!k.atend) return 'Ninguém atendeu ainda — varia o horário ou manda um WhatsApp antes da 2ª tentativa.';
   return `${k.semRes.length} ainda sem resultado — segue a discagem.`;
 }
-function spAdd(id){ if(!id) return; const c=S.contatos.find(x=>x.id===id); if(!c) return; c.sitplan=spData(); salvar(); toast(`${c.nome.split(' ')[0]} na lista de ${dataBR(spData())}`,true); render(); }
-function spReag(id,iso){ const c=S.contatos.find(x=>x.id===id); if(!c) return; c.sitplan=iso; salvar(); toast(`${c.nome.split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
+function spAdd(id){ if(!id) return; const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return; c.sitplan=spData(); salvar(); toast(`${c.nome.split(' ')[0]} na lista de ${dataBR(spData())}`,true); render(); }
+function spReag(id,iso){ const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return; c.sitplan=iso; salvar(); toast(`${c.nome.split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
 /* busca com sugestões (o <select> com 1.000+ nomes era inviável): casa 'Nome · Etapa' no funil ou 'Nome · Estoque' */
 function spAddPorNome(txt){ const t=String(txt||'').trim(); if(!t){ toast('Digite um nome',false); return; } const D=spData();
   const nome=t.split(' · ')[0].trim().toLowerCase(), tag=(t.split(' · ')[1]||'').trim();
@@ -5512,7 +5518,7 @@ function salvarNovoContato(){
   const fid=(rf?rf.value:(md&&md.dataset.funil))||'nn'; const bc=fid==='bc'; const extra=!['nn','bc'].includes(fid);
   const sp=document.getElementById('ncSitplan');
   const et0 = fid==='bc'?'Clientes Ativos' : fid==='nn'?'SitPlan' : ((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade');
-  const c={ id:uid(), lp: lpSel? lpSel.value : S.activeUser, nome, sexo:'—', idade:+v('ncIdade')||null,
+  const c={ id:uid(), lp: lpSel? lpSel.value : escLpNovo(), nome, sexo:'—', idade:+v('ncIdade')||null,
     profissao:v('ncProf')||'—', telefone:v('ncTel'), estrelas:0, ance:null, etapa: et0, funil: fid,
     origem:v('ncOrigem')||'—', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
@@ -8971,8 +8977,8 @@ function tarReuniaoInterval(t){ // início/fim ISO local a partir de quando+hora
   const hh=String((t&&t.hora)||'09:00').split(':');
   const h=Number(hh[0])||9, m=Number(hh[1])||0, p2=n=>String(n).padStart(2,'0');
   const dur=Math.max(5,Number(t&&t.dur)||60);
-  const fimMin=(h*60+m+dur)%(24*60);
-  return { ini:dia+'T'+p2(h)+':'+p2(m)+':00', fim:dia+'T'+p2(Math.floor(fimMin/60))+':'+p2(fimMin%60)+':00' };
+  const tot=h*60+m+dur; const diaFim=tot>=1440?isoAddDias(dia,1):dia; const fimMin=tot%(24*60);   /* BUGS-V5 #5: passa da meia-noite → fim no dia seguinte */
+  return { ini:dia+'T'+p2(h)+':'+p2(m)+':00', fim:diaFim+'T'+p2(Math.floor(fimMin/60))+':'+p2(fimMin%60)+':00' };
 }
 /* TAR-GCAL-DIRETO-V1 (08/09): qualquer atividade com hora entra na Agenda Google pela API
    (reunião segue o caminho dela, com etapa + cor). Sem abrir tela; sincroniza se já tem evento. */
@@ -8991,7 +8997,8 @@ async function gcalCriarEventoDaTarefa(cid,tid,op){
       interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na agenda Google: '+titulo,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
       toast('Gravado na sua Agenda Google: '+titulo+' · '+(t.hora||'')+' ('+(t.dur||60)+' min)',true); }
     render(); gcalCarregar();
-  }catch(e){ toast('Não consegui gravar direto na agenda ('+(e&&e.message||e)+') — abrindo o Google preenchido',false); try{ const u=tarGcalUrl(c,t); if(u) window.open(u,'_blank','noopener'); }catch(_){} }
+  }catch(e){ if(t.gcalId&&/404|410|not found|deleted|resource has been/i.test(String(e&&e.message||e))){ delete t.gcalId; salvar(); delete _gcalReuniaoBusy[chave]; return gcalCriarEventoDaTarefa(cid,tid,op); }   /* BUGS-V5 #6 */
+    toast('Não consegui gravar direto na agenda ('+(e&&e.message||e)+') — abrindo o Google preenchido',false); try{ const u=tarGcalUrl(c,t); if(u) window.open(u,'_blank','noopener'); }catch(_){} }
   finally{ delete _gcalReuniaoBusy[chave]; }
 }
 async function gcalCriarReuniaoDaTarefa(cid,tid){
@@ -9010,7 +9017,7 @@ async function gcalCriarReuniaoDaTarefa(cid,tid){
         if(ev){ const r=reuniaoResolveTitulo(c, ev.summary||'');
           if(r.acao==='skip'){ toast('Já está com a etapa certa na agenda',true); return; }
           if(r.acao==='manual'){ toast('Evento com título ajustado à mão — não mexi',true); return; } }
-        await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),{summary:alvo, colorId:REUNIAO_COLOR_ID},{sendUpdates:'none'});
+        await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),(()=>{ const iv=tarReuniaoInterval(t); return {summary:alvo, colorId:REUNIAO_COLOR_ID, start:{dateTime:iv.ini,timeZone:GCAL_TZ}, end:{dateTime:iv.fim,timeZone:GCAL_TZ}}; })(),{sendUpdates:'none'});   /* BUGS-V5 #7: remarcou → data vai junto */
         toast('Agenda atualizada: '+alvo,true);
       }else{
         await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),{summary:tituloCru},{sendUpdates:'none'});
@@ -9313,7 +9320,7 @@ function pTels(o){ if(!o) return [];
 function pTel(o){ return pTels(o)[0]||null; }
 /* promover lead → card SEM perder dado (era o vazamento do bnPromover): carrega
    os campos estruturados, não só nome/tel/idade/profissão. */
-function pessoaLeadToCard(b){ return { id:'bn'+Date.now(), lp:S.activeUser, funil:'nn', nome:b.nome,
+function pessoaLeadToCard(b){ return { id:'bn'+uid(), lp:escLpNovo(), funil:'nn', nome:b.nome,
   telefone:b.telefone||'', telefones_alt:Array.isArray(b.telefones_alt)?b.telefones_alt.slice():[],
   etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'', contexto:b.contexto||'',
   idade:b.idade||'', profissao:b.cargo||'', cidade:b.cidade||'', renda_estimada:b.renda_estimada||'',
@@ -12410,7 +12417,7 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
 function cartNovoNegocio(ref,funil){
   const c=(CART.clientes||[]).find(x=>x.ref===ref); if(!c) return null;
   const bc=funil!=='nn';
-  const n={ id:uid(), lp:S.activeUser, nome:c.nome, sexo:'—', idade:c.idade!=null?c.idade:null, profissao:'—', telefone:cartTel(c)||'', estrelas:0, ance:null,
+  const n={ id:uid(), lp:escLpNovo(), nome:c.nome, sexo:'—', idade:c.idade!=null?c.idade:null, profissao:'—', telefone:cartTel(c)||'', estrelas:0, ance:null,
     etapa: bc?'Clientes Ativos':'SitPlan', funil: bc?'bc':'nn', origem:'carteira', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[], sitplan:null, pessoaId:c.ref||null };
   S.contatos.push(n); salvar();
@@ -12611,7 +12618,8 @@ async function bnDupsCarregar(){
     bnSalvar(); render();
   }catch(e){ console.warn('lp_dup_fila: load remoto falhou → segue local',e); }
 }
-function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(raw) BN=JSON.parse(raw); }catch(e){ BN={contatos:[],dups:[]}; } if(!Array.isArray(BN.contatos)) BN.contatos=[]; if(!Array.isArray(BN.dups)) BN.dups=[]; }
+function bnCarregarLocal(){ try{ const raw=localStorage.getItem(BN_CHAVE); if(raw) BN=JSON.parse(raw); }catch(e){ BN={contatos:[],dups:[]}; } if(!Array.isArray(BN.contatos)) BN.contatos=[]; if(!Array.isArray(BN.dups)) BN.dups=[];
+  try{ if(typeof _bnLast!=='undefined'){ _bnLast={}; BN.contatos.forEach(c=>{ if(c&&c.id) _bnLast[c.id]=JSON.stringify(c); }); } }catch(_){} }
 
 /* persistência: carimba _upd só em quem mudou (mesma mecânica do salvar()) */
 let _bnLast={};
@@ -12790,11 +12798,11 @@ async function bnGarantirDono(d){ if(!d||!LPC_REMOTE||!sb) return;
   }catch(e){ console.warn('bnGarantirDono',e); toast('Não consegui carregar a base dele agora',false); } }
 /* Mover um contato do Estoque pra outra base (só admin): apaga a linha do dono antigo e sobe no novo. */
 async function bnMoverDono(c,rotulo){ const r=escRotulosTodos().find(x=>escLpNorm(x.rotulo)===escLpNorm(rotulo)); if(!c||!r) return false;
-  const donoAntigo=escDonoDe(c);
+  const donoAntigo=escDonoDe(c); const antes={lp:c.lp,_dono:c._dono,_upd:c._upd};
   c.lp=escLpNorm(r.rotulo); c._dono=r.dono; c._upd=new Date().toISOString();
-  if(LPC_REMOTE&&sb&&donoAntigo&&donoAntigo!==r.dono){ try{ const del=await sb.from(LPC_T).delete().eq('dono',donoAntigo).eq('id',c.id); if(del.error) throw del.error;
-      const up=await sb.from(LPC_T).upsert([lpcRowOut(c.id,{...c},{funil:'bn'})],{onConflict:'dono,id'}); if(up.error) throw up.error; }
-    catch(e){ console.warn('bnMoverDono',e); toast('Não consegui mover no servidor: '+(e.message||e),false); return false; } }
+  if(LPC_REMOTE&&sb&&donoAntigo&&donoAntigo!==r.dono){ try{ const up=await sb.from(LPC_T).upsert([lpcRowOut(c.id,{...c},{funil:'bn'})],{onConflict:'dono,id'}); if(up.error) throw up.error;
+      const del=await sb.from(LPC_T).delete().eq('dono',donoAntigo).eq('id',c.id); if(del.error) throw del.error; }
+    catch(e){ Object.assign(c,antes); console.warn('bnMoverDono',e); toast('Não consegui mover no servidor: '+(e.message||e),false); return false; } }
   bnSalvar(); return true; }
 /* linha de módulo (backoffice/benefícios): dono = lp_email, rótulo = lp/lp_servico */
 function escLinhaOk(r){ if(!logado()||!r) return true; return escRegOkDe(escAtual(),{_dono:r.lp_email||r.dono||null, lp:r.lp||r.lp_servico||null}); }
@@ -13316,11 +13324,11 @@ function bnSalvarEdicao(id){
   c.telefone=$('#bne-tel').value.trim()||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=$('#bne-rec').value.trim()||null;
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
-  c.idade=$('#bne-idade').value?Number($('#bne-idade').value):null;
+  c.idade=(()=>{ const n=parseInt($('#bne-idade').value,10); return isFinite(n)?n:null; })();
   c.estado_civil=$('#bne-ec').value||null;
   c.filhos=$('#bne-fi').value==='sim'?true:($('#bne-fi').value==='nao'?false:null); // boolean = formato canônico do banco (carga 04/08)
   c.civil_cod=bnCivilRecalc(c); // mantém o código da carga em sincronia com civil/filhos editados
-  c.renda_estimada=$('#bne-renda').value?Number($('#bne-renda').value):null;
+  c.renda_estimada=(()=>{ const n=Number($('#bne-renda').value); return ($('#bne-renda').value!==''&&isFinite(n))?n:null; })();
   c.cidade=$('#bne-cid').value.trim()||null; c.email=$('#bne-mail').value.trim()||null;
   { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); c.empresa=ec[0]||null; c.cargo=ec[1]||null; }
   const lpSel=$('#bne-lp'); const lpNovo=lpSel&&lpSel.value; const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
@@ -13340,8 +13348,8 @@ function bnPromover(id){
 function bnLevarProFunil(b,etapa){ try{
   let c=b.funil_contato_id? (S.contatos||[]).find(x=>x.id===b.funil_contato_id) : null;
   if(!c){ c=pessoaLeadToCard(b); S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id; }
-  if(etapa&&c.etapa!==etapa&&!ETAPAS_ENCERR.includes(c.etapa)){ c.etapa=etapa; }
-  salvar(); toast(String(b.nome||'').split(' ')[0]+' → funil em '+etapa+' ✓',true); return c;
+  if(etapa&&c.etapa!==etapa&&!ETAPAS_ENCERR.includes(c.etapa)&&etapasDe(c).includes(etapa)){ c.etapa=etapa; try{ funOrdemInserir(c,etapa,null); }catch(_){} }   /* BUGS-V5 #9: lead no BC/extra não ganha etapa do NN */
+  salvar(); try{ pendMarcar('bn',[b.id]); bnSalvar(); }catch(_){} toast(String(b.nome||'').split(' ')[0]+' → funil em '+(c.etapa||etapa)+' ✓',true); return c;
 }catch(e){ console.warn('bnLevarProFunil',e); return null; } }
 function bnLote(acao){
   const ids=[...FBN.sel]; if(!ids.length) return;
@@ -13387,7 +13395,7 @@ function bnLoteLista(){
 }
 function bnNovo(nome){ // nome opcional (⌘K passa pronto; o botão do Estoque pergunta)
   nome=nome||prompt('Nome do novo contato:'); if(!nome) return;
-  const c={id:'N'+Date.now(),lp:S.activeUser,listas:[],nome:String(nome).trim(),telefone:null,email:null,empresa:null,cargo:null,
+  const c={id:'N'+Date.now(),lp:escLpNovo(),listas:[],nome:String(nome).trim(),telefone:null,email:null,empresa:null,cargo:null,
     trilha:'seguro',tipo:null,estagio:'estoque',recomendante:null,cidade:null,prioridade:null,
     notas:'',tags:'',contexto:'',n_origens:1,precisa_revisao:false,ta_dia:null,hist:[],criadoEm:hojeISO()};
   BN.contatos.unshift(c); pendMarcar('bn',[c.id]); FBN.edit=c.id; bnSalvar(); viewBnEstoque();
@@ -15232,6 +15240,7 @@ function lpSelfCheck(){
     ok('ESCOPO-TUDO-V1: em escopo Meu (dono j@x), lead do Daniel (d@x) não entra em contatosDoLp/fxLista/meusContatos; nenhum leitor usa master-ou-logado', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=S.contatos; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}};
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
+    ok('BUGS-V5: lp de contato novo vem do escopo; funis extras na ficha/resultado; meia-noite; undo restaura status; locRemover por objeto; nome null vira vazio; ids comparados como string', (()=>{ const a=typeof escLpNovo==='function'&&String(escLpNovo()).length>0; const vg=ETAPAS_MAP.vg?etapasDoFunil('vg')===ETAPAS_MAP.vg.ids:true; const iv=tarReuniaoInterval({quando:'2026-09-15',hora:'23:30',dur:60}); const b=iv.fim.startsWith('2026-09-16T00:30'); const u=tarGcalUrl({id:'x',nome:'Zz'},{quando:'2026-09-15',hora:'23:30',dur:60}).includes('/20260916T003000'); const n=normContato({id:'zn'}); const c=n.nome===''; const d=String(drwMoverFunil).includes("dest==='nn')?'nn':dest")&&String(registrarResultado).includes('etapasDe(c).includes(alvo0)')&&String(locRemover).includes('locDe(c)[i]')&&String(funAvancar).includes('stAntes')&&String(ctMoverDono).includes('Object.assign(c,antes)')&&String(bnLevarProFunil).includes('bnSalvar')&&!String(nnMoveEtapa).includes('x.id===id)'); return a&&vg&&b&&u&&c&&d; })());
     ok('HANDLERS-EXISTEM-V1: toda função chamada em onclick/onchange/oninput/onsubmit do fonte existe (pegou setLeitura/simSet no PLACED)', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join('\n')+document.body.innerHTML; const re=/on(?:click|change|input|submit|keydown|keyup|blur|focus|toggle)="(?:[^"]*?;)?\s*(?:event\.[a-zA-Z]+\(\);\s*)*([A-Za-z_$][\w$]*)\(/g; const falt=new Set(); let m; while((m=re.exec(src))){ const f=m[1]; if(['if','return','this','event','window','document','void','new','typeof','function','MAPA_F','FBF','FTA','NN_MODE','BC_MODE'].includes(f)) continue; if(typeof window[f]!=='function') falt.add(f); } window.__handlersFaltando=[...falt]; return falt.size===0; })());
     ok('ESCOPO-TUDO-V2 + IMPORT-DONO-V2: datalist/negócios/índices/busca/ordem da coluna/tarefa rápida passam pelo escopo; rótulo desconhecido não cai no dono da sessão; cfg desiste após 3 falhas; mapa reaproveita a instância', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); const okSrc=[recomendanteDatalist,cliNegociosDe,cartNegIndex,funNeg,maisTarefaAchar,funColuna].every(f=>String(f).includes('escVisivel'))&&String(cartApVis).includes('escRegOk')&&String(exVis).includes('escLinhaOk')&&String(emVis).includes('escLinhaOk');
       const bk=ESC.rotulos; ESC.rotulos=[{rotulo:'gustavo',dono_email:'j@x'}]; let okLp=false; try{ okLp=escEmailDoLp('Fulano','s@x')===''&&escEmailDoLp('Gustavo','s@x')==='j@x'&&escEmailDoLp('','s@x')==='s@x'; } finally{ ESC.rotulos=bk; }
@@ -15882,7 +15891,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('funis extra: vg/prud/mfo existem com etapas próprias, board e ganho', !!(ETAPAS_MAP.vg&&ETAPAS_MAP.vg.fluxo.length>=3&&ETAPAS_MAP.prud&&ETAPAS_MAP.mfo&&typeof viewFunilExtra==='function'&&VIEWS_CONHECIDAS.includes('vg-funil')&&VIEWS_CONHECIDAS.includes('prud-funil')&&VIEWS_CONHECIDAS.includes('mfo-funil')&&ET_GANHO.vg&&ET_GANHO.vg.length));
     ok('funis extra: etapasDe/funFluxoDe/funilDe reconhecem o funil novo', (()=>{ const c={funil:'vg',etapa:ETAPAS_MAP.vg.fluxo[0]}; return etapasDe(c)===ETAPAS_MAP.vg.ids && funFluxoDe(c)===ETAPAS_MAP.vg.fluxo && funilDe(c)==='vg'; })());
     ok('funis extra: novo negócio abre com o funil fixado (sem radio nn/bc)', (()=>{ try{ openNovoContato('vg'); const m=document.getElementById('ncModal'); const okm=m&&m.dataset.funil==='vg'&&!document.querySelector('input[name=ncFunil]'); if(m) m.remove(); return !!okm; } catch(e){ return false; } })());
-    ok('funis extra: o funil Novos Negócios NÃO engole os contatos dos funis novos', (()=>{ const _c=S.contatos; try{ S.contatos=[{id:'zt',funil:'vg',etapa:'Oportunidade',lp:S.activeUser,nome:'Z',eventos:[],recs:[]}]; return meusContatos().length===0 && fxLista('vg').length===1; } finally{ S.contatos=_c; } })());
+    ok('funis extra: o funil Novos Negócios NÃO engole os contatos dos funis novos', (()=>{ const _c=S.contatos; try{ S.contatos=[{id:'zt',funil:'vg',etapa:'Oportunidade',lp:escLpNovo(),nome:'Z',eventos:[],recs:[]}]; return meusContatos().length===0 && fxLista('vg').length===1; } finally{ S.contatos=_c; } })());
     /* MENU-REORG-V7 (07/09) */
     ok('menu v7: Clientes/Contatos/Benefícios/Duplicatas moram em Módulos (hub) e têm título; SitPlan voltou pro menu (SITPLAN-UNIFICADO)', ['contatos','cart-visao','cart-clientes','cart-oportunidades','beneficios','bn-dups'].every(v=>HUB_VIEWS.includes(v)&&!!TITULO_VIEW[v]) && !!document.querySelector('#sp-group .nav-btn[data-view="sitplan"]'));
     ok('SITPLAN-UNIFICADO: a lista do dia lê as duas fontes e o resultado vai pra onde o contato mora', (()=>{ const D=hojeISO(); const l=spListaDoDia(D); return Array.isArray(l.fun)&&Array.isArray(l.bn)&&l.fun.every(c=>c.sitplan===D)&&l.bn.every(c=>c.ta_dia===D)&&l.fun.every(spEhFunil)&&!l.bn.some(spEhFunil)&&TA_RES_FUN.agendou==='agendou_oi'; })());
@@ -15915,7 +15924,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('BC-AUTO-1: apólice emitida (Venda ganha) gera automaticamente a entrega no Delivery', (()=>{ const c={funil:'bc',etapa:'Venda ganha',interacoes:[]}; const acted=funAutoDelivery(c); return acted&&c.etapa==='Delivery'&&interacoesDe(c).some(i=>i.k==='nota'&&/Automa/.test(i.l)); })());
     ok('BC v7.6: ganho aponta pra Venda ganha (emitida) e concluir entrega devolve pra Ativos', funEtapaGanho('bc')==='Venda ganha'&&typeof bcConcluirEntrega==='function'&&BC_DELIVERY==='Delivery'&&BC_EMITIDA==='Venda ganha');
     /* METAS-V7.7 (07/09): trimestre + metas de emissão (apólices/PA) contadas do funil */
-    ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:S.activeUser,funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
+    ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:escLpNovo(),funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
     /* PESSOA-CAMPOS-V1 (08/09): acessador único lê os 3 fichários; promover lead→card é lossless; renda pessoal ≠ cobertura */
@@ -16396,7 +16405,7 @@ async function locBuscar(alvo){ const inp=document.getElementById('loc-q-'+alvo)
   catch(e){ box.innerHTML='<button disabled>Busca de endereço indisponível agora</button>'; console.warn('geo',e); } }
 function locEscolher(alvo,i){ const r=(_locRes[alvo]||[])[i]; if(!r) return; const {c,salvar:sv}=locAlvo(alvo); if(!c) return; const sel=document.getElementById('loc-tipo-'+alvo); const l={...r,tipo:sel?sel.value:'trabalho'};
   if(locAddPuro(c,l)){ sv(); toast('📍 '+(l.nome||l.end)+' salvo',true); } locRefresh(alvo,c); }
-function locRemover(alvo,i){ const {c,salvar:sv}=locAlvo(alvo); if(!c||!Array.isArray(c.locais)) return; c.locais.splice(i,1); sv(); locRefresh(alvo,c); }
+function locRemover(alvo,i){ const {c,salvar:sv}=locAlvo(alvo); if(!c||!Array.isArray(c.locais)) return; const x=locDe(c)[i]; c.locais=c.locais.filter(l=>l!==x); sv(); locRefresh(alvo,c); }   /* BUGS-V5 #11: índice da lista filtrada */
 function locRefresh(alvo,c){ const w=document.getElementById('loc-w-'+alvo); if(w) w.outerHTML=locWidgetHtml(alvo,c); }
 function geoGoogleKey(){ try{ return localStorage.getItem('crmlp_gmaps_key')||''; }catch(_){ return ''; } }
 function geoGoogleKeySet(v){ try{ v=String(v||'').trim(); if(v) localStorage.setItem('crmlp_gmaps_key',v); else localStorage.removeItem('crmlp_gmaps_key'); }catch(_){} toast(v?'Chave do Google Maps guardada neste aparelho':'Voltou pro OpenStreetMap',true); }
