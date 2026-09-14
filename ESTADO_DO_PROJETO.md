@@ -2,6 +2,25 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14/09/2026 (6ª onda) — Painel TA: Delay só é Delay · fila "TA não atendeu" · autoria do Victor
+
+**v7.64.**
+### Listas do Painel TA (TA-LISTAS-V2)
+Pedido dele: *"esse filtro tá puxando da lista de TA quem não atendeu, e o caso aqui é o que tem STATUS DELAY — ex.: delay OI, delay P/C. Cria um filtro só 'TA não atendeu', e fica todo mundo que não atendeu, seja em qual funil ou etapa estiver."*
+A lista **Delay** virou saco de gato: os 20 que ele viu eram todos "ficou pra trás" (ninguém ligou), não status de delay. Agora são **três filas, três perguntas**:
+- ⏳ **Delay** — a ETAPA travou (Delay OI, Delay P/C, C2, Revisita, Delivery, Retornar). O Estoque **não entra** (não tem etapa).
+- 🔕 **TA não atendeu** — ligou e ninguém atendeu, **em qualquer funil, etapa ou no Estoque** (funil pelo `taStatus='Não respondeu'`, Estoque pelo último `hist` com `res='nao_atendeu'`). Selo mostra nº de tentativas e a última.
+- 🕗 **Ficou pra trás** — o dia da lista passou e ninguém chegou a ligar. Nunca duplica com o Delay (quem já tem delay não entra aqui). Selo mostra de que dia era a lista.
+
+### Autoria (AUTORIA-V1) — o caso do Victor
+Ele confirmou: *"o Victor não vai ter base dele; é usuário que dá suporte a mim e ao Daniel — pode mexer em tudo, mas fica REGISTRADO no usuário dele."* Conferido no banco: as delegações **já existem** (Victor → base do juca e → base do Daniel) e a base dele está **zerada** (0 em lp_contatos/carteira/atrasos/pendências/emitidas), como deve ser. **Nada a criar no seletor** — Victor não tem base pra aparecer nele.
+O que estava ERRADO era o rastro: os 28 pontos que gravam `por:` carimbavam `S.activeUser` — o **perfil local** ('gustavo') — então o que o Victor fazia na base delegada aparecia como se fosse do dono. Agora existe `quemFez()` (e-mail de quem está logado; sem login, o perfil local) e `lpNome` sabe mostrar e-mail como rótulo/nome.
+
+### Erro meu, pego pelo portão (e vale de lição)
+O invariante novo da autoria trocava `PERFIL` e restaurava com `if(P!==null)` — deslogado, `P` era `null` e **o app ficava logado como Victor depois do self-check**. Resultado: 33 telas com campo morto (o "Dono (LP)" só aparece logado). É o **livro de erros #17** (self-check não deixa lixo) de novo. Restaura SEMPRE agora.
+
+**Provas:** portão 6/6 verde (39 telas × {375,1024,1280} × {cheia,vazia}); 4 suítes funcionais verdes (14+14+17+14).
+
 ## 14/09/2026 (5ª onda) — CARREIRA DO ATIVO no plano NOVO (Revisão de Proteção)
 
 **Arquivo: `revisao-protecao.html`** (fora do portão, selfTest próprio). Pedido dele: *"quero a mesma visão que mostro no ativo securitário que o cliente já tem, trazida para o plano que eu monto — habilitado para múltiplos cenários, pra simular a contratação e o comportamento desse ativo."*

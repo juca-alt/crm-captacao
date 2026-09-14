@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.63 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.64 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1486,7 +1486,7 @@ function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; c
   return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)"><option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
 function etSetStatus(v){ const c=ct(); if(!c) return; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return; const de=etStatusDe(c); if(de===v) return;
   if(v){ c.status=v; c.status_etapa=c.etapa; } else { delete c.status; delete c.status_etapa; }
-  interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); renderDrawer(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); }
 let FUN_STATUS={};
 function funStatusSel(ns){ const opts=etStatusTodos(); if(!opts.length) return ''; const v=FUN_STATUS[ns]||'';
@@ -1955,7 +1955,18 @@ function etapaSugerida(c,dest){
     : {'Emissão Final':'EMISSÃO','Delivery':'DELIVERY','N/Emissão':'N','Venda ganha':'EMISSÃO','Venda perdida':'Não'};
   return mapa[c.etapa]||etapasDoFunil(dest)[0];
 }
-function lpNome(id){ const u=S.users.find(u=>u.id===id); return u? u.nome.split(' ')[0] : id; }
+/* ═══ AUTORIA-V1 (14/09/2026) ═══════════════════════════════════════════════
+   Pedido dele sobre o Victor: "ele não vai ter base dele; é usuário que dá suporte a
+   mim e ao Daniel — pode mexer em tudo, mas fica REGISTRADO no usuário dele."
+   O rastro (`por`) carimbava S.activeUser, que é o PERFIL LOCAL ('gustavo') — então o
+   que o Victor fazia na base delegada aparecia como se fosse do dono da base. Agora
+   quem fez é o e-mail de quem está logado; sem login, segue o perfil local de sempre. */
+function quemFez(){ try{ if(typeof logado==='function'&&logado()){ const e=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)||(typeof DELEG!=='undefined'&&DELEG&&DELEG.eu)||''; if(e) return e; } }catch(_){} return S.activeUser; }
+function lpNome(id){ const u=S.users.find(u=>u.id===id); if(u) return u.nome.split(' ')[0];
+  const t=String(id||'');
+  if(t.includes('@')){ try{ const r=(ESC.rotulos||[]).find(x=>x.dono_email===t); if(r&&r.rotulo) return escCap(r.rotulo); }catch(_){}
+    const p=t.split('@')[0].split(/[._-]/)[0]; return p? p[0].toUpperCase()+p.slice(1) : t; }
+  return t; }
 function iniciais(n){ return ((n||'?').trim().split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join('').toUpperCase())||'?'; }
 function brl(v){ return Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); }
 function brlCurto(v){ v=Number(v||0); return 'R$ '+v.toLocaleString('pt-BR',{maximumFractionDigits:0}); }
@@ -2991,16 +3002,16 @@ function reunAplicar(c,t,k,novaData,notas){
   if(para!==de){ c.etapa=para; logEtapa(c,de,para); }
   if(d.remarca && novaData){
     const nova={id:uid(),tipo:'reuniao',tit:(t.tit||'Reunião')+' (remarcada)',quando:novaData,hora:t.hora||'',
-                feito:null,notas:'',criadoEm:hojeISO(),por:S.activeUser};
+                feito:null,notas:'',criadoEm:hojeISO(),por:quemFez()};
     tarefasDe(c).push(nova);
     marca.remarcadaPara=novaData;
   }
   interacoesDe(c).push({id:uid(),k:'reuniao',l:'Reunião '+d.l.toLowerCase()+(marca.remarcadaPara?(' para '+dataBR(marca.remarcadaPara)):''),
-                        dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+                        dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   /* GC-44: anotações da reunião → ficam no registro da tarefa (vão pro Google Agenda)
      e entram na linha do tempo do contato como uma nota. */
   if(notas&&String(notas).trim()){ const _nt=String(notas).trim(); t.notas=_nt;
-    interacoesDe(c).push({id:uid(),k:'nota',l:'📝 Anotações da reunião: '+_nt,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
+    interacoesDe(c).push({id:uid(),k:'nota',l:'📝 Anotações da reunião: '+_nt,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }
   return marca;
 }
 
@@ -3110,7 +3121,7 @@ function reunSalvar(cid,tid){
   }
   const notas=($('#reun_notas')||{}).value||'';   /* GC-44 */
   const m=reunAplicar(c,t,k,novaData,notas);
-  if(prox) tarefasDe(c).push({id:uid(),tipo:prox.tipo,tit:prox.tit,quando:prox.quando,hora:'',feito:null,notas:'',criadoEm:hojeISO(),por:S.activeUser});
+  if(prox) tarefasDe(c).push({id:uid(),tipo:prox.tipo,tit:prox.tit,quando:prox.quando,hora:'',feito:null,notas:'',criadoEm:hojeISO(),por:quemFez()});
   salvar(); atClose(); render();
   toast(m&&m.para!==m.de ? `${c.nome.split(' ')[0]}: ${LBLE(m.de)} → ${LBLE(m.para)}` : 'Reunião finalizada', true);
 }
@@ -3226,7 +3237,7 @@ function tarSalvarEdicao(cid,tid){
      "compromisso com hora nasce espelhado": vai pro Google sem ele precisar clicar de novo */
   if(!gsyncEspelha(t)&&((!horaAntes&&t.hora)||(dest&&dest!=='auto'))) t.gcalSync=true;
   if(antes!==((t.quando||'')+'|'+(t.hora||'')+'|'+(t.dur||60)+'|'+(t.tit||'')+'|'+(t.tipo||'')))
-    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Atividade editada: '+t.tit+' · '+dataBR(t.quando)+(t.hora?' '+t.hora:''),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Atividade editada: '+t.tit+' · '+dataBR(t.quando)+(t.hora?' '+t.hora:''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   if(typeof gsyncMudou==='function') gsyncMudou(c,t);
   salvar(); atClose(); render();
   toast('Atividade atualizada'+(t.gcalId||t.gtaskId?' · e no Google':''),true);
@@ -3265,9 +3276,9 @@ window.tarCriar = (cid,tipo,tit,quando,hora,notas,dur) => {
   const c=tarContato(cid); if(!c) return null;
   const t={id:uid(), tipo:tipo||'follow', tit:String(tit||'').trim()||tarNomeTipo(tipo),
            quando:quando||hojeISO(), hora:hora||'', dur:Number(dur)||60, feito:null, notas:notas||'',
-           criadoEm:new Date().toISOString(), por:S.activeUser};
+           criadoEm:new Date().toISOString(), por:quemFez()};
   tarefasDe(c).push(t);
-  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa criada: '+t.tit,dia:hojeISO(),ts:t.criadoEm,por:S.activeUser});
+  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa criada: '+t.tit,dia:hojeISO(),ts:t.criadoEm,por:quemFez()});
   /* GCAL-BIDIRECIONAL-V1: compromisso com HORA nasce espelhado na Agenda Google — a fila
      garante a entrega mesmo se o Google estiver fora do ar na hora do clique. */
   if(t.hora&&typeof gsyncEnfileirar==='function'){ t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert'); gsyncAgendar(400); }
@@ -3282,9 +3293,9 @@ function tarAgendarLembrete(cid,meetQuando,meetHora,modo){ const c=tarContato(ci
   let rem = modo==='vespera'? isoAddDias(meetQuando,-1) : meetQuando;
   if(rem<hojeISO()) rem=hojeISO();          /* véspera no passado → lembra hoje, nunca cria tarefa vencida */
   const t={id:uid(),tipo:'whats',tit:'Lembrete da reunião '+dataBR(meetQuando),quando:rem,hora:'',feito:null,notas:'',
-           lembrarReuniao:{quando:meetQuando,hora:meetHora||''},criadoEm:new Date().toISOString(),por:S.activeUser};
+           lembrarReuniao:{quando:meetQuando,hora:meetHora||''},criadoEm:new Date().toISOString(),por:quemFez()};
   tarefasDe(c).push(t);
-  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Lembrete p/ cliente ('+(modo==='vespera'?'véspera':'no dia')+') — reunião '+dataBR(meetQuando),dia:hojeISO(),ts:t.criadoEm,por:S.activeUser});
+  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Lembrete p/ cliente ('+(modo==='vespera'?'véspera':'no dia')+') — reunião '+dataBR(meetQuando),dia:hojeISO(),ts:t.criadoEm,por:quemFez()});
   return t;
 }
 window.tarAgendarLembrete=tarAgendarLembrete;
@@ -3292,7 +3303,7 @@ window.tarConcluir = (cid,tid) => {
   const c=tarContato(cid); if(!c) return;
   const t=tarDe(c,tid); if(!t||t.feito) return;
   t.feito=new Date().toISOString();
-  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa concluída: '+t.tit,dia:hojeISO(),ts:t.feito,por:S.activeUser});
+  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa concluída: '+t.tit,dia:hojeISO(),ts:t.feito,por:quemFez()});
   /* GCAL-BIDIRECIONAL-V1: resolveu ANTES do dia → o compromisso futuro sai da agenda dele
      (o que já passou fica: é histórico, não é lixo). */
   if(t.gtaskId&&typeof gsyncEnfileirar==='function'){ gsyncEnfileirar(c.id,t.id,'upsert',{gtaskId:t.gtaskId}); gsyncAgendar(400); }   /* GTASKS-V1: concluir aqui marca concluída lá */
@@ -3847,15 +3858,15 @@ function bcMoveEtapa(id,etapa,cardEl,colEl,antesId){
   requestAnimationFrame(()=>setTimeout(render,0));
 }
 /* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
-function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); }
+function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }
 /* GC-08 (07/09): registrar um toque/status manual na jornada da rec/contato */
 let JORNADA_TUDO=false;
 function jornadaAddNota(){ const c=S.contatos.find(x=>x.id===CONTATO); if(!c) return; const el=document.getElementById('jornadaNota'); const t=el?(el.value||'').trim():''; if(!t){ if(el) el.focus(); return; }
-  interacoesDe(c).push({id:uid(),k:'nota',l:t,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); salvar(); renderDrawer(); toast('Status registrado na jornada',true); }
+  interacoesDe(c).push({id:uid(),k:'nota',l:t,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); salvar(); renderDrawer(); toast('Status registrado na jornada',true); }
 window.jornadaAddNota=jornadaAddNota;
 function registrarResultado(id,k,dia){
   const c=S.contatos.find(x=>String(x.id)===String(id)); const r=RES_BY_K[k]; if(!c||!r) return;
-  const it={id:uid(),k,l:r.l,dia:dia||hojeISO(),ts:new Date().toISOString(),por:S.activeUser};
+  const it={id:uid(),k,l:r.l,dia:dia||hojeISO(),ts:new Date().toISOString(),por:quemFez()};
   interacoesDe(c).push(it);
   if(r.lig) c.taTentativas=(c.taTentativas||0)+1;
   if(r.ta) c.taStatus=r.ta;
@@ -4279,10 +4290,10 @@ function funEhGanho(c){ return !!(c&&(ET_GANHO[funilDe(c)]||[]).includes(c.etapa
    por todo caminho que muda etapa (drag, avançar, ficha, checkout). Devolve true se agiu. */
 function funAutoDelivery(c){ if(!c||c.funil!=='bc'||c.etapa!==BC_EMITIDA) return false;
   c.etapa=BC_DELIVERY;
-  interacoesDe(c).push({id:uid(),k:'nota',l:'⚙️ Automação: apólice emitida → entrega (Delivery). Pós-venda — agendar entrega/brinde e pedir recomendações.',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  interacoesDe(c).push({id:uid(),k:'nota',l:'⚙️ Automação: apólice emitida → entrega (Delivery). Pós-venda — agendar entrega/brinde e pedir recomendações.',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   return true; }
 /* Concluir a entrega devolve o cliente pra Clientes Ativos (fecha o ciclo). */
-function bcConcluirEntrega(id){ const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c||c.funil!=='bc') return; const de=c.etapa; c.etapa=BC_ATIVOS; logEtapa(c,de,BC_ATIVOS); interacoesDe(c).push({id:uid(),k:'nota',l:'Entrega concluída — cliente volta pra Clientes Ativos.',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); salvar(); toast(c.nome.split(' ')[0]+': entrega concluída → Clientes Ativos',true); requestAnimationFrame(()=>setTimeout(render,0)); }
+function bcConcluirEntrega(id){ const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c||c.funil!=='bc') return; const de=c.etapa; c.etapa=BC_ATIVOS; logEtapa(c,de,BC_ATIVOS); interacoesDe(c).push({id:uid(),k:'nota',l:'Entrega concluída — cliente volta pra Clientes Ativos.',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); salvar(); toast(c.nome.split(' ')[0]+': entrega concluída → Clientes Ativos',true); requestAnimationFrame(()=>setTimeout(render,0)); }
 window.bcConcluirEntrega=bcConcluirEntrega;
 function funEtapaGanho(funil){ return (ET_GANHO[funil==='bc'?'bc':'nn']||[])[0]; }
 /* propostas pendentes na Emissão casadas por nome — o relatório da Prudential não traz telefone */
@@ -4389,7 +4400,7 @@ async function vendaAplicar(plano,escolhas){
   }
   (escolhas.mover||[]).forEach(m=>{ const c=S.contatos.find(x=>String(x.id)===String(m.id)); if(!c||!m.etapa||c.etapa===m.etapa) return;
     const de=c.etapa; c.etapa=m.etapa; logEtapa(c,de,m.etapa);
-    interacoesDe(c).push({id:uid(),k:'emissao',l:'Apólice '+(plano.apolice?(plano.apolice.apolice||plano.apolice.proposta||''):(escolhas.numero||''))+' emitida — negócio entregue',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    interacoesDe(c).push({id:uid(),k:'emissao',l:'Apólice '+(plano.apolice?(plano.apolice.apolice||plano.apolice.proposta||''):(escolhas.numero||''))+' emitida — negócio entregue',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
     feito.movidos.push(c.id); });
   if(feito.movidos.length) salvar();
   return feito;
@@ -5101,7 +5112,7 @@ function drwMoverFunil(dest){
   const nova=(($('#drwFunilEt')||{}).value)||etapasDoFunil(dest)[0];
   const deF=funilNome(funilDe(c)), deE=c.etapa;
   c.funil=(!dest||dest==='nn')?'nn':dest; c.etapa=nova;   /* BUGS-V5 #3: VG/Prud/MFO não caem mais no NN */
-  interacoesDe(c).push({id:uid(),k:'funil',l:`Funil: ${deF} → ${funilNome(dest)} (etapa ${deE} → ${nova})`,de:deE,para:nova,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  interacoesDe(c).push({id:uid(),k:'funil',l:`Funil: ${deF} → ${funilNome(dest)} (etapa ${deE} → ${nova})`,de:deE,para:nova,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); renderDrawer(); render();
   toast(`${c.nome.split(' ')[0]} → ${funilNome(dest)} · ${nova}`,true);
 }
@@ -5300,7 +5311,7 @@ function planoAplicarPremio(cid,pid){
   const c=S.contatos.find(x=>String(x.id)===String(cid)); const p=c&&planoPorId(c,pid); if(!c||!p) return;
   c.pm=Number(p.premio); c.premio_mes=Number(p.premio);
   interacoesDe(c).push({id:uid(),k:'plano',l:'Prêmio do negócio veio da simulação "'+p.nome+'": '+brl(p.premio),
-                        dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+                        dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); atClose(); render(); toast('Prêmio atualizado pelo plano',true);
 }
 
@@ -8687,7 +8698,7 @@ function bcColAtivos(lista){
    faixa do funil mostra quantas revisitas "pagaram". */
 const BC_REVISITA_ETAPAS=['Agendada Revisita','Novo Negócio/Resolução pós Revisita'];
 function bcRecRevisita(id,delta,ev){ if(ev){ ev.stopPropagation(); ev.preventDefault(); } const c=S.contatos.find(x=>String(x.id)===String(id)); if(!c) return;
-  c.recsRevisita=Math.max(0,(Number(c.recsRevisita)||0)+delta); if(delta>0) interacoesDe(c).push({id:uid(),k:'rec_revisita',l:'Recomendação colhida na revisita',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  c.recsRevisita=Math.max(0,(Number(c.recsRevisita)||0)+delta); if(delta>0) interacoesDe(c).push({id:uid(),k:'rec_revisita',l:'Recomendação colhida na revisita',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); render(); }
 function bcRevisitaPagou(c){ return (Number(c.recsRevisita)||0)>0 || (c.funil==='bc'&&ETAPAS_BC.indexOf(c.etapa)>ETAPAS_BC.indexOf('Agendada Revisita')&&!ETAPAS_BC_ENCERR.includes(c.etapa)) || funEhGanho(c); }
 function bcRevisitaHtml(c){ if(c.funil!=='bc'||!BC_REVISITA_ETAPAS.includes(c.etapa)&&!(Number(c.recsRevisita)>0)) return '';
@@ -9486,7 +9497,7 @@ function gsyncEspelharNaTarefa(ev){
   const antes=(t.quando||'')+'|'+(t.hora||'')+'|'+(Number(t.dur)||60);
   t.quando=d.quando; t.hora=d.hora; t.dur=d.dur; t.gcalId=ev.id||t.gcalId; t.gcalSync=true; t.gcalFora=false; t.gcalUpd=ev.updated||t.gcalUpd;
   if(antes!==(d.quando+'|'+d.hora+'|'+d.dur))
-    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcado na Agenda: '+dataBR(d.quando)+(d.hora?' às '+d.hora:' (dia todo)'),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcado na Agenda: '+dataBR(d.quando)+(d.hora?' às '+d.hora:' (dia todo)'),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar();
   return true;
 }
@@ -9544,7 +9555,7 @@ async function gsyncAplicarItem(it){
       catch(e){ if(!gsyncSumiu(e)) throw e; delete t.gtaskId; g=await gtApi('POST','/lists/'+GT_LISTA+'/tasks',corpo); novo=true; } }
     else { g=await gtApi('POST','/lists/'+GT_LISTA+'/tasks',corpo); novo=true; }
     if(g&&g.id){ t.gtaskId=g.id; t.gtaskUpd=g.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; }
-    if(novo) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Nas Tarefas do Google: '+(corpo.title||''),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    if(novo) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Nas Tarefas do Google: '+(corpo.title||''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
     salvar();
     return {ok:true,titulo:corpo.title,criou:novo,tarefa:true};
   }
@@ -9561,7 +9572,7 @@ async function gsyncAplicarItem(it){
       delete t.gcalId; ev=await gcalApi('POST','',body,{sendUpdates:'none'}); criou=true; }   /* sumiu lá → recria */
   }else{ ev=await gcalApi('POST','',body,{sendUpdates:'none'}); criou=true; }
   if(ev&&ev.id){ t.gcalId=ev.id; t.gcalUpd=ev.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; t.gcalLink=ev.htmlLink||t.gcalLink||''; }
-  if(criou) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na Agenda Google: '+(body.summary||gsyncTitulo(c,t)),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  if(criou) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na Agenda Google: '+(body.summary||gsyncTitulo(c,t)),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar();
   return {ok:true,titulo:body.summary||gsyncTitulo(c,t),criou:criou};
 }
@@ -9626,7 +9637,7 @@ async function gsyncPuxar(op){
       if(ev.status==='cancelled'){
         if(t.gcalId===ev.id||(!t.gcalId&&t.gcalSync)){
           delete t.gcalId; t.gcalSync=false; t.gcalFora=true; t.gcalUpd=ev.updated||t.gcalUpd;
-          interacoesDe(c).push({id:uid(),k:'tarefa',l:'Compromisso apagado na Agenda Google — a atividade segue aqui',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+          interacoesDe(c).push({id:uid(),k:'tarefa',l:'Compromisso apagado na Agenda Google — a atividade segue aqui',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
           mud++;
         }
         return;
@@ -9642,7 +9653,7 @@ async function gsyncPuxar(op){
       const depois=quando+'|'+hora+'|'+dur;
       if(antes!==depois){
         t.quando=quando; t.hora=hora; t.dur=dur;
-        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcado na Agenda Google: '+dataBR(quando)+(hora?' às '+hora:' (dia todo)'),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcado na Agenda Google: '+dataBR(quando)+(hora?' às '+hora:' (dia todo)'),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
         mud++;
       }
       t.gcalUpd=upd||t.gcalUpd;
@@ -9780,17 +9791,17 @@ async function gsyncPuxarTarefas(op){
       const c=par.c, t=par.t;
       if(gsyncNaFila(c.id,t.id)) return;                       /* mudança local não subida vence */
       if(g.deleted){ if(t.gtaskId){ delete t.gtaskId; t.gcalFora=true; t.gcalSync=false;
-          interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa apagada no Google — a atividade segue aqui',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); mud++; } return; }
+          interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa apagada no Google — a atividade segue aqui',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); mud++; } return; }
       if(g.status==='completed'&&!t.feito){
         t.feito=g.completed||new Date().toISOString();
-        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Concluída nas Tarefas do Google: '+(t.tit||''),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); mud++;
+        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Concluída nas Tarefas do Google: '+(t.tit||''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); mud++;
       }else if(g.status!=='completed'&&t.feito&&t.gtaskUpd&&g.updated&&g.updated>t.gtaskUpd){
         t.feito=null; mud++;                                    /* reabriu lá → reabre aqui */
       }
       const d=gtDataDaTarefa(g);
       if(d&&d!==t.quando&&(!t.gtaskUpd||!g.updated||g.updated>t.gtaskUpd)){
         t.quando=d;
-        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcada nas Tarefas do Google: '+dataBR(d),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); mud++;
+        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcada nas Tarefas do Google: '+dataBR(d),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); mud++;
       }
       t.gtaskUpd=g.updated||t.gtaskUpd;
     });
@@ -14466,18 +14477,51 @@ function taDelayTipo(c){ if(!c) return null; const hoje=hojeISO();
     const et=TA_DELAY_ETAPAS[c.etapa]; if(!et) return null;
     const atras=tarefasDe(c).some(t=>tarSituacao(t)==='atrasada'), passou=!!(c.sitplan&&c.sitplan<hoje&&!ultimoResultado(c,c.sitplan));
     return (atras||passou)?et:null; }
-  const h=(c.hist||[]).filter(x=>x.tipo==='ta'); const u=h.length?h[h.length-1]:null;
-  if(u&&u.res==='nao_atendeu'&&!(c.ta_dia&&c.ta_dia>=hoje)&&c.estagio!=='descartado') return 'Não atendeu';
-  if(c.ta_dia&&c.ta_dia<hoje&&!(c.hist||[]).some(x=>x.tipo==='ta'&&x.dia===c.ta_dia)&&c.estagio!=='descartado') return 'Ficou pra trás';
+  /* TA-LISTAS-V2 (14/09): o Estoque NÃO tem etapa, logo não tem "delay de etapa".
+     Quem não atendeu e quem ficou pra trás saíram daqui e ganharam fila própria. */
   return null; }
-const TA_DELAY_TIPOS_BASE=['OI','P/C','C2','Revisita','Delivery','Retornar','Não atendeu','Ficou pra trás'];
+/* ═══ TA-LISTAS-V2 (14/09/2026) ═══════════════════════════════════════════════
+   Pedido dele: "esse filtro do Painel TA tá puxando da lista de TA quem não atendeu,
+   e o caso aqui é o que tem STATUS DELAY — ex.: delay OI, delay P/C. No caso dos do
+   TA que não atenderam, cria um filtro só 'TA não atendeu', e fica todo mundo que não
+   atendeu, seja em qual funil ou etapa estiver."
+   Três filas, três perguntas diferentes — e nenhuma mistura com a outra:
+     ⏳ Delay          → a ETAPA travou (Delay OI, Delay P/C, C2, Revisita, Delivery, Retornar)
+     🔕 TA não atendeu → ligou e ninguém atendeu (status "não atendeu" / "Não respondeu"),
+                         em qualquer funil, etapa ou no Estoque
+     🕗 Ficou pra trás → o dia da lista passou e ninguém chegou a ligar */
+function taNaoAtendeu(c){
+  if(!c||c.estagio==='descartado') return false;
+  if(spEhFunil(c)) return String(c.taStatus||'')==='Não respondeu';   /* status do funil (registrarResultado) */
+  const h=(c.hist||[]).filter(x=>x.tipo==='ta'); const u=h.length?h[h.length-1]:null;
+  return !!(u&&u.res==='nao_atendeu');                                /* último TA do Estoque */
+}
+function taFicouPraTras(c){
+  if(!c||c.estagio==='descartado') return false;
+  if(taDelayTipo(c)) return false;                                    /* já está na fila de Delay — não conta duas vezes */
+  const hoje=hojeISO();
+  if(spEhFunil(c)) return !!(c.sitplan&&c.sitplan<hoje&&!ultimoResultado(c,c.sitplan));
+  return !!(c.ta_dia&&c.ta_dia<hoje&&!(c.hist||[]).some(x=>x.tipo==='ta'&&x.dia===c.ta_dia));
+}
+/* quantas vezes tentou e quando foi a última — é o que decide se insiste ou descarta */
+function taTentouTxt(c){
+  if(!c) return '';
+  if(spEhFunil(c)){ const n=Number(c.taTentativas||0); const its=interacoesDe(c).filter(i=>RES_BY_K[i.k]&&RES_BY_K[i.k].lig);
+    const u=its.length?its[its.length-1]:null; return (n?n+' tentativa(s)':'')+(u&&u.dia?' · última '+dataBR(u.dia):''); }
+  const h=(c.hist||[]).filter(x=>x.tipo==='ta'); const u=h.length?h[h.length-1]:null;
+  return (h.length?h.length+' tentativa(s)':'')+(u&&u.dia?' · última '+dataBR(u.dia):'');
+}
+function taDiaPerdidoTxt(c){ const d=spEhFunil(c)?(c&&c.sitplan):(c&&c.ta_dia); return d?('lista de '+dataBR(d)):''; }
+const TA_DELAY_TIPOS_BASE=['OI','P/C','C2','Revisita','Delivery','Retornar'];
 function taDelayTipos(){ return [...TA_DELAY_TIPOS_BASE, ...etStatusTodos().filter(s=>/^delay/i.test(s)&&!TA_DELAY_TIPOS_BASE.includes(s))]; }   /* STATUS-ETAPA-V1 */
-function taPoolDe(k){ return k==='delay'? [...bnVivos(),...meusContatos()] : bnVivos(); }
+function taPoolDe(k){ return (k==='delay'||k==='naoatendeu'||k==='ficou')? [...bnVivos(),...meusContatos()] : bnVivos(); }   /* TA-LISTAS-V2: essas três atravessam funil e Estoque */
 const TA_SMART={
   base:       {ic:'📇', label:'Toda a base',        base:c=>c.estagio!=='descartado'},
   comfone:    {ic:'📞', label:'Rec (com telefone)', base:c=>taTemFone(c)&&(c.estagio==='estoque'||c.estagio==='lista_ta')&&(c.trilha||'seguro')!=='recrutamento'},
   recs:       {ic:'🙌', label:'Recomendações',      base:c=>taTemFone(c)&&!!(c.recomendante||'').trim()&&!!(c.nome||'').trim()&&c.estagio!=='descartado'&&c.estagio!=='cliente'},
   delay:      {ic:'⏳', label:'Delay',              base:c=>!!taDelayTipo(c)},
+  naoatendeu: {ic:'🔕', label:'TA não atendeu',     base:c=>taNaoAtendeu(c)},
+  ficou:      {ic:'🕗', label:'Ficou pra trás',     base:c=>taFicouPraTras(c)},
   recsemfone: {ic:'📵', label:'Rec (sem fone)',     base:c=>!taTemFone(c)&&!!(c.recomendante||'').trim()&&c.estagio!=='descartado'&&c.estagio!=='cliente'},
   clientes:   {ic:'⭐', label:'Clientes (carteira)', base:c=>taEhCliente(c)},
   reccli:     {ic:'💎', label:'Rec de cliente',     base:c=>taRecDeCliente(c)&&c.estagio!=='descartado'},
@@ -14711,7 +14755,9 @@ function viewBnTa(){
       </div></aside>`;
   const linha=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'',c.origem&&c.origem!=='—'?c.origem:''].filter(Boolean).join(' · ')||'—':[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const pri=c.prioridade==1?'var(--verm)':c.prioridade==3?'var(--muted)':'transparent';
-    const badge=(fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`)+(smk==='delay'?` <span class="badge b-amarelo">⏳ ${esc(taDelayTipo(c)||'')}</span>`:'');
+    const badge=(fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`)+(smk==='delay'?` <span class="badge b-amarelo">⏳ ${esc(taDelayTipo(c)||'')}</span>`
+        :smk==='naoatendeu'?` <span class="badge b-amarelo">🔕 não atendeu${taTentouTxt(c)?' · '+esc(taTentouTxt(c)):''}</span>`
+        :smk==='ficou'?` <span class="badge b-amarelo">🕗 ${esc(taDiaPerdidoTxt(c)||'ficou pra trás')}</span>`:'');
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
     const acoes=`<div class="ta-acts">${taTemFone(c)?`<a class="ta-ib" title="Ligar" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" title="WhatsApp" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun?`<button class="ta-ib" title="Tirar de Hoje" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" title="Mover / listas" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" title="Foco a partir daqui" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>`;
     const res=trab?`<td onclick="event.stopPropagation()">${taResBtnsHtml(c)}</td>`:'';
@@ -16397,7 +16443,7 @@ function lpSelfCheck(){
     ok('ESCOPO-UNICO: o upsert leva o dono da linha e não devolve _dono pro jsonb', (()=>{
       const r=lpcRowOut('k1',{nome:'Zz',_dono:'daniel@x'},{funil:'bn'}); const r2=lpcRowOut('k2',{nome:'Zz'});
       return r.dono==='daniel@x'&&!('_dono' in r.dados)&&r.dados.funil==='bn'&&r.id==='k1'&&(!logado()? !('dono' in r2):true); })());
-    ok('LISTAS 11/09: ordem = Toda a base, Rec (com telefone), Recomendações, Delay, Rec (sem fone)… sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='comfone'&&k[2]==='recs'&&k[3]==='delay'&&k[4]==='recsemfone'&&!k.includes('oi')&&!k.includes('prontos'); })());
+    ok('LISTAS: ordem = Toda a base, Rec (com telefone), Recomendações, Delay, TA não atendeu, Ficou pra trás, Rec (sem fone)… sem "OIs agendados"', (()=>{ const k=Object.keys(TA_SMART); return k[0]==='base'&&k[1]==='comfone'&&k[2]==='recs'&&k[3]==='delay'&&k[4]==='naoatendeu'&&k[5]==='ficou'&&k[6]==='recsemfone'&&!k.includes('oi')&&!k.includes('prontos'); })());
     ok('HOMOLOG: a faixa de homologação nunca aparece', (()=>{ const b=document.getElementById('bannerHomolog'); return !b || getComputedStyle(b).display==='none'; })());
     ok('SAFE-AREA-V2: no celular a densidade compacta NÃO anula a safe-area de cima da topbar', (()=>{
       const css=[...document.styleSheets].flatMap(sh=>{ try{ return [...sh.cssRules].map(r=>r.cssText); }catch(_){ return []; } }).join('\n');
@@ -16413,12 +16459,46 @@ function lpSelfCheck(){
     ok('HOJE fora do card: o Painel TA abre em Rec (com telefone) e só mostra Hoje quando o SitPlan manda', (()=>{ const l=BNTA.lista; BNTA.lista='sm:comfone'; const ok=!String(viewBnTa.toString()).includes("navItem('hoje','📅','Hoje',"); BNTA.lista=l; return ok; })());
     ok('RECOMENDAÇÕES = nome + telefone + recomendante', TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'',estagio:'estoque'}));
     ok('SERVIDOR-MANDA Estoque: apagado no servidor sai do cache (só carga completa); criado local sem _dono fica', (()=>{ const loc=[{id:'a',_dono:'x'},{id:'b',_dono:'x'},{id:'c'}]; const rem=[{id:'a'}]; const r1=bnSemOsApagados(loc,rem,true).map(c=>c.id).join(''); const r2=bnSemOsApagados(loc,rem,false).map(c=>c.id).join(''); return r1==='ac'&&r2==='abc'; })());
-    ok('DELAY-V1: delay do Estoque = não atendeu sem nova data, ou ficou pra trás; com data futura não é delay', (()=>{
+    ok('AUTORIA-V1: o rastro é de QUEM está logado (o Victor operando a base delegada fica registrado como Victor)',
+       (()=>{ const P=PERFIL;   /* restaura SEMPRE (era `if(P!==null)`, e deslogado o app ficava logado como Victor — livro de erros #17) */
+         try{ PERFIL={email:'vfigueiredo.solucoes@gmail.com',nome:'Victor',papel:'lp'};
+           const eu=quemFez();
+           const okNome=/^(Vfigueiredo|Victor)$/.test(lpNome('vfigueiredo.solucoes@gmail.com'));
+           const src=[...document.scripts].map(x=>x.textContent).join('');
+           const semAntigo=!src.includes('por:S.'+'activeUser');
+           return semAntigo&&okNome&&eu==='vfigueiredo.solucoes@gmail.com';
+         } finally{ PERFIL=P; } })());
+    /* TA-LISTAS-V2 (14/09): Delay é SÓ status de etapa; não atendeu e ficou pra trás têm fila própria */
+    ok('TA-LISTAS-V2: o Estoque não entra mais no Delay (não tem etapa) e as três filas não se misturam', (()=>{
       const h=hojeISO(), ontem=isoAddDias(h,-1), amanha=isoAddDias(h,1);
-      return taDelayTipo({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:ontem})==='Não atendeu'
-          && taDelayTipo({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:amanha})===null
-          && taDelayTipo({hist:[],ta_dia:ontem})==='Ficou pra trás' && taDelayTipo({hist:[],ta_dia:h})===null
-          && taDelayTipo({hist:[{tipo:'ta',res:'atendeu',dia:ontem}],ta_dia:ontem})===null; })());
+      const naoAtend={hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:ontem};
+      const ficou={hist:[],ta_dia:ontem};
+      const semNada={hist:[],ta_dia:h};
+      const a=taDelayTipo(naoAtend)===null&&taDelayTipo(ficou)===null;                 /* saíram do Delay */
+      const b=taNaoAtendeu(naoAtend)&&!taNaoAtendeu(ficou)&&!taNaoAtendeu(semNada);     /* fila do "não atendeu" */
+      const c2=taFicouPraTras(ficou)&&!taFicouPraTras(semNada);                         /* fila do "ficou pra trás" */
+      const d=!taNaoAtendeu({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],estagio:'descartado'});   /* descartado fica fora */
+      const e=!TA_DELAY_TIPOS_BASE.includes('Não atendeu')&&!TA_DELAY_TIPOS_BASE.includes('Ficou pra trás');
+      return a&&b&&c2&&d&&e; })());
+    ok('TA-LISTAS-V2: "não atendeu" pega o funil também, em qualquer etapa (é o status que manda)', (()=>{
+      const C=S.contatos; try{
+        const f1={id:'na1',nome:'Z',funil:'nn',etapa:'OI/FF',taStatus:'Não respondeu',tarefas:[],interacoes:[]};
+        const f2={id:'na2',nome:'Z2',funil:'bc',etapa:'Agendada Revisita',taStatus:'Não respondeu',tarefas:[],interacoes:[]};
+        const f3={id:'na3',nome:'Z3',funil:'nn',etapa:'P/C',taStatus:'Sucesso',tarefas:[],interacoes:[]};
+        S.contatos=[f1,f2,f3];   /* spEhFunil é por identidade: o contato precisa estar na base */
+        return taNaoAtendeu(f1)&&taNaoAtendeu(f2)&&!taNaoAtendeu(f3)&&TA_SMART.naoatendeu.base(f1);
+      } finally{ S.contatos=C; } })());
+    ok('DELAY-V1: delay do FUNIL segue igual (etapa mapeada + tarefa atrasada)', (()=>{
+      const C=S.contatos; try{
+        const h=hojeISO(), ontem=isoAddDias(h,-1);
+        const semEstoque = taDelayTipo({hist:[{tipo:'ta',res:'nao_atendeu',dia:ontem}],ta_dia:ontem})===null
+                        && taDelayTipo({hist:[],ta_dia:ontem})===null;
+        const et=Object.keys(TA_DELAY_ETAPAS).find(e=>ETAPAS.includes(e)) || 'OI/FF';
+        const c1={id:'dl1',nome:'Z',funil:'nn',etapa:et,interacoes:[],
+                  tarefas:[{id:'t1',tipo:'ligar',tit:'x',quando:ontem,feito:null}]};
+        S.contatos=[c1];
+        return semEstoque && taDelayTipo(c1)===TA_DELAY_ETAPAS[et];
+      } finally{ S.contatos=C; } })());
     ok('REC-SEM-FONE: só quem tem recomendante e não tem telefone', TA_SMART.recsemfone.base({recomendante:'Zz',telefone:'',estagio:'estoque'}) && !TA_SMART.recsemfone.base({recomendante:'',telefone:'',estagio:'estoque'}) && !TA_SMART.recsemfone.base({recomendante:'Zz',telefone:'81999990000',estagio:'estoque'}));
     ok('CLIENTES-REAIS: cliente = está na carteira (nome ou telefone); rec de cliente = recomendante está na carteira', (()=>{
       const idx={nomes:new Set([normKey('Zz Cli Teste')]),tels:new Set(['999990001'])};
