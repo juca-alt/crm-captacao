@@ -477,7 +477,9 @@ body.modo-cliente .prod-gr,body.modo-cliente .cur-dica{display:none!important}
 </style>
 <style id="sim-css">
 .sim{margin:12px 0 4px;border:1px solid var(--roxo);border-radius:13px;overflow:hidden}
-.sim-h{display:flex;align-items:center;gap:9px;padding:10px 13px;cursor:pointer;background:var(--roxo-soft)}
+.sim-h{display:flex;align-items:center;gap:9px;padding:10px 13px;cursor:pointer;background:var(--roxo-soft);flex-wrap:wrap}
+/* CARREIRA-PLANO-V1: no celular o título da simulação ficava espremido numa coluna de 3 palavras — a linha quebra em vez de espremer */
+@media(max-width:560px){ .sim-h .s-t{flex:1 1 100%;order:2} .sim-h .chev{order:1} .sim-h .mini{flex:1 1 100%;order:3} }
 .sim-h .s-t{font-weight:800;font-size:.9rem}
 .sim-h .s-tag{font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--roxo);
   color:#fff;border-radius:999px;padding:3px 8px}
@@ -1173,6 +1175,14 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
           <span class="mini" id="motorBadge"></span></div>
         <div id="cenarios"></div>
       </div>
+    </div>
+
+    <!-- CARREIRA-PLANO-V1: o ativo securitário do plano que ele monta, cenário a cenário -->
+    <div class="card blk" data-blk="carreira" data-show="carreira">
+      <div class="blk-h"><span class="ico">🏛️</span><div class="tt"><h2>Carreira do ativo · plano proposto</h2>
+        <p class="sub">A mesma leitura do ativo que o cliente já tem, aplicada ao plano que você está montando: curva de resgate, benefício em vida, capital no tempo e o ano em que o resgate passa o que foi pago. Vale para <b>cada cenário</b> que você criar.</p></div>
+        <label class="blk-sw"><input type="checkbox" data-sw="carreira"> na apresentação</label><span class="blk-cx">▾</span></div>
+      <div class="blk-b"><div id="carreiraOut"></div></div>
     </div>
 
     <!-- CLI-VALORES-V1: cards de valor pro cliente — plano novo, MS ou os dois (mesma seleção do bloco da MS) -->
@@ -1996,7 +2006,7 @@ const VAZIO = () => ({
         familia:true, emvida:true, nec:true,
         planos:true, comp:true, muda:true, recado:true, glos:false, anxdg:false, anxinv:false, anxfra:false, anxcir:false,
         carteira:true, produtos:false, ab:true, novas:false, anxipca:false, assin:true,
-        mscli:true, msmigra:true, mspaga:true, mscomp:false, clivalores:true},
+        mscli:true, msmigra:true, mspaga:true, mscomp:false, clivalores:true, carreira:false},
   fechado:{},
   /* MS-ETAPA5: leitura da etapa 2 + decisões. Nada aqui é redigitado. */
   ms:{origem:'', prod:'WV20', csVit:0, preVit:0, alvos:{}, mig:{}, taxaNv:{}, novas:[], sims:[]},
@@ -2592,10 +2602,14 @@ function simLinhas(at){
     return (tot && ate) ? (tot / ate) : 1;
   };
   /* a tabela salta anos (12, 15, 20...); o acumulado soma TODOS os anos do caminho */
+  /* CARREIRA-PLANO-V1: num contrato que começa HOJE o 1º ano é exatamente o que foi
+     cotado — não leva um degrau de IPCA antes de existir. Vale só para o ativo simulado
+     do plano novo (at.novo); no ativo que o cliente já tem nada muda. */
+  const _d0 = at.novo ? 1 : 0;
   const premDoAno = a2 => {
     if (_pg != null && a2 > _pg) return 0;
     if (a2 < emCurso) return baseAnual / fatReal(a2);          /* passado: medido */
-    return baseAnual * Math.pow(1+i, a2 - base);               /* futuro: simulado */
+    return baseAnual * Math.pow(1+i, Math.max(0, a2 - base - _d0));   /* futuro: simulado */
   };
   const todos = ((RESG && RESG.anos) || []).slice();
   let acum = 0, antAno = 0;
@@ -2605,7 +2619,7 @@ function simLinhas(at){
     let cap;
     if (agora) cap = at.cap;
     else if (passado) cap = at.cap / fatReal(ano);             /* história, com IPCA real */
-    else cap = at.cap * Math.pow(1+i, n);                      /* simulação */
+    else cap = at.cap * Math.pow(1+i, Math.max(0, n - _d0));   /* simulação */
     for (let a2 = antAno + 1; a2 <= ano; a2++) acum += premDoAno(a2);
     antAno = ano;
     const premAno = premDoAno(ano);
@@ -2743,7 +2757,7 @@ function ativoCardHTML(at){
         ? `Seguro quitado: numa doença grave você antecipa 15%, 25% ou até <b>${fmt0(at.ev.valor)}</b> (50% do capital), à sua escolha.`
         : `Vale <b>depois da quitação</b>${at.ev.ano?`, prevista para <b>${at.ev.ano}</b>`:''}. A partir daí, antecipa 15%, 25% ou até 50% do capital numa doença grave.`]);
   }
-  const _atu = atualizacaoCapitalHTML(at);
+  const _atu = at.novo ? '' : atualizacaoCapitalHTML(at);   /* CARREIRA-PLANO-V1: contrato que ainda não existe não tem histórico de aniversário */
   if (!_atu) b.push(['📈','Atualização do capital', `O capital segurado é atualizado <b>anualmente, no aniversário da apólice, pelo IPCA/IBGE</b> dos 12 meses anteriores — e o prêmio acompanha na mesma proporção.<br><span style="display:inline-block;margin-top:5px"><b>Não é uma projeção</b> — é a regra do contrato (Vida Inteira Mais, cl. 21.2 · Vida e Saúde, cl. 23).</span>`]);
   const det = `<div style="display:flex;flex-direction:column;gap:9px">
       ${b.map(x => `<div style="display:flex;gap:9px;align-items:flex-start">
@@ -2760,11 +2774,15 @@ function ativoCardHTML(at){
     <div class="ativo-slot" onclick="ativoTog(this)">
       <div class="as-id">
         <div class="as-nome">${_ed?'<span class="ativo-gr no-print" title="arraste para mudar a ordem" onclick="event.stopPropagation()">⠿</span>':''}${esc(at.nome||'Ativo vitalício')}</div>
-        <div class="as-sub">Apólice ${esc(at.num||'—')}${at.emissao?' · desde '+dbr(at.emissao):''}${at.anos!=null?' · no '+anoEmCurso(at)+'º ano de contrato':''}<span class="so-consultor"> · ${esc(at.cod||'')}</span></div>
+        <div class="as-sub">${at.novo
+          ? `${esc(at.planoNome||'Plano novo')} · se contratar hoje${at.emissaoIdade?', aos '+esc(String(at.emissaoIdade))+' anos':''}`
+          : `Apólice ${esc(at.num||'—')}${at.emissao?' · desde '+dbr(at.emissao):''}${at.anos!=null?' · no '+anoEmCurso(at)+'º ano de contrato':''}`}<span class="so-consultor"> · ${esc(at.cod||'')}</span></div>
       </div>
       <div class="as-nums">
-        <div class="as-n forte"><div class="k">Capital de hoje</div><div class="v">${fmt0(at.cap)}</div><div class="d">não vence</div></div>
+        <div class="as-n forte"><div class="k">${at.novo?'Capital contratado':'Capital de hoje'}</div><div class="v">${fmt0(at.cap)}</div><div class="d">não vence</div></div>
         ${rh?`<div class="as-n"><div class="k">Resgate já disponível</div><div class="v">${fmt0(rh.v)}</div><div class="d">${(rh.f*100).toFixed(1)}% · ${rh.ano}º aniversário</div></div>`:''}
+        ${(at.novo && !rh)?(()=>{ const rp=_resgProx(at); return rp?`<div class="as-n"><div class="k">1º resgate</div><div class="v">${fmt0(rp.v)}</div><div class="d">${(rp.f*100).toFixed(1)}% · a partir do ${rp.ano}º ano</div></div>`:''; })():''}
+        ${at.novo?`<div class="as-n"><div class="k">Prêmio</div><div class="v">${fmt(at.preExib||at.pre)}<span style="font-size:.7rem;font-weight:500">/mês</span></div><div class="d">${anosPagamento(at.cod)?'paga por '+anosPagamento(at.cod)+' anos':'enquanto vigorar'}</div></div>`:''}
         ${evr?`<div class="as-n"><div class="k">Em vida</div><div class="v">${evr.v}</div><div class="d">${esc(evr.d)}</div></div>`:''}
         ${(()=>{const r=atualizacaoCapital(at); return (r&&r.ganho>0)?`<div class="as-n"><div class="k">Já subiu</div><div class="v">+${fmt0(r.ganho)}</div><div class="d">+${(r.pctTotal*100).toFixed(1)}% desde ${_mesTxt(r.de)}</div></div>`:'';})()}
       </div>
@@ -3526,6 +3544,7 @@ function renderCenarios(){
   }).join('');
   renderComp();
   renderMuda();
+  try{ renderCarreira(); }catch(e){ console.warn('carreira:',e); }   /* CARREIRA-PLANO-V1 */
   renderFoot();
   document.querySelectorAll('[data-per]').forEach(bt => {
     bt.classList.toggle('on', bt.dataset.per === state.ui.periodo);
@@ -3533,6 +3552,93 @@ function renderCenarios(){
   });
 }
 
+/* ═══════ CARREIRA-PLANO-V1 (14/09/2026) · a carreira do ativo, agora no plano NOVO ═══════
+   Pedido dele: "quero a mesma visão que mostro no ativo securitário que o cliente já tem,
+   trazida para o plano que eu monto — habilitado para múltiplos cenários, pra simular a
+   contratação e o comportamento desse ativo."
+   Como funciona: cada linha do plano cujo produto TEM tabela de valores de resgate
+   (famílias WL e WV da base de fatores) vira um ATIVO SIMULADO — uma apólice hipotética
+   emitida hoje, na idade e no sexo do cliente, com o capital e o prêmio que o motor já
+   calcula. A partir daí passa pelas MESMAS funções do ativo que ele já tem: curva de
+   resgate, benefício em vida, gráfico e a tabela "como isso caminha no tempo". Nada de
+   conta nova: o que muda é a origem do ativo, não a matemática.
+   O que NÃO entra: produto sem tabela de resgate (temporário, DG, funeral...) — não é
+   ativo, e a tela diz isso em vez de inventar curva. */
+function ativoSimuladoDaLinha(cen, l, ci, cli){
+  const p = PRODS[l.pid]; if (!p) return null;
+  const cc = calcC(cen, l, cli), r = cc.r;
+  if (!r || !r.ok) return null;
+  const cod = String(r.code || p.id || '');
+  if (!resgProduto(cod)) return null;                 /* sem tabela de resgate = não é ativo */
+  const cap = +r.cs || +l.capital || 0; if (!cap) return null;
+  const idade = cli.idade || idadeDe(cli.nasc);
+  const sexo = cli.sexo || 'M';
+  const hoje = new Date().toISOString().slice(0,10);
+  /* apólice hipotética: mesma forma da apólice real, para passar pelo mesmo motor */
+  const apSim = {num:'plano'+(ci+1), emissao:hoje, idadeEmissao:idade, per:'mes', totalPago:0, pagamentos:0,
+    cob:[{grupo:'MQC_VIT', cod:cod, nome:p.nome, cap:cap, pre:(+r.mensalLiq||0)}]};
+  const at = ativosVitalicios([apSim], idade, sexo)[0];
+  if (!at) return null;
+  at.novo = true; at.anos = 0; at.planoNome = cen.nome || ('Plano '+String.fromCharCode(65+ci));
+  /* CUIDADO: `at.pre` é o prêmio LÍQUIDO — quem soma o IOF é premioAnualHoje(). Guardar aqui o
+     valor com IOF cobrava o imposto duas vezes na simulação (pego no teste: 11.785,89 × 11.741,28). */
+  at.pre = +r.mensalLiq || 0;
+  at.preExib = +r.mensal || 0;                        /* o que aparece pro cliente já vem com IOF */
+  at.prazoPlano = l.prazo;
+  return at;
+}
+function ativosDoCenario(cen, ci, cli){
+  return (cen.linhas||[]).map(l => ativoSimuladoDaLinha(cen, l, ci, cli)).filter(Boolean);
+}
+/* marcos que interessam na conversa: 1º resgate e o ano em que o resgate passa o pago */
+function carreiraMarcos(at){
+  const L = simLinhas(at); if (!L.length) return null;
+  const vira = L.find(x => x.virou);
+  const rp = _resgProx(at);
+  const ult = L[L.length-1];
+  return {primeiro: rp, virada: vira || null, fim: ult, linhas: L};
+}
+function carreiraResumoHTML(at){
+  const m = carreiraMarcos(at); if (!m) return '';
+  const idade = state.cliente.idade || idadeDe(state.cliente.nasc);
+  return `<div class="grid g4" style="margin:10px 0 0">
+    <div class="tile h"><div class="k">Capital contratado</div><div class="v">${fmt0(at.cap)}</div><div class="d">não vence · corrigido pelo IPCA</div></div>
+    ${m.primeiro?`<div class="tile"><div class="k">1º resgate</div><div class="v">${fmt0(m.primeiro.v)}</div><div class="d">${(m.primeiro.f*100).toFixed(1)}% · ${m.primeiro.ano}º ano</div></div>`:''}
+    ${m.virada?`<div class="tile"><div class="k">Resgate passa o pago</div><div class="v">${m.virada.ano}º ano</div><div class="d">${idade?'aos '+(idade+m.virada.n)+' anos · ':''}${fmt0(m.virada.resgSim)} × ${fmt0(m.virada.acum)} pagos</div></div>`
+      :`<div class="tile"><div class="k">Resgate passa o pago</div><div class="v">—</div><div class="d">não acontece dentro da tabela (até o ${m.fim.ano}º ano)</div></div>`}
+    <div class="tile"><div class="k">No ${m.fim.ano}º ano</div><div class="v">${m.fim.resgSim!=null?fmt0(m.fim.resgSim):'—'}</div><div class="d">capital ${fmt0(m.fim.capSim)}${idade?' · aos '+(idade+m.fim.n)+' anos':''}</div></div>
+  </div>`;
+}
+function carreiraPlanosHTML(op){
+  op = op || {};
+  const cli = state.cliente, idade = cli.idade || idadeDe(cli.nasc);
+  const cens = (state.cen||[]).filter(c => (c.linhas||[]).length);
+  if (!cens.length) return '';
+  if (!idade || !cli.sexo) return `<div class="callout">Defina <b>idade e sexo</b> do cliente na etapa 1 para simular a carreira do ativo.</div>`;
+  const blocos = [];
+  let semAtivo = [];
+  cens.forEach((cen, ci) => {
+    const ats = ativosDoCenario(cen, ci, cli);
+    const nome = cen.nome || ('Plano '+String.fromCharCode(65+ci));
+    if (!ats.length){ semAtivo.push(nome); return; }
+    const cor = CORCEN[ci % CORCEN.length], soft = SOFTCEN[ci % SOFTCEN.length];
+    blocos.push(`<div class="card" style="border-left:5px solid ${cor};margin-top:14px;background:var(--surface2)">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="min-width:200px;flex:1">
+          <h3 style="margin:0;font-size:1.05rem">🏛️ ${esc(nome)}</h3>
+          <p class="sub" style="margin:4px 0 0">${ats.length} ativo(s) securitário(s) neste plano · ${fmt(ats.reduce((s,a)=>s+(+a.preExib||+a.pre||0),0))}/mês · capital ${fmt0(ats.reduce((s,a)=>s+a.cap,0))}</p>
+        </div>
+        <span class="pill" style="border-color:${cor};color:${cor};background:${soft}">plano ${String.fromCharCode(65+ci)}</span>
+      </div>
+      ${ats.map(at => carreiraResumoHTML(at) + `<div class="ativos-wrap">${ativoCardHTML(at)}</div>`).join('')}
+    </div>`);
+  });
+  if (!blocos.length && !semAtivo.length) return '';
+  const abre = `<div class="callout" style="margin-top:0">O que você está montando não é só proteção: o produto vitalício é um <b>ativo</b> — ele acumula valor de resgate e paga a você mesmo, em vida. Abaixo, a <b>mesma leitura</b> que você faz do ativo que já existe, agora aplicada ao plano proposto: quanto vale o resgate ano a ano, quanto terá sido pago até lá e <b>em que ano o resgate passa o que foi pago</b>.</div>`;
+  const nota = semAtivo.length ? `<div class="mini" style="margin-top:10px">${semAtivo.map(esc).join(', ')}: sem produto com tabela de valores de resgate (temporário, doenças graves e afins protegem, mas não formam patrimônio) — nada a simular aqui.</div>` : '';
+  return abre + blocos.join('') + nota;
+}
+function renderCarreira(){ const el = $('carreiraOut'); if (el) el.innerHTML = carreiraPlanosHTML(); }
 /* ═══════ SEL_CEN_V1 · quais cenários entram na comparação ═══════
    Ele monta vários planos para simular; a comparação mostra só os escolhidos.
    O cenário NÃO é apagado — segue vivo na etapa de proposta. */
@@ -5413,6 +5519,10 @@ function renderApresenta(){
     });
   }
 
+  /* CARREIRA-PLANO-V1: como o plano vira patrimônio (só entra se ele ligar o switch) */
+  if (mostra('carreira')){ const _cp = carreiraPlanosHTML({cliente:true});
+    if (_cp) h += sec('O que este plano vira em patrimônio','carreira') + `<div class="card">${_cp}</div>`; }
+
   /* comparação entre os planos */
   if (censTodos.length && mostra('comp')){
     h += sec(censTodos.length > 1 ? 'Comparando os planos' : 'Comparando com o que você tem hoje','comp');
@@ -5474,7 +5584,7 @@ const SUM_NOME = {como:'Como funciona sua proteção atual', carteira:'Carteira 
   emvida:'Benefício em vida', glos:'Glossário',
   mscli:'Mudança de Seguro — como fica', msmigra:'O que muda, cobertura a cobertura',
   mspaga:'O que você passa a pagar', mscomp:'Mudança de Seguro ou não fazer nada',
-  clivalores:'Quanto você passa a pagar'};
+  clivalores:'Quanto você passa a pagar', carreira:'O que este plano vira em patrimônio'};
 /* a chave da seção (data-sk) é a mesma chave de state.show na maioria dos blocos;
    estas poucas divergem porque a seção nasce de outro bloco */
 const SUM_SHOW = {fam:'familia', anexos:null};

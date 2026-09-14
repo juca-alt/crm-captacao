@@ -2,6 +2,20 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14/09/2026 (5ª onda) — CARREIRA DO ATIVO no plano NOVO (Revisão de Proteção)
+
+**Arquivo: `revisao-protecao.html`** (fora do portão, selfTest próprio). Pedido dele: *"quero a mesma visão que mostro no ativo securitário que o cliente já tem, trazida para o plano que eu monto — habilitado para múltiplos cenários, pra simular a contratação e o comportamento desse ativo."*
+
+**Como foi feito (sem conta nova):** cada linha do plano cujo produto TEM tabela de valores de resgate (famílias WL e WV da base de fatores — `resgProduto`) vira um **ativo simulado**: uma apólice hipotética emitida hoje, na idade/sexo do cliente, com o capital e o prêmio que o motor já calcula (`calcC`). A partir daí passa pelas **mesmas funções** do ativo que ele já tem — `ativosVitalicios`, `resgCurva`, `evItens`, `simLinhas`, `ativoCardHTML`. O que muda é a ORIGEM do ativo, não a matemática.
+- **Bloco novo no console** (etapa 4, logo após Planos propostos) + **seção na apresentação** ("O que este plano vira em patrimônio"), **fora do material por padrão** — ele liga no switch, como nas outras.
+- **Múltiplos cenários**: um grupo por plano, com a cor do plano. Plano sem produto que forma patrimônio **diz isso** em vez de inventar curva.
+- **Resumo que sustenta a conversa**: capital contratado · 1º resgate (ano e valor) · **o ano em que o resgate passa o total pago** · onde chega no 40º ano. Ex. medido (H, 40 anos, WV10, 250 mil): 1º resgate R$ 4.725 no 3º ano; **vira no 9º ano** (R$ 134.965 de resgate × R$ 132.280 pagos); 40º ano R$ 1.215.607 com capital de R$ 2.033.468.
+- **Contrato que começa hoje**: o 1º ano sai **exatamente pelo que foi cotado** (não leva um degrau de IPCA antes de existir). A mudança no motor é guardada por `at.novo` — **o ativo que o cliente já tem não mudou em nada** (tem invariante provando).
+- **Bug pego pelo teste:** `at.pre` do ativo simulado guardava o prêmio COM IOF, e `premioAnualHoje` soma IOF de novo — imposto cobrado duas vezes (11.785,89 × 11.741,28). Corrigido: `at.pre` é líquido, `at.preExib` é o de exibição.
+- Cabeçalho da simulação deixou de espremer no celular.
+
+**Provas:** 17/17 num teste funcional no navegador com o motor REAL do arquivo (nada dublado) — inclui a regressão do ativo existente; `selfTest` do arquivo segue **45/45**; 390/834/1280 sem estouro e sem exceção nas 6 abas.
+
 ## 14/09/2026 (4ª onda) — Faixa branca do iPad · Finalizar que não finalizava · Editar atividade · Tarefas do Google · Compromisso sabe de que negócio é
 
 **v7.63.** Quatro coisas que ele reportou usando o app no iPad, e duas que apareceram na investigação.
