@@ -4,6 +4,28 @@
 
 ## 14/09/2026 (6ª onda) — Painel TA: Delay só é Delay · fila "TA não atendeu" · autoria do Victor
 
+> ### ⏯️ RETOMAR AQUI (ponto de retomada — 14/09, 20h40)
+> **`main` = v7.64 no ar e conferido pelo `--servido`.** Sessão feita do iPad (MacBook no suporte Apple), tudo direto na main com autorização dele no chat ("pode executar tudo e ir pro ar").
+> **Prompt pra próxima sessão:**
+> ```
+> Sessão CRM Visão LP — retomar. v7.64 no ar (ler o topo do ESTADO: 6 ondas do dia 14/09).
+> Entregue hoje: GCAL-BIDIRECIONAL-V1 (fila persistida crmlp_gsync_v1, volta do Google) ·
+> ESTABILIDADE-DE-TELA-V1 (render/renderDrawer preservam rolagem+foco) · AGENDA-FLUIDA-V1
+> (arrastar pra mover, título nítido, nada trava) · FUNIL-CONSOLIDADO-V1 (tela 'consolidado') ·
+> IPAD-SEM-FAIXA-V1 (portão passou a medir 1024) · ATIVIDADE-UX-V1 (tarDe/tarPar, editar/excluir) ·
+> GTASKS-V1 (com hora→Agenda, sem hora→Tarefas do Google) · AGENDA-NEGOCIO-V1 (evento sabe de que
+> negócio é) · CARREIRA-PLANO-V1 (revisao-protecao.html: carreira do ativo no plano novo) ·
+> TA-LISTAS-V2 (Delay × TA não atendeu × Ficou pra trás) · AUTORIA-V1 (quemFez() = e-mail logado).
+> Testes fora do portão (playwright, no scratchpad da sessão): teste-gsync 17 · teste-agenda 14 ·
+> teste-atividade 14 · teste-estabilidade · teste-carreira 17. Regras de sempre: git fetch antes,
+> grep -a no vendas.html, portão verde (agora 39 telas × {375,1024,1280} × {cheia,vazia}) e
+> --servido depois do merge. Fila dele: MAPA & LOCAIS (rota do dia, locais na carteira) ·
+> extensão WhatsApp no CRM · 'Organizar painel' do 2.0 · (terceiros) Victor resubir emitidas,
+> Daniel subir a carteira.
+> ```
+> **Por que este bloco existe:** o iPad dele derruba a navegação no meio da conversa. Se a sessão se
+> perder, este parágrafo é o suficiente pra qualquer sessão nova continuar de onde parou.
+
 **v7.64.**
 ### Listas do Painel TA (TA-LISTAS-V2)
 Pedido dele: *"esse filtro tá puxando da lista de TA quem não atendeu, e o caso aqui é o que tem STATUS DELAY — ex.: delay OI, delay P/C. Cria um filtro só 'TA não atendeu', e fica todo mundo que não atendeu, seja em qual funil ou etapa estiver."*
