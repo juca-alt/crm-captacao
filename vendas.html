@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.61 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.63 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -217,7 +217,12 @@
 .pl .pl-tip .v{font-size:17px;font-weight:600;font-variant-numeric:tabular-nums}
 
   /* ── topbar (branca, título da view + ações — padrão Captação) ── */
-  .topbar{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid var(--linha);position:sticky;top:0;z-index:50}
+  /* IPAD-SEM-FAIXA-V1 (14/09): entre 981px e ~1300px (iPad em PAISAGEM, que é como ele
+     trabalha agora) a barra de cima pedia ~1140px e NÃO tinha como encolher — empurrava a
+     página inteira pra fora da tela, e sobrava aquela faixa branca à direita. O portão só
+     media 375 e 1280, então essa faixa nunca foi olhada. Conserto na origem: a barra quebra
+     a linha em vez de empurrar, e a busca encolhe antes de estourar. */
+  .topbar{display:flex;align-items:center;gap:12px;padding:14px 22px;background:#fff;border-bottom:1px solid var(--linha);position:sticky;top:0;z-index:50;flex-wrap:wrap;max-width:100%}
   .topbar h2{font-size:17px;font-weight:700;flex-shrink:0}
   .topbar .spacer{flex:1}
   .topbar .tag{font-size:10px;font-weight:700;background:var(--fundo);border:1px solid var(--linha);color:var(--muted);padding:3px 9px;border-radius:20px;letter-spacing:.4px;white-space:nowrap}
@@ -579,8 +584,11 @@
   /* ── drawer contato ── */
   .overlay{position:fixed;inset:0;background:rgba(12,22,38,.4);z-index:80;display:none}
   .overlay.aberto{display:block}
-  .drawer{position:fixed;top:0;right:-580px;width:min(580px,96vw);height:100vh;height:100dvh;background:var(--fundo);z-index:90;box-shadow:-8px 0 30px rgba(16,30,54,.2);transition:right .22s ease;display:flex;flex-direction:column}
-  .drawer.aberto{right:0}
+  /* a gaveta FECHADA ficava em right:-580px — elemento fora da tela que, no Safari do iPad,
+     entra na área rolável e alarga o documento. Agora sai por transform (não cria rolagem e
+     ainda anima na GPU). */
+  .drawer{position:fixed;top:0;right:0;width:min(580px,96vw);height:100vh;height:100dvh;background:var(--fundo);z-index:90;box-shadow:-8px 0 30px rgba(16,30,54,.2);transform:translateX(102%);transition:transform .22s ease;display:flex;flex-direction:column;will-change:transform}
+  .drawer.aberto{transform:translateX(0)}
   .drawer-head{background:var(--navy);color:#fff;padding:18px 20px}
   .drawer-head .nome{font-size:17px;font-weight:800}
   .drawer-head .meta{font-size:12px;opacity:.9;margin-top:3px}
@@ -948,7 +956,7 @@
   }
   /* telefone estreito */
   @media(max-width:640px){
-    .drawer{width:100vw;right:-102vw}
+    .drawer{width:100vw}   /* IPAD-SEM-FAIXA-V1: quem tira a gaveta da tela é o transform (a regra antiga, right:-102vw, brigava com ele e a ficha não abria no celular) */
     th,td{padding:8px 7px}
     h1.pg{font-size:18px}
   }
@@ -978,7 +986,7 @@
   /* ── B3: busca global ⌘K (padrão Captação) com escopo ── */
   /* ── B3.2: busca inline na topbar (o ⌘K continua existindo; isto é o campo
      sempre visível que ele pediu — mesma fonte de dados, resultado em typeahead) ── */
-  .tb-busca{position:relative;display:flex;align-items:center;gap:6px;background:var(--fundo);border:1px solid var(--linha);border-radius:10px;padding:5px 10px;min-width:210px;max-width:300px;flex:0 1 260px}
+  .tb-busca{position:relative;display:flex;align-items:center;gap:6px;background:var(--fundo);border:1px solid var(--linha);border-radius:10px;padding:5px 10px;min-width:120px;max-width:300px;flex:1 1 200px}
   .tb-busca:focus-within{border-color:var(--azul);background:#fff}
   .tb-busca .lupa{font-size:12.5px;opacity:.65;flex-shrink:0}
   .tb-busca input{border:0;background:transparent;outline:0;font-size:13px;width:100%;min-width:0;color:var(--ink)}
@@ -1704,6 +1712,7 @@ function salvar(opts){ if(window.CONTA_TROCANDO) return;
   pendSalvar();
   _lpcLast={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) _lpcLast[String(c.id)]=JSON.stringify(c); });
   try{ localStorage.setItem(CHAVE, JSON.stringify(S)); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); }
+  if(typeof negIndexLimpar==='function') negIndexLimpar();   /* AGENDA-NEGOCIO-V1: base mudou → índice de nomes refaz */
   if(typeof lpcAgendarPush==='function') lpcAgendarPush();
 }
 
@@ -3042,7 +3051,7 @@ function reunFunil(lista, corte){
 }
 function reunFinalizar(cid,tid){
   const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
+  const t=tarDe(c,tid); if(!t){ toast('Atividade não encontrada — atualize',false); return; }
   const px=funProxEtapa(c), dias=reunDiasParada(t);
   const op=d=>`<label class="reun-op">
     <input type="radio" name="reun_d" value="${d.k}" ${d.k==='avancou'?'checked':''} onchange="reunTrocou()">
@@ -3083,7 +3092,7 @@ function reunTrocou(){
 }
 function reunSalvar(cid,tid){
   const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
+  const t=tarDe(c,tid); if(!t) return;
   const k=(document.querySelector('input[name=reun_d]:checked')||{}).value;
   const d=REUN_BY_K[k]; if(!d) return;
   /* VALIDA TUDO ANTES DE APLICAR QUALQUER COISA. Na 1ª versão o reunAplicar
@@ -3152,16 +3161,78 @@ function tarGcalAcaoHTML(c,t){
      drena; o ícone conta em que pé está (＋ mandar · ↻ já está lá · ⏳ na fila · ↺ apagou no Google). */
   if(t&&t.quando){
     const est=(typeof gsyncEstado==='function')?gsyncEstado(c,t):(t.gcalId?'ok':'');
-    const ico=est==='fila'?'⏳':est==='ok'?'↻':est==='fora'?'↺':'＋';
-    const tit=est==='fila'?'Na fila — sobe pra sua Agenda Google sozinho (clique pra tentar agora)'
+    const dest=(typeof gtDestino==='function')?gtDestino(t):'evento';
+    const base=est==='tarefa'?'☑️':(dest==='tarefa'&&!est)?'☑️':'📅';
+    const ico=est==='fila'?'⏳':(est==='ok'||est==='tarefa')?'↻':est==='fora'?'↺':'＋';
+    const tit=est==='fila'?'Na fila — sobe pro Google sozinho (clique pra tentar agora)'
+             :est==='tarefa'?'Já está nas suas Tarefas do Google — clique pra atualizar lá'
              :est==='ok'?'Já está na sua Agenda Google — clique pra atualizar lá'
-             :est==='fora'?'Você apagou este evento no Google — clique pra mandar de novo'
+             :est==='fora'?'Você apagou no Google — clique pra mandar de novo'
+             :dest==='tarefa'?'Mandar pras suas Tarefas do Google (sem hora = afazer, não compromisso). O destino se troca no ✏️'
              :(t.tipo==='reuniao'?'Mandar pra sua Agenda Google com a etapa no título + cor':'Mandar pra sua Agenda Google (direto, sem abrir tela)');
-    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="${tit}">📅${ico}</button>`;
+    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="${tit}">${base}${ico}</button>`;
   }
   const gc=tarGcalUrl(c,t);
   return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido (conecte a Agenda em Agenda &amp; Tarefas pra gravar direto)">📅</a>`:'';
 }
+/* ── ATIVIDADE-UX-V1: editar / atualizar / excluir qualquer atividade ─────────
+   Pedido dele: "preciso com uma boa UX: pode editar, atualizar ou excluir, não
+   só finalizar." Uma folha só, chamada da ficha e da Agenda. O que mudar aqui
+   reflete na Agenda Google na hora (a fila do GCAL-BIDIRECIONAL cuida). */
+function tarEditar(cid,tid){
+  const par=tarPar(cid,tid); if(!par){ toast('Atividade não encontrada — atualize',false); return; }
+  const c=par.c, t=par.t, naAgenda=!!t.gcalId;
+  atModal(`<h2>Editar atividade</h2>
+    <div class="sub">${esc(c.nome||'')}${naAgenda?' · <b>espelhada na sua Agenda Google</b>':''}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <label style="font-size:12px;font-weight:600;grid-column:1/-1">O que é
+        <select id="te-tipo" style="width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px">
+          ${TAR_TIPOS.map(x=>`<option value="${x[0]}" ${x[0]===t.tipo?'selected':''}>${x[1]} ${x[2]}</option>`).join('')}</select></label>
+      <label style="font-size:12px;font-weight:600;grid-column:1/-1">Título
+        <input id="te-tit" value="${esc(t.tit||'')}" placeholder="${esc(tarNomeTipo(t.tipo))}" style="width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px"></label>
+      <label style="font-size:12px;font-weight:600">Dia
+        <input id="te-dia" type="date" value="${esc(t.quando||hojeISO())}" style="width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px"></label>
+      <label style="font-size:12px;font-weight:600">Hora <span style="font-weight:400;color:var(--muted)">(vazio = dia todo)</span>
+        <input id="te-hora" type="time" value="${esc(t.hora||'')}" style="width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px"></label>
+      <label style="font-size:12px;font-weight:600">Duração
+        <select id="te-dur" style="width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px">
+          ${[15,30,45,60,90,120].map(d=>`<option value="${d}" ${Number(t.dur||60)===d?'selected':''}>${d<60?d+' min':(d/60)+' h'}</option>`).join('')}</select></label>
+      <label style="font-size:12px;font-weight:600">Destino
+        <select id="te-destino" style="width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px">
+          ${gtDestinoOpcoes(t)}</select></label>
+      <label style="font-size:12px;font-weight:600;grid-column:1/-1">Anotação
+        <textarea id="te-notas" style="width:100%;min-height:64px;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px">${esc(t.notas||'')}</textarea></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-s" onclick="tarRemoverDoEditor('${esc(jsq(cid))}','${esc(jsq(tid))}')" style="color:var(--verm,#dc2626)">🗑️ Excluir</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" onclick="tarSalvarEdicao('${esc(jsq(cid))}','${esc(jsq(tid))}')">Salvar</button>
+    </div>`);
+}
+function tarSalvarEdicao(cid,tid){
+  const par=tarPar(cid,tid); if(!par) return;
+  const c=par.c, t=par.t, g=id=>{ const el=document.getElementById(id); return el?el.value:''; };
+  const antes=(t.quando||'')+'|'+(t.hora||'')+'|'+(t.dur||60)+'|'+(t.tit||'')+'|'+(t.tipo||'');
+  const horaAntes=t.hora||'';
+  t.tipo=g('te-tipo')||t.tipo;
+  t.tit=String(g('te-tit')||'').trim()||tarNomeTipo(t.tipo);
+  t.quando=g('te-dia')||t.quando;
+  t.hora=g('te-hora')||'';
+  t.dur=Number(g('te-dur'))||60;
+  t.notas=g('te-notas')||'';
+  const dest=g('te-destino'); if(dest) gtDestinoAplicar(t,dest);
+  /* colocou HORA agora, ou escolheu o destino na mão → passa a valer a mesma regra do
+     "compromisso com hora nasce espelhado": vai pro Google sem ele precisar clicar de novo */
+  if(!gsyncEspelha(t)&&((!horaAntes&&t.hora)||(dest&&dest!=='auto'))) t.gcalSync=true;
+  if(antes!==((t.quando||'')+'|'+(t.hora||'')+'|'+(t.dur||60)+'|'+(t.tit||'')+'|'+(t.tipo||'')))
+    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Atividade editada: '+t.tit+' · '+dataBR(t.quando)+(t.hora?' '+t.hora:''),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  if(typeof gsyncMudou==='function') gsyncMudou(c,t);
+  salvar(); atClose(); render();
+  toast('Atividade atualizada'+(t.gcalId||t.gtaskId?' · e no Google':''),true);
+}
+function tarRemoverDoEditor(cid,tid){ atClose(); tarRemover(cid,tid); }
+window.tarEditar=tarEditar; window.tarSalvarEdicao=tarSalvarEdicao; window.tarRemoverDoEditor=tarRemoverDoEditor;
 /* ═══ COMPROMISSO-WA-V1 (04/09) ════════════════════════════════════════════
    Pedido dele: na atividade agendada, um botão que manda ao cliente, pelo
    WhatsApp, o compromisso marcado — texto pronto, ele só aperta enviar.
@@ -3183,6 +3254,13 @@ function tarWaHref(c,t){ const m=tarWaMsg(c,t); if(!m) return ''; return cartWaU
 function tarWaAcaoHTML(c,t){ const h=tarWaHref(c,t); return h?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(h)}" target="_blank" rel="noopener" title="Enviar o compromisso ao cliente pelo WhatsApp (texto pronto)">💬 enviar</a>`:''; }
 /* ── mutadores ── */
 function tarContato(cid){ return (S.contatos||[]).find(c=>String(c.id)===String(cid)); }
+/* ATIVIDADE-UX-V1 (14/09): "Finalizar" (e concluir, remarcar, remover) não fazia NADA em
+   atividade que veio do import — o id lá é NÚMERO e aqui a busca era `x.id===tid`, com o tid
+   chegando do onclick como TEXTO. `===` entre 12345 e '12345' é false, a função dava return e
+   o clique morria em silêncio. É o erro #7 do livro (ids comparados como string) de novo, agora
+   nas tarefas. Passa a existir UM acessador — e ninguém mais busca tarefa na mão. */
+function tarDe(c,tid){ if(!c) return null; return tarefasDe(c).find(x=>String(x.id)===String(tid))||null; }
+function tarPar(cid,tid){ const c=tarContato(cid); if(!c) return null; const t=tarDe(c,tid); return t?{c,t}:null; }
 window.tarCriar = (cid,tipo,tit,quando,hora,notas,dur) => {
   const c=tarContato(cid); if(!c) return null;
   const t={id:uid(), tipo:tipo||'follow', tit:String(tit||'').trim()||tarNomeTipo(tipo),
@@ -3212,18 +3290,19 @@ function tarAgendarLembrete(cid,meetQuando,meetHora,modo){ const c=tarContato(ci
 window.tarAgendarLembrete=tarAgendarLembrete;
 window.tarConcluir = (cid,tid) => {
   const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t||t.feito) return;
+  const t=tarDe(c,tid); if(!t||t.feito) return;
   t.feito=new Date().toISOString();
   interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa concluída: '+t.tit,dia:hojeISO(),ts:t.feito,por:S.activeUser});
   /* GCAL-BIDIRECIONAL-V1: resolveu ANTES do dia → o compromisso futuro sai da agenda dele
      (o que já passou fica: é histórico, não é lixo). */
-  if(t.gcalId&&t.quando&&t.quando>hojeISO()&&typeof gsyncEnfileirar==='function'){
+  if(t.gtaskId&&typeof gsyncEnfileirar==='function'){ gsyncEnfileirar(c.id,t.id,'upsert',{gtaskId:t.gtaskId}); gsyncAgendar(400); }   /* GTASKS-V1: concluir aqui marca concluída lá */
+  else if(t.gcalId&&t.quando&&t.quando>hojeISO()&&typeof gsyncEnfileirar==='function'){
     gsyncEnfileirar(c.id,t.id,'apagar',{gcalId:t.gcalId,titulo:t.tit||''});
     delete t.gcalId; t.gcalSync=false; gsyncAgendar(400); }
   salvar(); render(); toast('Feito: '+t.tit,true);
 };
 window.tarReabrir = (cid,tid) => { const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return; t.feito=null;
+  const t=tarDe(c,tid); if(!t) return; t.feito=null;
   /* já viveu na Agenda Google (t.gcalUpd) → reabrir devolve o compromisso pra lá */
   if((t.gcalId||t.gcalUpd)&&typeof gsyncEnfileirar==='function'){ t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId}); gsyncAgendar(400); }
   salvar(); render(); };
@@ -3235,19 +3314,19 @@ function tarNovaData(t,dias){
 }
 window.tarAdiar = (cid,tid,dias) => {
   const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
+  const t=tarDe(c,tid); if(!t) return;
   t.quando=tarNovaData(t,dias);
   if(typeof gsyncMudou==='function') gsyncMudou(c,t);   /* GCAL-BIDIRECIONAL-V1: remarcou aqui, remarca lá */
   salvar(); render(); toast('Remarcada para '+dataBR(t.quando)+(t.gcalId?' · também na Agenda Google':''),true);
 };
 window.tarRemover = (cid,tid) => {
   const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
-  if(!confirm('Remover a tarefa "'+(t.tit||'')+'"?'+(t.gcalId?' Ela também sai da sua Agenda Google.':''))) return;
+  const t=tarDe(c,tid); if(!t) return;
+  if(!confirm('Remover a tarefa "'+(t.tit||'')+'"?'+(t.gcalId?' Ela também sai da sua Agenda Google.':t.gtaskId?' Ela também sai das suas Tarefas do Google.':''))) return;
   /* GCAL-BIDIRECIONAL-V1: o evento é do CRM — tirou aqui, tira lá (fila leva o id junto,
      porque a tarefa some do estado antes do item drenar). */
-  if(t.gcalId&&typeof gsyncEnfileirar==='function'){ gsyncEnfileirar(c.id,t.id,'apagar',{gcalId:t.gcalId,titulo:t.tit||''}); gsyncAgendar(400); }
-  c.tarefas=tarefasDe(c).filter(x=>x.id!==tid); salvar(); render();
+  if((t.gcalId||t.gtaskId)&&typeof gsyncEnfileirar==='function'){ gsyncEnfileirar(c.id,t.id,'apagar',{gcalId:t.gcalId,gtaskId:t.gtaskId,titulo:t.tit||''}); gsyncAgendar(400); }
+  c.tarefas=tarefasDe(c).filter(x=>String(x.id)!==String(tid)); salvar(); render();
 };
 window.tarNovaDoDrawer = () => {
   const c=ct(); if(!c) return;
@@ -4124,7 +4203,8 @@ function tarBlocoDrawer(c){
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)" title="Remarcar para daqui a uma semana">+7d</button>
         ${tarWaAcaoHTML(c,t)}
         ${tarGcalAcaoHTML(c,t)}
-        <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(c.id)}','${esc(t.id)}')" title="Remover">✕</button>
+        <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar: tipo, título, dia, hora, duração, destino no Google">✏️</button>
+        <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Remover">✕</button>
       </span></div>`;
   };
   let h = abertas.length ? abertas.map(linha).join('')
@@ -8969,7 +9049,10 @@ function revImprimir(){
    aqui dentro, sem pular de tela. Reaproveita o client OAuth do ecossistema (mesmo domínio
    juca-alt.github.io; Calendar API já ativa). Fase 2 (próxima) = criar evento + Meet + convite. */
 const GCAL_CLIENT_ID="63708753663-92us3rgem9s1j6rapi86b8uerc5440fr.apps.googleusercontent.com";
-const GCAL_SCOPE="https://www.googleapis.com/auth/calendar";
+/* GTASKS-V1 (14/09): ele usa MUITO a função Tarefas do Google, e o app só sabia criar
+   evento. Agora o consentimento pede as duas coisas. Se ele autorizar só a Agenda, o app
+   percebe (GCAL.escopos) e manda tudo pra Agenda, avisando — nunca perde o compromisso. */
+const GCAL_SCOPE="https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks";
 let GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:false,eventos:[],erro:null,vista:'lista',recolhido:false,diaSel:null,hint:null};
 /* GOOGLE-SEM-PEDIR-CONTA-V1 (04/09): o token do Google vale 1h e morria a cada
    recarga — e o pedido "silencioso" abria o "Escolha uma conta" toda vez, porque
@@ -8977,8 +9060,8 @@ let GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:false
    localStorage e é reaproveitado até expirar; (2) o pedido leva a DICA da conta
    (o e-mail do login do CRM), então o Google renova sem perguntar; (3) só pede
    de novo quando o token expirou de fato. */
-(function(){ try{ const o=JSON.parse(localStorage.getItem('crmlp_gcal_tok')||'null'); if(o&&o.tok&&o.exp&&Date.now()<o.exp-60000){ GCAL.tok=o.tok; GCAL.exp=o.exp; GCAL.conectado=true; } if(o&&o.hint) GCAL.hint=o.hint; }catch(_){} })();
-function gcalTokSalvar(){ try{ localStorage.setItem('crmlp_gcal_tok',JSON.stringify({tok:GCAL.tok,exp:GCAL.exp,hint:GCAL.hint})); }catch(_){} }
+(function(){ try{ const o=JSON.parse(localStorage.getItem('crmlp_gcal_tok')||'null'); if(o&&o.tok&&o.exp&&Date.now()<o.exp-60000){ GCAL.tok=o.tok; GCAL.exp=o.exp; GCAL.conectado=true; GCAL.escopos=o.escopos||''; } if(o&&o.hint) GCAL.hint=o.hint; }catch(_){} })();
+function gcalTokSalvar(){ try{ localStorage.setItem('crmlp_gcal_tok',JSON.stringify({tok:GCAL.tok,exp:GCAL.exp,hint:GCAL.hint,escopos:GCAL.escopos||''})); }catch(_){} }
 function gcalHint(){ if(GCAL.hint) return GCAL.hint; try{ if(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email) return PERFIL.email; }catch(_){} try{ const s=JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>/^sb-.*-auth-token$/.test(k))||'')||'null'); const e=s&&s.user&&s.user.email; if(e) return e; }catch(_){} return null; }
 try{ const _u=JSON.parse(localStorage.getItem('crmlp_gcal_ui')||'{}'); if(_u.vista)GCAL.vista=_u.vista; if(typeof _u.recolhido==='boolean')GCAL.recolhido=_u.recolhido; }catch(_){}
 function gcalUiSalvar(){ try{ localStorage.setItem('crmlp_gcal_ui',JSON.stringify({vista:GCAL.vista,recolhido:GCAL.recolhido})); }catch(_){} }
@@ -8989,6 +9072,7 @@ function gcalRecolher(){ GCAL.recolhido=!GCAL.recolhido; gcalUiSalvar(); if(VIEW
   .gcal-hd{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:16px 0 8px}
   .gcal-hd .tit{font-weight:800;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--cinza,#5b6770)}
   .gcal-hd .sub{color:var(--muted);font-weight:600;font-size:12px}
+  .gcal-dest{border:1px solid var(--linha);background:var(--fundo,#fff);border-radius:8px;padding:4px 8px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer}
   .gcal-seg{display:inline-flex;border:1px solid var(--linha);border-radius:8px;overflow:hidden}
   .gcal-seg button{border:0;background:transparent;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
   .gcal-seg button.on{background:var(--azul,#2563eb);color:#fff}
@@ -9023,7 +9107,7 @@ function gcalToken(interactive){ return new Promise((res,rej)=>{
   if(GCAL.tok&&Date.now()<GCAL.exp-60000) return res(GCAL.tok);
   gcalGisReady(()=>{ try{
     if(!_gcalTC){ _gcalTC=google.accounts.oauth2.initTokenClient({client_id:GCAL_CLIENT_ID,scope:GCAL_SCOPE,
-      callback:r=>{ if(r&&r.access_token){ GCAL.tok=r.access_token; GCAL.exp=Date.now()+(Number(r.expires_in||3600)*1000); GCAL.conectado=true; GCAL.hint=GCAL.hint||gcalHint(); gcalTokSalvar(); if(_gcalPending){_gcalPending.res(GCAL.tok);_gcalPending=null;} } else if(_gcalPending){_gcalPending.rej(new Error('sem token'));_gcalPending=null;} },
+      callback:r=>{ if(r&&r.access_token){ GCAL.tok=r.access_token; GCAL.exp=Date.now()+(Number(r.expires_in||3600)*1000); GCAL.conectado=true; GCAL.hint=GCAL.hint||gcalHint(); GCAL.escopos=String(r.scope||''); gcalTokSalvar(); if(_gcalPending){_gcalPending.res(GCAL.tok);_gcalPending=null;} } else if(_gcalPending){_gcalPending.rej(new Error('sem token'));_gcalPending=null;} },
       error_callback:e=>{ if(_gcalPending){_gcalPending.rej(e||new Error('oauth'));_gcalPending=null;} } }); }
     _gcalPending={res,rej}; const hint=gcalHint(); const o=interactive?{prompt:''}:{prompt:''}; if(hint){ o.hint=hint; o.login_hint=hint; }
     _gcalTC.requestAccessToken(o);
@@ -9066,6 +9150,9 @@ function gcalBlocoHTML(){
       <span class="sub">${GCAL.carregando?'sincronizando…':hojeEv.length+' hoje · atualiza sozinha'}</span>
       <span style="flex:1"></span>
       ${GCAL.recolhido?'':seg}
+      <select class="gcal-dest" onchange="gtSetSemHora(this.value)" title="Atividade SEM hora: vai como Tarefa do Google (lista de afazer) ou como evento de dia inteiro na Agenda">
+        <option value="tarefa" ${GT.semHora==='tarefa'?'selected':''}>sem hora → ☑️ Tarefas</option>
+        <option value="evento" ${GT.semHora==='evento'?'selected':''}>sem hora → 📅 Agenda</option></select>
       <button class="btn btn-p btn-mini" onclick="gcalNovo()" title="Criar evento">＋ Novo</button>
       <button class="btn btn-s btn-mini" onclick="gcalCarregar()" title="Atualizar">🔄</button>
       <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>`;
@@ -9076,8 +9163,8 @@ function gcalBlocoHTML(){
   const lista=[...hojeEv,...prox.slice(0,14)];
   return header+`<div class="card" style="padding:6px 14px">${lista.length?lista.map(gcalLinhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. Crie um em <b>＋ Novo</b>. 🎉</div>'}</div>`;
 }
-function gcalLinhaEv(e){ const hoje=hojeISO(); return `<div class="tarlin"><span>📅</span>
-    <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalEditar('${esc(e.id)}')" title="Editar evento">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''}
+function gcalLinhaEv(e){ const hoje=hojeISO(); const cn=gcalNegocioDoEvento(e); return `<div class="tarlin"><span>📅</span>
+    <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalEditar('${esc(e.id)}')" title="Editar evento">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''} ${negSeloHTML(cn)}
       <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees&&e.attendees.length?e.attendees.length+' convidado(s)':''))}</div></span>
     <span class="qd" style="background:transparent;padding:0">${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}</span>
     <span class="ac">
@@ -9091,7 +9178,8 @@ function gcalSemanaHTML(evs,hoje){
   const SEM=['dom','seg','ter','qua','qui','sex','sáb']; const dias=[]; for(let i=0;i<7;i++) dias.push(isoAddDias(hoje,i));
   /* AGENDA-FLUIDA-V1: o chip virou alça de arrasto — puxar pra outra coluna muda o DIA
      mantendo a hora (é o que ele faz no Google Agenda). Clique curto abre o editor. */
-  const chip=e=>{ const ad=e.start&&e.start.date&&!e.start.dateTime; return `<div class="gcal-chip${ad?' allday':''}" data-ev="${esc(e.id)}" data-dia="${esc(gcalDiaISO(e))}" title="${esc(e.summary||'')} — arraste pra outro dia"><span class="h">${ad?'dia todo':gcalHora(e)}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
+  const chip=e=>{ const ad=e.start&&e.start.date&&!e.start.dateTime; const cn=gcalNegocioDoEvento(e);
+    return `<div class="gcal-chip${ad?' allday':''}" data-ev="${esc(e.id)}" data-dia="${esc(gcalDiaISO(e))}" title="${esc(e.summary||'')}${cn?' — '+esc(negEtiqueta(cn)):''} — arraste pra outro dia"><span class="h">${ad?'dia todo':gcalHora(e)}${cn?' · '+esc(ET_LABEL[cn.etapa]||cn.etapa||''):''}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
   const col=dISO=>{ const p=dISO.split('-').map(Number); const dow=new Date(p[0],p[1]-1,p[2]).getDay();
     const evD=evs.filter(e=>gcalDiaISO(e)===dISO);
     return `<div class="gcal-day${dISO===hoje?' hoje':''}" data-dia="${dISO}"><div class="dh"><span>${SEM[dow]} ${p[2]}<span class="dn">${dISO===hoje?' · hoje':''}</span></span><span class="add" onclick="gcalNovoDia('${dISO}')" title="Novo evento neste dia">＋</span></div>
@@ -9135,7 +9223,7 @@ function gcalDiaHTML(evs,hoje){
   const blocos=timed.map(t=>{ const w=100/t.cols, left=t.lane*w, top=(t.s-top0)*(HPX/60), h=Math.max(34,(t.f-t.s)*(HPX/60));
     const lc=h>=80?3:h>=54?2:1;
     return `<div class="gcal-ev" data-ev="${esc(t.e.id)}" data-ini="${t.s}" data-fim="${t.f}" data-dia="${dia}" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);--lc:${lc}" title="${esc(t.e.summary||'')} — arraste pra mover, borda de baixo pra esticar">
-      <span class="h">${gcalMin2Hhmm(t.s)}–${gcalMin2Hhmm(t.f)}${t.e.hangoutLink?' · Meet':''}</span>
+      <span class="h">${gcalMin2Hhmm(t.s)}–${gcalMin2Hhmm(t.f)}${t.e.hangoutLink?' · Meet':''}${(()=>{ const cn=gcalNegocioDoEvento(t.e); return cn?' · '+esc(ET_LABEL[cn.etapa]||cn.etapa||''):''; })()}</span>
       <span class="s">${esc(t.e.summary||'(sem título)')}</span>
       <span class="gcal-rz" title="Arraste pra mudar a duração"></span></div>`;
   }).join('');
@@ -9196,7 +9284,7 @@ function gcalCliqueColuna(ev){ const alvo=ev&&ev.target; if(!alvo||!alvo.classLi
     .gcal-mv button{min-height:44px;padding:6px 14px}
     .gcal-wk{grid-template-columns:repeat(7,minmax(150px,1fr))}
   }`; document.head.appendChild(s); })();
-function gcalNovoDia(dia){ gcalModalEvento({novo:true,summary:'',description:'',dia:dia,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
+function gcalNovoDia(dia){ _GCAL_NEG=null; gcalModalEvento({novo:true,summary:'',description:'',dia:dia,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
 /* ── AGENDA-FLUIDA-V1 · motor de arrasto (mouse no desktop, segurar-e-arrastar no toque) ──
    Delegação no document: sobrevive a toda repintura sem religar nada. No toque
    segue a receita do DRAG-TOUCH-V1 dos funis (segurar ~320 ms → o bloco levanta),
@@ -9319,6 +9407,7 @@ async function gcalApi(method,path,body,params){
 function gcalEvPorId(id){ return (GCAL.eventos||[]).find(e=>e.id===id); }
 function gcalDT(ev,qual){ const o=ev&&ev[qual]; if(!o) return {d:'',t:''}; if(o.date) return {d:o.date,t:''}; const s=o.dateTime; return {d:s.slice(0,10),t:s.slice(11,16)}; }
 function gcalNovo(preNome,preDesc){
+  _GCAL_NEG=null;
   const d=hojeISO(); gcalModalEvento({novo:true,summary:preNome||'',description:preDesc||'',dia:d,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
 /* ── Reunião de venda em 1 toque (Fase 2, via API) ──────────────────────────
    Cria o evento no Google já com "<emoji> [ETAPA] <nome>" + cor Pavão, ou, se a
@@ -9402,9 +9491,9 @@ function gsyncEspelharNaTarefa(ev){
   return true;
 }
 function gsyncTarefa(cid,tid){ const c=tarContato(cid); if(!c) return null;
-  const t=tarefasDe(c).find(x=>String(x.id)===String(tid)); return t?{c,t}:null; }
+  const t=tarDe(c,tid); return t?{c,t}:null; }
 /* a atividade está "espelhada" quando já tem evento OU o usuário pediu pra ir */
-function gsyncEspelha(t){ return !!(t&&(t.gcalId||t.gcalSync)); }
+function gsyncEspelha(t){ return !!(t&&(t.gcalId||t.gtaskId||t.gcalSync)); }
 /* re-enfileira sozinho o que já vive na agenda (usado por remarcar/concluir/editar) */
 function gsyncMudou(c,t){ if(!c||!t) return; if(!gsyncEspelha(t)) return; gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId}); gsyncAgendar(); }
 function gsyncTitulo(c,t){
@@ -9436,6 +9525,7 @@ function gcalTokenPra(gesto){
 /* aplica UM item da fila. Devolve {ok, titulo} — erro sobe pra quem drena. */
 async function gsyncAplicarItem(it){
   if(it.op==='apagar'){
+    if(it.gtaskId){ try{ await gtApi('DELETE','/lists/'+GT_LISTA+'/tasks/'+encodeURIComponent(it.gtaskId)); }catch(e){ if(!gsyncSumiu(e)) throw e; } }
     if(!it.gcalId) return {ok:true,titulo:it.titulo||''};
     try{ await gcalApi('DELETE','/'+encodeURIComponent(it.gcalId),null,{sendUpdates:'all'}); }
     catch(e){ if(!gsyncSumiu(e)) throw e; }                    /* já não existe lá: objetivo cumprido */
@@ -9444,6 +9534,21 @@ async function gsyncAplicarItem(it){
   const par=gsyncTarefa(it.cid,it.tid);
   if(!par) return {ok:true,titulo:''};                          /* atividade não existe mais: item morto */
   const c=par.c, t=par.t;
+  /* GTASKS-V1: para onde vai esta atividade — e MIGRA se ele mudou de ideia */
+  const destino=gtDestino(t), quer=(destino==='tarefa'&&gtAutorizado())?'tarefa':'evento';
+  if(quer==='tarefa'){
+    if(t.gcalId){ try{ await gcalApi('DELETE','/'+encodeURIComponent(t.gcalId),null,{sendUpdates:'none'}); }catch(e){ if(!gsyncSumiu(e)) throw e; } delete t.gcalId; }
+    const corpo=gtCorpo(c,t);
+    let g=null, novo=false;
+    if(t.gtaskId){ try{ g=await gtApi('PATCH','/lists/'+GT_LISTA+'/tasks/'+encodeURIComponent(t.gtaskId),corpo); }
+      catch(e){ if(!gsyncSumiu(e)) throw e; delete t.gtaskId; g=await gtApi('POST','/lists/'+GT_LISTA+'/tasks',corpo); novo=true; } }
+    else { g=await gtApi('POST','/lists/'+GT_LISTA+'/tasks',corpo); novo=true; }
+    if(g&&g.id){ t.gtaskId=g.id; t.gtaskUpd=g.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; }
+    if(novo) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Nas Tarefas do Google: '+(corpo.title||''),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+    salvar();
+    return {ok:true,titulo:corpo.title,criou:novo,tarefa:true};
+  }
+  if(t.gtaskId){ try{ await gtApi('DELETE','/lists/'+GT_LISTA+'/tasks/'+encodeURIComponent(t.gtaskId)); }catch(e){ if(!gsyncSumiu(e)) throw e; } delete t.gtaskId; }
   const body=gsyncCorpoEvento(c,t);
   const id=t.gcalId||it.gcalId;
   let ev=null, criou=false;
@@ -9557,7 +9662,7 @@ function gsyncTick(forcar){
   const agora=Date.now();
   if(!forcar&&GSYNC.ultimo&&(agora-GSYNC.ultimo)<25000) return;
   GSYNC.ultimo=agora;
-  gsyncDrenar().then(r=>{ if(!r||!r.semToken) return gsyncPuxar({silencioso:true}); });
+  gsyncDrenar().then(r=>{ if(!r||!r.semToken) return gsyncPuxar({silencioso:true}).then(()=>gsyncPuxarTarefas({silencioso:true})); });
 }
 if(typeof window!=='undefined'){
   window.addEventListener('online',()=>gsyncTick(true));
@@ -9574,6 +9679,7 @@ async function gsyncReconectar(){
   GCAL.conectado=true; GSYNC.precisaLogin=false;
   await gsyncDrenar({gesto:true,avisar:true});
   await gsyncPuxar({gesto:true,silencioso:true});
+  await gsyncPuxarTarefas({silencioso:true});
   gcalCarregar();
   gsyncRepintar();
 }
@@ -9581,12 +9687,14 @@ async function gsyncReconectar(){
 function gsyncEstado(c,t){
   if(!t) return '';
   if(gsyncNaFila(c&&c.id,t.id)) return 'fila';
+  if(t.gtaskId) return 'tarefa';
   if(t.gcalId) return 'ok';
   if(t.gcalFora) return 'fora';
   return '';
 }
 function gsyncBadgeHTML(c,t){
   const e=gsyncEstado(c,t);
+  if(e==='tarefa') return `<span class="gsync-b ok" title="Está nas suas Tarefas do Google — concluir ou remarcar lá reflete aqui">☑️ nas tarefas</span>`;
   if(e==='ok')   return `<span class="gsync-b ok" title="Espelhado na sua Agenda Google — remarcar aqui ou lá mantém os dois iguais">📅 na agenda</span>`;
   if(e==='fila') return `<span class="gsync-b fila" title="Na fila — sobe pra Agenda Google assim que der (não precisa clicar de novo)">📅 na fila</span>`;
   if(e==='fora') return `<span class="gsync-b fora" title="Você apagou este evento na Agenda Google — a atividade continua aqui. Clique em 📅 pra mandar de novo">📅 fora da agenda</span>`;
@@ -9614,6 +9722,82 @@ function gsyncAvisoHTML(){
     .gsync-aviso .gsync-cta{width:100%;min-height:44px}
   }`; document.head.appendChild(s); })();
 window.gsyncEnfileirar=gsyncEnfileirar; window.gsyncReconectar=gsyncReconectar; window.gsyncTick=gsyncTick;
+/* ═══ GTASKS-V1 (14/09/2026) ═════════════════════════════════════════════════
+   Pedido dele: "consegue permitir na integração Google que eu possa mandar
+   eventos OU tarefas, conforme o que eu quero? Hoje sempre manda evento, mas
+   uso muito a função tarefas."
+   Regra (e ele pode mandar na regra em cada atividade):
+     · com HORA marcada  → evento na Agenda (compromisso tem hora e lugar);
+     · SEM hora          → Tarefa do Google (é lista de afazer, não compromisso);
+     · e o seletor "Destino" na folha de editar força um ou outro.
+   Trocar o destino MIGRA: apaga do lado antigo e cria no novo, sem duplicar.
+   A volta também existe: concluir a tarefa no Google conclui a atividade aqui,
+   e mudar a data lá remarca aqui. */
+const GT_API='https://tasks.googleapis.com/tasks/v1', GT_LISTA='@default', GT_PREF='crmlp_gtask_pref_v1';
+let GT={semHora:'tarefa'};
+(function gtPrefLer(){ try{ const o=JSON.parse(localStorage.getItem(GT_PREF)||'null'); if(o&&(o.semHora==='tarefa'||o.semHora==='evento')) GT.semHora=o.semHora; }catch(_){} })();
+function gtPrefSalvar(){ try{ localStorage.setItem(GT_PREF,JSON.stringify({semHora:GT.semHora})); }catch(_){} }
+window.gtSetSemHora=function(v){ GT.semHora=(v==='evento')?'evento':'tarefa'; gtPrefSalvar(); toast('Atividade sem hora vai como '+(GT.semHora==='tarefa'?'Tarefa do Google':'evento de dia inteiro'),true); if(VIEW==='agenda') viewAgenda(); };
+/* o Google autorizou mesmo as Tarefas? (ele pode ter marcado só a Agenda) */
+function gtAutorizado(){ const e=String(GCAL.escopos||''); return !e||/auth\/tasks/.test(e); }
+function gtDestino(t){
+  if(t&&t.destino==='tarefa') return 'tarefa';
+  if(t&&t.destino==='evento') return 'evento';
+  if(t&&t.hora) return 'evento';
+  return GT.semHora==='tarefa'?'tarefa':'evento';
+}
+function gtDestinoOpcoes(t){ const aut=gtDestino(t);
+  return `<option value="auto" ${!t||!t.destino?'selected':''}>Automático — ${aut==='tarefa'?'☑️ Tarefa do Google':'📅 Evento na Agenda'}</option>`
+       + `<option value="evento" ${t&&t.destino==='evento'?'selected':''}>📅 Sempre evento na Agenda</option>`
+       + `<option value="tarefa" ${t&&t.destino==='tarefa'?'selected':''}>☑️ Sempre Tarefa do Google</option>`; }
+function gtDestinoAplicar(t,v){ if(!t) return; if(v==='auto') delete t.destino; else t.destino=v; }
+async function gtApi(method,path,body){
+  const tok=await gcalTokenPra(false); if(!tok) throw new Error('401 sem token do Google');
+  const r=await fetch(GT_API+path,{method,headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(!r.ok){ let m='HTTP '+r.status; try{ const j=await r.json(); if(j.error&&j.error.message) m=j.error.message; }catch(_){}; throw new Error(m); }
+  return method==='DELETE'?true:r.json();
+}
+/* meio-dia UTC = mesmo dia em Recife, sem risco de a tarefa cair na véspera */
+function gtCorpo(c,t){ return { title:gsyncTitulo(c,t),
+  notes:(tarEventoDescricao(c,t)||'')+'\n#crmlp-'+t.id,
+  due:(t.quando||hojeISO())+'T12:00:00.000Z',
+  status:t.feito?'completed':'needsAction' }; }
+function gtDataDaTarefa(g){ const d=g&&g.due?String(g.due).slice(0,10):''; return d; }
+/* índice gtaskId → atividade (o pull precisa achar de quem é a tarefa que voltou) */
+function gtIndex(){ const m=new Map();
+  (S.contatos||[]).forEach(c=>{ (c&&Array.isArray(c.tarefas)?c.tarefas:[]).forEach(t=>{ if(t&&t.gtaskId) m.set(String(t.gtaskId),{c,t}); }); });
+  return m; }
+/* ── Google → CRM: concluir/remarcar/apagar na lista do Google volta pra cá ── */
+async function gsyncPuxarTarefas(op){
+  op=op||{};
+  if(!gtAutorizado()) return {mudou:0};
+  const idx=gtIndex(); if(!idx.size) return {mudou:0};
+  let mud=0;
+  try{
+    const j=await gtApi('GET','/lists/'+GT_LISTA+'/tasks?showCompleted=true&showHidden=true&maxResults=100');
+    (j&&j.items||[]).forEach(g=>{
+      const par=idx.get(String(g.id)); if(!par) return;
+      const c=par.c, t=par.t;
+      if(gsyncNaFila(c.id,t.id)) return;                       /* mudança local não subida vence */
+      if(g.deleted){ if(t.gtaskId){ delete t.gtaskId; t.gcalFora=true; t.gcalSync=false;
+          interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa apagada no Google — a atividade segue aqui',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); mud++; } return; }
+      if(g.status==='completed'&&!t.feito){
+        t.feito=g.completed||new Date().toISOString();
+        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Concluída nas Tarefas do Google: '+(t.tit||''),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); mud++;
+      }else if(g.status!=='completed'&&t.feito&&t.gtaskUpd&&g.updated&&g.updated>t.gtaskUpd){
+        t.feito=null; mud++;                                    /* reabriu lá → reabre aqui */
+      }
+      const d=gtDataDaTarefa(g);
+      if(d&&d!==t.quando&&(!t.gtaskUpd||!g.updated||g.updated>t.gtaskUpd)){
+        t.quando=d;
+        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcada nas Tarefas do Google: '+dataBR(d),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser}); mud++;
+      }
+      t.gtaskUpd=g.updated||t.gtaskUpd;
+    });
+    if(mud){ salvar(); gsyncRepintar(); if(!op.silencioso) toast(mud+' atividade(s) atualizada(s) pelas Tarefas do Google',true); }
+  }catch(e){ if(gsyncSemAuth(e)){ GSYNC.precisaLogin=true; } console.warn('[gsync] tarefas:',e); }
+  return {mudou:mud};
+}
 /* ── 1 TOQUE: garante a atividade na Agenda Google (cria, atualiza ou recria) ──
    Não fala com a rede aqui: marca a atividade como espelhada, ENFILEIRA e drena.
    Se falhar (token vencido, rede fora, popup bloqueado no iPad), o item FICA na
@@ -9625,14 +9809,99 @@ async function gcalCriarEventoDaTarefa(cid,tid,op){
   const c=par.c, t=par.t;
   t.gcalSync=true; t.gcalFora=false; salvar();
   gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId});
-  if(!op.silencioso) toast((t.gcalId?'Atualizando':'Mandando')+' na sua Agenda Google: '+gsyncTitulo(c,t),true);
+  if(!op.silencioso){ const d=gtDestino(t)==='tarefa'&&gtAutorizado()?'nas suas Tarefas do Google':'na sua Agenda Google';
+    toast(((t.gcalId||t.gtaskId)?'Atualizando ':'Mandando ')+d+': '+gsyncTitulo(c,t),true); }
   gsyncRepintar();
   const r=await gsyncDrenar({gesto:!op.silencioso,avisar:!op.silencioso});
   if(r&&r.feitos&&GCAL.conectado) gcalCarregar();
 }
 /* reunião entra pelo MESMO cano — etapa no título e cor Pavão vêm de gsyncCorpoEvento */
 async function gcalCriarReuniaoDaTarefa(cid,tid,op){ return gcalCriarEventoDaTarefa(cid,tid,op); }
+/* ═══ AGENDA-NEGOCIO-V1 (14/09/2026) ═════════════════════════════════════════
+   Pedido dele: "preciso de fluidez pra correlacionar essas atividades com os
+   negócios e oportunidades em andamento. Ex.: esse compromisso do Alexandre
+   Baltar é um cliente que está em etapa de OI de Novos Negócios."
+   O compromisso que NASCE de uma atividade do CRM já vem carimbado. O problema
+   é o evento criado à mão no Google ("ADOI/FF Alexandre Baltar"): ele não sabia
+   de quem era. Agora o app reconhece o dono do compromisso por três caminhos,
+   nesta ordem: (1) carimbo do CRM no próprio evento; (2) telefone na anotação;
+   (3) nome do contato dentro do título (ignorando o prefixo de etapa). Achou →
+   a etapa e o funil aparecem no bloco, na lista e no editor, e um toque abre a
+   ficha. Não achou → o editor oferece VINCULAR, e aí o vínculo fica gravado no
+   evento pra sempre (extendedProperties), sem depender mais do nome. */
+let _NEG_IDX=null,_NEG_IDX_TS=0;
+function negFone(t){ return String(t||'').replace(/\D/g,''); }
+function negIndex(){
+  if(_NEG_IDX&&(Date.now()-_NEG_IDX_TS)<15000) return _NEG_IDX;
+  const nome=new Map(), fone=new Map();
+  const vivo=c=>{ const m=ETAPAS_MAP[funilDe(c)]||{}; return !(m.enc||[]).includes(c.etapa); };
+  (S.contatos||[]).forEach(c=>{
+    if(!c||!escVisivel(c)) return;
+    const k=normKey(c.nome||'');
+    if(k&&k.indexOf(' ')>0&&(!nome.has(k)||(vivo(c)&&!vivo(nome.get(k))))) nome.set(k,c);   /* negócio vivo ganha do encerrado */
+    const f=negFone(c.telefone); if(f.length>=8){ const fk=f.slice(-8); if(!fone.has(fk)||(vivo(c)&&!vivo(fone.get(fk)))) fone.set(fk,c); }
+  });
+  _NEG_IDX={nome,fone}; _NEG_IDX_TS=Date.now(); return _NEG_IDX;
+}
+function negIndexLimpar(){ _NEG_IDX=null; }
+/* de que negócio é este compromisso do Google? */
+function gcalNegocioDoEvento(ev){
+  if(!ev) return null;
+  const p=(ev.extendedProperties&&ev.extendedProperties.private)||{};
+  if(p.crmContato){ const c=tarContato(p.crmContato); if(c) return c; }
+  const idx=negIndex();
+  const m=String(ev.description||'').match(/(\+?\d[\d\s().-]{7,})/);
+  if(m){ const k=negFone(m[1]).slice(-8); if(k.length===8&&idx.fone.has(k)) return idx.fone.get(k); }
+  const t=normKey(String(ev.summary||'').replace(RE_PREFIXO_REUNIAO,''));
+  if(t){ const w=t.split(' ').filter(Boolean);
+    for(let tam=Math.min(5,w.length); tam>=2; tam--)
+      for(let i=0;i+tam<=w.length;i++){ const k=w.slice(i,i+tam).join(' '); if(idx.nome.has(k)) return idx.nome.get(k); }
+  }
+  return null;
+}
+/* etiqueta curta: "OI/FF · Novos Negócios" */
+function negEtiqueta(c){ if(!c) return ''; return (ET_LABEL[c.etapa]||c.etapa||'sem etapa')+' · '+funilNome(funilDe(c)); }
+function negSeloHTML(c,op){ if(!c) return '';
+  const cls=(op&&op.mini)?'neg-selo mini':'neg-selo';
+  return `<span class="${cls}" onclick="event.stopPropagation();abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha de ${esc(c.nome||'')} — ${esc(negEtiqueta(c))}">🎯 ${esc(ET_LABEL[c.etapa]||c.etapa||'sem etapa')}${(op&&op.mini)?'':' · '+esc(funilNome(funilDe(c)))}</span>`; }
+(function negCss(){ if(document.getElementById('neg-css'))return; const s=document.createElement('style'); s.id='neg-css'; s.textContent=`
+  .neg-selo{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;background:#eef4ff;color:#2563eb;
+    border:1px solid #cddffb;border-radius:999px;padding:1px 8px;cursor:pointer;white-space:nowrap;vertical-align:middle}
+  .neg-selo:hover{background:#dbe8ff}
+  .neg-selo.mini{font-size:10px;padding:0 6px;border:0;background:transparent;color:#1d4ed8}
+  .neg-linha{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#f6f9ff;border:1px solid #cddffb;border-radius:10px;padding:9px 11px;margin-bottom:10px}
+  .neg-linha b{font-size:13px}
+  .neg-sug{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow:auto;margin-top:6px}
+  .neg-sug button{text-align:left;border:1px solid var(--linha);background:var(--fundo,#fff);border-radius:8px;padding:8px 10px;font-size:12.5px;cursor:pointer}
+  .neg-sug button:hover{border-color:var(--azul,#2563eb)}
+  @media (max-width:980px){ .neg-linha{padding:10px} .neg-sug button{min-height:44px} }`; document.head.appendChild(s); })();
+/* ── vincular à mão, quando o nome do evento não bate com nenhum negócio ── */
+let _GCAL_NEG=null;
+function gcalEdNegHTML(){
+  const c=_GCAL_NEG?tarContato(_GCAL_NEG):null;
+  if(c) return `<div class="neg-linha"><span>🎯</span><b>${esc(c.nome||'')}</b>
+    <span style="font-size:12px;color:var(--muted)">${esc(negEtiqueta(c))}</span><span style="flex:1"></span>
+    <button type="button" class="btn btn-s btn-mini" onclick="abrirContato('${esc(jsq(c.id))}')">Abrir ficha</button>
+    <button type="button" class="btn btn-ghost btn-mini" onclick="gcalEdDesvincular()" title="Tirar o vínculo com este negócio">✕</button></div>`;
+  return `<div class="neg-linha" style="background:var(--fundo);border-style:dashed">
+    <span>🎯</span><span style="font-size:12.5px;color:var(--muted)">Sem negócio vinculado</span>
+    <input id="ev-neg" placeholder="ligar a um negócio — digite o nome" oninput="gcalEdNegBuscar()" style="flex:1;min-width:150px;padding:8px;border:1px solid var(--linha);border-radius:8px">
+    <div id="ev-neg-sug" class="neg-sug" style="flex-basis:100%"></div></div>`;
+}
+function gcalEdNegPintar(){ const h=document.getElementById('ev-neg-linha'); if(h) h.innerHTML=gcalEdNegHTML(); }
+function gcalEdNegBuscar(){
+  const i=document.getElementById('ev-neg'), cx=document.getElementById('ev-neg-sug'); if(!i||!cx) return;
+  const q=normKey(i.value||''); if(q.length<2){ cx.innerHTML=''; return; }
+  const achados=(S.contatos||[]).filter(c=>c&&escVisivel(c)&&normKey(c.nome||'').includes(q)).slice(0,8);
+  cx.innerHTML=achados.length?achados.map(c=>`<button type="button" onclick="gcalEdVincular('${esc(jsq(c.id))}')">
+    <b>${esc(c.nome||'')}</b> <span style="color:var(--muted)">· ${esc(negEtiqueta(c))}</span></button>`).join('')
+    :'<div style="font-size:12px;color:var(--muted);padding:4px 2px">Nenhum negócio com esse nome.</div>';
+}
+function gcalEdVincular(id){ _GCAL_NEG=String(id); gcalEdNegPintar(); toast('Vinculado — salve o evento pra gravar',true); }
+function gcalEdDesvincular(){ _GCAL_NEG=null; gcalEdNegPintar(); }
+window.gcalEdNegBuscar=gcalEdNegBuscar; window.gcalEdVincular=gcalEdVincular; window.gcalEdDesvincular=gcalEdDesvincular;
 function gcalEditar(id){ const e=gcalEvPorId(id); if(!e){ toast('Evento não encontrado — atualize',false); return; }
+  const cneg=gcalNegocioDoEvento(e); _GCAL_NEG=cneg?String(cneg.id):null;   /* AGENDA-NEGOCIO-V1 */
   const s=gcalDT(e,'start'), f=gcalDT(e,'end');
   gcalModalEvento({id,summary:e.summary||'',description:e.description||'',dia:s.d,ini:s.t||'09:00',fim:f.t||'10:00',local:e.location||'',
     convidado:(e.attendees&&e.attendees.map(a=>a.email).filter(x=>x).join(', '))||'',meet:!!e.hangoutLink,diaTodo:!s.t}); }
@@ -9643,6 +9912,7 @@ function gcalModalEvento(m){
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <b style="font-size:17px">${m.id?'Editar evento':'Novo evento'}</b>
       <span onclick="gcalFecharModal()" style="cursor:pointer;font-size:20px;color:var(--muted)">✕</span></div>
+    <div id="ev-neg-linha">${gcalEdNegHTML()}</div>
     <label style="font-size:12px;font-weight:600">Título<input id="ev-tit" value="${esc(m.summary)}" placeholder="Ex.: OI com João" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin-top:10px">
       <label style="font-size:12px;font-weight:600">Dia<input id="ev-dia" type="date" value="${esc(m.dia)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
@@ -9703,6 +9973,13 @@ async function gcalSalvar(id){
     end:   ini? {dateTime:dia+'T'+fimOk+':00', timeZone:GCAL_TZ} : {date:isoAddDias(dia,1)} };
   const emails=conv.split(/[,;\s]+/).filter(x=>/@/.test(x));
   if(emails.length) body.attendees=emails.map(e=>({email:e}));
+  /* AGENDA-NEGOCIO-V1: o vínculo com o negócio mora NO EVENTO — assim ele sobrevive a
+     renomear o título e vale em qualquer aparelho. Não pisa no carimbo da atividade. */
+  { const at=id?gcalEvPorId(id):null, ant=(at&&at.extendedProperties&&at.extendedProperties.private)||{};
+    const priv=Object.assign({},ant);
+    if(_GCAL_NEG){ priv.crmApp=GSYNC_APP; priv.crmContato=String(_GCAL_NEG); }
+    else if(!ant.crmTarefa){ delete priv.crmContato; }
+    if(Object.keys(priv).length) body.extendedProperties={private:priv}; }
   const params={sendUpdates:'all', conferenceDataVersion:1};
   if(meet && !id){ body.conferenceData={createRequest:{requestId:'crm'+Date.now(), conferenceSolutionKey:{type:'hangoutsMeet'}}}; }
   const btn=err&&err.parentElement&&err.parentElement.querySelector('.btn-p'); if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
@@ -9750,6 +10027,8 @@ function viewAgenda(){
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)">+7d</button>
         ${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
         ${tarGcalAcaoHTML(c,t)}
+        <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar: tipo, título, dia, hora, duração, destino no Google">✏️</button>
+        <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Remover">✕</button>
       </span></div>`;
   };
   /* REUNIÃO A FINALIZAR V1: vem ANTES das atrasadas porque é dívida de outra
@@ -9764,7 +10043,10 @@ function viewAgenda(){
           <span style="color:var(--muted)"> · ${esc(x.t.tit||'Reunião')}</span>
           <div style="font-size:11px;color:var(--muted)">${badgeEtapa(x.c.etapa)} ${esc(telBR(x.c.telefone))}</div></span>
         <span class="qd tar-atrasada" style="background:transparent;padding:0">${dataBR(x.t.quando)}${dias>0?` · ${dias}d sem desfecho`:''}</span>
-        <span class="ac"><button class="btn btn-p btn-mini" onclick="reunFinalizar('${esc(x.c.id)}','${esc(x.t.id)}')">Finalizar</button></span>
+        <span class="ac"><button class="btn btn-p btn-mini" onclick="reunFinalizar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Registrar o desfecho da reunião">Finalizar</button>
+          <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Editar dia, hora, título ou destino">✏️</button>
+          <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}',1)" title="Remarcar para amanhã">+1d</button>
+          <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Remover a reunião">✕</button></span>
       </div>`; }).join('')}</div>` : '';
   grupos.forEach(g=>{
     const l=itens.filter(x=>tarSituacao(x.t)===g[0] && !reunPendente(x.t));   /* já listada acima, não repetir */
@@ -15892,6 +16174,46 @@ function lpSelfCheck(){
       const okEv=String(gsyncCorpoEvento).includes('location:locTexto(locPrincipal(c))')&&tarGcalUrl(c,{quando:'2026-09-15',hora:'10:00'}).includes('&location=');
       const okView=typeof viewMapa==='function'&&VIEWS_CONHECIDAS.includes('mapa')&&HUB_SECOES.some(sx=>sx.itens.some(i=>i.view==='mapa'))&&!!document.querySelector('.nav-btn[data-view="mapa"]');
       const okW=String(drwPessoaHtml).includes("locWidgetHtml('ct:'")&&String(bnEditorHtml).includes("locWidgetHtml('bn:'"); const okN=geoNormNominatim({name:'Real Hospital Português',lat:'-8.05',lon:'-34.9',address:{road:'Av. Agamenon',house_number:'4760',suburb:'Paissandu',city:'Recife',state:'Pernambuco'}}); return a&&b&&d&&okP&&okG&&okEv&&okView&&okW&&okN.nome==='Real Hospital Português'&&okN.end.includes('Paissandu')&&okN.lat===-8.05; })());
+    /* ═══ GTASKS-V1 + ATIVIDADE-UX-V1 (14/09) ═══ */
+    ok('atividade: o id é comparado como TEXTO (era o "Finalizar" que não fazia nada em atividade vinda do import)',
+       (()=>{ const c={id:'zt',nome:'Zz',tarefas:[{id:12345,tipo:'reuniao',tit:'R',quando:'2026-10-01'}],interacoes:[]};
+         return !!tarDe(c,'12345')&&!!tarDe(c,12345)&&!String(reunFinalizar).includes('find(x=>x.id===tid)'); })());
+    ok('atividade: dá pra editar e excluir de todo lugar (ficha, agenda e reunião a finalizar)',
+       typeof tarEditar==='function'&&String(tarBlocoDrawer).includes('tarEditar(')&&String(viewAgenda).includes('tarEditar('));
+    ok('google: com hora vai pra AGENDA, sem hora vai pras TAREFAS (e o seletor manda nos dois)',
+       gtDestino({hora:'10:00'})==='evento'&&gtDestino({hora:''})===(GT.semHora==='tarefa'?'tarefa':'evento')
+       &&gtDestino({hora:'10:00',destino:'tarefa'})==='tarefa'&&gtDestino({hora:'',destino:'evento'})==='evento');
+    ok('google: trocar o destino MIGRA (apaga do lado antigo antes de criar no novo) — nunca duplica',
+       String(gsyncAplicarItem).includes("if(quer==='tarefa')")&&String(gsyncAplicarItem).includes('delete t.gcalId;')&&String(gsyncAplicarItem).includes('delete t.gtaskId;'));
+    ok('google: a tarefa leva dia no meio-dia UTC (não cai na véspera em Recife) e volta concluída',
+       gtCorpo({nome:'Z'},{id:'t1',tipo:'ligar',quando:'2026-10-05'}).due==='2026-10-05T12:00:00.000Z'
+       &&gtCorpo({nome:'Z'},{id:'t1',tipo:'ligar',quando:'2026-10-05',feito:'x'}).status==='completed'
+       &&String(gsyncPuxarTarefas).includes("g.status==='completed'&&!t.feito"));
+    ok('google: sem autorização de Tarefas, o app manda pra Agenda em vez de perder o compromisso',
+       (()=>{ const bk=GCAL.escopos; try{ GCAL.escopos='https://www.googleapis.com/auth/calendar'; const a=!gtAutorizado();
+         GCAL.escopos='https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks'; return a&&gtAutorizado(); } finally{ GCAL.escopos=bk; } })());
+    /* ═══ AGENDA-NEGOCIO-V1 (14/09): o compromisso sabe de que negócio é ═══ */
+    { const C=S.contatos;
+      try{
+        S.contatos=[normContato({id:'nb1',nome:'Alexandre Baltar',funil:'nn',etapa:'OI/FF',telefone:'(81) 98888-1234'}),
+                    normContato({id:'nb2',nome:'Maria das Dores Silva',funil:'bc',etapa:'Agendada Revisita',telefone:'8199997777'})];
+        negIndexLimpar();
+        ok('agenda↔negócio: acha pelo NOME dentro do título, mesmo com prefixo de etapa',
+           (gcalNegocioDoEvento({summary:'ADOI/FF Alexandre Baltar'})||{}).id==='nb1'
+           &&(gcalNegocioDoEvento({summary:'🟡 [OI/FF] Alexandre Baltar'})||{}).id==='nb1');
+        ok('agenda↔negócio: acha pelo TELEFONE da anotação',
+           (gcalNegocioDoEvento({summary:'Reunião',description:'Telefone: +5581999977 77'.replace(' ','')})||{}).id==='nb2');
+        ok('agenda↔negócio: carimbo do CRM no evento manda em tudo',
+           (gcalNegocioDoEvento({summary:'Alexandre Baltar',extendedProperties:{private:{crmApp:'crmlp',crmContato:'nb2'}}})||{}).id==='nb2');
+        ok('agenda↔negócio: nome solto não casa (primeiro nome sozinho não vincula)',
+           gcalNegocioDoEvento({summary:'Alexandre'})===null&&gcalNegocioDoEvento({summary:'Almoço'})===null);
+        ok('agenda↔negócio: a etiqueta traz etapa e funil, e o selo abre a ficha',
+           negEtiqueta(S.contatos[0])==='OI/FF · Novos Negócios'&&negSeloHTML(S.contatos[0]).includes('abrirContato')
+           &&negSeloHTML(null)==='');
+        ok('agenda↔negócio: salvar grava o vínculo no evento sem pisar no carimbo da atividade',
+           String(gcalSalvar).includes('priv.crmContato=String(_GCAL_NEG)')&&String(gcalSalvar).includes("!ant.crmTarefa"));
+      } finally{ S.contatos=C; negIndexLimpar(); }
+    }
     /* ═══ FUNIL-CONSOLIDADO-V1 (14/09): régua única, seleção de funis, só leitura ═══ */
     { const C=S.contatos, bk=CONSOL.funis;
       try{
@@ -15940,6 +16262,21 @@ function lpSelfCheck(){
        String(gcalMoverEvento).includes('const bkS=e.start, bkE=e.end')&&String(gcalMoverEvento).includes('e.start=bkS; e.end=bkE;')&&String(gcalMoverEvento).includes('gsyncEspelharNaTarefa'));
     ok('agenda: a leitura da data do evento é FONTE ÚNICA (pull e arrasto leem do mesmo lugar)',
        String(gsyncPuxar).includes('gsyncDataDoEvento(ev,t)')&&String(gsyncEspelharNaTarefa).includes('gsyncDataDoEvento(ev,t)'));
+    { const tb=document.querySelector('.topbar'), dr=document.getElementById('drawer');
+      const medido=tb&&dr?(getComputedStyle(tb).flexWrap+' / right '+getComputedStyle(dr).right+' / '+String(getComputedStyle(dr).transform).slice(0,28)):'sem topbar/gaveta';
+      ok('iPad em paisagem (981–1300px): barra de cima QUEBRA a linha e a gaveta sai por transform — medido: '+medido,
+         !!tb&&!!dr&&getComputedStyle(tb).flexWrap==='wrap'
+         &&/matrix|translate/.test(getComputedStyle(dr).transform||'')
+         &&getComputedStyle(dr).right==='0px'); }
+    /* guarda de comportamento (não de texto): a gaveta da ficha tem de aparecer DENTRO da tela
+       em qualquer largura. Foi assim que a regressão do celular (ficha que não abria) apareceu. */
+    ok('ficha: a gaveta ABRE dentro da tela em qualquer largura',
+       (()=>{ const d=document.getElementById('drawer'); if(!d) return false;
+         const tinha=d.classList.contains('aberto'), tr=d.style.transition;
+         try{ d.style.transition='none'; d.classList.add('aberto');
+           const r=d.getBoundingClientRect();
+           return r.width>100 && r.left<window.innerWidth-10 && r.right>10;
+         } finally{ if(!tinha) d.classList.remove('aberto'); d.style.transition=tr; } })());
     ok('aviso (toast) não engole o toque do que está embaixo',
        (()=>{ const t=document.getElementById('toasts'); return !!t&&getComputedStyle(t).pointerEvents==='none'; })());
     /* ═══ ESTABILIDADE-DE-TELA-V1 (14/09): repintura não pode mover a tela ═══ */

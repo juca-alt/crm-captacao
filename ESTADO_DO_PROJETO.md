@@ -2,6 +2,27 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14/09/2026 (4ª onda) — Faixa branca do iPad · Finalizar que não finalizava · Editar atividade · Tarefas do Google · Compromisso sabe de que negócio é
+
+**v7.63.** Quatro coisas que ele reportou usando o app no iPad, e duas que apareceram na investigação.
+
+### 1. A "tela branca do nada" (IPAD-SEM-FAIXA-V1) — bug antigo, nunca medido
+Entre **981px e ~1300px** (o iPad em PAISAGEM, que é como ele trabalha agora) a página estourava pro lado em TODAS as telas — a barra de cima pedia ~1140px e não tinha como encolher, empurrando o documento inteiro; sobrava a faixa branca à direita. **O portão só media 375 e 1280**, então essa faixa nunca foi olhada. Conserto na origem: a barra **quebra a linha** (`flex-wrap`) e a busca encolhe. Medido depois: **estouro 0 em 768/834/1024/1112/1180/1366**.
+- **O portão passou a medir 1024** (`LARGURAS=[375,1024,1280]`) — 6 cenários, 39 telas cada.
+- **Regressão minha, pega pelo próprio portão:** ao tirar a gaveta da tela por `transform` (em vez de `right:-580px`, que no Safari alarga o documento), a regra antiga do celular (`right:-102vw`) brigou e **a ficha parou de abrir em ≤640px**. Consertado e agora há um invariante de COMPORTAMENTO (mede a geometria da gaveta aberta em cada largura), não de texto.
+
+### 2. "Finalizar" não fazia nada (ATIVIDADE-UX-V1)
+Atividade vinda do import tem id **NÚMERO**; o clique manda **TEXTO**; a busca era `x.id===tid`. `12345 === '12345'` é false → a função dava `return` e o clique morria calado (valia pra finalizar, concluir, remarcar e remover). É o erro #7 do livro (ids como string) de novo. Agora existe **UM acessador** (`tarDe`/`tarPar`) e ninguém mais busca atividade na mão.
+- **Editar / atualizar / excluir** em toda atividade (ficha, Agenda e "reuniões a finalizar"): tipo, título, dia, hora, duração, destino e anotação numa folha só. Reunião a finalizar ganhou ✏️, +1d e ✕ além do Finalizar.
+
+### 3. Tarefas do Google (GTASKS-V1)
+"Uso muito a função tarefas." Agora o escopo do Google inclui **Tasks** e a atividade vai pro lugar certo: **com hora → evento na Agenda; sem hora → Tarefa do Google** (ele troca o padrão no cabeçalho da Agenda e força um ou outro em cada atividade pelo ✏️). Trocar o destino **migra** (apaga de um lado antes de criar no outro, nunca duplica). Volta também: concluir ou remarcar a tarefa no Google reflete no CRM. Se ele autorizar só a Agenda, o app percebe e manda tudo pra Agenda em vez de perder o compromisso.
+
+### 4. Compromisso ↔ negócio (AGENDA-NEGOCIO-V1)
+"Esse compromisso do Alexandre Baltar é um cliente que está em etapa de OI." O evento criado à mão no Google não sabia de quem era. Agora o app reconhece o dono por (1) carimbo do CRM, (2) telefone na anotação, (3) **nome dentro do título** (ignorando o prefixo de etapa). A **etapa aparece no bloco da grade, no chip da semana e na lista**, o selo abre a ficha, e o editor permite **vincular à mão** — o vínculo fica gravado no próprio evento.
+
+**Provas:** portão **6/6 verde** (39 telas × {375,1024,1280} × {cheia,vazia}); **59 checagens funcionais** no navegador (14 atividade/Tasks + 14 agenda + 17 sincronia + 14 estabilidade); 18 invariantes novos.
+
 ## 14/09/2026 (3ª onda) — VISÃO CONSOLIDADA: os funis numa régua só
 
 **v7.61.** Pedido dele: "quero uma visão unificada dos funis, tipo um funil consolidado, e eu seleciono os funis que quero ver. Não é tela de manipulação e operação do dia a dia — é painel visual pra nortear minha visão do funil."
