@@ -2,6 +2,18 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14/09/2026 (2ª onda) — AGENDA FLUIDA: arrastar pra mover, título nítido, nada trava
+
+**v7.60.** Pedido dele: "mais fluidez, menos crivação; os nomes dos eventos têm que estar nítidos; fácil de mover e organizar — a mesma experiência do Google Agenda."
+- **Arrastar pra mover:** na grade do dia o bloco segue o dedo/mouse e cai de 15 em 15 min; a **borda de baixo estica** a duração; na semana, arrastar o chip pra outra coluna muda o DIA mantendo a hora. Mouse no desktop, **segurar ~320 ms** no toque (mesma receita do DRAG-TOUCH-V1 dos funis, pra não brigar com a rolagem). Arrasto curto sem sair do lugar = clique (abre o editor).
+- **Título nítido:** 13px/700 com até 3 linhas conforme a altura do bloco (era 11,5px cortado numa linha), bloco com altura mínima de 34px e hora de início–fim.
+- **Menos crivação:** clicar no vazio da grade cria naquele horário; a grade aparece **mesmo no dia vazio**; **linha vermelha do AGORA**; mudar o início **leva o fim junto** (mantém a duração) e salvar **nunca mais é barrado** por "o fim tem que ser depois do início" — o app conserta e segue; atalhos −15/+15/+1h/amanhã/+7d no editor.
+- **Mover otimista:** a tela responde no mesmo toque, grava no Google e, se o evento nasceu de uma atividade do CRM, a atividade anda junto na hora. Se o Google recusar, **volta pro lugar** (nunca fica meio movido).
+- **Achado:** a camada de avisos (`#toasts`) **engolia o toque** por 2,6 s depois de cada ação — sem `pointer-events:none`, tocar no que estava embaixo não fazia nada. Era uma fonte silenciosa de "cliquei e não foi". Corrigido.
+- **Leitura da data do evento virou fonte ÚNICA** (`gsyncDataDoEvento`): o pull periódico e o arrasto leem do mesmo lugar.
+
+**Provas:** portão 4/4 verde (38 telas); **14/14** num teste de arrasto real no navegador (mouse e toque via CDP, desktop e 390px); 12 invariantes novos no lpSelfCheck.
+
 ## 14/09/2026 — Agenda Google BIDIRECIONAL (fila que não perde clique) · Tela que não sobe mais · Trava de troca de conta que estava inerte
 
 **Estado em 30s:** branch `claude/google-calendar-sync-bidirectional-ruaeiq` — **v7.59**, portão VERDE (38 telas × {375,1280} × {cheia,vazia}, lpSelfCheck 0, funSelfCheck 0) + `--prova` acusando o defeito injetado. **Aguarda OK dele pra merge.** Sessão feita do iPad (MacBook no suporte Apple), 100% na nuvem.

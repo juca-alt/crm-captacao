@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.59 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.60 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -634,7 +634,11 @@
   .evento .dt{font-weight:800;color:var(--azul);min-width:86px}
 
   /* ── toast ── */
-  #toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center}
+  /* AGENDA-FLUIDA-V1 (14/09): a camada de avisos ficava ENGOLINDO o toque. Cada ação
+     mostra um toast por 2,6 s no rodapé (no celular, logo acima da barra inferior) e,
+     nesse tempo, tocar no que estava embaixo não fazia nada — "cliquei e não foi".
+     Aviso é pra ler, não pra receber toque: a camada não intercepta mais. */
+  #toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
   .toast{background:#15233c;color:#fff;padding:10px 18px;border-radius:30px;font-size:13px;font-weight:600;box-shadow:0 6px 24px rgba(0,0,0,.25);animation:sobe .2s ease}
   .toast.ok{background:var(--verde)}
   @keyframes sobe{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -8949,14 +8953,23 @@ function gcalLinhaEv(e){ const hoje=hojeISO(); return `<div class="tarlin"><span
     </span></div>`; }
 function gcalSemanaHTML(evs,hoje){
   const SEM=['dom','seg','ter','qua','qui','sex','sáb']; const dias=[]; for(let i=0;i<7;i++) dias.push(isoAddDias(hoje,i));
-  const chip=e=>{ const ad=e.start&&e.start.date&&!e.start.dateTime; return `<div class="gcal-chip${ad?' allday':''}" onclick="gcalEditar('${esc(e.id)}')" title="${esc(e.summary||'')}"><span class="h">${ad?'dia todo':gcalHora(e)}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
+  /* AGENDA-FLUIDA-V1: o chip virou alça de arrasto — puxar pra outra coluna muda o DIA
+     mantendo a hora (é o que ele faz no Google Agenda). Clique curto abre o editor. */
+  const chip=e=>{ const ad=e.start&&e.start.date&&!e.start.dateTime; return `<div class="gcal-chip${ad?' allday':''}" data-ev="${esc(e.id)}" data-dia="${esc(gcalDiaISO(e))}" title="${esc(e.summary||'')} — arraste pra outro dia"><span class="h">${ad?'dia todo':gcalHora(e)}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
   const col=dISO=>{ const p=dISO.split('-').map(Number); const dow=new Date(p[0],p[1]-1,p[2]).getDay();
     const evD=evs.filter(e=>gcalDiaISO(e)===dISO);
-    return `<div class="gcal-day${dISO===hoje?' hoje':''}"><div class="dh"><span>${SEM[dow]} ${p[2]}<span class="dn">${dISO===hoje?' · hoje':''}</span></span><span class="add" onclick="gcalNovoDia('${dISO}')" title="Novo evento neste dia">＋</span></div>
-      <div class="evs">${evD.length?evD.map(chip).join(''):'<div class="vaziod">—</div>'}</div></div>`; };
+    return `<div class="gcal-day${dISO===hoje?' hoje':''}" data-dia="${dISO}"><div class="dh"><span>${SEM[dow]} ${p[2]}<span class="dn">${dISO===hoje?' · hoje':''}</span></span><span class="add" onclick="gcalNovoDia('${dISO}')" title="Novo evento neste dia">＋</span></div>
+      <div class="evs" onclick="gcalCliqueColuna(event)">${evD.length?evD.map(chip).join(''):'<div class="vaziod">toque pra criar</div>'}</div></div>`; };
   return `<div class="gcal-wk">${dias.map(col).join('')}</div>`;
 }
-/* ── Vista DIA: grade-de-horas (linha do tempo real de 1 dia) ── */
+/* ── Vista DIA: grade-de-horas (linha do tempo real de 1 dia) ──
+   AGENDA-FLUIDA-V1 (14/09): bloco arrastável (mover e esticar), título em 13px
+   com até 3 linhas conforme a altura, linha vermelha do AGORA, clique no vazio
+   cria naquela hora e a grade aparece MESMO no dia vazio (senão não há onde
+   clicar pra criar — era o "＋ Novo" ou nada). */
+function gcalHpx(){ return window.matchMedia('(max-width:980px)').matches?58:52; }
+function gcalMin2Hhmm(m){ const p2=x=>String(x).padStart(2,'0'); m=((Math.round(m)%1440)+1440)%1440; return p2(Math.floor(m/60))+':'+p2(m%60); }
+function gcalEvMin(ev,qual){ const o=ev&&ev[qual]; if(!o||!o.dateTime) return null; const d=new Date(o.dateTime); return d.getHours()*60+d.getMinutes(); }
 function gcalDiaHTML(evs,hoje){
   const maxDia=isoAddDias(hoje,7);
   let dia=GCAL.diaSel||hoje; if(dia<hoje)dia=hoje; if(dia>maxDia)dia=maxDia; GCAL.diaSel=dia;
@@ -8970,19 +8983,25 @@ function gcalDiaHTML(evs,hoje){
     if(ed.toDateString()!==sd.toDateString())f=24*60; if(f<=s)f=s+30;
     return {e,s,f};
   }).sort((a,b)=>a.s-b.s||a.f-b.f);
+  const ehHoje=(dia===hoje), ag=new Date(), agMin=ag.getHours()*60+ag.getMinutes();
   let minH=7,maxH=20;
   timed.forEach(t=>{ minH=Math.min(minH,Math.floor(t.s/60)); maxH=Math.max(maxH,Math.ceil(t.f/60)); });
+  if(ehHoje){ minH=Math.min(minH,Math.floor(agMin/60)); maxH=Math.max(maxH,Math.min(24,Math.ceil(agMin/60)+1)); }
   minH=Math.max(0,minH); maxH=Math.min(24,Math.max(maxH,minH+1));
-  const HPX=46, top0=minH*60, pad2=n=>(n<10?'0':'')+n;
+  const HPX=gcalHpx(), top0=minH*60, pad2=n=>(n<10?'0':'')+n;
   // agrupa em clusters de sobreposição e distribui em colunas
   const cl=[]; let cur=[],curEnd=-1;
   timed.forEach(t=>{ if(cur.length&&t.s>=curEnd){cl.push(cur);cur=[];curEnd=-1;} cur.push(t); curEnd=Math.max(curEnd,t.f); });
   if(cur.length)cl.push(cur);
   cl.forEach(g=>{ const lanes=[]; g.forEach(t=>{ let l=0; while(l<lanes.length&&lanes[l]>t.s)l++; t.lane=l; lanes[l]=t.f; }); g.forEach(t=>t.cols=lanes.length); });
   const linhas=[]; for(let h=minH;h<=maxH;h++) linhas.push(`<div class="gcal-hl" style="top:${(h-minH)*HPX}px"><span class="gcal-hlab">${pad2(h)}:00</span></div>`);
-  const blocos=timed.map(t=>{ const w=100/t.cols, left=t.lane*w, top=(t.s-top0)*(HPX/60), h=Math.max(22,(t.f-t.s)*(HPX/60));
-    const hora=pad2(Math.floor(t.s/60))+':'+pad2(t.s%60);
-    return `<div class="gcal-ev" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px)" onclick="gcalEditar('${esc(t.e.id)}')" title="${esc(t.e.summary||'')}"><span class="h">${hora}${t.e.hangoutLink?' · Meet':''}</span><span class="s">${esc(t.e.summary||'(sem título)')}</span></div>`;
+  const agoraHtml=(ehHoje&&agMin>=top0&&agMin<=maxH*60)?`<div class="gcal-now" style="top:${(agMin-top0)*(HPX/60)}px"><span></span></div>`:'';
+  const blocos=timed.map(t=>{ const w=100/t.cols, left=t.lane*w, top=(t.s-top0)*(HPX/60), h=Math.max(34,(t.f-t.s)*(HPX/60));
+    const lc=h>=80?3:h>=54?2:1;
+    return `<div class="gcal-ev" data-ev="${esc(t.e.id)}" data-ini="${t.s}" data-fim="${t.f}" data-dia="${dia}" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);--lc:${lc}" title="${esc(t.e.summary||'')} — arraste pra mover, borda de baixo pra esticar">
+      <span class="h">${gcalMin2Hhmm(t.s)}–${gcalMin2Hhmm(t.f)}${t.e.hangoutLink?' · Meet':''}</span>
+      <span class="s">${esc(t.e.summary||'(sem título)')}</span>
+      <span class="gcal-rz" title="Arraste pra mudar a duração"></span></div>`;
   }).join('');
   const podeV=dia>hoje, podeA=dia<maxDia;
   const nav=`<div class="gcal-daynav">
@@ -8991,11 +9010,151 @@ function gcalDiaHTML(evs,hoje){
     <button class="nb" onclick="gcalSetDia('${isoAddDias(dia,1)}')" ${podeA?'':'disabled'} title="Próximo dia">▶</button>
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="gcalNovoDia('${dia}')">＋ Novo neste dia</button></div>`;
-  const band=allday.length?`<div class="gcal-adband">${allday.map(e=>`<div class="gcal-chip allday" onclick="gcalEditar('${esc(e.id)}')" title="${esc(e.summary||'')}"><span class="s">dia todo · ${esc(e.summary||'(sem título)')}</span></div>`).join('')}</div>`:'';
-  if(!timed.length&&!allday.length) return `<div class="card" style="padding:6px 14px">${nav}<div style="padding:16px 6px;color:var(--muted);text-align:center">Nada agendado neste dia. Crie em <b>＋ Novo</b>. 🎉</div></div>`;
-  return `<div class="card" style="padding:8px 14px 14px">${nav}${band}<div class="gcal-dg" style="height:${(maxH-minH)*HPX}px">${linhas.join('')}${blocos}</div></div>`;
+  const band=allday.length?`<div class="gcal-adband">${allday.map(e=>`<div class="gcal-chip allday" data-ev="${esc(e.id)}" data-dia="${esc(gcalDiaISO(e))}" title="${esc(e.summary||'')}"><span class="s">dia todo · ${esc(e.summary||'(sem título)')}</span></div>`).join('')}</div>`:'';
+  const dica=`<div class="gcal-dica">${timed.length?'Arraste o bloco pra mover · borda de baixo estica · toque no vazio cria':'Toque em qualquer horário pra marcar'}</div>`;
+  return `<div class="card" style="padding:8px 14px 14px">${nav}${band}<div class="gcal-dg" data-dia="${dia}" data-minh="${minH}" data-hpx="${HPX}" style="height:${(maxH-minH)*HPX}px" onclick="gcalCliqueVazio(event)">${linhas.join('')}${agoraHtml}${blocos}</div>${dica}</div>`;
 }
+/* clicar no vazio da grade = marcar naquela hora (arredonda pra 15 min) */
+function gcalCliqueVazio(ev){
+  const dg=ev&&ev.currentTarget; if(!dg) return;
+  if(ev.target!==dg&&!(ev.target.classList&&(ev.target.classList.contains('gcal-hl')||ev.target.classList.contains('gcal-hlab')))) return;
+  const r=dg.getBoundingClientRect(), hpx=Number(dg.getAttribute('data-hpx'))||52, minh=Number(dg.getAttribute('data-minh'))||0;
+  const min=Math.max(0,Math.min(1425, Math.round(((ev.clientY-r.top)/hpx*60+minh*60)/15)*15));
+  gcalModalEvento({novo:true,summary:'',description:'',dia:dg.getAttribute('data-dia'),ini:gcalMin2Hhmm(min),fim:gcalMin2Hhmm(min+60),local:'',convidado:'',meet:false});
+}
+/* clicar no vazio de uma coluna da semana = marcar naquele dia às 9h */
+function gcalCliqueColuna(ev){ const alvo=ev&&ev.target; if(!alvo||!alvo.classList||!(alvo.classList.contains('evs')||alvo.classList.contains('vaziod'))) return;
+  const col=alvo.closest&&alvo.closest('.gcal-day[data-dia]'); if(col) gcalNovoDia(col.getAttribute('data-dia')); }
+/* ── AGENDA-FLUIDA-V1: nitidez + alças de arrasto (entra depois do gcal-css, então manda) ── */
+(function gcalFluidaCss(){ if(document.getElementById('gcal-fluida-css'))return; const s=document.createElement('style'); s.id='gcal-fluida-css'; s.textContent=`
+  .gcal-ev{background:#eaf1ff;border:1px solid #2563eb;border-left-width:4px;border-radius:8px;padding:4px 8px;
+    display:flex;flex-direction:column;gap:1px;overflow:hidden;cursor:grab;user-select:none;-webkit-user-select:none;
+    box-shadow:0 1px 3px rgba(16,30,54,.10);transition:box-shadow .12s ease}
+  .gcal-ev .h{font-size:11px;font-weight:700;color:#2563eb;letter-spacing:.01em;flex:0 0 auto}
+  .gcal-ev .s{font-size:13px;font-weight:700;color:#0f2c5c;line-height:1.22;white-space:normal;
+    display:-webkit-box;-webkit-line-clamp:var(--lc,2);-webkit-box-orient:vertical;overflow:hidden}
+  .gcal-ev:hover{box-shadow:0 4px 14px rgba(37,99,235,.22)}
+  .gcal-ev.arrastando{cursor:grabbing;opacity:.92;z-index:9;box-shadow:0 10px 26px rgba(16,30,54,.28);transform:scale(1.01)}
+  .gcal-rz{position:absolute;left:0;right:0;bottom:0;height:9px;cursor:ns-resize;border-radius:0 0 8px 8px}
+  .gcal-ev:hover .gcal-rz{background:linear-gradient(transparent,rgba(37,99,235,.28))}
+  .gcal-now{position:absolute;left:0;right:0;border-top:2px solid #dc2626;z-index:4;pointer-events:none}
+  .gcal-now span{position:absolute;left:-5px;top:-5px;width:9px;height:9px;border-radius:50%;background:#dc2626}
+  .gcal-chip{font-size:12px;padding:6px 8px;border-radius:8px;cursor:grab;user-select:none;-webkit-user-select:none}
+  .gcal-chip .h{font-size:10.5px;font-weight:700}
+  .gcal-chip .s{font-size:12.5px;font-weight:700;color:#0f2c5c;white-space:normal;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .gcal-chip.arrastando{cursor:grabbing;opacity:.92;box-shadow:0 10px 26px rgba(16,30,54,.28)}
+  .gcal-day.alvo{outline:2px dashed var(--azul,#2563eb);outline-offset:-2px;background:#f4f8ff}
+  .gcal-day .evs{min-height:54px;cursor:copy}
+  .gcal-dg{cursor:copy}
+  .gcal-dica{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:center}
+  body.gcal-arr{cursor:grabbing;user-select:none;-webkit-user-select:none}
+  body.gcal-arr .gcal-dg,body.gcal-arr .gcal-wk{touch-action:none}
+  .gcal-mv{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .gcal-mv button{border:1px solid var(--linha);background:var(--fundo,#fff);border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--tinta,#0f172a)}
+  .gcal-mv button:hover{border-color:var(--azul,#2563eb);color:var(--azul,#2563eb)}
+  @media (max-width:980px){
+    .gcal-ev{padding:5px 9px}
+    .gcal-ev .s{font-size:13.5px}
+    .gcal-rz{height:14px}
+    .gcal-mv button{min-height:44px;padding:6px 14px}
+    .gcal-wk{grid-template-columns:repeat(7,minmax(150px,1fr))}
+  }`; document.head.appendChild(s); })();
 function gcalNovoDia(dia){ gcalModalEvento({novo:true,summary:'',description:'',dia:dia,ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false}); }
+/* ── AGENDA-FLUIDA-V1 · motor de arrasto (mouse no desktop, segurar-e-arrastar no toque) ──
+   Delegação no document: sobrevive a toda repintura sem religar nada. No toque
+   segue a receita do DRAG-TOUCH-V1 dos funis (segurar ~320 ms → o bloco levanta),
+   pra não brigar com a rolagem da página. Arrasto curto sem sair do lugar = clique
+   (abre o editor), igual ao Google Agenda. */
+(function gcalArrasto(){
+  if(window.__gcalArr) return; window.__gcalArr=1;
+  let A=null, pend=null, timer=null;
+  const q15=m=>Math.round(m/15)*15;
+  const achar=t=>(t&&t.closest)?t.closest('.gcal-ev,.gcal-chip[data-ev]'):null;
+  function comecar(el,x,y,alvo){
+    const dg=el.closest('.gcal-dg');
+    A={el:el,id:el.getAttribute('data-ev'),dia:el.getAttribute('data-dia'),x0:x,y0:y,ativo:false,mudou:false,
+       tipo:dg?'dia':'semana',hpx:dg?(Number(dg.getAttribute('data-hpx'))||52):0,
+       ini:Number(el.getAttribute('data-ini')),fim:Number(el.getAttribute('data-fim')),
+       modo:(alvo&&alvo.classList&&alvo.classList.contains('gcal-rz'))?'dur':'mover',
+       top0:el.offsetTop,diaAlvo:null};
+    A.ini2=A.ini; A.fim2=A.fim;
+  }
+  function levantar(){ if(!A||A.ativo) return; A.ativo=true; A.el.classList.add('arrastando'); document.body.classList.add('gcal-arr'); try{ navigator.vibrate&&navigator.vibrate(12); }catch(_){} }
+  function mover(x,y){
+    if(!A) return;
+    if(!A.ativo){ if(Math.abs(y-A.y0)<4&&Math.abs(x-A.x0)<4) return; levantar(); }
+    A.mudou=true;
+    if(A.tipo==='dia'&&!isNaN(A.ini)){
+      const dm=q15((y-A.y0)/A.hpx*60);
+      if(A.modo==='dur'){ A.fim2=Math.max(A.ini+15,Math.min(1440,A.fim+dm)); A.ini2=A.ini;
+        A.el.style.height=Math.max(34,(A.fim2-A.ini2)*(A.hpx/60))+'px'; }
+      else{ const dur=A.fim-A.ini; A.ini2=Math.max(0,Math.min(1440-dur,A.ini+dm)); A.fim2=A.ini2+dur;
+        A.el.style.top=(A.top0+(A.ini2-A.ini)*(A.hpx/60))+'px'; }
+      const h=A.el.querySelector('.h'); if(h) h.textContent=gcalMin2Hhmm(A.ini2)+'–'+gcalMin2Hhmm(A.fim2);
+    }else{
+      const sob=document.elementFromPoint(x,y), col=(sob&&sob.closest)?sob.closest('.gcal-day[data-dia]'):null;
+      document.querySelectorAll('.gcal-day.alvo').forEach(c=>{ if(c!==col) c.classList.remove('alvo'); });
+      if(col){ col.classList.add('alvo'); A.diaAlvo=col.getAttribute('data-dia'); }
+    }
+  }
+  function soltar(){
+    const a=A; A=null; clearTimeout(timer); timer=null; pend=null;
+    if(!a) return;
+    document.body.classList.remove('gcal-arr');
+    if(a.el){ a.el.classList.remove('arrastando'); }
+    document.querySelectorAll('.gcal-day.alvo').forEach(c=>c.classList.remove('alvo'));
+    if(!a.mudou){ gcalEditar(a.id); return; }                      /* não saiu do lugar = clique */
+    if(a.tipo==='dia'){
+      if(a.ini2===a.ini&&a.fim2===a.fim){ if(VIEW==='agenda') viewAgenda(); return; }
+      gcalMoverEvento(a.id,{dia:a.dia,ini:a.ini2,fim:a.fim2});
+    }else{
+      if(!a.diaAlvo||a.diaAlvo===a.dia){ if(VIEW==='agenda') viewAgenda(); return; }
+      gcalMoverEvento(a.id,{dia:a.diaAlvo});
+    }
+  }
+  document.addEventListener('mousedown',e=>{ if(e.button!==0) return; const el=achar(e.target); if(!el) return;
+    e.preventDefault(); comecar(el,e.clientX,e.clientY,e.target); },true);
+  document.addEventListener('mousemove',e=>{ if(A) mover(e.clientX,e.clientY); });
+  document.addEventListener('mouseup',()=>{ if(A) soltar(); });
+  document.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; const el=achar(e.target); if(!el) return;
+    const t=e.touches[0], alvo=e.target; pend={el:el,x:t.clientX,y:t.clientY};
+    clearTimeout(timer); timer=setTimeout(()=>{ if(!pend) return; comecar(pend.el,pend.x,pend.y,alvo); levantar(); },320); },{passive:true});
+  document.addEventListener('touchmove',e=>{ const t=e.touches[0]; if(!t) return;
+    if(!A){ if(pend&&(Math.abs(t.clientX-pend.x)>8||Math.abs(t.clientY-pend.y)>8)){ clearTimeout(timer); timer=null; pend=null; } return; }
+    e.preventDefault(); mover(t.clientX,t.clientY); },{passive:false});
+  document.addEventListener('touchend',e=>{ clearTimeout(timer); timer=null;
+    if(A){ e.preventDefault(); soltar(); return; }
+    if(pend){ const el=pend.el; pend=null; e.preventDefault(); gcalEditar(el.getAttribute('data-ev')); } },{passive:false});
+  document.addEventListener('touchcancel',()=>{ clearTimeout(timer); timer=null; pend=null; if(A){ const a=A; A=null; document.body.classList.remove('gcal-arr'); if(a.el) a.el.classList.remove('arrastando'); if(VIEW==='agenda') viewAgenda(); } });
+})();
+/* mover/esticar de verdade: pinta na hora (otimista), grava no Google e, se o
+   evento nasceu de uma atividade do CRM, a atividade anda junto. Deu errado,
+   volta pro lugar e diz o porquê — nunca fica "meio movido". */
+async function gcalMoverEvento(id,alvo){
+  const e=gcalEvPorId(id); if(!e){ toast('Evento não encontrado — atualize',false); return; }
+  alvo=alvo||{};
+  const temHora=!!(e.start&&e.start.dateTime), dia=alvo.dia||gcalDiaISO(e);
+  let body;
+  if(!temHora){ body={start:{date:dia},end:{date:isoAddDias(dia,1)}}; }
+  else{
+    const ini=(alvo.ini!=null)?alvo.ini:(gcalEvMin(e,'start')||0);
+    const fimB=(alvo.fim!=null)?alvo.fim:(gcalEvMin(e,'end')!=null?gcalEvMin(e,'end'):ini+60);
+    const fim=fimB>ini?fimB:ini+60;
+    const diaF=fim>=1440?isoAddDias(dia,1):dia;
+    body={start:{dateTime:dia+'T'+gcalMin2Hhmm(ini)+':00',timeZone:GCAL_TZ},end:{dateTime:diaF+'T'+gcalMin2Hhmm(fim)+':00',timeZone:GCAL_TZ}};
+  }
+  const bkS=e.start, bkE=e.end;
+  e.start=body.start; e.end=body.end;                 /* otimista: a tela responde no mesmo toque */
+  if(VIEW==='agenda') viewAgenda();
+  try{
+    const ev=await gcalApi('PATCH','/'+encodeURIComponent(id),body,{sendUpdates:'none'});
+    if(ev&&ev.id) Object.assign(e,ev);
+    gsyncEspelharNaTarefa(e);                          /* nasceu de atividade do CRM? ela anda junto */
+    toast((e.summary||'Evento')+' → '+dataBR(dia)+(temHora?' '+String(body.start.dateTime).slice(11,16):' (dia todo)'),true);
+    if(VIEW==='agenda') viewAgenda();
+  }catch(err){ e.start=bkS; e.end=bkE; if(VIEW==='agenda') viewAgenda(); toast('Não consegui mover: '+(err&&err.message||err),false); }
+}
 /* ── Fase 3: auto-sync Google → CRM (quase-tempo-real, sem servidor) ──
    CRM → Google já é instantâneo (criar/editar/adiar/excluir gravam na hora).
    Google → CRM: re-lê quando a aba volta ao foco e a cada 90s com a Agenda aberta e visível.
@@ -9080,6 +9239,31 @@ function gsyncEnfileirar(cid,tid,op,extra){
   if(!it.gcalId&&ant.gcalId) it.gcalId=ant.gcalId;
   it.ts=Date.now();
   GSYNC.fila[k]=it; gsyncSalvar();
+}
+/* dia/hora/duração de um evento do Google, do jeito que a atividade guarda.
+   Fonte ÚNICA: o pull periódico e o arrasto na grade leem daqui (duas leituras
+   parecidas mas separadas é como nascem as divergências). */
+function gsyncDataDoEvento(ev,t){
+  const s=gcalDT(ev,'start'), f=gcalDT(ev,'end');
+  let dur=Number(t&&t.dur)||60;
+  if(s.t&&f.t){ const a=Number(s.t.slice(0,2))*60+Number(s.t.slice(3,5)); let b=Number(f.t.slice(0,2))*60+Number(f.t.slice(3,5));
+    if(f.d&&s.d&&f.d>s.d) b+=1440; dur=Math.max(5,b-a); }
+  return {quando:s.d||'',hora:s.t||'',dur:dur};
+}
+/* evento mexido na grade (arrasto) → a atividade do CRM que o gerou anda junto,
+   sem esperar o próximo pulso de sincronia */
+function gsyncEspelharNaTarefa(ev){
+  const p=(ev&&ev.extendedProperties&&ev.extendedProperties.private)||{};
+  if(p.crmApp!==GSYNC_APP||!p.crmTarefa) return false;
+  const par=gsyncTarefa(p.crmContato,p.crmTarefa); if(!par) return false;
+  const c=par.c, t=par.t, d=gsyncDataDoEvento(ev,t);
+  if(!d.quando) return false;
+  const antes=(t.quando||'')+'|'+(t.hora||'')+'|'+(Number(t.dur)||60);
+  t.quando=d.quando; t.hora=d.hora; t.dur=d.dur; t.gcalId=ev.id||t.gcalId; t.gcalSync=true; t.gcalFora=false; t.gcalUpd=ev.updated||t.gcalUpd;
+  if(antes!==(d.quando+'|'+d.hora+'|'+d.dur))
+    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcado na Agenda: '+dataBR(d.quando)+(d.hora?' às '+d.hora:' (dia todo)'),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar();
+  return true;
 }
 function gsyncTarefa(cid,tid){ const c=tarContato(cid); if(!c) return null;
   const t=tarefasDe(c).find(x=>String(x.id)===String(tid)); return t?{c,t}:null; }
@@ -9211,11 +9395,8 @@ async function gsyncPuxar(op){
       if(ev.htmlLink&&t.gcalLink!==ev.htmlLink) t.gcalLink=ev.htmlLink;
       const upd=ev.updated||'';
       if(t.gcalUpd&&upd&&upd<=t.gcalUpd) return;               /* nada novo do lado do Google */
-      const s=gcalDT(ev,'start'), f=gcalDT(ev,'end');
-      const quando=s.d||t.quando, hora=s.t||'';
-      let dur=Number(t.dur)||60;
-      if(s.t&&f.t){ const a=Number(s.t.slice(0,2))*60+Number(s.t.slice(3,5)); let b=Number(f.t.slice(0,2))*60+Number(f.t.slice(3,5));
-        if(f.d&&s.d&&f.d>s.d) b+=1440; dur=Math.max(5,b-a); }
+      const d=gsyncDataDoEvento(ev,t);
+      const quando=d.quando||t.quando, hora=d.hora, dur=d.dur;
       const antes=(t.quando||'')+'|'+(t.hora||'')+'|'+(Number(t.dur)||60);
       const depois=quando+'|'+hora+'|'+dur;
       if(antes!==depois){
@@ -9329,8 +9510,15 @@ function gcalModalEvento(m){
     <label style="font-size:12px;font-weight:600">Título<input id="ev-tit" value="${esc(m.summary)}" placeholder="Ex.: OI com João" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
     <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin-top:10px">
       <label style="font-size:12px;font-weight:600">Dia<input id="ev-dia" type="date" value="${esc(m.dia)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
-      <label style="font-size:12px;font-weight:600">Início<input id="ev-ini" type="time" value="${esc(m.ini)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
-      <label style="font-size:12px;font-weight:600">Fim<input id="ev-fim" type="time" value="${esc(m.fim)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+      <label style="font-size:12px;font-weight:600">Início<input id="ev-ini" type="time" value="${esc(m.ini)}" oninput="gcalFimSegueInicio()" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+      <label style="font-size:12px;font-weight:600">Fim<input id="ev-fim" type="time" value="${esc(m.fim)}" oninput="gcalDurAnotar()" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
+    </div>
+    <div class="gcal-mv">
+      <button type="button" onclick="gcalEdDeslocar(-15)" title="15 minutos mais cedo">−15 min</button>
+      <button type="button" onclick="gcalEdDeslocar(15)">+15 min</button>
+      <button type="button" onclick="gcalEdDeslocar(60)">+1 h</button>
+      <button type="button" onclick="gcalEdDia(1)">Amanhã</button>
+      <button type="button" onclick="gcalEdDia(7)">+7 dias</button>
     </div>
     <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Local<input id="ev-loc" value="${esc(m.local)}" placeholder="endereço, sala, ou vazio" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
     <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Convidado (e-mail do cliente)<input id="ev-conv" value="${esc(m.convidado)}" placeholder="cliente@email.com — recebe o convite" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
@@ -9343,8 +9531,25 @@ function gcalModalEvento(m){
       ${m.id?`<span style="flex:1"></span><button class="btn btn-s" style="color:var(--verm,#dc2626)" onclick="gcalExcluir('${esc(m.id)}')">🗑️ Excluir</button>`:''}
     </div></div>`;
   document.body.appendChild(ov);
+  _GCAL_DUR=Math.max(15,(gcalHhmm2Min(m.fim||'')-gcalHhmm2Min(m.ini||''))||60);   /* duração de partida: é ela que o início arrasta junto */
   setTimeout(()=>{ const t=document.getElementById('ev-tit'); if(t)t.focus(); },50);
 }
+/* ── editor: o fim ANDA com o início (duração preservada), como no Google ── */
+let _GCAL_DUR=60;
+function gcalHhmm2Min(s){ const p=String(s||'').split(':'); return (Number(p[0])||0)*60+(Number(p[1])||0); }
+function gcalDurAnotar(){ const i=document.getElementById('ev-ini'), f=document.getElementById('ev-fim');
+  if(!i||!f||!i.value||!f.value) return; const d=gcalHhmm2Min(f.value)-gcalHhmm2Min(i.value); if(d>0) _GCAL_DUR=d; }
+function gcalFimSegueInicio(){ const i=document.getElementById('ev-ini'), f=document.getElementById('ev-fim');
+  if(!i||!f||!i.value) return; f.value=gcalMin2Hhmm(gcalHhmm2Min(i.value)+(_GCAL_DUR||60)); }
+function gcalEdDeslocar(min){ const i=document.getElementById('ev-ini'); if(!i) return;
+  if(!i.value) i.value='09:00';
+  const novo=gcalHhmm2Min(i.value)+min;
+  const d=document.getElementById('ev-dia');
+  if(novo<0&&d&&d.value){ d.value=isoAddDias(d.value,-1); i.value=gcalMin2Hhmm(novo+1440); }
+  else if(novo>=1440&&d&&d.value){ d.value=isoAddDias(d.value,1); i.value=gcalMin2Hhmm(novo-1440); }
+  else i.value=gcalMin2Hhmm(novo);
+  gcalFimSegueInicio(); }
+function gcalEdDia(dias){ const d=document.getElementById('ev-dia'); if(!d||!d.value) return; d.value=isoAddDias(d.value,dias); }
 function gcalFecharModal(){ const o=document.getElementById('ev-ov'); if(o) o.remove(); }
 async function gcalSalvar(id){
   const g=x=>{ const el=document.getElementById(x); return el?el.value.trim():''; };
@@ -9353,10 +9558,13 @@ async function gcalSalvar(id){
   const err=document.getElementById('ev-err'); const setErr=t=>{ if(err)err.textContent=t; };
   if(!tit){ setErr('Dá um título ao evento.'); return; }
   if(!dia){ setErr('Escolhe o dia.'); return; }
-  if(ini && fim && fim<=ini){ setErr('O fim tem que ser depois do início.'); return; }
+  /* AGENDA-FLUIDA-V1: nada de barrar o salvamento por causa do fim. Mudou o
+     início e o fim ficou pra trás? O app conserta (mantém a duração) e segue. */
+  let fimOk=fim;
+  if(ini && (!fimOk || fimOk<=ini)){ fimOk=gcalMin2Hhmm(gcalHhmm2Min(ini)+(_GCAL_DUR||60)); const ef=document.getElementById('ev-fim'); if(ef) ef.value=fimOk; }
   const body={summary:tit, location:loc||undefined, description:desc||undefined,
     start: ini? {dateTime:dia+'T'+ini+':00', timeZone:GCAL_TZ} : {date:dia},
-    end:   ini? {dateTime:dia+'T'+(fim||ini)+':00', timeZone:GCAL_TZ} : {date:dia} };
+    end:   ini? {dateTime:dia+'T'+fimOk+':00', timeZone:GCAL_TZ} : {date:isoAddDias(dia,1)} };
   const emails=conv.split(/[,;\s]+/).filter(x=>/@/.test(x));
   if(emails.length) body.attendees=emails.map(e=>({email:e}));
   const params={sendUpdates:'all', conferenceDataVersion:1};
@@ -15544,6 +15752,35 @@ function lpSelfCheck(){
       const okEv=String(gsyncCorpoEvento).includes('location:locTexto(locPrincipal(c))')&&tarGcalUrl(c,{quando:'2026-09-15',hora:'10:00'}).includes('&location=');
       const okView=typeof viewMapa==='function'&&VIEWS_CONHECIDAS.includes('mapa')&&HUB_SECOES.some(sx=>sx.itens.some(i=>i.view==='mapa'))&&!!document.querySelector('.nav-btn[data-view="mapa"]');
       const okW=String(drwPessoaHtml).includes("locWidgetHtml('ct:'")&&String(bnEditorHtml).includes("locWidgetHtml('bn:'"); const okN=geoNormNominatim({name:'Real Hospital Português',lat:'-8.05',lon:'-34.9',address:{road:'Av. Agamenon',house_number:'4760',suburb:'Paissandu',city:'Recife',state:'Pernambuco'}}); return a&&b&&d&&okP&&okG&&okEv&&okView&&okW&&okN.nome==='Real Hospital Português'&&okN.end.includes('Paissandu')&&okN.lat===-8.05; })());
+    /* ═══ AGENDA-FLUIDA-V1 (14/09): mover é arrastar, título nítido, nada trava ═══ */
+    { const bkDia=GCAL.diaSel;
+      try{
+        const h=hojeISO();
+        const ev={id:'zev',summary:'Zz Teste de Agenda',status:'confirmed',start:{dateTime:h+'T10:00:00'},end:{dateTime:h+'T11:00:00'}};
+        GCAL.diaSel=h;
+        const html=gcalDiaHTML([ev],h), vazio=gcalDiaHTML([],h), sem=gcalSemanaHTML([ev],h);
+        ok('agenda: o bloco leva identidade e horário (é o que o arrasto usa) + alça de esticar',
+           /data-ev="zev"/.test(html)&&/data-ini="600"/.test(html)&&/data-fim="660"/.test(html)&&html.includes('gcal-rz'));
+        ok('agenda: a grade traz a régua (hpx/minh) que converte pixel em minuto',
+           /data-hpx="\d+"/.test(html)&&/data-minh="\d+"/.test(html)&&html.includes('gcalCliqueVazio'));
+        ok('agenda: dia VAZIO também mostra a grade — é onde ele toca pra marcar', vazio.includes('gcal-dg')&&vazio.includes('gcalCliqueVazio'));
+        ok('agenda: linha do AGORA no dia de hoje', html.includes('gcal-now'));
+        ok('agenda: na semana o chip é arrastável e a coluna é alvo de soltura',
+           /class="gcal-chip[^"]*" data-ev="zev"/.test(sem)&&/data-dia="/.test(sem)&&sem.includes('gcalCliqueColuna'));
+        ok('agenda: título do evento sai em elemento próprio (nitidez mora no CSS .gcal-ev .s)',
+           /<span class="s">Zz Teste de Agenda<\/span>/.test(html));
+      } finally{ GCAL.diaSel=bkDia; }
+    }
+    ok('agenda: minuto↔hh:mm ida e volta, com virada de meia-noite',
+       gcalMin2Hhmm(0)==='00:00'&&gcalMin2Hhmm(645)==='10:45'&&gcalMin2Hhmm(1440)==='00:00'&&gcalHhmm2Min('10:45')===645&&gcalHhmm2Min('')===0);
+    ok('agenda: mudar o início LEVA o fim junto (mantém a duração) e o salvar nunca mais trava no fim',
+       String(gcalFimSegueInicio).includes('_GCAL_DUR')&&!String(gcalSalvar).includes('O fim tem que ser depois do início')&&String(gcalSalvar).includes('fimOk'));
+    ok('agenda: mover é otimista e VOLTA pro lugar se o Google recusar (nunca fica meio movido)',
+       String(gcalMoverEvento).includes('const bkS=e.start, bkE=e.end')&&String(gcalMoverEvento).includes('e.start=bkS; e.end=bkE;')&&String(gcalMoverEvento).includes('gsyncEspelharNaTarefa'));
+    ok('agenda: a leitura da data do evento é FONTE ÚNICA (pull e arrasto leem do mesmo lugar)',
+       String(gsyncPuxar).includes('gsyncDataDoEvento(ev,t)')&&String(gsyncEspelharNaTarefa).includes('gsyncDataDoEvento(ev,t)'));
+    ok('aviso (toast) não engole o toque do que está embaixo',
+       (()=>{ const t=document.getElementById('toasts'); return !!t&&getComputedStyle(t).pointerEvents==='none'; })());
     /* ═══ ESTABILIDADE-DE-TELA-V1 (14/09): repintura não pode mover a tela ═══ */
     ok('estabilidade: as duas repinturas (render e renderDrawer) estão embrulhadas',
        !!window.render.__estab&&!!window.renderDrawer.__estab&&String(estabFoto).includes('estabFocoFoto'));
