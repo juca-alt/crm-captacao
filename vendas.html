@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.58.1 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.59 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1891,11 +1891,17 @@ async function lpcPush(){
 /* SEGURANÇA-V1 (11/09): este botão zerava S.contatos e o push apagava TUDO no servidor (o diff via 'mortos'
    virava DELETE em massa — inclusive nas linhas do Daniel, visíveis por delegação). Agora ele só limpa o
    CACHE deste aparelho e recarrega do servidor. Apagar dado real é ação explícita por registro, nunca em massa. */
-const CONTA_CHAVES=['crmlp_v03_state','crmlp_bn_v1','crmlp_pend_v1','crmlp_carteira_v1','crmlp_subst_v1','crmlp_beneficios_v1','crmlp_import_log_v1','crmlp_emitidas_v1','crmlp_atrasos_v1','crmlp_emissao_v1','crmlp_solicitacoes_v1','crmlp_pipex_v1','crmlp_placed_v1','crmlp_gcal_tok','crmlp_escopo_v1','crmlp_deleg_ativo_v1','crmlp_relatorio_v1','crmlp_persist_v1','crmlp_assinatura_v1','crmlp_rec_v1','crmlp_funil_v1','crmlp_cart_perfis_v1','crmlp_var_dia'];
+const CONTA_CHAVES=['crmlp_v03_state','crmlp_bn_v1','crmlp_pend_v1','crmlp_carteira_v1','crmlp_subst_v1','crmlp_beneficios_v1','crmlp_import_log_v1','crmlp_emitidas_v1','crmlp_atrasos_v1','crmlp_emissao_v1','crmlp_solicitacoes_v1','crmlp_pipex_v1','crmlp_placed_v1','crmlp_gcal_tok','crmlp_gsync_v1','crmlp_escopo_v1','crmlp_deleg_ativo_v1','crmlp_relatorio_v1','crmlp_persist_v1','crmlp_assinatura_v1','crmlp_rec_v1','crmlp_funil_v1','crmlp_cart_perfis_v1','crmlp_var_dia'];
 /* CONTA-TROCOU-V3: uma função só, chamada no boot, no perfilCarregar tardio e no Sincronizar. Devolve true se recarregou. */
 function contaConferir(eu){ try{ eu=eu||((typeof DELEG!=='undefined'&&DELEG&&DELEG.eu)||''); if(!eu) return false; const ant=localStorage.getItem('crmlp_dono_v1'); if(ant&&ant!==eu){ contaLimparCache(); localStorage.setItem('crmlp_dono_v1',eu); location.reload(); return true; } localStorage.setItem('crmlp_dono_v1',eu); }catch(_){} return false; }
 /* CONTA-TROCOU-V4: portão ÚNICO — com a troca em curso, nenhum gravador (são 15+) reescreve chave por pessoa antes do reload */
-(function(){ try{ const _ls=localStorage.setItem.bind(localStorage); Object.defineProperty(localStorage,'setItem',{configurable:true,writable:true,value:function(k,v){ if(window.CONTA_TROCANDO&&CONTA_CHAVES.includes(String(k))) return; return _ls(k,v); }}); }catch(_){} })();
+/* V10.1 · TRAVA-REAL-V1 (14/09): a trava era escrita com Object.defineProperty NO OBJETO localStorage —
+   e num objeto Storage isso cai no "named property setter" do navegador (vira um ITEM chamado 'setItem'),
+   a chamada segue indo pro método do prototype e a trava nunca pegava. Provado no portão: com
+   CONTA_TROCANDO=true o setItem gravava igual. Agora a trava mora em Storage.prototype, que é onde a
+   chamada realmente passa. (O invariante V10.1 do self-check existia desde sempre e estava VERMELHO.) */
+(function(){ try{ const _ls=Storage.prototype.setItem;
+  Storage.prototype.setItem=function(k,v){ if(window.CONTA_TROCANDO&&this===window.localStorage&&CONTA_CHAVES.includes(String(k))) return; return _ls.call(this,k,v); }; }catch(_){} })();
 function contaLimparCache(){ window.CONTA_TROCANDO=true; CONTA_CHAVES.forEach(k=>{ try{ localStorage.removeItem(k); }catch(_){} }); }
 async function sairDaConta(){ if(!confirm('Sair desta conta neste aparelho? O cache local é apagado'+(typeof pendTotal==='function'&&pendTotal()?' (há '+pendTotal()+' edição(ões) ainda não enviadas — sincronize antes)':'')+'.')) return; try{ if(sb) await sb.auth.signOut(); }catch(_){} contaLimparCache(); try{ localStorage.removeItem('crmlp_dono_v1'); }catch(_){} location.reload(); }
 function zerarContatos(){
@@ -3135,16 +3141,18 @@ function tarEventoDescricao(c,t){
    Google já com etapa no título + cor Pavão); os outros tipos seguem com o
    link-template de sempre (sem prefixo, sem cor). */
 function tarGcalAcaoHTML(c,t){
-  if(t&&t.tipo==='reuniao'){
-    const jaTem=!!(t&&t.gcalId);
-    return `<button class="btn btn-s btn-mini" onclick="gcalCriarReuniaoDaTarefa('${esc(c.id)}','${esc(t.id)}')" title="${jaTem?'Atualizar na sua Agenda Google (etapa + cor)':'Criar na sua Agenda Google com a etapa no título + cor'}">📅${jaTem?'↻':'＋'}</button>`;
-  }
   /* GCAL-SEM-TELA-V1 (11/09): o token do Google dura 1h; expirado, GCAL.conectado ficava false e o botão
-     caía no link que ABRE a tela do Google. Agora toda atividade com data vai pela API (gcalApi renova o
-     token sozinho, com login_hint); o link-template só sobra como último recurso se a API falhar. */
+     caía no link que ABRE a tela do Google. Toda atividade com data vai pela API.
+     GCAL-BIDIRECIONAL-V1 (14/09): o clique não depende mais de a rede/token estarem de pé — enfileira e
+     drena; o ícone conta em que pé está (＋ mandar · ↻ já está lá · ⏳ na fila · ↺ apagou no Google). */
   if(t&&t.quando){
-    const jaTem=!!t.gcalId;
-    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="${jaTem?'Atualizar na sua Agenda Google (direto, sem abrir tela)':'Gravar na sua Agenda Google (direto, sem abrir tela)'}">📅${jaTem?'↻':'＋'}</button>`;
+    const est=(typeof gsyncEstado==='function')?gsyncEstado(c,t):(t.gcalId?'ok':'');
+    const ico=est==='fila'?'⏳':est==='ok'?'↻':est==='fora'?'↺':'＋';
+    const tit=est==='fila'?'Na fila — sobe pra sua Agenda Google sozinho (clique pra tentar agora)'
+             :est==='ok'?'Já está na sua Agenda Google — clique pra atualizar lá'
+             :est==='fora'?'Você apagou este evento no Google — clique pra mandar de novo'
+             :(t.tipo==='reuniao'?'Mandar pra sua Agenda Google com a etapa no título + cor':'Mandar pra sua Agenda Google (direto, sem abrir tela)');
+    return `<button class="btn btn-s btn-mini" onclick="gcalCriarEventoDaTarefa('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="${tit}">📅${ico}</button>`;
   }
   const gc=tarGcalUrl(c,t);
   return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido (conecte a Agenda em Agenda &amp; Tarefas pra gravar direto)">📅</a>`:'';
@@ -3177,6 +3185,9 @@ window.tarCriar = (cid,tipo,tit,quando,hora,notas,dur) => {
            criadoEm:new Date().toISOString(), por:S.activeUser};
   tarefasDe(c).push(t);
   interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa criada: '+t.tit,dia:hojeISO(),ts:t.criadoEm,por:S.activeUser});
+  /* GCAL-BIDIRECIONAL-V1: compromisso com HORA nasce espelhado na Agenda Google — a fila
+     garante a entrega mesmo se o Google estiver fora do ar na hora do clique. */
+  if(t.hora&&typeof gsyncEnfileirar==='function'){ t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert'); gsyncAgendar(400); }
   salvar(); render();
   toast(c.nome.split(' ')[0]+': '+tarNomeTipo(t.tipo)+' em '+(t.quando===hojeISO()?'hoje':dataBR(t.quando)),true);
   return t;
@@ -3199,10 +3210,18 @@ window.tarConcluir = (cid,tid) => {
   const t=tarefasDe(c).find(x=>x.id===tid); if(!t||t.feito) return;
   t.feito=new Date().toISOString();
   interacoesDe(c).push({id:uid(),k:'tarefa',l:'Tarefa concluída: '+t.tit,dia:hojeISO(),ts:t.feito,por:S.activeUser});
+  /* GCAL-BIDIRECIONAL-V1: resolveu ANTES do dia → o compromisso futuro sai da agenda dele
+     (o que já passou fica: é histórico, não é lixo). */
+  if(t.gcalId&&t.quando&&t.quando>hojeISO()&&typeof gsyncEnfileirar==='function'){
+    gsyncEnfileirar(c.id,t.id,'apagar',{gcalId:t.gcalId,titulo:t.tit||''});
+    delete t.gcalId; t.gcalSync=false; gsyncAgendar(400); }
   salvar(); render(); toast('Feito: '+t.tit,true);
 };
 window.tarReabrir = (cid,tid) => { const c=tarContato(cid); if(!c) return;
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return; t.feito=null; salvar(); render(); };
+  const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return; t.feito=null;
+  /* já viveu na Agenda Google (t.gcalUpd) → reabrir devolve o compromisso pra lá */
+  if((t.gcalId||t.gcalUpd)&&typeof gsyncEnfileirar==='function'){ t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId}); gsyncAgendar(400); }
+  salvar(); render(); };
 /* remarcar parte de HOJE quando a data já passou: empurrar a data vencida só
    acumularia atraso (foi exatamente o erro do vencimento estimado na Substituição) */
 function tarNovaData(t,dias){
@@ -3213,12 +3232,16 @@ window.tarAdiar = (cid,tid,dias) => {
   const c=tarContato(cid); if(!c) return;
   const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
   t.quando=tarNovaData(t,dias);
-  salvar(); render(); toast('Remarcada para '+dataBR(t.quando),true);
+  if(typeof gsyncMudou==='function') gsyncMudou(c,t);   /* GCAL-BIDIRECIONAL-V1: remarcou aqui, remarca lá */
+  salvar(); render(); toast('Remarcada para '+dataBR(t.quando)+(t.gcalId?' · também na Agenda Google':''),true);
 };
 window.tarRemover = (cid,tid) => {
   const c=tarContato(cid); if(!c) return;
   const t=tarefasDe(c).find(x=>x.id===tid); if(!t) return;
-  if(!confirm('Remover a tarefa "'+(t.tit||'')+'"?')) return;
+  if(!confirm('Remover a tarefa "'+(t.tit||'')+'"?'+(t.gcalId?' Ela também sai da sua Agenda Google.':''))) return;
+  /* GCAL-BIDIRECIONAL-V1: o evento é do CRM — tirou aqui, tira lá (fila leva o id junto,
+     porque a tarefa some do estado antes do item drenar). */
+  if(t.gcalId&&typeof gsyncEnfileirar==='function'){ gsyncEnfileirar(c.id,t.id,'apagar',{gcalId:t.gcalId,titulo:t.tit||''}); gsyncAgendar(400); }
   c.tarefas=tarefasDe(c).filter(x=>x.id!==tid); salvar(); render();
 };
 window.tarNovaDoDrawer = () => {
@@ -3228,8 +3251,10 @@ window.tarNovaDoDrawer = () => {
   const lembrar=(($('#tarLembrar')||{}).value)||'nao';
   if(!quando){ toast('Escolha a data da próxima atividade'); return; }
   const t=tarCriar(c.id,tipo,tit,quando,hora,'',dur);
-  /* TAR-GCAL-DIRETO-V1 (08/09): com hora marcada e Agenda conectada, grava direto no Google — sem abrir tela. */
-  if(t&&hora&&GCAL.conectado) gcalCriarEventoDaTarefa(c.id,t.id,{silencioso:true});
+  /* TAR-GCAL-DIRETO-V1 (08/09) + BIDIRECIONAL-V1 (14/09): tarCriar já enfileirou; aqui a fila
+     drena DENTRO do toque dele — é o único momento em que o Google pode pedir consentimento sem
+     o Safari do iPad bloquear o popup. Falhou? Segue na fila, sobe sozinho. */
+  if(t&&hora) gsyncDrenar({gesto:true,avisar:true});
   /* GC-25: só reunião gera lembrete pro cliente */
   if(t&&tipo==='reuniao'&&lembrar!=='nao'){ tarAgendarLembrete(c.id,quando,hora,lembrar); salvar(); render();
     toast('Lembrete do cliente agendado — '+(lembrar==='vespera'?'véspera':'no dia'),true); }
@@ -3951,7 +3976,7 @@ function tarBlocoDrawer(c){
     const sit=tarSituacao(t);
     return `<div class="tarlin">
       <span title="${esc(tarNomeTipo(t.tipo))}">${tarIco(t.tipo)}</span>
-      <span class="tt">${esc(t.tit||tarNomeTipo(t.tipo))}</span>
+      <span class="tt">${esc(t.tit||tarNomeTipo(t.tipo))} ${gsyncBadgeHTML(c,t)}</span>
       <span class="qd ${tarClasse(sit)}" style="background:transparent;padding:0">${esc(tarQuandoTxt(t))}</span>
       <span class="ac">
         <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')" title="Marcar como feita">✓ feita</button>
@@ -8876,7 +8901,10 @@ async function gcalCarregar(interactive){ if(GCAL.carregando) return; GCAL.carre
   finally{ GCAL.carregando=false; if(VIEW==='agenda') viewAgenda(); }
 }
 function gcalConectar(){ gcalCarregar(true); }
-function gcalDesconectar(){ try{ if(GCAL.tok&&window.google&&google.accounts&&google.accounts.oauth2) google.accounts.oauth2.revoke(GCAL.tok,function(){}); }catch(e){} GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:true,eventos:[],erro:null,hint:null}; try{ localStorage.removeItem('crmlp_gcal_tok'); }catch(_){} if(VIEW==='agenda') viewAgenda(); toast('Google Agenda desconectado'); }
+function gcalDesconectar(){ try{ if(GCAL.tok&&window.google&&google.accounts&&google.accounts.oauth2) google.accounts.oauth2.revoke(GCAL.tok,function(){}); }catch(e){} GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:true,eventos:[],erro:null,hint:null}; try{ localStorage.removeItem('crmlp_gcal_tok'); }catch(_){}
+  /* GCAL-BIDIRECIONAL-V1: desligou a Agenda → a fila morre com ela (senão o aviso cobraria pra sempre o que ele desligou de propósito) */
+  try{ GSYNC.fila={}; GSYNC.precisaLogin=false; gsyncSalvar(); }catch(_){}
+  if(VIEW==='agenda') viewAgenda(); toast('Google Agenda desconectado'); }
 function gcalDiaISO(ev){ const s=ev.start&&(ev.start.dateTime||ev.start.date); return s? s.slice(0,10):''; }
 function gcalHora(ev){ if(ev.start&&ev.start.date&&!ev.start.dateTime) return 'dia todo'; const s=ev.start&&ev.start.dateTime; if(!s) return ''; try{ return new Date(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return ''; } }
 function gcalBlocoHTML(){
@@ -9011,64 +9039,282 @@ function tarReuniaoInterval(t){ // início/fim ISO local a partir de quando+hora
   const tot=h*60+m+dur; const diaFim=tot>=1440?isoAddDias(dia,1):dia; const fimMin=tot%(24*60);   /* BUGS-V5 #5: passa da meia-noite → fim no dia seguinte */
   return { ini:dia+'T'+p2(h)+':'+p2(m)+':00', fim:diaFim+'T'+p2(Math.floor(fimMin/60))+':'+p2(fimMin%60)+':00' };
 }
-/* TAR-GCAL-DIRETO-V1 (08/09): qualquer atividade com hora entra na Agenda Google pela API
-   (reunião segue o caminho dela, com etapa + cor). Sem abrir tela; sincroniza se já tem evento. */
+/* ═══ GCAL-BIDIRECIONAL-V1 (14/09/2026) ═══════════════════════════════════════
+   O QUE ESTAVA ERRADO (caso Davi, 14/09): mandar a atividade pra Agenda Google
+   era um tiro único, sem rede de segurança. Se o token do Google tinha expirado,
+   se o consentimento morria (o Safari do iPad bloqueia popup que não nasce no
+   toque) ou se a rede oscilava, o clique não virava NADA — nem evento no Google,
+   nem sinal no CRM. E o caminho de volta não existia: remarcar ou apagar o
+   evento no Google não mexia na atividade do CRM.
+
+   COMO FUNCIONA AGORA — uma via só, nos dois sentidos:
+     · CRM → Google: toda mudança da atividade (criar com hora, clicar 📅,
+       remarcar, concluir, remover) ENFILEIRA um item numa fila PERSISTIDA. A
+       fila drena sozinha: no boot, ao voltar o foco, a cada 90 s, quando a rede
+       volta e logo depois de reconectar a Agenda. Clique não se perde mais.
+     · Google → CRM: a cada sincronia o app relê SÓ os eventos que ele mesmo
+       criou (extendedProperties.private.crmApp='crmlp') e traz de volta dia,
+       hora e duração. Evento apagado no Google marca a atividade como "fora da
+       agenda" — nunca apaga a atividade (dado do CRM não some por fora).
+     · Conflito: quem tem item na fila (mudança local ainda não subida) vence;
+       sem fila, vence o lado com carimbo mais novo (ev.updated × t.gcalUpd).
+   Sem hora = evento de DIA INTEIRO (antes, atividade sem hora simplesmente não
+   ia). Reunião segue o mapa de etapa + cor Pavão e respeita título ajustado à
+   mão no Google. Título NÃO volta do Google (o texto livre é do CRM); voltam
+   dia, hora, duração e a exclusão. */
+const GSYNC_CHAVE='crmlp_gsync_v1', GSYNC_APP='crmlp', GSYNC_TENT_MAX=8;
+let GSYNC={fila:{},drenando:false,puxando:false,precisaLogin:false,ultimo:0,ultimoErro:null};
+function gsyncLer(){ try{ const o=JSON.parse(localStorage.getItem(GSYNC_CHAVE)||'null'); if(o&&o.fila&&typeof o.fila==='object') GSYNC.fila=o.fila; }catch(_){} }
+function gsyncSalvar(){ try{ localStorage.setItem(GSYNC_CHAVE,JSON.stringify({fila:GSYNC.fila})); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); } }
+gsyncLer();
+function gsyncChave(cid,tid){ return String(cid)+'|'+String(tid); }
+function gsyncNaFila(cid,tid){ return !!GSYNC.fila[gsyncChave(cid,tid)]; }
+function gsyncPendentes(){ return Object.keys(GSYNC.fila).length; }
+/* enfileira uma intenção. 'upsert' = garantir o evento igual à atividade;
+   'apagar' = tirar da agenda (leva o gcalId junto, porque a atividade pode ter
+   sido removida do CRM antes do item drenar). */
+function gsyncEnfileirar(cid,tid,op,extra){
+  if(cid==null||tid==null) return;
+  const k=gsyncChave(cid,tid), ant=GSYNC.fila[k]||{};
+  const it=Object.assign({cid:String(cid),tid:String(tid),op:op||'upsert',tent:0,erro:null},extra||{});
+  if(!it.gcalId&&ant.gcalId) it.gcalId=ant.gcalId;
+  it.ts=Date.now();
+  GSYNC.fila[k]=it; gsyncSalvar();
+}
+function gsyncTarefa(cid,tid){ const c=tarContato(cid); if(!c) return null;
+  const t=tarefasDe(c).find(x=>String(x.id)===String(tid)); return t?{c,t}:null; }
+/* a atividade está "espelhada" quando já tem evento OU o usuário pediu pra ir */
+function gsyncEspelha(t){ return !!(t&&(t.gcalId||t.gcalSync)); }
+/* re-enfileira sozinho o que já vive na agenda (usado por remarcar/concluir/editar) */
+function gsyncMudou(c,t){ if(!c||!t) return; if(!gsyncEspelha(t)) return; gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId}); gsyncAgendar(); }
+function gsyncTitulo(c,t){
+  if(t&&t.tipo==='reuniao'){ const alvo=reuniaoTituloAlvo(c); if(alvo) return alvo; }
+  return tarNomeTipo(t&&t.tipo)+' · '+((c&&c.nome)||'');
+}
+/* corpo do evento a partir da atividade — fonte ÚNICA (o link-template e as duas
+   ações de 1 toque passam todas por aqui, senão os formatos divergem com o tempo) */
+function gsyncCorpoEvento(c,t){
+  const body={ summary:gsyncTitulo(c,t), description:tarEventoDescricao(c,t),
+    location:locTexto(locPrincipal(c))||undefined,
+    extendedProperties:{private:{crmApp:GSYNC_APP,crmTarefa:String(t.id),crmContato:String(c.id)}} };
+  if(t.hora){ const iv=tarReuniaoInterval(t); body.start={dateTime:iv.ini,timeZone:GCAL_TZ}; body.end={dateTime:iv.fim,timeZone:GCAL_TZ}; }
+  else { const d=t.quando||hojeISO(); body.start={date:d}; body.end={date:isoAddDias(d,1)}; }   /* sem hora = dia inteiro */
+  if(t.tipo==='reuniao'&&reuniaoTituloAlvo(c)) body.colorId=REUNIAO_COLOR_ID;
+  return body;
+}
+function gsyncSumiu(e){ return /404|410|not ?found|deleted|has been deleted|resource has been/i.test(String(e&&e.message||e)); }
+function gsyncSemAuth(e){ return /401|403|invalid credentials|unauthorized|invalid_token/i.test(String(e&&e.message||e)); }
+/* token sem susto: nunca pendura a fila pra sempre (GIS pode não chamar callback
+   nenhum quando o popup morre) e nunca abre tela pra quem nunca conectou. */
+function gcalTemToken(){ return !!(GCAL.tok&&Date.now()<GCAL.exp-60000); }
+function gcalTokenPra(gesto){
+  if(gcalTemToken()) return Promise.resolve(GCAL.tok);
+  if(!gesto&&!GCAL.conectado&&!GCAL.tok) return Promise.resolve(null);
+  return Promise.race([ gcalToken(!!gesto).catch(()=>null),
+    new Promise(r=>setTimeout(()=>r(null),20000)) ]).then(tk=>tk||null);
+}
+/* aplica UM item da fila. Devolve {ok, titulo} — erro sobe pra quem drena. */
+async function gsyncAplicarItem(it){
+  if(it.op==='apagar'){
+    if(!it.gcalId) return {ok:true,titulo:it.titulo||''};
+    try{ await gcalApi('DELETE','/'+encodeURIComponent(it.gcalId),null,{sendUpdates:'all'}); }
+    catch(e){ if(!gsyncSumiu(e)) throw e; }                    /* já não existe lá: objetivo cumprido */
+    return {ok:true,titulo:it.titulo||''};
+  }
+  const par=gsyncTarefa(it.cid,it.tid);
+  if(!par) return {ok:true,titulo:''};                          /* atividade não existe mais: item morto */
+  const c=par.c, t=par.t;
+  const body=gsyncCorpoEvento(c,t);
+  const id=t.gcalId||it.gcalId;
+  let ev=null, criou=false;
+  if(id){
+    /* respeita título ajustado à mão no Google (prefixo não-canônico) */
+    const conhecido=gcalEvPorId(id);
+    if(t.tipo==='reuniao'&&conhecido&&reuniaoResolveTitulo(c,conhecido.summary||'').acao==='manual') delete body.summary;
+    try{ ev=await gcalApi('PATCH','/'+encodeURIComponent(id),body,{sendUpdates:'none'}); }
+    catch(e){ if(!gsyncSumiu(e)) throw e;
+      delete t.gcalId; ev=await gcalApi('POST','',body,{sendUpdates:'none'}); criou=true; }   /* sumiu lá → recria */
+  }else{ ev=await gcalApi('POST','',body,{sendUpdates:'none'}); criou=true; }
+  if(ev&&ev.id){ t.gcalId=ev.id; t.gcalUpd=ev.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; t.gcalLink=ev.htmlLink||t.gcalLink||''; }
+  if(criou) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na Agenda Google: '+(body.summary||gsyncTitulo(c,t)),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+  salvar();
+  return {ok:true,titulo:body.summary||gsyncTitulo(c,t),criou:criou};
+}
+/* drena a fila inteira. op.gesto = veio de um toque dele (pode pedir consentimento);
+   op.avisar = fala por toast o que aconteceu. */
+async function gsyncDrenar(op){
+  op=op||{};
+  const ks=Object.keys(GSYNC.fila);
+  if(!ks.length) return {feitos:0,restam:0};
+  if(GSYNC.drenando){ gsyncAgendar(1500); return {feitos:0,restam:ks.length,ocupado:true}; }   /* clique no meio de outra drenagem não fica órfão */
+  GSYNC.drenando=true;
+  let feitos=0, ultimo='';
+  try{
+    const tok=await gcalTokenPra(op.gesto);
+    if(!tok){ GSYNC.precisaLogin=true;
+      if(op.avisar) toast('Agenda Google desconectada — '+ks.length+' na fila, sobem assim que reconectar',false);
+      return {feitos:0,restam:ks.length,semToken:true}; }
+    GSYNC.precisaLogin=false;
+    for(let i=0;i<ks.length;i++){
+      const k=ks[i], it=GSYNC.fila[k]; if(!it) continue;
+      try{ const r=await gsyncAplicarItem(it); delete GSYNC.fila[k]; feitos++; ultimo=r.titulo||ultimo; }
+      catch(e){
+        const m=String(e&&e.message||e);
+        if(gsyncSemAuth(e)){ GCAL.tok=null; GCAL.exp=0; GCAL.conectado=false; GSYNC.precisaLogin=true; GSYNC.ultimoErro=m; break; }
+        it.tent=(it.tent||0)+1; it.erro=m; it.ts=Date.now(); GSYNC.ultimoErro=m;
+        if(it.tent>=GSYNC_TENT_MAX){ delete GSYNC.fila[k]; console.warn('[gsync] desisti de',k,m); }
+      }
+      gsyncSalvar();
+    }
+  } finally{ GSYNC.drenando=false; gsyncSalvar(); }
+  const restam=gsyncPendentes();
+  if(op.avisar){
+    if(feitos&&!restam) toast('Na sua Agenda Google: '+(ultimo||feitos+' compromisso(s)'),true);
+    else if(restam) toast(restam+' esperando a Agenda Google — sobe sozinho assim que der',false);
+  }
+  if(feitos) gsyncRepintar();
+  return {feitos,restam};
+}
+let _gsyncTimer=null;
+function gsyncAgendar(ms){ clearTimeout(_gsyncTimer); _gsyncTimer=setTimeout(()=>{ gsyncDrenar().then(()=>{}); }, ms||1200); }
+/* ── Google → CRM: relê só os eventos criados por este app e traz a mudança ──
+   showDeleted pega o que ele apagou no Google; a janela cobre o que o CRM
+   costuma agendar (45 dias pra trás, 8 meses pra frente). */
+async function gsyncPuxar(op){
+  op=op||{};
+  if(GSYNC.puxando) return {mudou:0};
+  const tok=await gcalTokenPra(op.gesto);
+  if(!tok){ if(GCAL.conectado) GSYNC.precisaLogin=true; return {mudou:0,semToken:true}; }
+  GSYNC.puxando=true;
+  let mud=0;
+  try{
+    const ini=new Date(); ini.setDate(ini.getDate()-45); ini.setHours(0,0,0,0);
+    const fim=new Date(); fim.setDate(fim.getDate()+240);
+    const j=await gcalApi('GET','',null,{singleEvents:'true',showDeleted:'true',maxResults:'250',
+      privateExtendedProperty:'crmApp='+GSYNC_APP, timeMin:ini.toISOString(), timeMax:fim.toISOString()});
+    (j&&j.items||[]).forEach(ev=>{
+      const p=(ev.extendedProperties&&ev.extendedProperties.private)||{};
+      if(p.crmApp!==GSYNC_APP||!p.crmTarefa) return;
+      const par=gsyncTarefa(p.crmContato,p.crmTarefa); if(!par) return;
+      const c=par.c, t=par.t;
+      if(gsyncNaFila(c.id,t.id)) return;                       /* mudança local não subida vence */
+      if(ev.status==='cancelled'){
+        if(t.gcalId===ev.id||(!t.gcalId&&t.gcalSync)){
+          delete t.gcalId; t.gcalSync=false; t.gcalFora=true; t.gcalUpd=ev.updated||t.gcalUpd;
+          interacoesDe(c).push({id:uid(),k:'tarefa',l:'Compromisso apagado na Agenda Google — a atividade segue aqui',dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+          mud++;
+        }
+        return;
+      }
+      if(t.gcalId&&t.gcalId!==ev.id) return;                   /* outro evento da mesma atividade (antigo) */
+      if(!t.gcalId){ t.gcalId=ev.id; t.gcalSync=true; t.gcalFora=false; mud++; }   /* recupera vínculo perdido */
+      if(ev.htmlLink&&t.gcalLink!==ev.htmlLink) t.gcalLink=ev.htmlLink;
+      const upd=ev.updated||'';
+      if(t.gcalUpd&&upd&&upd<=t.gcalUpd) return;               /* nada novo do lado do Google */
+      const s=gcalDT(ev,'start'), f=gcalDT(ev,'end');
+      const quando=s.d||t.quando, hora=s.t||'';
+      let dur=Number(t.dur)||60;
+      if(s.t&&f.t){ const a=Number(s.t.slice(0,2))*60+Number(s.t.slice(3,5)); let b=Number(f.t.slice(0,2))*60+Number(f.t.slice(3,5));
+        if(f.d&&s.d&&f.d>s.d) b+=1440; dur=Math.max(5,b-a); }
+      const antes=(t.quando||'')+'|'+(t.hora||'')+'|'+(Number(t.dur)||60);
+      const depois=quando+'|'+hora+'|'+dur;
+      if(antes!==depois){
+        t.quando=quando; t.hora=hora; t.dur=dur;
+        interacoesDe(c).push({id:uid(),k:'tarefa',l:'Remarcado na Agenda Google: '+dataBR(quando)+(hora?' às '+hora:' (dia todo)'),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
+        mud++;
+      }
+      t.gcalUpd=upd||t.gcalUpd;
+    });
+    if(mud){ salvar(); gsyncRepintar(); if(!op.silencioso) toast(mud+' atividade(s) atualizada(s) pela Agenda Google',true); }
+  }catch(e){ if(gsyncSemAuth(e)){ GCAL.tok=null; GCAL.exp=0; GCAL.conectado=false; GSYNC.precisaLogin=true; } GSYNC.ultimoErro=String(e&&e.message||e); console.warn('[gsync] puxar:',e); }
+  finally{ GSYNC.puxando=false; }
+  return {mudou:mud};
+}
+/* repinta sem atropelar quem está digitando (o render() é global) */
+function gsyncRepintar(){ try{ const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return; render(); }catch(_){} }
+/* o pulso: drena e puxa. Roda em QUALQUER tela (antes só na Agenda) — a
+   sincronia não pode depender de ele estar olhando pra ela. */
+function gsyncTick(forcar){
+  if(typeof document!=='undefined'&&document.hidden) return;
+  if(!GCAL.conectado&&!gsyncPendentes()) return;
+  const agora=Date.now();
+  if(!forcar&&GSYNC.ultimo&&(agora-GSYNC.ultimo)<25000) return;
+  GSYNC.ultimo=agora;
+  gsyncDrenar().then(r=>{ if(!r||!r.semToken) return gsyncPuxar({silencioso:true}); });
+}
+if(typeof window!=='undefined'){
+  window.addEventListener('online',()=>gsyncTick(true));
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gsyncTick(); });
+  window.addEventListener('focus',()=>gsyncTick());
+  setInterval(()=>gsyncTick(), 90000);
+  setTimeout(()=>{ if(gsyncPendentes()||GCAL.conectado) gsyncTick(true); }, 4000);   /* boot: fila de ontem sobe sozinha */
+}
+/* reconectar num toque (o banner) — depois de conectar, a fila sai na hora */
+async function gsyncReconectar(){
+  GCAL.erro=null;
+  const tok=await gcalTokenPra(true);
+  if(!tok){ toast('Não consegui conectar a Agenda Google — tente de novo',false); gsyncRepintar(); return; }
+  GCAL.conectado=true; GSYNC.precisaLogin=false;
+  await gsyncDrenar({gesto:true,avisar:true});
+  await gsyncPuxar({gesto:true,silencioso:true});
+  gcalCarregar();
+  gsyncRepintar();
+}
+/* estado da atividade pro olho: '' (não vai pra agenda) · 'fila' · 'ok' · 'fora' */
+function gsyncEstado(c,t){
+  if(!t) return '';
+  if(gsyncNaFila(c&&c.id,t.id)) return 'fila';
+  if(t.gcalId) return 'ok';
+  if(t.gcalFora) return 'fora';
+  return '';
+}
+function gsyncBadgeHTML(c,t){
+  const e=gsyncEstado(c,t);
+  if(e==='ok')   return `<span class="gsync-b ok" title="Espelhado na sua Agenda Google — remarcar aqui ou lá mantém os dois iguais">📅 na agenda</span>`;
+  if(e==='fila') return `<span class="gsync-b fila" title="Na fila — sobe pra Agenda Google assim que der (não precisa clicar de novo)">📅 na fila</span>`;
+  if(e==='fora') return `<span class="gsync-b fora" title="Você apagou este evento na Agenda Google — a atividade continua aqui. Clique em 📅 pra mandar de novo">📅 fora da agenda</span>`;
+  return '';
+}
+/* aviso único no topo da Agenda: só aparece quando há algo pendente de verdade */
+function gsyncAvisoHTML(){
+  const n=gsyncPendentes();
+  if(!n&&!GSYNC.precisaLogin) return '';
+  if(!n) return '';
+  const precisa=GSYNC.precisaLogin||!GCAL.conectado;
+  return `<div class="card gsync-aviso" style="padding:12px 14px;margin-bottom:10px;border:1.5px solid #f0c987;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span style="font-size:20px">⏳</span>
+    <div style="flex:1;min-width:190px"><b>${n} compromisso(s) esperando a Agenda Google</b>
+      <div style="font-size:12px;color:var(--muted)">${precisa?'A conexão com o Google venceu. Um toque reconecta e manda tudo de uma vez.':'Tentando sozinho — sobe assim que a rede deixar.'}</div></div>
+    <button class="btn btn-p gsync-cta" onclick="gsyncReconectar()">${precisa?'🔗 Reconectar e enviar':'↻ Enviar agora'}</button></div>`;
+}
+(function gsyncCss(){ if(document.getElementById('gsync-css'))return; const s=document.createElement('style'); s.id='gsync-css'; s.textContent=`
+  .gsync-b{display:inline-block;font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;line-height:1.55;white-space:nowrap}
+  .gsync-b.ok{background:#e8f6ee;color:#157347}
+  .gsync-b.fila{background:#fff4e0;color:#9a6300}
+  .gsync-b.fora{background:#fdeaea;color:#b42318}
+  @media (max-width:640px){
+    .gsync-aviso{align-items:stretch}
+    .gsync-aviso .gsync-cta{width:100%;min-height:44px}
+  }`; document.head.appendChild(s); })();
+window.gsyncEnfileirar=gsyncEnfileirar; window.gsyncReconectar=gsyncReconectar; window.gsyncTick=gsyncTick;
+/* ── 1 TOQUE: garante a atividade na Agenda Google (cria, atualiza ou recria) ──
+   Não fala com a rede aqui: marca a atividade como espelhada, ENFILEIRA e drena.
+   Se falhar (token vencido, rede fora, popup bloqueado no iPad), o item FICA na
+   fila e sobe sozinho — o clique dele não se perde mais. */
 async function gcalCriarEventoDaTarefa(cid,tid,op){
   op=op||{};
-  const c=tarContato(cid); if(!c){ if(!op.silencioso) toast('Contato não encontrado — atualize',false); return; }
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t){ if(!op.silencioso) toast('Tarefa não encontrada — atualize',false); return; }
-  if(t.tipo==='reuniao') return gcalCriarReuniaoDaTarefa(cid,tid);
-  const chave=cid+'/'+tid; if(_gcalReuniaoBusy[chave]) return; _gcalReuniaoBusy[chave]=true;
-  try{
-    const titulo=tarNomeTipo(t.tipo)+' · '+(c.nome||'');
-    const {ini,fim}=tarReuniaoInterval(t);
-    const body={ summary:titulo, description:tarEventoDescricao(c,t), location:locTexto(locPrincipal(c))||undefined, start:{dateTime:ini,timeZone:GCAL_TZ}, end:{dateTime:fim,timeZone:GCAL_TZ} };   /* MAPA-V1: local de trabalho vai no evento */
-    if(t.gcalId){ await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),body,{sendUpdates:'none'}); toast('Agenda atualizada: '+titulo,true); }
-    else{ const ev=await gcalApi('POST','',body,{sendUpdates:'none'}); if(ev&&ev.id){ t.gcalId=ev.id; salvar(); }
-      interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na agenda Google: '+titulo,dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
-      toast('Gravado na sua Agenda Google: '+titulo+' · '+(t.hora||'')+' ('+(t.dur||60)+' min)',true); }
-    render(); gcalCarregar();
-  }catch(e){ if(t.gcalId&&/404|410|not found|deleted|resource has been/i.test(String(e&&e.message||e))){ delete t.gcalId; salvar(); delete _gcalReuniaoBusy[chave]; return await gcalCriarEventoDaTarefa(cid,tid,op); }   /* BUGS-V5 #6 */
-    toast('Não consegui gravar direto na agenda ('+(e&&e.message||e)+') — abrindo o Google preenchido',false); try{ const u=tarGcalUrl(c,t); if(u) window.open(u,'_blank','noopener'); }catch(_){} }
-  finally{ delete _gcalReuniaoBusy[chave]; }
+  const par=gsyncTarefa(cid,tid);
+  if(!par){ if(!op.silencioso) toast('Atividade não encontrada — atualize',false); return; }
+  const c=par.c, t=par.t;
+  t.gcalSync=true; t.gcalFora=false; salvar();
+  gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId});
+  if(!op.silencioso) toast((t.gcalId?'Atualizando':'Mandando')+' na sua Agenda Google: '+gsyncTitulo(c,t),true);
+  gsyncRepintar();
+  const r=await gsyncDrenar({gesto:!op.silencioso,avisar:!op.silencioso});
+  if(r&&r.feitos&&GCAL.conectado) gcalCarregar();
 }
-async function gcalCriarReuniaoDaTarefa(cid,tid){
-  const c=tarContato(cid); if(!c){ toast('Contato não encontrado — atualize',false); return; }
-  const t=tarefasDe(c).find(x=>x.id===tid); if(!t){ toast('Tarefa não encontrada — atualize',false); return; }
-  if(t.tipo!=='reuniao'){ toast('Só reunião entra na agenda com etapa e cor',false); return; }
-  const chave=cid+'/'+tid; if(_gcalReuniaoBusy[chave]) return; _gcalReuniaoBusy[chave]=true;
-  try{
-    const alvo=reuniaoTituloAlvo(c);                      // "🟡 [RCP/FF] Nome" ou null
-    const tituloCru=tarNomeTipo(t.tipo)+' · '+(c.nome||''); // fallback quando a etapa não está no mapa
-    if(!alvo) console.warn('[reunião→agenda] etapa não mapeada (sem prefixo/cor):',(c.funil==='bc'?'bc':'nn')+' / '+(c.etapa||'(sem etapa)'));
-    // ── tarefa já tem evento? então SINCRONIZA (não duplica) ──
-    if(t.gcalId){
-      const ev=gcalEvPorId(t.gcalId);
-      if(alvo){
-        if(ev){ const r=reuniaoResolveTitulo(c, ev.summary||'');
-          if(r.acao==='skip'){ toast('Já está com a etapa certa na agenda',true); return; }
-          if(r.acao==='manual'){ toast('Evento com título ajustado à mão — não mexi',true); return; } }
-        await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),(()=>{ const iv=tarReuniaoInterval(t); return {summary:alvo, colorId:REUNIAO_COLOR_ID, start:{dateTime:iv.ini,timeZone:GCAL_TZ}, end:{dateTime:iv.fim,timeZone:GCAL_TZ}}; })(),{sendUpdates:'none'});   /* BUGS-V5 #7: remarcou → data vai junto */
-        toast('Agenda atualizada: '+alvo,true);
-      }else{
-        await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),{summary:tituloCru},{sendUpdates:'none'});
-        toast('Agenda atualizada (etapa não mapeada)',true);
-      }
-      await gcalCarregar(); return;
-    }
-    // ── criar novo ──
-    const {ini,fim}=tarReuniaoInterval(t);
-    const body={ summary: alvo||tituloCru, description: tarEventoDescricao(c,t), location:locTexto(locPrincipal(c))||undefined,
-      start:{dateTime:ini, timeZone:GCAL_TZ}, end:{dateTime:fim, timeZone:GCAL_TZ} };
-    if(alvo) body.colorId=REUNIAO_COLOR_ID;
-    const ev=await gcalApi('POST','',body,{sendUpdates:'none'});
-    if(ev&&ev.id){ t.gcalId=ev.id; salvar(); }
-    interacoesDe(c).push({id:uid(),k:'tarefa',l:'Reunião na agenda: '+(alvo||tituloCru),dia:hojeISO(),ts:new Date().toISOString(),por:S.activeUser});
-    toast('Reunião criada na sua agenda: '+(alvo||tituloCru),true);
-    await gcalCarregar();
-  }catch(e){ toast('Não consegui criar na agenda: '+(e&&e.message||e),false); }
-  finally{ delete _gcalReuniaoBusy[chave]; }
-}
+/* reunião entra pelo MESMO cano — etapa no título e cor Pavão vêm de gsyncCorpoEvento */
+async function gcalCriarReuniaoDaTarefa(cid,tid,op){ return gcalCriarEventoDaTarefa(cid,tid,op); }
 function gcalEditar(id){ const e=gcalEvPorId(id); if(!e){ toast('Evento não encontrado — atualize',false); return; }
   const s=gcalDT(e,'start'), f=gcalDT(e,'end');
   gcalModalEvento({id,summary:e.summary||'',description:e.description||'',dia:s.d,ini:s.t||'09:00',fim:f.t||'10:00',local:e.location||'',
@@ -9152,7 +9398,7 @@ function viewAgenda(){
       <span title="${esc(tarNomeTipo(t.tipo))}">${tarIco(t.tipo)}</span>
       <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(c.id)}')">${esc(c.nome)}</b>
         <span style="color:var(--muted)"> · ${esc(t.tit||tarNomeTipo(t.tipo))}</span>
-        <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${esc(telBR(c.telefone))}</div></span>
+        <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${esc(telBR(c.telefone))} ${gsyncBadgeHTML(c,t)}</div></span>
       <span class="qd ${tarClasse(sit)}" style="background:transparent;padding:0">${esc(tarQuandoTxt(t))}</span>
       <span class="ac">
         <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')">✓ feita</button>
@@ -9187,6 +9433,7 @@ function viewAgenda(){
   $('#main').innerHTML=`<h1 class="pg">Agenda &amp; Tarefas</h1>
     <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
     ${gcalBlocoHTML()}
+    ${gsyncAvisoHTML()}
     <div class="kpis" style="margin-bottom:12px">
       ${cont.aFinalizar?`<div class="kpi" style="border:1.5px solid #f3c9c9"><div class="lbl">A finalizar</div><div class="num" style="font-size:19px">${cont.aFinalizar}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">reuniões sem desfecho</div></div>`:''}
       <div class="kpi"${cont.atrasadas?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Atrasadas</div><div class="num" style="font-size:19px">${cont.atrasadas}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">venceram e seguem abertas</div></div>
@@ -15282,7 +15529,7 @@ function lpSelfCheck(){
     ok('V10: pushResiliente único (funil+Estoque), 401/JWT transitório, sucesso zera PUSH_ERR, contaConferir nos 3 pontos, cart_perfis limpa', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); return typeof pushResiliente==='function'&&String(lpcPush).includes('pushResiliente(')&&String(bnPush).includes('pushResiliente(')&&String(pushResiliente).includes('jwt|expired|401')&&String(pushResiliente).includes('delete PUSH_ERR[x.id]')&&typeof contaConferir==='function'&&String(perfilCarregar).includes('contaConferir(')&&String(sincronizarDados).includes('contaConferir(')&&src.includes('if(contaConferir()) return;')&&CONTA_CHAVES.includes('crmlp_cart_perfis_v1')&&String(contaLimparCache).includes('CONTA_TROCANDO=true'); })());
     ok('V9 (regressão V8): conta-trocou no boot antes dos loaders + trava de escrita; fora da delegação desiste já; erro de rede não conta; offline não sincroniza; persist/assinatura limpam', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); return src.includes('CONTA-TROCOU-V2')&&src.includes('function salvar(opts){ if(window.CONTA_TROCANDO) return;')&&String(pendSalvar).includes('CONTA_TROCANDO')&&String(pushResiliente).includes('PUSH_ERR[x.id]=5')&&String(pushResiliente).includes('transitório')&&String(pendRetentar).includes('navigator.onLine===false')&&CONTA_CHAVES.includes('crmlp_persist_v1')&&!String(perfilCarregar).includes('crmlp_dono_v1'); })());
     ok('MULTIUSUÁRIO-V8: troca de conta limpa cache; Sair existe; dono carimbado na edição; push resiliente (1 a 1, fora da delegação não sobe, teto 5); offline volta sozinho; boot espera delegações; sync enfileira; escAtual memo; prefs com try', (()=>{ const a=typeof contaLimparCache==='function'&&typeof sairDaConta==='function'&&CONTA_CHAVES.includes('crmlp_pend_v1')&&[...document.scripts].map(x=>x.textContent).join('').includes('crmlp_dono_v1'); const _src=[...document.scripts].map(x=>x.textContent).join(''); const b=_src.includes('DONO-NA-EDI'+'ÇÃO-V1')&&_src.split('c._dono=d; }').length>=3; const c=String(pushResiliente).includes('linha a linha')&&String(pushResiliente).includes('vis.has(x.dono)'); const d=String(pendRetentar).includes('lpcRemoteOn'); const e=[...document.scripts].map(x=>x.textContent).join('').includes('BOOT-DELEG-V1'); const f=String(sincronizarDados).includes('_syncPedido'); const g=typeof escAtualCalc==='function'&&String(escSet).includes('_escMemo=null'); const h=[funPrefSalvar,ctPrefSalvar,bnPrefSalvar,taPrefSalvar,recPrefSalvar].every(x=>String(x).includes('try{')); return a&&b&&c&&d&&e&&f&&g&&h; })());
-    ok('BUGS-V7: salvar()/bnSalvar() marcam pendente mesmo com cache vazio (só doServidor não marca); status lembra a etapa; recursão do gcal com await; leaflet remove script em erro', (()=>{ const a=!String(salvar).includes('_primeiraFoto')&&!String(bnSalvar).includes('primeiraFoto'); const c={id:'zs7',etapa:'TA',status:'X',status_etapa:'OI/FF'}; const b=etStatusDe(c)===''; const d=String(gcalCriarEventoDaTarefa).includes('return await gcalCriarEventoDaTarefa'); const e=String(mapaLeaflet).includes('sc.remove()'); return a&&b&&d&&e; })());
+    ok('BUGS-V7: salvar()/bnSalvar() marcam pendente mesmo com cache vazio (só doServidor não marca); status lembra a etapa; recursão do gcal com await; leaflet remove script em erro', (()=>{ const a=!String(salvar).includes('_primeiraFoto')&&!String(bnSalvar).includes('primeiraFoto'); const c={id:'zs7',etapa:'TA',status:'X',status_etapa:'OI/FF'}; const b=etStatusDe(c)===''; const d=String(gsyncAplicarItem).includes('gsyncSumiu(e)) throw e;')&&String(gsyncAplicarItem).includes('criou=true'); const e=String(mapaLeaflet).includes('sc.remove()'); return a&&b&&d&&e; })());
     ok('BUGS-V6: PLACED abas/janela/robustez, subAddMonths clampa, desfecho recente preservado, nomes só marcados se mudaram, cnt-bo no escopo, 29/02, dias_pendentes numérico', (()=>{ const a=subAddMonths('2026-01-31',1)==='2026-02-28'&&subAddMonths('2026-03-31',1)==='2026-04-30'; const src=[...document.scripts].map(x=>x.textContent).join(''); const b=src.indexOf("S."+"aba=")<0&&String(plSetCfg).includes('janela:')&&!src.includes('plJanela'+' incompleta'); const c=String(plTogglePend).includes('if(!p) return'); const d=String(emDias).includes('Number(r.dias_pendentes)'); const e=String(soRow).includes('escEmailDoLp'); const f=lpDiasAte('--02-29')!==null; return a&&b&&c&&d&&e&&f; })());
     ok('IMPORT-DONO-V3: no import de emitidas, carteira/funil só pra linha do meu dono', String(exAplicarUI).includes('donoLinha!==meuDono'));
     ok('BUGS-V5: lp de contato novo vem do escopo; funis extras na ficha/resultado; meia-noite; undo restaura status; locRemover por objeto; nome null vira vazio; ids comparados como string', (()=>{ const a=typeof escLpNovo==='function'&&String(escLpNovo()).length>0; const vg=ETAPAS_MAP.vg?etapasDoFunil('vg')===ETAPAS_MAP.vg.ids:true; const iv=tarReuniaoInterval({quando:'2026-09-15',hora:'23:30',dur:60}); const b=iv.fim.startsWith('2026-09-16T00:30'); const u=tarGcalUrl({id:'x',nome:'Zz'},{quando:'2026-09-15',hora:'23:30',dur:60}).includes('/20260916T003000'); const n=normContato({id:'zn'}); const c=n.nome===''; const d=String(drwMoverFunil).includes("dest==='nn')?'nn':dest")&&String(registrarResultado).includes('etapasDe(c).includes(alvo0)')&&String(locRemover).includes('locDe(c)[i]')&&String(funAvancar).includes('stAntes')&&String(ctMoverDono).includes('Object.assign(c,antes)')&&String(bnLevarProFunil).includes('bnSalvar')&&!String(nnMoveEtapa).includes('x.id===id)'); return a&&vg&&b&&u&&c&&d; })());
@@ -15294,9 +15541,75 @@ function lpSelfCheck(){
     ok('ROTINAS-V1: rotina por local (dias/turno/hora) normaliza, não duplica, filtra o mapa por dia+turno e aparece na ficha', (()=>{ const l={tipo:'trabalho',nome:'RHP',lat:-8,lng:-34}; const a=locRotinaAdd(l,{dias:['sex'],turno:'manha'}); const b=!locRotinaAdd(l,{dias:'sex',turno:'manha'}); const c=locRotinaAdd(l,{dias:['qua'],ini:'08:00',fim:'12:00',obs:'exame'}); const t=locRotinaTxt(l.rotinas[1]); const d=locRotinaBate(l,'sex','manha')&&!locRotinaBate(l,'sex','tarde')&&locRotinaBate(l,'qua','')&&!locRotinaBate({},'sex','')&&locRotinaBate({},'','');
       const c2={id:'zr',nome:'Zz',locais:[l]}; const h=fichaPessoaHtml(c2,'card'); return a&&b&&c&&t==='Qua · 08:00–12:00 · exame'&&d&&h.includes('Sex · manhã')&&!locRotinaNorm({dias:[],turno:'',ini:'',obs:''}); })());
     ok('MAPA-V1: locais puros (add/dedupe/principal=trabalho), evento da Agenda leva o local, tela mapa registrada, widget na ficha e no Estoque', (()=>{ const c={id:'zl',nome:'Zz'}; const a=locAddPuro(c,{tipo:'casa',nome:'Casa',end:'Rua A',lat:-8.05,lng:-34.9}); const b=locAddPuro(c,{tipo:'trabalho',nome:'Hospital X',end:'Av B',lat:-8.06,lng:-34.91}); const d=!locAddPuro(c,{tipo:'outro',nome:'Hospital X',lat:-8.06001,lng:-34.91001}); const okP=locPrincipal(c).nome==='Hospital X'&&locTexto(locPrincipal(c))==='Hospital X, Av B'; const okG=mapaGrupos([{c,l:c.locais[0]},{c,l:c.locais[1]},{c:{id:'z2'},l:{...c.locais[1]}}])[0].pessoas.length===2;
-      const okEv=String(gcalCriarEventoDaTarefa).includes('location:locTexto(locPrincipal(c))')&&String(gcalCriarReuniaoDaTarefa).includes('location:locTexto(locPrincipal(c))')&&tarGcalUrl(c,{quando:'2026-09-15',hora:'10:00'}).includes('&location=');
+      const okEv=String(gsyncCorpoEvento).includes('location:locTexto(locPrincipal(c))')&&tarGcalUrl(c,{quando:'2026-09-15',hora:'10:00'}).includes('&location=');
       const okView=typeof viewMapa==='function'&&VIEWS_CONHECIDAS.includes('mapa')&&HUB_SECOES.some(sx=>sx.itens.some(i=>i.view==='mapa'))&&!!document.querySelector('.nav-btn[data-view="mapa"]');
       const okW=String(drwPessoaHtml).includes("locWidgetHtml('ct:'")&&String(bnEditorHtml).includes("locWidgetHtml('bn:'"); const okN=geoNormNominatim({name:'Real Hospital Português',lat:'-8.05',lon:'-34.9',address:{road:'Av. Agamenon',house_number:'4760',suburb:'Paissandu',city:'Recife',state:'Pernambuco'}}); return a&&b&&d&&okP&&okG&&okEv&&okView&&okW&&okN.nome==='Real Hospital Português'&&okN.end.includes('Paissandu')&&okN.lat===-8.05; })());
+    /* ═══ ESTABILIDADE-DE-TELA-V1 (14/09): repintura não pode mover a tela ═══ */
+    ok('estabilidade: as duas repinturas (render e renderDrawer) estão embrulhadas',
+       !!window.render.__estab&&!!window.renderDrawer.__estab&&String(estabFoto).includes('estabFocoFoto'));
+    ok('estabilidade: a foto acha o que rola e o caminho reencontra o MESMO nó depois de repintar',
+       (()=>{ const h=document.createElement('div'); h.innerHTML='<div><div id="e1" style="height:40px;overflow:auto"><div style="height:400px"></div></div></div>';
+         document.body.appendChild(h);
+         try{ const alvo=h.querySelector('#e1'); alvo.scrollTop=120;
+           const f=estabRolagens(h); const achou=f.find(r=>r.t>0);
+           if(!achou) return false;
+           const html=h.innerHTML; h.innerHTML=html;                    /* repintura: nós novos, mesma estrutura */
+           const novo=estabPorCaminho(h,achou.k);
+           const ok1=!!novo&&novo.id==='e1'&&novo.scrollTop===0;
+           estabReporRolagens(h,f);
+           return ok1&&novo.scrollTop===120; }
+         finally{ h.remove(); } })());
+    ok('estabilidade: o texto que ele digitava volta pro campo depois da repintura (e dado novo do servidor ganha)',
+       (()=>{ const h=document.createElement('div'); h.innerHTML='<input id="e2-tit" value="">'; document.body.appendChild(h);
+         try{ const i=h.querySelector('#e2-tit'); i.value='retomar a proposta';
+           const foto={id:'e2-tit',tag:'INPUT',val:'retomar a proposta',ini:null,fim:null};
+           h.innerHTML='<input id="e2-tit" value="">'; estabFocoRepor(foto);
+           const a=h.querySelector('#e2-tit').value==='retomar a proposta';
+           h.innerHTML='<input id="e2-tit" value="veio do servidor">'; estabFocoRepor(foto);
+           const b=h.querySelector('#e2-tit').value==='veio do servidor';
+           return a&&b; }
+         finally{ h.remove(); } })());
+    /* ═══ GCAL-BIDIRECIONAL-V1 (14/09): fila persistida + volta do Google ═══ */
+    { const _fila=GSYNC.fila; GSYNC.fila={};
+      try{
+        const c={id:'gb1',nome:'Cliente Teste',funil:'nn',etapa:'OI/FF',telefone:'81999990000',tarefas:[],interacoes:[]};
+        const tH={id:'th',tipo:'ligar',tit:'Ligar',quando:'2026-10-20',hora:'14:00',dur:30};
+        const tS={id:'ts',tipo:'follow',tit:'Follow',quando:'2026-10-21',hora:''};
+        const tR={id:'tr',tipo:'reuniao',tit:'Reunião',quando:'2026-10-22',hora:'09:00',dur:60};
+        const bH=gsyncCorpoEvento(c,tH), bS=gsyncCorpoEvento(c,tS), bR=gsyncCorpoEvento(c,tR);
+        ok('gsync: com hora vira evento com início/fim e fuso',
+           bH.start.dateTime==='2026-10-20T14:00:00'&&bH.end.dateTime==='2026-10-20T14:30:00'&&bH.start.timeZone===GCAL_TZ);
+        ok('gsync: SEM hora vira dia inteiro (start.date e end no dia seguinte)',
+           bS.start.date==='2026-10-21'&&bS.end.date==='2026-10-22'&&!bS.start.dateTime);
+        ok('gsync: todo evento sai carimbado (crmApp/crmTarefa/crmContato) — é o que permite a volta',
+           bH.extendedProperties.private.crmApp==='crmlp'&&bH.extendedProperties.private.crmTarefa==='th'&&bH.extendedProperties.private.crmContato==='gb1');
+        ok('gsync: reunião com etapa mapeada leva prefixo + cor Pavão',
+           bR.summary===reuniaoTituloAlvo(c)&&bR.colorId===REUNIAO_COLOR_ID&&/\[OI\/FF\]/.test(bR.summary));
+        ok('gsync: etapa fora do mapa = título cru, sem cor',
+           (()=>{ const cx=Object.assign({},c,{etapa:'ETAPA-QUE-NAO-EXISTE'}); const b=gsyncCorpoEvento(cx,tR); return !b.colorId&&b.summary.indexOf('Reunião')===0; })());
+        ok('gsync: fila persiste por contato|tarefa e o apagar guarda o gcalId',
+           (()=>{ gsyncEnfileirar('gb1','th','upsert'); gsyncEnfileirar('gb1','ts','apagar',{gcalId:'ev9'});
+             const a=gsyncNaFila('gb1','th')&&gsyncNaFila('gb1','ts')&&!gsyncNaFila('gb1','tr');
+             const b=GSYNC.fila[gsyncChave('gb1','ts')].gcalId==='ev9'&&gsyncPendentes()===2;
+             const j=JSON.parse(localStorage.getItem(GSYNC_CHAVE)||'{}'); return a&&b&&!!(j.fila&&j.fila['gb1|ts']); })());
+        ok('gsync: estado da atividade — fila > já na agenda > apagada no Google',
+           gsyncEstado(c,tH)==='fila'&&gsyncEstado(c,{id:'zz',gcalId:'e1'})==='ok'&&gsyncEstado(c,{id:'zy',gcalFora:true})==='fora'&&gsyncEstado(c,{id:'zx'})==='');
+        ok('gsync: o botão 📅 conta o estado (⏳ na fila · ↻ já está lá) e nunca cai na tela do Google com data',
+           (()=>{ const h1=tarGcalAcaoHTML(c,tH), h2=tarGcalAcaoHTML(c,{id:'zz',tipo:'ligar',quando:'2026-10-20',gcalId:'e1'});
+             return h1.includes('⏳')&&h2.includes('↻')&&!h1.includes('calendar/render')&&!h2.includes('calendar/render'); })());
+        ok('gsync: mudou a atividade que já vive na agenda → volta pra fila sozinha',
+           (()=>{ GSYNC.fila={}; gsyncMudou(c,{id:'zz',gcalId:'e1'}); const a=gsyncNaFila('gb1','zz');
+             GSYNC.fila={}; gsyncMudou(c,{id:'zw'}); return a&&!gsyncNaFila('gb1','zw'); })());
+      } finally{ GSYNC.fila=_fila; gsyncSalvar(); }
+    }
+    ok('gsync: o pulso roda em QUALQUER tela (não olha VIEW), para com a aba escondida e a fila vence o Google',
+       !String(gsyncTick).includes("VIEW")&&String(gsyncTick).includes('document.hidden')&&String(gsyncPuxar).includes('if(gsyncNaFila(c.id,t.id)) return;'));
+    ok('gsync: evento apagado no Google NUNCA apaga a atividade — só marca fora da agenda',
+       String(gsyncPuxar).includes("t.gcalFora=true")&&!/tarefas=.*filter/.test(String(gsyncPuxar)));
+    ok('gsync: remarcar/concluir/remover no CRM mexem no Google; troca de conta limpa a fila',
+       String(tarAdiar).includes('gsyncMudou')&&String(tarConcluir).includes("'apagar'")&&String(tarRemover).includes("'apagar'")&&CONTA_CHAVES.includes('crmlp_gsync_v1'));
+    ok('gsync: token nunca pendura a fila (corrida com timeout) e não abre tela pra quem nunca conectou',
+       String(gcalTokenPra).includes('Promise.race')&&String(gcalTokenPra).includes('setTimeout')&&String(gcalTokenPra).includes('!GCAL.conectado'));
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
     ok('BF-HISTORICO-V1: Benefícios tem KPI de pagos e chip Histórico (encerrados não somem)', (()=>{ const bk=BF.itens; BF.itens=[{id:'z1',situacao:'pago',valor_pago:100,segurado:'Zz',lp:'Gustavo'}]; try{ const V=VIEW; viewBeneficios(); const h=$('#main').innerHTML; return h.includes('Pagos (histórico)')&&h.includes('Histórico (1)'); } finally{ BF.itens=bk; } })());
@@ -16901,6 +17214,86 @@ function bnavRestaurar(){ bnavSalvar(BNAV_PADRAO.slice()); const bd=document.get
 (function(){
   const f=window.render; if(typeof f!=='function') return;
   window.render=function(){ const r=f.apply(this,arguments); try{ bnavPintar(); }catch(e){ console.warn('bnav:',e); } return r; };
+})();
+/* ═══ ESTABILIDADE-DE-TELA-V1 (14/09/2026) ═══════════════════════════════════
+   Pedido dele: "toda vez que clico num campo de tarefa ou atualizo um dado, a
+   tela sobe sozinha — preciso seguir de onde estou."
+   Causa: cada ação repinta trocando o innerHTML do #main e do #drawer. Trocar
+   innerHTML DESTRÓI os elementos, e com eles vão junto a posição de rolagem
+   (da janela, da ficha, do quadro que rola de lado) e o foco do campo. Quem
+   estava no meio da ficha voltava pro topo; quem estava digitando perdia o
+   cursor. Nenhuma tela tinha culpa: era a repintura.
+   Correção, num lugar só: toda repintura tira uma FOTO antes (rolagem da janela
+   + de tudo que rola dentro de #main/#drawer + foco + cursor + o texto que ele
+   estava digitando num campo que não mora no estado) e REPÕE na mesma batida,
+   mais uma conferida no quadro seguinte (o navegador às vezes só recalcula a
+   altura depois). Vale igual no celular e no desktop — é a MESMA repintura. */
+const ESTAB_MAX_NOS=6000;                 /* teto de varredura: tela gigante não paga pedágio */
+function estabRolagens(raiz){
+  const out=[]; if(!raiz) return out;
+  const pilha=[[raiz,'']]; let n=0;
+  while(pilha.length&&n++<ESTAB_MAX_NOS){
+    const par=pilha.pop(), el=par[0], k=par[1];
+    if(k&&(el.scrollTop>0||el.scrollLeft>0)) out.push({k:k,t:el.scrollTop,l:el.scrollLeft});
+    const f=el.children; for(let i=0;i<f.length;i++) pilha.push([f[i],k+'/'+i]);
+  }
+  return out;
+}
+function estabPorCaminho(raiz,k){ let el=raiz; const ps=String(k).split('/');
+  for(let i=0;i<ps.length;i++){ if(ps[i]==='') continue; el=el&&el.children[Number(ps[i])]; if(!el) return null; }
+  return el; }
+function estabReporRolagens(raiz,lista){ if(!raiz||!lista||!lista.length) return;
+  for(let i=0;i<lista.length;i++){ const r=lista[i], el=estabPorCaminho(raiz,r.k);
+    if(el){ if(r.t) el.scrollTop=r.t; if(r.l) el.scrollLeft=r.l; } } }
+/* foto do foco: só campo COM id (é por ele que a gente reencontra o novo elemento) */
+function estabFocoFoto(){
+  try{ const a=document.activeElement;
+    if(!a||!a.id||!/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return null;
+    const f={id:a.id,tag:a.tagName,val:('value' in a)?a.value:null,ini:null,fim:null};
+    try{ f.ini=a.selectionStart; f.fim=a.selectionEnd; }catch(_){}
+    return f; }catch(_){ return null; }
+}
+function estabFocoRepor(f){
+  if(!f) return; const el=document.getElementById(f.id); if(!el||el.tagName!==f.tag) return;
+  /* o que ele digitava (ex.: "O que fazer") não mora no estado — a repintura
+     devolvia o campo VAZIO e o texto sumia. Só repõe quando o campo voltou
+     vazio; se a repintura trouxe conteúdo, esse é dado de verdade e ganha. */
+  try{ if(f.val&&('value' in el)&&el.value==='') el.value=f.val; }catch(_){}
+  if(document.activeElement===el) return;
+  try{ el.focus({preventScroll:true}); }catch(_){ try{ el.focus(); }catch(__){} }
+  try{ if(f.ini!=null&&el.setSelectionRange&&(f.tag==='TEXTAREA'||/^(text|search|url|tel|password)$/i.test(el.type||'text'))) el.setSelectionRange(f.ini,f.fim); }catch(_){}
+}
+function estabFoto(){
+  return { y:(window.scrollY||window.pageYOffset||0), x:(window.scrollX||window.pageXOffset||0),
+           main:estabRolagens(document.getElementById('main')),
+           drw:estabRolagens(document.getElementById('drawer')),
+           foco:estabFocoFoto() };
+}
+function estabRepor(s){
+  if(!s) return;
+  try{
+    estabReporRolagens(document.getElementById('main'),s.main);
+    estabReporRolagens(document.getElementById('drawer'),s.drw);
+    estabFocoRepor(s.foco);
+    if(Math.abs((window.scrollY||window.pageYOffset||0)-s.y)>1||Math.abs((window.scrollX||window.pageXOffset||0)-s.x)>1) window.scrollTo(s.x,s.y);
+  }catch(e){ console.warn('estabilidade:',e); }
+}
+/* envolve as DUAS repinturas do app. Fica por último de propósito: assim a foto
+   é tirada antes de qualquer outro embrulho (bnav, cartões) e reposta depois. */
+(function estabEnvolver(){
+  ['render','renderDrawer'].forEach(function(nome){
+    const f=window[nome]; if(typeof f!=='function'||f.__estab) return;
+    const g=function(){
+      const s=estabFoto();
+      const r=f.apply(this,arguments);
+      estabRepor(s);
+      /* segunda conferida: em tela que muda de altura o navegador só recalcula
+         o limite de rolagem no quadro seguinte e "derruba" a posição de novo */
+      try{ requestAnimationFrame(function(){ if(Math.abs((window.scrollY||0)-s.y)>2) window.scrollTo(s.x,s.y); estabReporRolagens(document.getElementById('drawer'),s.drw); }); }catch(_){}
+      return r;
+    };
+    g.__estab=true; window[nome]=g;
+  });
 })();
 funPrefLer();
 sideRestaurar();
