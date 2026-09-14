@@ -2,6 +2,53 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14/09/2026 (2ª onda) — AGENDA FLUIDA: arrastar pra mover, título nítido, nada trava
+
+**v7.60.** Pedido dele: "mais fluidez, menos crivação; os nomes dos eventos têm que estar nítidos; fácil de mover e organizar — a mesma experiência do Google Agenda."
+- **Arrastar pra mover:** na grade do dia o bloco segue o dedo/mouse e cai de 15 em 15 min; a **borda de baixo estica** a duração; na semana, arrastar o chip pra outra coluna muda o DIA mantendo a hora. Mouse no desktop, **segurar ~320 ms** no toque (mesma receita do DRAG-TOUCH-V1 dos funis, pra não brigar com a rolagem). Arrasto curto sem sair do lugar = clique (abre o editor).
+- **Título nítido:** 13px/700 com até 3 linhas conforme a altura do bloco (era 11,5px cortado numa linha), bloco com altura mínima de 34px e hora de início–fim.
+- **Menos crivação:** clicar no vazio da grade cria naquele horário; a grade aparece **mesmo no dia vazio**; **linha vermelha do AGORA**; mudar o início **leva o fim junto** (mantém a duração) e salvar **nunca mais é barrado** por "o fim tem que ser depois do início" — o app conserta e segue; atalhos −15/+15/+1h/amanhã/+7d no editor.
+- **Mover otimista:** a tela responde no mesmo toque, grava no Google e, se o evento nasceu de uma atividade do CRM, a atividade anda junto na hora. Se o Google recusar, **volta pro lugar** (nunca fica meio movido).
+- **Achado:** a camada de avisos (`#toasts`) **engolia o toque** por 2,6 s depois de cada ação — sem `pointer-events:none`, tocar no que estava embaixo não fazia nada. Era uma fonte silenciosa de "cliquei e não foi". Corrigido.
+- **Leitura da data do evento virou fonte ÚNICA** (`gsyncDataDoEvento`): o pull periódico e o arrasto leem do mesmo lugar.
+
+**Provas:** portão 4/4 verde (38 telas); **14/14** num teste de arrasto real no navegador (mouse e toque via CDP, desktop e 390px); 12 invariantes novos no lpSelfCheck.
+
+## 14/09/2026 — Agenda Google BIDIRECIONAL (fila que não perde clique) · Tela que não sobe mais · Trava de troca de conta que estava inerte
+
+**Estado em 30s:** branch `claude/google-calendar-sync-bidirectional-ruaeiq` — **v7.59**, portão VERDE (38 telas × {375,1280} × {cheia,vazia}, lpSelfCheck 0, funSelfCheck 0) + `--prova` acusando o defeito injetado. **Aguarda OK dele pra merge.** Sessão feita do iPad (MacBook no suporte Apple), 100% na nuvem.
+
+### 1. GCAL-BIDIRECIONAL-V1 — o caso Davi
+**Sintoma dele:** "adicionei tarefa na oportunidade do Davi, cliquei pra mandar pra agenda do Google, não refletiu."
+**Causa:** mandar pra agenda era um TIRO ÚNICO sem rede de segurança. Token do Google vencido, popup de consentimento bloqueado (Safari do iPad bloqueia popup que não nasce do toque) ou rede oscilando = o clique não virava nada, nem evento nem sinal. E não existia caminho de volta: remarcar/apagar no Google não mexia no CRM.
+**Correção (uma via, dois sentidos):**
+- **CRM → Google:** toda mudança (criar com hora, clicar 📅, remarcar, concluir, remover) ENFILEIRA num `crmlp_gsync_v1` PERSISTIDO. Drena no boot, ao voltar o foco, a cada 90 s, quando a rede volta e ao reconectar. Clique não se perde mais.
+- **Google → CRM:** o app relê só os eventos que ele mesmo criou (`extendedProperties.private.crmApp='crmlp'`) e traz de volta **dia, hora e duração**. Evento apagado lá → atividade marcada "fora da agenda", **nunca apagada** (dado do CRM não some por fora). Título NÃO volta do Google (texto livre é do CRM).
+- **Conflito:** quem tem item na fila (mudança local não subida) vence; sem fila, vence o carimbo mais novo (`ev.updated` × `t.gcalUpd`).
+- **Sem hora = evento de dia inteiro** (antes, atividade sem hora simplesmente não ia).
+- **Onde roda:** QUALQUER tela (antes só com a Agenda aberta na cara).
+- **Concluir antes do dia** tira o compromisso futuro da agenda; **remover** apaga o evento; reunião mantém etapa no título + cor Pavão e respeita título ajustado à mão no Google.
+- **UI:** selo na atividade (📅 na agenda · na fila · fora da agenda) e um aviso único na Agenda ("N esperando · Reconectar e enviar", botão 44px no celular).
+
+### 2. ESTABILIDADE-DE-TELA-V1
+**Sintoma dele:** "toda vez que clico num campo de tarefa ou atualizo um dado, a tela sobe sozinha."
+**Causa:** cada ação repinta trocando `innerHTML` de `#main`/`#drawer` — e trocar innerHTML DESTRÓI os nós, levando junto rolagem e foco. **Medido na main:** a ficha pulava de **420 → 0**, o foco se perdia e o texto digitado sumia.
+**Correção:** `render` e `renderDrawer` embrulhados: foto antes (rolagem da janela + de tudo que rola em #main/#drawer + foco + cursor + texto digitado em campo que não mora no estado) e reposição na mesma batida + conferida no quadro seguinte. Medido depois: 420 → 420, foco e cursor no lugar, nos DOIS tamanhos.
+
+### 3. Achado de brinde: a trava de troca de conta estava INERTE
+O guarda do V10.1 (`localStorage.setItem` bloqueado durante troca de conta) era escrito com `Object.defineProperty` **no objeto** `localStorage` — num objeto Storage isso cai no *named property setter* do navegador (vira um ITEM chamado 'setItem') e a chamada seguia indo pro método do prototype. **O invariante V10.1 estava VERMELHO na main** (reproduzido no portão, antes e depois, no arquivo da main). Agora a trava mora em `Storage.prototype.setItem` — provado verde.
+
+### Provas
+- Portão 4/4 verde (38 telas), `--prova` OK. Guard do choke point OK.
+- **17/17** num teste funcional com a API do Google DUBLADA (navegador de verdade): carimbo, dia inteiro, remarcar dos dois lados, offline → fila → sobe sozinho, apagar no Google, remover no CRM, recriar sem duplicar, fila local vencendo o Google.
+- **14/14** de estabilidade em 390 e 1280 (lista, ficha, +1d, foco/cursor/texto, quadro que rola de lado).
+- 15 invariantes novos no `lpSelfCheck` (rodam no portão pra sempre).
+
+### Pendências
+- **Gustavo:** conferir logado no iPad (clicar 📅 numa tarefa do Davi, remarcar no Google e ver voltar) e **autorizar o merge**.
+- Nenhuma migration, nenhum dado tocado. Fila e sincronia são 100% client-side (sem servidor novo).
+- Frentes anteriores seguem: Victor resubir emitidas · Daniel carteira real · extensão WhatsApp no CRM · MAPA & LOCAIS (rota do dia).
+
 ## 10-11/09/2026 — Painel TA nativo · Estágio único · Escopo único (RLS unificada) · SitPlan unificado · listas do método · auditoria das bases
 
 **Estado em 30s:** `main` — **v7.58.1 no ar** (caça a bugs 11–12/09: 7 rodadas, PRs #227–#235, ~60 correções: handlers do PLACED, lp do contato novo, foto inicial/PEND, funis extras, agenda meia-noite/404, multiusuário (troca de conta limpa cache, dono na edição, push resiliente, SW v3), cfg admin, escopo em todos os leitores; anterior: v7.52 (PRs #210–#226: … MAPA & LOCAIS v7.50/7.51 (locais+rotinas na ficha/Estoque, busca OSM, local no evento da Agenda, Mapa filtra dia/turno), GCAL-SEM-TELA, CFG-ADMIN (cfg global só admin, RLS), ESCOPO-TUDO v1/v2, crm-mcp v2.5 (buscar_local/definir_locais c/ rotinas), prompt do assistente no Notion; antes: SEGURANÇA-V1/V2/V3 + varredura diária 02:00, DRAG-TOUCH no iPhone, STATUS-ETAPA-V1, IMPORT-DONO-V1 (relatório roteia por LP; Victor delegado por Daniel), LP-ROTULO-PORTA-V1, CARTEIRA-SEGURA-V1, CFG-SALVAR-V2). Supabase playground = PRODUÇÃO. Portão = 37 telas × {375,1280} × {cheia,vazia}. Frente "Painel TA / SitPlan × TA" **FECHADA**; sobra só ele conferir logado.
