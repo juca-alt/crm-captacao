@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.60 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.61 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1293,6 +1293,7 @@
     <!-- PIPE NEGÓCIOS (os 5 funis) -->
     <button class="nav-grp modulo nav-grp-btn fechado" id="pipe-toggle" onclick="toggleGrp('pipe')"><span class="ic">📈</span><span class="lbl">Pipe Negócios</span><span class="caret" id="pipe-caret">▾</span></button>
     <div class="nav-grp-wrap fechado" id="pipe-group">
+      <button class="nav-btn sub" data-view="consolidado" onclick="irPara('consolidado')"><span class="ic">🔭</span><span class="lbl">Visão Consolidada</span></button>
       <button class="nav-btn sub" data-view="nn-funil" onclick="irPara('nn-funil')"><span class="ic">🎯</span><span class="lbl">Novos Negócios</span></button>
       <button hidden class="nav-grp nav-sub-et nav-grp-btn fechado" id="nn-et-toggle" onclick="toggleGrp('nn-et')"><span class="lbl">Etapas Novos Negócios</span><span class="caret" id="nn-et-caret">▾</span></button>
       <div hidden class="nav-grp-wrap fechado" id="nn-etapas"></div>
@@ -3413,6 +3414,141 @@ function funScrollRestaurar(p){
   if(p.py!=null && Math.abs(window.scrollY-p.py)>1) window.scrollTo(0,p.py);
 }
 
+/* ═══ FUNIL-CONSOLIDADO-V1 (14/09/2026) ══════════════════════════════════════
+   Pedido dele: "quero uma visão unificada dos funis, tipo um funil consolidado,
+   e eu seleciono os funis que quero ver. Não é tela de manipulação e operação
+   do dia a dia — é painel visual pra nortear minha visão do funil."
+   Então aqui NÃO se arrasta, não se edita, não se move nada: é leitura. Clicar
+   num nome abre a ficha, clicar num funil abre o funil — só navegação.
+   A régua única usa o DE-PARA JÁ APROVADO (o mesmo que carimba a etapa no
+   título da reunião, aprovado em 27/08): Abertura = [OI/FF] · Proposta &
+   Fechamento = [PC] · Entrega = [DELIVERY]. Antes da abertura é Prospecção;
+   etapa de encerramento é Encerrado. Funil SEM de-para (Vida em Grupo, Prud.
+   Demais, MFO) entra pela POSIÇÃO na régua do próprio funil — e a tela escreve
+   isso, pra ninguém achar que o app inventou equivalência de etapa sozinho. */
+const CONSOL_CHAVE='crmlp_consol_v1';
+const CONSOL_FAIXAS=[
+  {k:'prosp',ic:'🟠',nome:'Prospecção',           desc:'antes da abertura',      cor:'#f59e0b'},
+  {k:'abert',ic:'🟡',nome:'Abertura',             desc:'OI/FF · revisita',       cor:'#eab308'},
+  {k:'prop', ic:'🟢',nome:'Proposta & Fechamento',desc:'P/C, negociação, emissão',cor:'#16a34a'},
+  {k:'entr', ic:'📦',nome:'Entrega',              desc:'delivery da apólice',    cor:'#8b5cf6'},
+  {k:'enc',  ic:'⛔',nome:'Encerrados',           desc:'fora do jogo',           cor:'#94a3b8'}
+];
+let CONSOL={funis:null};
+function consolLer(){ if(!CONSOL.funis){ try{ const o=JSON.parse(localStorage.getItem(CONSOL_CHAVE)||'null'); if(o&&Array.isArray(o.funis)) CONSOL.funis=o.funis; }catch(_){} }
+  if(!CONSOL.funis||!CONSOL.funis.length) CONSOL.funis=['nn','bc']; return CONSOL.funis; }
+function consolSalvar(){ try{ localStorage.setItem(CONSOL_CHAVE,JSON.stringify({funis:CONSOL.funis})); }catch(_){} }
+function consolDisponiveis(){ return FUNIS.filter(f=>(f[0]==='nn'||f[0]==='bc')||(modOn('funis_extra')&&ETAPAS_MAP[f[0]])); }
+function consolSel(){ const d=consolDisponiveis().map(f=>f[0]); const s=consolLer().filter(f=>d.includes(f)); return s.length?s:d.slice(0,2); }
+window.consolToggle=function(f){ consolLer(); const i=CONSOL.funis.indexOf(f); if(i<0) CONSOL.funis.push(f); else if(CONSOL.funis.length>1) CONSOL.funis.splice(i,1); else { toast('Deixe pelo menos um funil marcado'); return; } consolSalvar(); viewConsolidado(); };
+window.consolTodos=function(){ CONSOL.funis=consolDisponiveis().map(f=>f[0]); consolSalvar(); viewConsolidado(); };
+/* em que faixa da régua única este negócio está */
+function consolFaixaDe(c){
+  const f=funilDe(c), et=c&&c.etapa, map=ETAPAS_MAP[f]||{};
+  if((map.enc||[]).includes(et)) return 'enc';
+  if(ehPosVenda(et,f)) return 'entr';
+  if(f==='nn'||f==='bc'){
+    const p=(REUNIAO_PREFIXO[f==='bc'?'bc':'nn']||{})[et];
+    if(p&&(p.pfx==='[OI/FF]'||p.pfx==='[RCP/FF]')) return 'abert';
+    if(p&&(p.pfx==='[PC]'||p.pfx==='[RCP/PC]')) return 'prop';
+    if(p&&p.pfx==='[DELIVERY]') return 'entr';
+    return 'prosp';
+  }
+  const fluxo=map.fluxo||[], i=fluxo.indexOf(et);          /* sem de-para: posição na régua do próprio funil */
+  if(i<0) return 'prosp';
+  if(fluxo.length>2&&i===fluxo.length-1) return 'entr';
+  const r=(i+1)/fluxo.length;
+  return r<=0.34?'prosp':(r<=0.67?'abert':'prop');
+}
+function consolEmJogo(c){ const k=consolFaixaDe(c); return k!=='enc'&&k!=='entr'; }
+function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.includes(funilDe(c))); }
+(function consolCss(){ if(document.getElementById('consol-css'))return; const s=document.createElement('style'); s.id='consol-css'; s.textContent=`
+  .cs-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:2px 0 14px}
+  .cs-chip{border:1.5px solid var(--linha);background:var(--fundo,#fff);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;color:var(--muted);display:inline-flex;gap:7px;align-items:center}
+  .cs-chip.on{border-color:var(--azul,#2563eb);background:#eef4ff;color:var(--azul,#2563eb)}
+  .cs-chip .q{font-weight:800;opacity:.75;font-size:12px}
+  .cs-regua{display:flex;flex-direction:column;gap:10px}
+  .cs-fx{display:grid;grid-template-columns:200px 1fr 150px;gap:12px;align-items:center}
+  .cs-fx .nm{font-weight:800;font-size:13.5px;display:flex;gap:7px;align-items:center}
+  .cs-fx .nm small{display:block;font-weight:600;color:var(--muted);font-size:11px;text-transform:none;letter-spacing:0}
+  .cs-barra{height:34px;background:#f1f5f9;border-radius:9px;overflow:hidden;position:relative;cursor:pointer}
+  .cs-barra i{position:absolute;inset:0 auto 0 0;border-radius:9px;display:block;transition:width .25s ease}
+  .cs-barra b{position:absolute;left:10px;top:0;bottom:0;display:flex;align-items:center;font-size:12.5px;font-weight:800;color:#0f2c5c;text-shadow:0 1px 0 rgba(255,255,255,.6)}
+  .cs-vals{text-align:right;font-size:12.5px;font-weight:700;white-space:nowrap}
+  .cs-vals small{display:block;font-weight:600;color:var(--muted);font-size:11px}
+  .cs-nota{font-size:11.5px;color:var(--muted);margin-top:10px}
+  .cs-lin{display:flex;gap:10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--linha);font-size:13px}
+  .cs-lin:last-child{border-bottom:0}
+  .cs-lin .nm{flex:1;min-width:0;font-weight:700;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cs-lin .tg{font-size:11px;color:var(--muted);white-space:nowrap}
+  @media (max-width:860px){
+    .cs-fx{grid-template-columns:1fr;gap:4px}
+    .cs-vals{text-align:left}
+    .cs-barra{height:30px}
+    .cs-chip{min-height:44px}
+  }`; document.head.appendChild(s); })();
+function viewConsolidado(){
+  const disp=consolDisponiveis(), sel=consolSel();
+  const lista=consolLista(sel);
+  const porFaixa={}; CONSOL_FAIXAS.forEach(f=>porFaixa[f.k]=[]);
+  lista.forEach(c=>{ const k=consolFaixaDe(c); (porFaixa[k]||porFaixa.prosp).push(c); });
+  const jogo=lista.filter(consolEmJogo);
+  const parados=jogo.filter(semProxAtividade);
+  const pa=somaPA(jogo), pond=paPonderado(jogo);
+  const ticket=jogo.length?pa/jogo.length:0;
+  const chips=disp.map(f=>{ const on=sel.includes(f[0]); const q=lista.filter(c=>funilDe(c)===f[0]&&consolEmJogo(c)).length;
+    return `<button class="cs-chip${on?' on':''}" onclick="consolToggle('${f[0]}')" title="${on?'Tirar':'Somar'} ${esc(f[1])} do consolidado">${on?'✓':'+'} ${esc(f[1])}${on?` <span class="q">${q}</span>`:''}</button>`; }).join('');
+  const base=Math.max(1,...CONSOL_FAIXAS.map(f=>somaPA(porFaixa[f.k])), 1);
+  const baseN=Math.max(1,...CONSOL_FAIXAS.map(f=>porFaixa[f.k].length));
+  const temPA=CONSOL_FAIXAS.some(f=>somaPA(porFaixa[f.k])>0);
+  const regua=CONSOL_FAIXAS.map(f=>{ const l=porFaixa[f.k], p=somaPA(l);
+    const larg=Math.round((temPA? p/base : l.length/baseN)*100);
+    return `<div class="cs-fx">
+      <span class="nm">${f.ic} <span>${f.nome}<small>${f.desc}</small></span></span>
+      <span class="cs-barra" onclick="consolFoco('${f.k}')" title="${l.length} negócio(s) — clique pra ver quem está aqui">
+        <i style="width:${Math.max(l.length?6:0,larg)}%;background:${f.cor}22;border-left:4px solid ${f.cor}"></i>
+        <b>${l.length} negócio(s)${p?' · '+brlCurto(p):''}</b></span>
+      <span class="cs-vals">${p?brlCurto(p):'—'}<small>${l.length?(paPonderado(l)?'pond. '+brlCurto(paPonderado(l)):'sem valor lançado'):'vazio'}</small></span>
+    </div>`; }).join('');
+  const porFunil=sel.map(f=>{ const l=lista.filter(c=>funilDe(c)===f), j=l.filter(consolEmJogo);
+    return `<tr class="clicavel" onclick="irPara('${f==='nn'?'nn-funil':f==='bc'?'bc-funil':f+'-funil'}')">
+      <td><b>${esc(funilNome(f))}</b></td><td>${j.length}</td><td>${somaPA(j)?brlCurto(somaPA(j)):'—'}</td>
+      <td>${paPonderado(j)?brlCurto(paPonderado(j)):'—'}</td><td>${j.filter(semProxAtividade).length}</td></tr>`; }).join('');
+  const travados=parados.slice().sort((a,b)=>paDe(b)-paDe(a)).slice(0,8);
+  const foco=CONSOL.foco&&porFaixa[CONSOL.foco]?CONSOL.foco:null;
+  const fx=foco?CONSOL_FAIXAS.find(f=>f.k===foco):null;
+  const listaFoco=foco?porFaixa[foco].slice().sort((a,b)=>paDe(b)-paDe(a)).slice(0,30):[];
+  $('#main').innerHTML=`<h1 class="pg">Visão Consolidada</h1>
+    <div class="sub">Os funis que você marcar, numa régua só — pra enxergar onde o negócio está, não pra operar. Operar continua em cada funil.</div>
+    <div class="cs-chips">${chips}<span style="flex:1"></span>
+      <button class="cs-chip" onclick="consolTodos()" title="Marcar todos os funis disponíveis">⊕ todos</button></div>
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="kpi"><div class="lbl">PA em jogo</div><div class="num">${brlCurto(pa)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${brlCurto(pa/12)}/mês · ${jogo.length} negócio(s)</div></div>
+      <div class="kpi"><div class="lbl">Ponderado</div><div class="num">${brlCurto(pond)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">pela probabilidade da etapa</div></div>
+      <div class="kpi"><div class="lbl">Ticket médio</div><div class="num">${brlCurto(ticket)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">PA por negócio em jogo</div></div>
+      <div class="kpi"${parados.length?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Parados</div><div class="num">${parados.length}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">sem próxima atividade</div></div>
+      <div class="kpi"><div class="lbl">Entrega + encerrados</div><div class="num">${porFaixa.entr.length+porFaixa.enc.length}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${porFaixa.entr.length} na entrega · ${porFaixa.enc.length} fora</div></div>
+    </div>
+    <div class="tar-grp">Régua única <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${sel.length} funil(is) somados · barra pelo ${temPA?'PA':'nº de negócios'}</span></div>
+    <div class="card" style="padding:16px 18px"><div class="cs-regua">${regua}</div>
+      <div class="cs-nota">Abertura, Proposta e Entrega seguem o mesmo de-para que carimba a etapa na sua Agenda. ${sel.some(f=>f!=='nn'&&f!=='bc')?'Funis sem de-para (Vida em Grupo, Prud. Demais, MFO) entram pela <b>posição</b> na régua do próprio funil.':''}</div></div>
+    ${foco?`<div class="tar-grp">${fx.ic} ${fx.nome} <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${porFaixa[foco].length} · maiores primeiro</span>
+      <button class="btn btn-s btn-mini" style="margin-left:8px" onclick="consolFoco('')">fechar</button></div>
+      <div class="card" style="padding:6px 16px">${listaFoco.map(c=>`<div class="cs-lin">
+        <span class="nm" onclick="abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha">${esc(c.nome||'(sem nome)')}</span>
+        <span class="tg">${esc(funilNome(funilDe(c)))} · ${esc(ET_LABEL[c.etapa]||c.etapa||'—')}</span>
+        <span class="tg"><b>${paDe(c)?brlCurto(paDe(c)):'—'}</b></span></div>`).join('')||'<div style="padding:12px;color:var(--muted)">Nenhum negócio nesta faixa.</div>'}</div>`:''}
+    <div class="tar-grp">Por funil</div>
+    <div class="card" style="padding:6px 16px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;font-size:11px;color:var(--muted)"><th style="padding:8px 6px">Funil</th><th>Em jogo</th><th>PA</th><th>Ponderado</th><th>Parados</th></tr></thead>
+      <tbody>${porFunil||'<tr><td colspan="5" class="vazio">Marque um funil acima.</td></tr>'}</tbody></table></div>
+    ${travados.length?`<div class="tar-grp">Onde está travado <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">maior PA sem próxima atividade — é aqui que o mês escorre</span></div>
+      <div class="card" style="padding:6px 16px">${travados.map(c=>`<div class="cs-lin">
+        <span class="nm" onclick="abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha e marcar a próxima">${esc(c.nome||'(sem nome)')}</span>
+        <span class="tg">${esc(funilNome(funilDe(c)))} · ${esc(ET_LABEL[c.etapa]||c.etapa||'—')}</span>
+        <span class="tg"><b>${paDe(c)?brlCurto(paDe(c)):'—'}</b></span></div>`).join('')}</div>`:''}`;
+}
+window.consolFoco=function(k){ CONSOL.foco=(CONSOL.foco===k)?'':k; viewConsolidado(); };
 function viewNnFunil(){
   /* com etapa em foco o board deve ir pra coluna focada, não voltar pro lugar antigo */
   const _pos = NN_FOCUS ? null : funScrollSalvar();
@@ -11590,6 +11726,9 @@ const HUB_SECOES=[
     {view:'cart-oportunidades',ic:'💡', titulo:'Oportunidades',       desc:'Aniversários, gaps de cobertura e cruzamento com o relatório da semana.', mod:'carteira'},
     {view:'beneficios',        ic:'🩹', titulo:'Benefícios (sinistro)', desc:'Acompanhamento de sinistro/benefício, do aviso ao pagamento.', mod:'beneficios', cnt:()=>(BF.itens||[]).filter(escLinhaOk).filter(bfAtivo).length}
   ]},
+  {titulo:'Visão', itens:[
+    {view:'consolidado', ic:'🔭', titulo:'Visão Consolidada', desc:'Os funis que você escolher numa régua só — onde o negócio está, sem operar.'}
+  ]},
   {titulo:'Prospecção', itens:[
     {view:'mapa',    ic:'🗺️', titulo:'Mapa de locais',      desc:'Hospitais, clínicas, empresas e casas de leads e clientes — quem está em cada lugar.'},
     {view:'bn-dups', ic:'🔀', titulo:'Duplicatas',           desc:'Fila de possíveis duplicados no Estoque de Nomes — você decide juntar.', cnt:()=>BN.dups.filter(d=>!d.decisao).length}
@@ -14902,7 +15041,7 @@ function admVerComo(email){
 async function admUpsert(row){ const r=await sb.from('lp_perfis').upsert(row,{onConflict:'email'}); if(r.error){ toast('Falhou: '+r.error.message,false); return false; } return true; }
 async function admDesdelegar(dono,para){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:dono,delegado_email:para}); if(r.error){ toast('Falhou: '+r.error.message,false); return; } toast('Delegação removida',true); viewLpAdm(); }
 
-const TITULO_VIEW={inicio:'Início',modulos:'Módulos',config:'Configurações',sitplan:'SitPlan',metas:'Metas',contatos:'Contatos',
+const TITULO_VIEW={inicio:'Início',consolidado:'Visão Consolidada',modulos:'Módulos',config:'Configurações',sitplan:'SitPlan',metas:'Metas',contatos:'Contatos',
   'bn-estoque':'Estoque de Nomes','bn-ta':'Painel TA',mapa:'Mapa de locais','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo','prud-funil':'Prud. Demais','mfo-funil':'MFO','lp-atrasos':'Lista de Atraso',
@@ -15015,6 +15154,7 @@ function render(){
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
   else if(VIEW==='cart-oportunidades') viewCartOportunidades();
+  else if(VIEW==='consolidado') viewConsolidado();
   else if(VIEW==='nn-funil') viewNnFunil();
   else if(VIEW==='bc-funil') viewBcFunil();
   else if(VIEW==='vg-funil') viewFunilExtra('vg');
@@ -15752,6 +15892,27 @@ function lpSelfCheck(){
       const okEv=String(gsyncCorpoEvento).includes('location:locTexto(locPrincipal(c))')&&tarGcalUrl(c,{quando:'2026-09-15',hora:'10:00'}).includes('&location=');
       const okView=typeof viewMapa==='function'&&VIEWS_CONHECIDAS.includes('mapa')&&HUB_SECOES.some(sx=>sx.itens.some(i=>i.view==='mapa'))&&!!document.querySelector('.nav-btn[data-view="mapa"]');
       const okW=String(drwPessoaHtml).includes("locWidgetHtml('ct:'")&&String(bnEditorHtml).includes("locWidgetHtml('bn:'"); const okN=geoNormNominatim({name:'Real Hospital Português',lat:'-8.05',lon:'-34.9',address:{road:'Av. Agamenon',house_number:'4760',suburb:'Paissandu',city:'Recife',state:'Pernambuco'}}); return a&&b&&d&&okP&&okG&&okEv&&okView&&okW&&okN.nome==='Real Hospital Português'&&okN.end.includes('Paissandu')&&okN.lat===-8.05; })());
+    /* ═══ FUNIL-CONSOLIDADO-V1 (14/09): régua única, seleção de funis, só leitura ═══ */
+    { const C=S.contatos, bk=CONSOL.funis;
+      try{
+        CONSOL.funis=['nn','bc'];
+        S.contatos=[];
+        const faixa=(funil,etapa)=>consolFaixaDe({id:'z',funil:funil,etapa:etapa});
+        ok('consolidado: o de-para APROVADO manda (OI/FF→abertura, P/C→proposta, Delivery→entrega)',
+           faixa('nn','OI/FF')==='abert'&&faixa('nn','P/C')==='prop'&&faixa('nn','C2')==='prop'&&faixa('nn','DELIVERY')==='entr');
+        ok('consolidado: base de clientes cai na mesma régua (revisita→abertura, pós-revisita→proposta)',
+           faixa('bc','Agendada Revisita')==='abert'&&faixa('bc','Novo Negócio/Resolução pós Revisita')==='prop');
+        ok('consolidado: antes da abertura é prospecção e etapa de encerramento sai do jogo',
+           faixa('nn','SITPLAN')==='prosp'&&(ETAPAS_ENCERR.length?faixa('nn',ETAPAS_ENCERR[0])==='enc':true));
+        ok('consolidado: em jogo exclui entrega e encerrados',
+           consolEmJogo({funil:'nn',etapa:'P/C'})&&!consolEmJogo({funil:'nn',etapa:'DELIVERY'}));
+        ok('consolidado: a seleção de funis é dele, persiste e nunca fica vazia',
+           (()=>{ const a=consolSel().join(); consolToggle('bc'); const b=consolSel().join(); consolToggle('nn'); const c=consolSel().join();
+             CONSOL.funis=['nn','bc']; consolSalvar(); return a==='nn,bc'&&b==='nn'&&c==='nn'; })());
+        ok('consolidado: é painel de LEITURA — nada de arrastar, editar ou mover nesta tela',
+           !/draggable|ondrop|dragstart|tarCriar|mudarEtapa|funDropCard/.test(String(viewConsolidado)));
+      } finally{ S.contatos=C; CONSOL.funis=bk; CONSOL.foco=''; }
+    }
     /* ═══ AGENDA-FLUIDA-V1 (14/09): mover é arrastar, título nítido, nada trava ═══ */
     { const bkDia=GCAL.diaSel;
       try{
@@ -17258,7 +17419,7 @@ function abrirAjustesVisual(){
    na tela de Princípios, e ninguém percebe. */
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
-  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','config-funil','mapa'];
+  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado'];
 /* PAINEL-TA-NATIVO-V1: vendas.html#view=bn-ta&q=Nome abre direto a tela (é o que o
    painel-lp.html, agora só um redirect, manda). O hash é consumido e limpo. */
 (function(){ try{

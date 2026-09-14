@@ -2,6 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14/09/2026 (3ª onda) — VISÃO CONSOLIDADA: os funis numa régua só
+
+**v7.61.** Pedido dele: "quero uma visão unificada dos funis, tipo um funil consolidado, e eu seleciono os funis que quero ver. Não é tela de manipulação e operação do dia a dia — é painel visual pra nortear minha visão do funil."
+- Tela nova **Visão Consolidada** (1º item do Pipe Negócios, também no hub de Módulos). **Só leitura**: não arrasta, não edita, não move — clicar num nome abre a ficha, clicar num funil abre o funil.
+- **Seletor de funis** em chips (persistido em `crmlp_consol_v1`, nunca fica vazio). Vida em Grupo/Prud./MFO só aparecem se o módulo `funis_extra` estiver ligado.
+- **Régua única de 5 faixas**: Prospecção · Abertura · Proposta & Fechamento · Entrega · Encerrados. Usa o **de-para JÁ APROVADO** (o mesmo que carimba a etapa no título da reunião, 27/08): [OI/FF]→Abertura, [PC]→Proposta, [DELIVERY]→Entrega. Funil **sem** de-para entra pela **posição** na régua do próprio funil — e a tela escreve isso, pra ninguém achar que o app inventou equivalência de etapa.
+- **KPIs**: PA em jogo (+ R$/mês), ponderado pela probabilidade da etapa, ticket médio, parados (sem próxima atividade), entrega + encerrados.
+- **Por funil** (negócios em jogo, PA, ponderado, parados) e **"Onde está travado"** — maior PA sem próxima atividade, que é por onde o mês escorre. Clicar numa faixa abre a lista dela (30 maiores).
+- Nenhuma conta nova de negócio: reusa `somaPA`/`paPonderado`/`probDe`/`ehPosVenda`/`semProxAtividade`/`escVisivel` (escopo Meu/Rebeca/Daniel/Pipe X vale igual).
+- **O portão pegou uma falta real** antes de subir: tela de hub sem nome próprio na barra de cima (faltava em `TITULO_VIEW`). Corrigido.
+
+**Provas:** portão 4/4 verde com **39 telas** (a tela nova entra sozinha na lista), 6 invariantes novos; 390px e 1280px sem estouro e sem exceção.
+
 ## 14/09/2026 (2ª onda) — AGENDA FLUIDA: arrastar pra mover, título nítido, nada trava
 
 **v7.60.** Pedido dele: "mais fluidez, menos crivação; os nomes dos eventos têm que estar nítidos; fácil de mover e organizar — a mesma experiência do Google Agenda."
