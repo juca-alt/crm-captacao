@@ -2,6 +2,34 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (14ª onda) — NIVER-V2: aniversariantes de TODAS as bases (v7.69)
+
+Ele: *"foi aniversário do Felipe Leonardo ontem e do Sinval hoje, e nenhum dos dois apareceu. Esses dois têm apólice comigo E com o Daniel."* E o pedido junto: *"quero aniversariante GERAL, não só cliente — prospect e lead também, com filtro, porque dar parabéns é ponto de contato que ajuda a venda depois."*
+
+### Três causas somadas (as duas primeiras ele viu; a terceira estava escondida)
+Conferido no banco — os dois existem, com a data certa:
+
+| Caso | Onde está | Por que sumiu |
+|---|---|---|
+| **Sinval** (hoje, 15/09) | carteira do **Daniel** | `cartVis()` corta pelo **escopo** da tela |
+| **Felipe Leonardo** (ontem, 14/09) | carteira do **Daniel** | mesmo corte **+** o card só olhava pra frente (ontem virava "faltam 364 dias") |
+| **Cinthia e Diego** (hoje, 15/09) | base **dele**, rótulo **`lp: Rebeca`** | `pxLpOk` corta pelo **rótulo** — 2 dos 3 do dia |
+
+Medido com os 4 casos reais: **motor antigo devolvia 0 aniversariantes hoje; o novo devolve os 4**, cada um com a carteira de origem.
+
+### O que o NIVER-V2 faz
+- Lê **todas as bases que ele tem direito de ver** (o RLS já manda — ele é delegado do Daniel), com **selo de qual carteira** e filtro por LP. Aniversário é exceção declarada ao escopo: é ponto de contato, não recorte de operação.
+- Inclui **quem passou há até 3 dias** ("foi ontem") — ainda dá pra ligar.
+- Junta **carteira + negócios do funil + leads do Estoque**, com filtro por tipo (🛡 Cliente · 🎯 Negócio · 📇 Lead).
+- **Mesma pessoa em duas bases = uma linha**, com os dois selos (o Sinval está na carteira do Daniel e como negócio na dele).
+- **Data de nascimento virou campo editável na ficha da pessoa** — é isso que põe lead e negócio na lista.
+
+### Estado do dado (sem maquiar)
+222 clientes da carteira têm nascimento (**146 dele + 76 do Daniel**); **nenhum dos 6.851 contatos tem**. Enquanto a importação não trouxer a data, a lista sai só com clientes — a capacidade está pronta e o dado entra sozinho quando chegar.
+Na janela de hoje: **1 que passou · 3 hoje · 4 nos próximos 7 · 19 no mês** (9 deles da carteira do Daniel, que ele nunca via).
+
+**Provas:** teste novo **22/22** nos dois tamanhos reproduzindo os casos reais; **8 invariantes** novos (inclusive o do rótulo Rebeca); portão verde; 7 suítes anteriores verdes.
+
 ## 15/09/2026 (13ª onda) — O app parou de FALAR SOZINHO na abertura (v7.68)
 
 Print dele: quatro avisos empilhados na tela, em toda abertura. *"Essas msgs ficam aparecendo toda hora em qualquer device ou navegador."* Não era o cache do aparelho — eram **dois defeitos somados**, e um deles é sério.
