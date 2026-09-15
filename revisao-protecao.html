@@ -2272,6 +2272,47 @@ function anosDeApolice(emissao){
   if (m < 0 || (m === 0 && h.getDate() < d.getDate())) a--;
   return Math.max(a, 0);
 }
+/* RESGATE-VOLTA-V1 (15/09/2026): a tabela de resgate é lida por PRODUTO + SEXO + IDADE NA
+   EMISSÃO. Quando o espelho colado não traz "Idade na Emissão" (acontece), a idade vinha nula,
+   a curva voltava vazia e a coluna "Resgate" da tabela ficava com um traço em toda linha —
+   sem dizer por quê. Agora, faltando a idade na apólice, ela é DEDUZIDA do que o app já sabe:
+   idade de hoje menos os anos de apólice (emissão). Não é chute: são os dois dados que a
+   própria tela mostra. Idade digitada na apólice sempre vence a deduzida, e o consultor vê
+   quando o número veio por dedução. */
+function resgIdadeEmissao(a, idade){
+  if (a && a.idadeEmissao != null && a.idadeEmissao !== '') return parseInt(a.idadeEmissao,10) || null;
+  /* melhor caminho: data de NASCIMENTO × data de EMISSÃO dá a idade exata do contrato */
+  const nasc = (typeof state !== 'undefined' && state.cliente) ? state.cliente.nasc : null;
+  if (nasc && a && a.emissao){
+    const d = new Date(String(nasc).slice(0,10)+'T12:00:00'), e = new Date(String(a.emissao).slice(0,10)+'T12:00:00');
+    if (!isNaN(d.getTime()) && !isNaN(e.getTime())){
+      let y = e.getFullYear() - d.getFullYear();
+      const m = e.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && e.getDate() < d.getDate())) y--;
+      if (y >= 0 && y <= 120) return y;
+    }
+  }
+  /* sem nascimento: idade de hoje menos anos de apólice. Pode variar 1 ano conforme onde cai o
+     aniversário — por isso a tela marca como ESTIMADA e pede confirmação ao consultor. */
+  const anos = anosDeApolice(a && a.emissao);
+  if (idade == null || anos == null) return null;
+  const d2 = Math.round(idade) - anos;
+  return (d2 >= 0 && d2 <= 120) ? d2 : null;
+}
+/* a idade foi estimada (sem data de nascimento e sem idade na apólice)? */
+function resgIdadeEstimada(a, idade){
+  if (!a || (a.idadeEmissao != null && a.idadeEmissao !== '')) return false;
+  const nasc = (typeof state !== 'undefined' && state.cliente) ? state.cliente.nasc : null;
+  if (nasc && a.emissao) return false;
+  return resgIdadeEmissao(a, idade) != null;
+}
+/* por que não há curva — a tela precisa DIZER, em vez de mostrar uma coluna de traços */
+function resgMotivoSemTabela(at){
+  if (!at || (at.curva && at.curva.length)) return '';
+  if (!resgProduto(at.cod)) return `O produto <b>${esc(at.cod||'—')}</b>${at.nome?' ('+esc(at.nome)+')':''} não tem tabela de valores de resgate na base do sistema — a coluna fica vazia de propósito.`;
+  if (at.idadeEmissao == null) return `Falta a <b>idade na emissão</b> desta apólice (e não dá pra deduzir sem a data de emissão e a idade do cliente) — sem ela a tabela de resgate não pode ser lida. Preencha em <b>“Idade na emissão”</b>, no topo da apólice.`;
+  return `A tabela de resgate de <b>${esc(at.cod||'')}</b> não cobre a idade de emissão de <b>${at.idadeEmissao} anos</b> (a base oficial vai de 14 a 70).`;
+}
 /* os ativos vitalicios do cliente, um por cobertura, com as caracteristicas */
 function ativosVitalicios(aps, idade, sexo){
   const evs = evItens(aps, idade);
@@ -2280,11 +2321,14 @@ function ativosVitalicios(aps, idade, sexo){
     if (x.grupo !== 'MQC_VIT') return;
     const cap = +x.cap||0;
     const ev = evs.find(e => e.num === a.num && e.cod === x.cod) || null;
+    const idEm = resgIdadeEmissao(a, idade);                       /* RESGATE-VOLTA-V1 */
     out.push({
-      num:a.num, emissao:a.emissao, cod:x.cod, nome:x.nome, cap, emissaoIdade:a.idadeEmissao,
+      num:a.num, emissao:a.emissao, cod:x.cod, nome:x.nome, cap, emissaoIdade:idEm,
+      idadeEmissao:idEm, idadeEmissaoDeduzida:(a.idadeEmissao==null||a.idadeEmissao==='')&&idEm!=null,
+      idadeEmissaoEstimada: resgIdadeEstimada(a, idade),
       pre:+x.pre||0, fim:x.fim, ev,
       anos: anosDeApolice(a.emissao),
-      curva: resgCurva(x.cod, sexo, a.idadeEmissao),
+      curva: resgCurva(x.cod, sexo, idEm),
       perAp: perApol(a), totalPago: +a.totalPago || 0, pagamentos: +a.pagamentos || 0,
       sexoTab: String(sexo||'M').toUpperCase().charAt(0) === 'F' ? 'F' : 'M'
     });
@@ -2293,7 +2337,7 @@ function ativosVitalicios(aps, idade, sexo){
 }
 function curvaResgateHTML(at){
   if (!at.curva || !at.curva.length)
-    return `<div class="mini so-consultor" style="margin-top:8px">Tabela de resgate deste produto (${esc(at.cod||'')}) não está na base de fatores — sai da simulação do sistema.</div>`;
+    return `<div class="mini so-consultor" style="margin-top:8px">⚠️ <b>Sem curva de resgate aqui.</b> ${resgMotivoSemTabela(at)}</div>`;
   const mx = Math.max.apply(null, at.curva.map(p => p.f));
   const _rh = _resgHoje(at), _rp = _resgProx(at);
   const anoHoje = _rh ? _rh.ano : null, anoProx = _rp ? _rp.ano : null;
@@ -2301,7 +2345,7 @@ function curvaResgateHTML(at){
     const aqui = p.ano === anoHoje, prox = p.ano === anoProx;
     return `<div class="rl${aqui?' hoje':''}${prox?' prox':''}">
       <div class="ra">${p.ano}º ano${aqui?' · já disponível':(prox?' · próximo':'')}</div>
-      <div class="rb"><div class="rf" style="width:${(p.f/mx*100).toFixed(1).replace('.',',')}%"></div></div>
+      <div class="rb"><div class="rf" style="width:${(p.f/mx*100).toFixed(1)}%"></div></div>
       <div class="rp">${(p.f*100).toFixed(1).replace('.',',')}%</div>
     </div>`;
   }).join('');
@@ -2310,6 +2354,9 @@ function curvaResgateHTML(at){
     ${linhas}
     <div class="mini" style="margin-top:7px">Estes são <b>percentuais do capital segurado</b>, definidos em contrato pela tabela do produto
       (${esc(at.cod)}, emissão aos ${esc(String(at.emissaoIdade||''))||'—'} anos, ${at.sexoTab==='F'?'sexo feminino':'sexo masculino'}).
+      ${at.idadeEmissaoDeduzida?`<span class="so-consultor">${at.idadeEmissaoEstimada
+        ? `⚠️ A idade na emissão não veio na apólice e foi <b>estimada</b> (idade de hoje menos ${at.anos!=null?at.anos:'os'} anos de contrato) — pode variar 1 ano conforme o aniversário. Confirme em “Idade na emissão” ou informe a data de nascimento do cliente.`
+        : `A idade na emissão não veio na apólice; foi calculada pela <b>data de nascimento × data de emissão</b>.`}</span>`:''}
       O valor em reais é sempre <b>esse percentual sobre o capital segurado daquele momento</b> — como o capital é corrigido pelo IPCA todo ano, o resgate acompanha.
       <span class="so-consultor">A taxa técnica de 3% ao ano já está considerada nesta tabela (cl. 21.5 / cl. 23); o valor de resgate é atualizado mensalmente pelo IPCA.
       Fonte: tabela de valores de resgate do produto (Prudential); a completa sai da simulação do sistema.</span>
@@ -2646,7 +2693,7 @@ function graficoCapitalHTML(at, L){
   const mx = Math.max.apply(null, L.map(x => x.capSim).concat([at.cap]));
   const linha = (rot, v, pos, quit) => `<div class="gl${quit?' quit':''}">
     <div class="ga">${rot}</div>
-    <div class="gb"><div class="gf${pos?' pos':''}" style="width:${(v/mx*100).toFixed(1).replace('.',',')}%"></div></div>
+    <div class="gb"><div class="gf${pos?' pos':''}" style="width:${(v/mx*100).toFixed(1)}%"></div></div>
     <div class="gv">${fmt0(v)}</div></div>`;
   let h = `<div class="gcap">`;
   let marcou = false;
@@ -2656,7 +2703,7 @@ function graficoCapitalHTML(at, L){
     const rot = x.ano+'º ano'+(x.idadeNo?' · '+x.idadeNo+'a':'')+(x.agora?' · hoje':'');
     h += `<div class="gl${quit?' quit':''}${x.agora?' hoje hojeL':''}">
       <div class="ga">${rot}</div>
-      <div class="gb"><div class="gf${x.passado?' pass':(pos?' pos':'')}" style="width:${(x.capSim/mx*100).toFixed(1).replace('.',',')}%"></div></div>
+      <div class="gb"><div class="gf${x.passado?' pass':(pos?' pos':'')}" style="width:${(x.capSim/mx*100).toFixed(1)}%"></div></div>
       <div class="gv">${fmt0(x.capSim)}</div></div>`;
   });
   h += `</div><div class="gleg">
@@ -2739,7 +2786,7 @@ function simulacaoHTML(at){
         <i>“não é adequado simular sobre esses valores quaisquer projeções de índices inflacionários ou rentabilidade financeira”</i>
         <span class="so-consultor">(Vida Inteira Mais, cl. 21.5 · Vida e Saúde, cl. 23)</span> — a taxa de <b>3% ao ano já está dentro</b> da tabela de valor de resgate.
         Por isso a coluna de resgate mostra o <b>percentual oficial da tabela</b> — e o valor em reais é sempre esse percentual sobre o capital daquele ano.
-        ${temTab ? '' : `Este produto (${esc(at.cod||'')}) não tem tabela de resgate na base — a coluna fica vazia de propósito, o valor sai da simulação do sistema.`}
+        ${temTab ? '' : `<br><b>Por que a coluna de resgate está vazia:</b> ${resgMotivoSemTabela(at)}`}
       </div>
     </div>
   </div>`;
@@ -2884,7 +2931,7 @@ function barrasComp(cols){
   const mx = Math.max.apply(null, items.map(i => i.v).concat([1]));
   return `<div style="margin-top:20px"><div class="chart-t">Capital segurado somado, por cenário</div>` +
     items.map(i => `<div class="barlin"><div class="mini" style="width:130px;flex:0 0 auto">${esc(i.label)}</div>
-      <div class="bw"><div class="bf" style="width:${(i.v/mx*100).toFixed(1).replace('.',',')}%;background:${i.cor}"></div></div>
+      <div class="bw"><div class="bf" style="width:${(i.v/mx*100).toFixed(1)}%;background:${i.cor}"></div></div>
       <div style="width:120px;text-align:right;font-weight:700;font-size:.84rem;flex:0 0 auto">${fmt0(i.v)}</div></div>`).join('') +
     `</div>`;
 }
@@ -3761,7 +3808,7 @@ function htmlComp(){
       const gg = s.gs[i] || {};
       const dif = (_umCen && i === 1) ? (vals[1] - vals[0]) : null;
       h += `<div class="cell" data-col="${esc(cols[i].n)}"><div class="v"${v > 0 ? '' : ' style="color:var(--crit)"'}>${v > 0 ? fmt0(v) + (s.dia ? '/dia' : s.mensal ? '/mês' : '') : '✕ não tem'}</div>
-        ${v > 0 ? `<div class="barw"><div class="bar" style="width:${(v/mx*100).toFixed(1).replace('.',',')}%;background:${cols[i].cor}"></div></div>` : ''}
+        ${v > 0 ? `<div class="barw"><div class="bar" style="width:${(v/mx*100).toFixed(1)}%;background:${cols[i].cor}"></div></div>` : ''}
         ${dif !== null ? `<div class="cmp-dif ${dif>0?'up':(dif<0?'dn':'eq')}">${dif>0?'▲ +'+fmt0(dif):(dif<0?'▼ '+fmt0(dif):'= igual')}</div>` : ''}
         ${v > 0 && (gg.vig||[]).length ? `<div class="cellv">${esc(gg.vig.join(' · '))}</div>` : ''}
         ${v > 0 && (gg.prod||[]).length ? `<div class="cellv">${esc(gg.prod.join(' · '))}</div>` : ''}</div>`;
@@ -4224,6 +4271,49 @@ function selfTestFam(){
     ok('ativo: só o vitalício entra no patrimônio',
        ativosVitalicios([{num:'A',emissao:'2020-01-01',idadeEmissao:40,cob:[
          {cod:'WL10G',grupo:'MQC_VIT',cap:100000,pre:100},{cod:'TP10G',grupo:'MQC_TEMP',cap:900000,pre:100}]}], 45, 'M').length === 1);
+    /* RESGATE-VOLTA-V1 (15/09): as barras e a curva de resgate */
+    { const _i = state.cliente.idade, _s = state.cliente.sexo, _n = state.cliente.nasc;
+      try{
+        state.cliente.idade = 41; state.cliente.sexo = 'M'; state.cliente.nasc = null;   /* o caso base é SEM data de nascimento */
+        const ap = (idadeEmissao, cod) => ({num:'A1', emissao:'2020-03-10', per:'mes', idadeEmissao, totalPago:0, pagamentos:0,
+          cob:[{grupo:'MQC_VIT', cod, nome:'Vida Inteira', cap:223781, pre:545}]});
+        const at1 = ativosVitalicios([ap(35,'WL10G')],41,'M')[0];
+        const at2 = ativosVitalicios([ap(null,'WL10G')],41,'M')[0];
+        const at3 = ativosVitalicios([ap(35,'WD10G')],41,'M')[0];
+        ok('resgate: apólice COM idade na emissão tem curva (não regrediu)', !!(at1.curva && at1.curva.length));
+        ok('resgate: apólice SEM idade na emissão deduz pela emissão + idade de hoje e a curva volta',
+           !!(at2.curva && at2.curva.length) && at2.idadeEmissao === 35 && at2.idadeEmissaoDeduzida === true
+           && at1.curva.length === at2.curva.length);
+        ok('resgate: idade digitada na apólice vence a deduzida', at1.idadeEmissao === 35 && at1.idadeEmissaoDeduzida === false);
+        ok('resgate: com data de nascimento, a idade na emissão sai EXATA (não estimada)',
+           (()=>{ const _n = state.cliente.nasc;
+             try{ state.cliente.nasc = '1985-05-10';        /* aniversário depois da emissão: 34, não 35 */
+               const a = ativosVitalicios([ap(null,'WL10G')],41,'M')[0];
+               return a.idadeEmissao === 34 && a.idadeEmissaoDeduzida === true && a.idadeEmissaoEstimada === false;
+             } finally{ state.cliente.nasc = _n; } })());
+        ok('resgate: sem nascimento a idade é ESTIMADA e a tela avisa, em vez de fingir precisão',
+           (()=>{ const _n = state.cliente.nasc;
+             try{ state.cliente.nasc = null;
+               const a = ativosVitalicios([ap(null,'WL10G')],41,'M')[0];
+               return a.idadeEmissaoEstimada === true && /estimada/.test(curvaResgateHTML(a));
+             } finally{ state.cliente.nasc = _n; } })());
+        ok('resgate: a coluna da tabela sai preenchida quando há curva',
+           simLinhas(at1).some(x => x.fator != null && x.resgSim > 0));
+        ok('resgate: produto sem tabela na base diz POR QUE, em vez de coluna de traços',
+           !(at3.curva&&at3.curva.length) && /não tem tabela de valores de resgate/.test(resgMotivoSemTabela(at3))
+           && /Por que a coluna de resgate está vazia/.test(simulacaoHTML(at3)));
+        ok('resgate: sem data de emissão nem idade, avisa que falta a idade na emissão',
+           (()=>{ const s=ativosVitalicios([{num:'B',emissao:'',per:'mes',cob:[{grupo:'MQC_VIT',cod:'WL10G',nome:'x',cap:1000,pre:10}]}],41,'M')[0];
+                  return s.idadeEmissao===null && /Falta a <b>idade na emissão<\/b>/.test(resgMotivoSemTabela(s)); })());
+        /* o erro que apagou as barras: largura de CSS com vírgula não existe */
+        ok('gráficos: toda largura de barra sai em CSS válido (ponto decimal, nunca vírgula)',
+           (()=>{ const h = ativoCardHTML(at1);
+                  const ws = [...h.matchAll(/style="[^"]*width:\s*([^;"]+)/g)].map(m => m[1].trim());
+                  return ws.length > 3 && ws.every(w => /^(0|auto|\d+(\.\d+)?(%|px|rem|em))$/.test(w)); })());
+        ok('gráficos: nenhuma largura de CSS é montada com vírgula decimal no código-fonte',
+           !/width:\s*\$\{[^}]*replace\(/.test([...document.scripts].map(s=>s.textContent).join('')));
+      } finally{ state.cliente.idade = _i; state.cliente.sexo = _s; state.cliente.nasc = _n; }
+    }
     ok('cartas: sem ordem custom vale a padrão', ordemAtualDe(null) === ORDEM_SIT && ordemAtualDe([]) === ORDEM_SIT);
     /* pizza: as fatias somam o total e fatia zero nao vira desenho */
     ok('gráfico: fatia zerada não desenha', svgPie([{v:0,cor:'#000',label:'a'}]) === '');
