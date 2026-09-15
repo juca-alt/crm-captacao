@@ -1009,6 +1009,9 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
       <div class="grid g3">
         <div><label class="lbl">Nome completo</label><input id="cNome" placeholder="Nome do cliente"></div>
         <div><label class="lbl">Data de nascimento</label><input type="date" id="cNasc"></div>
+        <style>/* NASC-UM-CLIQUE-V1: o campo pisca quando o atalho do aviso leva até ele */
+          @keyframes piscaCampo{0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}35%{box-shadow:0 0 0 5px rgba(245,158,11,.45)}}
+          #cNasc.pisca{animation:piscaCampo 1.1s ease-in-out 2;border-color:#f59e0b}</style>
         <div><label class="lbl">Idade</label><input type="number" id="cIdade" min="18" max="75" placeholder="42"></div>
         <div><label class="lbl">Sexo</label><select id="cSexo"><option value="M">Masculino</option><option value="F">Feminino</option></select></div>
         <div><label class="lbl">Profissão</label><input id="cProf" placeholder="Agrônomo"></div>
@@ -2306,6 +2309,37 @@ function resgIdadeEstimada(a, idade){
   if (nasc && a.emissao) return false;
   return resgIdadeEmissao(a, idade) != null;
 }
+/* ═══ NASC-UM-CLIQUE-V1 (15/09/2026) ═════════════════════════════════════════
+   Escolha dele: resolver pela DATA DE NASCIMENTO (um dado, todas as apólices), em vez
+   de digitar a idade de emissão apólice por apólice. Faltando o nascimento, a idade de
+   emissão é estimada (idade de hoje − anos de contrato) e pode sair 1 ano deslocada —
+   o que muda o percentual de resgate. Então o app pede o dado UMA vez, no lugar em que
+   a diferença aparece, e leva direto ao campo da etapa 1. Só para o consultor: o cliente
+   não tem que ler pedido de cadastro no material dele. */
+function nascPedidoHTML(ativos){
+  if (typeof state === 'undefined' || (state.cliente && state.cliente.nasc)) return '';
+  const l = (ativos||[]).filter(a => a && a.idadeEmissaoEstimada);
+  if (!l.length) return '';
+  const quantos = l.length === 1 ? 'Um ativo está' : `${l.length} ativos estão`;
+  return `<div class="callout so-consultor" style="margin-top:10px;border-left:4px solid #f59e0b">
+    ⚠️ <b>${quantos} com a idade na emissão ESTIMADA.</b> Sem a data de nascimento o app deduz pela
+    idade de hoje menos os anos de contrato — pode sair <b>1 ano deslocado</b>, e é o que define o
+    percentual de resgate. Informe o nascimento <b>uma vez</b> e todas as apólices acertam sozinhas.
+    <button class="atalho no-print" style="margin-left:8px" onclick="irParaNascimento()">📅 preencher data de nascimento</button>
+  </div>`;
+}
+function irParaNascimento(){
+  try{
+    if (state.ui && state.ui.aba !== 'cliente'){ state.ui.aba = 'cliente'; save(); render(); }
+  }catch(_){}
+  setTimeout(() => { try{
+    const e = document.getElementById('cNasc'); if (!e) return;
+    e.scrollIntoView({behavior:'smooth', block:'center'});
+    e.focus(); e.classList.add('pisca'); setTimeout(()=>e.classList.remove('pisca'), 2200);
+    if (typeof e.showPicker === 'function') { try{ e.showPicker(); }catch(_){} }
+  }catch(_){} }, 60);
+}
+window.irParaNascimento = irParaNascimento;
 /* por que não há curva — a tela precisa DIZER, em vez de mostrar uma coluna de traços */
 function resgMotivoSemTabela(at){
   if (!at || (at.curva && at.curva.length)) return '';
@@ -4291,6 +4325,21 @@ function selfTestFam(){
                const a = ativosVitalicios([ap(null,'WL10G')],41,'M')[0];
                return a.idadeEmissao === 34 && a.idadeEmissaoDeduzida === true && a.idadeEmissaoEstimada === false;
              } finally{ state.cliente.nasc = _n; } })());
+        ok('nascimento: com a idade estimada, o app PEDE a data de nascimento e dá o atalho pro campo',
+           (()=>{ const _n = state.cliente.nasc;
+             try{ state.cliente.nasc = null;
+               const a = ativosVitalicios([ap(null,'WL10G')],41,'M')[0];
+               const h = nascPedidoHTML([a]);
+               return /idade na emissão ESTIMADA/.test(h) && /irParaNascimento\(\)/.test(h) && /so-consultor/.test(h);
+             } finally{ state.cliente.nasc = _n; } })());
+        ok('nascimento: com a data preenchida, o pedido some (não fica pedindo o que já tem)',
+           (()=>{ const _n = state.cliente.nasc;
+             try{ state.cliente.nasc = '1985-05-10';
+               const a = ativosVitalicios([ap(null,'WL10G')],41,'M')[0];
+               return nascPedidoHTML([a]) === '' && a.idadeEmissaoEstimada === false;
+             } finally{ state.cliente.nasc = _n; } })());
+        ok('nascimento: o campo do atalho existe na etapa 1 e é de data',
+           (()=>{ const e = document.getElementById('cNasc'); return !!e && e.type === 'date'; })());
         ok('resgate: sem nascimento a idade é ESTIMADA e a tela avisa, em vez de fingir precisão',
            (()=>{ const _n = state.cliente.nasc;
              try{ state.cliente.nasc = null;
@@ -4759,6 +4808,7 @@ function carteiraProtecaoHTML(cons, aps, idade){
       <p class="sub" style="margin:5px 0 0">Produtos vitalícios não vencem: além de proteger, formam patrimônio e pagam a você mesmo, em vida. Cada ativo abaixo é um slot: o essencial na linha, e o cálculo por trás abre no clique.</p></div>
       <div class="tile h" style="min-width:190px"><div class="k">Capital vitalício (ativo)</div><div class="v">${vit?fmt0(vit):'—'}</div><div class="d">não vence · seu patrimônio</div></div>
     </div>
+    ${nascPedidoHTML(_ativos)}
     ${_ativos.length ? ativosResumoHTML(_ativos) + `<div class="ativos-wrap">${_ativos.map(ativoCardHTML).join('')}</div>` : (ev||'')}
   </div>`;
   }
