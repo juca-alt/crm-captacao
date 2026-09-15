@@ -2,6 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (8ª onda) — Carreira do ativo: LIGADA no documento do cliente + vírgula decimal
+
+Ele repetiu o pedido da Revisão de Apólice ("quero esse mesmo tópico do ativo quando eu monto o plano proposto, pra mostrar ao CLIENTE a evolução ao longo do período"). A tela já existia (CARREIRA-PLANO-V1, 5ª onda) — o que faltava era ela **chegar ao cliente**:
+- A seção **"O que este plano vira em patrimônio"** nascia **desligada** no material do cliente (`show.carreira:false`). Como o pedido é justamente mostrar ao cliente, agora **nasce ligada** — ele tira no ✓ quando não quiser.
+- **Vírgula decimal** nos percentuais de resgate (15 pontos): num documento em português que vai pro cliente, "1.9%" estava errado — agora "1,9%".
+
+**Provas:** teste funcional da carreira 17/17 com o motor real; `selfTest` do arquivo 45/45; 390/834/1280 sem estouro nem exceção.
+
 ## 14-15/09/2026 (7ª onda) — ROTA DO DIA (fila B, item 1)
 
 **v7.65.** Ele liberou a fila: *"pode seguir o caminho B e vai andando… quero que você opere bem aí."* Primeiro item da frente **MAPA & LOCAIS**: a **rota do dia**.
