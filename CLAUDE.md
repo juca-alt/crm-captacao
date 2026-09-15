@@ -1,6 +1,8 @@
 # CRM Captação / Vendas LP — repo do app (`juca-alt/crm-captacao`)
 
-App single-file HTML + vanilla JS, backend **Supabase** (`kbiinfpjfmuidyzsfegp`), deploy **GitHub Pages** (main → https://juca-alt.github.io/crm-captacao/).
+App single-file HTML + vanilla JS, backend **Supabase**, deploy **GitHub Pages** (main → https://juca-alt.github.io/crm-captacao/).
+
+> ⚠️ **Projeto Supabase corrigido em 15/09/2026:** produção (index, vendas, revisao-protecao, carteira) roda em **`cjieobmdpqcupzdpckef`** — conferido nas URLs dos próprios arquivos. O `kbiinfpjfmuidyzsfegp` que constava aqui é o projeto ANTIGO e só aparece no `index-dev.html` (staging legado).
 
 - `index.html` = **PROD Captação de LP**. Versão atual: **v2.7.0 · Instagram → CRM** (inclui QA v2.6.3; código PI numerado pelo BANCO via trigger — o app manda `codigo` vazio; dedupe por `linkedin_url_norm`, `email_norm` e `instagram_handle`).
 - `vendas.html` = **PROD Visão LP** (CRM Life Planner / Vendas). Versão atual: **ISLAND · v0.3.1 · Visão LP**, mobile-ready (gaveta ☰ + barra inferior). Persistência **híbrida**: contatos/funil em localStorage (chave `crmlp_v02_state`); relatório semanal (`lp_relatorio_itens`) e Carteira (`carteira_clientes`/`carteira_apolices`, RLS por dono; migration rodada 19/07) no **Supabase** quando logado, com fallback local. O PR #18 ficou OPEN no GitHub mas o conteúdo dele JÁ está na main (fechar como superado). **Não existe `vendas-dev.html` no repo.** ⚠️ O arquivo tem bytes não-UTF8 — `grep` nele exige `-a` (sem isso falha mudo).

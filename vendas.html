@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.69 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.70 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -13638,6 +13638,7 @@ const BN_COLS={
   telefone:{label:'Telefone',edit:'text'},
   cargo:{label:'Profissão',edit:'text'},
   idade:{label:'Idade',edit:'num'},
+  nascimento:{label:'Nascimento',edit:'date'},      // NIVER-V2: alimenta o card de aniversariantes
   cidade:{label:'Cidade',edit:'text'},
   renda_estimada:{label:'Renda',edit:'num'},
   civil_cod:{label:'Civil/Filhos'},                 // badge do código; edição pela ficha
@@ -14257,7 +14258,7 @@ function bnCelClique(ev,id,k){
     el.onblur=()=>fecha(()=>render());
   }else{
     el=document.createElement('input');
-    el.type=col.edit==='num'?'number':'text';
+    el.type=col.edit==='num'?'number':col.edit==='date'?'date':'text';   /* NIVER-V2: nascimento em lote na planilha do Estoque */
     el.value=c[k]??'';
     el.onkeydown=e=>{ if(e.key==='Enter') fecha(()=>bnCelGravar(id,k,el.value));
       else if(e.key==='Escape') fecha(()=>render());
@@ -14321,6 +14322,17 @@ function celNormalizarColado(k,v){
     const n=Number(String(v).replace(/\./g,'').replace(',','.'));
     if(!isFinite(n)) return {ok:false,motivo:'não é número'};
     return {ok:true,valor:String(n)};
+  }
+  /* NIVER-V2: data aceita 2026-09-15 e 15/09/2026 (que é como sai de planilha) */
+  if(col&&col.edit==='date'){
+    const t=String(v||'').trim(); if(!t) return {ok:true,valor:''};
+    let m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+    if(!m){ const b=/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(t);
+      if(b) m=[null,b[3],String(b[2]).padStart(2,'0'),String(b[1]).padStart(2,'0')]; }
+    if(!m) return {ok:false,motivo:'data inválida (use 15/09/1990 ou 1990-09-15)'};
+    const iso=m[1]+'-'+m[2]+'-'+m[3]; const d=new Date(iso+'T12:00:00');
+    if(isNaN(d.getTime())||d.getFullYear()<1900||d>new Date()) return {ok:false,motivo:'data fora do razoável'};
+    return {ok:true,valor:iso};
   }
   return {ok:true,valor:v};
 }
@@ -14446,6 +14458,7 @@ function bnEditorHtml(c){
      +f('Cidade/UF',`<input id="bne-cid" value="${esc(c.cidade||'')}" placeholder="Recife/PE">`),!!(c.telefone||c.email||c.cidade))}
     ${grp('p','🧭 Perfil',perfilR,
       f('Idade',`<input id="bne-idade" type="number" min="0" max="120" value="${esc(c.idade||'')}">`)
+      +f('Nascimento',`<input id="bne-nasc" type="date" value="${esc(c.nascimento||c.nasc||'')}" title="Entra no card de aniversariantes">`)
      +f('Estado civil',`<select id="bne-ec"><option value="">—</option>${['Solteiro(a)','Casado(a)','União estável','Divorciado(a)','Viúvo(a)','Noivo(a)','Separado(a)'].map(e=>`<option ${bnCivilDe(c)===e?'selected':''} value="${e}">${e}</option>`).join('')}</select>`)
      +f('Filhos',`<select id="bne-fi"><option value="">—</option><option ${bnFilhosStr2(c)==='sim'?'selected':''} value="sim">Sim</option><option ${bnFilhosStr2(c)==='nao'?'selected':''} value="nao">Não</option></select>`)
      +f('Renda estimada (R$/mês)',`<input id="bne-renda" type="number" min="0" step="500" value="${esc(c.renda_estimada||'')}">`)
@@ -14470,6 +14483,8 @@ function bnSalvarEdicao(id){
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
   c.idade=(()=>{ const n=parseInt($('#bne-idade').value,10); return isFinite(n)?n:null; })();
+  /* NIVER-V2: nascimento do lead — é o que põe ele no card de aniversariantes; a idade vem junto */
+  { const e=$('#bne-nasc'); if(e){ c.nascimento=e.value||''; if(e.value){ const ia=(typeof mtIdade==='function')?mtIdade(e.value):null; if(ia!=null) c.idade=ia; } } }
   c.estado_civil=$('#bne-ec').value||null;
   c.filhos=$('#bne-fi').value==='sim'?true:($('#bne-fi').value==='nao'?false:null); // boolean = formato canônico do banco (carga 04/08)
   c.civil_cod=bnCivilRecalc(c); // mantém o código da carga em sincronia com civil/filhos editados
