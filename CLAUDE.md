@@ -20,6 +20,14 @@ App single-file HTML + vanilla JS, backend **Supabase** (`kbiinfpjfmuidyzsfegp`)
   - **Feature nova = feature nos dois.** O comportamento pode diferir (no celular vira folha inferior, no desktop vira modal); a CAPACIDADE, não.
 - **Portão de deploy = UM comando (desde 03/09, v0.44.1):** `python3 scripts/portao.py` abre `portao.html`, roda TODAS as `VIEWS_CONHECIDAS` nos 4 cenários (375 × 1280, base CHEIA × VAZIA), mede exceção / campo morto / estouro / alvos <44px, roda `lpSelfCheck` e `funSelfCheck`, e devolve 0 (aberto) ou 1 (fechado). `--prova` injeta defeito e exige que o portão acuse (o guarda se prova quebrando). Depois do merge: `python3 scripts/portao.py --servido` compara o vendas.html servido pelo Pages com o local (hash + versão) — conferência pelo CONTEÚDO servido, não pelo commit. Só python3, sem node; o iframe nunca está logado, nada toca o banco. A fixture cheia é inventada (sem PII) e traz a carteira nos DOIS formatos (importador e cockpit).
 
+## Privacidade no repo (repo PÚBLICO — regra fixa desde 15/09/2026)
+Este repositório é **público**. Dado pessoal de cliente/lead **nunca** entra em arquivo versionado — nem em `.md`, nem em comentário de código, nem em fixture de teste.
+- **Nome de cliente/lead → INICIAIS** ("Ricardo Da Fonte" vira "R. D. F."). Nome da equipe (Gustavo, Daniel, Victor, Rebeca) pode ficar.
+- **Número de apólice → mascarado** (`001…611`). **CPF, telefone e endereço de cliente: nunca.**
+- **E-mail de operador** (é chave de acesso no RLS) fica mascarado nos docs (`victor@…`).
+- Fixture de teste usa nome inventado (Fulano, Beltrano) — nunca um nome real da base.
+- Higienização de 15/09/2026: 80 trocas em `ESTADO_DO_PROJETO.md`, no backup local e num comentário da extensão. **O histórico do git ainda guarda as menções antigas** — só sai com reescrita de histórico ou tornando o repo privado.
+
 ## Release (sempre)
 Branch → preview LOCAL com dados reais → validar com o Gustavo → **merge na main só com autorização explícita dele no chat** (self-merge sem OK já foi barrado). O push na main é o deploy (Pages).
 

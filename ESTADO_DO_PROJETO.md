@@ -70,11 +70,11 @@ Print dele: no ativo que o cliente **já tem**, a coluna "Resgate — valor e % 
 
 **v7.66.** Segundo item da frente **MAPA & LOCAIS**: o Mapa de locais só enxergava **lead e negócio**. Os **clientes da carteira** — que são justamente quem ele visita — ficavam de fora do mapa e da rota do dia.
 
-- **Cliente da carteira tem local igual ao resto do app:** mesmo buscador de endereço (OSM/Google), mesmas **rotinas** (dia/turno: "Taciana atende no RHP sexta de manhã"), mesmo pino, mesma rota. O editor entra na ficha do cliente, no tópico **Pessoa e família**.
+- **Cliente da carteira tem local igual ao resto do app:** mesmo buscador de endereço (OSM/Google), mesmas **rotinas** (dia/turno: "T. atende no RHP sexta de manhã"), mesmo pino, mesma rota. O editor entra na ficha do cliente, no tópico **Pessoa e família**.
 - **Onde o dado mora:** `carteira_perfil.dados.pontos` (por dono+ref, já sincronizado no Supabase) — de propósito **fora de `carteira_clientes`**, que a importação apaga e reinsere. O campo antigo `locais` (texto livre "Recife, Petrolina") continua onde estava; `pontos` é o endereço **com lat/lng**.
 - **Ninguém vira dois pinos:** se o nome já entrou como lead/negócio, o cliente não repete — e o **contato do funil sem local próprio herda o do cliente** (`locDePessoa`). Um pino, um endereço.
 - **Filtro novo no mapa:** *Carteira (clientes)*. Filtro de funil/etapa/status continua sendo coisa de funil e não traz cliente.
-- **Na rota do dia:** evento do Google com o **nome do cliente no título** ("Entrega de apólice — Taciana Lima") passa a usar o **endereço da ficha dele**, com selo 🛡 Cliente e link pra ficha da carteira. Nome de uma palavra só **não** vira palpite.
+- **Na rota do dia:** evento do Google com o **nome do cliente no título** ("Entrega de apólice — T. L.") passa a usar o **endereço da ficha dele**, com selo 🛡 Cliente e link pra ficha da carteira. Nome de uma palavra só **não** vira palpite.
 - **Celular:** o editor de locais ganhou alvos de 44px (a regra geral do celular parava em 42 por causa do `:not()`, que pesa mais que `.loc-busca` — por isso a correção mora dentro do bloco do celular, não como remendo).
 
 **Provas:** portão verde (39 telas × {375,1024,1280} × {cheia,vazia}), **8 invariantes novos** no `lpSelfCheck` (pino, rotina, dedupe, filtro, rota pelo nome, gravação pelo caminho real, id de DOM com espaço/acento), teste funcional novo **13/13** nos dois tamanhos, e as 4 suítes de antes seguem verdes (gsync 17 · agenda 14 · atividade 14 · estabilidade).
@@ -193,7 +193,7 @@ Atividade vinda do import tem id **NÚMERO**; o clique manda **TEXTO**; a busca 
 "Uso muito a função tarefas." Agora o escopo do Google inclui **Tasks** e a atividade vai pro lugar certo: **com hora → evento na Agenda; sem hora → Tarefa do Google** (ele troca o padrão no cabeçalho da Agenda e força um ou outro em cada atividade pelo ✏️). Trocar o destino **migra** (apaga de um lado antes de criar no outro, nunca duplica). Volta também: concluir ou remarcar a tarefa no Google reflete no CRM. Se ele autorizar só a Agenda, o app percebe e manda tudo pra Agenda em vez de perder o compromisso.
 
 ### 4. Compromisso ↔ negócio (AGENDA-NEGOCIO-V1)
-"Esse compromisso do Alexandre Baltar é um cliente que está em etapa de OI." O evento criado à mão no Google não sabia de quem era. Agora o app reconhece o dono por (1) carimbo do CRM, (2) telefone na anotação, (3) **nome dentro do título** (ignorando o prefixo de etapa). A **etapa aparece no bloco da grade, no chip da semana e na lista**, o selo abre a ficha, e o editor permite **vincular à mão** — o vínculo fica gravado no próprio evento.
+"Esse compromisso do A. B. é um cliente que está em etapa de OI." O evento criado à mão no Google não sabia de quem era. Agora o app reconhece o dono por (1) carimbo do CRM, (2) telefone na anotação, (3) **nome dentro do título** (ignorando o prefixo de etapa). A **etapa aparece no bloco da grade, no chip da semana e na lista**, o selo abre a ficha, e o editor permite **vincular à mão** — o vínculo fica gravado no próprio evento.
 
 **Provas:** portão **6/6 verde** (39 telas × {375,1024,1280} × {cheia,vazia}); **59 checagens funcionais** no navegador (14 atividade/Tasks + 14 agenda + 17 sincronia + 14 estabilidade); 18 invariantes novos.
 
@@ -226,8 +226,8 @@ Atividade vinda do import tem id **NÚMERO**; o clique manda **TEXTO**; a busca 
 
 **Estado em 30s:** branch `claude/google-calendar-sync-bidirectional-ruaeiq` — **v7.59**, portão VERDE (38 telas × {375,1280} × {cheia,vazia}, lpSelfCheck 0, funSelfCheck 0) + `--prova` acusando o defeito injetado. **Aguarda OK dele pra merge.** Sessão feita do iPad (MacBook no suporte Apple), 100% na nuvem.
 
-### 1. GCAL-BIDIRECIONAL-V1 — o caso Davi
-**Sintoma dele:** "adicionei tarefa na oportunidade do Davi, cliquei pra mandar pra agenda do Google, não refletiu."
+### 1. GCAL-BIDIRECIONAL-V1 — o caso Dv.
+**Sintoma dele:** "adicionei tarefa na oportunidade do Dv., cliquei pra mandar pra agenda do Google, não refletiu."
 **Causa:** mandar pra agenda era um TIRO ÚNICO sem rede de segurança. Token do Google vencido, popup de consentimento bloqueado (Safari do iPad bloqueia popup que não nasce do toque) ou rede oscilando = o clique não virava nada, nem evento nem sinal. E não existia caminho de volta: remarcar/apagar no Google não mexia no CRM.
 **Correção (uma via, dois sentidos):**
 - **CRM → Google:** toda mudança (criar com hora, clicar 📅, remarcar, concluir, remover) ENFILEIRA num `crmlp_gsync_v1` PERSISTIDO. Drena no boot, ao voltar o foco, a cada 90 s, quando a rede volta e ao reconectar. Clique não se perde mais.
@@ -253,7 +253,7 @@ O guarda do V10.1 (`localStorage.setItem` bloqueado durante troca de conta) era 
 - 15 invariantes novos no `lpSelfCheck` (rodam no portão pra sempre).
 
 ### Pendências
-- **Gustavo:** conferir logado no iPad (clicar 📅 numa tarefa do Davi, remarcar no Google e ver voltar) e **autorizar o merge**.
+- **Gustavo:** conferir logado no iPad (clicar 📅 numa tarefa do Dv., remarcar no Google e ver voltar) e **autorizar o merge**.
 - Nenhuma migration, nenhum dado tocado. Fila e sincronia são 100% client-side (sem servidor novo).
 - Frentes anteriores seguem: Victor resubir emitidas · Daniel carteira real · extensão WhatsApp no CRM · MAPA & LOCAIS (rota do dia).
 
@@ -263,7 +263,7 @@ O guarda do V10.1 (`localStorage.setItem` bloqueado durante troca de conta) era 
 
 **Prompt pra próxima sessão:**
 ```
-Sessão CRM Visão LP — retomar. v7.58.1 no ar (caça a bugs fechada em 7 rodadas; ver memória crm-lp-painel-ta-consolidacao, entradas 11–12/09). Anterior: v7.52 no ar (ler memória crm-lp-mapa-locais + crm-lp-painel-ta-consolidacao). Frente aberta: MAPA & LOCAIS (próximos: rota do dia, locais em clientes da carteira, tarefa/compromisso via conector). Fila dele: Victor resubir emitidas + consolidado de divergências; conferir logado; Daniel carteira. Anterior: v7.46 no ar (FUNDAÇÃO V1 servidor manda + fila PEND; SEGURANÇA-V1/V2 c/ varredura diária pg_cron 02:00; DRAG-TOUCH-V1 no iPhone; STATUS-ETAPA-V1 (status Delay OI/FF, P/C, C2, Delivery já cadastrados no servidor); v7.46.1 IMPORT-DONO-V1 (Victor sobe relatório → cada linha vai pro dono do LP; delegação Daniel→Victor criada); v7.47 SEGURANÇA-V3 (carteira sem delete-all, cfg funil debounce+pendente, jsq). Fila: Victor resubir emitidas (José Rogério/Sandra faltam), Victor passa CONSOLIDADO de divergências dos relatórios, conferir 1ª execução do pg_cron 12/09, itens médios da auditoria (badge de pendência, debounce salvar()). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
+Sessão CRM Visão LP — retomar. v7.58.1 no ar (caça a bugs fechada em 7 rodadas; ver memória crm-lp-painel-ta-consolidacao, entradas 11–12/09). Anterior: v7.52 no ar (ler memória crm-lp-mapa-locais + crm-lp-painel-ta-consolidacao). Frente aberta: MAPA & LOCAIS (próximos: rota do dia, locais em clientes da carteira, tarefa/compromisso via conector). Fila dele: Victor resubir emitidas + consolidado de divergências; conferir logado; Daniel carteira. Anterior: v7.46 no ar (FUNDAÇÃO V1 servidor manda + fila PEND; SEGURANÇA-V1/V2 c/ varredura diária pg_cron 02:00; DRAG-TOUCH-V1 no iPhone; STATUS-ETAPA-V1 (status Delay OI/FF, P/C, C2, Delivery já cadastrados no servidor); v7.46.1 IMPORT-DONO-V1 (Victor sobe relatório → cada linha vai pro dono do LP; delegação Daniel→Victor criada); v7.47 SEGURANÇA-V3 (carteira sem delete-all, cfg funil debounce+pendente, jsq). Fila: Victor resubir emitidas (J. R./Sd. faltam), Victor passa CONSOLIDADO de divergências dos relatórios, conferir 1ª execução do pg_cron 12/09, itens médios da auditoria (badge de pendência, debounce salvar()). Ler memória crm-lp-painel-ta-consolidacao (frente FECHADA, lições dos 97 e do rótulo do Daniel) + ESTADO (topo) + CANONICO_CRM.md no Drive. Fila: (1) Gustavo conferir logado: seletor do nome (Meu/Rebeca/Daniel/Pipe X), Painel TA (listas do método, Delay, Rec de cliente, filtros dobráveis), SitPlan; (2) Daniel subir a carteira real; (3) extensão WhatsApp no CRM; (4) opcional: 'Organizar painel' (arrastar/ocultar) do 2.0. Regras iguais: git fetch antes, branch de origin/main no worktree crm-wt-rp, grep -a no vendas.html, portão verde, --servido, merge só com OK em regra/dado real/RLS.
 ```
 
 ### O que entrou (tudo no ar, PRs #186–#196)
@@ -274,7 +274,7 @@ Sessão CRM Visão LP — retomar. v7.58.1 no ar (caça a bugs fechada em 7 roda
 - **v7.36:** Painel TA com a ESTRUTURA do 2.0 (coluna Listas/Listas de TA/Filtros; tabela c/ avatar; ⋯ mover/listas; ficha em modal; cards no celular). "Todos os nomes" sai do menu.
 - **v7.37/.1 SITPLAN-UNIFICADO (opção 1):** `spListaDoDia` = funil (`c.sitplan`) + Estoque (`ta_dia`); resultado gravado onde o contato mora; SitPlan planeja, Painel TA executa; Lista do Dia sai do hub. Rótulo do "Meu" vem do banco (`escMeuLpDe`).
 - **v7.38/.39/.39.1/.40 listas do método:** Toda a base · Rec (com telefone) · Recomendações · Delay (`taDelayTipo`, filtro por tipo, inclui funil) · Rec (sem fone) · Clientes (carteira, `taEhCliente`) · Rec de cliente 💎 · Descartados. "OIs agendados" sai: agendou → `bnLevarProFunil('OI/FF')`. Cards de KPI fora; "Hoje" fora do card. SERVIDOR-MANDA no Estoque (`bnSemOsApagados`, só carga completa). Filtros dobráveis c/ resumo. `MODS.funis_extra` off pro LP. VER-COMO-V2: modo "vendo: X" aplica os módulos DELE e esconde o painel admin.
-- **Banco (OK dele):** 7 rótulos 'gustavo'→'daniel' em contatos do Daniel; 115 contatos de funil do Gustavo com estágio; apagados 3 'Davi Teste' (Daniel+Victor) e 'lista de atrasos' (Victor).
+- **Banco (OK dele):** 7 rótulos 'gustavo'→'daniel' em contatos do Daniel; 115 contatos de funil do Gustavo com estágio; apagados 3 'D. Teste' (Daniel+Victor) e 'lista de atrasos' (Victor).
 - **v7.40.1 QUOTA-V1 (#198):** o localStorage do Gustavo estourou a cota com 6.5k linhas → exceção no meio da carga → os 1.368 do Daniel nunca chegavam à memória (servidor devolvia todos). Cache guarda só os MEUS nomes; falha de cota avisa e não derruba. `escLinhaOk`: Benefícios/Atraso/Solicitações respeitam o escopo. SitPlan: busca em vez do select gigante.
 - **v7.41.1 (#201):** densidade compacta anulava a safe-area da topbar no iPhone (barra sob o relógio) — regra do celular cobre as duas densidades.
 - **v7.42 DONO-V1 (#202):** sem dono gravado = MEU (não vaza pro 'vendo: X'); `bnGarantirDono` busca a base do outro dono do servidor ao escolher no seletor; linha 'Dono (LP)' em toda ficha; editor do Estoque com Recomendante 1º + select Dono (admin move de base: `bnMoverDono`); Painel TA 'sem recomendante' explícito; linha do SitPlan abre a ficha.
@@ -293,7 +293,7 @@ Sessão CRM Visão LP — retomar. v7.58.1 no ar (caça a bugs fechada em 7 roda
 5. **Clientes = 614:** flag `estagio='cliente'` da carga de 04/08 (569 "CLIENTE ATIVO" da planilha) ≠ carteira real (146). Cliente = está na carteira.
 
 ### Auditoria das bases (11/09)
-Outras tabelas SEM mistura (só subst_apolices juca/lp=Daniel 6, intencional). Daniel 1.590 = 1.371 Estoque + 219 funil. Caso deixado: Ana Cecilia (NN etapa SitPlan c/ estágio cliente que ele mesmo setou). RLS provada como juca: vê 1.590 do Daniel, 0 do Victor.
+Outras tabelas SEM mistura (só subst_apolices juca/lp=Daniel 6, intencional). Daniel 1.590 = 1.371 Estoque + 219 funil. Caso deixado: A. C. (NN etapa SitPlan c/ estágio cliente que ele mesmo setou). RLS provada como juca: vê 1.590 do Daniel, 0 do Victor.
 
 ### Pendências
 - Gustavo conferir LOGADO (seletor, Painel TA, SitPlan, Delay, filtros). Daniel: "Atualizar app" e conferir o Estoque dele.
@@ -305,27 +305,27 @@ Outras tabelas SEM mistura (só subst_apolices juca/lp=Daniel 6, intencional). D
 **Estado em 30s:** `main 8ed4bf8` — v7.31 no ar; **v7.32 = PR #184 aberto** (colar apólice, portão verde, aguarda OK de merge). crm-mcp **v2.2** no ar (deploy v4). Supabase playground = PRODUÇÃO. Portão = **37 telas** × {375,1280} × {cheia,vazia}.
 
 ### O que entrou (no ar, salvo indicado)
-- **Victor login destravado** — não tinha conta em `auth.users` (signup off ⇒ "Entrar com Google" dava erro). Provisionada a conta de auth (email confirmado + identidade), espelhando a do Daniel (uid 964bbe10). Entra por Google **ou** senha temp `VictorCRM#2026`. E-mail `vfigueiredo.solucoes@gmail.com` confirmado pelo Gustavo.
+- **Victor login destravado** — não tinha conta em `auth.users` (signup off ⇒ "Entrar com Google" dava erro). Provisionada a conta de auth (email confirmado + identidade), espelhando a do Daniel (uid 964bbe10). Entra por Google **ou** senha temp `VictorCRM#2026`. E-mail `victor@…` confirmado pelo Gustavo.
 - **Mistura de bases (Gustavo/Rebeca/Daniel)** — contaminação REAL achada: o import MFB não separava por LP e o RLS não amarra rótulo⟷dono. **Limpeza rodada** (vendas_atrasos double-count desfeito: 15 espelhos apagados + 21 roteadas; pendências/emitidas/solicitações roteadas; 4 órfãos invisíveis recuperados; 108 rótulos normalizados; 9 contatos do Daniel re-rotulados; placed do Daniel apagado). **Trava NO AR** (migration `lp_trava_anti_mistura_v1`: tabela `lp_rotulo_dono` + trigger **normalizador** `trg_norm_dono` em vendas_atrasos/emissao_pendencias/emissao_emitidas/solicitacoes/beneficios). Verificação: **0 mismatch** (só subst_apolices=6, intencional/cliente-level). Plano completo: scratchpad/PLANO_ANTI_MISTURA.md. ⚠️ **melhor_dia emissão 30 = 14 (planilha), NÃO 15.**
 - **Delivery pós-venda** (v7.26, PR #177) — fora das somas do funil (BC+LP), mantém a coluna; venda conta em **Apólice Emitida**. Helper único `ehPosVenda`.
 - **Saudação do Daniel** (v7.30, PR #181) — usava `user()` demo (mostrava "Gustavo"); agora `nomeAtual()` (PERFIL da sessão).
 - **crm-mcp em lote** (v2.2, deploy v4, verify_jwt=false) — `criar_contatos_lote` (até 200, 1 INSERT, upsert idempotente `(dono,ref_base)`) + `atualizar_contatos_lote` (merge por id), resposta **enxuta** `{criados/atualizados,erros}` (Prefer return=minimal, não ecoa). Migration `lp_contatos.ref_base` + índice único. **Daniel já usa** (prompt entregue no chat).
-- **Postecipação (motor validado contra a planilha oficial + caso Davi):** PC-1 motor único `pcPosicao/pcClassifica/pcMelhorDia/pcProximaCobranca/pcGanhoDias` (PR #178); PC-2 componente `pcSimuladorHtml` (#179); PC-3 aba standalone "Melhor dia de vencimento" em Módulos→Referência (#180); PC-4 embed em **Substituição** (card) + **Lista de Atraso** (topo) via `pcSimModal` (#183); **colar apólice** no standalone reusando `subExtrai` (#184, aberto).
+- **Postecipação (motor validado contra a planilha oficial + caso Dv.):** PC-1 motor único `pcPosicao/pcClassifica/pcMelhorDia/pcProximaCobranca/pcGanhoDias` (PR #178); PC-2 componente `pcSimuladorHtml` (#179); PC-3 aba standalone "Melhor dia de vencimento" em Módulos→Referência (#180); PC-4 embed em **Substituição** (card) + **Lista de Atraso** (topo) via `pcSimModal` (#183); **colar apólice** no standalone reusando `subExtrai` (#184, aberto).
 
 ### Provas
 Portão em cada PR (37 telas, lpSelfCheck 0 com os testes de PC-1/2/4/4c, funSelfCheck 0); hash servido conferido nos deploys (Delivery/PC-1 via `--servido`); idempotência do mcp e da trava provadas por SQL; contaminação zerada por INV-1.
 
 ### Pendências (o que a próxima sessão pega)
 - **PR #184** (colar apólice) aberto, portão verde — aguarda OK de merge.
-- **PC-5** — view SQL `subst_postecipacao` idempotente: melhor_dia com correção fim-de-mês + colunas `proxima_cobranca`/`proxima_cobranca_melhor`/`ganho_dias`. Ler `pg_get_viewdef` ANTES; preservar off_dias/pgto_situacao/semaforo/veredito; apólice de teste 002105592.
+- **PC-5** — view SQL `subst_postecipacao` idempotente: melhor_dia com correção fim-de-mês + colunas `proxima_cobranca`/`proxima_cobranca_melhor`/`ganho_dias`. Ler `pg_get_viewdef` ANTES; preservar off_dias/pgto_situacao/semaforo/veredito; apólice de teste 002…592.
 - **Perfil "ver como"** — seletor no cartão do nome (Daniel/Victor/Pipe X=todos/Juca=meu) pro admin logado. `togglePerfilMenu` hoje retorna cedo quando logado; reusar PX.escopo/DELEG. **Decidir: só ver × operar/gravar como ele** (write-as = dado real).
 - **Daniel** subir a carteira real dele. **Substituição** (6 apólices Daniel sob juca) deixada de propósito (cliente-level/misto — mover a árvore cliente→apólice→pagamento junto se um dia for reatribuir).
 
 
-- **Bug real achado com o Daniel logado:** `carteira.html` embutia a carteira do Gustavo (143 cli/196 apólices, snapshot 28/07, com telefone/e-mail — PII em repo público) e, na 1ª abertura com tabela vazia, **semeava essa carteira na conta de quem abrisse**. Aconteceu às 21:39 de 08/09: 143/196 linhas com `_src=cockpit-2026-07-28` entraram em `carteira_clientes/apolices` com `dono=souzacruzdaniel@gmail.com`. Painel TA 2.0 estava certo (os 7 contatos são dele).
+- **Bug real achado com o Daniel logado:** `carteira.html` embutia a carteira do Gustavo (143 cli/196 apólices, snapshot 28/07, com telefone/e-mail — PII em repo público) e, na 1ª abertura com tabela vazia, **semeava essa carteira na conta de quem abrisse**. Aconteceu às 21:39 de 08/09: 143/196 linhas com `_src=cockpit-2026-07-28` entraram em `carteira_clientes/apolices` com `dono=daniel@…`. Painel TA 2.0 estava certo (os 7 contatos são dele).
 - **ISOLA-COCKPIT-V1 (PR #174, main cc2fee0):** snapshot e seed removidos; filas "Onde agir hoje", ABCD e profissão calculadas do dado vivo; filtro `dono=eq.<logado>` (escopo Pipe X `todos` abre pra delegação); estado vazio orientado; título por usuário; sessão herdada (cockpit e painel-lp) prioriza o login do app e descarta `lp_sess` de outro usuário. Portão 4/4 verde; Pages servindo `f77954bd68f7`.
 - **Conector MCP:** token antigo revogado, token novo emitido (insert do hash direto — `mcp_session_issue` exige JWT de admin, não roda pelo MCP). `crm-mcp` **v2.1 (deploy v3)**: `busca` em `listar_contatos` filtra por `dados->>nome` (antes quebrava com 42883). Provas ao vivo: quem_sou_eu=Daniel · 7 contatos dele · busca "Piquet" (meu) = 0 · token adulterado recusado · 15 atrasos dele. Fonte da função agora versionada em `supabase/functions/crm-mcp/index.ts`.
-- **PENDENTE (dado real, precisa de OK):** apagar as 143/196 linhas semeadas na conta do Daniel (`dono='souzacruzdaniel@gmail.com' and dados->>'_src'='cockpit-2026-07-28'`) e subir a carteira REAL dele (Subir relatório → Carteira de Clientes, logado como ele).
+- **PENDENTE (dado real, precisa de OK):** apagar as 143/196 linhas semeadas na conta do Daniel (`dono='daniel@…' and dados->>'_src'='cockpit-2026-07-28'`) e subir a carteira REAL dele (Subir relatório → Carteira de Clientes, logado como ele).
 
 ## 📸 Snapshot — 07/09 noite → 09/09/2026 · **v6.4 → v7.24** · 32 PRs (#141→#172), todos no ar
 
@@ -372,7 +372,7 @@ Portão em cada PR (33 telas × {375,1280} × {cheia,vazia}, lpSelfCheck 0, ~60 
 CS MQC por apólice · cancelamentos com data · data de emissão das apólices antigas · Status T/Benefícios no detector.
 
 ### Presos nele
-Exports acima · Google como identidade (opcional) · Sylvio no ar · migration `lp_perfis_nome_ativo.sql` · Victor · textos de cobrança · faixas 15/8 · PR #35.
+Exports acima · Google como identidade (opcional) · Sy. no ar · migration `lp_perfis_nome_ativo.sql` · Victor · textos de cobrança · faixas 15/8 · PR #35.
 
 ---
 
@@ -527,7 +527,7 @@ Exports acima · Google como identidade (opcional) · Sylvio no ar · migration 
 
 **Adendos no ar:** v0.40.1 = fix do boot (Emissão/Solicitações/Benefícios só carregavam no botão Sincronizar — `BOOT_LOADERS` única + invariante) · v0.41.0 = pedido dele depois de ver: **Benefícios saiu de Outros módulos/BackOffice e virou módulo isolado no menu de topo** (gate `MODS.beneficios`) + **card no bloco AGORA do Início** (exigências vencidas · parados · ação pra hoje/atrasada; urgência 1 quando pede ação). PR #110 mergeado por push (gh barrado pelo classificador). Sobra: 1 falha pré-existente do self-check na base real (índice de apólices por cliente, carteira).
 
-**Estado em 30 s:** terceiro módulo do BackOffice, `bf*` no `vendas.html`, espelhando at/em/so (cards, lentes, modal, campos de estado `bola_com`/`ultima_acao`/`proxima_acao`/`protocolo`). **Não tem "Colar relatório"**: o caso é aberto à mão e vive até o pagamento. Banco JÁ MIGRADO no playground (`supabase/migrations/backoffice_v1_beneficios.sql`: `beneficios` + `beneficio_documentos` + `beneficio_exigencias` + `beneficio_eventos`, RLS dono/delegado via `lp_donos_visiveis()`, filhas visíveis só quando o pai é). **O caso Diego foi semeado DIRETO no banco** (1 caso `em_exigencia`, 10 docs = 7 anexados + 3 pendentes, 3 exigências abertas de 18/08, 12 entradas no diário, próxima ação com prazo 02/09) — de propósito NÃO está em migration nem em fixture: dado de saúde + repo público. `lpSelfCheck` 0 falhas (+11 invariantes).
+**Estado em 30 s:** terceiro módulo do BackOffice, `bf*` no `vendas.html`, espelhando at/em/so (cards, lentes, modal, campos de estado `bola_com`/`ultima_acao`/`proxima_acao`/`protocolo`). **Não tem "Colar relatório"**: o caso é aberto à mão e vive até o pagamento. Banco JÁ MIGRADO no playground (`supabase/migrations/backoffice_v1_beneficios.sql`: `beneficios` + `beneficio_documentos` + `beneficio_exigencias` + `beneficio_eventos`, RLS dono/delegado via `lp_donos_visiveis()`, filhas visíveis só quando o pai é). **O caso Dg. foi semeado DIRETO no banco** (1 caso `em_exigencia`, 10 docs = 7 anexados + 3 pendentes, 3 exigências abertas de 18/08, 12 entradas no diário, próxima ação com prazo 02/09) — de propósito NÃO está em migration nem em fixture: dado de saúde + repo público. `lpSelfCheck` 0 falhas (+11 invariantes).
 
 ### O que entrou
 - **Tela `beneficios`** (menu BackOffice → 🩹 Benefícios, contador no grupo): cards Casos abertos · Mais antigo · Exigências vencidas (lente) · 🔴 Parados há 3d+ (lente, `BF_PARADO_DIAS`, = sem evento novo no diário) · 🔇 Casos mudos (sem bola ou sem próxima ação) · quebra por LP. Lista SEGURADO · APÓLICE · EVENTO · PROTOCOLO · DIAS · SITUAÇÃO · BOLA · PRÓXIMA AÇÃO · PRAZO; filtros situação/LP/"só os parados"/busca.
@@ -537,7 +537,7 @@ Exports acima · Google como identidade (opcional) · Sylvio no ar · migration 
 - "Ver exemplo" só sem login, nomes inventados, nada clínico.
 
 ### Aceite (spec §8) — verificados no preview local com o fixture do mesmo formato do caso real
-1 ✅ protocolo em texto, 23 dias, 3 exigências há 15d, próxima ação com prazo — sem rolar (375 e 1280) · 2 ✅ 7 anexados / 3 pendentes · 3 ✅ aviso "2 itens em aberto" ao anexar · 4 ✅ diário em ordem · 5 ✅ texto com o protocolo · 6 ✅ parado = sem evento há ≥3d (invariante). **Falta ele abrir logado e ver o caso Diego real** (o preview local não tem a sessão dele).
+1 ✅ protocolo em texto, 23 dias, 3 exigências há 15d, próxima ação com prazo — sem rolar (375 e 1280) · 2 ✅ 7 anexados / 3 pendentes · 3 ✅ aviso "2 itens em aberto" ao anexar · 4 ✅ diário em ordem · 5 ✅ texto com o protocolo · 6 ✅ parado = sem evento há ≥3d (invariante). **Falta ele abrir logado e ver o caso Dg. real** (o preview local não tem a sessão dele).
 
 ### Decisões tomadas sozinho
 - Seed do caso real fora do git (banco direto). `lp_email` do caso = juca@ (dono; o Victor vê pela delegação).
@@ -555,7 +555,7 @@ Exports acima · Google como identidade (opcional) · Sylvio no ar · migration 
 - **v0.39.1/v0.39.2 — parser da emissão consertado com o relatório REAL**: token com letra = proposta, 9 dígitos = apólice, pareados por adjacência aceitando `/` entre eles; chave `coalesce(proposta, apolice)` como coluna gerada + unique por dono; colagem que diverge do `Total MFB` **não grava**; "Ver exemplo" bloqueado logado e com números inventados; teste de idempotência no `lpSelfCheck`. Erro de origem: fixture com identificador real + exemplo desligando a sync.
 - **v0.41.1 — cards seguem os filtros** (LP/contestação/busca; lentes ficam de fora) na emissão e no atraso; ficha de emissão com "Corrigir nomes" (`nomes_corrigidos`).
 - **v0.42.0 — hub Módulos**: o grupo "Outros módulos" virou um item que abre tela de cards (como o Atalhos do Painel Central); gates MODS valem nos cards.
-- **Banco**: relatório real de UW e Emissão colado logado (5 propostas · PA 37.696,56 · AFYC 15.013,88, sem duplicar); Victor (`vfigueiredo.solucoes@gmail.com`) já com `lp_perfis` (preset Assistente) e `lp_delegacoes` (juca → victor). **Falta só o convite no Supabase** (Auth → Users → Add user → Send invitation).
+- **Banco**: relatório real de UW e Emissão colado logado (5 propostas · PA 37.696,56 · AFYC 15.013,88, sem duplicar); Victor (`victor@…`) já com `lp_perfis` (preset Assistente) e `lp_delegacoes` (juca → victor). **Falta só o convite no Supabase** (Auth → Users → Add user → Send invitation).
 
 ### Lições desta sessão
 - Aba com versão em cache = colagem que "parece" que rodou e não vai pro banco. Sempre "Atualizar app" antes de testar.
@@ -616,7 +616,7 @@ O app guardava só `AT.carregadoEm`. A Lista de Atraso e a Substituição agora 
 
 ### 4 · v0.35.0 — o card diz O QUE se vende
 
-Com uma pessoa tendo várias oportunidades (o caso das duas do Rogério), o nome repetido não distingue nada. Precedência: **título escrito > simulação ATIVADA > nada**. Simulação apenas "Apresentada" não vira título.
+Com uma pessoa tendo várias oportunidades (o caso das duas do Rg.), o nome repetido não distingue nada. Precedência: **título escrito > simulação ATIVADA > nada**. Simulação apenas "Apresentada" não vira título.
 
 ### 5 · v0.35.1 — o atraso é a palavra da seguradora
 
@@ -710,7 +710,7 @@ Duas regras que impedem isso de virar esconderijo: **bloco fechado mostra o resu
 
 ### ⚠️ Aberto / depende do Gustavo
 1. **PR #35** — Revisão de Apólices duplica ou complementa o `revisao-protecao.html`? É **pré-requisito da Mudança de Seguro**.
-2. **`ms-calc.html`** — sem o motor de tarifa (1.038 séries) o prêmio da apólice nova é digitado da prévia. A tela avisa que o custo fica **subestimado**. E o **caso Marcus** para rodar os critérios de aceite.
+2. **`ms-calc.html`** — sem o motor de tarifa (1.038 séries) o prêmio da apólice nova é digitado da prévia. A tela avisa que o custo fica **subestimado**. E o **caso Ms.** para rodar os critérios de aceite.
 3. **Usar o app logado** — 13 versões subiram verificadas *deslogado*. Só a sessão real exercita o upsert no Supabase.
 4. **X218630** · **motivos de recusa órfãos** · **CG do WL65** · **emissão das apólices-gatilho** · decisões de **CPF como identidade** e **extensão cria ou anexa**.
 
@@ -763,7 +763,7 @@ Etapa vive em `lp_contatos.dados->>'etapa'` (ID de fábrica). **4 valores de fun
 Sem `node`/`deno`/`bun` na máquina (só python3): servi o arquivo com `python3 -m http.server` e validei no browser — o `<script>` inline parseia (sem erro de sintaxe), funções definidas, casos reais certos, **10 invariantes novos de reunião verdes** no self-check de boot. **Guard de CI limpo** (0 `from('leads').insert` no vendas.html). As 2 falhas de self-check `menu:…` são **ambientais** (app servido estático, sem Supabase, não bootou o menu) — não é regressão (não toquei em menu).
 
 ### Backfill aplicado (via MCP Google Calendar, dry-run mostrado antes de escrever)
-2 eventos reais viraram **`🟡 [RCP/FF] Daniel Ricardo…`** (id `2pgjvs5j…`, 25/08) e **`🟡 [RCP/FF] Roberto Jose…`** (id `73d11rd2…`, 01/09), colorId 7, **local/descrição/horário preservados**. Os 2 `WhatsApp ·` (Ricardo, Herica) NÃO foram tocados (Regra 3). Verissimo/Felipe não tinham evento no Google.
+2 eventos reais viraram **`🟡 [RCP/FF] Daniel Rc.…`** (id `2pgjvs5j…`, 25/08) e **`🟡 [RCP/FF] R. J.…`** (id `73d11rd2…`, 01/09), colorId 7, **local/descrição/horário preservados**. Os 2 `WhatsApp ·` (Rc., Herica) NÃO foram tocados (Regra 3). Verissimo/Fe. não tinham evento no Google.
 
 ### Lições da leva
 - **Link-template do Google Calendar ignora `colorId`** — cor exige a API. Metade do pedido ("ler o funil na agenda") só fecha criando o evento pela API.
@@ -1005,8 +1005,8 @@ Ele perguntou: *"eu tb posso add os clientes e puxar pela lista de atraso né? q
 
 **⚠️ PENDENTE (dele) e próximas frentes:**
 1. ✅ **Backup da Substituição JÁ IMPORTADO por ele** (confirmou no fechamento). Agora pode também **puxar da Lista de Atraso** pra trazer clientes/apólices que faltarem, e completar a **data de emissão** da apólice-gatilho pelo ✏️ (sem ela a janela de 180d não fecha).
-2. **Caso Ricardo Da Fonte** — não reproduzi (base vazia). Corrigi o mecanismo pela especificação; se após importar ainda divergir, precisa do print da ficha + relatório.
-3. **Caso Gilvania** — precisa dos **dois relatórios** (antes/depois do abatimento) pra fechar em definitivo.
+2. **Caso R. D. F.** — não reproduzi (base vazia). Corrigi o mecanismo pela especificação; se após importar ainda divergir, precisa do print da ficha + relatório.
+3. **Caso G.** — precisa dos **dois relatórios** (antes/depois do abatimento) pra fechar em definitivo.
 4. **Item 4 do caderno** (botão "Adicionar" na aba Oportunidades): esse selector **não existe** em `vendas.html` nem `carteira.html` — **precisa de print** pra conectar a coisa certa.
 5. **Itens 6+7+9** (duplo modelo do card Cliente×Oportunidades · modal Mover Estágio em etapa única · converter contato→aba Clientes): dependem de definir a **trilha de follow-up de cliente**. Viram UMA frente, sessão própria.
 6. **Item 13** (extensão Wapp, PA/PM editáveis): outra base (`extensao-whatsapp/`), já reservado como frente "extensão WA 2.0".
@@ -1035,7 +1035,7 @@ Ele perguntou: *"eu tb posso add os clientes e puxar pela lista de atraso né? q
 **O que foi feito nesta sessão (evolução v0.9.6 → v0.9.9):**
 - **v0.9.6 (#54):** módulo criado + migration aplicada (`supabase/migrations/vendas_atrasos.sql`: +7 colunas, UNIQUE `(lp_email,apolice)`, RLS por dono `lp_email=jwt email`). Os 7 bugs do prompt corrigidos na origem (upsert por apólice, dias derivado, presente nunca vira "pago", pago≠venc, apólice string normalizada).
 - **v0.9.7 (#55):** aplicar não exige mais nome (desbloqueou) + 1ª tentativa de ler nome sem rótulo.
-- **v0.9.8 (#56) — O FIX GRANDE:** com o **relatório real** do Gustavo (salvo em `scratchpad/relatorio-real.txt`), descobri que TODO o registro vem **DEPOIS** do nº da apólice → reescrevi o parser p/ **janela FORWARD** `[nº..próxima apólice]`. Isso consertou o **bug de datas herdadas da apólice de cima** (Gilvania 001737611=22/06, 001505343=27/06) — **que já existia no artefato backoffice.html**. Nome extraído entre `Ativa` e o 1º contato (some o "Ativa" que vazava). **Status workflow de volta** (dropdown na ficha) + os 2 novos que ele pediu (`Boleto pago cliente`, `Aguardando baixa sistema`). Ficha ganhou edição de segurado/responsável/vencimento/prêmio.
+- **v0.9.8 (#56) — O FIX GRANDE:** com o **relatório real** do Gustavo (salvo em `scratchpad/relatorio-real.txt`), descobri que TODO o registro vem **DEPOIS** do nº da apólice → reescrevi o parser p/ **janela FORWARD** `[nº..próxima apólice]`. Isso consertou o **bug de datas herdadas da apólice de cima** (G. 001…611=22/06, 001…343=27/06) — **que já existia no artefato backoffice.html**. Nome extraído entre `Ativa` e o 1º contato (some o "Ativa" que vazava). **Status workflow de volta** (dropdown na ficha) + os 2 novos que ele pediu (`Boleto pago cliente`, `Aguardando baixa sistema`). Ficha ganhou edição de segurado/responsável/vencimento/prêmio.
 - **v0.9.9 (#57):** re-colar CONSERTA nomes "Ativa …" salvos na v0.9.7 (heal), preservando nome corrigido à mão.
 
 **Verificação:** 73 golden asserts contra o relatório REAL (`scratchpad/atrasos-core.js` + `atrasos-test.html`, rodo no browser interno — SEM node na máquina). E2E no app conferido (10 registros, datas/prêmio/LP/nome ok).

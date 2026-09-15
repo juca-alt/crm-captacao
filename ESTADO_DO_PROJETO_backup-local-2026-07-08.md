@@ -2,7 +2,7 @@
 
 > ⚙️ **MODELO DE TRABALHO (regra fixa do Gustavo, 29/06): UMA SESSÃO POR VISÃO.** Cada visão é trabalhada numa sessão própria, em paralelo, pra evitar confusão. **Esta sessão/contexto = visão CAPTAÇÃO (`index.html`).** A **visão LP (`vendas.html`) tem sessão própria, paralela** (o Gustavo já a iniciou). Convivem sem conflito porque tocam arquivos/tabelas diferentes (`index.html` vs `vendas.html`; `leads`/`app_users` vs `vendas_*`/`lp_*`). **Ao retomar este contexto, NÃO mexer na LP — ela é tratada na outra sessão.** Ver [[crm-captacao-uma-sessao-por-visao]].
 
-**Última atualização:** 08/07/2026 — **PR #15 MERGEADO → v2.6.2 NO AR.** Nesta sessão o merge do PR #15 (`feat/id-hardening`) foi feito (com autorização explícita do Gustavo no chat) e o deploy do GitHub Pages concluiu com sucesso. `origin/main` = **`e5c7316`** (v2.6.2), `main` local sincronizada. Agora o app manda `codigo` VAZIO e a **trigger do banco numera o PI atômico** (fim da colisão entre aparelhos); guard do choke point roda verde no CI. **O que SOBRA (parte do Gustavo, pra amanhã):** (2) validar logado que lead novo por cada origem — manual/inbox/captura/import — sai com PI do banco sequencial, sem duplicar (recarregar com Cmd+Shift+R pra pegar a v2.6.2; próximos PIs a partir de ~PI01538); (3) unificar os **6 telefones duplicados** na tela Duplicatas (4 são mesma pessoa 2×: Luiz, Lucas Atanasio, Maurilio, Renan; 2 dependem do julgamento dele: Rafael Farias×Raphael Freitas, "OT Dea…"×Deadigliane) → **depois PEDIR pra ligar a trava 2b de telefone** (comentada na `lead_id_control.sql`). · Contexto da auditoria: 07/07 (abaixo). Snapshots em ordem decrescente. · **Leia isto primeiro ao retomar.**
+**Última atualização:** 08/07/2026 — **PR #15 MERGEADO → v2.6.2 NO AR.** Nesta sessão o merge do PR #15 (`feat/id-hardening`) foi feito (com autorização explícita do Gustavo no chat) e o deploy do GitHub Pages concluiu com sucesso. `origin/main` = **`e5c7316`** (v2.6.2), `main` local sincronizada. Agora o app manda `codigo` VAZIO e a **trigger do banco numera o PI atômico** (fim da colisão entre aparelhos); guard do choke point roda verde no CI. **O que SOBRA (parte do Gustavo, pra amanhã):** (2) validar logado que lead novo por cada origem — manual/inbox/captura/import — sai com PI do banco sequencial, sem duplicar (recarregar com Cmd+Shift+R pra pegar a v2.6.2; próximos PIs a partir de ~PI01538); (3) unificar os **6 telefones duplicados** na tela Duplicatas (4 são mesma pessoa 2×: Lz., L. A., M., Rn.; 2 dependem do julgamento dele: Ra. F.×R. F., "OT Dea…"×D-e.) → **depois PEDIR pra ligar a trava 2b de telefone** (comentada na `lead_id_control.sql`). · Contexto da auditoria: 07/07 (abaixo). Snapshots em ordem decrescente. · **Leia isto primeiro ao retomar.**
 
 ### ▶️ PROMPT PRA RETOMAR (cole numa sessão nova — foco VISÃO CAPTAÇÃO)
 ```
@@ -29,7 +29,7 @@ Me orienta em poucas linhas e engata.
 
 ### ⭐ SOBRA pro Gustavo (amanhã)
 1. **Validar logado** — lead novo por cada origem (manual/inbox/captura/import) sai com PI do banco, sequencial (próximos ~PI01538+), sem duplicar. Recarregar com **Cmd+Shift+R** pra pegar a v2.6.2. Se aparecer "colisão de código PI — recarregue", é a proteção nova funcionando (não é erro).
-2. **Unificar os 6 telefones duplicados** na tela Duplicatas — 4 são mesma pessoa 2× (Luiz, Lucas Atanasio, Maurilio, Renan); 2 são julgamento dele (Rafael Farias×Raphael Freitas, "OT Dea…"×Deadigliane). **Depois PEDIR pra ligar a trava 2b de telefone** (comentada na `lead_id_control.sql`).
+2. **Unificar os 6 telefones duplicados** na tela Duplicatas — 4 são mesma pessoa 2× (Lz., L. A., M., Rn.); 2 são julgamento dele (Ra. F.×R. F., "OT Dea…"×D-e.). **Depois PEDIR pra ligar a trava 2b de telefone** (comentada na `lead_id_control.sql`).
 3. Extensão Chrome segue em **stand-by** (não iniciar até ele pedir).
 
 ---
@@ -41,7 +41,7 @@ Me orienta em poucas linhas e engata.
 ### (A) Auditoria — VEREDITO: lógica de ID ÍNTEGRA
 - **Choke point confirmado:** no `index.html` só existem 2 `sb.from('leads').insert` — ambos dentro de `insertLead` (def ~1424) e `insertLeadsBatch` (def ~1455). As 4 origens passam por eles: inbox LinkedIn (~2377), manual `#n-save` (~3378, `dedupe:false` pós two-click de nome), captura múltipla (~3606), import CSV (~3675). `insertLead` normaliza derivados, roda `findLeadMatch` antes do insert (LinkedIn > telefone > e-mail bloqueiam; nome só sugere) e trata 23505. `vendas.html` **NÃO** escreve em `leads` (verificado).
 - **RLS ok:** REST anônima com a publishable key devolve `*/0` — diagnóstico de dados só logado.
-- **Diagnóstico logado (1.496 leads, via Chrome):** 0 sem código PI · 0 PI repetido · 0 LinkedIn dup · 0 e-mail dup · **6 telefones duplicados** (Luiz, Lucas Atanasio, Maurilio, Renan = mesma pessoa 2×; Rafael Farias×Raphael Freitas e "OT Dea…"×Deadigliane = Gustavo julga) → unificar na tela **Duplicatas**.
+- **Diagnóstico logado (1.496 leads, via Chrome):** 0 sem código PI · 0 PI repetido · 0 LinkedIn dup · 0 e-mail dup · **6 telefones duplicados** (Lz., L. A., M., Rn. = mesma pessoa 2×; Ra. F.×R. F. e "OT Dea…"×D-e. = Gustavo julga) → unificar na tela **Duplicatas**.
 - **Índices reais em prod (pg_indexes):** UNIQUE em `linkedin_url_norm` (`idx_leads_url`), **`codigo` (`leads_codigo_key`)** e `id` (pkey). **NÃO havia** UNIQUE em `telefone_e164` (o header antigo da migration mentia; os 6 dups provam).
 
 ### (B) v2.6.2 — código PI numerado pelo BANCO + guard do choke point (PR #15, commit `e7c7ba2`)
@@ -99,7 +99,7 @@ Gustavo pausou a pedido. **Tudo pronto pra retomar:** decidido publicar na **Chr
   - 🔴 **Menu de status estava QUEBRADO em produção** (confirmado baixando o HTML no ar, byte-idêntico): `.stmenu` nascia `position:static`, sem fundo/sombra → renderizava **invisível no fim do body**. O Gustavo não via porque muda status pelo **dropdown Etapa/Status do drawer**, não pelo badge flutuante. FIX: `position:fixed`+visual no `.stmenu`.
   - Drawer do lead: "Salvar" movido pra **rodapé sticky** (`.drawer-actions`) — fim do bug histórico "Salvar fora da tela" (só o modal Novo lead tinha o fix).
   - Modais Inbox/Thread paste: ações em `.modal-actions` sticky.
-  - **Bug do acento em `dupGroups`** (linha ~3402): agora normaliza tirando acento (João/Joao agrupam). Era o fix de 1 linha pendente desde 17/06.
+  - **Bug do acento em `dupGroups`** (linha ~3402): agora normaliza tirando acento (Jo./Jo. agrupam). Era o fix de 1 linha pendente desde 17/06.
   - `clampMenu()` mantém menus na viewport (desconta tab bar no mobile) + **fecham ao rolar a página** (não ao rolar a lista interna) + resize.
   - **ESC** fecha overlay/menu do topo + **scroll-lock** do body com overlay aberto.
   - `.row2` empilha no mobile (campos lado-a-lado não espremem no drawer).
@@ -147,7 +147,7 @@ Gustavo pausou a pedido. **Tudo pronto pra retomar:** decidido publicar na **Chr
 - **Frontend:** botão `✨ IA` (topo desktop) + `✨ Preencher com IA` dentro do "Novo lead" (porta no mobile). Modal de captura (imagem com downscale, **PDF** cru, texto, Ctrl+V). 1 lead → abre o form pra revisar; vários → modal de lote (marca quem entra, salva em lote, dedup por LinkedIn+telefone). Campo E-mail novo no form.
 - **Backend = Edge Function `capturar-lead`** (Supabase kbiinfpjfmuidyzsfegp): Gemini `gemini-2.5-flash`, `generateContent` + `responseMimeType:application/json` + schema descrito no prompt, parser defensivo, **retry até 3x em 503** (free tier dá "high demand"). Chave server-side, verify_jwt ON, CORS travado nos domínios do app, limites de tamanho.
 - **RLS LIGADO** no banco (leads/lead_events/app_settings/mining_sessions/app_users · policy `crm_auth_full` to authenticated) — fecha o buraco da chave pública/anônima. Dívida antiga resolvida.
-- **Novas origens de lead:** + **Rec Cliente, Rec Familiar, Instagram, Facebook** (além de LinkedIn/Rec LP/Rec OT/Abordagem Direta). Recomendante capturado em toda "Rec ..." (a IA infere, ex.: "indicado pelo cliente Marcelo" → Rec Cliente + recomendante Marcelo).
+- **Novas origens de lead:** + **Rec Cliente, Rec Familiar, Instagram, Facebook** (além de LinkedIn/Rec LP/Rec OT/Abordagem Direta). Recomendante capturado em toda "Rec ..." (a IA infere, ex.: "indicado pelo cliente Mc." → Rec Cliente + recomendante Mc.).
 - **Novo módulo `Recomendações`** (sidebar, abaixo do LinkedIn): lista os leads de recomendação **agrupados por quem indicou**, clique abre o lead. Já populou com ~223 leads / 55 recomendantes reais. Versão simples — evoluir depois.
 - **Fix mobile:** botões dos modais agora **sticky no rodapé** + modal rolável (`.modal` max-height 90vh + `.modal-actions`). Resolve o "Salvar fora da tela" no celular.
 
@@ -214,7 +214,7 @@ Gustavo pausou a pedido. **Tudo pronto pra retomar:** decidido publicar na **Chr
 ### O que foi FEITO
 - **`app_crm/index.html` → v1.27** (pronto, NÃO deployado):
   - **FIX applyMerge** (causa-raiz do bug 23505): agora **deleta os dups ANTES** de gravar a URL no mantido → destrava o botão ⚡ Unificar pra Gustavo e Victor. (linhas ~2055)
-  - **FIX dupGroups** acento: `norm()` agora faz `.normalize('NFD')...` → "João/Joao", "José/Jose" agrupam na aba Duplicatas. Testado em node (João=Joao, São=Sao, Conceição=Conceicao). (linha ~2027)
+  - **FIX dupGroups** acento: `norm()` agora faz `.normalize('NFD')...` → "Jo./Jo.", "Js./Js." agrupam na aba Duplicatas. Testado em node (Jo.=Jo., São=Sao, Conceição=Conceicao). (linha ~2027)
   - Backup salvo: `app_crm/index_v1.26_prod_backup_*.html`.
 - **`app_crm/vendas.html` → v1.0** (pronto, NÃO deployado): RELIGADO de localStorage→**Supabase** (tabela `vendas_contatos`).
   - **Auth herdada** do index.html (sessão Supabase é por origem → não loga de novo). Sem login = redireciona pro index.
@@ -230,7 +230,7 @@ Gustavo pausou a pedido. **Tudo pronto pra retomar:** decidido publicar na **Chr
 ### PENDENTE (estado real)
 1. **🔴 git push dos 2 arquivos** (`app_crm/index.html` v1.27 + `app_crm/vendas.html`) pro repo `juca-alt/crm-captacao` (Pages). **Passo do Gustavo** — a pasta do Cowork não é repo git e não dá pra eu digitar no Terminal (trava de tier). Opções: Terminal (janela nova + bloco abaixo) OU pedir pro **Claude Code** fazer o commit/push (mais limpo, ele tem o repo).
 2. **Smoke test do vendas.html ao vivo** (login herdado / criar cliente / F5 persiste / Master vê tudo) — só DEPOIS do push (vendas.html precisa estar na origem github.io pra herdar a sessão).
-3. Decidir os **12 grupos de dups restantes** (homônimos; Diego = nunca) — quando quiser.
+3. Decidir os **12 grupos de dups restantes** (homônimos; Dg. = nunca) — quando quiser.
 4. Validar extensão v1.9.2 ao longo da semana.
 
 ### Bloco de deploy (Gustavo cola no Terminal — janela nova)
@@ -267,23 +267,23 @@ fi
 - Zip pro Victor confirmado limpo: `extensao_captacao_v1.9.2_para_victor.zip` (manifest v1.9.2 + content.js + inbox.js + content.css + INSTRUCOES.md). Recado de reinstalação passado (Remover antiga → Carregar sem compactação → F5).
 
 ### Dedup por NOME — análise ao vivo (base 1022 leads)
-- **45 grupos** de nome colidindo (94 leads): **4 telefone idêntico** (Amanda Lapa, Bruno Valença, Bianca Mendes, Jonas Lima) + **29 mesmo nome+empresa** (Bradesco/Safra/Ambev/Neo Energia…) + **9 needs-eye** + **3 empresas diferentes / homônimos** (Thiago Santos, Renato Medeiros, Victor).
+- **45 grupos** de nome colidindo (94 leads): **4 telefone idêntico** (A. L., B. V., B. M., J. L.) + **29 mesmo nome+empresa** (Bradesco/Safra/Ambev/Neo Energia…) + **9 needs-eye** + **3 empresas diferentes / homônimos** (T. S., Renato Medeiros, Victor).
 - **INSIGHT:** a maioria é a **mesma pessoa capturada por você E pelo Victor** (mineração sobreposta nas mesmas empresas) → vale combinar divisão de empresas pra parar o retrabalho na fonte.
-- **⚠️ Diego (needs-eye) NUNCA mesclar — uma cópia é Convertido.** (Verificado pós-merge: Diego segue 2x, intacto.)
+- **⚠️ Dg. (needs-eye) NUNCA mesclar — uma cópia é Convertido.** (Verificado pós-merge: Dg. segue 2x, intacto.)
 - Triagem completa salva em **`REVISAO_DUPLICADOS_NOME_2026-06-17.md`**.
-- **✅ EXECUTADO (18/06):** os **33 grupos** unificados via execução controlada (ordem segura: campos sem-URL → deleta dups → grava URL). Base **→ 995 leads**. Verificado: Amanda Lapa/Pedro Rosado/José Carlos(era 3x)/Maria Eduarda(3x)/Saulo Costa(3x) → 1x limpo, URL gravada, sem resíduo. Os **12 grupos restantes** (9 needs-eye + 3 homônimos), incl. Diego, **preservados**.
+- **✅ EXECUTADO (18/06):** os **33 grupos** unificados via execução controlada (ordem segura: campos sem-URL → deleta dups → grava URL). Base **→ 995 leads**. Verificado: A. L./P. R./J. C.(era 3x)/M. E.(3x)/S. C.(3x) → 1x limpo, URL gravada, sem resíduo. Os **12 grupos restantes** (9 needs-eye + 3 homônimos), incl. Dg., **preservados**.
 
 ### 🐞 BUG DE MERGE — CAUSA-RAIZ CONFIRMADA (ainda latente no botão do app)
 - **Erro exato:** `duplicate key value violates unique constraint "idx_leads_url"` (código **23505**) — há **índice UNIQUE em `linkedin_url_norm`**.
 - **Por quê:** `applyMerge` faz `updateLead(keep, patch)` **antes** de deletar os dups. Quando o lead mantido não tem URL e o dup tem, o patch copia a URL pro mantido enquanto o dup AINDA existe com a mesma URL → colisão do índice único. (NÃO era enum — testei campo a campo: `observacoes`/`cargo`/`empresa`/`faixa_idade` passam isolados; só `linkedin_url_norm` do dup quebra.)
 - **AFETA o botão ⚡ Unificar do app** pra qualquer grupo onde o mantido não tem URL e um dup tem. Nesta sessão contornei executando na ordem segura (deleta dup → grava URL); **o código do app NÃO foi corrigido.**
 - **FIX do app (pendente, ~simples):** em `applyMerge`, **deletar os dups ANTES** de gravar a URL no mantido (ou separar: grava campos sem-URL → deleta → grava URL). 1 reorder.
-- **`dupGroups()` gap (pendente):** agrupa nome por minúsculas mas **não tira acento** → "João/Joao", "Márcio/Marcio" não aparecem agrupados na aba Duplicatas. Fix = 1 linha (`.normalize('NFD').replace(/[̀-ͯ]/g,'')`).
+- **`dupGroups()` gap (pendente):** agrupa nome por minúsculas mas **não tira acento** → "Jo./Jo.", "Márcio/Marcio" não aparecem agrupados na aba Duplicatas. Fix = 1 linha (`.normalize('NFD').replace(/[̀-ͯ]/g,'')`).
 
 ### Próximos passos (priorizados)
 1. **Corrigir o `applyMerge` no código** (reorder: deleta dups ANTES de gravar URL) — destrava o botão ⚡ Unificar pra todos (Gustavo + Victor) e pra futuros dups. Deploy via GitHub.
-2. **`dupGroups()` tirar acento** (1 linha) — pra dups de acento ("João/Joao") aparecerem na aba Duplicatas.
-3. **Decidir os 12 grupos restantes** (9 needs-eye + 3 homônimos): a maioria é homônimo/ambíguo p/ MANTER; revisar caso a caso quando quiser (Diego = nunca).
+2. **`dupGroups()` tirar acento** (1 linha) — pra dups de acento ("Jo./Jo.") aparecerem na aba Duplicatas.
+3. **Decidir os 12 grupos restantes** (9 needs-eye + 3 homônimos): a maioria é homônimo/ambíguo p/ MANTER; revisar caso a caso quando quiser (Dg. = nunca).
 4. Validar extensão v1.9.2 ao longo da semana.
 
 ### Tooling (lição)
@@ -315,7 +315,7 @@ fi
 ### ⏭ PENDENTE — avaliação honesta (nada disto foi testado/feito pelo Gustavo ainda)
 1. **Testar ao vivo** (⌘R local): Novo lead por origem · ordenação/filtro de coluna · 🔄 Sincronizar · 📩 Modelos. **Risco baixo, mas sem validação dele ainda.**
 2. **Recarregar a extensão v1.9.2** (chrome://extensions) + **F5 no LinkedIn** — sem isso o script antigo segue e novas capturas continuam com nome/foto errados.
-3. **Revisar dups por NOME na aba Duplicatas** — o dedup só uniu os de URL idêntica; nome (ex.: 2 "Paulo Cavalcanti") é julgamento humano.
+3. **Revisar dups por NOME na aba Duplicatas** — o dedup só uniu os de URL idêntica; nome (ex.: 2 "P. C.") é julgamento humano.
 4. **Nomes dos LPs** — pra o "Recomendante de LP" virar dropdown (hoje é texto livre).
 5. **Gating do balão "⇄ Vendas" só-admin** (Victor não deve ver Vendas) — pendência ANTIGA, NÃO mexida nesta sessão.
 
@@ -556,7 +556,7 @@ M-01 telefone na mineração · M-03 mobile UX kanban/lista (expert UX) · M-06 
 ---
 
 ## 🔵 SESSÃO 03/06/2026 (parte 3) — CAPTURA REAL DO INBOX (v1.7 + extensão v1.2)
-Acessei o LinkedIn pelo Chrome e mapeei a página de Mensagens. **Boa notícia:** ao contrário do perfil, as classes do inbox são estáveis (`msg-conversation-listitem__*`), então a leitura é confiável. Scraper validado ao vivo no inbox real do Gustavo: 10 conversas, 4 responderam, 6 aguardando, 2 quentes (ex.: "Bianca: me liga em 20 min").
+Acessei o LinkedIn pelo Chrome e mapeei a página de Mensagens. **Boa notícia:** ao contrário do perfil, as classes do inbox são estáveis (`msg-conversation-listitem__*`), então a leitura é confiável. Scraper validado ao vivo no inbox real do Gustavo: 10 conversas, 4 responderam, 6 aguardando, 2 quentes (ex.: "Bi.: me liga em 20 min").
 
 **STATUS DEPLOY (03/06 noite):** ✅ (1) migração rodada no Supabase via Chrome — "Success" (criou inbox_* + acompanhar_victor + prioridade, tudo idempotente). ✅ (3) `index.html` v1.7 commitado no repo (commit f9f18e0) e **confirmado LIVE** em juca-alt.github.io/crm-captacao (rodapé "Versão v1.7", 245 leads ativos lendo a base real). ✅ (2) Extensão recarregada pra v1.2 pelo Gustavo — botão azul **📥 Captar inbox** apareceu nas Mensagens e **deu certo** (confirmado 03/06 ~23h). (Obs: precisa F5 na página de Mensagens depois de recarregar a extensão; o botão roxo "⛏ Captar" é o de PERFIL, só serve em /in/.)
 
@@ -627,7 +627,7 @@ Foco: deixar a parte do LinkedIn incrível pra dar acesso ao **Victor até quint
 - **Importados 617 leads novos** (dedup vs os 66 seed) via **Import CSV nativo do Supabase** (Table Editor). **Total agora = 688 leads.** Verificado: 391 dormentes, 169 qualificação, renda máx R$25k, 37 com renda≥10k, 244 no Victor.
 - **Tratamentos aplicados:** Aline→Victor com `[Histórico: trabalhado por Aline]` nas obs; nomes limpos (Ot/Rec/Linkedin) com `[Nome original:...]`; origem normalizada + "Mercado X" adicionado ao enum; renda corrigida (bug de centavos); LinkedIn em triagem→Qualificado.
 - **Arquivos:** `base_unica.json`, `net_new_import.csv` (na pasta), `ANALISE_BASES_E_ROADMAP.md`.
-- **PENDENTE no roadmap (pedido do Gustavo):** função no app de **buscar duplicatas** + **unificar escolhendo campos** (há ~18 nomes repetidos que são julgamento humano, ex. Gabriel Chamie, Guilherme Nobre). E os ~23 "Aguardando Qualificação" sem origem pra ele triar.
+- **PENDENTE no roadmap (pedido do Gustavo):** função no app de **buscar duplicatas** + **unificar escolhendo campos** (há ~18 nomes repetidos que são julgamento humano, ex. G. C., G. N.). E os ~23 "Aguardando Qualificação" sem origem pra ele triar.
 
 ---
 

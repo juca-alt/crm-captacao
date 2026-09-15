@@ -137,7 +137,7 @@ const MSG_TPL_DEFAULT=[
 ];
 function fillTpl(txt,l){ l=l||{}; return (txt||'').replace(/\{\{\s*primeiro_nome\s*\}\}/gi,firstName(l.nome)).replace(/\{\{\s*recomendante\s*\}\}/gi,l.recomendante||'').replace(/\{\{\s*nome\s*\}\}/gi,l.nome||''); }
 
-// Tokens de nome p/ casar apelidos operacionais do WhatsApp ("OT Andre Jr Due
+// Tokens de nome p/ casar apelidos operacionais do WhatsApp ("OT Fulano Jr Due
 // Rec LP Daniel") com o nome limpo do CRM: quebra em palavras ≥3 letras.
 function nameTokens(s){ return fuzzyNameKey(s||'').split(' ').filter(w=>w.length>=3); }
 // Match FORTE por nome: primeiro+último nome do candidato contidos nos tokens do
