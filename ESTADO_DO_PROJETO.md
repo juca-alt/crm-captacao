@@ -2,6 +2,37 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (9ª onda) — CARTEIRA NO MAPA (fila B, item 2)
+
+**v7.66.** Segundo item da frente **MAPA & LOCAIS**: o Mapa de locais só enxergava **lead e negócio**. Os **clientes da carteira** — que são justamente quem ele visita — ficavam de fora do mapa e da rota do dia.
+
+- **Cliente da carteira tem local igual ao resto do app:** mesmo buscador de endereço (OSM/Google), mesmas **rotinas** (dia/turno: "Taciana atende no RHP sexta de manhã"), mesmo pino, mesma rota. O editor entra na ficha do cliente, no tópico **Pessoa e família**.
+- **Onde o dado mora:** `carteira_perfil.dados.pontos` (por dono+ref, já sincronizado no Supabase) — de propósito **fora de `carteira_clientes`**, que a importação apaga e reinsere. O campo antigo `locais` (texto livre "Recife, Petrolina") continua onde estava; `pontos` é o endereço **com lat/lng**.
+- **Ninguém vira dois pinos:** se o nome já entrou como lead/negócio, o cliente não repete — e o **contato do funil sem local próprio herda o do cliente** (`locDePessoa`). Um pino, um endereço.
+- **Filtro novo no mapa:** *Carteira (clientes)*. Filtro de funil/etapa/status continua sendo coisa de funil e não traz cliente.
+- **Na rota do dia:** evento do Google com o **nome do cliente no título** ("Entrega de apólice — Taciana Lima") passa a usar o **endereço da ficha dele**, com selo 🛡 Cliente e link pra ficha da carteira. Nome de uma palavra só **não** vira palpite.
+- **Celular:** o editor de locais ganhou alvos de 44px (a regra geral do celular parava em 42 por causa do `:not()`, que pesa mais que `.loc-busca` — por isso a correção mora dentro do bloco do celular, não como remendo).
+
+**Provas:** portão verde (39 telas × {375,1024,1280} × {cheia,vazia}), **8 invariantes novos** no `lpSelfCheck` (pino, rotina, dedupe, filtro, rota pelo nome, gravação pelo caminho real, id de DOM com espaço/acento), teste funcional novo **13/13** nos dois tamanhos, e as 4 suítes de antes seguem verdes (gsync 17 · agenda 14 · atividade 14 · estabilidade).
+
+**Fila B, o que resta:** extensão WhatsApp no CRM · "Organizar painel" (arrastar/esconder cards, do 2.0) · *(terceiros)* Victor resubir emitidas, Daniel subir a carteira real.
+
+**Bônus da onda (PORTAO-LINUX-V1):** o portão só sabia abrir o Chrome do **macOS** — nesta sessão (iPad → sessão na nuvem, Linux) ele caía no `open`, que não existe lá, e terminava em *"sem resultado em 300 s"*. Agora procura o navegador nos dois mundos (`PORTAO_CHROME` manda em tudo) e usa `--no-sandbox` quando é container. `--prova` conferido: o guarda acusou o defeito injetado.
+
+> ### ⏯️ RETOMAR AQUI (ponto de retomada — 15/09)
+> **`main` = v7.66**, portão verde (39 telas × {375,1024,1280} × {cheia,vazia}) e `--prova` OK.
+> ```
+> Sessão CRM Visão LP — retomar. v7.66 no ar. Ler o topo do ESTADO (ondas 6→9).
+> Última entrega: CARTEIRA-NO-MAPA-V1 (cliente da carteira com local/rotina no mapa e na rota;
+> dado em carteira_perfil.dados.pontos; dedupe com lead/negócio; filtro "Carteira"; 44px no celular)
+> + PORTAO-LINUX-V1 (o portão roda no Linux desta sessão).
+> Fila B que resta: extensão WhatsApp no CRM · "Organizar painel" do 2.0 ·
+> (terceiros) Victor resubir emitidas, Daniel subir a carteira real.
+> Regras de sempre: git fetch antes, grep -a no vendas.html, portão verde e --servido depois do merge.
+> Testes fora do portão (scratchpad): teste-gsync 17 · teste-agenda 14 · teste-atividade 14 ·
+> teste-estabilidade · teste-carreira 17 · teste-carteira-mapa 13.
+> ```
+
 ## 15/09/2026 (8ª onda) — Carreira do ativo: LIGADA no documento do cliente + vírgula decimal
 
 Ele repetiu o pedido da Revisão de Apólice ("quero esse mesmo tópico do ativo quando eu monto o plano proposto, pra mostrar ao CLIENTE a evolução ao longo do período"). A tela já existia (CARREIRA-PLANO-V1, 5ª onda) — o que faltava era ela **chegar ao cliente**:

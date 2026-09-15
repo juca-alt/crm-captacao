@@ -96,6 +96,25 @@ def subir_servidor(porta, tentativas=20):
         return srv, p
     sys.exit(f'❌ nenhuma porta livre entre {porta} e {porta + tentativas - 1}')
 
+def achar_chrome():
+    """O navegador que roda o portão, headless. PORTAO-LINUX-V1 (15/09): antes só
+    conhecia o Chrome do macOS — na sessão da nuvem (Linux) caía no `open`, que não
+    existe, e o portão nunca recebia resultado. Agora procura nos dois mundos.
+    PORTAO_CHROME=<caminho> manda em tudo."""
+    cands = [os.environ.get('PORTAO_CHROME', ''),
+             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+             '/opt/pw-browsers/chromium',
+             '/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser']
+    for c in cands:
+        if c and os.path.exists(c):
+            return c
+    from shutil import which
+    for n in ('google-chrome', 'chromium', 'chromium-browser'):
+        c = which(n)
+        if c:
+            return c
+    return None
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--porta', type=int, default=4611)
@@ -119,16 +138,20 @@ def main():
     proc = None
     perfil = None
     if not a.sem_abrir:
-        chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+        chrome = achar_chrome()
         try:
-            if os.path.exists(chrome) and not a.aba:
+            if chrome and not a.aba:
                 import tempfile
                 perfil = tempfile.mkdtemp(prefix='portao-chrome-')
-                proc = subprocess.Popen([chrome, '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-                                         '--window-size=1280,900', f'--user-data-dir={perfil}', url],
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                cmd = [chrome, '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+                       '--window-size=1280,900', f'--user-data-dir={perfil}']
+                # PORTAO-LINUX-V1 (15/09): a sessão na nuvem roda como root em container — sem
+                # --no-sandbox o Chromium nem sobe, e o portão ficava "sem resultado em 300 s".
+                if sys.platform.startswith('linux'):
+                    cmd += ['--no-sandbox', '--disable-dev-shm-usage']
+                proc = subprocess.Popen(cmd + [url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             else:
-                subprocess.Popen(['open', url])
+                subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', url])
         except Exception as e:
             print('não consegui abrir o navegador:', e, '— abra a URL acima')
     ini = time.time()

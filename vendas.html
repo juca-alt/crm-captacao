@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.65 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.66 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -920,6 +920,14 @@
     input:not([type=checkbox]):not([type=radio]),select{min-height:42px}
     .btn{min-height:44px}
     .btn-mini{min-height:44px}
+    /* CARTEIRA-NO-MAPA-V1 (15/09): o editor de locais agora também vive na ficha do cliente da
+       carteira — no celular o dedo precisa de 44px (a regra geral acima para de 42 por causa do
+       :not(), que pesa mais que .loc-busca; por isso mora aqui dentro, no bloco do celular). */
+    .loc-busca input:not([type=checkbox]),.loc-busca select{min-height:44px}
+    .loc-rot input:not([type=checkbox]),.loc-rot select{min-height:44px}
+    .loc-chip{font-size:13px;padding:6px 6px 6px 12px}
+    .loc-chip .x{min-width:44px;min-height:44px}
+    .loc-dia{min-width:44px;min-height:44px;font-size:13px}
     .seg{flex:1 1 100%;display:flex}
     .seg button{flex:1;padding:10px 4px;font-size:12px;min-height:44px}
     /* ALVOS-44-V1 (05/09): o portão listava 83 alvos <44px a 375 (cabeçalho dos tópicos do Início,
@@ -8821,7 +8829,8 @@ function cartGrupoChips(cli){ const g=cartGrupo(cli); if(!g||!g.tem) return '';
 const CART_TPERF='carteira_perfil', CART_PERF_CHAVE='crmlp_cart_perfis_v1';
 (function(){ try{ const o=JSON.parse(localStorage.getItem(CART_PERF_CHAVE)||'{}'); if(o&&typeof o==='object') CART.perfis=o; }catch(_){} })();
 function cartPerfil(ref){ if(!CART.perfis||typeof CART.perfis!=='object') CART.perfis={}; return CART.perfis[ref]||{}; }
-function cartPerfilNorm(p){ p=p||{}; return { profissao:String(p.profissao||'').trim(), locais:Array.isArray(p.locais)?p.locais.filter(Boolean):[], conjuge:String(p.conjuge||'').trim(), conjugeIdade:p.conjugeIdade!=null&&p.conjugeIdade!==''?Number(p.conjugeIdade):null,
+function cartPerfilNorm(p){ p=p||{}; return { profissao:String(p.profissao||'').trim(), locais:Array.isArray(p.locais)?p.locais.filter(Boolean):[],
+  pontos:Array.isArray(p.pontos)?p.pontos.filter(l=>l&&(l.nome||l.end)):[],   /* CARTEIRA-NO-MAPA-V1: local com lat/lng, que o mapa sabe ler */ conjuge:String(p.conjuge||'').trim(), conjugeIdade:p.conjugeIdade!=null&&p.conjugeIdade!==''?Number(p.conjugeIdade):null,
   filhos:Array.isArray(p.filhos)?p.filhos.filter(f=>f&&f.nome).map(f=>({nome:String(f.nome).trim(),idade:f.idade!=null&&f.idade!==''?Number(f.idade):null})):[], outros:Array.isArray(p.outros)?p.outros.filter(f=>f&&f.nome).map(f=>({nome:String(f.nome).trim(),parentesco:String(f.parentesco||'').trim(),idade:f.idade!=null&&f.idade!==''?Number(f.idade):null})):[], notas:String(p.notas||'').trim(), _upd:p._upd||null }; }
 async function cartPerfilSalvar(ref,p){ p=cartPerfilNorm(p); p._upd=new Date().toISOString(); CART.perfis[ref]=p; try{ localStorage.setItem(CART_PERF_CHAVE,JSON.stringify(CART.perfis)); }catch(_){}
   if(CART_REMOTE&&sb){ try{ const me=await cartMeuEmail(); const cli=(CART.clientes||[]).find(c=>c.ref===ref); const dono=(cli&&cli._dono)||me; const r=await sb.from(CART_TPERF).upsert({dono,ref,dados:p,atualizado:p._upd},{onConflict:'dono,ref'}); if(r.error) throw r.error; return 'remoto'; }catch(e){ console.error('perfil da carteira: sync falhou',e); return 'falhou'; } } return 'local'; }
@@ -8855,6 +8864,35 @@ async function cartPerfilGravar(ref){ const v=id=>(document.getElementById(id)||
   const p={profissao:v('cp-prof'),locais:String(v('cp-loc')).split(/,|;/).map(x=>x.trim()).filter(Boolean),conjuge:v('cp-conj'),conjugeIdade:v('cp-conji')||null,filhos:cartPerfilParseLista(v('cp-filhos')),outros,notas:v('cp-notas')};
   const st=await cartPerfilSalvar(ref,p); CART._perfilEdit=null; cartAbrir(ref); toast(st==='remoto'?'Perfil salvo':st==='local'?'Perfil salvo neste aparelho (faça login pra sincronizar)':'Salvo aqui — sync falhou',st!=='falhou'); }
 window.cartPerfilGravar=cartPerfilGravar;
+
+/* ═══ CARTEIRA-NO-MAPA-V1 (15/09/2026) ════════════════════════════════════════
+   Fila B, item 2. O Mapa de locais só enxergava lead e negócio — os clientes da
+   CARTEIRA, que são justamente quem ele visita, ficavam de fora do mapa e da rota
+   do dia. Agora o cliente da carteira tem local igual ao resto do app: mesmo
+   buscador de endereço, mesmas rotinas (dia/turno), mesmo pino, mesma rota.
+   Onde o dado mora: `carteira_perfil.dados.pontos` (por dono+ref, já sincronizado
+   no Supabase) — de propósito FORA de carteira_clientes, que a importação apaga e
+   reinsere. O campo antigo `locais` (texto livre: "Recife, Petrolina") continua
+   onde estava; `pontos` é o endereço com lat/lng.
+   Quem é a mesma pessoa não vira dois pinos: se o nome já entrou como lead ou
+   negócio, o cliente da carteira não repete — e o contato do funil que não tem
+   local próprio herda o do cliente (locDePessoa). */
+function cartPontosLer(ref){ const p=CART.perfis&&CART.perfis[ref]; const l=p&&p.pontos; return Array.isArray(l)?l.filter(x=>x&&(x.nome||x.end)):[]; }
+function cartPontos(ref){ if(!CART.perfis||typeof CART.perfis!=='object') CART.perfis={}; const p=CART.perfis[ref]||(CART.perfis[ref]={}); if(!Array.isArray(p.pontos)) p.pontos=[]; return p.pontos; }
+function cartPseudoContato(cli){ if(!cli) return null; return {id:'cart:'+cli.ref, _cartRef:cli.ref, nome:cli.nome, telefone:cli.celular||cli.telefone||cli.telComercial||'', locais:cartPontos(cli.ref)}; }
+function cartComoContato(ref){ return cartPseudoContato((CART.clientes||[]).find(c=>c.ref===ref)); }
+function cartPontosSalvar(ref,arr){ const p=cartPerfilNorm(cartPerfil(ref)); p.pontos=Array.isArray(arr)?arr.filter(l=>l&&(l.nome||l.end)):[]; CART.perfis[ref]=p; return cartPerfilSalvar(ref,p); }
+/* achar o cliente por trás de um texto (título de evento do Google, p.ex.).
+   Só nome com 2+ palavras — "Ana" dentro de "Planejamento" seria acidente. */
+function cartDoTexto(txt){ const k=normKey(txt||''); if(!k) return null;
+  const l=(typeof cartVis==='function')?cartVis():(CART.clientes||[]);
+  const achados=l.filter(c=>{ const nk=normKey(c.nome||''); return nk&&String(c.nome).trim().split(/\s+/).length>=2&&k.includes(nk); });
+  achados.sort((a,b)=>normKey(b.nome).length-normKey(a.nome).length);
+  return achados[0]||null; }
+/* os locais da pessoa: os dela; não tendo, os do cliente da carteira com o mesmo nome */
+function locDePessoa(c){ const own=(typeof locDe==='function')?locDe(c):[]; if(own.length||!c||!c.nome) return own;
+  const ref=(typeof cartRefDe==='function')?cartRefDe(c.nome):null; return ref?cartPontosLer(ref):[]; }
+function locPrincipalPessoa(c){ const ls=locDePessoa(c); return ls.find(l=>l.tipo==='trabalho')||ls[0]||null; }
 
 
 /* ═══ CLIENTE-NA-FICHA-V1 (05/09) ═════════════════════════════════════════
@@ -13306,7 +13344,9 @@ function cartAbrir(ref){ const c=CART.clientes.find(x=>x.ref===ref); if(!c) retu
       return bl('cf-quem','👤 Quem é a pessoa',fichaPessoaResumo(c,'cliente')||'—',fichaPessoaHtml(c,'cliente'))
         +(radItens.length?bl('cf-radar','📡 No relatório da semana',radItens.map(i=>i.t).join(' · '),radHTML.replace(/<h3[^>]*>.*?<\/h3>/,'')):'')
         +bl('cf-neg','Negócios e emissão',negs||emis?[negs?negs+' negócio(s)':'',emis?emis+' na emissão':''].filter(Boolean).join(' · '):'nenhum negócio aberto',cliCardHtml(dcli,{modo:'carteira'}))
-        +bl('cf-perfil','👨‍👩‍👧 Pessoa e família',pr.length?pr.slice(0,2).join(' · '):'nada anotado',cartPerfilHtml(c).replace(/<h3[^>]*>.*?<\/h3>/,''))
+        +bl('cf-perfil','👨‍👩‍👧 Pessoa e família',pr.length?pr.slice(0,2).join(' · '):'nada anotado',
+             cartPerfilHtml(c).replace(/<h3[^>]*>.*?<\/h3>/,'')
+             +`<div style="margin-top:12px;border-top:1px dashed var(--linha);padding-top:10px">${locWidgetHtml('cart:'+c.ref,cartComoContato(c.ref))}</div>`)   /* CARTEIRA-NO-MAPA-V1: onde ele atende/mora, com lat/lng — é isso que põe o cliente no mapa e na rota */
         +`<div class="ini-bl cf-bl${iniAberto('cf-cob')?'':' fechado'}" data-ini="cf-cob"><button class="ini-h" onclick="iniToggle('cf-cob')" aria-expanded="${iniAberto('cf-cob')?'true':'false'}"><span class="ini-car">${iniAberto('cf-cob')?'▾':'▸'}</span><span class="ini-t">Coberturas vigentes</span><span class="ini-res">${esc(cobRes)}</span></button><div class="ini-b">`; })()}
     ${c._origem?`<div style="font-size:12px;color:var(--muted);margin-bottom:4px">Cliente entrou pela ${esc(c._origem)}${c._criadoEm?' em '+dataBR(c._criadoEm):''}. Capital e coberturas chegam com a próxima importação da carteira — até lá o app não inventa.</div>`:''}
     ${(()=>{ const destaca=!!CART._cobDestaca, det=cartTemDetalheCob(c);
@@ -16493,6 +16533,54 @@ function lpSelfCheck(){
            (()=>{ S.contatos=[]; GCAL.eventos=[]; const html=rotaDoDiaHTML(); return /Rota do dia/.test(html)&&/Nada marcado/.test(html); })());
       } finally{ S.contatos=C; GCAL.eventos=E; }
     }
+    /* ═══ CARTEIRA-NO-MAPA-V1 (15/09): o cliente da carteira no mapa e na rota ═══ */
+    { const C=S.contatos, E=GCAL.eventos, CL=CART.clientes, PF=CART.perfis, F={...MAPA_F};
+      try{
+        const h=hojeISO();
+        CART.clientes=[{ref:'taciana lima',nome:'Taciana Lima',celular:'81999990003',lp:'Gustavo',cob:{}},
+                       {ref:'bruno sa',nome:'Bruno Sá',celular:'81999990004',lp:'Gustavo',cob:{}}];
+        CART.perfis={'taciana lima':{pontos:[{tipo:'trabalho',nome:'Hospital RHP',end:'Recife',lat:-8.04,lng:-34.91,
+                                              rotinas:[{dias:['sex'],turno:'manha',ini:'',fim:'',obs:''}]}]}};
+        S.contatos=[]; GCAL.eventos=[]; MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:'',dia:'',turno:'',rota:'hoje'};
+        ok('carteira no mapa: cliente com local vira pino; cliente sem local não inventa ponto',
+           (()=>{ const p=mapaPontos(); return p.length===1 && p[0].origem==='carteira' && p[0].c.nome==='Taciana Lima' && p[0].l.nome==='Hospital RHP'; })());
+        ok('carteira no mapa: o local do cliente é o mesmo dado do perfil (carteira_perfil.pontos), e sobrevive à normalização do perfil',
+           (()=>{ const p=cartPerfilNorm({pontos:[{nome:'X',lat:1,lng:2},{nome:''}]}); return p.pontos.length===1 && locDe({ref:'taciana lima'}).length===1; })());
+        ok('carteira no mapa: as rotinas do local valem igual (sexta de manhã aparece; terça à tarde não)',
+           (()=>{ MAPA_F.dia='sex'; MAPA_F.turno='manha'; const a=mapaPontos().length;
+                  MAPA_F.dia='ter'; MAPA_F.turno='tarde'; const b=mapaPontos().length;
+                  MAPA_F.dia=''; MAPA_F.turno=''; return a===1&&b===0; })());
+        ok('carteira no mapa: mesma pessoa não vira dois pinos — se já é lead/negócio, o cliente não repete',
+           (()=>{ const c1=normContato({id:'cm1',nome:'Taciana Lima',funil:'nn',etapa:'OI/FF'});
+                  S.contatos=[c1]; const p=mapaPontos();
+                  const so1=p.length===1 && p[0].origem==='funil';                 /* um pino só */
+                  const herdou=p[0].l.nome==='Hospital RHP';                        /* e é o endereço do cliente */
+                  S.contatos=[]; return so1&&herdou; })());
+        ok('carteira no mapa: o filtro "Carteira" mostra só cliente; filtro de funil/etapa não traz cliente',
+           (()=>{ const c1=normContato({id:'cm2',nome:'Outro Lead',funil:'nn',etapa:'OI/FF'});
+                  c1.locais=[{tipo:'trabalho',nome:'Empresa Q',lat:-8.1,lng:-34.9}]; S.contatos=[c1];
+                  MAPA_F.funil='cart'; const a=mapaPontos();
+                  MAPA_F.funil='nn';  const b=mapaPontos();
+                  MAPA_F.funil=''; S.contatos=[];
+                  return a.length===1&&a[0].origem==='carteira' && b.length===1&&b[0].origem==='funil'; })());
+        ok('carteira na rota: evento do Google com o nome do cliente no título usa o endereço da ficha dele',
+           (()=>{ GCAL.eventos=[{id:'cev1',status:'confirmed',summary:'Entrega de apólice — Taciana Lima',location:'Recife',
+                                 start:{dateTime:h+'T10:00:00'},end:{dateTime:h+'T11:00:00'}}];
+                  const p=rotaParadas(h)[0]; const bateu=p&&p.c&&p.c._cartRef==='taciana lima'&&p.loc&&p.loc.lat===-8.04;
+                  const html=bateu?rotaParadaHTML(p,0,null):''; GCAL.eventos=[];
+                  return bateu && /cartAbrir\(/.test(html) && /Cliente/.test(html); })());
+        ok('carteira na rota: nome de uma palavra só não vira palpite (não casa cliente errado)',
+           (()=>{ return cartDoTexto('Reunião Bruno')===null && cartDoTexto('P/C com Bruno Sá às 10h').ref==='bruno sa'; })());
+        ok('carteira: o editor de locais da ficha do cliente grava no perfil (mesmo motor do lead) e o id do DOM não quebra com espaço/acento',
+           (()=>{ const {c,salvar}=locAlvo('cart:bruno sa');
+                  const okAdd=locAddPuro(c,{tipo:'trabalho',nome:'Clínica Sá',end:'Recife',lat:-8.07,lng:-34.87});
+                  salvar(); const gravou=cartPontosLer('bruno sa').length===1;
+                  const id=locDomId('cart:bruno sa'); const idOk=!/\s/.test(id)&&/^loc-w-/.test('loc-w-'+id)===true;
+                  const htmlOk=locWidgetHtml('cart:bruno sa',c).includes('id="loc-w-'+id+'"');
+                  CART.perfis['bruno sa']=undefined; delete CART.perfis['bruno sa'];
+                  return okAdd&&gravou&&idOk&&htmlOk; })());
+      } finally{ S.contatos=C; GCAL.eventos=E; CART.clientes=CL; CART.perfis=PF; MAPA_F=F; }
+    }
     ok('AUTORIA-V1: o rastro é de QUEM está logado (o Victor operando a base delegada fica registrado como Victor)',
        (()=>{ const P=PERFIL;   /* restaura SEMPRE (era `if(P!==null)`, e deslogado o app ficava logado como Victor — livro de erros #17) */
          try{ PERFIL={email:'vfigueiredo.solucoes@gmail.com',nome:'Victor',papel:'lp'};
@@ -17566,13 +17654,19 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
    contatos do funil e do Estoque (vai no JSON, sem migração). Geocoder: OpenStreetMap (Nominatim) sem chave;
    com chave do Google (Config → Administração) usa Places. Mapa: Leaflet + tiles OSM, carregado só na tela. */
 const LOC_TIPOS={trabalho:'Trabalho',casa:'Casa',outro:'Outro'};
-function locDe(c){ return (c&&Array.isArray(c.locais))?c.locais.filter(l=>l&&(l.nome||l.end)):[]; }
+function locDe(c){ if(c&&Array.isArray(c.locais)) return c.locais.filter(l=>l&&(l.nome||l.end));
+  if(c&&c.ref&&typeof cartPontosLer==='function') return cartPontosLer(c.ref);   /* CARTEIRA-NO-MAPA-V1: cliente da carteira guarda o local no perfil */
+  return []; }
 function locPrincipal(c){ const ls=locDe(c); return ls.find(l=>l.tipo==='trabalho')||ls[0]||null; }
 function locTexto(l){ return l?[l.nome,l.end].filter(Boolean).join(', '):''; }
 function locChave(l){ if(!l) return ''; if(l.lat!=null&&l.lng!=null&&isFinite(+l.lat)&&isFinite(+l.lng)) return (+l.lat).toFixed(4)+','+(+l.lng).toFixed(4); return normKey(l.nome||l.end||''); }
 function locAddPuro(c,l){ if(!c||!l||!(l.nome||l.end)) return false; if(!Array.isArray(c.locais)) c.locais=[]; const k=locChave(l); if(c.locais.some(x=>locChave(x)===k)) return false;
   c.locais.push({tipo:LOC_TIPOS[l.tipo]?l.tipo:'outro',nome:String(l.nome||'').trim(),end:String(l.end||'').trim(),lat:(l.lat!=null&&isFinite(+l.lat))?+l.lat:null,lng:(l.lng!=null&&isFinite(+l.lng))?+l.lng:null,src:l.src||''}); return true; }
-function locAlvo(alvo){ const m=String(alvo).match(/^(ct|bn):(.+)$/); if(!m) return {c:null}; if(m[1]==='bn') return {c:bnPor(m[2]),salvar:()=>{ pendMarcar('bn',[m[2]]); bnSalvar(); }}; return {c:tarContato(m[2]),salvar:()=>salvar()}; }
+function locAlvo(alvo){ const m=String(alvo).match(/^(ct|bn|cart):(.+)$/); if(!m) return {c:null}; if(m[1]==='bn') return {c:bnPor(m[2]),salvar:()=>{ pendMarcar('bn',[m[2]]); bnSalvar(); }};
+  if(m[1]==='cart'){ const c=cartComoContato(m[2]); return {c,salvar:()=>{ cartPontosSalvar(m[2],c?c.locais:[]); }}; }   /* CARTEIRA-NO-MAPA-V1 */
+  return {c:tarContato(m[2]),salvar:()=>salvar()}; }
+/* o alvo vira id de elemento e a ref da carteira tem espaço e acento — id de HTML não pode. */
+function locDomId(alvo){ return String(alvo||'').replace(/[^A-Za-z0-9_:-]+/g,'-'); }
 /* ROTINAS-V1 (11/09): "Taciana atende no RHP às sextas de manhã; Renata às quartas de manhã" — cada local
    guarda rotinas [{dias:['sex'],turno:'manha',ini:'',fim:'',obs:''}]. O mapa filtra por dia/turno ("quem
    está no RHP sexta de manhã") e a ficha mostra. Vale pra todo lead/cliente com vários locais e horários. */
@@ -17586,18 +17680,18 @@ function locRotinaBate(l,dia,turno){ const rs=locRotinas(l); if(!dia&&!turno) re
 function locDiaHoje(off){ const d=new Date(); d.setDate(d.getDate()+(off||0)); return ['dom','seg','ter','qua','qui','sex','sab'][d.getDay()]; }
 let LOC_ROT_ABERTO='';
 function locRotinaAbrir(alvo,i){ LOC_ROT_ABERTO=(LOC_ROT_ABERTO===alvo+'#'+i)?'':alvo+'#'+i; const {c}=locAlvo(alvo); if(c) locRefresh(alvo,c); }
-function locRotinaEditorHtml(alvo,i,l){ const a=esc(alvo), aj=esc(jsq(alvo)); const id=`loc-rot-${a}-${i}`;
+function locRotinaEditorHtml(alvo,i,l){ const a=esc(locDomId(alvo)), aj=esc(jsq(alvo)); const id=`loc-rot-${a}-${i}`;
   return `<div class="loc-rot" id="${id}">${locRotinas(l).map((r,j)=>`<span class="loc-chip"><span>⏰ ${esc(locRotinaTxt(r))}</span><button class="x" title="Tirar" onclick="locRotinaRemover('${aj}',${i},${j})">✕</button></span>`).join('')}
     <div class="loc-rot-form"><div class="loc-dias">${LOC_DIAS.map(d=>`<button type="button" class="loc-dia" data-dia="${d[0]}" aria-pressed="false" onclick="this.setAttribute('aria-pressed',this.getAttribute('aria-pressed')==='true'?'false':'true')">${d[1]}</button>`).join('')}</div>
       <select id="${id}-turno" data-so-leitura="lido no Adicionar (locRotinaSalvar)"><option value="">turno (opcional)</option>${Object.keys(LOC_TURNOS).map(k=>`<option value="${k}">${LOC_TURNOS[k]}</option>`).join('')}</select>
       <input id="${id}-ini" type="time" data-so-leitura="lido no Adicionar (locRotinaSalvar)" title="Das"><input id="${id}-fim" type="time" data-so-leitura="lido no Adicionar (locRotinaSalvar)" title="Até">
       <input id="${id}-obs" data-so-leitura="lido no Adicionar (locRotinaSalvar)" placeholder="obs: sala 3, fica fazendo exame…" style="flex:1;min-width:140px">
       <button class="btn btn-p btn-mini" onclick="locRotinaSalvar('${aj}',${i})">Adicionar horário</button></div></div>`; }
-function locRotinaSalvar(alvo,i){ const {c,salvar:sv}=locAlvo(alvo); const l=c&&locDe(c)[i]; if(!l) return; const id=`loc-rot-${alvo}-${i}`; const g=x=>{ const e=document.getElementById(id+'-'+x); return e?e.value:''; };
+function locRotinaSalvar(alvo,i){ const {c,salvar:sv}=locAlvo(alvo); const l=c&&locDe(c)[i]; if(!l) return; const id=`loc-rot-${locDomId(alvo)}-${i}`; const g=x=>{ const e=document.getElementById(id+'-'+x); return e?e.value:''; };
   const dias=[...document.querySelectorAll('#'+CSS.escape(id)+' .loc-dia[aria-pressed="true"]')].map(b=>b.dataset.dia);
   if(locRotinaAdd(l,{dias,turno:g('turno'),ini:g('ini'),fim:g('fim'),obs:g('obs')})){ sv(); toast('⏰ horário salvo',true); } else toast('Marque pelo menos um dia, turno ou horário',false); locRefresh(alvo,c); }
 function locRotinaRemover(alvo,i,j){ const {c,salvar:sv}=locAlvo(alvo); const l=c&&locDe(c)[i]; if(!l||!Array.isArray(l.rotinas)) return; l.rotinas.splice(j,1); sv(); locRefresh(alvo,c); }
-function locWidgetHtml(alvo,c){ const ls=locDe(c), a=esc(alvo), aj=esc(jsq(alvo));
+function locWidgetHtml(alvo,c){ const ls=locDe(c), a=esc(locDomId(alvo)), aj=esc(jsq(alvo));
   return `<div class="loc-wrap" id="loc-w-${a}"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:4px">📍 Locais (trabalho · casa) — entra no evento da Agenda e no Mapa</label>
     <div>${ls.map((l,i)=>`<span class="loc-chip"><b>${esc(LOC_TIPOS[l.tipo]||'Outro')}</b><span title="${esc(l.end||'')}">${esc(l.nome||l.end)}${locRotinas(l).length?` <small style="color:var(--muted)">· ${esc(locRotinas(l).map(locRotinaTxt).join(' | '))}</small>`:''}</span><button class="x" title="Dias e horários em que a pessoa está aqui" aria-pressed="${LOC_ROT_ABERTO===alvo+'#'+i}" onclick="locRotinaAbrir('${aj}',${i})">⏰</button><button class="x" title="Tirar" onclick="locRemover('${aj}',${i})">✕</button></span>${LOC_ROT_ABERTO===alvo+'#'+i?locRotinaEditorHtml(alvo,i,l):''}`).join('')||'<span style="font-size:11.5px;color:var(--muted)">Nenhum local ainda.</span>'}</div>
     <div class="loc-busca" style="margin-top:6px"><select id="loc-tipo-${a}" data-so-leitura="lido ao escolher o resultado (locEscolher)" style="flex:0 0 auto">${Object.keys(LOC_TIPOS).map(k=>`<option value="${k}">${LOC_TIPOS[k]}</option>`).join('')}</select>
@@ -17605,15 +17699,15 @@ function locWidgetHtml(alvo,c){ const ls=locDe(c), a=esc(alvo), aj=esc(jsq(alvo)
     <div class="loc-res" id="loc-res-${a}" hidden></div></div>`; }
 let _locT={}, _locRes={};
 function locBuscaDeb(alvo){ clearTimeout(_locT[alvo]); _locT[alvo]=setTimeout(()=>locBuscar(alvo),550); }
-async function locBuscar(alvo){ const inp=document.getElementById('loc-q-'+alvo), box=document.getElementById('loc-res-'+alvo); if(!inp||!box) return; const q=inp.value.trim(); if(q.length<3){ box.hidden=true; return; }
+async function locBuscar(alvo){ const inp=document.getElementById('loc-q-'+locDomId(alvo)), box=document.getElementById('loc-res-'+locDomId(alvo)); if(!inp||!box) return; const q=inp.value.trim(); if(q.length<3){ box.hidden=true; return; }
   box.hidden=false; box.innerHTML='<button disabled>Buscando…</button>';
   try{ const rs=await geoBuscar(q); if(inp.value.trim()!==q) return; _locRes[alvo]=rs;
     box.innerHTML=rs.length?rs.map((r,i)=>`<button onclick="locEscolher('${esc(jsq(alvo))}',${i})">${esc(r.nome)}<small>${esc(r.end)}</small></button>`).join(''):'<button disabled>Nada encontrado — tente com bairro ou cidade</button>'; }
   catch(e){ box.innerHTML='<button disabled>Busca de endereço indisponível agora</button>'; console.warn('geo',e); } }
-function locEscolher(alvo,i){ const r=(_locRes[alvo]||[])[i]; if(!r) return; const {c,salvar:sv}=locAlvo(alvo); if(!c) return; const sel=document.getElementById('loc-tipo-'+alvo); const l={...r,tipo:sel?sel.value:'trabalho'};
+function locEscolher(alvo,i){ const r=(_locRes[alvo]||[])[i]; if(!r) return; const {c,salvar:sv}=locAlvo(alvo); if(!c) return; const sel=document.getElementById('loc-tipo-'+locDomId(alvo)); const l={...r,tipo:sel?sel.value:'trabalho'};
   if(locAddPuro(c,l)){ sv(); toast('📍 '+(l.nome||l.end)+' salvo',true); } locRefresh(alvo,c); }
 function locRemover(alvo,i){ const {c,salvar:sv}=locAlvo(alvo); if(!c||!Array.isArray(c.locais)) return; const x=locDe(c)[i]; c.locais=c.locais.filter(l=>l!==x); sv(); locRefresh(alvo,c); }   /* BUGS-V5 #11: índice da lista filtrada */
-function locRefresh(alvo,c){ const w=document.getElementById('loc-w-'+alvo); if(w) w.outerHTML=locWidgetHtml(alvo,c); }
+function locRefresh(alvo,c){ const w=document.getElementById('loc-w-'+locDomId(alvo)); if(w) w.outerHTML=locWidgetHtml(alvo,c); }
 function geoGoogleKey(){ try{ return localStorage.getItem('crmlp_gmaps_key')||''; }catch(_){ return ''; } }
 function geoGoogleKeySet(v){ try{ v=String(v||'').trim(); if(v) localStorage.setItem('crmlp_gmaps_key',v); else localStorage.removeItem('crmlp_gmaps_key'); }catch(_){} toast(v?'Chave do Google Maps guardada neste aparelho':'Voltou pro OpenStreetMap',true); }
 function geoNormNominatim(x){ const a=x.address||{}; const nome=(x.namedetails&&x.namedetails.name)||x.name||String(x.display_name||'').split(',')[0];
@@ -17629,9 +17723,14 @@ function geoKeyHtml(){ return `<div class="card" style="padding:12px 14px;margin
   <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="gmaps-key" placeholder="Chave da Google Maps Platform (opcional)" value="${esc(geoGoogleKey())}" style="flex:1;min-width:220px"><button class="btn btn-p btn-mini" onclick="geoGoogleKeySet(document.getElementById('gmaps-key').value)">Guardar</button></div></div>`; }
 /* ── a tela do mapa ── */
 let MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:'',dia:'',turno:'',rota:'hoje'};   /* ROTA-DIA-V1: qual dia a rota mostra */ let _mapa=null, _mapaLayer=null, _mapaEl=null, _mapaQT=null;
-function mapaPontos(){ const out=[]; const dia=MAPA_F.dia==='hoje'?locDiaHoje(0):MAPA_F.dia==='amanha'?locDiaHoje(1):MAPA_F.dia; const add=(c,origem,abrir)=>{ locDe(c).forEach(l=>{ if(l.lat==null||l.lng==null) return; if(MAPA_F.tipo&&l.tipo!==MAPA_F.tipo) return; if(!locRotinaBate(l,dia,MAPA_F.turno)) return; out.push({c,l,origem,abrir}); }); };
-  (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(MAPA_F.funil&&MAPA_F.funil!=='bn'&&(c.funil||'nn')!==MAPA_F.funil) return; if(MAPA_F.funil==='bn') return; if(MAPA_F.etapa&&c.etapa!==MAPA_F.etapa) return; if(MAPA_F.status&&etStatusDe(c)!==MAPA_F.status) return; add(c,'funil',`abrirContato('${esc(jsq(String(c.id)))}')`); });
-  if((!MAPA_F.funil||MAPA_F.funil==='bn')&&!MAPA_F.etapa&&!MAPA_F.status) (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>add(b,'estoque',`taFichaAbrir('${esc(jsq(String(b.id)))}')`));
+function mapaPontos(){ const out=[]; const dia=MAPA_F.dia==='hoje'?locDiaHoje(0):MAPA_F.dia==='amanha'?locDiaHoje(1):MAPA_F.dia;
+  const vistos=new Set();   /* CARTEIRA-NO-MAPA-V1: quem já entrou como lead/negócio não repete como cliente */
+  const add=(c,origem,abrir)=>{ locDePessoa(c).forEach(l=>{ if(l.lat==null||l.lng==null) return; if(MAPA_F.tipo&&l.tipo!==MAPA_F.tipo) return; if(!locRotinaBate(l,dia,MAPA_F.turno)) return; out.push({c,l,origem,abrir}); }); };
+  (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(MAPA_F.funil&&MAPA_F.funil!=='bn'&&(c.funil||'nn')!==MAPA_F.funil) return; if(MAPA_F.funil==='bn') return; if(MAPA_F.etapa&&c.etapa!==MAPA_F.etapa) return; if(MAPA_F.status&&etStatusDe(c)!==MAPA_F.status) return; vistos.add(normKey(c.nome||'')); add(c,'funil',`abrirContato('${esc(jsq(String(c.id)))}')`); });
+  if((!MAPA_F.funil||MAPA_F.funil==='bn')&&!MAPA_F.etapa&&!MAPA_F.status) (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>{ vistos.add(normKey(b.nome||'')); add(b,'estoque',`taFichaAbrir('${esc(jsq(String(b.id)))}')`); });
+  if((!MAPA_F.funil||MAPA_F.funil==='cart')&&!MAPA_F.etapa&&!MAPA_F.status) (typeof cartVis==='function'?cartVis():[]).forEach(cli=>{
+    if(vistos.has(normKey(cli.nome||''))) return; if(!cartPontosLer(cli.ref).length) return;
+    add(cartPseudoContato(cli),'carteira',`cartAbrir('${esc(jsq(String(cli.ref)))}')`); });
   if(MAPA_F.q){ const q=normKey(MAPA_F.q); return out.filter(p=>normKey(p.c.nome||'').includes(q)||normKey((p.l.nome||'')+' '+(p.l.end||'')).includes(q)); }
   return out; }
 function mapaGrupos(pts){ const m=new Map(); pts.forEach(p=>{ const k=locChave(p.l); if(!m.has(k)) m.set(k,{k,nome:p.l.nome||p.l.end,end:p.l.end,lat:p.l.lat,lng:p.l.lng,pessoas:[]}); m.get(k).pessoas.push(p); }); return [...m.values()].sort((a,b)=>b.pessoas.length-a.pessoas.length); }
@@ -17663,7 +17762,7 @@ function rotaParadas(dia){
   const out=[];
   (typeof agendaItens==='function'?agendaItens():[]).forEach(x=>{
     if(!x||!x.t||x.t.quando!==dia) return;
-    const l=locPrincipal(x.c);
+    const l=locPrincipalPessoa(x.c);   /* CARTEIRA-NO-MAPA-V1: sem local próprio, vale o do cliente da carteira */
     out.push({hora:x.t.hora||'', titulo:(x.t.tit||tarNomeTipo(x.t.tipo)), c:x.c, t:x.t, loc:l,
               tipo:x.t.tipo, fonte:'crm'});
   });
@@ -17674,8 +17773,11 @@ function rotaParadas(dia){
     if(p.crmTarefa) return;                                  /* já entrou como atividade do CRM */
     const l=rotaLocDoEvento(ev); if(!l) return;              /* sem local não é parada de rota */
     const cn=(typeof gcalNegocioDoEvento==='function')?gcalNegocioDoEvento(ev):null;
+    /* CARTEIRA-NO-MAPA-V1: não é negócio aberto? pode ser cliente da carteira — e aí o endereço é o da ficha dele */
+    const cc=cn?null:((typeof cartDoTexto==='function')?cartDoTexto(ev.summary||''):null);
     const s=gcalDT(ev,'start');
-    out.push({hora:s.t||'', titulo:ev.summary||'(sem título)', c:cn, t:null, ev:ev, loc:(cn&&locPrincipal(cn))||l, fonte:'google'});
+    out.push({hora:s.t||'', titulo:ev.summary||'(sem título)', c:cn||(cc?cartPseudoContato(cc):null), t:null, ev:ev,
+              loc:(cn&&locPrincipalPessoa(cn))||(cc&&locPrincipal(cartPseudoContato(cc)))||l, fonte:'google'});
   });
   return out.sort((a,b)=>String(a.hora||'99:99').localeCompare(String(b.hora||'99:99')));
 }
@@ -17703,10 +17805,10 @@ function rotaParadaHTML(p,i,ant){
     <div class="rota-par">
       <div class="rota-h">${esc(p.hora||'—')}</div>
       <div class="rota-b">
-        <div class="rota-t">${p.c?`<a href="#" onclick="event.preventDefault();abrirContato('${esc(jsq(p.c.id))}')">${esc(nome)}</a>`:esc(p.titulo)}
+        <div class="rota-t">${p.c?`<a href="#" onclick="event.preventDefault();${p.c._cartRef?`cartAbrir('${esc(jsq(String(p.c._cartRef)))}')`:`abrirContato('${esc(jsq(String(p.c.id)))}')`}">${esc(nome)}</a>`:esc(p.titulo)}
           ${p.c?`<span class="rota-sub">· ${esc(p.titulo)}</span>`:''}
           ${p.fonte==='google'?'<span class="badge b-cinza">Google</span>':''}
-          ${p.c?badgeEtapa(p.c.etapa):''}</div>
+          ${p.c?(p.c._cartRef?'<span class="badge b-verde">🛡 Cliente</span>':badgeEtapa(p.c.etapa)):''}</div>
         <div class="rota-e">${end?('📍 '+esc(end)):'<span style="color:var(--verm,#dc2626)">sem local cadastrado na ficha</span>'}</div>
       </div>
       <div class="rota-a">
@@ -17760,9 +17862,9 @@ function rotaDoDiaHTML(){
 function viewMapa(){ const pts=mapaPontos(), gr=mapaGrupos(pts);
   const sel=(id,opts,v,rot)=>`<select onchange="MAPA_F.${id}=this.value;viewMapa()" title="${rot}" style="flex:0 1 auto;width:auto;min-width:140px;max-width:100%"><option value="">${rot}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===v?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
   const etapas=[...new Set((S.contatos||[]).filter(escVisivel).map(c=>c.etapa).filter(Boolean))].map(e=>[e,ET_LABEL[e]||e]);
-  const funis=[['nn','Novos Negócios'],['bc','Base de Clientes'],['bn','Estoque de Nomes']].concat(Object.keys(ETAPAS_MAP||{}).filter(f=>!['nn','bc'].includes(f)).map(f=>[f,((typeof fxMeta==='function'&&fxMeta(f))||{}).nome||f]));
-  const pessoaLinha=p=>`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px dashed var(--linha)"><a href="#" onclick="event.preventDefault();${p.abrir}" style="font-weight:600">${esc(p.c.nome)}</a>${p.origem==='funil'?badgeEtapa(p.c.etapa):'<span class="badge b-cinza">Estoque</span>'}${etStatusChip(p.c)}<span style="font-size:11px;color:var(--muted)">${esc(LOC_TIPOS[p.l.tipo]||'')}${p.c.telefone?' · '+esc(telBR(p.c.telefone)):''}</span>${locRotinas(p.l).length?`<span style="font-size:11px;color:var(--azul)">⏰ ${esc(locRotinas(p.l).map(locRotinaTxt).join(' | '))}</span>`:''}</div>`;
-  $('#main').innerHTML=`<h1 class="pg">Mapa de locais</h1><div class="sub">${pts.length} pessoa(s) em ${gr.length} local(is) — hospitais, clínicas, empresas e casas cadastrados na ficha. Toque no local pra ver quem está lá e abrir a ficha.</div>
+  const funis=[['nn','Novos Negócios'],['bc','Base de Clientes'],['bn','Estoque de Nomes'],['cart','Carteira (clientes)']].concat(Object.keys(ETAPAS_MAP||{}).filter(f=>!['nn','bc'].includes(f)).map(f=>[f,((typeof fxMeta==='function'&&fxMeta(f))||{}).nome||f]));
+  const pessoaLinha=p=>`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px dashed var(--linha)"><a href="#" onclick="event.preventDefault();${p.abrir}" style="font-weight:600">${esc(p.c.nome)}</a>${p.origem==='funil'?badgeEtapa(p.c.etapa):p.origem==='carteira'?'<span class="badge b-verde">🛡 Cliente</span>':'<span class="badge b-cinza">Estoque</span>'}${p.origem==='carteira'?'':etStatusChip(p.c)}<span style="font-size:11px;color:var(--muted)">${esc(LOC_TIPOS[p.l.tipo]||'')}${p.c.telefone?' · '+esc(telBR(p.c.telefone)):''}</span>${locRotinas(p.l).length?`<span style="font-size:11px;color:var(--azul)">⏰ ${esc(locRotinas(p.l).map(locRotinaTxt).join(' | '))}</span>`:''}</div>`;
+  $('#main').innerHTML=`<h1 class="pg">Mapa de locais</h1><div class="sub">${pts.length} pessoa(s) em ${gr.length} local(is) — leads, negócios e clientes da carteira, nos hospitais, clínicas, empresas e casas cadastrados na ficha. Toque no local pra ver quem está lá e abrir a ficha.</div>
     ${rotaDoDiaHTML()}
     <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input id="mapa-q" placeholder="Buscar pessoa ou local…" value="${esc(MAPA_F.q)}" oninput="MAPA_F.q=this.value;mapaQDeb()" style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
