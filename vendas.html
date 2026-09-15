@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.66 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.67 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -745,6 +745,14 @@
   .loc-dia{min-width:40px;min-height:34px;border:1px solid var(--linha);background:#fff;border-radius:8px;font:inherit;font-size:12px;cursor:pointer}
   .loc-dia[aria-pressed="true"]{background:var(--azul);color:#fff;border-color:var(--azul)}
   .loc-chip .x[aria-pressed="true"]{background:var(--azul-claro)}
+  /* PAINEL-ORGANIZAR-V1: a barrinha de organizar em cima de cada card do Início */
+  .pord-hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:8px 12px;margin:0 0 10px;font-size:12.5px}
+  .pord-it{border:1px dashed var(--linha);border-radius:12px;padding:6px;margin-bottom:10px;background:#f8fafc}
+  .pord-it.off{opacity:.65}
+  .pord-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 4px 6px}
+  .pord-n{font-weight:700;font-size:12.5px;flex:1;min-width:120px}
+  .pord-off{font-size:12px;color:var(--muted);padding:6px 4px 10px}
+  .pord-esc{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
   .nncard.td-lift{opacity:.35;border-style:dashed} .td-ghost{position:fixed;z-index:400;pointer-events:none;opacity:.95;transform:scale(1.03) rotate(1.5deg);box-shadow:0 12px 30px rgba(16,30,54,.28)} body.td-on{overflow:hidden;touch-action:none}
   .nncard:hover{border-color:var(--azul-borda)}
   .nncard.dragging{opacity:.4}
@@ -920,6 +928,9 @@
     input:not([type=checkbox]):not([type=radio]),select{min-height:42px}
     .btn{min-height:44px}
     .btn-mini{min-height:44px}
+    /* PAINEL-ORGANIZAR-V1 no celular: a barra quebra em duas linhas em vez de espremer os alvos */
+    .pord-bar{gap:8px}
+    .pord-n{flex:1 1 100%}
     /* CARTEIRA-NO-MAPA-V1 (15/09): o editor de locais agora também vive na ficha do cliente da
        carteira — no celular o dedo precisa de 44px (a regra geral acima para de 42 por causa do
        :not(), que pesa mais que .loc-busca; por isso mora aqui dentro, no bloco do celular). */
@@ -2387,6 +2398,60 @@ function iniBotaoPinta(){
   b.textContent=fechar?'⌃ fechar tudo':'⌄ abrir tudo';
   b.setAttribute('onclick','iniTudo('+(fechar?'false':'true')+')');
 }
+/* ═══ PAINEL-ORGANIZAR-V1 (15/09/2026) ═══════════════════════════════════════
+   Fila B, item do 2.0: "organizar painel" — mudar a ordem e esconder cards do Início.
+   Até aqui o Início tinha ordem FIXA e cada card só abria/fechava. Mas a ordem certa
+   depende do ciclo: em semana de ligação o TA é o primeiro; em semana de agenda são as
+   Reuniões. E card que ele nunca usa só empurrava o resto pra baixo — no celular, várias
+   telas de rolagem antes de qualquer coisa acionável.
+   Agora: ↑ ↓ pra mover, 🚫 pra esconder, ↺ pra voltar ao padrão. Fica POR APARELHO
+   (localStorage), como o abre/fecha dos blocos — não é dado, é preferência de tela.
+   Botões e não arrastar, de propósito: mesmo gesto no mouse e no dedo, alvo de 44px,
+   e sem brigar com a rolagem do celular (arrastar card longo em tela de 390 é cilada).
+   Duas regras pra isso não virar esconderijo:
+   1) card escondido continua na lista do modo organizar, com o botão de trazer de volta;
+   2) card NOVO do app entra no fim sozinho — nunca nasce escondido. */
+const PORD_CHAVE='crmlp_painel_v1';
+const PORD_NOMES={agora:'Agora',mf:'Resumo MF',numeros:'Números',aniv:'🎂 Aniversariantes','funil-nn':'Funil · Novos Negócios','funil-bc':'Funil · Base de Clientes',ta:'Telephone Approach',reunioes:'Reuniões',eventos:'Compromissos',lp:'Por LP'};
+let PORD_MODO=false, _PORD_CH=[];
+function pordLer(){ try{ const o=JSON.parse(localStorage.getItem(PORD_CHAVE)||'{}')||{};
+  return {ordem:Array.isArray(o.ordem)?o.ordem.map(String):[], ocultos:Array.isArray(o.ocultos)?o.ocultos.map(String):[]}; }catch(_){ return {ordem:[],ocultos:[]}; } }
+function pordGravar(o){ try{ localStorage.setItem(PORD_CHAVE,JSON.stringify(o)); }catch(_){} }
+/* a ordem salva vale só pras peças que EXISTEM hoje; o que ela não conhece vai pro fim */
+function pordOrdem(chaves){ const st=pordLer(); const o=st.ordem.filter(k=>chaves.includes(k));
+  chaves.forEach(k=>{ if(!o.includes(k)) o.push(k); }); return o; }
+function pordOculto(k){ return pordLer().ocultos.includes(k); }
+function pordModo(v){ PORD_MODO=!!v; render(); }
+function pordMover(k,d){ const o=_PORD_CH.slice(); const i=o.indexOf(k); if(i<0) return; const j=i+d; if(j<0||j>=o.length) return;
+  o[i]=o[j]; o[j]=k; const st=pordLer(); st.ordem=o; pordGravar(st); render(); }
+function pordOcultar(k){ const st=pordLer(); const i=st.ocultos.indexOf(k); if(i>=0) st.ocultos.splice(i,1); else st.ocultos.push(k); pordGravar(st); render(); }
+function pordRestaurar(){ pordGravar({ordem:[],ocultos:[]}); render(); }
+/* pecas = [[chave, html], …] na ordem NATURAL do app; peça vazia (card que não existe hoje) cai fora */
+function pordRender(pecas){
+  const mapa={}; const chaves=[];
+  (pecas||[]).forEach(p=>{ if(p&&p[1]){ mapa[p[0]]=p[1]; chaves.push(p[0]); } });
+  _PORD_CH=pordOrdem(chaves);
+  const st=pordLer();
+  const lista=PORD_MODO?_PORD_CH:_PORD_CH.filter(k=>!st.ocultos.includes(k));
+  const corpo=lista.map(k=>{
+    if(!PORD_MODO) return mapa[k];
+    const oculto=st.ocultos.includes(k), i=_PORD_CH.indexOf(k);
+    return `<div class="pord-it${oculto?' off':''}" data-pord="${esc(k)}">
+      <div class="pord-bar"><span class="pord-n">${esc(PORD_NOMES[k]||k)}</span>
+        <button class="btn btn-s btn-mini" ${i===0?'disabled':''} onclick="pordMover('${esc(jsq(k))}',-1)" title="Subir" aria-label="Subir ${esc(PORD_NOMES[k]||k)}">↑</button>
+        <button class="btn btn-s btn-mini" ${i===_PORD_CH.length-1?'disabled':''} onclick="pordMover('${esc(jsq(k))}',1)" title="Descer" aria-label="Descer ${esc(PORD_NOMES[k]||k)}">↓</button>
+        <button class="btn ${oculto?'btn-p':'btn-s'} btn-mini" onclick="pordOcultar('${esc(jsq(k))}')">${oculto?'👁 mostrar':'🚫 esconder'}</button></div>
+      ${oculto?'<div class="pord-off">escondido do painel</div>':mapa[k]}</div>`;
+  }).join('');
+  const hd=PORD_MODO?`<div class="pord-hd"><b>Organizando o painel</b> — ↑ ↓ muda a ordem, 🚫 esconde. Vale só neste aparelho.
+      <span style="flex:1"></span>
+      <button class="btn btn-ghost btn-mini" onclick="pordRestaurar()">↺ voltar ao padrão</button>
+      <button class="btn btn-p btn-mini" onclick="pordModo(false)">✓ pronto</button></div>`:'';
+  const esc0=(!PORD_MODO&&st.ocultos.length)?`<div class="pord-esc">${st.ocultos.length} card${st.ocultos.length===1?'':'s'} escondido${st.ocultos.length===1?'':'s'} do painel — <button class="btn btn-s btn-mini" onclick="pordModo(true)">organizar painel</button></div>`:'';
+  return hd+corpo+esc0;
+}
+window.pordModo=pordModo; window.pordMover=pordMover; window.pordOcultar=pordOcultar; window.pordRestaurar=pordRestaurar;
+
 function iniBloco(k,titulo,resumo,corpo){
   const ab=iniAberto(k);
   return `<div class="ini-bl${ab?'':' fechado'}" data-ini="${esc(k)}">
@@ -2563,9 +2628,10 @@ function viewInicio(){
   $('#main').innerHTML=`
     <h1 class="pg">Seja bem-vindo(a), ${esc(nomeAtual())}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
-    ${inicioAgoraHtml()}
-    <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)">⌄ abrir tudo</button></div>
-    ${mfBlocoHTML()}${bNumeros}${bAniv}${bNn}${bBc}${bTa}${bReun}${bEv}${bLp}`;
+    <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)">⌄ abrir tudo</button>
+      <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button></div>
+    ${pordRender([['agora',inicioAgoraHtml()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
+                  ['funil-nn',bNn],['funil-bc',bBc],['ta',bTa],['reunioes',bReun],['eventos',bEv],['lp',bLp]])}`;
   iniBotaoPinta();
 }
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
@@ -16532,6 +16598,40 @@ function lpSelfCheck(){
         ok('rota: dia vazio não quebra e explica o que fazer',
            (()=>{ S.contatos=[]; GCAL.eventos=[]; const html=rotaDoDiaHTML(); return /Rota do dia/.test(html)&&/Nada marcado/.test(html); })());
       } finally{ S.contatos=C; GCAL.eventos=E; }
+    }
+    /* ═══ PAINEL-ORGANIZAR-V1 (15/09): a ordem e o que aparece no Início são dele ═══ */
+    { const _p=localStorage.getItem(PORD_CHAVE), _m=PORD_MODO;   /* self-check NÃO deixa lixo salvo (livro de erros #17) */
+      try{
+        const pecas=[['agora','<i>A</i>'],['numeros','<i>N</i>'],['ta','<i>T</i>'],['funil-bc','']];   /* funil-bc não existe hoje */
+        pordGravar({ordem:[],ocultos:[]}); PORD_MODO=false;
+        ok('painel: sem preferência salva, a ordem é a natural do app e ninguém some',
+           (()=>{ const h=pordRender(pecas); return pordOrdem(['agora','numeros','ta']).join()==='agora,numeros,ta'
+                  && h.indexOf('<i>A</i>')<h.indexOf('<i>N</i>') && h.indexOf('<i>N</i>')<h.indexOf('<i>T</i>'); })());
+        ok('painel: card que não existe hoje (2º funil) não entra na ordem nem vira espaço vazio',
+           (()=>{ pordRender(pecas); return !_PORD_CH.includes('funil-bc'); })());
+        ok('painel: ↑ ↓ mudam a ordem e ficam salvos no aparelho',
+           (()=>{ pordRender(pecas); pordMover('ta',-1); const st=pordLer();
+                  return st.ordem.join()==='agora,ta,numeros' && pordOrdem(['agora','numeros','ta']).join()==='agora,ta,numeros'; })());
+        ok('painel: 🚫 tira o card da tela, mas ele continua na lista do modo organizar (não é esconderijo)',
+           (()=>{ pordOcultar('numeros');
+                  PORD_MODO=false; const fora=pordRender(pecas);
+                  PORD_MODO=true;  const dentro=pordRender(pecas); PORD_MODO=false;
+                  return !fora.includes('<i>N</i>') && /card escondido/.test(fora)
+                      && dentro.includes('Números') && /👁 mostrar/.test(dentro); })());
+        ok('painel: mostrar de volta traz o card, e ↺ devolve a ordem padrão',
+           (()=>{ pordOcultar('numeros'); const voltou=pordRender(pecas).includes('<i>N</i>');
+                  pordRestaurar(); const st=pordLer();
+                  return voltou && !st.ordem.length && !st.ocultos.length && pordOrdem(['agora','numeros','ta']).join()==='agora,numeros,ta'; })());
+        ok('painel: card NOVO do app entra no fim sozinho — nunca nasce escondido nem some',
+           (()=>{ pordGravar({ordem:['ta','agora'],ocultos:['xyz-velho']});
+                  const o=pordOrdem(['agora','numeros','ta']);
+                  return o.join()==='ta,agora,numeros' && !pordOculto('numeros'); })());
+        ok('painel: preferência corrompida no aparelho não derruba o Início',
+           (()=>{ localStorage.setItem(PORD_CHAVE,'{isso nao e json'); const st=pordLer();
+                  return !st.ordem.length && !st.ocultos.length && pordRender(pecas).includes('<i>A</i>'); })());
+        ok('painel: a chave é preferência de tela (por aparelho), não dado de conta',
+           PORD_CHAVE==='crmlp_painel_v1' && !CONTA_CHAVES.includes(PORD_CHAVE));
+      } finally{ PORD_MODO=_m; if(_p===null) localStorage.removeItem(PORD_CHAVE); else localStorage.setItem(PORD_CHAVE,_p); }
     }
     /* ═══ CARTEIRA-NO-MAPA-V1 (15/09): o cliente da carteira no mapa e na rota ═══ */
     { const C=S.contatos, E=GCAL.eventos, CL=CART.clientes, PF=CART.perfis, F={...MAPA_F};

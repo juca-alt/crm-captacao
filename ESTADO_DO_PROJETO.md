@@ -2,6 +2,20 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (10ª onda) — ORGANIZAR PAINEL (fila B, item do 2.0)
+
+**v7.67.** O Início tinha ordem **fixa** e cada card só abria/fechava. Mas a ordem certa depende do ciclo — em semana de ligação o **TA** é o primeiro, em semana de agenda são as **Reuniões** — e card que ele não usa só empurrava o resto pra baixo (no celular, várias telas de rolagem antes de qualquer coisa acionável).
+
+- **⋮⋮ organizar painel** no topo do Início: **↑ ↓** move, **🚫** esconde, **↺** volta ao padrão, **✓ pronto** sai do modo.
+- **Botões, não arrastar** — de propósito: mesmo gesto no mouse e no dedo, alvo de 44px, e sem brigar com a rolagem do celular (arrastar card longo em tela de 390px é cilada).
+- **Não vira esconderijo:** card escondido continua listado no modo organizar com o botão de trazer de volta, e o painel avisa *"N cards escondidos"* quando há algum.
+- **Card novo do app entra no fim sozinho** — nunca nasce escondido, nunca some porque a preferência é velha. Preferência corrompida no aparelho não derruba o Início.
+- **Por aparelho** (`crmlp_painel_v1`, localStorage), como o abre/fecha dos blocos — é preferência de tela, não dado de conta (fora do `CONTA_CHAVES`, de propósito).
+
+**Provas:** portão verde (39 telas × {375,1024,1280} × {cheia,vazia}), **8 invariantes novos** no `lpSelfCheck` (ordem natural, card inexistente, mover, esconder/mostrar, restaurar, card novo no fim, preferência corrompida, chave de tela), teste funcional novo **19/19** com clique de verdade nos dois tamanhos (inclusive **fechar e abrir o app** e voltar com a ordem dele).
+
+**Nota de escolha (fila B):** o item *"extensão WhatsApp no CRM"* ficou **na frente da fila, mas não foi feito agora** — é extensão Chrome MV3, que ele **não consegue instalar nem testar no iPad**. Fica pro MacBook voltar do suporte; enquanto isso a fila anda no que ele usa hoje.
+
 ## 15/09/2026 (9ª onda) — CARTEIRA NO MAPA (fila B, item 2)
 
 **v7.66.** Segundo item da frente **MAPA & LOCAIS**: o Mapa de locais só enxergava **lead e negócio**. Os **clientes da carteira** — que são justamente quem ele visita — ficavam de fora do mapa e da rota do dia.
@@ -15,22 +29,23 @@
 
 **Provas:** portão verde (39 telas × {375,1024,1280} × {cheia,vazia}), **8 invariantes novos** no `lpSelfCheck` (pino, rotina, dedupe, filtro, rota pelo nome, gravação pelo caminho real, id de DOM com espaço/acento), teste funcional novo **13/13** nos dois tamanhos, e as 4 suítes de antes seguem verdes (gsync 17 · agenda 14 · atividade 14 · estabilidade).
 
-**Fila B, o que resta:** extensão WhatsApp no CRM · "Organizar painel" (arrastar/esconder cards, do 2.0) · *(terceiros)* Victor resubir emitidas, Daniel subir a carteira real.
+**Fila B, o que resta:** extensão WhatsApp no CRM · "Organizar painel" (feito na 10ª onda) · *(terceiros)* Victor resubir emitidas, Daniel subir a carteira real.
 
 **Bônus da onda (PORTAO-LINUX-V1):** o portão só sabia abrir o Chrome do **macOS** — nesta sessão (iPad → sessão na nuvem, Linux) ele caía no `open`, que não existe lá, e terminava em *"sem resultado em 300 s"*. Agora procura o navegador nos dois mundos (`PORTAO_CHROME` manda em tudo) e usa `--no-sandbox` quando é container. `--prova` conferido: o guarda acusou o defeito injetado.
 
 > ### ⏯️ RETOMAR AQUI (ponto de retomada — 15/09)
-> **`main` = v7.66**, portão verde (39 telas × {375,1024,1280} × {cheia,vazia}) e `--prova` OK.
+> **`main` = v7.67**, portão verde (39 telas × {375,1024,1280} × {cheia,vazia}) e `--prova` OK.
 > ```
-> Sessão CRM Visão LP — retomar. v7.66 no ar. Ler o topo do ESTADO (ondas 6→9).
-> Última entrega: CARTEIRA-NO-MAPA-V1 (cliente da carteira com local/rotina no mapa e na rota;
+> Sessão CRM Visão LP — retomar. v7.67 no ar. Ler o topo do ESTADO (ondas 6→10).
+> Últimas entregas: CARTEIRA-NO-MAPA-V1 (cliente da carteira com local/rotina no mapa e na rota;
 > dado em carteira_perfil.dados.pontos; dedupe com lead/negócio; filtro "Carteira"; 44px no celular)
-> + PORTAO-LINUX-V1 (o portão roda no Linux desta sessão).
-> Fila B que resta: extensão WhatsApp no CRM · "Organizar painel" do 2.0 ·
+> + PORTAO-LINUX-V1 (o portão roda no Linux desta sessão) + PAINEL-ORGANIZAR-V1 (⋮⋮ organizar
+> painel no Início: ↑ ↓ esconder, por aparelho em crmlp_painel_v1).
+> Fila B que resta: extensão WhatsApp no CRM (só com o MacBook — MV3 não roda no iPad) ·
 > (terceiros) Victor resubir emitidas, Daniel subir a carteira real.
 > Regras de sempre: git fetch antes, grep -a no vendas.html, portão verde e --servido depois do merge.
 > Testes fora do portão (scratchpad): teste-gsync 17 · teste-agenda 14 · teste-atividade 14 ·
-> teste-estabilidade · teste-carreira 17 · teste-carteira-mapa 13.
+> teste-estabilidade · teste-carreira 17 · teste-carteira-mapa 13 · teste-painel 19.
 > ```
 
 ## 15/09/2026 (8ª onda) — Carreira do ativo: LIGADA no documento do cliente + vírgula decimal
