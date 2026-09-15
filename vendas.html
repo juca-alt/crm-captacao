@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.64 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.65 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -16459,6 +16459,40 @@ function lpSelfCheck(){
     ok('HOJE fora do card: o Painel TA abre em Rec (com telefone) e só mostra Hoje quando o SitPlan manda', (()=>{ const l=BNTA.lista; BNTA.lista='sm:comfone'; const ok=!String(viewBnTa.toString()).includes("navItem('hoje','📅','Hoje',"); BNTA.lista=l; return ok; })());
     ok('RECOMENDAÇÕES = nome + telefone + recomendante', TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'',estagio:'estoque'}));
     ok('SERVIDOR-MANDA Estoque: apagado no servidor sai do cache (só carga completa); criado local sem _dono fica', (()=>{ const loc=[{id:'a',_dono:'x'},{id:'b',_dono:'x'},{id:'c'}]; const rem=[{id:'a'}]; const r1=bnSemOsApagados(loc,rem,true).map(c=>c.id).join(''); const r2=bnSemOsApagados(loc,rem,false).map(c=>c.id).join(''); return r1==='ac'&&r2==='abc'; })());
+    /* ═══ ROTA-DIA-V1 (14/09): o dia dele em ordem, com endereço e distância ═══ */
+    { const C=S.contatos, E=GCAL.eventos;
+      try{
+        const h=hojeISO();
+        const c1=normContato({id:'rt1',nome:'Ana Rota',funil:'nn',etapa:'OI/FF',telefone:'81999990001'});
+        c1.locais=[{nome:'Hospital A',end:'Av X, Recife',tipo:'trabalho',lat:-8.05,lng:-34.90}];
+        c1.tarefas=[{id:'rt-t1',tipo:'reuniao',tit:'P/C',quando:h,hora:'14:00',dur:60,feito:null}];
+        const c2=normContato({id:'rt2',nome:'Beto Rota',funil:'nn',etapa:'P/C',telefone:'81999990002'});
+        c2.locais=[{nome:'Clínica B',end:'Rua Y, Recife',tipo:'trabalho',lat:-8.06,lng:-34.88}];
+        c2.tarefas=[{id:'rt-t2',tipo:'ligar',tit:'Retomar',quando:h,hora:'09:30',dur:30,feito:null}];
+        S.contatos=[c1,c2];
+        GCAL.eventos=[{id:'rev1',status:'confirmed',summary:'Almoço com parceiro',location:'Restaurante Z',
+                       start:{dateTime:h+'T12:00:00'},end:{dateTime:h+'T13:00:00'}},
+                      {id:'rev2',status:'confirmed',summary:'Já é atividade do CRM',location:'Hospital A',
+                       start:{dateTime:h+'T14:00:00'},end:{dateTime:h+'T15:00:00'},
+                       extendedProperties:{private:{crmApp:'crmlp',crmTarefa:'rt-t1',crmContato:'rt1'}}}];
+        const ps=rotaParadas(h);
+        ok('rota: as paradas saem em ORDEM DE HORA, juntando CRM e Google',
+           ps.length===3 && ps[0].hora==='09:30' && ps[1].hora==='12:00' && ps[2].hora==='14:00');
+        ok('rota: evento que nasceu de atividade do CRM não entra duas vezes',
+           ps.filter(p=>p.fonte==='google').length===1);
+        ok('rota: distância em linha reta entre as paradas geolocalizadas (Recife ~2,4 km)',
+           (()=>{ const d=rotaKm({lat:-8.05,lng:-34.90},{lat:-8.06,lng:-34.88}); return d>2&&d<3; })());
+        ok('rota: o Maps recebe origem, destino e as paradas do meio numa URL só',
+           (()=>{ const u=rotaMapsUrl(ps); return /maps\/dir\/\?api=1/.test(u)&&/origin=/.test(u)&&/destination=/.test(u); })());
+        ok('rota: parada sem local aparece pedindo cadastro, não some',
+           (()=>{ const c3=normContato({id:'rt3',nome:'Sem Local',funil:'nn',etapa:'OI/FF'});
+             c3.tarefas=[{id:'rt-t3',tipo:'ligar',tit:'x',quando:h,hora:'16:00',feito:null}];
+             S.contatos=[c1,c2,c3]; const p=rotaParadas(h).find(x=>x.c&&x.c.id==='rt3');
+             return !!p && !locTexto(p.loc) && /sem local cadastrado/.test(rotaParadaHTML(p,0,null)); })());
+        ok('rota: dia vazio não quebra e explica o que fazer',
+           (()=>{ S.contatos=[]; GCAL.eventos=[]; const html=rotaDoDiaHTML(); return /Rota do dia/.test(html)&&/Nada marcado/.test(html); })());
+      } finally{ S.contatos=C; GCAL.eventos=E; }
+    }
     ok('AUTORIA-V1: o rastro é de QUEM está logado (o Victor operando a base delegada fica registrado como Victor)',
        (()=>{ const P=PERFIL;   /* restaura SEMPRE (era `if(P!==null)`, e deslogado o app ficava logado como Victor — livro de erros #17) */
          try{ PERFIL={email:'vfigueiredo.solucoes@gmail.com',nome:'Victor',papel:'lp'};
@@ -17594,7 +17628,7 @@ function geoKeyHtml(){ return `<div class="card" style="padding:12px 14px;margin
   <div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Sem chave usa o OpenStreetMap (grátis). Com uma chave da Google Maps Platform (Places API), a busca fica com a qualidade do Google Agenda. A chave fica só neste aparelho — no Google Cloud, restrinja a chave por site (HTTP referrer = juca-alt.github.io) e só à Places API.</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="gmaps-key" placeholder="Chave da Google Maps Platform (opcional)" value="${esc(geoGoogleKey())}" style="flex:1;min-width:220px"><button class="btn btn-p btn-mini" onclick="geoGoogleKeySet(document.getElementById('gmaps-key').value)">Guardar</button></div></div>`; }
 /* ── a tela do mapa ── */
-let MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:'',dia:'',turno:''}; let _mapa=null, _mapaLayer=null, _mapaEl=null, _mapaQT=null;
+let MAPA_F={funil:'',etapa:'',status:'',tipo:'',q:'',sel:'',dia:'',turno:'',rota:'hoje'};   /* ROTA-DIA-V1: qual dia a rota mostra */ let _mapa=null, _mapaLayer=null, _mapaEl=null, _mapaQT=null;
 function mapaPontos(){ const out=[]; const dia=MAPA_F.dia==='hoje'?locDiaHoje(0):MAPA_F.dia==='amanha'?locDiaHoje(1):MAPA_F.dia; const add=(c,origem,abrir)=>{ locDe(c).forEach(l=>{ if(l.lat==null||l.lng==null) return; if(MAPA_F.tipo&&l.tipo!==MAPA_F.tipo) return; if(!locRotinaBate(l,dia,MAPA_F.turno)) return; out.push({c,l,origem,abrir}); }); };
   (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(MAPA_F.funil&&MAPA_F.funil!=='bn'&&(c.funil||'nn')!==MAPA_F.funil) return; if(MAPA_F.funil==='bn') return; if(MAPA_F.etapa&&c.etapa!==MAPA_F.etapa) return; if(MAPA_F.status&&etStatusDe(c)!==MAPA_F.status) return; add(c,'funil',`abrirContato('${esc(jsq(String(c.id)))}')`); });
   if((!MAPA_F.funil||MAPA_F.funil==='bn')&&!MAPA_F.etapa&&!MAPA_F.status) (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>add(b,'estoque',`taFichaAbrir('${esc(jsq(String(b.id)))}')`));
@@ -17604,12 +17638,132 @@ function mapaGrupos(pts){ const m=new Map(); pts.forEach(p=>{ const k=locChave(p
 function mapaQDeb(){ clearTimeout(_mapaQT); _mapaQT=setTimeout(()=>{ viewMapa(); const i=document.getElementById('mapa-q'); if(i){ i.focus(); i.setSelectionRange(i.value.length,i.value.length); } },300); }
 function mapaFoco(k){ MAPA_F.sel=(MAPA_F.sel===k?'':k); viewMapa(); }
 function mapaListaHtml(gr,pessoaLinha){ return gr.map(g=>`<div class="mapa-loc${MAPA_F.sel===g.k?' on':''}" onclick="mapaFoco('${esc(jsq(g.k))}')"><div class="n">📍 ${esc(g.nome)} <span class="badge b-azul">${g.pessoas.length}</span></div><div class="s">${esc(g.end||'')}</div>${MAPA_F.sel===g.k?`<div style="margin-top:6px" onclick="event.stopPropagation()">${g.pessoas.map(pessoaLinha).join('')}</div>`:''}</div>`).join('')||'<div class="vazio" style="padding:20px">Nenhum local com esse filtro. Abra a ficha de um lead ou cliente, em "Dados da pessoa", e adicione o local de trabalho.</div>'; }
+/* ═══ ROTA-DIA-V1 (14/09/2026) ═══════════════════════════════════════════════
+   Frente MAPA & LOCAIS, próximo item da fila: a ROTA DO DIA.
+   O app já sabia DUAS coisas separadas: onde cada pessoa fica (locais na ficha) e
+   o que está combinado pra hoje (atividades + Agenda Google). Faltava cruzar: o
+   dia dele em ORDEM DE HORA, com endereço, distância entre uma parada e a outra e
+   um botão que joga tudo no Google Maps de uma vez.
+   O que entra como parada: atividade do CRM com data no dia (o local vem do local
+   de trabalho da pessoa) e evento do Google com LOCAL preenchido. Evento que nasceu
+   de uma atividade (crmTarefa) não entra duas vezes.
+   Distância é EM LINHA RETA (haversine) — o app não tem roteirizador, e dizer "12 km"
+   de rua sem saber seria inventar. A tela escreve isso. */
+function rotaKm(a,b){
+  if(!a||!b||a.lat==null||a.lng==null||b.lat==null||b.lng==null) return null;
+  const R=6371, r=x=>x*Math.PI/180;
+  const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
+  const h=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return Math.round(2*R*Math.asin(Math.min(1,Math.sqrt(h)))*10)/10;
+}
+function rotaLocDoEvento(ev){ const t=String(ev&&ev.location||'').trim(); return t?{nome:t,end:'',lat:null,lng:null}:null; }
+/* as paradas do dia, em ordem de hora (sem hora vai pro fim) */
+function rotaParadas(dia){
+  dia=dia||hojeISO();
+  const out=[];
+  (typeof agendaItens==='function'?agendaItens():[]).forEach(x=>{
+    if(!x||!x.t||x.t.quando!==dia) return;
+    const l=locPrincipal(x.c);
+    out.push({hora:x.t.hora||'', titulo:(x.t.tit||tarNomeTipo(x.t.tipo)), c:x.c, t:x.t, loc:l,
+              tipo:x.t.tipo, fonte:'crm'});
+  });
+  (GCAL.eventos||[]).forEach(ev=>{
+    if(!ev||ev.status==='cancelled') return;
+    if(gcalDiaISO(ev)!==dia) return;
+    const p=(ev.extendedProperties&&ev.extendedProperties.private)||{};
+    if(p.crmTarefa) return;                                  /* já entrou como atividade do CRM */
+    const l=rotaLocDoEvento(ev); if(!l) return;              /* sem local não é parada de rota */
+    const cn=(typeof gcalNegocioDoEvento==='function')?gcalNegocioDoEvento(ev):null;
+    const s=gcalDT(ev,'start');
+    out.push({hora:s.t||'', titulo:ev.summary||'(sem título)', c:cn, t:null, ev:ev, loc:(cn&&locPrincipal(cn))||l, fonte:'google'});
+  });
+  return out.sort((a,b)=>String(a.hora||'99:99').localeCompare(String(b.hora||'99:99')));
+}
+function rotaComCoord(ps){ return (ps||[]).filter(p=>p.loc&&p.loc.lat!=null&&p.loc.lng!=null); }
+function rotaTotalKm(ps){ const l=rotaComCoord(ps); let t=0,n=0;
+  for(let i=1;i<l.length;i++){ const d=rotaKm(l[i-1].loc,l[i].loc); if(d!=null){ t+=d; n++; } }
+  return n?Math.round(t*10)/10:null; }
+/* uma URL só com todas as paradas — o Maps traça e ele só dirige */
+function rotaMapsUrl(ps){
+  const pts=(ps||[]).filter(p=>p.loc&&(p.loc.lat!=null||locTexto(p.loc)))
+    .map(p=>(p.loc.lat!=null&&p.loc.lng!=null)?(p.loc.lat+','+p.loc.lng):locTexto(p.loc));
+  if(!pts.length) return '';
+  if(pts.length===1) return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(pts[0]);
+  const destino=pts[pts.length-1], meio=pts.slice(1,-1);
+  return 'https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(pts[0])
+    +'&destination='+encodeURIComponent(destino)
+    +(meio.length?'&waypoints='+meio.map(encodeURIComponent).join('%7C'):'');
+}
+function rotaParadaHTML(p,i,ant){
+  const d=ant?rotaKm(ant.loc,p.loc):null;
+  const nome=p.c?p.c.nome:'';
+  const end=locTexto(p.loc);
+  const tel=p.c&&p.c.telefone;
+  return `${d!=null?`<div class="rota-lig">↓ ${d} km em linha reta</div>`:''}
+    <div class="rota-par">
+      <div class="rota-h">${esc(p.hora||'—')}</div>
+      <div class="rota-b">
+        <div class="rota-t">${p.c?`<a href="#" onclick="event.preventDefault();abrirContato('${esc(jsq(p.c.id))}')">${esc(nome)}</a>`:esc(p.titulo)}
+          ${p.c?`<span class="rota-sub">· ${esc(p.titulo)}</span>`:''}
+          ${p.fonte==='google'?'<span class="badge b-cinza">Google</span>':''}
+          ${p.c?badgeEtapa(p.c.etapa):''}</div>
+        <div class="rota-e">${end?('📍 '+esc(end)):'<span style="color:var(--verm,#dc2626)">sem local cadastrado na ficha</span>'}</div>
+      </div>
+      <div class="rota-a">
+        ${end?`<a class="btn btn-s btn-mini" style="text-decoration:none" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((p.loc.lat!=null&&p.loc.lng!=null)?(p.loc.lat+','+p.loc.lng):end)}" title="Abrir este endereço no Maps">🗺️</a>`:''}
+        ${tel?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}
+        ${tel?`<a class="btn btn-s btn-mini" style="text-decoration:none" target="_blank" rel="noopener" href="${esc(waHref(tel)||'#')}" title="WhatsApp">💬</a>`:''}
+      </div>
+    </div>`;
+}
+function rotaDoDiaHTML(){
+  const dia=(MAPA_F.rota==='amanha')?isoAddDias(hojeISO(),1):hojeISO();
+  const ps=rotaParadas(dia);
+  const semLocal=ps.filter(p=>!locTexto(p.loc)).length;
+  const km=rotaTotalKm(ps), url=rotaMapsUrl(ps);
+  const seg=`<span class="gcal-seg"><button class="${MAPA_F.rota!=='amanha'?'on':''}" onclick="MAPA_F.rota='hoje';viewMapa()">Hoje</button><button class="${MAPA_F.rota==='amanha'?'on':''}" onclick="MAPA_F.rota='amanha';viewMapa()">Amanhã</button></span>`;
+  const cab=`<div class="rota-hd"><span class="tit">🚗 Rota do dia</span>
+    <span class="sub">${esc(diaSemanaBR(dia))}, ${esc(dataBR(dia))} · ${ps.length} parada(s)${km!=null?' · ~'+km+' km em linha reta':''}</span>
+    <span style="flex:1"></span>${seg}
+    ${url?`<a class="btn btn-p btn-mini rota-cta" style="text-decoration:none" target="_blank" rel="noopener" href="${esc(url)}" title="Abre o Google Maps já com todas as paradas na ordem">🗺️ Traçar no Maps</a>`:''}</div>`;
+  if(!ps.length) return `<div class="card" style="padding:12px 14px;margin-bottom:12px">${cab}
+    <div style="color:var(--muted);font-size:12.5px;padding:6px 2px">Nada marcado para ${MAPA_F.rota==='amanha'?'amanhã':'hoje'}. O que tiver data e local entra aqui na ordem da hora.</div></div>`;
+  let ant=null;
+  const linhas=ps.map((p,i)=>{ const h=rotaParadaHTML(p,i,(ant&&ant.loc&&p.loc)?ant:null); if(p.loc&&p.loc.lat!=null) ant=p; return h; }).join('');
+  return `<div class="card rota-card" style="padding:12px 14px;margin-bottom:12px">${cab}${linhas}
+    ${semLocal?`<div class="mini" style="margin-top:8px;color:var(--muted)">${semLocal} parada(s) sem local na ficha — abra a pessoa e cadastre o local pra ela entrar na rota.</div>`:''}
+    <div class="mini" style="margin-top:6px;color:var(--muted)">A distância é <b>em linha reta</b> entre as paradas com endereço geolocalizado — serve pra ordenar o dia, não é a quilometragem da rua. O traçado de verdade sai no Maps.</div></div>`;
+}
+(function rotaCss(){ if(document.getElementById('rota-css'))return; const s=document.createElement('style'); s.id='rota-css'; s.textContent=`
+  .rota-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .rota-hd .tit{font-weight:800;font-size:13px}
+  .rota-hd .sub{font-size:12px;color:var(--muted)}
+  .rota-par{display:flex;gap:10px;align-items:flex-start;padding:7px 0}
+  .rota-h{flex:0 0 52px;font-weight:800;font-size:13px;color:var(--azul,#2563eb);font-variant-numeric:tabular-nums}
+  .rota-b{flex:1;min-width:0}
+  .rota-t{font-weight:700;font-size:13.5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .rota-t a{color:inherit;text-decoration:none}
+  .rota-t a:hover{text-decoration:underline}
+  .rota-sub{font-weight:600;color:var(--muted);font-size:12px}
+  .rota-e{font-size:12px;color:var(--muted);margin-top:2px}
+  .rota-a{display:flex;gap:4px;flex:0 0 auto}
+  .rota-lig{margin-left:52px;font-size:11px;color:var(--muted);border-left:2px dashed var(--linha);padding:2px 0 2px 10px}
+  @media (max-width:640px){
+    /* regra permanente dos 44px: o seletor Hoje/Amanhã é dedo, não mouse */
+    .rota-hd .gcal-seg button{min-height:44px;padding:0 16px}
+    .rota-par{flex-wrap:wrap}
+    .rota-h{flex:0 0 46px}
+    .rota-a{width:100%;justify-content:flex-end}
+    .rota-a .btn{min-height:44px;min-width:44px}
+    .rota-hd .rota-cta{width:100%;min-height:44px;display:flex;align-items:center;justify-content:center}
+  }`; document.head.appendChild(s); })();
 function viewMapa(){ const pts=mapaPontos(), gr=mapaGrupos(pts);
   const sel=(id,opts,v,rot)=>`<select onchange="MAPA_F.${id}=this.value;viewMapa()" title="${rot}" style="flex:0 1 auto;width:auto;min-width:140px;max-width:100%"><option value="">${rot}</option>${opts.map(o=>`<option value="${esc(o[0])}" ${o[0]===v?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
   const etapas=[...new Set((S.contatos||[]).filter(escVisivel).map(c=>c.etapa).filter(Boolean))].map(e=>[e,ET_LABEL[e]||e]);
   const funis=[['nn','Novos Negócios'],['bc','Base de Clientes'],['bn','Estoque de Nomes']].concat(Object.keys(ETAPAS_MAP||{}).filter(f=>!['nn','bc'].includes(f)).map(f=>[f,((typeof fxMeta==='function'&&fxMeta(f))||{}).nome||f]));
   const pessoaLinha=p=>`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:5px 0;border-top:1px dashed var(--linha)"><a href="#" onclick="event.preventDefault();${p.abrir}" style="font-weight:600">${esc(p.c.nome)}</a>${p.origem==='funil'?badgeEtapa(p.c.etapa):'<span class="badge b-cinza">Estoque</span>'}${etStatusChip(p.c)}<span style="font-size:11px;color:var(--muted)">${esc(LOC_TIPOS[p.l.tipo]||'')}${p.c.telefone?' · '+esc(telBR(p.c.telefone)):''}</span>${locRotinas(p.l).length?`<span style="font-size:11px;color:var(--azul)">⏰ ${esc(locRotinas(p.l).map(locRotinaTxt).join(' | '))}</span>`:''}</div>`;
   $('#main').innerHTML=`<h1 class="pg">Mapa de locais</h1><div class="sub">${pts.length} pessoa(s) em ${gr.length} local(is) — hospitais, clínicas, empresas e casas cadastrados na ficha. Toque no local pra ver quem está lá e abrir a ficha.</div>
+    ${rotaDoDiaHTML()}
     <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input id="mapa-q" placeholder="Buscar pessoa ou local…" value="${esc(MAPA_F.q)}" oninput="MAPA_F.q=this.value;mapaQDeb()" style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
       ${sel('funil',funis,MAPA_F.funil,'Todos os funis')}${sel('etapa',etapas,MAPA_F.etapa,'Todas as etapas')}${sel('status',etStatusTodos().map(x=>[x,x]),MAPA_F.status,'Todos os status')}${sel('tipo',Object.entries(LOC_TIPOS),MAPA_F.tipo,'Trabalho e casa')}

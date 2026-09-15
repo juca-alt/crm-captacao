@@ -2,6 +2,20 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 14-15/09/2026 (7ª onda) — ROTA DO DIA (fila B, item 1)
+
+**v7.65.** Ele liberou a fila: *"pode seguir o caminho B e vai andando… quero que você opere bem aí."* Primeiro item da frente **MAPA & LOCAIS**: a **rota do dia**.
+
+O app já sabia duas coisas separadas — **onde** cada pessoa fica (locais na ficha) e **o que** está combinado (atividades + Agenda Google). Faltava cruzar.
+- **No topo do Mapa de locais:** o dia em **ordem de hora**, com endereço, **distância entre as paradas** e o total.
+- **O que entra:** atividade do CRM com data no dia (local = local de trabalho da pessoa) **+ evento do Google com local preenchido**. Evento que nasceu de atividade (`crmTarefa`) **não entra duas vezes**.
+- **🗺️ Traçar no Maps:** uma URL só com origem, destino e todas as paradas do meio na ordem — ele só dirige.
+- Por parada: abrir a ficha, ligar, WhatsApp e abrir aquele endereço no Maps. Seletor **Hoje / Amanhã**.
+- **Honestidade:** a distância é **em linha reta** (haversine) — o app não tem roteirizador, e a tela escreve isso. Quem não tem local cadastrado **aparece pedindo cadastro**, em vez de sumir da rota.
+- Medido com 5 paradas reais de Recife: 13,4 km, 0 exceção, 0 estouro em 390 e 1280.
+
+**Provas:** portão 6/6 verde (39 telas), 6 invariantes novos da rota, 4 suítes funcionais verdes. O portão acusou 2 alvos de toque <44px (o seletor Hoje/Amanhã) — corrigido antes de subir.
+
 ## 14/09/2026 (6ª onda) — Painel TA: Delay só é Delay · fila "TA não atendeu" · autoria do Victor
 
 > ### ⏯️ RETOMAR AQUI (ponto de retomada — 14/09, 20h40)
