@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.67 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.68 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -13660,10 +13660,36 @@ function bnSalvar(opts){ if(window.CONTA_TROCANDO) return;
   /* QUOTA-V1 (11/09): o cache guarda só os MEUS nomes (linha de outro dono vem do servidor a cada abertura).
      Com 6.5k linhas o localStorage estourava a cota, o setItem lançava no meio da carga e os 1.368 do Daniel
      nunca chegavam à memória. Falha de cota agora avisa uma vez e NUNCA derruba a carga. */
+  /* QUOTA-V2 (15/09/2026): a base dele tem 5,2 mil nomes — como JSON não cabe nos ~5 MB do
+     localStorage. O app tentava gravar TUDO a cada save, o navegador recusava e ele levava um
+     "cache cheio" em toda abertura, em todo aparelho. Agora o cache tem ORÇAMENTO: grava o que
+     cabe, escolhendo pelo que serve na abertura (lista do dia primeiro, depois os mexidos por
+     último), e marca `parcial`. Nada se perde: o Estoque inteiro vem do servidor a cada carga —
+     o cache é só pra tela não nascer vazia. Avisa só se nem a fatia couber. */
   try{ const eu=(typeof escEu==='function'?escEu():'')||''; const meus=BN.contatos.filter(c=>!c._dono||!eu||c._dono===eu);
-    localStorage.setItem(BN_CHAVE,JSON.stringify({contatos:meus,dups:BN.dups})); }
+    localStorage.setItem(BN_CHAVE, bnCachePayload(meus, BN.dups)); }
   catch(e){ lsQuotaAviso(e); }
   bnAgendarPush();
+}
+/* quanto o cache do Estoque pode ocupar (texto). ~1,5 MB deixa folga pro resto do app
+   (funil, carteira, emitidas, atrasos) dentro dos ~5 MB que o navegador dá. */
+const BN_CACHE_MAX=1500000;
+/* PURA: devolve o texto que vai pro cache, cortado até caber. */
+function bnCachePayload(meus, dups){
+  meus=Array.isArray(meus)?meus:[]; dups=Array.isArray(dups)?dups:[];
+  let txt=JSON.stringify({contatos:meus,dups:dups});
+  if(txt.length<=BN_CACHE_MAX) return txt;
+  const hoje=(typeof hojeISO==='function')?hojeISO():'';
+  /* quem serve na abertura: quem está na lista do dia, depois quem foi mexido por último */
+  const naLista=c=>(c&&c.ta_dia&&hoje&&String(c.ta_dia)<=hoje)?0:1;
+  const ord=meus.slice().sort((a,b)=> naLista(a)-naLista(b) || String((b&&b._upd)||'').localeCompare(String((a&&a._upd)||'')));
+  let n=ord.length;
+  while(n>25){
+    n=Math.floor(n*0.7);
+    txt=JSON.stringify({contatos:ord.slice(0,n),dups:dups,parcial:true,total:meus.length});
+    if(txt.length<=BN_CACHE_MAX) return txt;
+  }
+  return JSON.stringify({contatos:[],dups:[],parcial:true,total:meus.length});
 }
 let _lsQuotaAvisado=false;
 function lsQuotaAviso(e){ console.warn('localStorage: não coube (cota) — dado segue na memória e no servidor',e&&e.name);
@@ -16557,7 +16583,34 @@ function lpSelfCheck(){
     ok('FICHA-UX-V2: mesmos ids do editor (bnSalvarEdicao intacta) + grupos dobráveis + cabeçalho', (()=>{ const h=bnEditorHtml({id:'Zz1',nome:'Zz Teste',telefone:'81999990000',estagio:'lista_ta',prioridade:1,recomendante:'Zz R',trilha:'seguro'}); return ['bne-nome','bne-ctx','bne-tel','bne-tel2','bne-rec','bne-tri','bne-est','bne-pri','bne-idade','bne-ec','bne-fi','bne-renda','bne-cid','bne-mail','bne-emp','bne-not'].every(id=>h.includes('id="'+id+'"')) && h.includes('class="bne-head"') && (h.match(/class="bne-grp"/g)||[]).length>=4; })());
     ok('ESCOPO em módulos: linha de outro dono some quando opero como X; deslogado passa tudo', (()=>{ const P=PERFIL,E=ESC,D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=['d@x']; ESC={sel:'dono:d@x',rotulos:[{rotulo:'daniel',dono_email:'d@x'},{rotulo:'gustavo',dono_email:'a@x'}],perfis:{}};
       const a=escLinhaOk({lp_email:'d@x',lp:'Daniel'}), b=escLinhaOk({lp_email:'a@x',lp:'Gustavo'}); PERFIL=null; const c=escLinhaOk({lp_email:'a@x',lp:'Gustavo'}); return a&&!b&&c; } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
-    ok('QUOTA: falha de cota no cache não derruba bnSalvar/salvar (comportamento, não texto — erro #50)', (()=>{ const st=Storage.prototype.setItem; const av=_lsQuotaAvisado; try{ Storage.prototype.setItem=function(){ const e=new Error('q'); e.name='QuotaExceededError'; throw e; }; bnSalvar(); salvar(); return true; }catch(e){ return false; } finally{ Storage.prototype.setItem=st; _lsQuotaAvisado=av; } })());
+    /* SELF-CHECK-MUDO-V1: no boot bnSalvar/salvar estão mudos — aqui o teste chama as FUNÇÕES REAIS,
+       senão ele passaria de graça sem provar nada (um teste que não pode falhar não é teste). */
+    ok('QUOTA: falha de cota no cache não derruba bnSalvar/salvar (comportamento, não texto — erro #50)', (()=>{ const st=Storage.prototype.setItem; const av=_lsQuotaAvisado;
+      const _bs=(typeof __SC_REAL!=='undefined'&&__SC_REAL.bnSalvar)||bnSalvar, _sv=(typeof __SC_REAL!=='undefined'&&__SC_REAL.salvar)||salvar;
+      try{ Storage.prototype.setItem=function(){ const e=new Error('q'); e.name='QuotaExceededError'; throw e; }; _bs(); _sv(); return true; }catch(e){ return false; } finally{ Storage.prototype.setItem=st; _lsQuotaAvisado=av; } })());
+    ok('QUOTA-V2: cache do Estoque grava só o que cabe — corta e marca "parcial" em vez de estourar',
+       (()=>{ const gordo=[]; for(let i=0;i<5200;i++) gordo.push({id:'q'+i,nome:'Nome Comprido De Teste '+i,telefone:'8199999'+i,
+                notas:'x'.repeat(600),_upd:'2026-09-'+String(10+(i%20)).padStart(2,'0')});
+         const t=bnCachePayload(gordo,[]); const o=JSON.parse(t);
+         return t.length<=BN_CACHE_MAX && o.parcial===true && o.total===5200 && o.contatos.length>25 && o.contatos.length<5200; })());
+    ok('QUOTA-V2: base que cabe vai INTEIRA pro cache, sem marca de parcial',
+       (()=>{ const l=[{id:'a',nome:'A'},{id:'b',nome:'B'}]; const o=JSON.parse(bnCachePayload(l,[])); return o.contatos.length===2 && !o.parcial; })());
+    ok('QUOTA-V2: na hora de cortar, quem está na lista do dia fica',
+       (()=>{ const hoje=hojeISO(); const l=[];
+         l.push({id:'hoje1',nome:'Da lista de hoje',ta_dia:hoje,_upd:'2020-01-01'});
+         for(let i=0;i<5200;i++) l.push({id:'z'+i,nome:'Outro '+i,notas:'x'.repeat(600),_upd:'2026-09-15'});
+         const o=JSON.parse(bnCachePayload(l,[]));
+         return o.parcial===true && o.contatos.some(c=>c.id==='hoje1'); })());
+    ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
+       (()=>{ if(typeof selfCheckMudo!=='function') return false;
+         let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
+         let gravou=0; const _st=Storage.prototype.setItem; Storage.prototype.setItem=function(){ gravou++; };
+         try{ selfCheckMudo(()=>{ toast('nada disso deveria aparecer',true); bnSalvar(); salvar(); });
+              return falou===0 && gravou===0 && SC_MUDO===false;   /* e a trava se desarma no fim */
+         } finally{ window.toast=_t; Storage.prototype.setItem=_st; } })());
+    ok('SELF-CHECK-MUDO-V1: fora do self-check o app volta a falar (a trava não fica presa)',
+       (()=>{ let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
+         try{ toast('normal',true); return falou===1; } finally{ window.toast=_t; } })());
     ok('VER-COMO-V2: operando como um LP, os módulos são os DELE (funis extras desligados) e o painel admin some', (()=>{
       const P=PERFIL, E=ESC, D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=['d@x']; ESC={sel:'dono:d@x',rotulos:[{rotulo:'daniel',dono_email:'d@x'}],perfis:{'d@x':{papel:'lp',modulos:{}}}};
         return modOn('funis_extra')===false && modOn('carteira')===true && !!delegAtivo(); } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
@@ -18470,8 +18523,31 @@ funPrefLer();
 sideRestaurar();
 /* CAPTACAO-OCULTA-V1: a porta do topo só existe se o interruptor estiver ligado. */
 if(CAPTACAO_VISIVEL){ const _tbc=document.getElementById('tb-captacao'); if(_tbc) _tbc.hidden=false; }
-lpSelfCheck();
-funSelfCheck();
+/* ═══ SELF-CHECK-MUDO-V1 (15/09/2026) ════════════════════════════════════════
+   Pedido dele: "essas msgs de chave ficam aparecendo toda hora, em qualquer device
+   ou navegador". Não era o cache dele: o SELF-CHECK roda no boot do app de produção
+   e alguns invariantes exercitam funções DE VERDADE — bnJuntar (2× "Fundidos"),
+   consolToggle ("Deixe pelo menos um funil marcado") — e ainda chamam bnSalvar(),
+   que numa base de 5,2 mil nomes estoura a cota e dispara "Cache do navegador cheio".
+   Resultado: quatro avisos em TODA abertura, em qualquer aparelho, sem ele ter tocado
+   em nada. E pior: escrita (local e remota) com dados de teste.
+   Trava geral, que vale pra hoje e pro que vier: enquanto o self-check roda, o app
+   fica MUDO (nenhum toast), NÃO grava no aparelho e NÃO sobe nada pro servidor.
+   As funções reais continuam acessíveis em __SC_REAL para o invariante que precisa
+   testar o comportamento verdadeiro (o da cota). Livro de erros #17, agora na tela. */
+let SC_MUDO=false;
+const __SC_REAL={};
+function selfCheckMudo(fn){
+  const mudos=['toast','toastDesfazer','bnSalvar','salvar','bnAgendarPush','_bnDupSync','cartSalvar','lpcAgendarPush','pendMarcar','gsyncSalvar'];
+  const guarda={};
+  mudos.forEach(k=>{ if(typeof window[k]==='function'){ guarda[k]=window[k]; __SC_REAL[k]=window[k]; window[k]=function(){ return undefined; }; } });
+  SC_MUDO=true;
+  try{ return fn(); }
+  finally{ SC_MUDO=false; Object.keys(guarda).forEach(k=>{ window[k]=guarda[k]; }); }
+}
+window.selfCheckMudo=selfCheckMudo;
+const _scFalhas=selfCheckMudo(()=>{ const a=lpSelfCheck()||[]; const b=funSelfCheck()||[]; return {lp:a,fun:b}; });
+try{ if((_scFalhas.lp||[]).length||(_scFalhas.fun||[]).length) console.warn('[self-check] invariantes quebrados:',_scFalhas); }catch(_){}
 render();
 /* FLUIDEZ-V1:BOOT — antes era Promise.all([...8 cargas]).then(render): a tela
    só era repintada quando a ÚLTIMA resposta chegava, e a última é a lp_contatos
