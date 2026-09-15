@@ -2,6 +2,31 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (13ª onda) — O app parou de FALAR SOZINHO na abertura (v7.68)
+
+Print dele: quatro avisos empilhados na tela, em toda abertura. *"Essas msgs ficam aparecendo toda hora em qualquer device ou navegador."* Não era o cache do aparelho — eram **dois defeitos somados**, e um deles é sério.
+
+### 1. SELF-CHECK-MUDO-V1 — o self-check falava e gravava como se fosse ele
+`lpSelfCheck()` e `funSelfCheck()` rodam **no boot do app de produção** (linha do boot, sempre rodaram). Alguns invariantes exercitam funções **de verdade**:
+- `bnJuntar(...)` → 2× toast **"Fundidos — reversível em Decididos"** + `bnSalvar()` + `_bnDupSync()` (**escrita remota** com dados de teste);
+- `consolToggle(...)` → toast **"Deixe pelo menos um funil marcado"**;
+- e o `bnSalvar()` desses invariantes, na base de 5,2 mil nomes, **estoura a cota** → toast **"Cache do navegador cheio"**.
+
+Resultado: **4 avisos em toda abertura, em qualquer aparelho**, sem ele ter tocado em nada. Conferido no banco: **0 lixo** chegou em `lp_dup_fila` (a escrita remota não vingou), mas o risco existia.
+
+**Correção — trava geral, não remendo por invariante:** enquanto o self-check roda, o app fica **mudo** (`toast`/`toastDesfazer` no-op), **não grava no aparelho** (`salvar`/`bnSalvar`/`gsyncSalvar`/`cartSalvar`) e **não sobe nada** (`bnAgendarPush`/`_bnDupSync`/`pendMarcar`). As funções reais ficam em `__SC_REAL` — e o invariante da cota passou a chamá-las, senão passaria de graça (*um teste que não pode falhar não é teste*).
+
+### 2. QUOTA-V2 — o cache não cabia, e o app insistia
+A base dele tem **5.261 nomes** (3 MB já comprimidos no Postgres) — como JSON **não cabe** nos ~5 MB do localStorage. O app tentava gravar tudo a cada save e o navegador recusava, **sempre**. Agora o cache do Estoque tem **orçamento de 1,5 MB**: grava o que cabe, priorizando quem serve na abertura (lista do dia primeiro, depois os mexidos por último) e marca `parcial`. Nada se perde — o Estoque inteiro vem do servidor a cada carga. Só avisa se nem a fatia couber.
+
+### Sobre o menu "abrindo sozinho"
+Medido em **375, 640, 768, 834, 900, 980, 1024 e 1280**: a gaveta abre em todas, o véu fecha ao toque e a rolagem destrava. O que o print mostrava era a tela **com os quatro avisos empilhados** — sintoma dos defeitos acima, não do menu.
+
+**Provas:** **teste de usuário novo (28/28)** com base do tamanho da dele — 5.200 nomes no Estoque, 200 negócios, 222 clientes — em celular, iPad retrato, iPad paisagem e desktop: 0 aviso no boot, cache em 1.105 KB, menu abrindo de verdade, passeio por 9 telas + criar/concluir tarefa sem exceção. Portão verde, 5 invariantes novos, 7 suítes anteriores verdes, `--servido` conferido.
+
+### Backup antes da Apple
+O MacBook vai para reparo **sem backup** (não liga). Subi ao Drive, na pasta *Pipe X - Captacao Life Planner*: **MAPA DE CONTINUIDADE** (o que está seguro, o que só existe no Mac, o que pedir à Apple, e como recomeçar do zero) e o **delta 05/09→15/09** do ESTADO (a cópia do Drive tinha parado em 05/09).
+
 ## 15/09/2026 (12ª onda) — NASC-UM-CLIQUE-V1: a data de nascimento resolve todas as apólices
 
 Ele escolheu o **caminho A**: em vez de digitar a idade de emissão apólice por apólice, informar **uma** data de nascimento e deixar o app calcular a idade exata de cada contrato (*nascimento × emissão*).
