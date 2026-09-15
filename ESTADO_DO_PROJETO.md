@@ -2,6 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (11ª onda) — Revisão de Proteção: a projeção do valor de resgate voltou
+
+Print dele: no ativo que o cliente **já tem**, a coluna "Resgate — valor e % do capital" com **traço em toda linha** e as barras do gráfico vazias. Eram **dois defeitos somados**:
+
+1. **Barras vazias — regressão minha (8ª onda).** A passada de "vírgula decimal" trocou o ponto por vírgula **também dentro de `style="width:…"`**. CSS não aceita vírgula decimal: `width:2,3%` é inválido e o navegador ignora — toda barra do arquivo (curva de resgate, capital ano a ano, comparativo, planos) ficou vazia. Voltaram ao ponto; a vírgula fica só no texto que a pessoa lê.
+2. **Coluna de resgate em branco — antigo.** A tabela é lida por **produto + sexo + IDADE NA EMISSÃO**. Quando o espelho colado não traz "Idade na Emissão", a idade ficava nula, a curva vinha vazia e a coluna virava "—" **sem dizer por quê**.
+
+**Correção (RESGATE-VOLTA-V1):** a idade na emissão passa a ser **deduzida** — *data de nascimento × data de emissão* (exata) ou, na falta do nascimento, *idade de hoje − anos de contrato*, e nesse caso marcada como **ESTIMADA** (pode variar 1 ano conforme o aniversário), com pedido de confirmação ao consultor. Idade digitada na apólice sempre vence. E quando ainda assim não houver curva, a tela **diz o motivo**: produto sem tabela na base (WD, p.ex.), idade ausente, ou idade fora da faixa 14–70.
+
+**Livro de erros #18 — vírgula decimal não entra em CSS.** Formatação br ("1,9%") é para o texto que a pessoa lê; `width`, `left`, `flex` e afins precisam de ponto. Ficou um **invariante que rejeita qualquer largura montada com vírgula** — esse erro não volta.
+
+**Provas:** 7 invariantes novos no `selfTestFam` (curva com e sem idade, dedução exata, dedução estimada, motivo de cada caso, guarda do CSS); `selfTest` de tarifas 45/45; 390/834/1280 sem estouro nem exceção; teste funcional da carreira 17/17. Servido pelo Pages conferido pelo hash.
+
 ## 15/09/2026 (10ª onda) — ORGANIZAR PAINEL (fila B, item do 2.0)
 
 **v7.67.** O Início tinha ordem **fixa** e cada card só abria/fechava. Mas a ordem certa depende do ciclo — em semana de ligação o **TA** é o primeiro, em semana de agenda são as **Reuniões** — e card que ele não usa só empurrava o resto pra baixo (no celular, várias telas de rolagem antes de qualquer coisa acionável).
@@ -46,6 +59,7 @@
 > Regras de sempre: git fetch antes, grep -a no vendas.html, portão verde e --servido depois do merge.
 > Testes fora do portão (scratchpad): teste-gsync 17 · teste-agenda 14 · teste-atividade 14 ·
 > teste-estabilidade · teste-carreira 17 · teste-carteira-mapa 13 · teste-painel 19.
+> Atenção (livro de erros #18): vírgula decimal é só para TEXTO — nunca dentro de style="width:…".
 > ```
 
 ## 15/09/2026 (8ª onda) — Carreira do ativo: LIGADA no documento do cliente + vírgula decimal
