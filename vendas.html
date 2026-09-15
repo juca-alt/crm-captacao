@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.68 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.69 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2511,22 +2511,36 @@ function viewInicio(){
      mais relacionamento, mais venda". Card de aniversariantes de hoje / próximos 7 / neste mês,
      das datas de nascimento da carteira (cartNiverProx). Cada linha abre a ficha + 💬 já com a
      mensagem de parabéns. Só aparece quando há carteira. */
-  const bAniv=(typeof cartVis==='function'&&cartVis().length)? (()=>{
-    const nHoje=cartNiverProx(0), nSem=cartNiverProx(7), nMes=cartNiverProx(31);
-    const resumo=nHoje.length?`${nHoje.length} hoje 🎉`:nSem.length?`${nSem.length} nos próximos 7 dias`:nMes.length?`${nMes.length} neste mês`:'nenhum nos próximos 31 dias';
-    const linha=(x)=>{ const c=x.c,d=x.d,pn=(c.nome||'').split(' ')[0]; const wa=cartWaUrl(cartTel(c),'Feliz aniversário, '+pn+'! 🎉');
-      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--linha);cursor:pointer" onclick="cartAbrir('${esc(jsq(c.ref))}')">
-        <span class="dias-tag ${diasTagCls(d)}">${d===0?'hoje!':d===1?'amanhã':'em '+d+'d'}</span>
-        <span style="flex:1;min-width:120px;font-weight:600">${esc(c.nome)}</span>
-        <span style="font-size:12px;color:var(--muted)">🎂 ${dataBR(c.nascimento).slice(0,5)}${(mtIdade(c.nascimento)!=null)?' · faz '+(mtIdade(c.nascimento)+1):(c.idade!=null?' · faz '+(c.idade+1):'')}</span>
-        <button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(jsq(c.ref))}','aniversario')" title="Mensagem de aniversário (editável antes de enviar)">💬</button></div>`; };
-    const refHoje=new Set(nHoje.map(x=>x.c.ref)), refSem=new Set(nSem.map(x=>x.c.ref));
+  /* NIVER-V2: o card lê o motor novo — todas as bases visíveis, quem passou há pouco,
+     dedupe por pessoa e filtro por tipo/LP. */
+  const bAniv=(()=>{
+    const todos=niverItens(31), l=niverFiltrar(todos);
+    if(!todos.length && !(typeof cartVis==='function'&&cartVis().length)) return '';
+    const nHoje=l.filter(x=>x.d===0), nPass=l.filter(x=>x.d<0), nSem=l.filter(x=>x.d>0&&x.d<=7), nMes=l.filter(x=>x.d>7);
+    const resumo=nHoje.length?`${nHoje.length} hoje 🎉`:nPass.length?`${nPass.length} passou há pouco`:nSem.length?`${nSem.length} nos próximos 7 dias`:nMes.length?`${nMes.length} neste mês`:'nenhum nos próximos 31 dias';
+    const selo=p=>(p.tipos||[]).map(t=>`<span class="badge ${t==='cliente'?'b-verde':t==='negocio'?'b-azul':'b-cinza'}" style="font-size:10px">${NIVER_TIPOS[t].ic} ${NIVER_TIPOS[t].l}</span>`).join(' ');
+    const linha=(p)=>{ const wa=niverMsgWa(p); const idade=mtIdade(p.nasc);
+      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--linha);${p.abrir?'cursor:pointer':''}" ${p.abrir?`onclick="${p.abrir}"`:''}>
+        <span class="dias-tag ${diasTagCls(p.d<0?0:p.d)}">${esc(niverQuandoTxt(p.d))}</span>
+        <span style="flex:1;min-width:120px;font-weight:600">${esc(p.nome)}</span>
+        ${selo(p)}${(p.lps||[]).length?`<span class="badge b-cinza" style="font-size:10px" title="De qual carteira/base">👤 ${esc(p.lps.join(' · '))}</span>`:''}
+        <span style="font-size:12px;color:var(--muted)">🎂 ${esc(dataBR(p.nasc).slice(0,5))}${idade!=null?' · faz '+(p.d<0?idade:idade+1):''}</span>
+        ${p.tipo==='cliente'&&p.ref?`<button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(jsq(p.ref))}','aniversario')" title="Mensagem de aniversário (editável antes de enviar)">💬</button>`
+          :(wa?`<a class="btn btn-p btn-mini" style="text-decoration:none" target="_blank" rel="noopener" href="${esc(wa)}" onclick="event.stopPropagation()" title="Parabenizar no WhatsApp">💬</a>`:'')}</div>`; };
     const grp=(t,arr)=>arr.length?`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px">${t} · ${arr.length}</div>${arr.map(linha).join('')}`:'';
-    const corpo=(nHoje.length||nSem.length||nMes.length)
-      ? grp('Hoje',nHoje)+grp('Próximos 7 dias',nSem.filter(x=>!refHoje.has(x.c.ref)))+grp('Ainda neste mês',nMes.filter(x=>!refSem.has(x.c.ref)))+`<div style="margin-top:8px"><button class="btn btn-s btn-mini" onclick="irPara('lp-aniversario')">ver todos os aniversariantes</button></div>`
-      : `<div class="vazio" style="padding:14px">Nenhum aniversário nos próximos 31 dias. As datas vêm da carteira (Subir relatório → Carteira de Clientes).</div>`;
+    const lps=[...new Set(todos.flatMap(p=>p.lps||[]))].sort();
+    const cnt=t=>todos.filter(p=>p.tipos.includes(t)).length;
+    const chip=(k,lbl,on)=>`<button class="cs-chip${on?' on':''}" onclick="event.stopPropagation();niverSetF('tipo','${k}')" style="font-size:11.5px">${lbl}</button>`;
+    const filtros=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px" onclick="event.stopPropagation()">
+        ${chip('','Todos',!NIVER_F.tipo)}${Object.keys(NIVER_TIPOS).map(t=>cnt(t)?chip(t,NIVER_TIPOS[t].ic+' '+NIVER_TIPOS[t].l+' '+cnt(t),NIVER_F.tipo===t):'').join('')}
+        ${lps.length>1?`<select onchange="niverSetF('lp',this.value)" style="max-width:150px;min-height:34px;font-size:12px"><option value="">Todas as carteiras</option>${lps.map(x=>`<option value="${esc(x)}"${escLpNorm(NIVER_F.lp)===escLpNorm(x)?' selected':''}>👤 ${esc(x)}</option>`).join('')}</select>`:''}
+      </div>`;
+    const corpo=filtros+((nHoje.length||nPass.length||nSem.length||nMes.length)
+      ? grp('🎉 Hoje',nHoje)+grp('Passou há pouco — ainda dá pra ligar',nPass)+grp('Próximos 7 dias',nSem)+grp('Ainda neste mês',nMes)
+        +`<div style="margin-top:8px"><button class="btn btn-s btn-mini" onclick="irPara('lp-aniversario')">ver todos os aniversariantes</button></div>`
+      : `<div class="vazio" style="padding:14px">Nenhum aniversário nos próximos 31 dias${NIVER_F.tipo||NIVER_F.lp?' com esse filtro':''}. As datas dos clientes vêm da carteira (Subir relatório → Carteira de Clientes); as de lead e negócio, da data de nascimento na ficha da pessoa.</div>`);
     return iniBloco('aniv','🎂 Aniversariantes',resumo,corpo);
-  })() : '';
+  })();
   const bNn=iniFunilBloco('funil-nn','Funil · Novos Negócios',lista,ETAPAS_FLUXO,ETAPAS_ENCERR,'nn-funil');
   /* o segundo funil so aparece quando existe: bloco vazio na tela de abrir
      ensina a ignorar a tela inteira. */
@@ -4809,6 +4823,7 @@ function drwPessoaHtml(c){
         ${campo('pes_mail','E-mail',c.email,'email')}
         ${campo('pes_prof','Profissão',c.profissao)}
         ${campo('pes_idade','Idade',c.idade,'number')}
+        ${campo('pes_nasc','Nascimento',c.nascimento||c.nasc||'','date')}   <!-- NIVER-V2: é isto que põe a pessoa no card de aniversariantes -->
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
         <div style="flex:1;min-width:200px">
@@ -4841,6 +4856,10 @@ function pessoaSalvarDados(id){
   const mail=v('pes_mail'); if(mail!==undefined) c.email=mail;
   const prof=v('pes_prof'); if(prof!==undefined) c.profissao=prof||'—';
   const idade=v('pes_idade'); if(idade!==undefined) c.idade=(idade!==''&&isFinite(parseInt(idade,10)))?parseInt(idade,10):null;   /* BUGS-V5 #15 */
+  /* NIVER-V2: a data de nascimento do lead/negócio — o que faz ele aparecer nos aniversariantes.
+     Preenchendo a data, a idade vem junto (e não sobrescreve idade digitada à mão sem data). */
+  const nasc=v('pes_nasc');
+  if(nasc!==undefined){ c.nascimento=nasc||''; if(nasc){ const ia=(typeof mtIdade==='function')?mtIdade(nasc):null; if(ia!=null) c.idade=ia; } }
   const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec||'';
   const n=pessoaPropagar(c);
   const lpNovo=v('pes_lp'); const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
@@ -13312,6 +13331,75 @@ function viewCartClientes(){ const q=normKey(CART_Q);
    cobertura e radar da semana — tudo derivado, nada digitado. ---- */
 let CART_GAP='';
 function cartNiverProx(dias){ return cartVis().map(c=>({c,d:lpDiasAte(c.nascimento)})).filter(x=>x.d!=null&&x.d<=dias).sort((a,b)=>a.d-b.d); }
+/* ═══ NIVER-V2 (15/09/2026) ═══════════════════════════════════════════════════
+   Ele: "foi aniversário do Felipe Leonardo ontem e do Sinval hoje, e nenhum dos dois
+   apareceu. Esses dois têm apólice comigo E com o Daniel, então têm que aparecer nos
+   dois. E quero aniversariante GERAL, não só cliente — prospect e lead também, com
+   filtro, porque dar parabéns é ponto de contato que ajuda a venda depois."
+   Conferido na base: os dois existem, com data certa, mas **na carteira do Daniel**
+   (`_dono` = souzacruzdaniel). Duas travas somadas explicavam o sumiço:
+     1) o card lia `cartVis()`, que corta pelo ESCOPO da tela (só a carteira dele);
+     2) o card só olhava pra FRENTE — aniversário de ontem virava "faltam 364 dias".
+   Aqui o aniversário é exceção declarada ao escopo: mostra TODAS as bases que ele tem
+   direito de ver (o RLS já manda), com o selo de QUAL carteira é, e um filtro por LP.
+   Pessoa que está em duas carteiras aparece UMA vez, com os dois selos.
+   Leads/negócios entram pela mesma porta: hoje nenhum contato tem data de nascimento
+   gravada (0 de 6.851), então a lista sai só com clientes — quando o dado chegar (na
+   ficha ou na importação), aparece sozinho, sem mexer em nada. */
+const NIVER_ANTES=3;      /* quantos dias PARA TRÁS ainda valem um "parabéns atrasado" */
+function niverNasc(o){ return (o && (o.nascimento || o.nasc)) || null; }
+/* dias até o próximo aniversário; negativo = passou há poucos dias (até NIVER_ANTES) */
+function niverDias(nasc){
+  const d = lpDiasAte(nasc);
+  if(d == null) return null;
+  const ano = 365;
+  return (d > ano - NIVER_ANTES - 1) ? d - ano : d;   /* 364 vira −1 (foi ontem) */
+}
+function niverChave(p){
+  const t=String(p.tel||'').replace(/\D/g,'');
+  return t.length>=8 ? 't:'+t.slice(-8) : 'n:'+normKey(p.nome||'');
+}
+/* todas as pessoas com data de nascimento, de todas as bases visíveis */
+function niverItens(dias){
+  dias = (dias==null?31:dias);
+  const out=[];
+  const push=(nome,nasc,tel,tipo,lp,abrir,ref)=>{
+    const d=niverDias(nasc);
+    if(d==null || d>dias || d < -NIVER_ANTES) return;
+    if(!String(nome||'').trim()) return;
+    out.push({nome:String(nome).trim(), nasc, tel:tel||'', tipo, lp:lp||'', abrir:abrir||'', ref:ref||'', d});
+  };
+  /* 1. CARTEIRA — todos os donos que o servidor deixou ele ver, não só o escopo da tela */
+  (CART.clientes||[]).forEach(c=>push(c.nome, c.nascimento, cartTel(c), 'cliente',
+      c.lp || escRotuloDe({_dono:c._dono}) || '', `cartAbrir('${'${'}esc(jsq(String(c.ref)))})`, c.ref));
+  /* 2. NEGÓCIOS do funil */
+  (S.contatos||[]).filter(escVisivel).forEach(c=>push(c.nome, niverNasc(c), c.telefone, 'negocio',
+      escRotuloDe(c)||'', `abrirContato('${'${'}esc(jsq(String(c.id)))})`, c.id));
+  /* 3. LEADS do Estoque */
+  (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>push(b.nome, niverNasc(b), b.telefone, 'lead',
+      escRotuloDe(b)||'', `taFichaAbrir('${'${'}esc(jsq(String(b.id)))})`, b.id));
+  /* mesma pessoa em duas bases = UMA linha, com as duas marcas */
+  const m=new Map();
+  out.forEach(p=>{ const k=niverChave(p); const a=m.get(k);
+    if(!a){ m.set(k,{...p, tipos:[p.tipo], lps:p.lp?[p.lp]:[]}); return; }
+    if(!a.tipos.includes(p.tipo)) a.tipos.push(p.tipo);
+    if(p.lp && !a.lps.includes(p.lp)) a.lps.push(p.lp);
+    if(a.tipo!=='cliente' && p.tipo==='cliente'){ a.tipo='cliente'; a.abrir=p.abrir; a.ref=p.ref; }  /* a ficha do cliente é a mais completa */
+    if(!a.tel && p.tel) a.tel=p.tel;
+  });
+  return [...m.values()].sort((a,b)=>a.d-b.d || a.nome.localeCompare(b.nome));
+}
+const NIVER_TIPOS={cliente:{ic:'🛡',l:'Cliente'}, negocio:{ic:'🎯',l:'Negócio'}, lead:{ic:'📇',l:'Lead'}};
+let NIVER_F={tipo:'', lp:''};   /* filtro do card, por aparelho na sessão */
+function niverFiltrar(l){ return (l||[]).filter(p=>
+  (!NIVER_F.tipo || p.tipos.includes(NIVER_F.tipo)) &&
+  (!NIVER_F.lp   || (p.lps||[]).some(x=>escLpNorm(x)===escLpNorm(NIVER_F.lp)))); }
+function niverSetF(k,v){ NIVER_F[k]=v||''; render(); }
+window.niverSetF=niverSetF;
+function niverQuandoTxt(d){ return d<0 ? (d===-1?'foi ontem':'há '+Math.abs(d)+' dias')
+  : d===0 ? 'hoje!' : d===1 ? 'amanhã' : 'em '+d+'d'; }
+function niverMsgWa(p){ const pn=(p.nome||'').split(' ')[0];
+  return waHref(p.tel) ? waHref(p.tel)+'?text='+encodeURIComponent('Feliz aniversário, '+atTitleC(pn)+'! 🎉') : ''; }
 function cartRadarLista(){ return cartVis().map(c=>({c,rad:cartRadar(c)})).filter(x=>cartRadarTemAcao(x.rad)); }
 function viewCartOportunidades(){
   if(!cartVis().length){ $('#main').innerHTML=`<h1 class="pg">Oportunidades</h1><div class="sub">Ganchos de contato e venda extraídos da carteira.</div>`+cartVazio(); return; }
@@ -16601,6 +16689,44 @@ function lpSelfCheck(){
          for(let i=0;i<5200;i++) l.push({id:'z'+i,nome:'Outro '+i,notas:'x'.repeat(600),_upd:'2026-09-15'});
          const o=JSON.parse(bnCachePayload(l,[]));
          return o.parcial===true && o.contatos.some(c=>c.id==='hoje1'); })());
+    /* ═══ NIVER-V2 (15/09): aniversariantes de todas as bases, inclusive a do outro LP ═══ */
+    { const _c=CART.clientes, _s=S.contatos, _b=BN.contatos, _f={...NIVER_F};
+      try{
+        const hj=new Date(), iso=dd=>{ const d=new Date(hj); d.setDate(d.getDate()+dd);
+          return '1990-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+        CART.clientes=[{ref:'outro lp',nome:'Cliente Do Outro LP',nascimento:iso(0),celular:'81999990001',lp:'Daniel',_dono:'outro@x.com',cob:{}},
+                       {ref:'ontem lp',nome:'Fez Ontem',nascimento:iso(-1),celular:'81999990002',lp:'Daniel',_dono:'outro@x.com',cob:{}},
+                       {ref:'velho',   nome:'Faz Daqui A Muito',nascimento:iso(200),celular:'81999990003',lp:'Gustavo',cob:{}}];
+        S.contatos=[]; BN.contatos=[]; NIVER_F={tipo:'',lp:''};
+        const l=niverItens(31); const por=nm=>l.find(p=>normKey(p.nome)===normKey(nm));
+        ok('niver: cliente da carteira de OUTRO LP aparece (o card não é mais preso ao escopo da tela)',
+           !!por('Cliente Do Outro LP') && por('Cliente Do Outro LP').d===0 && por('Cliente Do Outro LP').lps.includes('Daniel'));
+        ok('niver: quem fez ontem ainda aparece, marcado como "foi ontem" (antes virava "faltam 364 dias")',
+           !!por('Fez Ontem') && por('Fez Ontem').d===-1 && /foi ontem/.test(niverQuandoTxt(-1)));
+        ok('niver: quem faz daqui a muito tempo fica de fora da janela', !por('Faz Daqui A Muito'));
+        ok('niver: a mesma pessoa em duas bases vira UMA linha com os dois selos',
+           (()=>{ const c=normContato({id:'nv1',nome:'Cliente Do Outro LP',funil:'nn',etapa:'OI/FF',telefone:'81999990001'});
+             c.nascimento=iso(0); S.contatos=[c];
+             const l2=niverItens(31).filter(p=>normKey(p.nome)===normKey('Cliente Do Outro LP'));
+             S.contatos=[];
+             return l2.length===1 && l2[0].tipos.includes('cliente') && l2[0].tipos.includes('negocio'); })());
+        ok('niver: lead do Estoque com data de nascimento entra; sem data, não inventa',
+           (()=>{ BN.contatos=[{id:'ld1',nome:'Lead Com Data',telefone:'81999990009',nascimento:iso(1),estagio:'estoque'},
+                               {id:'ld2',nome:'Lead Sem Data',telefone:'81999990008',estagio:'estoque'}];
+             const l2=niverItens(31); BN.contatos=[];
+             return l2.some(p=>p.nome==='Lead Com Data') && !l2.some(p=>p.nome==='Lead Sem Data'); })());
+        ok('niver: o filtro por tipo e por carteira recorta a lista',
+           (()=>{ BN.contatos=[{id:'ld1',nome:'Lead Com Data',telefone:'81999990009',nascimento:iso(1),estagio:'estoque'}];
+             NIVER_F={tipo:'lead',lp:''}; const soLead=niverFiltrar(niverItens(31));
+             NIVER_F={tipo:'',lp:'Daniel'}; const soDaniel=niverFiltrar(niverItens(31));
+             NIVER_F={tipo:'',lp:''}; BN.contatos=[];
+             return soLead.length===1 && soLead[0].nome==='Lead Com Data'
+                 && soDaniel.length===2 && soDaniel.every(p=>p.lps.includes('Daniel')); })());
+        ok('niver: a data de nascimento é editável na ficha da pessoa (é o que alimenta lead e negócio)',
+           (()=>{ const f=String(drwPessoaHtml||'')+String(pessoaSalvarDados||'');
+             return f.includes("pes_nasc") && f.includes("c.nascimento=nasc"); })());
+      } finally{ CART.clientes=_c; S.contatos=_s; BN.contatos=_b; NIVER_F=_f; }
+    }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
          let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
