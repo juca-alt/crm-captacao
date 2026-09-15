@@ -2,6 +2,18 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 15/09/2026 (12ª onda) — NASC-UM-CLIQUE-V1: a data de nascimento resolve todas as apólices
+
+Ele escolheu o **caminho A**: em vez de digitar a idade de emissão apólice por apólice, informar **uma** data de nascimento e deixar o app calcular a idade exata de cada contrato (*nascimento × emissão*).
+
+- Quando algum ativo está com a idade na emissão **ESTIMADA**, o app pede o dado **no lugar em que a diferença aparece** (topo do bloco de ativos); o botão leva à etapa 1, rola até o campo, põe o cursor e abre o seletor de data.
+- O aviso é **só do consultor** (`so-consultor`) — o cliente não lê pedido de cadastro no material dele. Com a data preenchida, o aviso some sozinho.
+- O espelho colado **já trazia** "Data de Nascimento" quando o documento tem (`cli.nasc` → `state.cliente.nasc`); o pedido só aparece quando o dado realmente falta.
+
+**Por que importa, no número:** no caso de teste a estimativa dava 35 anos e a data real dá 34 — **44,1% contra 43,0%** de resgate no 10º ano. Um ano de diferença muda o valor que vai pro cliente.
+
+**Provas:** 3 invariantes novos no `selfTestFam` + teste funcional novo **14/14** com clique de verdade nos dois tamanhos (inclusive a mudança do percentual); tarifas 45/45; carreira 17/17; 390/834/1280 sem estouro nem exceção; servido pelo Pages conferido pelo hash (`cdf408708f52`).
+
 ## 15/09/2026 (11ª onda) — Revisão de Proteção: a projeção do valor de resgate voltou
 
 Print dele: no ativo que o cliente **já tem**, a coluna "Resgate — valor e % do capital" com **traço em toda linha** e as barras do gráfico vazias. Eram **dois defeitos somados**:
