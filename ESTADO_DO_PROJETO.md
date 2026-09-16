@@ -2,6 +2,39 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 16/09/2026 (15ª onda) — Visão Consolidada reformada pelos prints do iPhone (v7.71)
+
+Ele mandou 5 prints da Consolidada no iPhone e descreveu um a um: *"essa tela ficou muito boa... agora ajusta logo o layout"*. Rodado com a skill **construir-time-ux** (medir antes → mexer → medir depois), celular e desktop juntos.
+
+### O que ele apontou → o que foi feito
+
+| Ele disse | Causa | O que mudou |
+|---|---|---|
+| *"o cifrão tá ali, os números embaixo"* | 5 KPIs em 3 colunas + `overflow-wrap:anywhere` quebravam **dentro** do valor | 2 colunas no celular e `white-space:nowrap` no valor (`.kpis-consol`) |
+| *"tira ticket médio e bota PA médio"* | vocabulário errado | rótulo **PA médio** |
+| *"esse card de entrega + encerrados eu não entendi"* | somava **apólice ganha** com **negócio perdido** | virou **"A entregar"** — R$ de PA emitido esperando delivery, com a contagem de apólices. Encerrado continua na régua |
+| *"essas descrições explicando, pode ir tirando"* | subtítulo da tela, `desc` de cada etapa, rodapé do de-para | saíram os 3 |
+| *"aqueles textinhos de rodapé, tipo sem valor lançado"* | rodapé de linha para valor zero | zero não aparece: sem ponderado, sem sub-linha |
+| *"está aparecendo base de negócio, base de negócio"* | o nome inteiro do funil repetido em toda linha | vira **sigla** (NN/BC), e **só quando há mais de um funil somado** |
+| nome e valor cortados na direita | `.cs-lin` era uma faixa `nowrap` de 3 colunas | no celular o nome pega a linha inteira e etapa+PA descem pra segunda |
+| o botão **fechar** quebrando o título | botão solto dentro do `.tar-grp` | cabeçalho próprio (`.cs-grp`) com o botão na ponta |
+
+Extras da mesma passada: **"Parados" virou caminho** (toca e vai pra lista de travados, padrão LENTE), a barra da régua ficou **44px** no celular (era 30 — alvo de mouse), a coluna de dinheiro da tabela "Por funil" parou de quebrar o `R$`, e no celular o PA deixou de ser repetido embaixo da barra que já o escreve.
+
+### Um bug sério achado de passagem — no card de aniversariantes
+O `onclick` de cada aniversariante saía com um `${...}` **literal** (escape a mais no patch do NIVER-V2): `cartAbrir('${esc(jsq(String(c.ref)))})`. **Clicar em qualquer aniversariante estourava `Invalid or unexpected token` e não abria nada** — desde a v7.69. Corrigido nos 3 caminhos (cliente, negócio, lead), com invariante que **compila** o onclick (`new Function`) para não voltar.
+
+### Medido (base inventada, 33 negócios em 2 funis)
+
+| | antes | depois |
+|---|---|---|
+| textos recortados a 390px | **7** | **0** |
+| alvos de toque <44px a 390px | **13** | **0** |
+| estouro horizontal (390 e 1280) | 0 | 0 |
+| clique no aniversariante | ❌ erro de sintaxe | ✅ abre a ficha |
+
+**Provas:** portão verde nos 6 cenários (39 telas × 375/1024/1280 × cheia/vazia), `--prova` acusando o defeito injetado, 7 invariantes novos, teste de clique antes×depois.
+
 ## 15/09/2026 (14ª onda) — NIVER-V2: aniversariantes de TODAS as bases (v7.69)
 
 Ele: *"foi aniversário do Felipe Leonardo ontem e do Sinval hoje, e nenhum dos dois apareceu. Esses dois têm apólice comigo E com o Daniel."* E o pedido junto: *"quero aniversariante GERAL, não só cliente — prospect e lead também, com filtro, porque dar parabéns é ponto de contato que ajuda a venda depois."*

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.70 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.71 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3639,6 +3639,21 @@ function consolFaixaDe(c){
   return r<=0.34?'prosp':(r<=0.67?'abert':'prop');
 }
 function consolEmJogo(c){ const k=consolFaixaDe(c); return k!=='enc'&&k!=='entr'; }
+/* CONSOL-UX-V1: ele, olhando a lista: "está aparecendo base de negócio, base de
+   negócio — o que eu quero ver é QUAL é o negócio e QUANTO é cada um".
+   Então o nome vem primeiro e inteiro, a etapa vira marca curta e o PA fica na
+   ponta. O funil vira sigla e só aparece quando há MAIS DE UM funil somado —
+   com um só, repetir o rótulo em toda linha é ruído. */
+const CONSOL_SIGLA={nn:'NN',bc:'BC',vg:'VG',prud:'PRUD',mfo:'MFO'};
+function consolSigla(f){ return CONSOL_SIGLA[f]||String(f||'').toUpperCase(); }
+function consolLinha(c,comFunil){
+  const f=funilDe(c), et=ET_LABEL[c.etapa]||c.etapa||'—', p=paDe(c);
+  return `<div class="cs-lin">
+    <span class="nm" onclick="abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha">${esc(c.nome||'(sem nome)')}</span>
+    ${comFunil?`<span class="cs-sig" title="${esc(funilNome(f))}">${esc(consolSigla(f))}</span>`:''}
+    <span class="tg">${esc(et)}</span>
+    <span class="pa">${p?brlCurto(p):'—'}</span></div>`;
+}
 function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.includes(funilDe(c))); }
 (function consolCss(){ if(document.getElementById('consol-css'))return; const s=document.createElement('style'); s.id='consol-css'; s.textContent=`
   .cs-chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:2px 0 14px}
@@ -3654,16 +3669,46 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .cs-barra b{position:absolute;left:10px;top:0;bottom:0;display:flex;align-items:center;font-size:12.5px;font-weight:800;color:#0f2c5c;text-shadow:0 1px 0 rgba(255,255,255,.6)}
   .cs-vals{text-align:right;font-size:12.5px;font-weight:700;white-space:nowrap}
   .cs-vals small{display:block;font-weight:600;color:var(--muted);font-size:11px}
-  .cs-nota{font-size:11.5px;color:var(--muted);margin-top:10px}
+  /* CONSOL-UX-V1: cabeçalho de bloco com o botão na ponta — antes o "fechar"
+     entrava no meio do texto e quebrava a linha do título no celular. */
+  .cs-grp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0 4px}
+  .cs-grp .t{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+  .cs-grp .q{font-size:12px;font-weight:600;color:var(--muted)}
+  .cs-grp .btn{margin-left:auto;flex:0 0 auto}
+  /* o valor do KPI é uma unidade: "R$" não desce de linha sozinho */
+  .kpis-consol .kpi .num{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+  .kpi.cs-click{cursor:pointer}
+  .cs-sig{font-size:10.5px;font-weight:800;letter-spacing:.04em;color:var(--muted);background:#f1f5f9;border-radius:6px;padding:2px 6px;white-space:nowrap;flex:0 0 auto}
+  /* o dinheiro fica numa coluna só: sem min-width a etapa empurrava cada valor pra
+     uma posição diferente e a coluna de PA saía serrilhada. */
+  .cs-lin .pa{font-weight:800;white-space:nowrap;margin-left:auto;flex:0 0 auto;min-width:96px;text-align:right}
+  /* mesma doença do KPI: no celular "R$" descia de linha e o número ficava embaixo.
+     Só as colunas de número travam; o nome do funil continua podendo quebrar. */
+  .cs-tab td:not(:first-child),.cs-tab th:not(:first-child){white-space:nowrap}
   .cs-lin{display:flex;gap:10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--linha);font-size:13px}
   .cs-lin:last-child{border-bottom:0}
   .cs-lin .nm{flex:1;min-width:0;font-weight:700;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cs-lin .tg{font-size:11px;color:var(--muted);white-space:nowrap}
   @media (max-width:860px){
     .cs-fx{grid-template-columns:1fr;gap:4px}
+    /* no celular a própria barra já escreve "18 negócios · R$ 220.320" — repetir o
+       mesmo PA logo abaixo era uma linha inteira dizendo o que já está na tela.
+       Fica só o ponderado, que a barra não tem. */
     .cs-vals{text-align:left}
-    .cs-barra{height:30px}
+    .cs-vals .v{display:none}
+    /* a barra é o que ele TOCA pra abrir a faixa — 30px era alvo de mouse, não de dedo */
+    .cs-barra{height:44px}
     .cs-chip{min-height:44px}
+    /* CONSOL-UX-V1: a linha do negócio deixa de ser uma fita que sai pela direita.
+       O nome pega a largura inteira e pode quebrar; etapa e PA descem pra segunda
+       linha, com o valor encostado na direita. No desktop nada disso vale. */
+    .cs-lin{flex-wrap:wrap;gap:2px 8px;padding:6px 2px}
+    .cs-lin .nm{flex:1 0 100%;white-space:normal;overflow:visible;min-height:44px;display:flex;align-items:center}
+  }
+  @media (max-width:980px){
+    /* 5 KPIs em 3 colunas espremiam o valor em duas linhas ("R$" em cima, número
+       embaixo). Em 2 colunas o valor cabe inteiro. */
+    .kpis-consol{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
   }`; document.head.appendChild(s); })();
 function viewConsolidado(){
   const disp=consolDisponiveis(), sel=consolSel();
@@ -3679,14 +3724,18 @@ function viewConsolidado(){
   const base=Math.max(1,...CONSOL_FAIXAS.map(f=>somaPA(porFaixa[f.k])), 1);
   const baseN=Math.max(1,...CONSOL_FAIXAS.map(f=>porFaixa[f.k].length));
   const temPA=CONSOL_FAIXAS.some(f=>somaPA(porFaixa[f.k])>0);
-  const regua=CONSOL_FAIXAS.map(f=>{ const l=porFaixa[f.k], p=somaPA(l);
+  /* CONSOL-UX-V1: saem a descrição de cada etapa ("antes da abertura", "OI/FF ·
+     revisita") e o rodapé de linha ("sem valor lançado", "vazio") — explicação
+     que ele já sabe de cor, ocupando a linha que o número deveria ter. Zero não
+     aparece: sem ponderado, a sub-linha simplesmente não existe. */
+  const regua=CONSOL_FAIXAS.map(f=>{ const l=porFaixa[f.k], p=somaPA(l), pd=paPonderado(l);
     const larg=Math.round((temPA? p/base : l.length/baseN)*100);
     return `<div class="cs-fx">
-      <span class="nm">${f.ic} <span>${f.nome}<small>${f.desc}</small></span></span>
+      <span class="nm">${f.ic} <span>${f.nome}</span></span>
       <span class="cs-barra" onclick="consolFoco('${f.k}')" title="${l.length} negócio(s) — clique pra ver quem está aqui">
         <i style="width:${Math.max(l.length?6:0,larg)}%;background:${f.cor}22;border-left:4px solid ${f.cor}"></i>
-        <b>${l.length} negócio(s)${p?' · '+brlCurto(p):''}</b></span>
-      <span class="cs-vals">${p?brlCurto(p):'—'}<small>${l.length?(paPonderado(l)?'pond. '+brlCurto(paPonderado(l)):'sem valor lançado'):'vazio'}</small></span>
+        <b>${l.length} ${l.length===1?'negócio':'negócios'}${p?' · '+brlCurto(p):''}</b></span>
+      <span class="cs-vals"><b class="v">${p?brlCurto(p):'—'}</b>${pd?`<small>pond. ${brlCurto(pd)}</small>`:''}</span>
     </div>`; }).join('');
   const porFunil=sel.map(f=>{ const l=lista.filter(c=>funilDe(c)===f), j=l.filter(consolEmJogo);
     return `<tr class="clicavel" onclick="irPara('${f==='nn'?'nn-funil':f==='bc'?'bc-funil':f+'-funil'}')">
@@ -3696,36 +3745,37 @@ function viewConsolidado(){
   const foco=CONSOL.foco&&porFaixa[CONSOL.foco]?CONSOL.foco:null;
   const fx=foco?CONSOL_FAIXAS.find(f=>f.k===foco):null;
   const listaFoco=foco?porFaixa[foco].slice().sort((a,b)=>paDe(b)-paDe(a)).slice(0,30):[];
+  const multi=sel.length>1;
+  /* CONSOL-UX-V1: "Entrega + encerrados" somava coisas opostas — apólice emitida
+     esperando delivery (PA GANHO) com negócio perdido. Vira "A entregar": o que
+     já é dele e só falta entregar, que é o que vira tarefa amanhã. Encerrado
+     continua na régua, onde é leitura e não meta. */
+  const paEntr=somaPA(porFaixa.entr);
   $('#main').innerHTML=`<h1 class="pg">Visão Consolidada</h1>
-    <div class="sub">Os funis que você marcar, numa régua só — pra enxergar onde o negócio está, não pra operar. Operar continua em cada funil.</div>
     <div class="cs-chips">${chips}<span style="flex:1"></span>
       <button class="cs-chip" onclick="consolTodos()" title="Marcar todos os funis disponíveis">⊕ todos</button></div>
-    <div class="kpis" style="margin-bottom:14px">
-      <div class="kpi"><div class="lbl">PA em jogo</div><div class="num">${brlCurto(pa)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${brlCurto(pa/12)}/mês · ${jogo.length} negócio(s)</div></div>
-      <div class="kpi"><div class="lbl">Ponderado</div><div class="num">${brlCurto(pond)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">pela probabilidade da etapa</div></div>
-      <div class="kpi"><div class="lbl">Ticket médio</div><div class="num">${brlCurto(ticket)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">PA por negócio em jogo</div></div>
-      <div class="kpi"${parados.length?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Parados</div><div class="num">${parados.length}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">sem próxima atividade</div></div>
-      <div class="kpi"><div class="lbl">Entrega + encerrados</div><div class="num">${porFaixa.entr.length+porFaixa.enc.length}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${porFaixa.entr.length} na entrega · ${porFaixa.enc.length} fora</div></div>
+    <div class="kpis kpis-consol" style="margin-bottom:14px">
+      <div class="kpi"><div class="lbl">PA em jogo</div><div class="num">${brlCurto(pa)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${jogo.length} ${jogo.length===1?'negócio':'negócios'} · ${brlCurto(pa/12)}/mês</div></div>
+      <div class="kpi"><div class="lbl">Ponderado</div><div class="num">${brlCurto(pond)}</div></div>
+      <div class="kpi"><div class="lbl">PA médio</div><div class="num">${brlCurto(ticket)}</div></div>
+      <div class="kpi${parados.length?' cs-click':''}"${parados.length?' style="border:1.5px solid #f3c9c9" onclick="consolIrTravados()" title="Ver quem está travado"':''}><div class="lbl">Parados</div><div class="num">${parados.length}</div></div>
+      <div class="kpi"><div class="lbl">A entregar</div><div class="num">${paEntr?brlCurto(paEntr):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${porFaixa.entr.length} ${porFaixa.entr.length===1?'apólice':'apólices'}</div></div>
     </div>
-    <div class="tar-grp">Régua única <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${sel.length} funil(is) somados · barra pelo ${temPA?'PA':'nº de negócios'}</span></div>
-    <div class="card" style="padding:16px 18px"><div class="cs-regua">${regua}</div>
-      <div class="cs-nota">Abertura, Proposta e Entrega seguem o mesmo de-para que carimba a etapa na sua Agenda. ${sel.some(f=>f!=='nn'&&f!=='bc')?'Funis sem de-para (Vida em Grupo, Prud. Demais, MFO) entram pela <b>posição</b> na régua do próprio funil.':''}</div></div>
-    ${foco?`<div class="tar-grp">${fx.ic} ${fx.nome} <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${porFaixa[foco].length} · maiores primeiro</span>
-      <button class="btn btn-s btn-mini" style="margin-left:8px" onclick="consolFoco('')">fechar</button></div>
-      <div class="card" style="padding:6px 16px">${listaFoco.map(c=>`<div class="cs-lin">
-        <span class="nm" onclick="abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha">${esc(c.nome||'(sem nome)')}</span>
-        <span class="tg">${esc(funilNome(funilDe(c)))} · ${esc(ET_LABEL[c.etapa]||c.etapa||'—')}</span>
-        <span class="tg"><b>${paDe(c)?brlCurto(paDe(c)):'—'}</b></span></div>`).join('')||'<div style="padding:12px;color:var(--muted)">Nenhum negócio nesta faixa.</div>'}</div>`:''}
-    <div class="tar-grp">Por funil</div>
-    <div class="card" style="padding:6px 16px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <div class="cs-grp"><span class="t">Régua única</span></div>
+    <div class="card" style="padding:16px 18px"><div class="cs-regua">${regua}</div></div>
+    ${foco?`<div class="cs-grp"><span class="t">${fx.ic} ${fx.nome}</span><span class="q">${porFaixa[foco].length} · maiores primeiro</span>
+      <button class="btn btn-s btn-mini" onclick="consolFoco('')">fechar</button></div>
+      <div class="card" style="padding:6px 16px">${listaFoco.map(c=>consolLinha(c,multi)).join('')||'<div style="padding:12px;color:var(--muted)">Nenhum negócio nesta faixa.</div>'}</div>`:''}
+    <div class="cs-grp"><span class="t">Por funil</span></div>
+    <div class="card" style="padding:6px 16px;overflow-x:auto"><table class="cs-tab" style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;font-size:11px;color:var(--muted)"><th style="padding:8px 6px">Funil</th><th>Em jogo</th><th>PA</th><th>Ponderado</th><th>Parados</th></tr></thead>
       <tbody>${porFunil||'<tr><td colspan="5" class="vazio">Marque um funil acima.</td></tr>'}</tbody></table></div>
-    ${travados.length?`<div class="tar-grp">Onde está travado <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">maior PA sem próxima atividade — é aqui que o mês escorre</span></div>
-      <div class="card" style="padding:6px 16px">${travados.map(c=>`<div class="cs-lin">
-        <span class="nm" onclick="abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha e marcar a próxima">${esc(c.nome||'(sem nome)')}</span>
-        <span class="tg">${esc(funilNome(funilDe(c)))} · ${esc(ET_LABEL[c.etapa]||c.etapa||'—')}</span>
-        <span class="tg"><b>${paDe(c)?brlCurto(paDe(c)):'—'}</b></span></div>`).join('')}</div>`:''}`;
+    ${travados.length?`<div class="cs-grp" id="cs-travados"><span class="t">Onde está travado</span><span class="q">maior PA sem próxima atividade</span></div>
+      <div class="card" style="padding:6px 16px">${travados.map(c=>consolLinha(c,multi)).join('')}</div>`:''}`;
 }
+/* o número "Parados" vira caminho: leva à lista de quem está travado */
+window.consolIrTravados=function(){ const el=document.getElementById('cs-travados');
+  if(el&&el.scrollIntoView) setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),0); };
 window.consolFoco=function(k){ CONSOL.foco=(CONSOL.foco===k)?'':k; viewConsolidado(); };
 function viewNnFunil(){
   /* com etapa em foco o board deve ir pra coluna focada, não voltar pro lugar antigo */
@@ -13371,13 +13421,13 @@ function niverItens(dias){
   };
   /* 1. CARTEIRA — todos os donos que o servidor deixou ele ver, não só o escopo da tela */
   (CART.clientes||[]).forEach(c=>push(c.nome, c.nascimento, cartTel(c), 'cliente',
-      c.lp || escRotuloDe({_dono:c._dono}) || '', `cartAbrir('${'${'}esc(jsq(String(c.ref)))})`, c.ref));
+      c.lp || escRotuloDe({_dono:c._dono}) || '', `cartAbrir('${esc(jsq(String(c.ref)))}')`, c.ref));
   /* 2. NEGÓCIOS do funil */
   (S.contatos||[]).filter(escVisivel).forEach(c=>push(c.nome, niverNasc(c), c.telefone, 'negocio',
-      escRotuloDe(c)||'', `abrirContato('${'${'}esc(jsq(String(c.id)))})`, c.id));
+      escRotuloDe(c)||'', `abrirContato('${esc(jsq(String(c.id)))}')`, c.id));
   /* 3. LEADS do Estoque */
   (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>push(b.nome, niverNasc(b), b.telefone, 'lead',
-      escRotuloDe(b)||'', `taFichaAbrir('${'${'}esc(jsq(String(b.id)))})`, b.id));
+      escRotuloDe(b)||'', `taFichaAbrir('${esc(jsq(String(b.id)))}')`, b.id));
   /* mesma pessoa em duas bases = UMA linha, com as duas marcas */
   const m=new Map();
   out.forEach(p=>{ const k=niverChave(p); const a=m.get(k);
@@ -16750,6 +16800,41 @@ function lpSelfCheck(){
              return f.includes("pes_nasc") && f.includes("c.nascimento=nasc"); })());
       } finally{ CART.clientes=_c; S.contatos=_s; BN.contatos=_b; NIVER_F=_f; }
     }
+    /* ═══ CONSOL-UX-V1 (16/09): Visão Consolidada depois dos prints do iPhone ═══ */
+    { const _f=CONSOL.funis, _fo=CONSOL.foco;
+      try{
+        const c1={id:'cx1',nome:'Fulano De Teste',funil:'bc',etapa:'PC',pm:2000};
+        const um=consolLinha(c1,false), dois=consolLinha(c1,true);
+        ok('consol: a linha diz QUAL é o negócio e QUANTO é — nome e PA na mesma linha',
+           /Fulano De Teste/.test(um) && /24/.test(um) && um.includes('class="pa"'));
+        ok('consol: com UM funil somado, o rótulo do funil não se repete em toda linha (era "base de clientes, base de clientes")',
+           !/Negócios Base de Clientes/.test(um));
+        ok('consol: com mais de um funil, o funil vira sigla curta (BC), não o nome inteiro',
+           /cs-sig/.test(dois) && />BC</.test(dois) && !/>Negócios Base de Clientes</.test(dois));
+        /* sem os comentários: eles CITAM o texto que saiu da tela, e a citação
+           fazia o invariante acusar o que já foi removido. */
+        const fonte=String(viewConsolidado).replace(/\/\*[\s\S]*?\*\//g,'');
+        ok('consol: "Ticket médio" virou "PA médio" (é prêmio anualizado, na língua dele)',
+           fonte.includes('PA médio') && !fonte.includes('Ticket médio'));
+        ok('consol: "Entrega + encerrados" saiu — somava apólice ganha com negócio perdido',
+           !fonte.includes('Entrega + encerrados') && fonte.includes('A entregar'));
+        ok('consol: os rodapés de explicação saíram da tela (cs-nota, "sem valor lançado", subtítulo)',
+           !fonte.includes('sem valor lançado') && !fonte.includes('cs-nota') && !fonte.includes('funil(is) somados'));
+        ok('consol: o número "Parados" é caminho, não só informação — leva à lista de travados',
+           fonte.includes('consolIrTravados') && fonte.includes('id="cs-travados"') && typeof consolIrTravados==='function');
+      } finally{ CONSOL.funis=_f; CONSOL.foco=_fo; }
+    }
+    /* NIVER-V2: o `abrir` de cada aniversariante entra CRU no onclick. Se sobrar um
+       `${` literal ali (escape a mais no patch), o clique morre com erro de sintaxe. */
+    ok('niver: clicar no aniversariante abre a ficha de verdade (o onclick sai montado, sem ${ sobrando)',
+       (()=>{ const _c=CART.clientes;
+         try{ CART.clientes=[{ref:"o'ref",nome:'Fulano Aniversario',nascimento:(new Date().getFullYear()-40)+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0'),celular:'81999990001',cob:{}}];
+           const p=niverItens(31).find(x=>x.nome==='Fulano Aniversario');
+           if(!p||!p.abrir) return false;
+           if(p.abrir.indexOf('${')>=0) return false;
+           new Function('cartAbrir', p.abrir);            /* compila: acusa aspas soltas */
+           return /^cartAbrir\('.*'\)$/.test(p.abrir);
+         } finally{ CART.clientes=_c; } })());
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
          let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
