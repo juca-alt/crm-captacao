@@ -2,6 +2,45 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 16/09/2026 (18ª onda) — REPERTÓRIO-V1: o script certo da recomendação, na ficha do lead (v7.74)
+
+Ele mandou a spec (handoff) antes de dormir: *"dentro do painel do lead, dar ao LP o SCRIPT certo pra cada situação de recomendação, já com nome do lead e do recomendante preenchidos, a um clique de copiar. Roda tudo autônomo, quero acordar com isso no ar. Depois roda a skill de UX 2x e a de engenharia 2x."*
+
+### Uma decisão que precisou ser tomada sozinho (registrada aqui pra ele conferir)
+A spec citava campos da tabela **`leads`** (`tentativas_ligacao`, `inbox_hot`, `data_status_atual`, `agendamento`). Essa tabela é a da **Captação (index.html)** — recrutamento de LP, outra visão, outra sessão. Mas os 5 scripts são de **venda de proteção** ("como fica sua proteção", reunião de 20 min): isso é o **lead do Estoque de Nomes do vendas.html**, que tem `recomendante`, `hist` de TA, estrelas ANCE e `estagio`. Construí no lugar certo e traduzi os sinais campo a campo (`repSinais()`):
+
+| Spec | Campo real do Estoque |
+|---|---|
+| `tentativas_ligacao` | nº de TAs no `hist` |
+| `agendamento ≠ null` | estágio "OI agendado"/"Cliente" ou último TA = "agendou" |
+| `inbox_hot` | Quente pelo ANCE (≥4 estrelas) ou prioridade P1 |
+| `data_status_atual` | dia do último TA; sem TA, o dia em que entrou |
+
+Ninguém lê `leads` a partir do `vendas.html` (o guard de CI continua valendo). Segundo ajuste de julgamento: a regra 1 (≥4 tentativas sem agendar → *reativar pela ponte*) **exige um recomendante de verdade** — sem ponte não há quem reativar; cai pra próxima regra.
+
+### T1 — `kb_scripts_captacao` (espelho da `kb_scripts_cobranca`)
+Migração **idempotente** (create if not exists · drop/create policy · upsert por `gatilho`), mesma postura de RLS (leitura `crm_autorizado()`, escrita `lp_sou_admin()`). **Aplicada 2x no projeto de produção** e conferida: 5 linhas, 5 ativas, 5 gatilhos distintos, 0 fixtures; `kb_scripts_cobranca` **3 antes, 3 depois**. Os 5 textos são de produção, dele.
+
+### T2 — fonte única
+`repSugerir(lead)` decide o gatilho (ordem da spec; `so_texto` nunca sai sozinho). `repResolver(lead, script)` troca `{primeiro_nome}`/`{recomendante}` e devolve se **pode copiar** — texto liberado **nunca** carrega `{chave}`; sem recomendante num script que o usa, a cópia trava. Textos do banco; `REP_FALLBACK` com o mesmo conteúdo cobre offline/deslogado/portão (invariante confere as 5 chaves). Sem nome, a saudação sai limpa ("Olá, tudo bem?").
+
+### T3 — a seção "Repertório" na ficha
+Logo abaixo da Qualificação do TA (onde o recomendante mora). Selo **★ sugerido** + seletor pros 5 gatilhos (troca = texto muda na hora, selo vira "escolhido") · "enviar para:" (o lead pelo primeiro nome, ou o recomendante quando é a ponte) · horários entre `[colchetes]` destacados e contados · aviso + **Copiar travado** sem recomendante — e **digitar o recomendante (sem salvar) já destrava** · **📋 Copiar texto** · **💬 WhatsApp** com o texto já dentro (só quando o alvo é o lead e há telefone). Nada grava no lead nem no banco.
+
+**Nasce sob a regra de 16/09:** `novoOn('repertorio')` — só ele vê. Daniel abre a mesma ficha sem a seção.
+
+### UX (2 passadas, medidas)
+1ª: seletor cortava a situação no celular ("★ Quente: pediu o próxim…") → linha inteira, selo em cima · Copiar travado **parecia ativo** → opacidade .45 · "2 horários pra / completar" quebrando no meio → peças · botões de dedo 44px · **WhatsApp com o texto** (1 toque em vez de copiar → 💬 → colar).
+2ª: WhatsApp era `<a>` sublinhado em 2 linhas → botão "💬 WhatsApp" · pendência virou **chip âmbar** (a cor dos horários no texto — ensina o amarelo).
+
+### Engenharia (2 passadas)
+1ª: **corrida** — a 1ª carga do banco redesenhava a ficha do lead que *abriu a sessão*, não a que estava na tela; agora lê o `data-id` da própria seção.
+2ª: redesenhar reabria o bloco que ele tinha fechado → preserva · falha transitória na 1ª carga prendia o app no fallback a sessão inteira → tenta de novo na próxima ficha.
+
+**Provas:** 28 invariantes novos (14 regras da spec + 9 tela + 5 UX/eng) · teste de ponta a ponta **como usuário** (abre ficha, vê sugestão, troca, digita recomendante, copia, WhatsApp, outro LP não vê) **28/28 em 390px e 1280px** · portão verde nos 6 cenários · `--prova` acusando o defeito injetado.
+
+**Aceite da spec, item a item:** migração 2x = 5 ✅ · quente → `quente_pediu_passo` com nome ✅ · 5 tentativas sem agendar → `reativar_recomendante`, destino recomendante, texto pro recomendante ✅ · 20 dias parado → `quer_nao_senta` ✅ · sem recomendante → aviso + cópia travada ✅ · clipboard sem `{chave}` ✅ · trocar gatilho muda na hora ✅ · `kb_scripts_cobranca` igual antes/depois ✅ · sem `%Exemplo%`/`%Teste%` ✅.
+
 ## 16/09/2026 (17ª onda) — O app avisa quando saiu versão nova (v7.73)
 
 Ele disse **"bota no ar" três vezes seguidas**. Estava no ar — conferido buscando o arquivo público (`<title>… v7.72 …</title>`, hash igual ao local). O que estava velho era **o app aberto no iPhone dele**.

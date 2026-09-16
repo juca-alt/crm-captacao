@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.73 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.74 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -422,13 +422,27 @@
   .bne-grp{border-bottom:1px solid var(--linha)} .bne-grp:last-of-type{border-bottom:0}
   /* REPERTORIO-V1: o script pronto dentro da ficha do lead */
   .rep-sel{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
-  .rep-sel select{flex:1;min-width:180px;min-height:36px}
+  .rep-sel select{flex:1;min-width:180px;max-width:460px;min-height:36px}
+  .rep-para{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;font-size:12px;color:var(--muted);margin-bottom:6px}
+  /* travado tem que PARECER travado — antes o botão ficava azul cheio com o clique morto */
+  .rep-bar .btn[disabled]{opacity:.45;cursor:not-allowed}
+  .rep-bar a.btn{text-decoration:none}
+  /* o chip usa a MESMA cor dos horários destacados no texto: ele lê "2 horários" e entende o amarelo */
+  .rep-pend-n{background:#fef3c7;color:#7a5b07;border-radius:999px;padding:1px 8px;font-weight:600;white-space:nowrap}
   .rep-txt{white-space:pre-wrap;font-size:13.5px;line-height:1.55;background:#f8fafc;border:1px solid var(--linha);border-radius:10px;padding:10px 12px;overflow-wrap:anywhere}
   .rep-pend{background:#fef3c7;border-radius:4px;padding:0 3px}
   .rep-falta{background:#fee2e2;color:#991b1b;border-radius:4px;padding:0 4px;font-weight:700}
   .rep-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
   .rep-aviso{font-size:12px;color:#991b1b;background:#fee2e2;border-radius:8px;padding:6px 10px;margin-top:8px}
-  @media(max-width:980px){ .rep-sel select,.rep-bar .btn{min-height:44px} }
+  @media(max-width:980px){
+    /* UX passada 1 (16/09): no celular a situação escolhida saía cortada no seletor
+       ("★ Quente: pediu o próxim…"). Ela é o que ele mais precisa ler — ganha a linha
+       inteira, e o selo sobe. Botões viram alvos cheios de dedo. */
+    .rep-sel{flex-direction:column;align-items:stretch}
+    .rep-sel .badge{align-self:flex-start}
+    .rep-sel select{max-width:none;min-height:44px}
+    .rep-bar .btn{flex:1 1 45%;min-height:44px;justify-content:center}
+  }
   .bne-grp summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;padding:2px 0}
   .bne-grp summary::-webkit-details-marker{display:none}
   .bne-grp-t{font-size:13px;font-weight:700;flex:0 0 auto} .bne-grp-r{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
@@ -15137,7 +15151,7 @@ async function repCarregar(){
     if(error) throw error;
     REP_DB=data||[];
     if(REP_DB.length){ try{ localStorage.setItem(REP_CACHE,JSON.stringify(REP_DB)); }catch(_){} }
-  }catch(e){ console.warn('kb_scripts_captacao indisponível → repertório do app',e); if(REP_DB===null) REP_DB=[]; }
+  }catch(e){ console.warn('kb_scripts_captacao indisponível → repertório do app (tenta de novo na próxima ficha)',e); REP_DB=null; }
 }
 /* ── tradução dos sinais da spec pros campos REAIS do lead do Estoque ─────────────
    tentativas_ligacao → nº de TAs no `hist`            (cada TA registrado = 1 tentativa)
@@ -15196,7 +15210,9 @@ function repLeadAtual(id){
 function repGatilhoDe(c){ const g=REP.sel[c.id]; return (g&&repPor(g))?g:repSugerir(c); }
 function repSecHtml(c){
   if(!c||!novoOn('repertorio')) return '';
-  if(REP_DB===null&&sb){ REP_DB=[]; repCarregar().then(()=>repSecRender(c.id)); }   /* 1ª ficha da sessão puxa do banco */
+  /* 1ª ficha da sessão puxa do banco. Quando volta, redesenha a seção que ESTIVER na tela
+     (pelo data-id dela), não a do lead que abriu a sessão — ele pode ter trocado de ficha. */
+  if(REP_DB===null&&sb){ REP_DB=[]; repCarregar().then(()=>{ const el=document.getElementById('rep-sec'); if(el) repSecRender(el.getAttribute('data-id')||c.id); }); }
   const L=repScripts(); if(!L.length) return '';
   const sug=repSugerir(c), g=repGatilhoDe(c), sc=repPor(g)||L[0];
   const r=repResolver(c,sc.script);
@@ -15210,22 +15226,27 @@ function repSecHtml(c){
   const opt=L.map(x=>`<option value="${esc(x.gatilho)}" ${x.gatilho===g?'selected':''}>${x.gatilho===sug?'★ ':''}${esc(x.rotulo)}${x.destino==='recomendante'?' · pro recomendante':''}</option>`).join('');
   const sugRot=(repPor(sug)||{}).rotulo||sug;
   setTimeout(()=>repLigarRec(c.id),0);
-  return `<details class="bne-grp" open id="rep-sec"><summary><span class="bne-grp-t">🗣️ Repertório</span><span class="bne-grp-r">${esc(sc.rotulo)}${g===sug?' · sugerido':''}</span><span class="bne-grp-c">▾</span></summary>
+  const tel=String(c.telefone||'').replace(/[^+\d]/g,'');
+  const wa=(sc.destino==='lead'&&r.ok&&tel&&typeof waHref==='function')? waHref(tel)+'?text='+encodeURIComponent(r.texto) : '';
+  return `<details class="bne-grp" open id="rep-sec" data-id="${esc(c.id)}"><summary><span class="bne-grp-t">🗣️ Repertório</span><span class="bne-grp-r">${esc(sc.rotulo)}${g===sug?' · sugerido':''}</span><span class="bne-grp-c">▾</span></summary>
     <div style="padding:6px 0 10px">
       <div class="rep-sel">
         <span class="badge ${g===sug?'b-azul':'b-cinza'}" title="${g===sug?'O que os sinais do lead apontam (tentativas, agendamento, temperatura, tempo parado). É palpite — troque à vontade.':'Você escolheu. A sugestão era: '+esc(sugRot)}">${g===sug?'★ sugerido':'escolhido'}</span>
         <select onchange="repSet('${esc(jsq(c.id))}',this.value)" aria-label="Situação da recomendação">${opt}</select>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">enviar para: <b style="color:var(--ink)">${alvo}</b>${r.pendencias.length?` · ${r.pendencias.length} horário${r.pendencias.length>1?'s':''} pra completar`:''}</div>
+      <div class="rep-para"><span>enviar para: <b style="color:var(--ink)">${alvo}</b></span>${r.pendencias.length?`<span class="rep-pend-n" title="Horários entre [colchetes] no texto — complete antes de enviar">${r.pendencias.length} horário${r.pendencias.length>1?'s':''} pra completar</span>`:''}</div>
       <div class="rep-txt" id="rep-txt">${html}</div>
       ${r.ok?'':`<div class="rep-aviso">⚠️ Preencha o <b>recomendante</b> (campo em Qualificação do TA, acima) pra liberar a cópia — o texto não sai com chave em branco.</div>`}
       <div class="rep-bar">
         <button class="btn btn-p" id="rep-copiar" onclick="repCopiar('${esc(jsq(c.id))}')" ${r.ok?'':'disabled'} title="${r.ok?'Copia o texto pronto':'Falta o recomendante'}">📋 Copiar texto</button>
+        ${wa?`<a class="btn btn-s" id="rep-wa" target="_blank" rel="noopener" href="${esc(wa)}" title="Abre a conversa do lead no WhatsApp com este texto já digitado — você só completa o horário e envia">💬 WhatsApp</a>`:''}
         ${sc.canal&&sc.canal!=='whatsapp'?`<span class="badge b-cinza">${esc(sc.canal)}</span>`:''}
       </div>
     </div></details>`;
 }
-function repSecRender(id){ const c=repLeadAtual(id); const el=document.getElementById('rep-sec'); if(!c||!el) return; const h=repSecHtml(c); if(h) el.outerHTML=h; }
+function repSecRender(id){ const c=repLeadAtual(id); const el=document.getElementById('rep-sec'); if(!c||!el) return;
+  const h=repSecHtml(c); if(!h) return; const aberto=el.open; el.outerHTML=h;
+  const novo=document.getElementById('rep-sec'); if(novo&&!aberto) novo.removeAttribute('open');   /* ele fechou o bloco? continua fechado */ }
 /* o recomendante digitado (sem salvar) já atualiza o preview e destrava a cópia */
 function repLigarRec(id){ const inp=document.getElementById('bne-rec'); if(!inp||inp._rep) return; inp._rep=true; inp.addEventListener('input',()=>repSecRender(id)); }
 window.repSet=function(id,g){ REP.sel[id]=g||''; repSecRender(id); };
@@ -17215,6 +17236,20 @@ function lpSelfCheck(){
            (()=>{ const f=bnEditorHtml(cOk); const a=f.indexOf('Qualificação do TA'), b=f.indexOf('id="rep-sec"'), c2=f.indexOf('id="bne-nome"'); return a>0 && b>a && c2>b; })());   /* âncora = o input Nome, que só existe no grupo Contato ("📞 Contato" também aparece em "Quem é a pessoa") */
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('telinha: outro LP abre a mesma ficha e NÃO vê a seção (regra de 16/09)', repSecHtml(cOk)==='' && !/rep-sec/.test(bnEditorHtml(cOk)));
+        ok('telinha: "Abrir no WhatsApp" só quando o alvo é o LEAD, há telefone e o texto está liberado; pro recomendante não há número, então não aparece',
+           (()=>{ PERFIL={email:'eu@x.com',papel:'admin',modulos:{}};
+             const h1=repSecHtml(cOk), hSem=repSecHtml(cSem);
+             REP.sel[cOk.id]='reativar_recomendante'; const hRec=repSecHtml(cOk); REP.sel={};
+             const hSemTel=repSecHtml(Object.assign({},cOk,{telefone:''}));
+             return /id="rep-wa"[^>]*href="https:\/\/wa\.me\/5581999990001\?text=Ol%C3%A1%20Fulano/.test(h1) && !/id="rep-wa"/.test(hSem) && !/id="rep-wa"/.test(hRec) && !/id="rep-wa"/.test(hSemTel); })());   /* cOk não é quente → recem_indicado → "Olá Fulano" codificado */
+        ok('telinha: a seção carrega o id do lead (data-id) — a recarga do banco redesenha a ficha ABERTA, não a que abriu a sessão',
+           /data-id="rp1"/.test(repSecHtml(cOk)) && String(repSecHtml).includes("getAttribute('data-id')"));
+        ok('telinha: a pendência de horário vira chip com a cor dos destaques, e o WhatsApp é botão (sem sublinhado de link)',
+           (()=>{ PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; const h=repSecHtml(cOk); return /rep-pend-n/.test(h) && />💬 WhatsApp</.test(h) && /\.rep-bar a\.btn\{text-decoration:none\}/.test(document.querySelector('style')?[...document.querySelectorAll('style')].map(s=>s.textContent).join(''):''); })());
+        ok('telinha: redesenhar a seção respeita se ele a tinha fechado',
+           String(repSecRender).includes("removeAttribute('open')"));
+        ok('telinha: falha na carga do banco não prende o app no fallback — tenta de novo na próxima ficha',
+           /REP_DB=null;\s*\}/.test(String(repCarregar)));
         ok('telinha: copiar é a única saída — nada aqui grava no lead nem no banco',
            !/bnSalvar|from\(|\.insert\(|\.update\(/.test(String(repSecHtml)+String(repCopiar)+String(repSet)));
       } finally{ REP_DB=_db; PERFIL=_p; REP.sel=_sel; }
