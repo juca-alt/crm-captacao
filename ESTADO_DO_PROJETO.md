@@ -26,6 +26,9 @@ Print dele da gaveta do negócio, tudo expandido: *"toda vez que abro o card ele
 
 Fora da regra, de propósito: a **apresentação/impressão pro cliente** (ali o documento sai inteiro).
 
+### v7.76 — "tem botão de expandir tudo mas não tem de encolher tudo"
+Tinha um botão só, que trocava de rótulo pela **maioria**: com 2 de 12 seções abertas ainda dizia "Expandir tudo" — e não havia como recolher. Agora são **dois botões fixos** (⌄ Expandir tudo · ⌃ Recolher tudo) na gaveta do negócio, no Início e na ficha do lead. Teste como usuário 29/29.
+
 ### Guarda pro futuro
 Invariante varre **todos os scripts** e fecha o portão se aparecer um `details` com `open` escrito literal — abrir só via escolha gravada. (Ele se acusou duas vezes na hora de nascer: o próprio comentário e a própria mensagem soletravam a tag. Corrigido reescrevendo sem soletrar.)
 
