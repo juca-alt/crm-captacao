@@ -2,6 +2,27 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 16/09/2026 (17ª onda) — O app avisa quando saiu versão nova (v7.73)
+
+Ele disse **"bota no ar" três vezes seguidas**. Estava no ar — conferido buscando o arquivo público (`<title>… v7.72 …</title>`, hash igual ao local). O que estava velho era **o app aberto no iPhone dele**.
+
+### A causa, e por que não era óbvio
+O service worker é **network-first**: qualquer carga nova traz o código novo, ninguém fica preso. Mas uma aba (ou atalho na tela de início) que passa dias sem recarregar **segue rodando o JS antigo** — e ele não tinha nenhum sinal disso. O conserto existia (⋯ → Atualizar app), mas dependia de ele **adivinhar** que precisava.
+
+### AVISO-VERSAO-V1
+- Guarda a **assinatura (ETag)** do próprio arquivo na abertura e confere de 15 em 15 min com um **HEAD** — só cabeçalho, nada dos 1,6 MB, nada de dado. Confere também quando ele volta pro app (`visibilitychange`).
+- Mudou a assinatura → faixa com **um botão: Atualizar**. Mais um ✕ pra dispensar.
+- **Nunca recarrega sozinho.** Ele pode estar no meio de uma ligação com cliente; perder a tela seria pior que a versão velha.
+- Sem ETag (offline, outro host) **não inventa aviso**; a primeira leitura é a versão que ele está rodando, não um alarme.
+- A faixa vive **fora do `#main`** — navegar não pode fazer o aviso sumir.
+
+Conferido contra o host real: o GitHub Pages manda `etag: "6aaa07dc-19bc11"`, e o mesmo ETag volta com o cache-buster na query.
+
+### Primeira feature nascida sob a regra de hoje
+Entrou em `NOVO_SO_MEU` como `'aviso-versao'` — **só ele vê**. Daniel e os outros não recebem nada até ele validar e mandar liberar. Aparece no Painel Master · Acessos → 🧪 Ainda só na sua base.
+
+**Provas:** teste de ponta a ponta com servidor trocando a assinatura — **24/24 em 390px e 1280px** (primeira leitura quieta · aparece no deploy · cabe na tela · alvo ≥44px no dedo · dá pra fechar · não recarrega sozinho · o botão dispara o Atualizar · outro LP não vê · admin vê · console limpo). 9 invariantes novos. Portão verde nos 6 cenários.
+
 ## 16/09/2026 (16ª onda) — Regra nova: coisa nova nasce só na base dele (v7.72)
 
 Palavra dele: *"tudo que eu for criando primeiro fica na minha base. E só depois você vai me perguntando se eu já libero pro Daniel ou pros outros usuários. Esses que já estão, deixa como tá. Primeiro eu desenvolvo bem, depois eu valido pra liberar sem erro e funcionando bem."*

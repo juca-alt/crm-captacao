@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.72 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.73 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -821,6 +821,19 @@
   .meta-in input{width:64px;border:1px solid var(--linha);border-radius:8px;padding:3px 6px;font-size:12px;text-align:center}
   .banner-homolog{background:var(--amarelo-bg);border-bottom:1px solid #e8d9b0;color:#7a5b07;font-size:12.5px;padding:7px 18px;display:flex;gap:10px;align-items:center}
   .banner-homolog button{margin-left:auto;border:1px solid #e0cf9f;background:#fff;border-radius:8px;padding:3px 10px;cursor:pointer;font-size:12px;color:#7a5b07}
+  /* AVISO-VERSAO-V1: fica FORA do #main de propósito — o app redesenha o #main o
+     tempo todo e o aviso não pode sumir no meio de uma navegação. */
+  .ver-nova{position:fixed;z-index:60;right:16px;bottom:16px;max-width:calc(100vw - 32px);
+    display:flex;gap:10px;align-items:center;background:#0f2c5c;color:#fff;border-radius:12px;
+    padding:10px 12px;box-shadow:0 8px 28px rgba(15,44,92,.28);font-size:13px;font-weight:600}
+  .ver-nova button{border:0;border-radius:9px;padding:8px 12px;font-size:13px;font-weight:800;cursor:pointer;
+    background:#fff;color:#0f2c5c;min-height:40px;white-space:nowrap}
+  .ver-nova .x{background:transparent;color:#cfe0ff;font-weight:700;padding:8px 6px;min-width:40px}
+  @media(max-width:980px){
+    /* no celular a barra inferior mora embaixo: o aviso senta ACIMA dela, respeitando a safe-area */
+    .ver-nova{left:12px;right:12px;bottom:calc(88px + env(safe-area-inset-bottom));justify-content:space-between}
+    .ver-nova button{min-height:44px}
+  }
 
   /* ── tarefas / próxima atividade ── */
   .tarchip{display:inline-flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;font-weight:700;
@@ -13735,6 +13748,56 @@ function bnSugColuna(k,q){ const n=normKey(String(q||'')); const vistos={}, out=
   bnVivos().forEach(c=>{ let v=k==='telefone'?bnTelsTxt(c):(k==='estado_civil'?bnCivilDe(c):c[k]); v=v==null?'':String(v).trim(); if(!v||out.length>=12) return; if(n&&!normKey(v).includes(n)) return; const key=normKey(v); if(vistos[key]) return; vistos[key]=1; out.push('<option value="'+esc(v)+'"></option>'); });
   return out.join(''); }
 function bnLpLabel(id){ const u=(S.users||[]).find(x=>x.id===(id||'gustavo')); return u?String(u.nome).split(' ')[0]:(id||'gustavo'); }
+/* ═══ AVISO-VERSAO-V1 (16/09/2026) ═══════════════════════════════════════════
+   Ele, três vezes seguidas: "bota no ar". Estava no ar — conferido buscando o
+   arquivo público. O que estava velho era o app ABERTO no iPhone dele: o
+   service worker é network-first, então qualquer carga nova traz o código novo,
+   mas uma aba/atalho que fica dias sem recarregar segue rodando o JS antigo.
+   Ele não tinha como SABER disso: tinha que adivinhar e ir no ⋯ → Atualizar app.
+   Aqui o app passa a avisar sozinho. Como: guarda a assinatura (ETag) do próprio
+   arquivo na abertura e confere de tempos em tempos com um HEAD — só cabeçalho,
+   nada dos 1,6 MB, nada de dado. Mudou a assinatura, aparece uma faixa com UM
+   botão. Nunca recarrega sozinho: ele pode estar no meio de uma ligação com o
+   cliente, e perder a tela no meio seria pior que a versão velha.
+   Nasce sob a regra de 16/09: fica só na base dele até liberar. */
+const VER_INTERVALO=15*60*1000;      /* 15 min: o app fica aberto o dia todo, não é polling agressivo */
+let _verAssin=null, _verAvisado=false, _verTimer=null;
+function verArquivo(){ const p=location.pathname; return p.endsWith('/')? p+'vendas.html' : p; }
+/* PURA o quanto dá: devolve a assinatura do arquivo servido, ou null se não der pra saber */
+async function verAssinatura(){
+  try{
+    const r=await fetch(verArquivo()+'?v='+Date.now(), {method:'HEAD', cache:'no-store'});
+    if(!r||!r.ok) return null;
+    return r.headers.get('etag') || r.headers.get('last-modified') || null;
+  }catch(_){ return null; }
+}
+function verFaixaFechar(){ const e=document.getElementById('ver-nova'); if(e) e.remove(); }
+function verFaixaMostrar(){
+  if(document.getElementById('ver-nova')) return;
+  document.body.insertAdjacentHTML('beforeend',
+    `<div class="ver-nova" id="ver-nova" role="status">
+       <span>⬆︎ Saiu versão nova do app</span>
+       <button onclick="atualizarApp()">Atualizar</button>
+       <button class="x" onclick="verFaixaFechar()" title="Agora não" aria-label="Fechar">✕</button>
+     </div>`);
+}
+async function verConferir(){
+  if(!novoOn('aviso-versao')) return;
+  if(_verAvisado) return;
+  const a=await verAssinatura();
+  if(!a) return;                         /* servidor sem ETag (ou offline): não inventa aviso */
+  if(_verAssin===null){ _verAssin=a; return; }   /* primeira leitura = a versão que ele está rodando */
+  if(a!==_verAssin){ _verAvisado=true; verFaixaMostrar(); }
+}
+function verIniciar(){
+  if(!novoOn('aviso-versao')) return;
+  if(_verTimer) return;
+  verConferir();
+  _verTimer=setInterval(verConferir, VER_INTERVALO);
+  /* voltar pro app depois de horas é justamente quando a versão costuma estar velha */
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) verConferir(); });
+}
+window.verFaixaFechar=verFaixaFechar; window.verConferir=verConferir;
 /* Atualizar app: limpa caches (SW/CacheStorage) e recarrega — versão nova na hora */
 /* Dois botões, dois propósitos — antes eram um só e qualquer refresh custava um
    reload, derrubando a rota, o modal aberto e o trabalho em andamento:
@@ -13896,8 +13959,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
-  /* exemplo da forma, sem nada ligado:
-     'niver-geral': {o:'Aniversariantes de todas as bases', desde:'2026-09-15'}, */
+  'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return true;                  /* não listado = já liberado (o que estava no ar continua) */
@@ -16897,6 +16959,33 @@ function lpSelfCheck(){
            String(admHtml).includes('Ainda só na sua base') && typeof novoLista==='function');
       } finally{ PERFIL=_p; ESC.sel=_sel; ESC.perfis=_perfis; _escMemo=null; }
     }
+    /* ═══ AVISO-VERSAO-V1 (16/09) ═══ */
+    { const _p=PERFIL, _a=_verAssin, _av=_verAvisado;
+      try{
+        ok('aviso-versão: nasce na lista "só na minha base" (é a regra de hoje valendo na prática)',
+           !!NOVO_SO_MEU['aviso-versao'] && NOVO_SO_MEU['aviso-versao'].desde==='2026-09-16');
+        PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
+        ok('aviso-versão: outro LP não recebe nada enquanto ele não liberar', novoOn('aviso-versao')===false);
+        PERFIL={email:'eu@x.com',papel:'admin',modulos:{}};
+        ok('aviso-versão: ele recebe', novoOn('aviso-versao')===true);
+        ok('aviso-versão: a faixa fica FORA do #main — navegar não pode fazer o aviso sumir',
+           String(verFaixaMostrar).includes('document.body.insertAdjacentHTML'));
+        ok('aviso-versão: o app NUNCA recarrega sozinho — quem decide é ele, num botão',
+           !/location\.reload|atualizarApp\(\)\s*;/.test(String(verConferir)+String(verIniciar))
+           && String(verFaixaMostrar).includes('onclick="atualizarApp()"'));
+        ok('aviso-versão: sem assinatura do servidor (offline, sem ETag) não inventa aviso',
+           String(verConferir).includes('if(!a) return'));
+        _verAssin=null; _verAvisado=false;
+        ok('aviso-versão: a PRIMEIRA leitura é a versão que ele está rodando, não um alarme',
+           String(verConferir).includes('_verAssin===null'));
+        verFaixaMostrar();
+        const f=document.getElementById('ver-nova');
+        ok('aviso-versão: a faixa tem alvo de toque de celular e um jeito de fechar',
+           !!f && !!f.querySelector('.x') && /Atualizar/.test(f.textContent));
+        verFaixaFechar();
+        ok('aviso-versão: fechar tira a faixa da tela', !document.getElementById('ver-nova'));
+      } finally{ PERFIL=_p; _verAssin=_a; _verAvisado=_av; verFaixaFechar(); }
+    }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
          let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
@@ -18662,6 +18751,8 @@ function filtrosRecolhidos(){
   if(window.top!==window.self) return;
   addEventListener('load',function(){
     navigator.serviceWorker.register('sw.js').catch(function(e){ console.warn('sw: registro falhou (o app segue igual)',e); });
+    /* AVISO-VERSAO-V1: só depois do load, e só onde faz sentido (https, não em iframe) */
+    try{ if(typeof verIniciar==='function') setTimeout(verIniciar, 8000); }catch(_){}
   });
 })();
 
