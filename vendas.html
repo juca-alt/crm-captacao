@@ -420,6 +420,15 @@
   .bne-nome{font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.15} .bne-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
   .bne-acts{display:flex;gap:6px} .bne-acts .btn{min-height:40px;min-width:44px;justify-content:center;text-decoration:none}
   .bne-grp{border-bottom:1px solid var(--linha)} .bne-grp:last-of-type{border-bottom:0}
+  /* REPERTORIO-V1: o script pronto dentro da ficha do lead */
+  .rep-sel{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+  .rep-sel select{flex:1;min-width:180px;min-height:36px}
+  .rep-txt{white-space:pre-wrap;font-size:13.5px;line-height:1.55;background:#f8fafc;border:1px solid var(--linha);border-radius:10px;padding:10px 12px;overflow-wrap:anywhere}
+  .rep-pend{background:#fef3c7;border-radius:4px;padding:0 3px}
+  .rep-falta{background:#fee2e2;color:#991b1b;border-radius:4px;padding:0 4px;font-weight:700}
+  .rep-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  .rep-aviso{font-size:12px;color:#991b1b;background:#fee2e2;border-radius:8px;padding:6px 10px;margin-top:8px}
+  @media(max-width:980px){ .rep-sel select,.rep-bar .btn{min-height:44px} }
   .bne-grp summary{list-style:none;display:flex;align-items:center;gap:8px;min-height:44px;cursor:pointer;padding:2px 0}
   .bne-grp summary::-webkit-details-marker{display:none}
   .bne-grp-t{font-size:13px;font-weight:700;flex:0 0 auto} .bne-grp-r{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
@@ -14593,6 +14602,7 @@ function bnEditorHtml(c){
      +f('Estágio',`<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select>`)
      +f('Prioridade',`<select id="bne-pri"><option value="">—</option><option ${String(c.prioridade)==='1'?'selected':''} value="1">🔥 P1 · Alta</option><option ${String(c.prioridade)==='2'?'selected':''} value="2">P2 · Normal</option><option ${String(c.prioridade)==='3'?'selected':''} value="3">P3 · Baixa</option></select>`)
      +f('Trilha',`<select id="bne-tri">${BN_TRILHAS.map(t=>`<option ${c.trilha===t?'selected':''} value="${t}">${t==='seguro'?'Seguro':'Recrutamento'}</option>`).join('')}</select>`),true)}
+    ${repSecHtml(c)}
     ${grp('c','📞 Contato',contatoR,
       f('Nome',`<input id="bne-nome" value="${esc(c.nome)}">`)
      +f('Contexto (sufixo do nome)',`<input id="bne-ctx" value="${esc(c.contexto||'')}" placeholder="ex.: Faculdade, MED Radiologista">`)
@@ -15173,6 +15183,63 @@ function repResolver(c, script){
   const ok=faltas.length===0 && !/\{[a-z_]+\}/i.test(txt);
   return { texto:txt, ok, faltas, pendencias };
 }
+/* ── T3: a seção "Repertório" dentro da ficha do lead ────────────────────────────
+   Uma escolha (a situação), um texto pronto, um botão. O selo "★ sugerido" é palpite
+   dos sinais do lead; o select deixa trocar por qualquer gatilho. Horário entre
+   [colchetes] fica destacado como pendente. Sem recomendante num script que usa
+   {recomendante}, a cópia trava e o aviso aponta o campo — que está logo acima. */
+function repLeadAtual(id){
+  const c=bnPor(id); if(!c) return null;
+  const inp=document.getElementById('bne-rec');            /* o que ele DIGITOU e ainda não salvou já vale pro preview */
+  return inp ? Object.assign({},c,{recomendante:inp.value}) : c;
+}
+function repGatilhoDe(c){ const g=REP.sel[c.id]; return (g&&repPor(g))?g:repSugerir(c); }
+function repSecHtml(c){
+  if(!c||!novoOn('repertorio')) return '';
+  if(REP_DB===null&&sb){ REP_DB=[]; repCarregar().then(()=>repSecRender(c.id)); }   /* 1ª ficha da sessão puxa do banco */
+  const L=repScripts(); if(!L.length) return '';
+  const sug=repSugerir(c), g=repGatilhoDe(c), sc=repPor(g)||L[0];
+  const r=repResolver(c,sc.script);
+  const pn=repPrimeiroNome(c), rec=String(c.recomendante||'').trim();
+  const alvo=sc.destino==='recomendante'
+    ? `🤝 ${rec?esc(rec):'<span class="rep-falta">recomendante?</span>'} <span style="font-weight:400;color:var(--muted)">(quem indicou)</span>`
+    : `👤 ${esc(pn||'o lead')} <span style="font-weight:400;color:var(--muted)">(o lead)</span>`;
+  const html=esc(r.texto)
+    .replace(/\[[^\]\n]{1,40}\]/g,m=>`<mark class="rep-pend" title="Horário — complete antes de enviar">${m}</mark>`)
+    .replace(/\{recomendante\}/g,'<mark class="rep-falta" title="Preencha o recomendante">recomendante?</mark>');
+  const opt=L.map(x=>`<option value="${esc(x.gatilho)}" ${x.gatilho===g?'selected':''}>${x.gatilho===sug?'★ ':''}${esc(x.rotulo)}${x.destino==='recomendante'?' · pro recomendante':''}</option>`).join('');
+  const sugRot=(repPor(sug)||{}).rotulo||sug;
+  setTimeout(()=>repLigarRec(c.id),0);
+  return `<details class="bne-grp" open id="rep-sec"><summary><span class="bne-grp-t">🗣️ Repertório</span><span class="bne-grp-r">${esc(sc.rotulo)}${g===sug?' · sugerido':''}</span><span class="bne-grp-c">▾</span></summary>
+    <div style="padding:6px 0 10px">
+      <div class="rep-sel">
+        <span class="badge ${g===sug?'b-azul':'b-cinza'}" title="${g===sug?'O que os sinais do lead apontam (tentativas, agendamento, temperatura, tempo parado). É palpite — troque à vontade.':'Você escolheu. A sugestão era: '+esc(sugRot)}">${g===sug?'★ sugerido':'escolhido'}</span>
+        <select onchange="repSet('${esc(jsq(c.id))}',this.value)" aria-label="Situação da recomendação">${opt}</select>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">enviar para: <b style="color:var(--ink)">${alvo}</b>${r.pendencias.length?` · ${r.pendencias.length} horário${r.pendencias.length>1?'s':''} pra completar`:''}</div>
+      <div class="rep-txt" id="rep-txt">${html}</div>
+      ${r.ok?'':`<div class="rep-aviso">⚠️ Preencha o <b>recomendante</b> (campo em Qualificação do TA, acima) pra liberar a cópia — o texto não sai com chave em branco.</div>`}
+      <div class="rep-bar">
+        <button class="btn btn-p" id="rep-copiar" onclick="repCopiar('${esc(jsq(c.id))}')" ${r.ok?'':'disabled'} title="${r.ok?'Copia o texto pronto':'Falta o recomendante'}">📋 Copiar texto</button>
+        ${sc.canal&&sc.canal!=='whatsapp'?`<span class="badge b-cinza">${esc(sc.canal)}</span>`:''}
+      </div>
+    </div></details>`;
+}
+function repSecRender(id){ const c=repLeadAtual(id); const el=document.getElementById('rep-sec'); if(!c||!el) return; const h=repSecHtml(c); if(h) el.outerHTML=h; }
+/* o recomendante digitado (sem salvar) já atualiza o preview e destrava a cópia */
+function repLigarRec(id){ const inp=document.getElementById('bne-rec'); if(!inp||inp._rep) return; inp._rep=true; inp.addEventListener('input',()=>repSecRender(id)); }
+window.repSet=function(id,g){ REP.sel[id]=g||''; repSecRender(id); };
+window.repCopiar=async function(id){
+  const c=repLeadAtual(id); if(!c) return;
+  const sc=repPor(repGatilhoDe(c)); if(!sc) return;
+  const r=repResolver(c,sc.script);
+  if(!r.ok){ toast('Preencha o recomendante antes de copiar'); return; }
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText) await navigator.clipboard.writeText(r.texto);
+    else{ const t=document.createElement('textarea'); t.value=r.texto; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    toast(r.pendencias.length?`Copiado · complete ${r.pendencias.length} horário${r.pendencias.length>1?'s':''} antes de enviar`:'Texto copiado',true);
+  }catch(_){ toast('Não consegui copiar'); }
+};
 function taFichaAbrir(id){ const c=bnPor(id); if(!c) return; TAV.ficha=id;
   let ov=document.getElementById('ta-ficha'); if(!ov){ ov=document.createElement('div'); ov.id='ta-ficha'; ov.className='ta-ficha-bd'; ov.onclick=e=>{ if(e.target===ov) taFichaFechar(); }; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="ta-ficha"><div class="ta-ficha-top"><span style="color:var(--muted);font-size:12px">Ficha do contato${c._upd?' · atualizado '+esc(String(c._upd).slice(0,10)):''}</span>
@@ -17124,6 +17191,33 @@ function lpSelfCheck(){
         ok('repertório: nasce só na base dele (regra de 16/09) — outro LP não vê',
            (()=>{ PERFIL={email:'outro@x.com',papel:'lp',modulos:{}}; const a=novoOn('repertorio'); PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; const b=novoOn('repertorio'); return a===false && b===true; })());
       } finally{ REP_DB=_db; PERFIL=_p; }
+    }
+    /* ═══ REPERTORIO-V1 · T3 (16/09) — a telinha ═══ */
+    { const _db=REP_DB, _p=PERFIL, _sel=REP.sel;
+      try{
+        REP_DB=[]; REP.sel={}; PERFIL={email:'eu@x.com',papel:'admin',modulos:{}};
+        const hoje=hojeISO();
+        const cOk={id:'rp1',nome:'Fulano De Tal',recomendante:'Beltrano',estagio:'estoque',hist:[],criado:hoje,telefone:'81999990001'};
+        const cSem={id:'rp2',nome:'Fulano De Tal',recomendante:'',estagio:'estoque',hist:[],criado:hoje};
+        const h1=repSecHtml(cOk);
+        ok('telinha: tem a seção, o seletor com os 5 gatilhos, o selo de sugerido e o botão Copiar',
+           /id="rep-sec"/.test(h1) && (h1.match(/<option /g)||[]).length===5 && /★ sugerido/.test(h1) && /id="rep-copiar"/.test(h1) && !/disabled/.test(h1));
+        ok('telinha: diz PRA QUEM vai — o lead, pelo primeiro nome', /enviar para:.*👤 Fulano/.test(h1));
+        ok('telinha: o texto renderizado não tem {chave}; horários entre [colchetes] viram pendência destacada',
+           (()=>{ const m=h1.match(/<div class="rep-txt"[^>]*>([\s\S]*?)<\/div>/); return !!m && !/\{[a-z_]+\}/.test(m[1]) && /rep-pend/.test(m[1]); })());
+        ok('telinha: sem recomendante num script que usa {recomendante} → aviso e Copiar travado',
+           (()=>{ const h=repSecHtml(cSem); return /rep-aviso/.test(h) && /id="rep-copiar"[^>]*disabled/.test(h) && /rep-falta/.test(h); })());
+        ok('telinha: trocar o gatilho no seletor muda o script na hora (e o selo vira "escolhido")',
+           (()=>{ REP.sel[cOk.id]='so_texto'; const h=repSecHtml(cOk); REP.sel={}; return /Só quer texto/.test(h) && /escolhido/.test(h) && /fazemos do seu jeito/.test(h); })());
+        ok('telinha: quando o alvo é o recomendante, o cabeçalho aponta pra ele',
+           (()=>{ REP.sel[cOk.id]='reativar_recomendante'; const h=repSecHtml(cOk); REP.sel={}; return /enviar para:.*🤝 Beltrano/.test(h) && /pro recomendante/.test(h); })());
+        ok('telinha: fica na ficha do lead, logo abaixo da Qualificação do TA',
+           (()=>{ const f=bnEditorHtml(cOk); const a=f.indexOf('Qualificação do TA'), b=f.indexOf('id="rep-sec"'), c2=f.indexOf('id="bne-nome"'); return a>0 && b>a && c2>b; })());   /* âncora = o input Nome, que só existe no grupo Contato ("📞 Contato" também aparece em "Quem é a pessoa") */
+        PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
+        ok('telinha: outro LP abre a mesma ficha e NÃO vê a seção (regra de 16/09)', repSecHtml(cOk)==='' && !/rep-sec/.test(bnEditorHtml(cOk)));
+        ok('telinha: copiar é a única saída — nada aqui grava no lead nem no banco',
+           !/bnSalvar|from\(|\.insert\(|\.update\(/.test(String(repSecHtml)+String(repCopiar)+String(repSet)));
+      } finally{ REP_DB=_db; PERFIL=_p; REP.sel=_sel; }
     }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
