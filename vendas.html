@@ -13960,6 +13960,7 @@ const MODS={
    pede nasce. */
 const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
+  'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return true;                  /* não listado = já liberado (o que estava no ar continua) */
@@ -15080,6 +15081,98 @@ function taListasAplicar(ids,nome,add){ taFecharMenu(); ids.forEach(id=>{ const 
     if(nome==='hoje') c.ta_dia=add?hojeISO():null; else c.listas=add?[...new Set([...(c.listas||[]),nome])]:(c.listas||[]).filter(x=>x!==nome); });
   FTA.sel.clear(); bnSalvar(); render(); toast(ids.length+(add?' → “':' saiu de “')+(nome==='hoje'?'Hoje':nome)+'”',true); }
 function taListasNova(ids){ taFecharMenu(); let n=prompt('Nome da nova lista:'); if(!n) return; n=n.trim(); if(!n) return; taListasAplicar(ids,n,true); }
+/* ═══ REPERTORIO-V1 (16/09/2026) ═══════════════════════════════════════════════
+   Pedido dele (handoff): "dentro do painel do lead, dar ao LP o SCRIPT certo pra cada
+   situação de recomendação, já com nome do lead e do recomendante preenchidos, a um
+   clique de copiar."
+   ONDE MORA: a ficha do lead do ESTOQUE (Base de Nomes). É o lead de VENDA de proteção
+   — tem recomendante, histórico de TA (`hist`), estrelas ANCE e estágio. A spec citava
+   campos da tabela `leads` (tentativas_ligacao, inbox_hot, data_status_atual,
+   agendamento); essa tabela é a da CAPTAÇÃO (index.html, recrutamento de LP), outra
+   visão e outra sessão. Aqui os MESMOS sinais saem dos campos reais do Estoque — a
+   tradução, campo a campo, está em repSinais(). Ninguém lê `leads` deste arquivo.
+   FONTE ÚNICA: qual gatilho sugerir = repSugerir(); resolver placeholders = repResolver().
+   Os textos vivem em kb_scripts_captacao (banco, espelho da kb_scripts_cobranca).
+   REP_FALLBACK cobre offline/deslogado/portão com o MESMO conteúdo do seed — um
+   invariante confere que as chaves batem, pra não haver "dois repertórios".
+   Nasce sob a regra de 16/09: novoOn('repertorio') — só na base dele até ele liberar. */
+const REP_CACHE='crmlp_rep_kb_v1';
+let REP_DB=null;                 /* null = ainda não buscou · [] = buscou (vazio ou falhou) */
+let REP={sel:{}};                /* gatilho escolhido à mão, por lead, nesta sessão */
+const REP_FALLBACK=[
+  {gatilho:'recem_indicado', rotulo:'Recém-indicado (1º contato)', destino:'lead', ordem:1,
+   script:'Olá {primeiro_nome}, tudo bem? Aqui é o Gustavo Jucá 👋\n\nNão nos conhecemos ainda, mas o {recomendante} me pediu pra falar com você — e indicação de quem confia eu levo a sério.\n\nÉ uma conversa rápida, uns 20 min, sem compromisso: eu te mostro como funciona e você decide com calma. Consigo [quinta 9h] ou [sábado 10h] — qual encaixa melhor?'},
+  {gatilho:'quente_pediu_passo', rotulo:'Quente: pediu o próximo passo', destino:'lead', ordem:2,
+   script:'{primeiro_nome}, boa! Já que você tá com energia de resolver, deixa eu facilitar 👇\n\nNossa conversa é rápida, uns 20 min. Você não prepara nada nem traz documento agora — sou eu te mostrando como fica sua proteção e você decidindo com calma.\n\nMe diz o melhor: [amanhã 9h] ou [sábado 10h]? Já travo na agenda e te mando o link 🙌'},
+  {gatilho:'so_texto', rotulo:'Só quer texto / não atende ligação', destino:'lead', ordem:3,
+   script:'{primeiro_nome}, fechado — fazemos do seu jeito 👊\n\nO {recomendante} me pediu pra te mostrar uma coisa que ele achou que faz sentido pra você. Sem compromisso: é você entender e decidir.\n\nÉ rápido, 20 min por vídeo, e você não precisa preparar nada. Consigo [quinta 19h] ou [sábado 10h]. Qual fica melhor?'},
+  {gatilho:'quer_nao_senta', rotulo:'Quer mas não senta há semanas', destino:'lead', ordem:4,
+   script:'{primeiro_nome}, vou ser direto porque respeito seu tempo 🙏\n\nA gente vem tentando encaixar faz um tempo e eu sei que corrido é o normal. Então bora resolver: me manda só um "sim" num desses que eu travo na agenda —\n📅 [terça 8h]\n📅 [quarta 20h]\n\nSão 20 min, por vídeo, sem preparar nada. Se nenhum servir, me diz qual semana é a sua que eu me adapto.'},
+  {gatilho:'reativar_recomendante', rotulo:'Reativar pela ponte (fala com quem indicou)', destino:'recomendante', ordem:5,
+   script:'{recomendante}, tudo certo? 🙏\n\nTô querendo ajudar o {primeiro_nome} de verdade, mas ele anda muito corrido e some. Você que abriu essa porta — consegue dar um alô rápido pra ele, só um "fala com o Jucá que vale a pena"? De você faz toda diferença. Te devo essa! 🙌'}
+];
+const REP_MANUAL=['so_texto'];   /* nunca sugerido sozinho — só escolha do LP */
+function repCacheLer(){ try{ const o=JSON.parse(localStorage.getItem(REP_CACHE)||'null'); return Array.isArray(o)&&o.length?o:null; }catch(_){ return null; } }
+/* lista viva: banco > cache do último banco > texto do app. Só ativos, na ordem. */
+function repScripts(){
+  const base=(REP_DB&&REP_DB.length)?REP_DB:(repCacheLer()||REP_FALLBACK);
+  return base.filter(r=>r&&r.gatilho&&r.script&&r.ativo!==false).slice().sort((a,b)=>(a.ordem||0)-(b.ordem||0)||String(a.gatilho).localeCompare(String(b.gatilho)));
+}
+function repPor(g){ return repScripts().find(r=>r.gatilho===g)||null; }
+async function repCarregar(){
+  if(!sb) return;
+  try{
+    const {data:ses}=await sb.auth.getSession(); if(!ses||!ses.session) return;    /* deslogado = texto do app */
+    const {data,error}=await sb.from('kb_scripts_captacao').select('gatilho,rotulo,descricao,destino,canal,script,ordem,ativo').eq('ativo',true).order('ordem');
+    if(error) throw error;
+    REP_DB=data||[];
+    if(REP_DB.length){ try{ localStorage.setItem(REP_CACHE,JSON.stringify(REP_DB)); }catch(_){} }
+  }catch(e){ console.warn('kb_scripts_captacao indisponível → repertório do app',e); if(REP_DB===null) REP_DB=[]; }
+}
+/* ── tradução dos sinais da spec pros campos REAIS do lead do Estoque ─────────────
+   tentativas_ligacao → nº de TAs no `hist`            (cada TA registrado = 1 tentativa)
+   agendamento ≠ null → estágio "OI agendado"/"Cliente" ou último TA = "agendou"
+   inbox_hot          → Quente pelo ANCE (≥4 estrelas) ou prioridade P1
+   data_status_atual  → dia do último TA; sem TA, o dia em que entrou na base       */
+function repSinais(c){
+  c=c||{};
+  const tas=(Array.isArray(c.hist)?c.hist:[]).filter(h=>h&&h.tipo==='ta');
+  const ultimo=tas.length?tas[tas.length-1]:null;
+  const agendou=(c.estagio==='oi_agendado'||c.estagio==='cliente')||!!(ultimo&&ultimo.res==='agendou');
+  const quente=(typeof isQuente==='function'&&isQuente(c))||String(c.prioridade||'')==='1';
+  const ref=String((ultimo&&ultimo.dia)||c.criado||c._upd||'').slice(0,10);
+  let diasParado=null;
+  if(/^\d{4}-\d{2}-\d{2}$/.test(ref)){ const d=Math.round((new Date(hojeISO()+'T12:00:00')-new Date(ref+'T12:00:00'))/86400000); if(isFinite(d)) diasParado=d; }
+  return { tentativas:tas.length, agendou, quente, diasParado, temRec:!!String(c.recomendante||'').trim() };
+}
+/* FONTE ÚNICA da sugestão. Ordem de prioridade da spec; `so_texto` nunca sai daqui.
+   Regra 1 pede um recomendante de verdade: sem ponte não há quem reativar — cai pra próxima. */
+function repSugerir(c){
+  const s=repSinais(c);
+  if(s.tentativas>=4 && !s.agendou && s.temRec) return 'reativar_recomendante';
+  if(s.quente) return 'quente_pediu_passo';
+  if(!s.agendou && s.diasParado!=null && s.diasParado>15) return 'quer_nao_senta';
+  return 'recem_indicado';
+}
+function repPrimeiroNome(c){ const n=String((c&&(c.primeiro_nome||c.nome))||'').trim(); return n?n.split(/\s+/)[0]:''; }
+/* FONTE ÚNICA dos placeholders. Devolve o texto pronto e se ele PODE ser copiado.
+   Regra dura: texto ok nunca carrega uma {chave}. Sem recomendante e o script usa
+   {recomendante} → ok=false e a cópia trava até preencher. */
+function repResolver(c, script){
+  const pn=repPrimeiroNome(c), rec=String((c&&c.recomendante)||'').trim();
+  let txt=String(script||''); const faltas=[];
+  if(/\{recomendante\}/.test(txt) && !rec) faltas.push('recomendante');
+  if(pn) txt=txt.replace(/\{primeiro_nome\}/g,pn);
+  else{ /* sem nome: tira a saudação em vez de deixar a chave */
+    txt=txt.replace(/^Olá \{primeiro_nome\}, /gm,'Olá, ')
+           .replace(/^\{primeiro_nome\}, (\S)/gm,(m,ch)=>ch.toUpperCase())
+           .replace(/\bo \{primeiro_nome\}/g,'quem você indicou')
+           .replace(/\{primeiro_nome\}/g,'você'); }
+  if(rec) txt=txt.replace(/\{recomendante\}/g,rec);
+  const pendencias=txt.match(/\[[^\]\n]{1,40}\]/g)||[];         /* [quinta 9h] — horário que o LP completa */
+  const ok=faltas.length===0 && !/\{[a-z_]+\}/i.test(txt);
+  return { texto:txt, ok, faltas, pendencias };
+}
 function taFichaAbrir(id){ const c=bnPor(id); if(!c) return; TAV.ficha=id;
   let ov=document.getElementById('ta-ficha'); if(!ov){ ov=document.createElement('div'); ov.id='ta-ficha'; ov.className='ta-ficha-bd'; ov.onclick=e=>{ if(e.target===ov) taFichaFechar(); }; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="ta-ficha"><div class="ta-ficha-top"><span style="color:var(--muted);font-size:12px">Ficha do contato${c._upd?' · atualizado '+esc(String(c._upd).slice(0,10)):''}</span>
@@ -16985,6 +17078,52 @@ function lpSelfCheck(){
         verFaixaFechar();
         ok('aviso-versão: fechar tira a faixa da tela', !document.getElementById('ver-nova'));
       } finally{ PERFIL=_p; _verAssin=_a; _verAvisado=_av; verFaixaFechar(); }
+    }
+    /* ═══ REPERTORIO-V1 · T2 (16/09) — as regras da spec, uma a uma ═══ */
+    { const _db=REP_DB, _p=PERFIL;
+      try{
+        REP_DB=null; try{ localStorage.removeItem(REP_CACHE); }catch(_){}
+        const hoje=hojeISO(), diasAtras=n=>{ const d=new Date(hoje+'T12:00:00'); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); };
+        const ta=(n,res,dia)=>{ const a=[]; for(let i=0;i<n;i++) a.push({tipo:'ta',res:res||'nao_atendeu',dia:dia||hoje}); return a; };
+        const L=repScripts();
+        ok('repertório: os 5 gatilhos do seed, na ordem, e nenhum é fixture (%Exemplo%/%Teste%)',
+           L.length===5 && L.map(r=>r.gatilho).join(',')==='recem_indicado,quente_pediu_passo,so_texto,quer_nao_senta,reativar_recomendante'
+           && L.every(r=>!/Exemplo|Teste/i.test(r.script)));
+        ok('repertório: só reativar_recomendante é endereçado ao recomendante; os outros 4 vão pro lead',
+           L.filter(r=>r.destino==='recomendante').map(r=>r.gatilho).join()==='reativar_recomendante' && L.filter(r=>r.destino==='lead').length===4);
+        ok('repertório: lead quente (ANCE ≥4 / P1) → quente_pediu_passo, com o primeiro nome resolvido',
+           (()=>{ const c={nome:'Fulano De Tal',recomendante:'Beltrano',prioridade:'1',estagio:'estoque',hist:[]};
+             const g=repSugerir(c), r=repResolver(c,repPor(g).script);
+             return g==='quente_pediu_passo' && r.ok && r.texto.startsWith('Fulano, boa!'); })());
+        ok('repertório: 5 tentativas sem agendar, com recomendante → reativar_recomendante, texto falando COM o recomendante',
+           (()=>{ const c={nome:'Fulano De Tal',recomendante:'Beltrano Silva',estagio:'estoque',hist:ta(5)};
+             const g=repSugerir(c), sc=repPor(g), r=repResolver(c,sc.script);
+             return g==='reativar_recomendante' && sc.destino==='recomendante' && r.ok && r.texto.startsWith('Beltrano Silva, tudo certo?') && /ajudar o Fulano de verdade/.test(r.texto); })());
+        ok('repertório: 5 tentativas SEM recomendante → não há ponte pra reativar; cai pra próxima regra',
+           repSugerir({nome:'Fulano',recomendante:'',estagio:'estoque',hist:ta(5)})!=='reativar_recomendante');
+        ok('repertório: 5 tentativas mas JÁ agendou (OI agendado) → não reativa',
+           repSugerir({nome:'Fulano',recomendante:'Beltrano',estagio:'oi_agendado',hist:ta(5)})!=='reativar_recomendante');
+        ok('repertório: 20 dias parado, sem agendar, não-quente → quer_nao_senta',
+           repSugerir({nome:'Fulano',recomendante:'Beltrano',estagio:'estoque',hist:ta(1,'nao_atendeu',diasAtras(20))})==='quer_nao_senta');
+        ok('repertório: lead recém-entrado, sem TA → recem_indicado',
+           repSugerir({nome:'Fulano',recomendante:'Beltrano',estagio:'estoque',hist:[],criado:hoje})==='recem_indicado');
+        ok('repertório: so_texto nunca é sugerido sozinho — é escolha do LP',
+           (()=>{ const casos=[{nome:'A',hist:[]},{nome:'A',prioridade:'1'},{nome:'A',recomendante:'B',hist:ta(9)},{nome:'A',hist:ta(1,'nao_atendeu',diasAtras(40))}];
+             return casos.every(c=>repSugerir(c)!=='so_texto') && REP_MANUAL.includes('so_texto') && !!repPor('so_texto'); })());
+        ok('repertório: script com {recomendante} e lead sem recomendante → aviso e cópia travada',
+           (()=>{ const r=repResolver({nome:'Fulano',recomendante:''},repPor('recem_indicado').script);
+             return r.ok===false && r.faltas.join()==='recomendante'; })());
+        ok('repertório: texto liberado NUNCA carrega uma {chave} — nos 5 scripts',
+           L.every(sc=>{ const r=repResolver({nome:'Fulano De Tal',recomendante:'Beltrano'},sc.script); return r.ok && !/\{[a-z_]+\}/i.test(r.texto); }));
+        ok('repertório: [colchetes de horário] viram pendência contada, e continuam no texto pro LP completar',
+           (()=>{ const r=repResolver({nome:'Fulano',recomendante:'Beltrano'},repPor('quer_nao_senta').script); return r.pendencias.length===2 && r.pendencias[0]==='[terça 8h]'; })());
+        ok('repertório: lead sem nome → a saudação sai limpa, sem chave e sem "Olá ,"',
+           L.every(sc=>{ const r=repResolver({nome:'',recomendante:'Beltrano'},sc.script); return !/\{[a-z_]+\}/.test(r.texto) && !/Olá ,|\bo você\b/.test(r.texto); }));
+        ok('repertório: sinais traduzidos dos campos reais do Estoque (hist de TA, estágio, ANCE/P1)',
+           (()=>{ const s=repSinais({hist:ta(3),estagio:'estoque',prioridade:'1',recomendante:'X'}); return s.tentativas===3 && s.agendou===false && s.quente===true && s.temRec===true; })());
+        ok('repertório: nasce só na base dele (regra de 16/09) — outro LP não vê',
+           (()=>{ PERFIL={email:'outro@x.com',papel:'lp',modulos:{}}; const a=novoOn('repertorio'); PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; const b=novoOn('repertorio'); return a===false && b===true; })());
+      } finally{ REP_DB=_db; PERFIL=_p; }
     }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
