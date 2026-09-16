@@ -2,6 +2,30 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 16/09/2026 (16ª onda) — Regra nova: coisa nova nasce só na base dele (v7.72)
+
+Palavra dele: *"tudo que eu for criando primeiro fica na minha base. E só depois você vai me perguntando se eu já libero pro Daniel ou pros outros usuários. Esses que já estão, deixa como tá. Primeiro eu desenvolvo bem, depois eu valido pra liberar sem erro e funcionando bem."*
+
+### Como ficou (usando o que já existia, sem sistema paralelo)
+O app já tinha `MODS` + `lp_perfis.modulos` — mas isso gateia **MENU**, ou seja, tela inteira. A maior parte do que ele pede nasce **dentro** de uma tela (um card do Início, um campo da ficha, uma coluna). Então entrou uma porta irmã, do mesmo tamanho do problema:
+
+- **`NOVO_SO_MEU`** — registro `{chave: {o:'o que é', desde:'AAAA-MM-DD'}}`.
+- **`novoOn('<chave>')`** — `true` só pro admin (ele). Chave fora da lista → `true` pra todo mundo, então **o que já estava no ar não mudou nada** (ele pediu isso explicitamente; a lista nasceu **vazia**).
+- **Sem login** (base local dele) nada é escondido.
+- **"Ver como" outro dono** mostra a **ausência** da novidade — é assim que ele confere antes de liberar.
+
+### Liberar (decisão dele, nunca minha)
+| Quero liberar | O que se faz |
+|---|---|
+| pra todo mundo | tira a chave de `NOVO_SO_MEU` |
+| pessoa a pessoa | tira daqui e registra em `MODS` com `def:false` → ele liga por usuário no Painel Master |
+
+Ele revisa a lista em **Painel Master · Acessos → "🧪 Ainda só na sua base"** (com a data de cada uma). Hoje: *"Nada em provador agora"*.
+
+A regra virou linha fixa no `CLAUDE.md`, junto com a de mobile+desktop e a do portão.
+
+**Provas:** 7 invariantes novos (não-listado passa · admin vê · outro LP não vê · ver-como esconde · tirar da lista libera · sem login vê · o painel lista), portão verde nos 6 cenários.
+
 ## 16/09/2026 (15ª onda) — Visão Consolidada reformada pelos prints do iPhone (v7.71)
 
 Ele mandou 5 prints da Consolidada no iPhone e descreveu um a um: *"essa tela ficou muito boa... agora ajusta logo o layout"*. Rodado com a skill **construir-time-ux** (medir antes → mexer → medir depois), celular e desktop juntos.

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.71 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.72 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -13879,6 +13879,37 @@ const MODS={
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']},
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']}
 };
+/* ═══ NOVO-PRIMEIRO-NA-MINHA-BASE-V1 (16/09/2026) ══════════════════════════════
+   Regra fixa dele: "tudo que eu for criando primeiro fica na MINHA base. E só
+   depois você vai me perguntando se eu já libero pro Daniel ou pros outros
+   usuários. Esses que já estão, deixa como tá. Primeiro eu desenvolvo bem,
+   depois eu valido pra liberar sem erro e funcionando bem."
+
+   Como funciona: feature nova nasce NESTA lista. Enquanto estiver aqui, só ele
+   (admin) enxerga — os outros abrem o app sem ela, sem aviso e sem menu morto.
+   Liberar é uma linha só:
+     • pra todo mundo → tira a chave daqui;
+     • pessoa a pessoa → tira daqui e registra em MODS com `def:false` — aí ele
+       liga por usuário no Painel Master · Acessos.
+   O que JÁ ESTAVA NO AR em 16/09 não entra aqui: ele pediu pra deixar como está.
+   MODS gateia MENU (uma tela inteira); isto gateia QUALQUER coisa — um card do
+   Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
+   pede nasce. */
+const NOVO_SO_MEU={
+  /* exemplo da forma, sem nada ligado:
+     'niver-geral': {o:'Aniversariantes de todas as bases', desde:'2026-09-15'}, */
+};
+function novoOn(k){
+  if(!NOVO_SO_MEU[k]) return true;                  /* não listado = já liberado (o que estava no ar continua) */
+  if(!PERFIL) return true;                          /* sem login = base local dele */
+  /* vendo como outro dono, a tela mostra o que O OUTRO enxerga — inclusive a
+     ausência da novidade. É assim que ele confere antes de liberar. */
+  if(typeof delegAtivo==='function' && delegAtivo()) return false;
+  return souAdm();
+}
+function novoLista(){ return Object.keys(NOVO_SO_MEU).map(k=>({k,...NOVO_SO_MEU[k]}))
+  .sort((a,b)=>String(b.desde||'').localeCompare(String(a.desde||'')) || a.k.localeCompare(b.k)); }
+window.novoOn=novoOn;
 /* == ACESSO-ASSISTENTE-V1 (02/09) ==========================================
    Ele vai trazer o Victor como ASSISTENTE de backoffice e comercial. O papel
    no banco so tem `lp` e `admin`, e um assistente nao e nem um nem outro --
@@ -15547,6 +15578,12 @@ function admHtml(){
       <div class="adm-grid">${ADM.lista.map(card).join('')||'<div class="card" style="padding:14px">Só você por enquanto.</div>'}</div>
       ${ADM.temAtivo?'':`<div class="card" style="padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.7;color:var(--muted)">
         <b style="color:var(--ink)">Nome e pausa de acesso ainda não estão no banco.</b> Rode a migration <code>supabase/migrations/lp_perfis_nome_ativo.sql</code> no SQL Editor e estes dois controles aparecem sozinhos. Enquanto isso o resto do painel funciona normalmente.</div>`}
+      <div class="card" style="padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.7">
+        <b>🧪 Ainda só na sua base</b> <span style="color:var(--muted)">— regra de 16/09: coisa nova nasce só pra você, e os outros só recebem depois que você validar.</span>
+        ${novoLista().length?`<div style="margin-top:8px">${novoLista().map(x=>`<div class="adm-lin"><span class="badge b-cinza" style="flex-shrink:0">${esc(x.desde||'—')}</span><span style="text-transform:none;letter-spacing:0;font-size:12.5px">${esc(x.o||x.k)}</span></div>`).join('')}</div>
+          <div style="margin-top:8px;color:var(--muted)">Quando quiser liberar, me diga qual e pra quem — pra todo mundo ou pessoa a pessoa.</div>`
+        :`<div style="margin-top:6px;color:var(--muted)">Nada em provador agora: tudo que está no ar já vale para quem tem o módulo ligado.</div>`}
+      </div>
       <div class="card" style="padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.75">
         <b>Três coisas diferentes, na ordem em que se faz:</b><br>
         <b>1. Convite</b> — o cadastro aqui não cria a conta. Quem nunca entrou precisa do convite no Supabase (Auth → Users → Add user → Send invitation), porque o signup está fechado.<br>
@@ -16835,6 +16872,31 @@ function lpSelfCheck(){
            new Function('cartAbrir', p.abrir);            /* compila: acusa aspas soltas */
            return /^cartAbrir\('.*'\)$/.test(p.abrir);
          } finally{ CART.clientes=_c; } })());
+    /* ═══ NOVO-PRIMEIRO-NA-MINHA-BASE-V1 (16/09) ═══ */
+    { const _p=PERFIL, _sel=ESC.sel, _perfis=ESC.perfis;
+      try{
+        const K='__prova_novo';
+        ok('novo: o que JÁ ESTAVA no ar não é gateado (ele pediu pra deixar como está)', novoOn('qualquer-coisa-antiga')===true);
+        NOVO_SO_MEU[K]={o:'prova',desde:'2026-09-16'};
+        PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; ESC.sel='meu';
+        ok('novo: feature nova aparece pra ELE (admin, na própria base)', novoOn(K)===true);
+        PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
+        ok('novo: a MESMA feature não aparece pro outro LP enquanto ele não liberar', novoOn(K)===false);
+        PERFIL={email:'eu@x.com',papel:'admin',modulos:{}};
+        ESC.perfis={'dono@x.com':{papel:'lp',modulos:{}}}; ESC.sel='dono:dono@x.com'; _escMemo=null;
+        ok('novo: em "ver como" o admin enxerga a AUSÊNCIA da novidade — é assim que ele confere antes de liberar',
+           (typeof delegAtivo==='function'&&delegAtivo())? novoOn(K)===false : true);
+        ESC.sel='meu'; _escMemo=null;
+        delete NOVO_SO_MEU[K];
+        ok('novo: tirar a chave da lista libera pra todo mundo, sem mexer em mais nada',
+           (()=>{ PERFIL={email:'outro@x.com',papel:'lp',modulos:{}}; return novoOn(K)===true; })());
+        PERFIL=null;
+        ok('novo: sem login (base local dele) nada é escondido',
+           (()=>{ NOVO_SO_MEU[K]={o:'prova',desde:'2026-09-16'}; const r=novoOn(K); delete NOVO_SO_MEU[K]; return r===true; })());
+        ok('novo: o Painel Master lista o que ainda é só dele (é onde ele revisa e me diz o que liberar)',
+           String(admHtml).includes('Ainda só na sua base') && typeof novoLista==='function');
+      } finally{ PERFIL=_p; ESC.sel=_sel; ESC.perfis=_perfis; _escMemo=null; }
+    }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
          let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
