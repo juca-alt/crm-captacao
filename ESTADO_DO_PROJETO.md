@@ -2,6 +2,35 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 16/09/2026 (19ª onda) — DOBRA-FECHADA-V1: todo bloco dobrável nasce fechado (v7.75)
+
+Print dele da gaveta do negócio, tudo expandido: *"toda vez que abro o card ele já vem expandido… pra consultar algo tenho que ir recolhendo cada um. Ajuste esse card e assume essa regra para TODOS os itens expansíveis ou retráteis, os de agora e os do futuro: ao abrir a tela, vir já encolhido. O usuário que vai abrindo cada tópico que quiser. Fluidez e menos fricção."*
+
+### Virou regra permanente (CLAUDE.md) e fonte única no código
+`dobraAberta(chave, estado)` no `vendas.html`: **fechado a menos que ele tenha aberto** (escolha lembrada por aparelho onde o sistema lembra). Na Revisão de Proteção, `blkFechado()` / `secMSFechada()` (estado no documento, como já era). O cabeçalho fechado continua com o resumo — encolher nunca apaga o número. Toda tela com blocos tem abrir/fechar tudo.
+
+### Onde mudou (inventário completo)
+
+| Tela | Antes | Agora |
+|---|---|---|
+| **Gaveta do negócio** (o print) | 7 seções abertas por padrão + "Quem é a pessoa" aberto | **todas fechadas**; "Expandir tudo" no topo |
+| **Início** | agora, números, aniversariantes, funil NN, radar CF… abertos | **todos fechados**; resumo no cabeçalho; "abrir tudo" |
+| **Ficha do lead** (Estoque) | "Quem é a pessoa" e Qualificação abertos, sem memória | **todos fechados**, ganhou **memória por aparelho** e botão **⌄⌃ tópicos** (maioria aberta → fecha; senão abre) |
+| Repertório (ontem) | nascia aberto | fechado; o resumo do cabeçalho diz a situação |
+| Filtros do TA | abriam sozinhos quando tinham valor | fechados; o valor aparece no resumo do cabeçalho |
+| SitPlan "Do Estoque de Nomes" | abria se tinha gente na lista | fechado; a contagem está no título |
+| Relatório "Detalhado" | abria com ≤12 linhas | fechado |
+| Benefícios (docs, exigências) | abertos | fechados |
+| Varredura diária | abria com alerta | fechada; nº de alertas no título |
+| **Revisão de Proteção** — blocos das 6 etapas e seções da Mudança de Seguro | abertos | **fechados**; clique abre e grava no documento |
+
+Fora da regra, de propósito: a **apresentação/impressão pro cliente** (ali o documento sai inteiro).
+
+### Guarda pro futuro
+Invariante varre **todos os scripts** e fecha o portão se aparecer um `details` com `open` escrito literal — abrir só via escolha gravada. (Ele se acusou duas vezes na hora de nascer: o próprio comentário e a própria mensagem soletravam a tag. Corrigido reescrevendo sem soletrar.)
+
+**Provas:** 9 invariantes novos + 2 antigos atualizados (eles codificavam o padrão aberto) · teste como usuário **25/25** (Início 12 blocos fechados · gaveta 12 seções fechadas e a que ele abriu continua aberta ao reabrir · ficha do lead 6 grupos fechados, memória e "tópicos" nos dois sentidos · Revisão de Proteção blocos fechados e clique grava) em 390 e 1280 · portão verde nos 6 cenários.
+
 ## 16/09/2026 (18ª onda) — REPERTÓRIO-V1: o script certo da recomendação, na ficha do lead (v7.74)
 
 Ele mandou a spec (handoff) antes de dormir: *"dentro do painel do lead, dar ao LP o SCRIPT certo pra cada situação de recomendação, já com nome do lead e do recomendante preenchidos, a um clique de copiar. Roda tudo autônomo, quero acordar com isso no ar. Depois roda a skill de UX 2x e a de engenharia 2x."*

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.74 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.75 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2402,11 +2402,25 @@ function inicioAgoraHtml(){
       apaga o numero -- so troca a tabela pela manchete;
    2) o bloco AGORA nasce ABERTO e, desde 02/09 (pedido dele), tambem dobra --
       mas o cabecalho fechado ainda diz quantos itens e quantos pedem acao ja. */
+/* ═══ DOBRA-FECHADA-V1 (16/09/2026) — regra permanente dele ═══════════════════
+   "Toda vez que abro o card ele já vem expandido… aí pra consultar algo tenho que ir
+   recolhendo cada um. Ajuste esse card e assume essa regra para TODOS os itens
+   expansíveis ou retráteis, os de agora e os do futuro: ao abrir a tela onde eles
+   habitam, vir já encolhido. O usuário que vai abrindo cada tópico que quiser."
+   Portanto: bloco dobrável NASCE FECHADO. Aberto só se ELE abriu — e a escolha fica
+   lembrada por aparelho onde o sistema lembra (gaveta, Início, ficha do lead).
+   O cabeçalho fechado continua com o resumo: encolher nunca apaga o número.
+   Bloco novo passa por dobraAberta(); um details com o atributo open escrito LITERAL
+   no código é proibido (um invariante varre os scripts — por isso nem este comentário
+   soletra a tag inteira). */
+const DOBRA_PADRAO=false;
+function dobraAberta(chave, st){ return (st && Object.prototype.hasOwnProperty.call(st,chave)) ? !!st[chave] : DOBRA_PADRAO; }
 const INI_CHAVE='crmlp_inicio_secs_v1';
-const INI_PADRAO={agora:1,numeros:1,aniv:1,'funil-nn':1,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':1,'cf-neg':1,'cf-perfil':1,'cf-cob':0,'cf-aps':1};
+/* DOBRA-FECHADA-V1: a lista fica pela ORDEM/existência dos blocos; o padrão de todos é fechado */
+const INI_PADRAO={agora:0,numeros:0,aniv:0,'funil-nn':0,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':0,'cf-neg':0,'cf-perfil':0,'cf-cob':0,'cf-aps':0};
 function iniLer(){ try{ return JSON.parse(localStorage.getItem(INI_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function iniGravar(o){ try{ localStorage.setItem(INI_CHAVE,JSON.stringify(o)); }catch(_){} }
-function iniAberto(k){ const st=iniLer(); return (k in st)? !!st[k] : !!INI_PADRAO[k]; }
+function iniAberto(k){ return dobraAberta(k, iniLer()); }   /* DOBRA-FECHADA-V1 */
 function iniToggle(k){
   const st=iniLer(); const novo=!iniAberto(k); st[k]=novo?1:0; iniGravar(st);
   const bl=document.querySelector('.ini-bl[data-ini="'+k+'"]');
@@ -4991,8 +5005,7 @@ function drwIrmaosHtml(c){
    O padrão abre só o que se usa todo dia; o resto começa fechado e lembra a
    escolha por aparelho. */
 const DRW_SEC_CHAVE='crmlp_ficha_secs_v1';
-const DRW_SEC_PADRAO=['etapa de comercializacao','tarefas & atividades','valor do negocio','registrar contato',
-  'ja e seu cliente','venda ganha','na emissao'];   /* CARD-CLIENTE-V1: o card do cliente abre por padrão — atraso, emissão pendente e "registrar apólice" são ação, não estoque */
+const DRW_SEC_PADRAO=[];   /* DOBRA-FECHADA-V1 (16/09): nenhuma seção nasce aberta — ele abre o que quer, e o aparelho lembra */
 /* A chave sai só do PRIMEIRO pedaço do título, não do textContent inteiro: o
    h3 carrega dentro dele o <select> de funil, o aviso "sem próxima atividade" e
    botões, e isso ia junto — foi assim que "Etapa" e "Tarefas" deixaram de casar
@@ -5014,7 +5027,7 @@ function drwSecKey(h){
 }
 function drwSecsLer(){ try{ return JSON.parse(localStorage.getItem(DRW_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function drwSecsGravar(o){ try{ localStorage.setItem(DRW_SEC_CHAVE,JSON.stringify(o)); }catch(_){} }
-function drwSecAberta(k,st){ return (k in st) ? !!st[k] : DRW_SEC_PADRAO.includes(k); }
+function drwSecAberta(k,st){ return dobraAberta(k,st); }   /* DOBRA-FECHADA-V1 */
 function drwSecAplicar(sec,aberto){
   sec.classList.toggle('sec-fechada',!aberto);
   [...sec.children].forEach(el=>{ if(el.tagName!=='H3') el.hidden=!aberto; });
@@ -5085,7 +5098,7 @@ function renderDrawer(){
           onclick="drwSecsTodas(this.dataset.abrir==='1')"
           title="Abre ou fecha todos os tópicos desta ficha">⌄ Expandir tudo</button>
       </div>
-      <div class="sec"><details open>
+      <div class="sec"><details>
         <summary style="cursor:pointer;font-weight:700;font-size:14px">👤 Quem é a pessoa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(fichaPessoaResumo(c,'card'))}</span></summary>
         <div style="margin-top:8px">${fichaPessoaHtml(c,'card')}</div>
       </details></div>
@@ -5693,7 +5706,7 @@ function viewSitplan(){
   const totNaLista=k.naLista.length+bnDia.length, totFeitas=k.feitas+bnHist.length, totAtend=k.atend+bnHist.filter(h=>h.res==='atendeu'||h.res==='agendou').length, totAgend=k.agend+bnHist.filter(h=>h.res==='agendou').length;
   const bnSem=bnDia.filter(c=>!taResHoje(c));
   const bnCand=bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&c.estagio==='lista_ta').slice(0,12);
-  const bnSecao=`<details class="card" style="padding:0;margin:8px 0" ${bnDia.length?'open':''}>
+  const bnSecao=`<details class="card" style="padding:0;margin:8px 0">
     <summary style="padding:12px 14px;cursor:pointer;font-weight:700">🗃️ Do Estoque de Nomes <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${bnDia.length} na lista de ${D===hoje?'hoje':dataBR(D)}${D===hoje?' · '+bnSem.length+' sem resultado':''}</span></summary>
     <div style="padding:0 14px 14px">
       <div class="toolbar" style="gap:6px;flex-wrap:wrap">
@@ -8693,7 +8706,7 @@ function viewEmissaoDiaria(){
           <td style="text-align:right">${l.n}</td><td style="text-align:right">${brlCurto(l.paMedio)}</td><td style="text-align:right">${l.cycle!=null?edN(l.cycle):'—'}</td></tr>`).join('')}
         <tr style="border-top:2px solid var(--linha);font-weight:700"><td style="padding:8px">Total · ${d.lpsComEmissao} LP c/ emissão</td><td style="text-align:right">${brlCurto(d.paLiq)}</td><td style="text-align:right">${brlCurto(d.plano)}</td><td style="text-align:right">${d.nLiq}</td><td style="text-align:right">${brlCurto(d.paMedio)}</td><td style="text-align:right">${d.cycle!=null?edN(d.cycle):'—'}</td></tr></tbody></table>
     </div>
-    <details class="card" style="padding:10px 14px;margin-top:12px"${d.linhas.length&&d.linhas.length<=12?' open':''}><summary style="cursor:pointer;font-weight:700">Detalhado · ${d.linhas.length} evento(s)</summary>
+    <details class="card" style="padding:10px 14px;margin-top:12px"><summary style="cursor:pointer;font-weight:700">Detalhado · ${d.linhas.length} evento(s)</summary>
       <div style="overflow-x:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
         <th style="padding:6px 8px">Dia</th><th>Apólice</th><th>Cliente</th><th>LP</th><th>Evento</th><th style="text-align:right">Apol.</th><th style="text-align:right">PA</th><th style="text-align:right">AFYC</th></tr></thead>
         <tbody>${d.linhas.map(l=>`<tr style="border-top:1px solid var(--linha)${l.n<0?';color:#d03b3b':''}"><td style="padding:6px 8px">${l.dia}</td><td>${esc(l.r.apolice||l.r.proposta||'')}</td><td>${esc(atTitleC(l.r.segurado))}</td><td>${esc(l.lp.nome.split(' ')[0])}</td><td>${l.evento}</td><td style="text-align:right">${l.n}</td><td style="text-align:right">${brlCurto(l.pa)}</td><td style="text-align:right">${brlCurto(l.afyc)}</td></tr>`).join('')}</tbody></table></div>
@@ -12012,7 +12025,7 @@ async function bfConfNovo(){ const v=id=>{ const e=$('#'+id); return e?(e.value|
 }
 
 /* ── ficha do caso: estado em cima (sempre visível), depois tópicos dobráveis ── */
-let BF_ABERTO={docs:true,exig:true,diario:false};
+let BF_ABERTO={docs:false,exig:false,diario:false};   /* DOBRA-FECHADA-V1 */
 function bfAbrir(id,secao){ const r=bfAcha(id); if(!r) return; const hoje=atHojeLocal(), hojeISO=atHojeISO(); const dias=bfDiasAberto(r,hoje), parado=bfDiasParado(r,hoje);
   const exAb=bfExigAbertas(r), exVenc=bfExigVencidas(r,hojeISO); const exMaisVelha=exAb.reduce((mx,e)=>{ const d=Math.round((hoje-atParseISO(e.recebida_em))/864e5); return d>mx?d:mx; },0);
   const docs=bfDocsOrdenados(r), anex=docs.filter(d=>d.estado==='anexado').length, na=docs.filter(d=>d.estado==='nao_se_aplica').length, pend=docs.length-anex-na;
@@ -14591,13 +14604,23 @@ function bnUndoBarra(){ return (_bnUndoCels&&_bnUndoCels.length)
       <button class="btn btn-s btn-mini" onclick="bnColarDesfazer()">↩︎ Desfazer a colagem</button>
       <button class="btn btn-ghost btn-mini" onclick="_bnUndoCels=null;render()">Ok, manter</button></div>`
   : ''; }
+/* DOBRA-FECHADA-V1: os grupos da ficha do lead nascem fechados e lembram a escolha por aparelho */
+const BNE_SEC_CHAVE='crmlp_bne_secs_v1';
+function bneSecsLer(){ try{ return JSON.parse(localStorage.getItem(BNE_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
+function bneSecAberta(k){ return dobraAberta(k, bneSecsLer()); }
+function bneSecToggle(k,aberto){ const st=bneSecsLer(); st[k]=aberto?1:0; try{ localStorage.setItem(BNE_SEC_CHAVE,JSON.stringify(st)); }catch(_){} }
+function bneSecsTodas(abrir){ document.querySelectorAll('.bne details.bne-grp').forEach(d=>{ d.open=!!abrir; }); }   /* o ontoggle de cada um grava */
+/* mesma regra da gaveta e do Início: maioria aberta → fecha tudo; senão → abre tudo */
+function bneSecsTodasToggle(){ const t=document.querySelectorAll('.bne details.bne-grp'), a=document.querySelectorAll('.bne details.bne-grp[open]'); bneSecsTodas(a.length < t.length/2); }
+window.bneSecToggle=bneSecToggle; window.bneSecsTodas=bneSecsTodas; window.bneSecsTodasToggle=bneSecsTodasToggle;
 function bnEditorHtml(c){
   /* FICHA-UX-V2 (11/09, time de UX): cabeçalho com avatar + nome + badges + ações rápidas; campos em
      grupos que encolhem e estendem (Contato · Qualificação do TA · Perfil · Notas), rótulo em cima,
      alvos de 44px, rodapé fixo com as ações. Mesmos ids (bne-*) → bnSalvarEdicao intacta. */
   const tel=String(c.telefone||'').replace(/[^+\d]/g,''), wa=(typeof taWaHref==='function'?taWaHref(c):waHref(c.telefone));
   const badge=(t,cls)=>t?`<span class="badge ${cls||'b-cinza'}">${esc(t)}</span>`:'';
-  const grp=(id,titulo,resumo,html,aberto)=>`<details class="bne-grp" ${aberto?'open':''}><summary><span class="bne-grp-t">${titulo}</span><span class="bne-grp-r">${esc(resumo||'')}</span><span class="bne-grp-c">▾</span></summary><div class="bne-grid">${html}</div></details>`;
+  /* `aberto` (5º arg) é ignorado desde a DOBRA-FECHADA-V1: quem decide é bneSecAberta(id) */
+  const grp=(id,titulo,resumo,html,aberto)=>`<details class="bne-grp" data-sec="${id}" ${bneSecAberta(id)?'open':''} ontoggle="bneSecToggle('${id}',this.open)"><summary><span class="bne-grp-t">${titulo}</span><span class="bne-grp-r">${esc(resumo||'')}</span><span class="bne-grp-c">▾</span></summary><div class="bne-grid">${html}</div></details>`;
   const f=(lbl,inp,full)=>`<label class="bne-f${full?' bne-full':''}"><span class="bne-lbl">${lbl}</span>${inp}</label>`;
   const contatoR=[c.telefone?String(c.telefone):'',c.email||'',c.cidade||''].filter(Boolean).join(' · ')||'sem telefone';
   const qualR=[BN_EST_LABEL[c.estagio]||c.estagio||'',c.prioridade?'P'+c.prioridade:'',(c.recomendante||'').trim()?'rec. '+c.recomendante:''].filter(Boolean).join(' · ');
@@ -14607,9 +14630,9 @@ function bnEditorHtml(c){
       ${(typeof taAvatar==='function'?taAvatar(c):'')}
       <div class="bne-head-t"><div class="bne-nome">${esc(c.nome||'(sem nome)')}</div>
         <div class="bne-badges">${badge(BN_EST_LABEL[c.estagio]||c.estagio,'b-'+(c.estagio||'estoque'))}${badge(c.prioridade?'P'+c.prioridade:'',c.prioridade==1?'b-verm':'b-cinza')}${badge(c.trilha==='recrutamento'?'Recrutamento':'',null)}${(c.recomendante||'').trim()?badge('👤 '+c.recomendante,'b-azul'):''}</div></div>
-      <div class="bne-acts">${tel?`<a class="btn btn-s btn-mini" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}${wa?`<a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(wa)}" title="WhatsApp">💬</a>`:''}<button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')" title="${c.funil_contato_id?'Abrir no funil':'Criar contato no funil'}">${c.funil_contato_id?'👤 Funil':'🚀 Funil'}</button></div>
+      <div class="bne-acts">${tel?`<a class="btn btn-s btn-mini" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}${wa?`<a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(wa)}" title="WhatsApp">💬</a>`:''}<button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')" title="${c.funil_contato_id?'Abrir no funil':'Criar contato no funil'}">${c.funil_contato_id?'👤 Funil':'🚀 Funil'}</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodasToggle()" title="Abre ou fecha todos os tópicos desta ficha">⌄⌃ tópicos</button></div>
     </div>
-    <details class="bne-grp" open><summary><span class="bne-grp-t">👤 Quem é a pessoa</span><span class="bne-grp-r">${esc(fichaPessoaResumo(c,'lead'))}</span><span class="bne-grp-c">▾</span></summary><div style="padding:6px 0 10px">${fichaPessoaHtml(c,'lead')}</div></details>
+    <details class="bne-grp" data-sec="pessoa" ${bneSecAberta('pessoa')?'open':''} ontoggle="bneSecToggle('pessoa',this.open)"><summary><span class="bne-grp-t">👤 Quem é a pessoa</span><span class="bne-grp-r">${esc(fichaPessoaResumo(c,'lead'))}</span><span class="bne-grp-c">▾</span></summary><div style="padding:6px 0 10px">${fichaPessoaHtml(c,'lead')}</div></details>
     ${grp('q','🎯 Qualificação do TA',qualR,
       f('Recomendante',`<input id="bne-rec" value="${esc(c.recomendante||'')}" placeholder="quem indicou (vazio = sem recomendante)">`)
      +(logado()? f('Dono (LP)', souAdm()? `<select id="bne-lp">${escRotulosTodos().map(r=>`<option value="${esc(r.rotulo)}" ${escLpNorm(r.rotulo)===escLpNorm(escRotuloDe(c))?'selected':''}>${esc(r.rotulo)}</option>`).join('')}</select>` : `<input value="${esc(escRotuloDe(c)||'—')}" disabled title="Só o admin muda o dono">`) : '')
@@ -15072,7 +15095,7 @@ function taChipToggle(k,v){ const st=csvSet(FTA[k]); st.has(v)?st.delete(v):st.a
    está marcado; abre sozinho quando tem valor. O card de Filtros deixou de ter 1.500px de altura. */
 let TA_ABERTOS=new Set();
 function taResumoCsv(k,opts){ const st=csvSet(FTA[k]); if(!st.size) return ''; return opts.filter(o=>st.has(o.v)).map(o=>o.l).join(', '); }
-function taGrupo(titulo,resumo,html,temValor){ const id='g:'+titulo; const aberto=!!temValor||TA_ABERTOS.has(id);
+function taGrupo(titulo,resumo,html,temValor){ const id='g:'+titulo; const aberto=TA_ABERTOS.has(id);   /* DOBRA-FECHADA-V1: valor marcado aparece no resumo, não abre o grupo */
   return `<details class="ta-grp" ${aberto?'open':''} ontoggle="this.open?TA_ABERTOS.add('${esc(jsq(id))}'):TA_ABERTOS.delete('${esc(jsq(id))}')"><summary><span class="ta-grp-t">${esc(titulo)}</span><span class="ta-grp-r">${esc(resumo||'todos')}</span><span class="ta-grp-c">▾</span></summary><div class="ta-grp-b">${html}</div></details>`; }
 function taChips(k,opts){ const st=csvSet(FTA[k]); return `<div class="ta-chips">${opts.map(o=>`<span class="ta-chip${st.has(o.v)?' on':''}" onclick="taChipToggle('${k}','${esc(jsq(o.v))}')">${esc(o.l)}</span>`).join('')}</div>`; }
 function taAvatar(c){ const n=String(c.nome||'?'); let h=0; for(let i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))>>>0; return `<span class="avatar" style="background:hsl(${h%360} 45% 45%)">${esc(iniciais(n))}</span>`; }
@@ -15228,7 +15251,7 @@ function repSecHtml(c){
   setTimeout(()=>repLigarRec(c.id),0);
   const tel=String(c.telefone||'').replace(/[^+\d]/g,'');
   const wa=(sc.destino==='lead'&&r.ok&&tel&&typeof waHref==='function')? waHref(tel)+'?text='+encodeURIComponent(r.texto) : '';
-  return `<details class="bne-grp" open id="rep-sec" data-id="${esc(c.id)}"><summary><span class="bne-grp-t">🗣️ Repertório</span><span class="bne-grp-r">${esc(sc.rotulo)}${g===sug?' · sugerido':''}</span><span class="bne-grp-c">▾</span></summary>
+  return `<details class="bne-grp" id="rep-sec" data-sec="rep" data-id="${esc(c.id)}" ${bneSecAberta('rep')?'open':''} ontoggle="bneSecToggle('rep',this.open)"><summary><span class="bne-grp-t">🗣️ Repertório</span><span class="bne-grp-r">${esc(sc.rotulo)}${g===sug?' · sugerido':''}</span><span class="bne-grp-c">▾</span></summary>
     <div style="padding:6px 0 10px">
       <div class="rep-sel">
         <span class="badge ${g===sug?'b-azul':'b-cinza'}" title="${g===sug?'O que os sinais do lead apontam (tentativas, agendamento, temperatura, tempo parado). É palpite — troque à vontade.':'Você escolheu. A sugestão era: '+esc(sugRot)}">${g===sug?'★ sugerido':'escolhido'}</span>
@@ -15787,7 +15810,7 @@ async function varCarregar(){ if(!sb||!souAdm()) return; try{ const r=await sb.f
 async function varRodarAgora(){ if(!sb||!souAdm()) return; try{ toast('Rodando varredura…',true); const r=await sb.rpc('lp_varredura_diaria',{p_origem:'app'}); if(r.error) throw r.error; await varCarregar(); render(); toast('Varredura concluída · '+(r.data&&r.data.alertas||0)+' alerta(s)',true); }catch(e){ toast('Varredura falhou: '+(e.message||e),false); } }
 async function varDiariaSeNecessario(){ if(!sb||!souAdm()) return; try{ const h=hojeISO(); let ult=null; try{ ult=localStorage.getItem('crmlp_var_dia'); }catch(_){} if(ult===h) return; await varCarregar(); const q=VAR.ultima&&String(VAR.ultima.quando||'').slice(0,10); if(q===h){ try{ localStorage.setItem('crmlp_var_dia',h); }catch(_){} return; } const r=await sb.rpc('lp_varredura_diaria',{p_origem:'app'}); if(!r.error){ try{ localStorage.setItem('crmlp_var_dia',h); }catch(_){} await varCarregar(); } }catch(_){} }
 function varHtml(){ const u=VAR.ultima; const sev=x=>x==='ALERTA'?'b-verm':x==='aviso'?'b-amarelo':x==='info'?'b-cinza':'b-verde';
-  return `<details class="card" style="padding:0;margin-top:14px" ${u&&u.alertas?'open':''}><summary style="padding:12px 14px;cursor:pointer;font-weight:700">🛡️ Varredura diária (segurança · integridade · performance) <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${u?('última '+String(u.quando).slice(0,16).replace('T',' ')+' · '+u.origem+' · '):'ainda não rodou · '}<b style="color:${u&&u.alertas?'var(--verm)':'var(--verde,#157f4b)'}">${u?u.alertas+' alerta(s)':''}</b></span></summary>
+  return `<details class="card" style="padding:0;margin-top:14px"><summary style="padding:12px 14px;cursor:pointer;font-weight:700">🛡️ Varredura diária (segurança · integridade · performance) <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${u?('última '+String(u.quando).slice(0,16).replace('T',' ')+' · '+u.origem+' · '):'ainda não rodou · '}<b style="color:${u&&u.alertas?'var(--verm)':'var(--verde,#157f4b)'}">${u?u.alertas+' alerta(s)':''}</b></span></summary>
     <div style="padding:0 14px 14px"><div style="font-size:12px;color:var(--muted);margin-bottom:8px">Roda sozinha todo dia às 02:00 no banco (pg_cron) e no 1º acesso do admin. <button class="btn btn-s btn-mini" onclick="varRodarAgora()">Rodar agora</button></div>
     ${u?`<table style="width:100%;font-size:12.5px"><tbody>${(u.achados||[]).map(a=>`<tr><td style="width:70px"><span class="badge ${sev(a.sev)}">${esc(a.sev)}</span></td><td>${esc(a.chave)}</td><td style="color:var(--muted)">${esc(String(a.valor||''))}</td></tr>`).join('')}</tbody></table>`:''}</div></details>`; }
 function admHtml(){
@@ -17254,6 +17277,25 @@ function lpSelfCheck(){
            !/bnSalvar|from\(|\.insert\(|\.update\(/.test(String(repSecHtml)+String(repCopiar)+String(repSet)));
       } finally{ REP_DB=_db; PERFIL=_p; REP.sel=_sel; }
     }
+    /* ═══ DOBRA-FECHADA-V1 (16/09) — bloco dobrável nasce fechado, em TODOS os sistemas ═══ */
+    { const _bne=(()=>{ try{ return localStorage.getItem(BNE_SEC_CHAVE); }catch(_){ return null; } })(), _p=PERFIL;
+      try{
+        try{ localStorage.removeItem(BNE_SEC_CHAVE); }catch(_){}
+        ok('dobra: sem escolha gravada, fechado; com escolha, obedece', dobraAberta('x',{})===false && dobraAberta('x',null)===false && dobraAberta('x',{x:1})===true && dobraAberta('x',{x:0})===false);
+        ok('dobra: Início — nenhum bloco abre por padrão', Object.values(INI_PADRAO).every(v=>!v) && iniAberto('__novo__')===false);
+        ok('dobra: gaveta do negócio — nenhuma seção abre por padrão (o print dele: "toda vez que abro já vem expandido")', DRW_SEC_PADRAO.length===0 && drwSecAberta('ja e seu cliente',{})===false && drwSecAberta('etapa de comercializacao',{})===false);
+        ok('dobra: benefícios — nada aberto por padrão', Object.values(BF_ABERTO).every(v=>!v));
+        PERFIL={email:'eu@x.com',papel:'admin',modulos:{}};
+        const f=bnEditorHtml({id:'db1',nome:'Fulano De Tal',recomendante:'Beltrano',estagio:'estoque',hist:[],telefone:'81999990001',notas:'x'});
+        ok('dobra: ficha do lead — TODOS os grupos nascem fechados (inclusive "Quem é a pessoa" e Repertório)', (f.match(/<details/g)||[]).length>=5 && !/<details[^>]*\sopen[\s>]/.test(f));
+        bneSecToggle('q',true);
+        const f2=bnEditorHtml({id:'db1',nome:'Fulano De Tal',recomendante:'Beltrano',estagio:'estoque',hist:[]});
+        ok('dobra: ficha do lead — o que ele abriu fica aberto na próxima vez, neste aparelho', /data-sec="q"[^>]*\sopen/.test(f2) && !/data-sec="pessoa"[^>]*\sopen/.test(f2));
+        ok('dobra: ficha do lead tem o botão de abrir/fechar tudo (regra da maioria, igual gaveta e Início)', /bneSecsTodasToggle\(/.test(f) && String(bneSecsTodasToggle).includes('a.length < t.length/2'));
+        ok('dobra: nenhum details com "open" LITERAL sobrou no código — abrir só por escolha gravada (vale pro futuro)',
+           (()=>{ const re=/<details(?:\s+class="[^"]*")?\s+open[\s>]/; return ![...document.scripts].some(s=>re.test(s.textContent||'')); })());
+      } finally{ try{ if(_bne===null) localStorage.removeItem(BNE_SEC_CHAVE); else localStorage.setItem(BNE_SEC_CHAVE,_bne); }catch(_){} PERFIL=_p; }
+    }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
          let falou=0; const _t=window.toast; window.toast=()=>{ falou++; };
@@ -17267,7 +17309,7 @@ function lpSelfCheck(){
     ok('VER-COMO-V2: operando como um LP, os módulos são os DELE (funis extras desligados) e o painel admin some', (()=>{
       const P=PERFIL, E=ESC, D={...DELEG}; try{ PERFIL={email:'a@x',papel:'admin',modulos:{}}; DELEG.eu='a@x'; DELEG.donos=['d@x']; ESC={sel:'dono:d@x',rotulos:[{rotulo:'daniel',dono_email:'d@x'}],perfis:{'d@x':{papel:'lp',modulos:{}}}};
         return modOn('funis_extra')===false && modOn('carteira')===true && !!delegAtivo(); } finally{ PERFIL=P; ESC=E; DELEG=D; } })());
-    ok('FILTROS-DOBRAVEIS: grupo fechado mostra o resumo; com valor abre sozinho', (()=>{ const l=FTA.estagio, ab=TA_ABERTOS; TA_ABERTOS=new Set(); FTA.estagio='cliente'; const h=taGrupo('Estágio',taResumoCsv('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),'x',true); FTA.estagio=''; const h2=taGrupo('Estágio','','x',false); FTA.estagio=l; TA_ABERTOS=ab; return h.includes(' open')&&h.includes('Cliente')&&!h2.includes(' open')&&h2.includes('todos'); })());
+    ok('FILTROS-DOBRAVEIS + DOBRA-FECHADA: grupo nasce fechado mesmo com valor — o resumo do cabeçalho mostra o que está marcado', (()=>{ const l=FTA.estagio, ab=TA_ABERTOS; TA_ABERTOS=new Set(); FTA.estagio='cliente'; const h=taGrupo('Estágio',taResumoCsv('estagio',BN_ESTAGIOS.map(e=>({v:e,l:BN_EST_LABEL[e]}))),'x',true); FTA.estagio=''; const h2=taGrupo('Estágio','','x',false); FTA.estagio=l; TA_ABERTOS=ab; return !h.includes(' open')&&h.includes('Cliente')&&!h2.includes(' open')&&h2.includes('todos'); })());
     ok('HOJE fora do card: o Painel TA abre em Rec (com telefone) e só mostra Hoje quando o SitPlan manda', (()=>{ const l=BNTA.lista; BNTA.lista='sm:comfone'; const ok=!String(viewBnTa.toString()).includes("navItem('hoje','📅','Hoje',"); BNTA.lista=l; return ok; })());
     ok('RECOMENDAÇÕES = nome + telefone + recomendante', TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'',recomendante:'Zz R',estagio:'estoque'}) && !TA_SMART.recs.base({nome:'Zz',telefone:'81999990000',recomendante:'',estagio:'estoque'}));
     ok('SERVIDOR-MANDA Estoque: apagado no servidor sai do cache (só carga completa); criado local sem _dono fica', (()=>{ const loc=[{id:'a',_dono:'x'},{id:'b',_dono:'x'},{id:'c'}]; const rem=[{id:'a'}]; const r1=bnSemOsApagados(loc,rem,true).map(c=>c.id).join(''); const r2=bnSemOsApagados(loc,rem,false).map(c=>c.id).join(''); return r1==='ac'&&r2==='abc'; })());
@@ -18158,7 +18200,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
           ok('carteira PDF: merge completa nascimento e NÃO apaga detalhe/cobertura já existente', f&&f.nascimento==='1980-07-10' && f.cobDetalhe===true && f.cob.hc===5 && CART.clientes.length===2);
         } finally{ CART.clientes=_oc; CART.apolices=_oa; } }
     }
-    ok('Início: card de aniversariantes no padrão (hoje/semana/mês da carteira)', INI_PADRAO.aniv===1 && typeof cartNiverProx==='function');
+    ok('Início: card de aniversariantes existe no padrão (nasce fechado, como todos — DOBRA-FECHADA-V1)', ('aniv' in INI_PADRAO) && typeof cartNiverProx==='function');
     ok('tema: FAB 🎨 escondido em todas as telas (abre só por Configurações)', (()=>{ const f=document.getElementById('tw-fab'); return !f || getComputedStyle(f).display==='none'; })());
     ok('subir relatório: do aviso de sinistro sai segurado/apólice/protocolo pro caso', (()=>{ const o=relExtrairBeneficio('Aviso de sinistro em 03/09/2026\nSegurado: Fulano de Tal\nApólice nº 1234567\nProtocolo: 2026-88'); return o.segurado==='Fulano de Tal'&&o.apolice==='1234567'&&o.protocolo==='2026-88'&&o.data==='2026-09-03'; })());
     ok('menu: Metas mora em Configurações', CFG_VIEWS.includes('metas') && !!document.querySelector('.sidebar .nav-btn[data-view="config"]'));
