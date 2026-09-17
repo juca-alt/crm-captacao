@@ -11,7 +11,7 @@ Print dele do card de aniversariantes no iPhone: *"permitir que eu coloque os an
 - Quem está feito **some da lista**; um chip **"✓ N feitos"** mostra os feitos (riscados, com ↩︎ pra desfazer). Sem feitos, o chip some e o modo desliga sozinho.
 - **Lembrado entre aparelhos:** grava local na hora e no banco em seguida — tabela nova **`lp_niver_feito`** (dono, chave da pessoa, ano; RLS por dono, espelho da `lp_dup_fila`). Chave = a mesma pessoa do card (8 últimos dígitos do telefone ou nome) **+ ano**: ano que vem ela volta. Deslogado fica local; falha no banco não trava a tela.
 - **Linha do card refeita** em duas linhas fixas (nome + ações · selos + 🎂) — antes o 💬 caía sozinho numa terceira linha como um quadrado de 44px.
-- Nasce sob a regra de 16/09: `novoOn('niver-feito')` — **só ele vê**.
+- Nasceu sob a regra de 16/09 (`novoOn('niver-feito')`) e foi **liberado no mesmo dia** — palavra dele: *"pode liberar pro Daniel"*. Chave saiu de `NOVO_SO_MEU` (v7.78): todo LP vê o ✓ e o arrasto; cada um marca os seus (RLS por dono).
 
 **Provas:** migração aplicada em produção · 8 invariantes · teste como usuário **16/16** em 390 e 1280 (✓ some · chip mostra e desfaz · arrasto de 120px marca · arrasto de 40px não · outro LP não vê · console limpo) · portão verde.
 
