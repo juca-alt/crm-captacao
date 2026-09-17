@@ -2,6 +2,25 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 17/09/2026 (23ª onda) — SOLIC-AGENDA-V1: agendar atividade a partir da solicitação → Google Agenda (v7.81)
+
+Print dele da lista de Solicitações no iPhone: *"permite que nessa área de solicitações/pendências eu já gere uma tarefa, uma atividade, jogando direto pro Google Agenda, como a gente já faz nos cards dos clientes."*
+
+### Como funciona (reaproveita o motor que já existia — nada de segundo cano pro Google)
+- Regra do app: **tarefa é sempre de um contato (negócio)**. Então o botão **📅** (na linha da lista e na ficha V2) abre uma folha — *O quê · Tipo · Dia · Hora* — já preenchida: título = próximo passo (ou "Cobrar <área> · <tipo>"), dia = "até quando" (senão o prazo da área, senão amanhã), 09:00.
+- **Achou o negócio do segurado** (`soContatoDe`: `cliNegociosDe` por nome/telefone, preferindo Base de Clientes) → `tarCriar` no negócio, notas com tipo/área/prazo/protocolo/contexto, `t.solicId`; com hora, a fila do GCAL-BIDIRECIONAL leva pra Agenda Google **dentro do toque** (é quando o Google pode pedir consentimento sem o Safari barrar).
+- **Não achou negócio** → abre o **evento do Google já preenchido** (`gcalModalEvento`: título, dia, hora–hora+1, descrição da solicitação), sem criar tarefa em ninguém.
+- Nos dois casos a solicitação ganha o andamento **"Atividade agendada: dd/mm às hh — título"** na linha do tempo e, se estava **sem próximo passo, passa a ter** (título + dia).
+- Só na base dele: `novoOn('solic-agenda')`. Victor (com `solic-v2`) vê a V2 sem o 📅 até ele liberar.
+
+### Prova
+- Portão aberto (39 telas × 3 × 2, lpSelfCheck 0) · `--prova` OK · guard OK.
+- `teste-solic-agenda.mjs` **20/20** em 390 e 1280: 📅 nas linhas (44px no celular), folha preenchida, atividade criada no negócio + fila do Google + andamento, ficha → sem negócio → evento do Google preenchido e a solicitação ganha próximo passo, Victor sem o botão, console limpo. `teste-solic` 26/26 e `teste-ini-acomp` 24/24 seguem.
+- 2 invariantes novos.
+
+### Pendente dele
+- Liberar `solic-agenda` (e `ini-acomp`) pro Victor?
+
 ## 17/09/2026 (22ª onda) — INI-ACOMP-V1: cards de acompanhamento no Início · `solic-v2` liberado pro Victor (v7.80)
 
 Voz dele, logo depois do "pode subir" da v7.79: *"ajusta já essa solicitação pro Victor poder acompanhar. E vou ter um card no Início — tanto pras solicitações/pendências como pra parte de benefício — pra estar com ele na onda das tratativas, assim como já tem o de atraso."*

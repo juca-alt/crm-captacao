@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.80 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.81 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3803,6 +3803,13 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .ac-l1{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .ac-l1 b{min-width:0;overflow-wrap:anywhere}
   .ac-l2{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere;line-height:1.35}
   .ac-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  /* SOLIC-AGENDA-V1: folha de agendar e o 📅 da linha */
+  .so-ag{min-width:40px;min-height:40px;padding:0 8px;flex:0 0 auto}
+  @media(max-width:980px){ .so-ag{min-width:44px;min-height:44px} }   /* dedo */
+  .so-ag-l{display:block;font-size:12px;font-weight:600;margin-top:8px}
+  .so-ag-l input,.so-ag-l select{display:block;width:100%;margin-top:3px;font:inherit;padding:9px;border:1px solid var(--linha);border-radius:9px;min-height:44px;background:var(--fundo)}
+  .so-ag-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
+  @media(max-width:600px){ .so-ag-grid{grid-template-columns:1fr 1fr} .so-ag-grid .so-ag-l:first-child{grid-column:1/-1} }
   @media(hover:hover){ .ac-row:hover{background:#f6f8fb} }
   .so-l1,.so-l2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .so-l1 .so-nome{flex:1;min-width:140px;font-size:14px}
@@ -12054,8 +12061,68 @@ function soAbrirV2(s){
    <details class="bne-grp" data-sec="so-hist" ${bneSecAberta('so-hist')?'open':''} ontoggle="bneSecToggle('so-hist',this.open)"><summary><span class="bne-grp-t">🕓 Linha do tempo</span><span class="bne-grp-r">${evs.length} ${evs.length===1?'evento':'eventos'}</span><span class="bne-grp-c">▾</span></summary>
      <div style="padding:6px 0 10px">${evs.length?evs.map(ev).join(''):`<div style="font-size:12.5px;color:var(--muted)">Nenhum andamento registrado ainda${String(s.id).startsWith('loc_')?' — faça login pra gravar a linha do tempo':''}.</div>`}</div></details>
    ${lbl('Resultado / retorno final')}<textarea id="sof_res" rows="2" ${boSelectVivo()} style="width:100%;margin-top:3px">${esc(s.resultado||'')}</textarea>
-   <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-s btn-mini" onclick="soMostrarTexto(SO.itens.find(x=>String(x.id)==='${esc(String(s.id))}'))">📋 Ver texto</button><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="soSalvarFicha('${esc(String(s.id))}')">Salvar</button></div>`);
+   <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">${novoOn('solic-agenda')?`<button class="btn btn-p btn-mini" onclick="soAgendar('${esc(jsq(String(s.id)))}')" title="Cria a atividade e manda pra sua Agenda Google">📅 Agendar atividade</button>`:''}<button class="btn btn-s btn-mini" onclick="soMostrarTexto(SO.itens.find(x=>String(x.id)==='${esc(String(s.id))}'))">📋 Ver texto</button><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="soSalvarFicha('${esc(String(s.id))}')">Salvar</button></div>`);
 }
+/* ═══ SOLIC-AGENDA-V1 (17/09/2026): agendar atividade a partir da solicitação ═══════
+   Pedido dele (print da lista no iPhone): "permite que na área de solicitações/pendências eu já
+   gere uma tarefa/atividade jogando direto pro Google Agenda, como a gente já faz nos cards."
+   Regra do app: tarefa é sempre DE um contato (negócio). Então: achou o negócio do segurado →
+   nasce como atividade dele (tarCriar) e a fila do GCAL-BIDIRECIONAL leva pro Google; não achou →
+   abre o evento do Google já preenchido (gcalModalEvento). Nos dois casos a solicitação ganha o
+   andamento "atividade agendada" e, se estava sem próximo passo, passa a ter um. */
+function soContatoDe(s){
+  if(!s||typeof S==='undefined'||!Array.isArray(S.contatos)) return null;
+  const nk=normKey(s.segurado||''); if(!nk) return null;
+  const cands=(typeof cliNegociosDe==='function')?cliNegociosDe({nome:s.segurado||'',telefone:s.telefone||null}):[];
+  const lista=cands.length?cands:S.contatos.filter(c=>c&&normKey(c.nome||'')===nk);
+  if(!lista.length) return null;
+  return lista.find(c=>funilDe(c)==='bc')||lista[0];   /* cliente da base primeiro */
+}
+function soAgendaTitulo(s){ const prox=String(s.proxima_acao||'').trim(); if(prox) return prox; return 'Cobrar '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro')+' · '+soTipoRot(s.tipo); }
+function soAgendaDiaPadrao(s){ const hj=atHojeISO(); const p=(s.proxima_acao_prazo&&s.proxima_acao_prazo>=hj)?s.proxima_acao_prazo:null; const pe=soPrazoEfetivo(s); return p||((pe&&pe>=hj)?pe:isoAddDias(hj,1)); }
+function soAgendaNotas(s){ const pe=soPrazoEfetivo(s); return ['Solicitação · '+soTipoRot(s.tipo)+(s.apolice?' · apólice '+s.apolice:''), 'Com: '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro')+(pe?' · prazo '+atFmtBR(pe):''), s.protocolo?'Protocolo '+s.protocolo:'', String(s.contexto||'').trim()].filter(Boolean).join('\n'); }
+function soAgendarFechar(){ const b=document.getElementById('so-ag-bd'); if(b) b.remove(); }
+window.soAgendar=function(id){
+  const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return;
+  soAgendarFechar();
+  const c=soContatoDe(s);
+  const tipos=TAR_TIPOS.filter(t=>t[0]!=='reuniao'&&t[0]!=='proposta');
+  const destino=c?`vira atividade de <b>${esc(negTitulo(c)||c.nome)}</b> e sobe pra sua Agenda Google`:`sem negócio no funil pra <b>${esc(s.segurado||'—')}</b> — vai direto pra sua Agenda Google`;
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd mais-centro" id="so-ag-bd" onclick="if(event.target===this)soAgendarFechar()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-tit">📅 Agendar atividade · ${esc(s.segurado||'—')}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin:2px 0 6px">${destino}</div>
+      <label class="so-ag-l">O quê<input id="so-ag-tit" value="${esc(soAgendaTitulo(s))}"></label>
+      <div class="so-ag-grid">
+        <label class="so-ag-l">Tipo<select id="so-ag-tipo">${tipos.map(t=>`<option value="${t[0]}"${t[0]==='ligar'?' selected':''}>${t[1]} ${esc(t[2])}</option>`).join('')}</select></label>
+        <label class="so-ag-l">Dia<input id="so-ag-dia" type="date" value="${esc(soAgendaDiaPadrao(s))}"></label>
+        <label class="so-ag-l">Hora<input id="so-ag-hora" type="time" value="09:00"></label></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Com hora, entra como compromisso na Agenda. Sem hora, vira afazer do dia${c?' (e Tarefa do Google, se autorizado)':''}.</div>
+      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" style="flex:1;min-height:48px;justify-content:center" onclick="soAgendarFechar()">Cancelar</button><button class="btn btn-p" style="flex:2;min-height:48px;justify-content:center" onclick="soAgendarConfirmar('${esc(jsq(String(s.id)))}')">📅 Agendar</button></div>
+    </div></div>`);
+  setTimeout(()=>{ const i=document.getElementById('so-ag-tit'); if(i&&!window.matchMedia('(max-width:980px)').matches) i.focus(); },60);
+};
+window.soAgendarConfirmar=async function(id){
+  const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return;
+  const v=k=>{ const e=document.getElementById(k); return e?String(e.value||'').trim():''; };
+  const tit=v('so-ag-tit')||soAgendaTitulo(s), tipo=v('so-ag-tipo')||'ligar', dia=v('so-ag-dia'), hora=v('so-ag-hora');
+  if(!dia){ toast('Escolhe o dia'); return; }
+  const c=soContatoDe(s), notas=soAgendaNotas(s);
+  soAgendarFechar();
+  let como='';
+  if(c){ const t=tarCriar(c.id,tipo,tit,dia,hora,notas,60); if(!t){ toast('Não consegui criar a atividade',false); return; }
+    t.solicId=String(s.id); salvar();
+    if(hora&&typeof gsyncDrenar==='function') gsyncDrenar({gesto:true,avisar:true});   /* dentro do toque: é quando o Google pode pedir consentimento sem o Safari barrar */
+    como='atividade de '+(negTitulo(c)||c.nome); }
+  else { _GCAL_NEG=null; const ini=hora||'09:00', fim=gcalMin2Hhmm(gcalHhmm2Min(ini)+60);
+    gcalModalEvento({novo:true,summary:tit,description:notas+'\nCRM Life Planner',dia:dia,ini:ini,fim:fim,local:'',convidado:'',meet:false}); como='evento na Agenda Google'; }
+  await soEvento(s,'prazo','Atividade agendada: '+dataBR(dia)+(hora?' às '+hora:'')+' — '+tit+(c?'':' (direto na Agenda)'));
+  if(!String(s.proxima_acao||'').trim()) s.proxima_acao=tit;
+  if(!s.proxima_acao_prazo) s.proxima_acao_prazo=dia;
+  await soGravar(s);
+  if(document.getElementById('at-ov')) soAbrirV2(s); else if(VIEW==='solicitacoes') viewSolicitacoes(); else if(VIEW==='inicio') render();
+  toast('Agendado: '+dataBR(dia)+(hora?' às '+hora:'')+' · '+como,true);
+};
 window.soRegistrarAndamento=async function(id){ const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return;
   const v=k=>{ const e=$('#'+k); return e?(e.value||'').trim():''; }; const tx=v('sof_evtx'); if(!tx){ toast('Escreva o que aconteceu'); return; }
   await soEvento(s,v('sof_evt')||'contato',tx); await soGravar(s); soAbrirV2(s); toast('Andamento registrado',true); };
@@ -12092,7 +12159,7 @@ function viewSolicitacoesV2(){
   const linha=s=>{ const p=soPrazoEfetivo(s), v=soVencida(s,hj), d=soDiasAberta(s,hoje), st=soDiasSemToque(s,hoje), par=soParada(s,hoje);
     return `<div class="so-row${v?' venc':''}" onclick="soAbrir('${esc(String(s.id))}')">
       <div class="so-l1"><span class="so-dias" title="aberta há ${d} dias">${d}d</span><b class="so-nome">${esc(s.segurado)}</b>
-        <span class="badge ${s.status==='executada'?'b-verde':s.status==='cancelada'?'b-cinza':s.status==='sem_retorno'||v?'b-verm':s.status==='respondida'?'b-azul':'b-amarelo'}">${v&&soAberta(s)?'prazo passou':esc(soRot(SO_STATUS,s.status))}</span></div>
+        <span class="badge ${s.status==='executada'?'b-verde':s.status==='cancelada'?'b-cinza':s.status==='sem_retorno'||v?'b-verm':s.status==='respondida'?'b-azul':'b-amarelo'}">${v&&soAberta(s)?'prazo passou':esc(soRot(SO_STATUS,s.status))}</span>${novoOn('solic-agenda')&&soAberta(s)?`<button class="btn btn-s btn-mini so-ag" onclick="event.stopPropagation();soAgendar('${esc(jsq(String(s.id)))}')" title="Agendar atividade na Agenda Google">📅</button>`:''}</div>
       <div class="so-l2"><span class="so-tipo">${esc(soTipoRot(s.tipo))}</span><span class="so-area" title="com quem está">🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span class="so-prazo ${v?'verm':''}">⏳ ${p?atFmtBR(p):'—'}</span>${par?`<span class="so-par">🔇 ${st}d sem andamento</span>`:''}</div>
       <div class="so-l3">${s.proxima_acao?`➡️ ${esc(s.proxima_acao)}${s.proxima_acao_prazo?' <span style="color:var(--muted)">até '+esc(atFmtBR(s.proxima_acao_prazo))+'</span>':''}`:'<span style="color:var(--amarelo)">➡️ sem próximo passo — defina um</span>'} <span style="color:var(--muted)">· bola com ${esc(boRot(SO_BOLA,s.bola_com||'area'))}</span></div>
     </div>`; };
@@ -14296,6 +14363,7 @@ const NOVO_SO_MEU={
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
   /* 'solic-v2' — nasceu aqui em 17/09 e no MESMO DIA foi pra MODS com def:false, ligado pro Victor. Palavra dele: "ajusta já essa solicitação pro Victor poder acompanhar". */
   'ini-acomp':    {o:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o Victor na onda das tratativas', desde:'2026-09-17'},
+  'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return MODS[k]? modOn(k) : true;   /* não listado = liberado; se virou módulo em MODS, obedece ao mapa do usuário (pessoa a pessoa) */
@@ -17642,6 +17710,13 @@ function lpSelfCheck(){
             return /<b>1<\/b> em aberto/.test(h) && /prazo passou/.test(h) && /Fulano Teste/.test(h) && !/Beltrana/.test(h) && /data-ini="solic"/.test(h) && /<b>1<\/b> em regulação/.test(b) && /Sicrano Teste/.test(b) && !/Pago Teste/.test(b) && /data-ini="benef"/.test(b); })());
         ok('ini-acomp: os dois cards estão no Início logo depois do Agora, com nome no painel e chave de dobra', /\['solic',iniSolicBloco\(\)\],\['benef',iniBenefBloco\(\)\]/.test(String(viewInicio)) && !!PORD_NOMES.solic && !!PORD_NOMES.benef && ('solic' in INI_PADRAO) && ('benef' in INI_PADRAO));
         ok('acesso: chave que saiu do "só na minha base" e virou módulo em MODS obedece ao mapa de módulos do usuário (pessoa a pessoa)', (()=>{ const bak=PERFIL; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{'solic-v2':true}}; _escMemo=null; const a=novoOn('solic-v2'); PERFIL={email:'zz@teste',papel:'lp',modulos:{}}; _escMemo=null; const b=novoOn('solic-v2'); return a===true && b===false && !NOVO_SO_MEU['solic-v2'] && !!MODS['solic-v2'] && MODS['solic-v2'].def===false; } finally{ PERFIL=bak; _escMemo=null; } })());
+        /* SOLIC-AGENDA-V1 */
+        ok('solic-agenda: agendar da solicitação acha o negócio do segurado (nome escrito diferente), e sem negócio cai pro evento direto', (()=>{ if(!NOVO_SO_MEU['solic-agenda']) return false; const bak=S.contatos; try{
+            S.contatos=[normContato({id:'zzag1',nome:'Fulano Agenda Teste',funil:'bc',etapa:'PC',telefone:'81900000001'})];
+            const s1={id:'zzs1',segurado:'FULANO AGENDA TESTE',tipo:'boleto',area:'lm',aberta_em:'2026-09-01T09:00:00Z',status:'aberta'};
+            const s2={id:'zzs2',segurado:'Ninguem Assim Existe',tipo:'boleto',area:'lm',aberta_em:'2026-09-01T09:00:00Z',status:'aberta'};
+            const c=soContatoDe(s1); return !!c && String(c.id)==='zzag1' && soContatoDe(s2)===null && /Cobrar Assessoria \(LM\)/.test(soAgendaTitulo(s1)) && soAgendaDiaPadrao(s1)>=atHojeISO() && /Solicitação · /.test(soAgendaNotas(s1)); } finally{ S.contatos=bak; } })());
+        ok('solic-agenda: o 📅 está na ficha V2 e na linha da lista, e nasce só na base dele', /soAgendar\(/.test(String(soAbrirV2)) && /soAgendar\(/.test(String(viewSolicitacoesV2)) && /novoOn\('solic-agenda'\)/.test(String(soAbrirV2)) && typeof soAgendarConfirmar==='function');
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
       } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }
