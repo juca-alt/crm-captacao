@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.76 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.77 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -844,6 +844,18 @@
   .meta-in input{width:64px;border:1px solid var(--linha);border-radius:8px;padding:3px 6px;font-size:12px;text-align:center}
   .banner-homolog{background:var(--amarelo-bg);border-bottom:1px solid #e8d9b0;color:#7a5b07;font-size:12.5px;padding:7px 18px;display:flex;gap:10px;align-items:center}
   .banner-homolog button{margin-left:auto;border:1px solid #e0cf9f;background:#fff;border-radius:8px;padding:3px 10px;cursor:pointer;font-size:12px;color:#7a5b07}
+  /* NIVER-FEITO-V1: a linha do aniversariante em duas linhas fixas (nome · dados), ações na ponta */
+  .niv-row{position:relative;border-top:1px solid var(--linha);padding:8px 0;overflow:hidden;touch-action:pan-y}
+  .niv-in{display:flex;flex-direction:column;gap:4px;transition:transform .18s ease;background:var(--card,#fff)}
+  .niv-l1,.niv-l2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .niv-l1 .niv-nome{flex:1;min-width:120px;font-weight:600}
+  .niv-acts{display:flex;gap:6px;margin-left:auto;flex:0 0 auto}
+  .niv-acts .btn{min-height:34px;padding:4px 10px}
+  .niv-row.feito .niv-nome{text-decoration:line-through;color:var(--muted)}
+  /* o que aparece por trás quando arrasta: "✓ parabenizei" */
+  .niv-fundo{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;padding-right:16px;color:#157f4b;font-weight:800;font-size:13px;background:#e7f6ec;opacity:0;transition:opacity .15s}
+  .niv-row.arrastando .niv-fundo{opacity:1}
+  @media(max-width:980px){ .niv-acts .btn{min-height:44px;min-width:44px} }
   /* AVISO-VERSAO-V1: fica FORA do #main de propósito — o app redesenha o #main o
      tempo todo e o aviso não pode sumir no meio de uma navegação. */
   .ver-nova{position:fixed;z-index:60;right:16px;bottom:16px;max-width:calc(100vw - 32px);
@@ -2559,31 +2571,38 @@ function viewInicio(){
   /* NIVER-V2: o card lê o motor novo — todas as bases visíveis, quem passou há pouco,
      dedupe por pessoa e filtro por tipo/LP. */
   const bAniv=(()=>{
-    const todos=niverItens(31), l=niverFiltrar(todos);
+    const todos=niverItens(31), lTudo=niverFiltrar(todos);
     if(!todos.length && !(typeof cartVis==='function'&&cartVis().length)) return '';
+    /* NIVER-FEITO-V1: quem já foi parabenizado sai da lista (fica no chip "feitos") */
+    const podeFeito=novoOn('niver-feito');
+    const feitos=podeFeito? lTudo.filter(niverFeito) : [];
+    if(!feitos.length) NIVER_VER_FEITOS=false;   /* sem feitos, o modo "ver feitos" não tem o que mostrar — desliga sozinho */
+    const l=podeFeito&&!NIVER_VER_FEITOS ? lTudo.filter(p=>!niverFeito(p)) : lTudo;
     const nHoje=l.filter(x=>x.d===0), nPass=l.filter(x=>x.d<0), nSem=l.filter(x=>x.d>0&&x.d<=7), nMes=l.filter(x=>x.d>7);
     const resumo=nHoje.length?`${nHoje.length} hoje 🎉`:nPass.length?`${nPass.length} passou há pouco`:nSem.length?`${nSem.length} nos próximos 7 dias`:nMes.length?`${nMes.length} neste mês`:'nenhum nos próximos 31 dias';
     const selo=p=>(p.tipos||[]).map(t=>`<span class="badge ${t==='cliente'?'b-verde':t==='negocio'?'b-azul':'b-cinza'}" style="font-size:10px">${NIVER_TIPOS[t].ic} ${NIVER_TIPOS[t].l}</span>`).join(' ');
-    const linha=(p)=>{ const wa=niverMsgWa(p); const idade=mtIdade(p.nasc);
-      return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--linha);${p.abrir?'cursor:pointer':''}" ${p.abrir?`onclick="${p.abrir}"`:''}>
-        <span class="dias-tag ${diasTagCls(p.d<0?0:p.d)}">${esc(niverQuandoTxt(p.d))}</span>
-        <span style="flex:1;min-width:120px;font-weight:600">${esc(p.nome)}</span>
-        ${selo(p)}${(p.lps||[]).length?`<span class="badge b-cinza" style="font-size:10px" title="De qual carteira/base">👤 ${esc(p.lps.join(' · '))}</span>`:''}
-        <span style="font-size:12px;color:var(--muted)">🎂 ${esc(dataBR(p.nasc).slice(0,5))}${idade!=null?' · faz '+(p.d<0?idade:idade+1):''}</span>
-        ${p.tipo==='cliente'&&p.ref?`<button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(jsq(p.ref))}','aniversario')" title="Mensagem de aniversário (editável antes de enviar)">💬</button>`
-          :(wa?`<a class="btn btn-p btn-mini" style="text-decoration:none" target="_blank" rel="noopener" href="${esc(wa)}" onclick="event.stopPropagation()" title="Parabenizar no WhatsApp">💬</a>`:'')}</div>`; };
+    const linha=(p)=>{ const wa=niverMsgWa(p); const idade=mtIdade(p.nasc); const feito=podeFeito&&niverFeito(p); const nk=niverFeitoK(p);
+      const msg=p.tipo==='cliente'&&p.ref?`<button class="btn btn-p btn-mini" onclick="event.stopPropagation();msgProntaCarteira('${esc(jsq(p.ref))}','aniversario')" title="Mensagem de aniversário (editável antes de enviar)">💬</button>`
+          :(wa?`<a class="btn btn-p btn-mini" style="text-decoration:none" target="_blank" rel="noopener" href="${esc(wa)}" onclick="event.stopPropagation()" title="Parabenizar no WhatsApp">💬</a>`:'');
+      const chk=podeFeito?(feito?`<button class="btn btn-s btn-mini" onclick="event.stopPropagation();niverFeitoSet('${esc(jsq(nk))}',false)" title="Desfazer — voltar pra lista">↩︎</button>`
+                                 :`<button class="btn btn-s btn-mini" onclick="event.stopPropagation();niverFeitoSet('${esc(jsq(nk))}',true)" title="Já dei parabéns — marcar como feito (no celular, arraste a linha pro lado)">✓</button>`):'';
+      return `<div class="niv-row${feito?' feito':''}" data-nk="${esc(nk)}"><div class="niv-fundo">✓ parabenizei</div><div class="niv-in" ${p.abrir&&!feito?`onclick="${p.abrir}" style="cursor:pointer"`:''}>
+        <div class="niv-l1"><span class="dias-tag ${diasTagCls(p.d<0?0:p.d)}">${esc(niverQuandoTxt(p.d))}</span><span class="niv-nome">${esc(p.nome)}</span><span class="niv-acts">${feito?'':msg}${chk}</span></div>
+        <div class="niv-l2">${selo(p)}${(p.lps||[]).length?`<span class="badge b-cinza" style="font-size:10px" title="De qual carteira/base">👤 ${esc(p.lps.join(' · '))}</span>`:''}<span style="font-size:12px;color:var(--muted)">🎂 ${esc(dataBR(p.nasc).slice(0,5))}${idade!=null?' · faz '+(p.d<0?idade:idade+1):''}</span></div>
+      </div></div>`; };
     const grp=(t,arr)=>arr.length?`<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px">${t} · ${arr.length}</div>${arr.map(linha).join('')}`:'';
     const lps=[...new Set(todos.flatMap(p=>p.lps||[]))].sort();
     const cnt=t=>todos.filter(p=>p.tipos.includes(t)).length;
     const chip=(k,lbl,on)=>`<button class="cs-chip${on?' on':''}" onclick="event.stopPropagation();niverSetF('tipo','${k}')" style="font-size:11.5px">${lbl}</button>`;
     const filtros=`<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px" onclick="event.stopPropagation()">
         ${chip('','Todos',!NIVER_F.tipo)}${Object.keys(NIVER_TIPOS).map(t=>cnt(t)?chip(t,NIVER_TIPOS[t].ic+' '+NIVER_TIPOS[t].l+' '+cnt(t),NIVER_F.tipo===t):'').join('')}
+        ${feitos.length?`<button class="cs-chip${NIVER_VER_FEITOS?' on':''}" onclick="event.stopPropagation();niverVerFeitos(${NIVER_VER_FEITOS?'false':'true'})" style="font-size:11.5px" title="${NIVER_VER_FEITOS?'Esconder quem já foi parabenizado':'Mostrar quem já foi parabenizado (dá pra desfazer)'}">✓ ${feitos.length} feito${feitos.length>1?'s':''}</button>`:''}
         ${lps.length>1?`<select onchange="niverSetF('lp',this.value)" style="max-width:150px;min-height:34px;font-size:12px"><option value="">Todas as carteiras</option>${lps.map(x=>`<option value="${esc(x)}"${escLpNorm(NIVER_F.lp)===escLpNorm(x)?' selected':''}>👤 ${esc(x)}</option>`).join('')}</select>`:''}
       </div>`;
     const corpo=filtros+((nHoje.length||nPass.length||nSem.length||nMes.length)
       ? grp('🎉 Hoje',nHoje)+grp('Passou há pouco — ainda dá pra ligar',nPass)+grp('Próximos 7 dias',nSem)+grp('Ainda neste mês',nMes)
         +`<div style="margin-top:8px"><button class="btn btn-s btn-mini" onclick="irPara('lp-aniversario')">ver todos os aniversariantes</button></div>`
-      : `<div class="vazio" style="padding:14px">Nenhum aniversário nos próximos 31 dias${NIVER_F.tipo||NIVER_F.lp?' com esse filtro':''}. As datas dos clientes vêm da carteira (Subir relatório → Carteira de Clientes); as de lead e negócio, da data de nascimento na ficha da pessoa.</div>`);
+      : `<div class="vazio" style="padding:14px">${feitos.length&&!NIVER_VER_FEITOS?'Todos parabenizados ✓ — ':''}Nenhum aniversário nos próximos 31 dias${NIVER_F.tipo||NIVER_F.lp?' com esse filtro':''}. As datas dos clientes vêm da carteira (Subir relatório → Carteira de Clientes); as de lead e negócio, da data de nascimento na ficha da pessoa.</div>`);
     return iniBloco('aniv','🎂 Aniversariantes',resumo,corpo);
   })();
   const bNn=iniFunilBloco('funil-nn','Funil · Novos Negócios',lista,ETAPAS_FLUXO,ETAPAS_ENCERR,'nn-funil');
@@ -13477,6 +13496,61 @@ function niverItens(dias){
   });
   return [...m.values()].sort((a,b)=>a.d-b.d || a.nome.localeCompare(b.nome));
 }
+/* ═══ NIVER-FEITO-V1 (17/09/2026) ══════════════════════════════════════════════
+   Ele: "permitir que eu coloque os aniversários em que já dei parabéns como FEITO —
+   botão, ou arrastar pro lado como no e-mail, e ele dá baixa."
+   Chave = a mesma pessoa do card (niverChave) + o ANO: ano que vem ela volta.
+   Guarda local na hora (pra tela responder) e no banco em seguida (lp_niver_feito,
+   RLS por dono) — é o que faz o feito no iPhone valer no iPad. Sem login, fica local. */
+const NIVER_FEITO_CHAVE='crmlp_niver_feito_v1';
+let NIVER_FEITO=null, NIVER_VER_FEITOS=false;
+function niverFeitoLer(){ if(NIVER_FEITO) return NIVER_FEITO; try{ NIVER_FEITO=JSON.parse(localStorage.getItem(NIVER_FEITO_CHAVE)||'{}')||{}; }catch(_){ NIVER_FEITO={}; } return NIVER_FEITO; }
+function niverFeitoGravar(){ try{ localStorage.setItem(NIVER_FEITO_CHAVE,JSON.stringify(niverFeitoLer())); }catch(_){} }
+function niverAnoDe(d){ const h=new Date(); if(d<0&&h.getMonth()===0&&h.getDate()<=NIVER_ANTES) return h.getFullYear()-1; return h.getFullYear(); }  /* virada do ano: "foi ontem" em 1/jan é do ano anterior */
+function niverFeitoK(p){ return niverAnoDe(p.d)+'|'+niverChave(p); }
+function niverFeito(p){ return !!niverFeitoLer()[niverFeitoK(p)]; }
+function niverMarcar(p, feito){
+  const st=niverFeitoLer(), k=niverFeitoK(p);
+  if(feito) st[k]=hojeISO(); else delete st[k];
+  niverFeitoGravar();
+  /* banco, sem travar a tela; se falhar, o local segue valendo e o próximo marcar tenta de novo */
+  if(sb&&logado()){ const [ano,chave]=[k.slice(0,4),k.slice(5)]; const dono=escEu()||undefined;
+    (feito? sb.from('lp_niver_feito').upsert({dono,chave,ano:Number(ano),nome:String(p.nome||'').slice(0,80)},{onConflict:'dono,chave,ano'})
+          : sb.from('lp_niver_feito').delete().match({dono,chave,ano:Number(ano)}))
+      .then(r=>{ if(r&&r.error) console.warn('lp_niver_feito',r.error); }).catch(e=>console.warn('lp_niver_feito',e)); }
+}
+async function niverFeitoCarregar(){
+  if(!sb||!logado()) return;
+  try{ const ano=new Date().getFullYear();
+    const {data,error}=await sb.from('lp_niver_feito').select('chave,ano,feito_em').in('ano',[ano-1,ano]);
+    if(error) throw error;
+    const st=niverFeitoLer(); (data||[]).forEach(r=>{ st[r.ano+'|'+r.chave]=String(r.feito_em||'').slice(0,10)||hojeISO(); });
+    niverFeitoGravar();
+  }catch(e){ console.warn('lp_niver_feito indisponível → só o local',e); }
+}
+/* UI */
+window.niverFeitoSet=function(nk,feito){
+  const p=niverItens(31).find(x=>niverFeitoK(x)===nk); if(!p) return;
+  niverMarcar(p,!!feito);
+  if(feito) toastDesfazer('✓ '+String(p.nome||'').split(' ')[0]+' parabenizado',()=>{ niverMarcar(p,false); render(); });
+  render();
+};
+window.niverVerFeitos=function(v){ NIVER_VER_FEITOS=!!v; render(); };
+/* arrastar pro lado = feito (celular). Delegado no documento: as linhas nascem e morrem a cada render. */
+(function niverSwipe(){
+  if(!('ontouchstart' in window)) return;
+  let a=null;
+  document.addEventListener('touchstart',e=>{ if(e.touches.length!==1) return; const row=e.target.closest('.niv-row'); if(!row||row.classList.contains('feito')) return;
+    const t=e.touches[0]; a={row,x:t.clientX,y:t.clientY,dx:0,ativo:false}; },{passive:true});
+  document.addEventListener('touchmove',e=>{ if(!a) return; const t=e.touches[0]; const dx=t.clientX-a.x, dy=t.clientY-a.y;
+    if(!a.ativo){ if(Math.abs(dy)>Math.abs(dx)||Math.abs(dx)<10) return; a.ativo=true; a.row.classList.add('arrastando'); }
+    a.dx=Math.min(0,dx); const inr=a.row.querySelector('.niv-in'); if(inr) inr.style.transform='translateX('+a.dx+'px)'; },{passive:true});
+  const fim=()=>{ if(!a) return; const {row,dx,ativo}=a; a=null; if(!ativo) return;
+    const inr=row.querySelector('.niv-in'); row.classList.remove('arrastando');
+    if(dx<=-80){ if(inr) inr.style.transform='translateX(-110%)'; setTimeout(()=>niverFeitoSet(row.getAttribute('data-nk'),true),160); }
+    else if(inr) inr.style.transform=''; };
+  document.addEventListener('touchend',fim,{passive:true}); document.addEventListener('touchcancel',fim,{passive:true});
+})();
 const NIVER_TIPOS={cliente:{ic:'🛡',l:'Cliente'}, negocio:{ic:'🎯',l:'Negócio'}, lead:{ic:'📇',l:'Lead'}};
 let NIVER_F={tipo:'', lp:''};   /* filtro do card, por aparelho na sessão */
 function niverFiltrar(l){ return (l||[]).filter(p=>
@@ -13986,6 +14060,7 @@ const MODS={
 const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
+  'niver-feito':  {o:'Aniversariantes: marcar "parabenizei" (botão ou arrasto), lembrado entre aparelhos', desde:'2026-09-17'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return true;                  /* não listado = já liberado (o que estava no ar continua) */
@@ -14150,6 +14225,7 @@ async function perfilCarregar(){
     PERFIL.email=email; PERFIL.nome=md.full_name||md.name||md.nome||(email.split('@')[0].replace(/[._-]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase()));
     if(!DELEG.eu){ try{ await delegCarregar(); }catch(_){} if(contaConferir(email)) return; }   /* v7.35.1: delegações rodaram sem sessão → refaz agora que há e-mail; CONTA-TROCOU-V3 confere aqui também */
     setTimeout(()=>{ try{ varDiariaSeNecessario(); }catch(_){} },4000);
+    try{ niverFeitoCarregar().then(()=>{ if(VIEW==='inicio'&&typeof render==='function') render(); }); }catch(_){}   /* NIVER-FEITO-V1 */
   }catch(e){ console.warn('lp_perfis: sem perfil remoto → defaults',e); }
 }
 function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) b.style.display=logado()?'':'none'; }catch(_){}
@@ -17283,6 +17359,26 @@ function lpSelfCheck(){
         ok('dobra: nenhum details com "open" LITERAL sobrou no código — abrir só por escolha gravada (vale pro futuro)',
            (()=>{ const re=/<details(?:\s+class="[^"]*")?\s+open[\s>]/; return ![...document.scripts].some(s=>re.test(s.textContent||'')); })());
       } finally{ try{ if(_bne===null) localStorage.removeItem(BNE_SEC_CHAVE); else localStorage.setItem(BNE_SEC_CHAVE,_bne); }catch(_){} PERFIL=_p; }
+    }
+    /* ═══ NIVER-FEITO-V1 (17/09) ═══ */
+    { const _c=CART.clientes, _s=S.contatos, _b=BN.contatos, _f={...NIVER_F}, _nf=NIVER_FEITO, _ls=(()=>{ try{ return localStorage.getItem(NIVER_FEITO_CHAVE); }catch(_){ return null; } })(), _p=PERFIL, _v=NIVER_VER_FEITOS;
+      try{
+        NIVER_FEITO={}; NIVER_VER_FEITOS=false; PERFIL=null;
+        const hj=new Date(), iso=dd=>{ const d=new Date(hj); d.setDate(d.getDate()+dd); return '1990-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+        CART.clientes=[{ref:'nf1',nome:'Fulano Aniversario',nascimento:iso(0),celular:'81999990001',lp:'Gustavo',cob:{}},{ref:'nf2',nome:'Beltrana Ontem',nascimento:iso(-1),celular:'81999990002',lp:'Gustavo',cob:{}}];
+        S.contatos=[]; BN.contatos=[]; NIVER_F={tipo:'',lp:''};
+        const l=niverItens(31), p=l.find(x=>x.nome==='Fulano Aniversario');
+        ok('niver-feito: chave = ano + pessoa (ano que vem ela volta pra lista)', !!p && niverFeitoK(p)===new Date().getFullYear()+'|'+niverChave(p));
+        ok('niver-feito: antes de marcar, ninguém está feito', !niverFeito(p));
+        niverMarcar(p,true);
+        ok('niver-feito: marcar → fica feito (o card filtra quem está feito, chip "feitos" mostra)', niverFeito(p) && String(viewInicio).includes('lTudo.filter(p=>!niverFeito(p))'));
+        NIVER_FEITO=null; ok('niver-feito: o feito sobrevive ao recarregar (localStorage)', niverFeito(p));
+        niverMarcar(p,false); ok('niver-feito: desfazer volta', !niverFeito(p));
+        ok('niver-feito: a linha do card tem a chave (data-nk), ✓, e o arrasto pro lado está ligado no documento',
+           (()=>{ const f=String(viewInicio); return f.includes('data-nk=') && f.includes("niverFeitoSet('${esc(jsq(nk))}',true)") && /niv-fundo/.test(f) && typeof niverFeitoSet==='function'; })());
+        ok('niver-feito: nasce só na base dele — outro LP não vê o ✓', (()=>{ PERFIL={email:'outro@x.com',papel:'lp',modulos:{}}; const a=novoOn('niver-feito'); PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; const b=novoOn('niver-feito'); return a===false&&b===true; })());
+        ok('niver-feito: o banco só entra logado; deslogado fica local (e o app não quebra)', String(niverMarcar).includes('sb&&logado()') && String(niverFeitoCarregar).includes('!sb||!logado()'));
+      } finally{ CART.clientes=_c; S.contatos=_s; BN.contatos=_b; NIVER_F=_f; NIVER_FEITO=_nf; NIVER_VER_FEITOS=_v; PERFIL=_p; try{ if(_ls===null) localStorage.removeItem(NIVER_FEITO_CHAVE); else localStorage.setItem(NIVER_FEITO_CHAVE,_ls); }catch(_){} }
     }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;

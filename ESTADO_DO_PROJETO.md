@@ -2,6 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 17/09/2026 (20ª onda) — NIVER-FEITO-V1: "parabenizei → feito", por botão ou arrasto (v7.77)
+
+Print dele do card de aniversariantes no iPhone: *"permitir que eu coloque os aniversários em que já dei parabéns como feito. Botão, ou tipo o e-mail, arrasta pro lado e dá baixa. Começa a ficar melhor a usabilidade."*
+
+### O que entrou
+- **✓ em cada linha** (desktop e celular) e, no celular, **arrastar a linha pro lado** (≥80px) mostra "✓ parabenizei" e dá baixa. Arrasto curto volta pro lugar. Toast com **desfazer**.
+- Quem está feito **some da lista**; um chip **"✓ N feitos"** mostra os feitos (riscados, com ↩︎ pra desfazer). Sem feitos, o chip some e o modo desliga sozinho.
+- **Lembrado entre aparelhos:** grava local na hora e no banco em seguida — tabela nova **`lp_niver_feito`** (dono, chave da pessoa, ano; RLS por dono, espelho da `lp_dup_fila`). Chave = a mesma pessoa do card (8 últimos dígitos do telefone ou nome) **+ ano**: ano que vem ela volta. Deslogado fica local; falha no banco não trava a tela.
+- **Linha do card refeita** em duas linhas fixas (nome + ações · selos + 🎂) — antes o 💬 caía sozinho numa terceira linha como um quadrado de 44px.
+- Nasce sob a regra de 16/09: `novoOn('niver-feito')` — **só ele vê**.
+
+**Provas:** migração aplicada em produção · 8 invariantes · teste como usuário **16/16** em 390 e 1280 (✓ some · chip mostra e desfaz · arrasto de 120px marca · arrasto de 40px não · outro LP não vê · console limpo) · portão verde.
+
 ## 16/09/2026 (19ª onda) — DOBRA-FECHADA-V1: todo bloco dobrável nasce fechado (v7.75)
 
 Print dele da gaveta do negócio, tudo expandido: *"toda vez que abro o card ele já vem expandido… pra consultar algo tenho que ir recolhendo cada um. Ajuste esse card e assume essa regra para TODOS os itens expansíveis ou retráteis, os de agora e os do futuro: ao abrir a tela, vir já encolhido. O usuário que vai abrindo cada tópico que quiser. Fluidez e menos fricção."*
