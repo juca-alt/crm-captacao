@@ -2,6 +2,36 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 17/09/2026 (21ª onda) — SOLIC-V2: acompanhamento de solicitações e pendências, com prazo por área (v7.79)
+
+Pedido dele por voz: *"módulo de acompanhamento de solicitações e pendências — o que entrou, o que está sendo tratado, os próximos passos, o tempo que está a solicitação, os prazos de cada área — até pra colocar o Victor como assistente nesse fluxo."* Exemplos dele: erro no fluxo de cobrança de uma cliente; benefício/app de cashback que não aparece pra outra.
+
+### Diagnóstico antes de construir
+- O módulo **Solicitações já existia** (tabela `solicitacoes`, RLS com `lp_donos_visiveis()` → o Victor já enxerga e grava pela delegação), mas estava magro: 3 linhas em prod, todas `alt_pag`/aberta de 02/09, nunca atualizadas. Sem área, sem prazo, sem linha do tempo, sem próximo passo.
+- Decisão: **evoluir, não recriar.** Tudo atrás de `novoOn('solic-v2')` → só na base dele; Daniel/Victor seguem vendo a tela antiga (tabela), sem menu morto.
+
+### O que entrou (banco — migration `solicitacoes_v2_acompanhamento.sql`, aplicada em prod 17/09, idempotente)
+- `solicitacoes` ganha `area`, `prazo_area_dias` (gravado no dia da abertura — mudar a régua depois não reescreve o passado), `proxima_acao`, `proxima_acao_prazo`, `bola_com` (nos | cliente | area), `ultimo_toque_em`, `encerrada_em`. Caíram os CHECKs fixos de `tipo`/`frente` (vocabulário passa a viver no app).
+- Tabela nova **`solicitacao_eventos`** (linha do tempo: abertura | contato | retorno | protocolo | prazo | status | nota), espelho da `beneficio_eventos`, RLS `lp_donos_visiveis()`.
+
+### O que entrou (app)
+- **Vocabulário novo de tipos** (`SO_TIPOS_V2`): erro no fluxo de cobrança, benefício/app não aparece, alteração de pagamento, postecipar, boleto, alteração de dados, anexar, reabilitação, consulta de valor, 2ª via, reclamação, outro.
+- **Régua de prazos por área** (`SO_AREAS`): Assessoria (LM) 3d · Prudential Atendimento 5d · Cobrança 7d · Benefícios/App 10d · Subscrição 15d · Sinistro 30d · Outro 7d. Escolher a área na abertura preenche o prazo sozinho (editável). ⚠️ Régua **chutada por mim** — ele ajusta em `SO_AREAS` quando tiver os prazos reais.
+- **Lista V2** com 4 lentes clicáveis: **Em aberto · Prazo passou · Paradas (3d+ sem andamento) · Sem próximo passo**; filtro por área; linha em 3 níveis (dias em aberto + segurado + status · tipo + área + prazo + "Nd sem andamento" · próximo passo + bola com). Vencidas primeiro. Régua de áreas no rodapé.
+- **Ficha V2**: 4 KPIs (Aberta há · Com <área> até <prazo> · Último andamento · Bola com) e 3 blocos dobráveis que **nascem fechados**: Próximo passo (texto, até quando, bola com, área, protocolo, status), **Registrar andamento** (tipo + texto → evento + zera "último andamento") e **Linha do tempo**.
+- **Salvar escreve o andamento sozinho:** mudou status/próximo passo/bola/área/protocolo → vira evento na linha do tempo sem ele precisar redigitar. `executada`/`cancelada` grava `encerrada_em`.
+- **Início · Agora:** "N solicitações em acompanhamento", urgência 1 quando há prazo estourado ou parada.
+- **Card do cliente (gaveta do negócio, Base, Carteira):** "📨 N solicitações em acompanhamento · prazo estourado" com botão **ver** (casa por nome normalizado ou nº de apólice).
+- 11 invariantes novos no `lpSelfCheck`.
+
+### Prova
+- Portão aberto (39 telas × 375/1024/1280 × cheia/vazia, lpSelfCheck 0), `--prova` acusou o defeito, guard do choke point OK.
+- Teste como usuário 390 e 1280 (`teste-solic.mjs`): 26/26 — lentes, ficha, registrar andamento, salvar com evento automático, encerrar, Agora, card do cliente, outro LP vê a tela antiga, console limpo. ⚠️ Lição: `innerText` não lê `<details>` fechado — teste de tela com dobra fechada usa `textContent`.
+
+### Pendente dele
+- **Liberar `solic-v2` pro Victor (e Daniel)?** Hoje só na base dele (🧪). Pro Victor virar assistente do fluxo, é tirar a chave de `NOVO_SO_MEU` (ou `MODS` com `def:false` e ligar por usuário).
+- Ajustar a régua real de prazos por área.
+
 ## 17/09/2026 (20ª onda) — NIVER-FEITO-V1: "parabenizei → feito", por botão ou arrasto (v7.77)
 
 Print dele do card de aniversariantes no iPhone: *"permitir que eu coloque os aniversários em que já dei parabéns como feito. Botão, ou tipo o e-mail, arrasta pro lado e dá baixa. Começa a ficar melhor a usabilidade."*

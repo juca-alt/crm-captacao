@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.78 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.79 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2359,6 +2359,11 @@ function inicioAgora(){
     const bfVenc=bfa.filter(r=>bfExigVencidas(r,hj).length).length, bfPar=bfa.filter(r=>bfParado(r)).length, bfPrazo=bfa.filter(r=>r.proxima_acao_prazo&&r.proxima_acao_prazo<=hj).length;
     const bfSub=[bfVenc?bfVenc+' exigência'+(bfVenc===1?' vencida':'s vencidas'):'', bfPar?bfPar+' parado'+(bfPar===1?'':'s')+' há '+BF_PARADO_DIAS+'d+':'', bfPrazo?bfPrazo+' com ação pra hoje ou atrasada':''].filter(Boolean).join(' · ')||'documentos, exigências e diário em dia';
     push('benef','🩹',bfa.length,'benefício em regulação','benefícios em regulação',bfSub,"irPara('beneficios')",(bfVenc||bfPar||bfPrazo)?1:2); }
+  /* SOLIC-V2: solicitação com prazo da área estourado ou parada é acompanhamento do dia */
+  if(novoOn('solic-v2')&&typeof SO!=='undefined'&&SO.itens){ const hj=hojeISO(), hjl=atHojeLocal(); const sab=SO.itens.filter(escLinhaOk).filter(soAberta);
+    const sv=sab.filter(s=>soVencida(s,hj)).length, sp=sab.filter(s=>soParada(s,hjl)).length;
+    push('solic','📨',sab.length,'solicitação em acompanhamento','solicitações em acompanhamento',
+      [sv?sv+' com prazo estourado':'', sp?sp+' parada'+(sp===1?'':'s')+' há '+SO_PARADA_DIAS+'d+':''].filter(Boolean).join(' · ')||'todas em dia',"irPara('solicitacoes')",(sv||sp)?1:2); }
   const venc=vivos.filter(c=>prevVencida(prevDe(c,'fech')));
   push('venc','🎯',venc.length,'fechamento vencido','fechamentos vencidos',
        'a previsão passou — renegociar a data',"FUN_LENTE.nn='vencido';irPara('nn-funil')",2);
@@ -3746,6 +3751,26 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   /* o dinheiro fica numa coluna só: sem min-width a etapa empurrava cada valor pra
      uma posição diferente e a coluna de PA saía serrilhada. */
   .cs-lin .pa{font-weight:800;white-space:nowrap;margin-left:auto;flex:0 0 auto;min-width:96px;text-align:right}
+  /* SOLIC-V2: linha da solicitação em 3 faixas (quem · com quem/prazo · próximo passo) e a ficha */
+  .so-row{padding:10px 0;border-top:1px solid var(--linha);cursor:pointer}
+  .so-row:first-child{border-top:0}
+  .so-row.venc{background:linear-gradient(90deg,#fff5f5 0,transparent 60%)}
+  .so-l1,.so-l2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .so-l1 .so-nome{flex:1;min-width:140px;font-size:14px}
+  .so-dias{font-size:12px;font-weight:800;color:var(--muted);min-width:34px}
+  .so-l2{font-size:12px;color:var(--muted);margin-top:3px}
+  .so-prazo.verm,.so-par{color:var(--verm);font-weight:700}
+  .so-l3{font-size:12.5px;margin-top:4px}
+  .so-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+  .so-k{background:#f8fafc;border:1px solid var(--linha);border-radius:10px;padding:8px 10px}
+  .so-k .lbl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+  .so-k .num{font-size:18px;font-weight:800;white-space:nowrap}
+  .so-k .sub{font-size:11px;color:var(--muted)}
+  .so-k.verm{border-color:#f3c9c9;background:#fff5f5} .so-k.amar{border-color:#f3e2b0;background:#fffbeb}
+  .so-ev{display:grid;grid-template-columns:110px 1fr;gap:2px 8px;padding:6px 0;border-top:1px solid var(--linha);font-size:12.5px}
+  .so-ev-q{color:var(--muted);font-size:11.5px} .so-ev-t{grid-column:2} .so-ev-a{grid-column:2;font-size:11px;color:var(--muted)}
+  .so-ev .badge{grid-column:2;justify-self:start}
+  @media(max-width:980px){ .so-kpis{grid-template-columns:repeat(2,minmax(0,1fr))} .so-ev{grid-template-columns:1fr} .so-ev-t,.so-ev-a,.so-ev .badge{grid-column:1} }
   /* mesma doença do KPI: no celular "R$" descia de linha e o número ficava embaixo.
      Só as colunas de número travam; o nome do funil continua podendo quebrar. */
   .cs-tab td:not(:first-child),.cs-tab th:not(:first-child){white-space:nowrap}
@@ -4565,6 +4590,9 @@ function cliCardHtml(d,opts){
     ${!carteira&&d.cli?cliCarteiraResumoHtml(d):''}
     ${atras?`<div style="font-size:12.5px;color:var(--verm);font-weight:600;margin-bottom:6px">⏰ ${d.atrasos.slice(0,3).map(a=>esc(a.apolice)+' · '+(a.dias_atraso!=null?a.dias_atraso+'d':'—')).join(' · ')}${atras>3?` +${atras-3}`:''} — resolver antes de oferecer coisa nova.</div>`:''}
     ${d.emissoes.map(emLinha).join('')}
+    ${(()=>{ if(!novoOn('solic-v2')||typeof SO==='undefined') return ''; const nome=normKey((d.cli&&d.cli.nome)||(d.pessoa&&d.pessoa.nome)||''); const aps=new Set((d.aps||[]).map(a=>String(a.apolice||'').replace(/\D/g,'')).filter(Boolean));
+        const abertas=(SO.itens||[]).filter(escLinhaOk).filter(soAberta).filter(s=>(nome&&normKey(s.segurado)===nome)||(s.apolice&&aps.has(String(s.apolice).replace(/\D/g,''))));
+        return abertas.length?`<div class="cli-linha"><span>📨 <b>${abertas.length}</b> solicitação${abertas.length===1?'':'ões'} em acompanhamento${abertas.some(s=>soVencida(s))?' · <b style="color:var(--verm)">prazo estourado</b>':''}</span><button class="btn btn-s btn-mini" onclick="event.stopPropagation();FSO.q='${esc(jsq((d.cli&&d.cli.nome)||(d.pessoa&&d.pessoa.nome)||''))}';irPara('solicitacoes')">ver</button></div>`:''; })()}
     ${carteira?(d.negocios.length?d.negocios.map(negLinha).join(''):`<div style="font-size:12.5px;color:var(--muted)">Nenhum negócio aberto no funil para esta pessoa.</div>`):''}
     ${!carteira&&d.cli&&!d.cobDetalhe?`<div style="font-size:11.5px;color:var(--muted);margin-top:4px">A carga da carteira não traz o detalhe de coberturas — o app não diz o que falta.</div>`:''}
     ${!carteira&&d.gaps.length?`<div style="margin-top:4px;font-size:12px;color:var(--muted)">💡 Sem: ${d.gaps.map(([k,l])=>`<span class="badge b-amarelo">${l}</span>`).join(' ')}</div>`:''}
@@ -11810,20 +11838,72 @@ function viewLpPendencias(){
    OBRIGATÓRIO (item 4 da spec), sem improviso. */
 const SO_TABLE='solicitacoes', SO_CHAVE='crmlp_solicitacoes_v1';
 let SO={itens:[]}; let SO_REMOTE=false, SO_EMAIL='';
-let FSO={status:'aberta',q:''};
+let FSO={status:'aberta',q:'',area:''};
 const SO_SEM_RETORNO_DIAS=3;   /* régua de cobrança do Victor — vai mudar */
 const SO_TIPOS=[['postecipar','postecipar'],['alt_pag','ALT PAG'],['alt_dados','alteração de dados'],['boleto','boleto'],['anexar','anexar'],['beneficio','benefício'],['reabilitacao','reabilitação'],['consulta_valor','consulta de valor'],['outro','outro']];
 const SO_STATUS=[['aberta','Aberta'],['respondida','Respondida'],['executada','Executada'],['sem_retorno','Sem retorno'],['cancelada','Cancelada']];
+/* ═══ SOLIC-V2 · ACOMPANHAMENTO (17/09/2026) ═══════════════════════════════════
+   Ele: "preciso de um módulo de acompanhamento de solicitações e pendências — cliente
+   com erro no fluxo de cobrança, cliente cujo app de benefício (cashback) não aparece;
+   abro ticket na Prudential e preciso acompanhar: o que entrou, o que está sendo
+   tratado, os próximos passos, o tempo que está, os prazos de cada área. Até pra
+   colocar o Victor como assistente nesse fluxo."
+   O módulo Solicitações JÁ existia (3 registros, só "ALT PAG", sem andamento). Aqui ele
+   ganha o que faltava, em cima da mesma tabela — o RLS com delegação já deixa o Victor
+   ver e gravar. Vocabulário e régua vivem AQUI (o banco largou as travas fixas). */
+const SO_TIPOS_V2=[['cobranca_erro','erro no fluxo de cobrança'],['alt_pag','alteração de pagamento'],['postecipar','postecipar'],['boleto','boleto'],
+  ['beneficio_app','benefício / app não aparece'],['beneficio','benefício (sinistro)'],['alt_dados','alteração de dados'],['anexar','anexar documento'],
+  ['reabilitacao','reabilitação'],['consulta_valor','consulta de valor'],['segunda_via','2ª via / documento'],['reclamacao','reclamação do cliente'],['outro','outro']];
+const SO_FRENTES=[['atraso','Atraso'],['emissao','Emissão'],['cliente','Cliente da carteira'],['outro','Outro']];
+/* PRAZO POR ÁREA — dias corridos. Régua inicial dele pra ajustar conforme a vida real;
+   o prazo do dia da abertura fica GRAVADO na solicitação (mudar a régua não reescreve o passado). */
+const SO_AREAS=[
+  ['lm',                     'Assessoria (LM)',            3],
+  ['prudential_atendimento', 'Prudential · Atendimento',   5],
+  ['prudential_cobranca',    'Prudential · Cobrança',      7],
+  ['prudential_beneficios',  'Prudential · Benefícios/App',10],
+  ['prudential_subscricao',  'Prudential · Subscrição',   15],
+  ['prudential_sinistro',    'Prudential · Sinistro',     30],
+  ['outro',                  'Outro',                      7]];
+const SO_BOLA=[['nos','Nós (Gustavo/Victor)'],['area','A área'],['cliente','O cliente']];
+const SO_EV_TIPOS=[['contato','Contato / cobrança'],['retorno','Retorno da área'],['protocolo','Protocolo'],['prazo','Prazo'],['status','Status'],['nota','Nota']];
+const SO_PARADA_DIAS=3;    /* sem andamento há N dias = "parada" */
+function soAreaDias(a){ const o=SO_AREAS.find(x=>x[0]===a); return o?o[2]:7; }
+function soTipoRot(t){ return boRot(SO_TIPOS_V2.concat(SO_TIPOS),t); }
+function soAberta(s){ return s&&(s.status==='aberta'||s.status==='sem_retorno'||s.status==='respondida'); }   /* respondida ainda não é resolvida */
+function soDiasAberta(s,hoje){ if(!s||!s.aberta_em) return 0; const fim=s.encerrada_em?atParseISO(String(s.encerrada_em).slice(0,10)):(hoje||atHojeLocal()); return Math.max(0,Math.round((fim-atParseISO(String(s.aberta_em).slice(0,10)))/864e5)); }
+/* prazo efetivo: o digitado; senão, abertura + prazo da área */
+function soPrazoEfetivo(s){ if(s.prazo) return s.prazo; const d=atParseISO(String(s.aberta_em||'').slice(0,10)); if(!d) return null; d.setDate(d.getDate()+(s.prazo_area_dias||soAreaDias(s.area))); return d.toISOString().slice(0,10); }
+function soVencida(s,hojeISO){ const p=soPrazoEfetivo(s); return !!(soAberta(s)&&p&&p<(hojeISO||atHojeISO())); }
+function soDiasSemToque(s,hoje){ const u=s.ultimo_toque_em||s.aberta_em; if(!u) return 0; return Math.max(0,Math.round(((hoje||atHojeLocal())-atParseISO(String(u).slice(0,10)))/864e5)); }
+function soParada(s,hoje){ return soAberta(s)&&soDiasSemToque(s,hoje)>=SO_PARADA_DIAS; }
+function soMuda(s){ return soAberta(s)&&!String(s.proxima_acao||'').trim(); }   /* sem próximo passo escrito */
+/* linha do tempo: filha em solicitacao_eventos (espelho da beneficio_eventos) */
+let SO_EV={};   /* solicitacao_id → [eventos] */
+async function soEventosCarregar(){ SO_EV={}; if(!SO_REMOTE||!sb) return;
+  try{ const {data,error}=await sb.from('solicitacao_eventos').select('*').order('ocorrido_em'); if(error) throw error;
+    (data||[]).forEach(e=>{ (SO_EV[String(e.solicitacao_id)]=SO_EV[String(e.solicitacao_id)]||[]).push(e); }); }
+  catch(e){ console.warn('solicitacao_eventos indisponível',e); } }
+function soEventos(s){ return SO_EV[String(s.id)]||[]; }
+async function soEvento(s,tipo,texto){
+  texto=String(texto||'').trim(); if(!texto) return null;
+  const ev={ id:'loc_'+uid(), solicitacao_id:s.id, ocorrido_em:new Date().toISOString(), autor:soQuemSou(), tipo:tipo||'nota', texto };
+  (SO_EV[String(s.id)]=SO_EV[String(s.id)]||[]).push(ev);
+  s.ultimo_toque_em=ev.ocorrido_em;
+  if(SO_REMOTE&&sb&&!String(s.id).startsWith('loc_')){ try{ const {data,error}=await sb.from('solicitacao_eventos').upsert([{solicitacao_id:s.id,lp_email:s.lp_email||SO_EMAIL||undefined,ocorrido_em:ev.ocorrido_em,autor:ev.autor,tipo:ev.tipo,texto:ev.texto}]).select('id'); if(error) throw error; if(data&&data[0]) ev.id=data[0].id; }
+    catch(e){ console.warn('solicitacao_eventos gravar',e); toast('Andamento salvo só neste aparelho (falha no servidor)',false); } }
+  return ev;
+}
 const SO_CONTATO=[['lm','LM'],['gustavo','Gustavo'],['ninguem','ninguém por ora']];
 function soRot(opts,v){ return boRot(opts,v); }
 async function soRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ SO_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
 async function soCarregar(){
   SO_REMOTE=await soRemoteOn();
-  if(SO_REMOTE){ try{ const {data,error}=await sb.from(SO_TABLE).select('*').order('aberta_em',{ascending:false}); if(error) throw error; SO.itens=(data||[]).filter(escLinhaOk); soSalvarLocal(); return; }   /* ESCOPO na porta */catch(e){ console.warn('SO load remoto falhou → local',e); SO_REMOTE=false; } }
+  if(SO_REMOTE){ try{ const {data,error}=await sb.from(SO_TABLE).select('*').order('aberta_em',{ascending:false}); if(error) throw error; SO.itens=(data||[]).filter(escLinhaOk); soSalvarLocal(); await soEventosCarregar(); return; }   /* ESCOPO na porta */catch(e){ console.warn('SO load remoto falhou → local',e); SO_REMOTE=false; } }
   try{ const raw=localStorage.getItem(SO_CHAVE); if(raw){ const o=JSON.parse(raw); SO.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
 }
 function soSalvarLocal(){ try{ localStorage.setItem(SO_CHAVE,JSON.stringify(SO)); }catch(e){} }
-function soRow(s){ const row={}; ['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status'].forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 */
+function soRow(s){ const row={}; ['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status','area','prazo_area_dias','proxima_acao','proxima_acao_prazo','bola_com','ultimo_toque_em','encerrada_em'].forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 */
 async function soGravar(s){ const i=SO.itens.findIndex(x=>x.id===s.id); if(i>=0) SO.itens[i]=s; else SO.itens.unshift(s); soSalvarLocal();
   if(SO_REMOTE&&sb){ try{ const {data,error}=await sb.from(SO_TABLE).upsert([soRow(s)]).select('id'); if(error) throw error; if(data&&data[0]&&String(s.id).startsWith('loc_')){ s.id=data[0].id; soSalvarLocal(); } return true; }catch(e){ console.error('SO gravar',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
   return true; }
@@ -11849,7 +11929,9 @@ function soNova(pre){ pre=pre||{}; atClose();
    <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Apólice / proposta')}<input id="so_ap" ${boSelectVivo()} value="${esc(pre.apolice||'')}" style="width:100%;margin-top:3px"></div>
      <div style="flex:1;min-width:140px">${lbl('Base')}${boSel('so_lp',[['','—'],['Gustavo','Gustavo'],['Daniel','Daniel'],['Rebeca','Rebeca']],pre.base_lp||'',boSelectVivo())}</div></div>
    ${lbl('Ação *')}<div style="display:flex;gap:14px;margin-top:3px;font-size:13px"><label><input type="radio" name="so_acao" value="consultar" ${boSelectVivo()}> Consultar</label><label><input type="radio" name="so_acao" value="executar" ${boSelectVivo()}> Executar</label></div>
-   ${lbl('O quê *')}${boSel('so_tipo',SO_TIPOS,pre.tipo||'postecipar',boSelectVivo())}
+   ${lbl('O quê *')}${boSel('so_tipo',novoOn('solic-v2')?SO_TIPOS_V2:SO_TIPOS,pre.tipo||(novoOn('solic-v2')?'cobranca_erro':'postecipar'),boSelectVivo())}
+   ${novoOn('solic-v2')?`${lbl('Com quem está (área) *')}${boSel('so_area',SO_AREAS.map(a=>[a[0],a[1]+' · '+a[2]+'d']),pre.area||'lm',boSelectVivo()+' onchange="soAreaPrazo()"')}
+   ${lbl('Próximo passo (o que falta acontecer)')}<input id="so_prox" ${boSelectVivo()} placeholder="ex.: LM confirmar protocolo · Prudential reativar débito · cliente mandar comprovante" style="width:100%;margin-top:3px">`:''}
    ${lbl('Contexto (dias de atraso, motivo, o que o cliente já disse)')}<textarea id="so_ctx" rows="2" ${boSelectVivo()} style="width:100%;margin-top:3px">${esc(pre.contexto||'')}</textarea>
    <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Prazo')}<input id="so_prazo" type="date" ${boSelectVivo()} style="width:100%;margin-top:3px"></div>
      <div style="flex:1;min-width:140px">${lbl('Contato')}${boSel('so_ct',SO_CONTATO,'lm',boSelectVivo())}</div>
@@ -11858,13 +11940,18 @@ function soNova(pre){ pre=pre||{}; atClose();
    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null})).replace(/"/g,'&quot;')})">Registrar e gerar texto</button></div>`);
   setTimeout(()=>{ const e=$('#so_seg'); if(e&&!e.value) e.focus(); },50);
 }
+/* o prazo sugerido acompanha a área escolhida — se ele já digitou um prazo, não mexe */
+window.soAreaPrazo=function(){ const a=$('#so_area'), p=$('#so_prazo'); if(!a||!p||p.dataset.manual==='1') return; const d=atHojeLocal(); d.setDate(d.getDate()+soAreaDias(a.value)); p.value=d.toISOString().slice(0,10); };
 async function soConfNova(refs){ refs=refs||{};
   const v=id=>{ const e=$('#'+id); return e?(e.value||'').trim():''; };
   const acao=(document.querySelector('input[name="so_acao"]:checked')||{}).value||'';
   const err=$('#so_err'); if(!v('so_seg')){ if(err) err.textContent='Segurado é obrigatório.'; return; } if(!acao){ if(err) err.textContent='Diga se é CONSULTAR ou EXECUTAR — é obrigatório.'; return; }
   const s={ id:'loc_'+uid(), frente:v('so_fr')||'outro', ref_atraso_id:refs.ref_atraso_id||null, ref_emissao_id:refs.ref_emissao_id||null, segurado:v('so_seg'), apolice:v('so_ap')||null, base_lp:v('so_lp')||null,
     acao, tipo:v('so_tipo')||'outro', contexto:v('so_ctx')||null, prazo:v('so_prazo')||null, contato_com:v('so_ct')||null, aberta_por:v('so_por')||soQuemSou(), aberta_em:new Date().toISOString(), respondida_em:null, resultado:null, protocolo:null, status:'aberta' };
-  await soGravar(s); soMostrarTexto(s); render();
+  if(novoOn('solic-v2')){ s.area=v('so_area')||'lm'; s.prazo_area_dias=soAreaDias(s.area); s.proxima_acao=v('so_prox')||null; s.bola_com='area'; s.ultimo_toque_em=s.aberta_em; }
+  await soGravar(s);
+  if(novoOn('solic-v2')&&!String(s.id).startsWith('loc_')) await soEvento(s,'abertura','Aberta por '+(s.aberta_por||'—')+' · '+soTipoRot(s.tipo)+' · com '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area)+(s.contexto?' — '+s.contexto:''));
+  soMostrarTexto(s); render();
 }
 function soMostrarTexto(s){ atModal(`<h2>Texto pronto pra colar</h2><div class="sub">Registrada como <b>${esc(soRot(SO_STATUS,s.status))}</b> por ${esc(s.aberta_por||'—')}.</div>
    <textarea id="so_txt" rows="9" ${boSelectVivo()} style="width:100%;margin-top:8px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px">${esc(soTexto(s))}</textarea>
@@ -11872,6 +11959,7 @@ function soMostrarTexto(s){ atModal(`<h2>Texto pronto pra colar</h2><div class="
 function soCopiar(){ const e=$('#so_txt'); const m=e?e.value:''; if(!m) return;
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(m).then(()=>toast('Texto copiado',true),()=>toast('Não consegui copiar')); } else { e.select(); document.execCommand('copy'); toast('Texto copiado',true); } }
 function soAbrir(id){ const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return;
+  if(novoOn('solic-v2')) return soAbrirV2(s);
   const lbl=t=>`<label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">${t}</label>`;
   atModal(`<h2>${esc(s.segurado)}</h2><div class="sub">${esc(soRot(SO_TIPOS,s.tipo))} · <b>${esc(String(s.acao).toUpperCase())}</b> · ${s.apolice?'apólice '+esc(s.apolice)+' · ':''}base ${esc(s.base_lp||'—')} · aberta ${esc(dataBR(String(s.aberta_em).slice(0,10)))} por ${esc(s.aberta_por||'—')}${s.prazo?' · prazo '+atFmtBR(s.prazo):''}</div>
    ${s.contexto?`<div style="font-size:12.5px;margin-top:6px;color:var(--muted)">${esc(s.contexto)}</div>`:''}
@@ -11879,10 +11967,105 @@ function soAbrir(id){ const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s
    ${lbl('Resultado / retorno da assessoria')}<textarea id="sof_res" rows="2" ${boSelectVivo()} style="width:100%;margin-top:3px">${esc(s.resultado||'')}</textarea>
    ${lbl('Protocolo')}<input id="sof_prot" ${boSelectVivo()} value="${esc(s.protocolo||'')}" style="width:100%;margin-top:3px">
    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-s btn-mini" onclick="soMostrarTexto(SO.itens.find(x=>String(x.id)==='${esc(String(s.id))}'))">📋 Ver texto</button><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="soSalvarFicha('${esc(String(s.id))}')">Salvar</button></div>`); }
+/* ── SOLIC-V2 · a ficha de acompanhamento ─────────────────────────────────────
+   Responde as perguntas dele na ordem em que ele as faz: há quanto tempo está aberta ·
+   com quem está e até quando · qual é o próximo passo · o que já aconteceu (linha do
+   tempo) · registrar o andamento de agora. Encerrar = status executada/cancelada. */
+function soAbrirV2(s){
+  const lbl=t=>`<label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">${t}</label>`;
+  const hoje=atHojeLocal(), hj=atHojeISO(), dias=soDiasAberta(s,hoje), prazo=soPrazoEfetivo(s), venc=soVencida(s,hj), semT=soDiasSemToque(s,hoje);
+  const areaRot=boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro');
+  const evs=soEventos(s).slice().sort((a,b)=>String(b.ocorrido_em).localeCompare(String(a.ocorrido_em)));
+  const ev=e=>`<div class="so-ev"><span class="so-ev-q">${esc(dataBR(String(e.ocorrido_em).slice(0,10)))} ${esc(String(e.ocorrido_em).slice(11,16))}</span><span class="badge b-cinza" style="font-size:10px">${esc(boRot([['abertura','Abertura']].concat(SO_EV_TIPOS),e.tipo))}</span><span class="so-ev-t">${esc(e.texto)}</span><span class="so-ev-a">${esc(e.autor||'')}</span></div>`;
+  atModal(`<h2>${esc(s.segurado)}</h2>
+   <div class="sub">${esc(soTipoRot(s.tipo))} · <b>${esc(String(s.acao||'').toUpperCase())}</b>${s.apolice?' · apólice '+esc(s.apolice):''} · base ${esc(s.base_lp||'—')} · aberta ${esc(dataBR(String(s.aberta_em).slice(0,10)))} por ${esc(s.aberta_por||'—')}${s.protocolo?' · prot. '+esc(s.protocolo):''}</div>
+   <div class="so-kpis">
+     <div class="so-k"><div class="lbl">Aberta há</div><div class="num">${dias}d</div></div>
+     <div class="so-k${venc?' verm':''}"><div class="lbl">Com ${esc(areaRot)}</div><div class="num">${prazo?atFmtBR(prazo):'—'}</div><div class="sub">${venc?'prazo passou':'prazo da área · '+(s.prazo_area_dias||soAreaDias(s.area))+'d'}</div></div>
+     <div class="so-k${soParada(s,hoje)?' amar':''}"><div class="lbl">Último andamento</div><div class="num">${semT===0?'hoje':'há '+semT+'d'}</div><div class="sub">${soParada(s,hoje)?'parada — cobrar':'em dia'}</div></div>
+     <div class="so-k${soMuda(s)?' amar':''}"><div class="lbl">Bola com</div><div class="num" style="font-size:14px">${esc(boRot(SO_BOLA,s.bola_com||'area'))}</div></div>
+   </div>
+   ${s.contexto?`<div style="font-size:12.5px;margin-top:8px;color:var(--muted)"><b>Contexto:</b> ${esc(s.contexto)}</div>`:''}
+   <details class="bne-grp" data-sec="so-prox" ${bneSecAberta('so-prox')?'open':''} ontoggle="bneSecToggle('so-prox',this.open)"><summary><span class="bne-grp-t">➡️ Próximo passo</span><span class="bne-grp-r">${esc(s.proxima_acao||'não definido')}${s.proxima_acao_prazo?' · até '+esc(atFmtBR(s.proxima_acao_prazo)):''}</span><span class="bne-grp-c">▾</span></summary>
+     <div style="padding:6px 0 10px">
+       ${lbl('O que falta acontecer')}<input id="sof_prox" ${boSelectVivo()} value="${esc(s.proxima_acao||'')}" placeholder="ex.: LM confirmar protocolo" style="width:100%;margin-top:3px">
+       <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Até quando')}<input id="sof_proxp" type="date" ${boSelectVivo()} value="${esc(s.proxima_acao_prazo||'')}" style="width:100%;margin-top:3px"></div>
+         <div style="flex:1;min-width:140px">${lbl('Bola com')}${boSel('sof_bola',SO_BOLA,s.bola_com||'area',boSelectVivo())}</div>
+         <div style="flex:1;min-width:160px">${lbl('Com quem está (área)')}${boSel('sof_area',SO_AREAS.map(a=>[a[0],a[1]+' · '+a[2]+'d']),s.area||'lm',boSelectVivo())}</div></div>
+       <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Prazo (deixe vazio pra usar o da área)')}<input id="sof_prazo" type="date" ${boSelectVivo()} value="${esc(s.prazo||'')}" style="width:100%;margin-top:3px"></div>
+         <div style="flex:1;min-width:140px">${lbl('Protocolo')}<input id="sof_prot" ${boSelectVivo()} value="${esc(s.protocolo||'')}" style="width:100%;margin-top:3px"></div>
+         <div style="flex:1;min-width:140px">${lbl('Status')}${boSel('sof_st',SO_STATUS,s.status,boSelectVivo())}</div></div>
+     </div></details>
+   <details class="bne-grp" data-sec="so-and" ${bneSecAberta('so-and')?'open':''} ontoggle="bneSecToggle('so-and',this.open)"><summary><span class="bne-grp-t">📝 Registrar andamento</span><span class="bne-grp-r">o que aconteceu agora</span><span class="bne-grp-c">▾</span></summary>
+     <div style="padding:6px 0 10px">
+       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div style="flex:0 0 170px">${lbl('Tipo')}${boSel('sof_evt',SO_EV_TIPOS,'contato',boSelectVivo())}</div>
+         <div style="flex:1;min-width:200px">${lbl('O que aconteceu')}<input id="sof_evtx" ${boSelectVivo()} placeholder="ex.: cobrei a LM no WhatsApp · Prudential respondeu que reativou o débito" style="width:100%;margin-top:3px"></div>
+         <button class="btn btn-s" style="min-height:40px" onclick="soRegistrarAndamento('${esc(String(s.id))}')">＋ Registrar</button></div>
+     </div></details>
+   <details class="bne-grp" data-sec="so-hist" ${bneSecAberta('so-hist')?'open':''} ontoggle="bneSecToggle('so-hist',this.open)"><summary><span class="bne-grp-t">🕓 Linha do tempo</span><span class="bne-grp-r">${evs.length} ${evs.length===1?'evento':'eventos'}</span><span class="bne-grp-c">▾</span></summary>
+     <div style="padding:6px 0 10px">${evs.length?evs.map(ev).join(''):`<div style="font-size:12.5px;color:var(--muted)">Nenhum andamento registrado ainda${String(s.id).startsWith('loc_')?' — faça login pra gravar a linha do tempo':''}.</div>`}</div></details>
+   ${lbl('Resultado / retorno final')}<textarea id="sof_res" rows="2" ${boSelectVivo()} style="width:100%;margin-top:3px">${esc(s.resultado||'')}</textarea>
+   <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-s btn-mini" onclick="soMostrarTexto(SO.itens.find(x=>String(x.id)==='${esc(String(s.id))}'))">📋 Ver texto</button><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="soSalvarFicha('${esc(String(s.id))}')">Salvar</button></div>`);
+}
+window.soRegistrarAndamento=async function(id){ const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return;
+  const v=k=>{ const e=$('#'+k); return e?(e.value||'').trim():''; }; const tx=v('sof_evtx'); if(!tx){ toast('Escreva o que aconteceu'); return; }
+  await soEvento(s,v('sof_evt')||'contato',tx); await soGravar(s); soAbrirV2(s); toast('Andamento registrado',true); };
 async function soSalvarFicha(id){ const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return; const v=k=>{ const e=$('#'+k); return e?(e.value||'').trim():''; };
+  if(novoOn('solic-v2')){
+    const antes={st:s.status, prox:s.proxima_acao||'', bola:s.bola_com||'', area:s.area||'', prot:s.protocolo||''};
+    s.proxima_acao=v('sof_prox')||null; s.proxima_acao_prazo=v('sof_proxp')||null; s.bola_com=v('sof_bola')||'area'; s.area=v('sof_area')||s.area||'lm'; s.prazo=v('sof_prazo')||null;
+    if(!s.prazo_area_dias) s.prazo_area_dias=soAreaDias(s.area);
+    const st=v('sof_st')||'aberta';
+    if(st!==antes.st){ if((st==='executada'||st==='cancelada')&&!s.encerrada_em) s.encerrada_em=new Date().toISOString(); if(st==='aberta') s.encerrada_em=null; if((st==='respondida'||st==='executada')&&!s.respondida_em) s.respondida_em=new Date().toISOString(); s.status=st; }
+    s.resultado=v('sof_res')||null; s.protocolo=v('sof_prot')||null;
+    /* o que mudou vira andamento sozinho — a linha do tempo não depende de ele lembrar de escrever */
+    const mud=[]; if(st!==antes.st) mud.push('status → '+soRot(SO_STATUS,st)); if((s.proxima_acao||'')!==antes.prox&&s.proxima_acao) mud.push('próximo passo: '+s.proxima_acao); if((s.bola_com||'')!==antes.bola) mud.push('bola com '+boRot(SO_BOLA,s.bola_com)); if((s.area||'')!==antes.area) mud.push('passou pra '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area)); if((s.protocolo||'')!==antes.prot&&s.protocolo) mud.push('protocolo '+s.protocolo);
+    await soGravar(s); if(mud.length&&!String(s.id).startsWith('loc_')) await soEvento(s, st!==antes.st?'status':(s.protocolo&&(s.protocolo||'')!==antes.prot?'protocolo':'nota'), mud.join(' · '));
+    atClose(); render(); toast('Salvo',true); return;
+  }
   const st=v('sof_st')||'aberta'; if(st!==s.status&&(st==='respondida'||st==='executada')&&!s.respondida_em) s.respondida_em=new Date().toISOString();
   s.status=st; s.resultado=v('sof_res')||null; s.protocolo=v('sof_prot')||null; await soGravar(s); atClose(); render(); toast('Salvo',true); }
+function viewSolicitacoesV2(){
+  const hoje=atHojeLocal(), hj=atHojeISO();
+  const SOV=SO.itens.filter(escLinhaOk);
+  const abertas=SOV.filter(soAberta), venc=abertas.filter(s=>soVencida(s,hj)), paradas=abertas.filter(s=>soParada(s,hoje)), mudas=abertas.filter(soMuda);
+  const kpiLente=(k,l,n,sb)=>{ const on=FSO.status===k; return `<button class="kpi kpi-lente${on?' on':''}" onclick="FSO.status=FSO.status==='${k}'?'aberta':'${k}';viewSolicitacoes()"><div class="lbl">${l}</div><div class="num">${n}</div><div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estas':sb}</div></button>`; };
+  let lista=SOV.filter(s=>{
+    if(FSO.status==='aberta') return soAberta(s);
+    if(FSO.status==='vencida') return soVencida(s,hj);
+    if(FSO.status==='parada') return soParada(s,hoje);
+    if(FSO.status==='muda') return soMuda(s);
+    if(FSO.status==='todas') return true;
+    return s.status===FSO.status; })
+    .filter(s=>{ if(FSO.area&&(s.area||'outro')!==FSO.area) return false; if(FSO.q){ const q=normKey(FSO.q); if(normKey(s.segurado).indexOf(q)<0&&String(s.apolice||'').indexOf(FSO.q.replace(/\D/g,'')||'§')<0&&normKey(s.proxima_acao||'').indexOf(q)<0) return false; } return true; })
+    .sort((a,b)=>{ const va=soVencida(a,hj)?0:1, vb=soVencida(b,hj)?0:1; if(va!==vb) return va-vb; const pa=soPrazoEfetivo(a)||'9999', pb=soPrazoEfetivo(b)||'9999'; return pa.localeCompare(pb)||String(b.aberta_em).localeCompare(String(a.aberta_em)); });
+  const areasVivas=[...new Set(abertas.map(s=>s.area||'outro'))];
+  const linha=s=>{ const p=soPrazoEfetivo(s), v=soVencida(s,hj), d=soDiasAberta(s,hoje), st=soDiasSemToque(s,hoje), par=soParada(s,hoje);
+    return `<div class="so-row${v?' venc':''}" onclick="soAbrir('${esc(String(s.id))}')">
+      <div class="so-l1"><span class="so-dias" title="aberta há ${d} dias">${d}d</span><b class="so-nome">${esc(s.segurado)}</b>
+        <span class="badge ${s.status==='executada'?'b-verde':s.status==='cancelada'?'b-cinza':s.status==='sem_retorno'||v?'b-verm':s.status==='respondida'?'b-azul':'b-amarelo'}">${v&&soAberta(s)?'prazo passou':esc(soRot(SO_STATUS,s.status))}</span></div>
+      <div class="so-l2"><span class="so-tipo">${esc(soTipoRot(s.tipo))}</span><span class="so-area" title="com quem está">🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span class="so-prazo ${v?'verm':''}">⏳ ${p?atFmtBR(p):'—'}</span>${par?`<span class="so-par">🔇 ${st}d sem andamento</span>`:''}</div>
+      <div class="so-l3">${s.proxima_acao?`➡️ ${esc(s.proxima_acao)}${s.proxima_acao_prazo?' <span style="color:var(--muted)">até '+esc(atFmtBR(s.proxima_acao_prazo))+'</span>':''}`:'<span style="color:var(--amarelo)">➡️ sem próximo passo — defina um</span>'} <span style="color:var(--muted)">· bola com ${esc(boRot(SO_BOLA,s.bola_com||'area'))}</span></div>
+    </div>`; };
+  $('#main').innerHTML=`<h1 class="pg">Solicitações</h1>${delegFaixa()}
+    <div class="kpis kpis-consol" style="margin-top:10px">
+      ${kpiLente('aberta','Em aberto',abertas.length,'ordenadas por prazo')}
+      ${kpiLente('vencida','⏳ Prazo passou',venc.length,'a área estourou o prazo')}
+      ${kpiLente('parada','🔇 Paradas',paradas.length,'sem andamento há '+SO_PARADA_DIAS+'d+')}
+      ${kpiLente('muda','➡️ Sem próximo passo',mudas.length,'ninguém disse o que falta')}
+    </div>
+    <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input id="so-q" placeholder="Buscar segurado, apólice ou próximo passo…" value="${esc(FSO.q)}" oninput="FSO.q=this.value;viewSolicitacoes();atFocus('so-q')" style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
+      <select onchange="FSO.area=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px"><option value="">Todas as áreas</option>${SO_AREAS.filter(a=>areasVivas.includes(a[0])||FSO.area===a[0]).map(a=>`<option value="${a[0]}"${FSO.area===a[0]?' selected':''}>${esc(a[1])}</option>`).join('')}</select>
+      <select onchange="FSO.status=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">${[['aberta','Em aberto'],['todas','Todas']].concat(SO_STATUS.filter(s=>s[0]!=='aberta')).map(o=>`<option value="${o[0]}"${FSO.status===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>
+      <button class="btn btn-p btn-mini" onclick="soNova()">📨 Nova solicitação</button>
+    </div>
+    <div class="card" style="padding:4px 14px">${lista.length?lista.map(linha).join(''):`<div style="padding:16px;text-align:center;color:var(--muted)">Nenhuma solicitação ${FSO.status==='aberta'?'em aberto':'com esse filtro'}. <a href="#" onclick="soNova();return false">Abrir a primeira</a>.</div>`}</div>
+    <div class="cs-grp" style="margin-top:14px"><span class="t">Prazo por área</span><span class="q">régua de hoje · o prazo do dia da abertura fica gravado em cada solicitação</span></div>
+    <div class="card" style="padding:8px 14px;font-size:12.5px;display:flex;gap:6px 14px;flex-wrap:wrap">${SO_AREAS.map(a=>`<span>🏢 ${esc(a[1])} · <b>${a[2]}d</b></span>`).join('')}</div>`;
+}
 function viewSolicitacoes(){
+  if(novoOn('solic-v2')) return viewSolicitacoesV2();
   const hoje=atHojeLocal(), mes=atHojeISO().slice(0,7);
   const SOV=SO.itens.filter(escLinhaOk);   /* ESCOPO-UNICO */
   const abertas=SOV.filter(s=>s.status==='aberta'), semRet=abertas.filter(s=>soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS);
@@ -14061,6 +14244,7 @@ const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
+  'solic-v2':     {o:'Solicitações v2: área + prazo da área, linha do tempo, próximo passo, bola com, tempo em aberto (base pro Victor acompanhar)', desde:'2026-09-17'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return true;                  /* não listado = já liberado (o que estava no ar continua) */
@@ -17379,6 +17563,30 @@ function lpSelfCheck(){
         ok('niver-feito: LIBERADO em 17/09 ("pode liberar pro Daniel") — todo LP vê o ✓', (()=>{ PERFIL={email:'outro@x.com',papel:'lp',modulos:{}}; const a=novoOn('niver-feito'); PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; const b=novoOn('niver-feito'); return a===true&&b===true; })());
         ok('niver-feito: o banco só entra logado; deslogado fica local (e o app não quebra)', String(niverMarcar).includes('sb&&logado()') && String(niverFeitoCarregar).includes('!sb||!logado()'));
       } finally{ CART.clientes=_c; S.contatos=_s; BN.contatos=_b; NIVER_F=_f; NIVER_FEITO=_nf; NIVER_VER_FEITOS=_v; PERFIL=_p; try{ if(_ls===null) localStorage.removeItem(NIVER_FEITO_CHAVE); else localStorage.setItem(NIVER_FEITO_CHAVE,_ls); }catch(_){} }
+    }
+    /* ═══ SOLIC-V2 (17/09) ═══ */
+    { const _p=PERFIL, _so=SO.itens, _ev=SO_EV;
+      try{
+        PERFIL={email:'eu@x.com',papel:'admin',modulos:{}}; SO_EV={};
+        const hj=atHojeISO(), d=n=>{ const x=atHojeLocal(); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10)+'T09:00:00Z'; };
+        const s1={id:'s1',segurado:'Fulano De Tal',acao:'executar',tipo:'cobranca_erro',area:'prudential_cobranca',prazo_area_dias:7,aberta_em:d(10),status:'aberta',proxima_acao:'Prudential reativar débito',bola_com:'area',ultimo_toque_em:d(5)};
+        const s2={id:'s2',segurado:'Beltrana Silva',acao:'consultar',tipo:'beneficio_app',area:'prudential_beneficios',prazo_area_dias:10,aberta_em:d(2),status:'aberta',ultimo_toque_em:d(0)};
+        const s3={id:'s3',segurado:'Sicrano',acao:'executar',tipo:'alt_pag',area:'lm',prazo_area_dias:3,aberta_em:d(20),status:'executada',encerrada_em:d(15)};
+        ok('solic: prazo efetivo = abertura + prazo da área gravado; aberta há 10d com área de 7d → prazo passou', soPrazoEfetivo(s1)<hj && soVencida(s1,hj)===true && soVencida(s2,hj)===false);
+        ok('solic: tempo em aberto conta até hoje se aberta, até o encerramento se fechou', soDiasAberta(s1)===10 && soDiasAberta(s3)===5);
+        ok('solic: parada = sem andamento há '+SO_PARADA_DIAS+'d+; sem próximo passo escrito = muda', soParada(s1)===true && soParada(s2)===false && soMuda(s2)===true && soMuda(s1)===false);
+        ok('solic: encerrada não é vencida nem parada nem muda', !soVencida(s3,hj) && !soParada(s3) && !soMuda(s3));
+        ok('solic: régua tem as áreas que ele citou (cobrança, benefícios/app, assessoria) com prazo em dias', ['lm','prudential_cobranca','prudential_beneficios'].every(k=>SO_AREAS.some(a=>a[0]===k&&a[2]>0)));
+        ok('solic: vocabulário novo tem os dois casos que ele contou (erro de cobrança · benefício/app não aparece)', SO_TIPOS_V2.some(t=>t[0]==='cobranca_erro') && SO_TIPOS_V2.some(t=>t[0]==='beneficio_app'));
+        ok('solic: soRow grava as colunas novas (área, prazo da área, próximo passo, bola, último toque, encerrada)', ['area','prazo_area_dias','proxima_acao','proxima_acao_prazo','bola_com','ultimo_toque_em','encerrada_em'].every(k=>String(soRow).includes("'"+k+"'")));
+        SO.itens=[s1,s2,s3];
+        const f=(()=>{ let h=''; const _m=window.atModal; window.atModal=x=>{ h=x; }; try{ soAbrirV2(s1); }finally{ window.atModal=_m; } return h; })();
+        ok('solic: a ficha responde as 4 perguntas dele — há quanto tempo · com quem e até quando · último andamento · bola com', /Aberta há/.test(f) && /Com Prudential · Cobrança/.test(f) && /Último andamento/.test(f) && /Bola com/.test(f) && /prazo passou/.test(f));
+        ok('solic: a ficha tem próximo passo, registrar andamento e linha do tempo — todos dobráveis e fechados (regra de 16/09)', /Próximo passo/.test(f) && /Registrar andamento/.test(f) && /Linha do tempo/.test(f) && !/<details[^>]*\sopen[\s>]/.test(f));
+        ok('solic: o Agora lista solicitações em acompanhamento com urgência 1 quando há prazo estourado', (()=>{ const l=inicioAgora(); const it=l.find(x=>x.k==='solic'); return !!it && it.n===2 && it.urg===1 && /prazo estourado/.test(it.sub); })());
+        PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
+        ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
+      } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }
     }
     ok('SELF-CHECK-MUDO-V1: rodando o self-check, o app não fala e não grava (nenhum aviso de graça na abertura)',
        (()=>{ if(typeof selfCheckMudo!=='function') return false;
