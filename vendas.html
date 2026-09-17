@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.81 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.82 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -708,6 +708,25 @@
   .nav-grp-wrap.fechado{display:none}
   /* HUB-MODULOS */
   .hub-sec{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:18px 0 8px}
+  /* HUB-DOBRA-V1: seção dobrável — o cabeçalho fechado mostra o que tem dentro */
+  .hub-dobra{margin:0} .hub-dobra+.hub-dobra{margin-top:2px}
+  .hub-dobra>summary.hub-sec{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:44px;margin:6px 0 0;padding:8px 10px;border-radius:10px;background:var(--card);border:1px solid var(--linha);text-transform:none;letter-spacing:0}
+  .hub-dobra>summary::-webkit-details-marker{display:none}
+  .hub-sec-c{color:var(--muted);font-size:12px;transition:transform .12s} .hub-dobra[open] .hub-sec-c{transform:rotate(90deg)}
+  .hub-sec-t{font-size:13.5px;font-weight:800;color:var(--texto,#0f172a);text-transform:uppercase;letter-spacing:.05em}
+  .hub-sec-n{font-size:11px;font-weight:700;background:var(--fundo);border:1px solid var(--linha);border-radius:99px;padding:1px 8px;color:var(--muted)}
+  .hub-sec-r{flex:1;min-width:0;font-size:12px;font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:right}
+  .hub-dobra[open] .hub-sec-r{display:none}
+  .hub-dobra>.hub-grid{margin:8px 0 14px}
+  .hub-tudo{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
+  .hub-tx{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+  @media(max-width:980px){
+    .hub-dobra>summary.hub-sec{flex-wrap:wrap} .hub-sec-r{flex-basis:100%;text-align:left;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;font-size:11.5px}
+    .hub-grid{grid-template-columns:1fr;gap:8px}
+    .hub-grid>.hub-card{flex-direction:row;align-items:center;gap:12px;padding:10px 12px;min-height:56px}   /* especificidade: ganha da regra geral do card no celular */
+    .hub-grid .hub-ic{font-size:22px;flex:0 0 auto} .hub-grid .hub-tx{gap:2px} .hub-grid .hub-tit{font-size:14px} .hub-grid .hub-desc{font-size:12px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    .hub-grid .hub-tag{display:none}
+  }
   .hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
   .hub-card{font:inherit;text-align:left;cursor:pointer;padding:14px 16px;display:flex;flex-direction:column;gap:6px;transition:border-color .12s,box-shadow .12s}
   .hub-card:hover{border-color:var(--azul);box-shadow:0 2px 10px rgba(37,99,235,.14)}
@@ -12589,18 +12608,34 @@ function hubCardHtml(i,tagPadrao){
   const go=i.href?`location.href='${i.href}'`:(i.acao||`irPara('${i.view}')`);
   return `<button class="card hub-card" onclick="${go}">
       <div class="hub-ic">${i.ic}</div>
-      <div class="hub-tit">${esc(i.titulo)}${n?` <span class="badge b-azul">${n}</span>`:''}</div>
-      <div class="hub-desc">${esc(i.desc)}</div>
+      <div class="hub-tx"><div class="hub-tit">${esc(i.titulo)}${n?` <span class="badge b-azul">${n}</span>`:''}</div>
+      <div class="hub-desc">${esc(i.desc)}</div></div>
       <div class="hub-tag">${i.href?'↗ abre em outra página':(i.tag||tagPadrao)}</div>
     </button>`;
 }
-function hubSecoesHtml(secoes,filtro,tagPadrao){
+/* HUB-DOBRA-V1 (17/09/2026): print dele da tela Módulos no iPhone — "a área de outros módulos também
+   precisa que os tópicos sejam recolhidos ou expandíveis, está ficando muito extenso." Regra da
+   dobra fechada (16/09): toda seção nasce fechada, lembrada por aparelho, e o cabeçalho fechado
+   leva o que tem dentro (nome de cada card + contagem). Dois botões fixos: abrir tudo · recolher tudo. */
+const HUB_SEC_CHAVE='crmlp_hub_secs_v1';
+function hubSecsLer(){ try{ return JSON.parse(localStorage.getItem(HUB_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
+function hubSecAberta(k){ return dobraAberta(k, hubSecsLer()); }
+function hubSecToggle(k,aberto){ const st=hubSecsLer(); st[k]=aberto?1:0; try{ localStorage.setItem(HUB_SEC_CHAVE,JSON.stringify(st)); }catch(_){} }
+function hubSecsTodas(abrir){ document.querySelectorAll('#main details.hub-dobra').forEach(d=>{ d.open=!!abrir; }); }   /* o ontoggle de cada um grava */
+function hubSecChave(prefixo,titulo){ return 'hub:'+prefixo+':'+normKey(titulo).replace(/\s+/g,'-'); }
+function hubBotoesHtml(){ return `<div class="hub-tudo"><button class="btn btn-s btn-mini" onclick="hubSecsTodas(true)" title="Abre todas as seções">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="hubSecsTodas(false)" title="Recolhe todas as seções">⌃ recolher tudo</button></div>`; }
+function hubSecoesHtml(secoes,filtro,tagPadrao,prefixo){
+  prefixo=prefixo||'mod';
   return secoes.map(s=>{ const it=s.itens.filter(filtro); if(!it.length) return '';
-    return `<div class="hub-sec">${esc(s.titulo)}</div><div class="hub-grid">${it.map(i=>hubCardHtml(i,tagPadrao)).join('')}</div>`; }).join('');
+    const k=hubSecChave(prefixo,s.titulo), ab=hubSecAberta(k);
+    const resumo=it.map(i=>{ const c=i.cnt?i.cnt():0; return esc(i.titulo)+(c?' ('+c+')':''); }).join(' · ');
+    return `<details class="hub-dobra" data-sec="${esc(k)}" ${ab?'open':''} ontoggle="hubSecToggle('${esc(jsq(k))}',this.open)">
+      <summary class="hub-sec"><span class="hub-sec-c">▸</span><span class="hub-sec-t">${esc(s.titulo)}</span><span class="hub-sec-n">${it.length}</span><span class="hub-sec-r">${resumo}</span></summary>
+      <div class="hub-grid">${it.map(i=>hubCardHtml(i,tagPadrao)).join('')}</div></details>`; }).join('');
 }
 function viewModulos(){
-  const secs=hubSecoesHtml(HUB_SECOES,i=>!i.mod||modOn(i.mod),'● módulo');
-  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Clique pra abrir aqui dentro.</div>${secs}`;
+  const secs=hubSecoesHtml(HUB_SECOES,i=>!i.mod||modOn(i.mod),'● módulo','mod');
+  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card.</div>${hubBotoesHtml()}${secs}`;
 }
 
 /* ════ VIEW: CONFIGURAÇÕES (o mesmo hub de cards dos Módulos) ════
@@ -12628,8 +12663,8 @@ function cfgCabe(i){
   return true;
 }
 function viewConfig(){
-  const secs=hubSecoesHtml(CFG_SECOES,cfgCabe,'⚙ configuração');
-  $('#main').innerHTML=`<h1 class="pg">Configurações</h1><div class="sub">O que muda o jeito do app trabalhar. Clique pra abrir aqui dentro.</div>${secs}`;
+  const secs=hubSecoesHtml(CFG_SECOES,cfgCabe,'⚙ configuração','cfg');
+  $('#main').innerHTML=`<h1 class="pg">Configurações</h1><div class="sub">O que muda o jeito do app trabalhar. Abra a seção e toque no card.</div>${hubBotoesHtml()}${secs}`;
 }
 
 /* ════ VIEW: PENDÊNCIAS (P2 #15) — LEGADO do relatório semanal; a view lp-pendencias agora é do módulo em* (mesmo destino do LPDB 'atrasos') ════ */
@@ -17717,6 +17752,15 @@ function lpSelfCheck(){
             const s2={id:'zzs2',segurado:'Ninguem Assim Existe',tipo:'boleto',area:'lm',aberta_em:'2026-09-01T09:00:00Z',status:'aberta'};
             const c=soContatoDe(s1); return !!c && String(c.id)==='zzag1' && soContatoDe(s2)===null && /Cobrar Assessoria \(LM\)/.test(soAgendaTitulo(s1)) && soAgendaDiaPadrao(s1)>=atHojeISO() && /Solicitação · /.test(soAgendaNotas(s1)); } finally{ S.contatos=bak; } })());
         ok('solic-agenda: o 📅 está na ficha V2 e na linha da lista, e nasce só na base dele', /soAgendar\(/.test(String(soAbrirV2)) && /soAgendar\(/.test(String(viewSolicitacoesV2)) && /novoOn\('solic-agenda'\)/.test(String(soAbrirV2)) && typeof soAgendarConfirmar==='function');
+        /* HUB-DOBRA-V1 */
+        ok('hub: as seções de Módulos e Configurações são dobráveis, nascem fechadas e o cabeçalho fechado leva o que tem dentro', (()=>{ const bak=(()=>{ try{ return localStorage.getItem(HUB_SEC_CHAVE); }catch(_){ return null; } })(); try{
+            try{ localStorage.removeItem(HUB_SEC_CHAVE); }catch(_){}
+            const h=hubSecoesHtml([{titulo:'Teste Sec',itens:[{view:'contatos',ic:'x',titulo:'Card Um',desc:'d'},{view:'mapa',ic:'y',titulo:'Card Dois',desc:'d',cnt:()=>7}]}],()=>true,'t','zz');
+            const tmp=document.createElement('div'); tmp.innerHTML=h; const d=tmp.querySelector('details.hub-dobra');
+            const fechado=!!d && !d.open; const resumo=(tmp.querySelector('.hub-sec-r')||{}).textContent||'';
+            hubSecToggle('hub:zz:teste-sec',true); const lembrou=hubSecAberta('hub:zz:teste-sec')===true && hubSecAberta('hub:zz:outra')===false;
+            return fechado && /Card Um · Card Dois \(7\)/.test(resumo) && lembrou && /hubSecsTodas\(true\)/.test(String(viewModulos)+String(hubBotoesHtml)) && /hubSecsTodas\(false\)/.test(String(hubBotoesHtml)) && /hubBotoesHtml\(\)/.test(String(viewConfig)); }
+          finally{ try{ if(bak===null) localStorage.removeItem(HUB_SEC_CHAVE); else localStorage.setItem(HUB_SEC_CHAVE,bak); }catch(_){} } })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
       } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }

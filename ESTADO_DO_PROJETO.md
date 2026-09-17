@@ -2,6 +2,22 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 17/09/2026 (24ª onda) — HUB-DOBRA-V1: Módulos e Configurações com seções dobráveis (v7.82)
+
+Print dele da tela Módulos no iPhone: *"a área de outros módulos também precisa que os tópicos sejam recolhidos ou expandíveis. Está ficando muito extenso."* É a regra da dobra fechada (16/09) chegando no hub.
+
+### O que mudou
+- `hubSecoesHtml` (usado por **Módulos** e **Configurações**) passa a desenhar cada seção como `<details class="hub-dobra">` — **nasce fechada**, lembrada por aparelho (`crmlp_hub_secs_v1`, `hubSecAberta`/`hubSecToggle`), aberta só por `${ab?'open':''}`.
+- **Cabeçalho fechado leva o que tem dentro:** título + contagem + os nomes dos cards ("Contatos · Visão da Carteira · Clientes (carteira) · …"), com a contagem do badge quando há (ex.: "Duplicatas (105)"). Aberto, o resumo sai.
+- **Dois botões fixos** no topo: ⌄ abrir tudo · ⌃ recolher tudo (`hubSecsTodas`).
+- **Celular:** card virou **linha** (ícone à esquerda, título + descrição em 2 linhas, sem o selo "MÓDULO") — 56px em vez de ~240px por card. Desktop segue com a grade de cards. ⚠️ Lição: a regra de celular precisava de especificidade (`.hub-grid>.hub-card`) porque no arquivo ela fica **antes** da regra base do card.
+- Tela de Módulos no iPhone: de ~7.300px de rolagem (tudo aberto) pra **844px** (uma tela) fechada.
+
+### Prova
+- Portão aberto · `--prova` OK · guard OK.
+- `teste-hub-dobra.mjs` **16/16** em 390 e 1280: 6 seções fechadas, resumo no cabeçalho, botões, memória por aparelho, card abre a tela, Configurações idem, console limpo.
+- 1 invariante novo (renderiza seção de teste: nasce fechada, resumo com contagem, memória, botões nas duas telas).
+
 ## 17/09/2026 (23ª onda) — SOLIC-AGENDA-V1: agendar atividade a partir da solicitação → Google Agenda (v7.81)
 
 Print dele da lista de Solicitações no iPhone: *"permite que nessa área de solicitações/pendências eu já gere uma tarefa, uma atividade, jogando direto pro Google Agenda, como a gente já faz nos cards dos clientes."*
