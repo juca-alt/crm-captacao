@@ -2,6 +2,30 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 17/09/2026 (22ª onda) — INI-ACOMP-V1: cards de acompanhamento no Início · `solic-v2` liberado pro Victor (v7.80)
+
+Voz dele, logo depois do "pode subir" da v7.79: *"ajusta já essa solicitação pro Victor poder acompanhar. E vou ter um card no Início — tanto pras solicitações/pendências como pra parte de benefício — pra estar com ele na onda das tratativas, assim como já tem o de atraso."*
+
+### Liberação pessoa a pessoa (primeira vez que a regra de 16/09 rodou de ponta a ponta)
+- `solic-v2` **saiu de `NOVO_SO_MEU` e entrou em `MODS`** com `def:false` e `views:[]` (não é tela, é capacidade dentro da tela Solicitações). `novoOn(k)` agora, pra chave que já saiu da lista mas está em `MODS`, **obedece ao mapa de módulos do usuário** (`modOn`).
+- **Victor ligado direto no banco** (`lp_perfis.modulos → "solic-v2": true`). Operando a base dele (delegação) o Victor vê a V2 porque o dono é admin; na base do Daniel vê a antiga (Daniel não tem o módulo). Painel Master · Acessos mostra o toggle novo pra cada pessoa.
+- Daniel segue na tela antiga até ele ligar.
+
+### Cards novos no Início (só na base dele: `novoOn('ini-acomp')`)
+- **📨 Solicitações em acompanhamento** — cabeçalho: "N em aberto · X prazo passou · Y paradas". Linhas (até 6): dias em aberto · segurado · badge (prazo passou / Nd sem andamento / status) · tipo · área · até <prazo> · ➡️ próximo passo · bola com. Vencidas primeiro, depois paradas, depois mudas. Clique abre a ficha V2. Botões: abrir Solicitações · ＋ nova.
+- **🩹 Benefícios em regulação** — cabeçalho: "N em regulação · X exig. vencidas · Y parados · Z mudos". Linhas: dias · segurado · situação · 🔴 parado · evento · exigências (vencidas em vermelho) · ➡️ próxima ação até <prazo> (passou/hoje) · bola com. Clique abre o caso. Botões: abrir Benefícios · 🩹 abrir benefício.
+- Os dois **nascem fechados**, entram **logo depois do Agora**, respeitam `modOn('backoffice')`/`modOn('beneficios')`, alvo ≥44px, sem estouro em 390.
+- **Correção de painel que veio junto:** card novo do app entrava **no fim** da ordem salva (quem já tinha reordenado o Início ganhava a novidade escondida lá embaixo). Agora entra **no lugar natural**, logo depois do vizinho que a ordem já conhece (`pordOrdem`). Invariante atualizado com o caso que distingue.
+
+### Prova
+- Portão aberto (39 telas × 3 larguras × cheia/vazia, lpSelfCheck 0), `--prova` OK, guard OK.
+- `teste-ini-acomp.mjs` 24/24 (390 e 1280): cards, número no cabeçalho, ordem, linhas, clique abre ficha/caso, Victor vê V2, Daniel vê antiga, ninguém além dele vê os cards. `teste-solic.mjs` 26/26 continua.
+- 3 invariantes novos (cards testáveis por lista injetada; `novoOn` × `MODS`).
+
+### Pendente dele
+- Liberar `ini-acomp` (os cards) pro Victor também? Hoje só ele vê.
+- Régua real de prazos por área (`SO_AREAS`) — continua chutada.
+
 ## 17/09/2026 (21ª onda) — SOLIC-V2: acompanhamento de solicitações e pendências, com prazo por área (v7.79)
 
 Pedido dele por voz: *"módulo de acompanhamento de solicitações e pendências — o que entrou, o que está sendo tratado, os próximos passos, o tempo que está a solicitação, os prazos de cada área — até pra colocar o Victor como assistente nesse fluxo."* Exemplos dele: erro no fluxo de cobrança de uma cliente; benefício/app de cashback que não aparece pra outra.

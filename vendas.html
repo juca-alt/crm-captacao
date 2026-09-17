@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.79 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.80 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2434,7 +2434,7 @@ const DOBRA_PADRAO=false;
 function dobraAberta(chave, st){ return (st && Object.prototype.hasOwnProperty.call(st,chave)) ? !!st[chave] : DOBRA_PADRAO; }
 const INI_CHAVE='crmlp_inicio_secs_v1';
 /* DOBRA-FECHADA-V1: a lista fica pela ORDEM/existência dos blocos; o padrão de todos é fechado */
-const INI_PADRAO={agora:0,numeros:0,aniv:0,'funil-nn':0,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':0,'cf-neg':0,'cf-perfil':0,'cf-cob':0,'cf-aps':0};
+const INI_PADRAO={agora:0,solic:0,benef:0,numeros:0,aniv:0,'funil-nn':0,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':0,'cf-neg':0,'cf-perfil':0,'cf-cob':0,'cf-aps':0};
 function iniLer(){ try{ return JSON.parse(localStorage.getItem(INI_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function iniGravar(o){ try{ localStorage.setItem(INI_CHAVE,JSON.stringify(o)); }catch(_){} }
 function iniAberto(k){ return dobraAberta(k, iniLer()); }   /* DOBRA-FECHADA-V1 */
@@ -2474,14 +2474,16 @@ function iniBotaoPinta(){}
    1) card escondido continua na lista do modo organizar, com o botão de trazer de volta;
    2) card NOVO do app entra no fim sozinho — nunca nasce escondido. */
 const PORD_CHAVE='crmlp_painel_v1';
-const PORD_NOMES={agora:'Agora',mf:'Resumo MF',numeros:'Números',aniv:'🎂 Aniversariantes','funil-nn':'Funil · Novos Negócios','funil-bc':'Funil · Base de Clientes',ta:'Telephone Approach',reunioes:'Reuniões',eventos:'Compromissos',lp:'Por LP'};
+const PORD_NOMES={agora:'Agora',solic:'📨 Solicitações',benef:'🩹 Benefícios',mf:'Resumo MF',numeros:'Números',aniv:'🎂 Aniversariantes','funil-nn':'Funil · Novos Negócios','funil-bc':'Funil · Base de Clientes',ta:'Telephone Approach',reunioes:'Reuniões',eventos:'Compromissos',lp:'Por LP'};
 let PORD_MODO=false, _PORD_CH=[];
 function pordLer(){ try{ const o=JSON.parse(localStorage.getItem(PORD_CHAVE)||'{}')||{};
   return {ordem:Array.isArray(o.ordem)?o.ordem.map(String):[], ocultos:Array.isArray(o.ocultos)?o.ocultos.map(String):[]}; }catch(_){ return {ordem:[],ocultos:[]}; } }
 function pordGravar(o){ try{ localStorage.setItem(PORD_CHAVE,JSON.stringify(o)); }catch(_){} }
-/* a ordem salva vale só pras peças que EXISTEM hoje; o que ela não conhece vai pro fim */
+/* a ordem salva vale só pras peças que EXISTEM hoje; o que ela não conhece entra no LUGAR NATURAL
+   do app (logo depois do vizinho anterior que ela já conhece). 17/09: antes ia pro fim — e card novo
+   nascia escondido lá embaixo pra quem já tinha reordenado o painel. */
 function pordOrdem(chaves){ const st=pordLer(); const o=st.ordem.filter(k=>chaves.includes(k));
-  chaves.forEach(k=>{ if(!o.includes(k)) o.push(k); }); return o; }
+  chaves.forEach((k,i)=>{ if(o.includes(k)) return; let pos=-1; for(let j=i-1;j>=0;j--){ const q=o.indexOf(chaves[j]); if(q>=0){ pos=q; break; } } o.splice(pos+1,0,k); }); return o; }
 function pordOculto(k){ return pordLer().ocultos.includes(k); }
 function pordModo(v){ PORD_MODO=!!v; render(); }
 function pordMover(k,d){ const o=_PORD_CH.slice(); const i=o.indexOf(k); if(i<0) return; const j=i+d; if(j<0||j>=o.length) return;
@@ -2550,6 +2552,45 @@ function iniFunilBloco(k,titulo,lista,fluxo,encerr,view){
   return iniBloco(k,titulo,resumo,corpo);
 }
 
+/* ═══ INI-ACOMP-V1 (17/09/2026): cards de acompanhamento no Início ═══════════════
+   Pedido dele (voz): "vou deixar na área inicial um card, tanto pras solicitações/pendências
+   como pra parte de benefício — pra estar com o Victor na onda das tratativas, assim como já
+   tem, por exemplo, o de atraso." Nasce atrás de novoOn('ini-acomp'). Regra da dobra: o
+   cabeçalho leva o número (fechado nunca apaga o número). `lista` opcional = testável. */
+function iniSolicBloco(lista){
+  if(!novoOn('ini-acomp')||!modOn('backoffice')||typeof SO==='undefined') return '';
+  const hj=atHojeISO(), hjl=atHojeLocal();
+  const ab=(lista||(SO.itens||[]).filter(escLinhaOk)).filter(soAberta);
+  const venc=ab.filter(s=>soVencida(s,hj)), par=ab.filter(s=>soParada(s,hjl)&&!soVencida(s,hj));
+  const peso=s=>(soVencida(s,hj)?0:soParada(s,hjl)?1:soMuda(s)?2:3);
+  const ord=ab.slice().sort((a,b)=>peso(a)-peso(b)||soDiasAberta(b,hjl)-soDiasAberta(a,hjl));
+  const resumo=ab.length?`<b>${ab.length}</b> em aberto${venc.length?` · <b style="color:var(--verm)">${venc.length}</b> prazo passou`:''}${par.length?` · ${par.length} parada${par.length===1?'':'s'}`:''}`:'nada em aberto';
+  const areaRot=s=>boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area);
+  const linha=s=>{ const v=soVencida(s,hj), pz=soParada(s,hjl), d=soDiasAberta(s,hjl), pr=soPrazoEfetivo(s);
+    return `<div class="ac-row${v?' venc':''}" onclick="soAbrir('${esc(jsq(String(s.id)))}')">
+      <div class="ac-l1"><span class="dias-tag ${v?'hoje':pz?'perto':'longe'}">${d}d</span><b>${esc(atTitleC(s.segurado||'—'))}</b>${v?'<span class="badge b-verm">prazo passou</span>':pz?`<span class="badge b-amarelo">${soDiasSemToque(s,hjl)}d sem andamento</span>`:`<span class="badge b-amarelo">${esc(soRot(SO_STATUS,s.status))}</span>`}</div>
+      <div class="ac-l2">${esc(soTipoRot(s.tipo))}${s.area?' · '+esc(areaRot(s)):''}${pr?' · até '+esc(atFmtBR(pr)):''} · ${String(s.proxima_acao||'').trim()?'➡️ '+esc(s.proxima_acao):'<span style="color:#b45309">sem próximo passo</span>'}${s.bola_com?' · bola com '+esc(boRot(SO_BOLA,s.bola_com)):''}</div></div>`; };
+  const corpo=ab.length?`<div class="ac-lista">${ord.slice(0,6).map(linha).join('')}</div>${ord.length>6?`<div class="ini-nota">+${ord.length-6} — todas na tela de Solicitações.</div>`:''}`
+    :`<div class="vazio" style="padding:12px">Nenhuma solicitação em aberto.</div>`;
+  return iniBloco('solic','📨 Solicitações em acompanhamento',resumo,corpo+`<div class="ac-acts"><button class="btn btn-s btn-mini" onclick="irPara('solicitacoes')">abrir Solicitações</button><button class="btn btn-p btn-mini" onclick="soNova()">＋ nova solicitação</button></div>`);
+}
+function iniBenefBloco(lista){
+  if(!novoOn('ini-acomp')||!modOn('beneficios')||typeof BF==='undefined') return '';
+  const hj=atHojeISO(), hjl=atHojeLocal();
+  const at=(lista||(BF.itens||[]).filter(escLinhaOk)).filter(bfAtivo);
+  const exV=r=>bfExigVencidas(r,hj).length, passou=r=>!!(r.proxima_acao_prazo&&r.proxima_acao_prazo<hj), eHoje=r=>r.proxima_acao_prazo===hj;
+  const nV=at.filter(r=>exV(r)).length, nP=at.filter(r=>bfParado(r,hjl)).length, nM=at.filter(bfMudo).length;
+  const peso=r=>((exV(r)||passou(r))?0:bfParado(r,hjl)?1:bfMudo(r)?2:3);
+  const ord=at.slice().sort((a,b)=>peso(a)-peso(b)||(bfDiasAberto(b,hjl)||0)-(bfDiasAberto(a,hjl)||0));
+  const resumo=at.length?`<b>${at.length}</b> em regulação${nV?` · <b style="color:var(--verm)">${nV}</b> exig. vencida${nV===1?'':'s'}`:''}${nP?` · ${nP} parado${nP===1?'':'s'}`:''}${nM?` · ${nM} mudo${nM===1?'':'s'}`:''}`:'nenhum caso em regulação';
+  const linha=r=>{ const d=bfDiasAberto(r,hjl), ev=exV(r), ea=bfExigAbertas(r).length, par=bfParado(r,hjl), pp=passou(r);
+    return `<div class="ac-row${(ev||pp)?' venc':''}" onclick="bfAbrir('${esc(jsq(String(r.id)))}')">
+      <div class="ac-l1"><span class="dias-tag ${d>=30?'hoje':d>=15?'perto':'longe'}">${d!=null?d+'d':'—'}</span><b>${esc(atTitleC(r.segurado||'—'))}</b><span class="badge ${r.situacao==='em_exigencia'?'b-verm':r.situacao==='montagem'?'b-roxo':'b-amarelo'}">${esc(bfRot(BF_SIT,r.situacao))}</span>${par?`<span class="badge b-verm" title="sem evento novo no diário">🔴 parado ${bfDiasParado(r,hjl)}d</span>`:''}</div>
+      <div class="ac-l2">${esc(bfRot(BF_EVENTOS,r.tipo_evento))}${ea?` · ${ea} exig. aberta${ea===1?'':'s'}${ev?` (<span style="color:var(--verm)">${ev} vencida${ev===1?'':'s'}</span>)`:''}`:''} · ${String(r.proxima_acao||'').trim()?'➡️ '+esc(r.proxima_acao)+(r.proxima_acao_prazo?' até '+esc(atFmtBR(r.proxima_acao_prazo))+(pp?' <b style="color:var(--verm)">passou</b>':eHoje(r)?' <b>hoje</b>':''):''):'<span style="color:#b45309">sem próxima ação</span>'}${r.bola_com?' · bola com '+esc(bfRot(BF_BOLA,r.bola_com)):''}</div></div>`; };
+  const corpo=at.length?`<div class="ac-lista">${ord.slice(0,6).map(linha).join('')}</div>${ord.length>6?`<div class="ini-nota">+${ord.length-6} — todos na tela de Benefícios.</div>`:''}`
+    :`<div class="vazio" style="padding:12px">Nenhum caso em regulação.</div>`;
+  return iniBloco('benef','🩹 Benefícios em regulação',resumo,corpo+`<div class="ac-acts"><button class="btn btn-s btn-mini" onclick="irPara('beneficios')">abrir Benefícios</button><button class="btn btn-p btn-mini" onclick="bfNovo()">🩹 abrir benefício</button></div>`);
+}
 function viewInicio(){
   const lista=meusContatos();
   const listaBC=meusContatosBC();
@@ -2713,7 +2754,7 @@ function viewInicio(){
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
     <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)" title="Abre todos os cards">⌄ abrir tudo</button><button class="btn btn-s btn-mini" id="iniNadaBtn" onclick="iniTudo(false)" title="Recolhe todos os cards">⌃ recolher tudo</button>
       <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button></div>
-    ${pordRender([['agora',inicioAgoraHtml()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
+    ${pordRender([['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
                   ['funil-nn',bNn],['funil-bc',bBc],['ta',bTa],['reunioes',bReun],['eventos',bEv],['lp',bLp]])}`;
   iniBotaoPinta();
 }
@@ -3755,6 +3796,14 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .so-row{padding:10px 0;border-top:1px solid var(--linha);cursor:pointer}
   .so-row:first-child{border-top:0}
   .so-row.venc{background:linear-gradient(90deg,#fff5f5 0,transparent 60%)}
+  /* INI-ACOMP-V1: linhas dos cards de acompanhamento do Início (dedo ≥44px, sem estouro) */
+  .ac-row{padding:9px 0;border-top:1px solid var(--linha);cursor:pointer;min-height:44px}
+  .ac-row:first-child{border-top:0}
+  .ac-row.venc{background:linear-gradient(90deg,#fff5f5 0,transparent 60%)}
+  .ac-l1{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .ac-l1 b{min-width:0;overflow-wrap:anywhere}
+  .ac-l2{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere;line-height:1.35}
+  .ac-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  @media(hover:hover){ .ac-row:hover{background:#f6f8fb} }
   .so-l1,.so-l2{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .so-l1 .so-nome{flex:1;min-width:140px;font-size:14px}
   .so-dias{font-size:12px;font-weight:800;color:var(--muted);min-width:34px}
@@ -14220,6 +14269,7 @@ const MODS={
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
+  'solic-v2':{label:'Solicitações · acompanhamento v2 (área, prazo, próximo passo, linha do tempo)', def:false, views:[]},   /* 17/09: saiu do "só na minha base"; liga por usuário (Victor ligado) */
   beneficios:{label:'Benefícios (sinistro)',               def:true,  views:['beneficios']},
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']},
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']}
@@ -14244,10 +14294,11 @@ const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
-  'solic-v2':     {o:'Solicitações v2: área + prazo da área, linha do tempo, próximo passo, bola com, tempo em aberto (base pro Victor acompanhar)', desde:'2026-09-17'},
+  /* 'solic-v2' — nasceu aqui em 17/09 e no MESMO DIA foi pra MODS com def:false, ligado pro Victor. Palavra dele: "ajusta já essa solicitação pro Victor poder acompanhar". */
+  'ini-acomp':    {o:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o Victor na onda das tratativas', desde:'2026-09-17'},
 };
 function novoOn(k){
-  if(!NOVO_SO_MEU[k]) return true;                  /* não listado = já liberado (o que estava no ar continua) */
+  if(!NOVO_SO_MEU[k]) return MODS[k]? modOn(k) : true;   /* não listado = liberado; se virou módulo em MODS, obedece ao mapa do usuário (pessoa a pessoa) */
   if(!PERFIL) return true;                          /* sem login = base local dele */
   /* vendo como outro dono, a tela mostra o que O OUTRO enxerga — inclusive a
      ausência da novidade. É assim que ele confere antes de liberar. */
@@ -17584,6 +17635,13 @@ function lpSelfCheck(){
         ok('solic: a ficha responde as 4 perguntas dele — há quanto tempo · com quem e até quando · último andamento · bola com', /Aberta há/.test(f) && /Com Prudential · Cobrança/.test(f) && /Último andamento/.test(f) && /Bola com/.test(f) && /prazo passou/.test(f));
         ok('solic: a ficha tem próximo passo, registrar andamento e linha do tempo — todos dobráveis e fechados (regra de 16/09)', /Próximo passo/.test(f) && /Registrar andamento/.test(f) && /Linha do tempo/.test(f) && !/<details[^>]*\sopen[\s>]/.test(f));
         ok('solic: o Agora lista solicitações em acompanhamento com urgência 1 quando há prazo estourado', (()=>{ const l=inicioAgora(); const it=l.find(x=>x.k==='solic'); return !!it && it.n===2 && it.urg===1 && /prazo estourado/.test(it.sub); })());
+        /* INI-ACOMP-V1 + liberação por módulo */
+        ok('ini-acomp: cards de solicitações e benefícios nascem só na base dele, o cabeçalho leva o número e só entra o que está aberto', (()=>{ if(!NOVO_SO_MEU['ini-acomp']) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10)+'T09:00:00Z'; };
+            const h=iniSolicBloco([{id:'zz1',segurado:'Fulano Teste',status:'aberta',tipo:'boleto',area:'lm',prazo_area_dias:3,aberta_em:d(10),ultimo_toque_em:d(0)},{id:'zz2',segurado:'Beltrana Teste',status:'executada',aberta_em:d(3)}]);
+            const b=iniBenefBloco([{id:'zb1',segurado:'Sicrano Teste',situacao:'em_exigencia',tipo_evento:'outro',data_abertura:d(20).slice(0,10),data_aviso:d(20).slice(0,10),exigencias:[],documentos:[],eventos:[]},{id:'zb2',segurado:'Pago Teste',situacao:'pago',tipo_evento:'outro',exigencias:[],documentos:[],eventos:[]}]);
+            return /<b>1<\/b> em aberto/.test(h) && /prazo passou/.test(h) && /Fulano Teste/.test(h) && !/Beltrana/.test(h) && /data-ini="solic"/.test(h) && /<b>1<\/b> em regulação/.test(b) && /Sicrano Teste/.test(b) && !/Pago Teste/.test(b) && /data-ini="benef"/.test(b); })());
+        ok('ini-acomp: os dois cards estão no Início logo depois do Agora, com nome no painel e chave de dobra', /\['solic',iniSolicBloco\(\)\],\['benef',iniBenefBloco\(\)\]/.test(String(viewInicio)) && !!PORD_NOMES.solic && !!PORD_NOMES.benef && ('solic' in INI_PADRAO) && ('benef' in INI_PADRAO));
+        ok('acesso: chave que saiu do "só na minha base" e virou módulo em MODS obedece ao mapa de módulos do usuário (pessoa a pessoa)', (()=>{ const bak=PERFIL; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{'solic-v2':true}}; _escMemo=null; const a=novoOn('solic-v2'); PERFIL={email:'zz@teste',papel:'lp',modulos:{}}; _escMemo=null; const b=novoOn('solic-v2'); return a===true && b===false && !NOVO_SO_MEU['solic-v2'] && !!MODS['solic-v2'] && MODS['solic-v2'].def===false; } finally{ PERFIL=bak; _escMemo=null; } })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
       } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }
@@ -17662,10 +17720,11 @@ function lpSelfCheck(){
            (()=>{ pordOcultar('numeros'); const voltou=pordRender(pecas).includes('<i>N</i>');
                   pordRestaurar(); const st=pordLer();
                   return voltou && !st.ordem.length && !st.ocultos.length && pordOrdem(['agora','numeros','ta']).join()==='agora,numeros,ta'; })());
-        ok('painel: card NOVO do app entra no fim sozinho — nunca nasce escondido nem some',
+        ok('painel: card NOVO do app entra sozinho no lugar natural (logo depois do vizinho que a ordem já conhece) — nunca nasce escondido nem some',
            (()=>{ pordGravar({ordem:['ta','agora'],ocultos:['xyz-velho']});
                   const o=pordOrdem(['agora','numeros','ta']);
-                  return o.join()==='ta,agora,numeros' && !pordOculto('numeros'); })());
+                  pordGravar({ordem:['agora','numeros'],ocultos:[]}); const o2=pordOrdem(['agora','novo','numeros']);
+                  return o.join()==='ta,agora,numeros' && o2.join()==='agora,novo,numeros' && !pordOculto('numeros'); })());
         ok('painel: preferência corrompida no aparelho não derruba o Início',
            (()=>{ localStorage.setItem(PORD_CHAVE,'{isso nao e json'); const st=pordLer();
                   return !st.ordem.length && !st.ocultos.length && pordRender(pecas).includes('<i>A</i>'); })());
