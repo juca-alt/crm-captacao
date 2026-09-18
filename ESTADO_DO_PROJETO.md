@@ -2,6 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (38ª onda) — MES-V1: vista Mês da Agenda no estilo do Google (v7.96)
+
+Print do Mês do Google no celular dele: semanas em linha com o número da semana à esquerda, seg→dom, hoje em círculo azul, 2–3 chips coloridos por dia e "•••" quando tem mais. Pedido: *"B — antes, vista Mês e sobe tudo junto"* (deploy já autorizado).
+
+### O que mudou
+- **Vista Mês** (`gcalMesHTML`): grade **seg→dom** em semanas completas (células de fora do mês apagadas), **nº da semana ISO** na esquerda, **hoje** em círculo azul, até **3 chips** por dia (pintados com a cor do Google, pessoal apagado) e **+N** quando tem mais. **◀ ▶** trocam o mês, "hoje" volta.
+- **Carga própria do mês** (`gcalCarregarMes`): a lista vale 8 dias; o Mês busca o intervalo primeira→última célula em todas as agendas ligadas e guarda em `GCAL.mes` (5 min de validade). Enquanto carrega, mostra o que já tem.
+- **Toque no dia** abre a **folha do dia** (`gcalMesDia`): as linhas do dia com o mesmo **⋯ ação** da lista + **＋ Novo neste dia**. `gcalEvPorId` passou a achar também os eventos do mês (o cartão ⋯ funciona fora da janela de 8 dias).
+- Botão **Mês** no seletor (só com `agenda-semana`).
+
+### Gate
+- Dentro de `agenda-semana` (sem chave nova).
+
+### Prova
+- Portão aberto (47 telas) · guard OK · `teste-mes.mjs` **12/12** em 390 e 1280 (grade correta, hoje, 3 chips + "+2", chip com a cor, ▶ carrega o mês e mostra o evento do dia 15, folha do dia com 5 linhas ⋯ e ＋ Novo, ⋯ de evento do mês, Daniel sem Mês) · regressão cores 8/8, semana 10/10, categorias 12/12 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (37ª onda) — CATEGORIAS-V1: as 12 categorias dele puxadas sozinhas; reunião do CRM na cor da etapa (v7.95)
 
 Prints do Google dele (Agenda em lista com as cores, menu de vistas, Semana de 7 no celular) e a palavra: *"te mandei as 10 categorias que eu uso; vai cair tudo de Minha agenda e Tarefas. Se ele puxar já de cada categoria fica mais fácil a associação."*
