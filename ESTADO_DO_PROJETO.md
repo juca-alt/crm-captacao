@@ -2,6 +2,22 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (25ª onda) — FORM-BASE-V1 (campos sem borda) + DRW-ORDEM-V1 (organizar tópicos da ficha) (v7.83)
+
+Print dele da ficha no iPad: *"alguns campos como telefone aparecem em branco. Verifica todos os campos e corrige. Permite também no card do cliente, além de expandir e recolher, organizar os tópicos — tipo o Início."*
+
+### Bug: Telefone/Profissão "em branco"
+- **Causa:** regra da calculadora de planos (`.pl`) **sem escopo** em `input[type=text]` e `select` desde 11/09 (v7.39). Fora da calculadora as variáveis `--pl-*` não existem → `border:1px solid var(--pl-ring)` inválida → **campo sem borda nem fundo** (o valor aparecia como texto solto; vazio, sumia). E-mail/número/data escapavam por não estarem na regra — mas ficavam no estilo cru do navegador.
+- **Conserto (FORM-BASE-V1):** a regra ganhou o `.pl` de volta e nasceu uma **base única e válida** pra todo campo de texto/select/textarea que nenhum bloco estilizou (borda `--linha`, raio 7, padding 6/9, fundo branco, foco na cor primária). Regras de bloco (`.bne-f`, `.toolbar`, `.sheet`…) seguem ganhando por virem depois. `width:100%` em `input[type=text]`/`select` mantido (status quo desde 11/09). Font-size fora da base (o 16px do celular anti-zoom continua).
+- Invariante que renderiza um input/select/e-mail fora da tela e exige borda sólida + varre as folhas de estilo por `input[type=text]` com `var(--pl-`.
+
+### Organizar tópicos da ficha (DRW-ORDEM-V1)
+- Botão **⋮⋮ organizar** ao lado de Expandir/Recolher na gaveta do negócio. Modo organizar = barra ↑ ↓ 🚫 em cada tópico (14 hoje, inclusive "Quem é a pessoa" e "Dados da pessoa"), cabeçalho amarelo com **↺ voltar ao padrão** e **✓ pronto**. Escondido continua listado (riscado) no modo; fora dele, some e aparece "N tópicos escondidos — organizar".
+- Memória por aparelho (`crmlp_ficha_ordem_v1`), separada da memória de aberto/fechado. Tópico novo do app entra **logo depois do vizinho natural** (`drwOrdCalc`, pura e testada). Funciona por cima do DOM após cada render (a gaveta é innerHTML refeito).
+
+### Prova
+- Portão aberto · `teste-ficha-ordem.mjs` **18/18** em 390 e 1280 (bordas iguais em todos os campos, select com borda, organizar/mover/esconder/lembrar/restaurar, Expandir tudo segue) · 2 invariantes novos. ⚠️ Lição: `String(renderDrawer)` não serve pra invariante — a função é envelopada pelas camadas (voltar do Android).
+
 ## 17/09/2026 (24ª onda) — HUB-DOBRA-V1: Módulos e Configurações com seções dobráveis (v7.82)
 
 Print dele da tela Módulos no iPhone: *"a área de outros módulos também precisa que os tópicos sejam recolhidos ou expandíveis. Está ficando muito extenso."* É a regra da dobra fechada (16/09) chegando no hub.

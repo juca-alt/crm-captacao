@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.82 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.83 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -75,9 +75,16 @@
   border-radius:8px;padding:7px 14px;font-size:13px}
 .pl .plb:hover{border-color:#4a4a47;color:var(--pl-ink)}
 .pl .plb.on{background:var(--pl-series);border-color:var(--pl-series);color:#fff}
-.pl input[type=number],input[type=text],select{background:var(--pl-surface2);color:var(--pl-ink);
+.pl input[type=number],.pl input[type=text],.pl select{background:var(--pl-surface2);color:var(--pl-ink);
   border:1px solid var(--pl-ring);border-radius:7px;padding:6px 9px;font:inherit;font-size:14px;width:100%}
-.pl input:focus,select:focus{outline:none;border-color:var(--pl-series)}
+.pl input:focus,.pl select:focus{outline:none;border-color:var(--pl-series)}
+/* FORM-BASE-V1 (18/09): a regra acima vazava sem o `.pl` em input[type=text] e select (desde 11/09) —
+   fora da calculadora as variáveis --pl-* não existem, a borda virava inválida e o campo sumia
+   (print dele: Telefone/Profissão em branco na ficha). Base única e válida pra todo campo de texto
+   que nenhum bloco estilizou; regra de bloco (.bne-f, .toolbar, .sheet…) continua ganhando por vir depois. */
+input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=search],input[type=url],select,textarea{background:#fff;color:var(--ink);border:1px solid var(--linha);border-radius:7px;padding:6px 9px;font-family:inherit}
+input[type=text],select{width:100%}   /* status quo desde 11/09: estes dois já vinham com largura cheia */
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)}
 .pl .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 
 /* MENU-SEM-ETAPAS: o [hidden] perdia pro display:flex do .nav-grp-btn */
@@ -795,6 +802,8 @@
   .pord-n{font-weight:700;font-size:12.5px;flex:1;min-width:120px}
   .pord-off{font-size:12px;color:var(--muted);padding:6px 4px 10px}
   .pord-esc{font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  /* DRW-ORDEM-V1: tópico escondido no modo organizar da gaveta */
+  #drawer .sec.drw-off{opacity:.55;border-style:dashed} #drawer .sec.drw-off > :not(.pord-bar):not(h3):not(details){display:none} #drawer .sec > .pord-bar{margin:-4px 0 6px}
   .nncard.td-lift{opacity:.35;border-style:dashed} .td-ghost{position:fixed;z-index:400;pointer-events:none;opacity:.95;transform:scale(1.03) rotate(1.5deg);box-shadow:0 12px 30px rgba(16,30,54,.28)} body.td-on{overflow:hidden;touch-action:none}
   .nncard:hover{border-color:var(--azul-borda)}
   .nncard.dragging{opacity:.4}
@@ -5164,6 +5173,44 @@ function drwSecsTodas(abrir){
 }
 /* DOBRA-FECHADA-V1.1: dois botões fixos (Expandir / Recolher) — nada a repintar. */
 function drwSecsBotao(){}
+/* ═══ DRW-ORDEM-V1 (18/09/2026): organizar os tópicos da gaveta ═════════════════════
+   Pedido dele (print da ficha no iPad): "permite também na área do card do cliente, além de
+   expandir e recolher, organizar os tópicos — tipo o que botou lá no Início."
+   Mesmo desenho do "organizar painel": ordem + esconder, por aparelho; tópico escondido continua
+   no modo organizar com o botão de trazer de volta; tópico NOVO do app entra no lugar natural.
+   Funciona por cima do DOM depois do render (a gaveta é innerHTML refeito toda vez). */
+const DRW_ORD_CHAVE='crmlp_ficha_ordem_v1';
+let DRW_ORG=false;
+function drwOrdLer(){ try{ const o=JSON.parse(localStorage.getItem(DRW_ORD_CHAVE)||'{}')||{}; return {ordem:Array.isArray(o.ordem)?o.ordem.map(String):[], ocultos:Array.isArray(o.ocultos)?o.ocultos.map(String):[]}; }catch(_){ return {ordem:[],ocultos:[]}; } }
+function drwOrdGravar(o){ try{ localStorage.setItem(DRW_ORD_CHAVE,JSON.stringify(o)); }catch(_){} }
+/* pura e testável: ordem salva só vale pro que existe; desconhecido entra logo depois do vizinho natural anterior */
+function drwOrdCalc(chaves,st){ const o=(st.ordem||[]).filter(k=>chaves.includes(k));
+  chaves.forEach((k,i)=>{ if(o.includes(k)) return; let pos=-1; for(let j=i-1;j>=0;j--){ const q=o.indexOf(chaves[j]); if(q>=0){ pos=q; break; } } o.splice(pos+1,0,k); }); return o; }
+function drwSecKeyTxt(txt){ return normKey(String(txt||'').replace(/\(\s*\d+\s*\)/g,'').replace(/\d+%/g,'').replace(/\d+/g,'')).replace(/[+✏️🗑✕⌄⌃▾▸👤🎯🏠🛡]/g,'').trim(); }
+function drwSecTituloDe(sec){ const h=sec.querySelector('h3'); if(h) return drwSecTitulo(h).trim(); const sm=sec.querySelector('summary'); if(sm){ const b=sm.firstChild; return ((b&&b.nodeType===3?b.textContent:sm.textContent)||'').trim(); } return ''; }
+function drwOrgModo(v){ DRW_ORG=!!v; renderDrawer(); }
+function drwOrdMover(k,d){ const secs=[...document.querySelectorAll('#drawer .drawer-body > .sec[data-sec]')].map(x=>x.dataset.sec); const i=secs.indexOf(k); if(i<0) return; const j=i+d; if(j<0||j>=secs.length) return; secs[i]=secs[j]; secs[j]=k; const st=drwOrdLer(); st.ordem=secs; drwOrdGravar(st); renderDrawer(); }
+function drwOrdOcultar(k){ const st=drwOrdLer(); const i=st.ocultos.indexOf(k); if(i>=0) st.ocultos.splice(i,1); else st.ocultos.push(k); drwOrdGravar(st); renderDrawer(); }
+function drwOrdRestaurar(){ drwOrdGravar({ordem:[],ocultos:[]}); renderDrawer(); }
+function drwOrdAplicar(){
+  const body=document.querySelector('#drawer .drawer-body'); if(!body) return;
+  const secs=[...body.querySelectorAll(':scope > .sec')];
+  secs.forEach(sec=>{ if(!sec.dataset.sec){ const k=drwSecKeyTxt(drwSecTituloDe(sec)); if(k) sec.dataset.sec=k; } });
+  const com=secs.filter(x=>x.dataset.sec); const chaves=com.map(x=>x.dataset.sec);
+  const st=drwOrdLer(); const ordem=drwOrdCalc(chaves,st);
+  const ancora=com.length?com[com.length-1].nextSibling:null;
+  ordem.forEach(k=>{ const sec=com.find(x=>x.dataset.sec===k); if(sec) body.insertBefore(sec,ancora); });
+  body.querySelectorAll(':scope > .pord-hd, :scope > .pord-esc').forEach(e=>e.remove());
+  com.forEach(sec=>{ const k=sec.dataset.sec, oculto=st.ocultos.includes(k); sec.querySelectorAll(':scope > .pord-bar').forEach(e=>e.remove()); sec.classList.remove('drw-off');
+    if(DRW_ORG){ const i=ordem.indexOf(k), nome=drwSecTituloDe(sec)||k;
+      const bar=document.createElement('div'); bar.className='pord-bar';
+      bar.innerHTML=`<span class="pord-n">${esc(nome)}</span><button class="btn btn-s btn-mini" ${i===0?'disabled':''} onclick="drwOrdMover('${esc(jsq(k))}',-1)" title="Subir" aria-label="Subir ${esc(nome)}">↑</button><button class="btn btn-s btn-mini" ${i===ordem.length-1?'disabled':''} onclick="drwOrdMover('${esc(jsq(k))}',1)" title="Descer" aria-label="Descer ${esc(nome)}">↓</button><button class="btn ${oculto?'btn-p':'btn-s'} btn-mini" onclick="drwOrdOcultar('${esc(jsq(k))}')">${oculto?'👁 mostrar':'🚫 esconder'}</button>`;
+      sec.insertBefore(bar,sec.firstChild); sec.hidden=false; if(oculto) sec.classList.add('drw-off'); }
+    else sec.hidden=oculto; });
+  if(DRW_ORG){ const hd=document.createElement('div'); hd.className='pord-hd'; hd.innerHTML=`<b>Organizando a ficha</b> — ↑ ↓ muda a ordem, 🚫 esconde. Vale só neste aparelho.<span style="flex:1"></span><button class="btn btn-ghost btn-mini" onclick="drwOrdRestaurar()">↺ voltar ao padrão</button><button class="btn btn-p btn-mini" onclick="drwOrgModo(false)">✓ pronto</button>`; body.insertBefore(hd,com[0]||null); }
+  else if(st.ocultos.length){ const n=st.ocultos.filter(k=>chaves.includes(k)).length; if(n){ const e=document.createElement('div'); e.className='pord-esc'; e.innerHTML=`${n} tópico${n===1?'':'s'} escondido${n===1?'':'s'} desta ficha — <button class="btn btn-s btn-mini" onclick="drwOrgModo(true)">organizar</button>`; body.appendChild(e); } }
+}
+window.drwOrgModo=drwOrgModo; window.drwOrdMover=drwOrdMover; window.drwOrdOcultar=drwOrdOcultar; window.drwOrdRestaurar=drwOrdRestaurar;
 /* roda depois de cada render da gaveta — o innerHTML é refeito toda vez */
 function drwSecsWire(){
   const st=drwSecsLer();
@@ -5183,6 +5230,7 @@ function drwSecsWire(){
     drwSecAplicar(sec,drwSecAberta(k,st));
   });
   drwSecsBotao();
+  drwOrdAplicar();   /* DRW-ORDEM-V1: ordem, escondidos e o modo organizar, por cima do DOM pronto */
 }
 
 function renderDrawer(){
@@ -5208,6 +5256,7 @@ function renderDrawer(){
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:-4px">
         <button class="btn btn-ghost btn-mini" id="drw-todas" onclick="drwSecsTodas(true)" title="Abre todos os tópicos desta ficha">⌄ Expandir tudo</button>
         <button class="btn btn-ghost btn-mini" id="drw-nada" onclick="drwSecsTodas(false)" title="Recolhe todos os tópicos desta ficha">⌃ Recolher tudo</button>
+        <button class="btn ${DRW_ORG?'btn-p':'btn-ghost'} btn-mini" id="drw-org" onclick="drwOrgModo(${DRW_ORG?'false':'true'})" title="Mudar a ordem dos tópicos e esconder o que você não usa nesta ficha">⋮⋮ ${DRW_ORG?'pronto':'organizar'}</button>
       </div>
       <div class="sec"><details>
         <summary style="cursor:pointer;font-weight:700;font-size:14px">👤 Quem é a pessoa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(fichaPessoaResumo(c,'card'))}</span></summary>
@@ -17761,6 +17810,9 @@ function lpSelfCheck(){
             hubSecToggle('hub:zz:teste-sec',true); const lembrou=hubSecAberta('hub:zz:teste-sec')===true && hubSecAberta('hub:zz:outra')===false;
             return fechado && /Card Um · Card Dois \(7\)/.test(resumo) && lembrou && /hubSecsTodas\(true\)/.test(String(viewModulos)+String(hubBotoesHtml)) && /hubSecsTodas\(false\)/.test(String(hubBotoesHtml)) && /hubBotoesHtml\(\)/.test(String(viewConfig)); }
           finally{ try{ if(bak===null) localStorage.removeItem(HUB_SEC_CHAVE); else localStorage.setItem(HUB_SEC_CHAVE,bak); }catch(_){} } })());
+        /* FORM-BASE-V1 + DRW-ORDEM-V1 */
+        ok('form: campo de texto e select fora da calculadora têm borda visível (o vazamento do .pl foi fechado)', (()=>{ const w=document.createElement('div'); w.style.cssText='position:absolute;left:-9999px;top:0'; w.innerHTML='<input type="text" id="zz_ft"><select id="zz_fs"><option>a</option></select><input type="email" id="zz_fe">'; document.body.appendChild(w); try{ const b=id=>{ const cs=getComputedStyle(document.getElementById(id)); return cs.borderTopStyle==='solid' && parseFloat(cs.borderTopWidth)>=1; }; return b('zz_ft') && b('zz_fs') && b('zz_fe') && ![...document.styleSheets].some(sh=>{ try{ return [...sh.cssRules].some(r=>r.selectorText && /(^|,)\s*input\[type=text\]/.test(r.selectorText) && /var\(--pl-/.test(r.style.cssText)); }catch(_){ return false; } }); } finally{ w.remove(); } })());
+        ok('ficha: organizar tópicos — ordem salva vale só pro que existe, tópico novo entra no lugar natural, escondido segue listado', (()=>{ const o=drwOrdCalc(['a','b','c','d'],{ordem:['c','a'],ocultos:['b']}); const o2=drwOrdCalc(['a','novo','b'],{ordem:['a','b'],ocultos:[]}); return o.join()==='c,d,a,b' && o2.join()==='a,novo,b' && typeof drwOrgModo==='function' && typeof window.drwOrdMover==='function' && /drwOrdAplicar\(\)/.test(String(drwSecsWire)) && drwSecKeyTxt('Recomendações (3)')==='recomendacoes' && drwSecKeyTxt('👤 Quem é a pessoa ')==='quem e a pessoa'; })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
       } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }
