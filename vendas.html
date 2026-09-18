@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.85 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.86 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -868,6 +868,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nncol-enc-head:hover{background:#f5eaea}
   .sp-sug{background:var(--azul-claro);border:1px solid var(--azul-borda);border-radius:10px;padding:10px 14px;font-size:13px;margin:10px 0 4px}
   .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff;min-height:36px}
+  .ta-link{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:none;border-bottom:1px dotted var(--muted)} .ta-link:hover{color:var(--azul);border-bottom-color:var(--azul)}
+  .ta-chip a{color:inherit;text-decoration:none}
   .ta-lchip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--linha);background:var(--bg);white-space:nowrap;margin:1px 0}
   @media(max-width:980px){ .res-sel{min-height:44px;max-width:none;width:100%;font-size:14px} }
   .meta-in{font-size:11px;color:var(--muted);margin-top:4px;text-align:center}
@@ -15299,12 +15301,64 @@ const FTA_CAMPOS=['busca','trilha','estagio','pri','res','cid','prof','idmin','i
 function taFiltroLimpar(){ FTA_CAMPOS.forEach(k=>FTA[k]=''); FTA.recem.clear(); viewBnTa(); }
 function taFiltrosAtivos(){ return FTA_CAMPOS.filter(k=>k!=='busca'&&FTA[k]).length; }
 /* colunas extras da planilha do TA — reusa o catálogo do Estoque (BN_COLS) */
-const TA_COLS_DEF=['recomendante','cargo','cidade','idade'];
+/* ═══ TA-COLUNAS-V1 (18/09/2026): colunas ajustáveis nos painéis TA e WA + campos linkados ═══
+   Pedido dele: "tem também a possibilidade de ajustar essas colunas — a pessoa quer botar o
+   endereço, que já vai brincar com o link dos mapas no fluxo de visitação. Trabalha bem esses
+   campos linkados." Catálogo próprio (serve funil E Estoque), 🧩 Colunas no mesmo desenho do
+   Estoque (ligar/desligar + ↑↓, salvo por aparelho). Nome, resultado e ações ficam fixos. Cada
+   campo é um LINK: endereço → Google Maps · telefone → ligar · recomendante → abre a ficha dele ·
+   e-mail → mailto · cidade/empresa → busca no Maps. */
+const TA_COLS={
+  prof:     {label:'Profissão / empresa', hide:true},
+  idade:    {label:'Idade', sort:'idade'},
+  renda:    {label:'Renda', sort:'renda_estimada'},
+  estagio:  {label:'Estágio', sort:'estagio'},
+  listas:   {label:'Listas', hide:true},
+  rec:      {label:'Indicado por', hide:true},
+  telefone: {label:'Telefone'},
+  endereco: {label:'📍 Endereço', hide:true},
+  cidade:   {label:'Cidade', sort:'cidade', hide:true},
+  empresa:  {label:'Empresa', hide:true},
+  email:    {label:'E-mail', sort:'email', hide:true},
+  nasc:     {label:'Nascimento', sort:'nascimento', hide:true},
+  ultima:   {label:'Última tentativa', hide:true}
+};
+const TA_COLS_DEF=['prof','idade','renda','estagio','listas','rec','telefone'];
 let TAP={cols:null};
-function taPrefLer(){ try{ const r=localStorage.getItem('crmlp_ta_cols_v1'); if(r) TAP=Object.assign(TAP,JSON.parse(r)); }catch(_){}
+function taPrefLer(){ try{ const r=localStorage.getItem('crmlp_ta_cols_v2'); if(r) TAP=Object.assign(TAP,JSON.parse(r)); }catch(_){}
   if(!Array.isArray(TAP.cols)) TAP.cols=null; }
-function taPrefSalvar(){ try{ localStorage.setItem('crmlp_ta_cols_v1',JSON.stringify(TAP)); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); } }
-function taColsVis(){ return (TAP.cols||TA_COLS_DEF).filter(k=>BN_COLS[k]&&k!=='nome'&&k!=='telefone'); }
+function taPrefSalvar(){ try{ localStorage.setItem('crmlp_ta_cols_v2',JSON.stringify(TAP)); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); } }
+function taColsVis(){ return (TAP.cols||TA_COLS_DEF).filter(k=>TA_COLS[k]); }
+function taMapsUrl(q){ q=String(q||'').trim(); return q?'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q):''; }
+function taLocDe(c){ const l=(typeof locPrincipalPessoa==='function')?locPrincipalPessoa(c):((typeof locPrincipal==='function')?locPrincipal(c):null); if(!l) return null;
+  const txt=locTexto(l); if(!txt) return null; const q=(l.lat!=null&&l.lng!=null&&isFinite(+l.lat)&&isFinite(+l.lng))?(l.lat+','+l.lng):txt; return {txt,url:taMapsUrl(q)}; }
+function taEndHtml(c,mini){ const L=taLocDe(c); if(!L) return mini?'':'<span class="ta-sub">—</span>';
+  return `<a class="ta-link" target="_blank" rel="noopener" href="${esc(L.url)}" onclick="event.stopPropagation()" title="Abrir no Google Maps">📍 ${esc(L.txt)}</a>`; }
+function taAbrirPorNome(nome){ const k=normKey(nome||''); if(!k) return;
+  const b=bnVivos().find(x=>normKey(x.nome||'')===k); if(b){ taFichaAbrir(b.id); return; }
+  const f=(S.contatos||[]).find(x=>escVisivel(x)&&normKey(x.nome||'')===k); if(f){ abrirContato(f.id); return; }
+  const ref=(typeof cartRefDe==='function')?cartRefDe(nome):null; if(ref&&typeof cartAbrir==='function'){ cartAbrir(ref); return; }
+  toast('Não achei a ficha de '+nome+' — só o nome está registrado',false); }
+window.taAbrirPorNome=taAbrirPorNome;
+function taThHtml(k){ const d=TA_COLS[k]; if(!d) return ''; const cls=d.hide?' class="ta-hide"':'';
+  return d.sort? fxTh('ta',d.sort,d.label).replace('<th ','<th'+cls+' ') : `<th${cls}>${esc(d.label)}</th>`; }
+function taCelHtml(c,k,ctx){ ctx=ctx||{}; const fun=spEhFunil(c), d=TA_COLS[k]; if(!d) return ''; const cls=d.hide?' class="ta-hide"':''; const vazio='<span class="ta-sub">—</span>'; let h='';
+  switch(k){
+    case 'prof': h=`<div>${esc((fun?c.profissao:c.cargo)||'—')}</div><div class="ta-sub">${esc(fun?'funil':(c.empresa||''))}</div>`; break;
+    case 'idade': h=c.idade??vazio; break;
+    case 'renda': h=taRenda(c.renda_estimada); break;
+    case 'estagio': h=ctx.badge!=null?ctx.badge:taEtapaBadge(c); break;
+    case 'listas': h=taListasChips(c); break;
+    case 'rec': h=(c.recomendante||'').trim()?`<button class="ta-link" onclick="event.stopPropagation();taAbrirPorNome('${esc(jsq(c.recomendante))}')" title="Abrir a ficha de quem indicou">👤 <b>${esc(c.recomendante)}</b></button>`:vazio; break;
+    case 'telefone': h=taTemFone(c)?`<a class="ta-tel ta-link" href="${esc(telHref(c.telefone))}" onclick="event.stopPropagation()" title="Ligar">${esc(c.telefone)}</a>`:'<span class="ta-sub">sem telefone</span>'; break;
+    case 'endereco': h=taEndHtml(c); break;
+    case 'cidade': h=c.cidade?`<a class="ta-link" target="_blank" rel="noopener" href="${esc(taMapsUrl(c.cidade))}" onclick="event.stopPropagation()" title="Ver no Google Maps">${esc(c.cidade)}</a>`:vazio; break;
+    case 'empresa': { const e=fun?'':(c.empresa||''); h=e?`<a class="ta-link" target="_blank" rel="noopener" href="${esc(taMapsUrl(e+(c.cidade?' '+c.cidade:'')))}" onclick="event.stopPropagation()" title="Buscar no Google Maps">${esc(e)}</a>`:vazio; break; }
+    case 'email': { const e=(c.email||'').trim(); h=e?`<a class="ta-link" href="mailto:${esc(e)}" onclick="event.stopPropagation()">${esc(e)}</a>`:vazio; break; }
+    case 'nasc': { const d0=c.nascimento||c.nasc||''; h=d0?esc(dataBR(String(d0).slice(0,10))):vazio; break; }
+    case 'ultima': h=esc(taTentouTxt(c)||'')||vazio; break;
+  }
+  return `<td${cls}>${h}</td>`; }
 function taColToggle(k,on){ TAP.cols=fxColsSet(taColsVis(),k,on,''); taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
 function taColMover(k,d){ TAP.cols=fxColsMover(taColsVis(),k,d,''); taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
 function taColPadrao(){ TAP.cols=null; taPrefSalvar(); FTA.pop='cols'; viewBnTa(); }
@@ -15859,6 +15913,7 @@ function viewBnTa(){
            <label class="ta-lbl">Renda ≥ (R$/mês)</label><input type="number" step="1000" value="${esc(FTA.rmin)}" onchange="FTA.rmin=this.value;viewBnTa()">
            <label class="ta-lbl">Cidade</label><input type="search" value="${esc(FTA.cid)}" onchange="FTA.cid=this.value;viewBnTa()">`,!!(FTA.prof||FTA.rec||FTA.idmin||FTA.idmax||FTA.rmin||FTA.cid))}
       </div></aside>`;
+  const cols=taColsVis();
   const linha=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'',c.origem&&c.origem!=='—'?c.origem:''].filter(Boolean).join(' · ')||'—':[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const pri=c.prioridade==1?'var(--verm)':c.prioridade==3?'var(--muted)':'transparent';
     const badge=taEtapaBadge(c)+(smk==='delay'?` <span class="badge b-amarelo">⏳ ${esc(taDelayTipo(c)||'')}</span>`
@@ -15870,22 +15925,16 @@ function viewBnTa(){
     return `<tr class="ta-row" onclick="${abrir}" title="Abrir ficha">
       <td onclick="event.stopPropagation()"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()"></td>
       <td><div style="display:flex;align-items:center;gap:10px">${taAvatar(c)}<div><div class="ta-nm"><span class="ta-pri" style="background:${pri}"></span>${esc(c.nome)}</div><div class="ta-sub ta-hide">${esc(sub)}${c.cidade?' · '+esc(c.cidade):''}</div></div></div></td>
-      <td class="ta-hide"><div>${esc((fun?c.profissao:c.cargo)||'—')}</div><div class="ta-sub">${esc(fun?'funil':(c.empresa||''))}</div></td>
-      <td>${c.idade??'<span class="ta-sub">—</span>'}</td><td>${taRenda(c.renda_estimada)}</td>
-      <td>${badge}</td>
-      <td class="ta-hide">${taListasChips(c)}</td>
-      <td class="ta-hide">${(c.recomendante||'').trim()?`👤 <b>${esc(c.recomendante)}</b>`:'<span class="ta-sub">—</span>'}</td>
-      <td>${taTemFone(c)?`<span class="ta-tel">${esc(c.telefone)}</span>`:'<span class="ta-sub">sem telefone</span>'}</td>${res}<td>${acoes}</td></tr>`; };
+      ${cols.map(k=>taCelHtml(c,k,{badge})).join('')}${res}<td>${acoes}</td></tr>`; };
   const card=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'','funil'].filter(Boolean).join(' · '):[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const badge=taEtapaBadge(c);
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
-    const chips=[...taListasDe(c).map(x=>esc(x)),c.idade!=null?'🎂 '+c.idade:'', c.renda_estimada?'💰 '+taRenda(c.renda_estimada):'', c.cidade?'📍 '+esc(c.cidade):'', (c.recomendante||'').trim()?'👤 <b>'+esc(c.recomendante)+'</b>':'<span style="color:var(--muted)">👤 sem recomendante</span>', (logado()&&escAtual().id==='todos')?'🏷️ '+esc(escRotuloDe(c)):''].filter(Boolean);
+    const chips=[...taListasDe(c).map(x=>esc(x)),taEndHtml(c,true),c.idade!=null?'🎂 '+c.idade:'', c.renda_estimada?'💰 '+taRenda(c.renda_estimada):'', c.cidade?'📍 '+esc(c.cidade):'', (c.recomendante||'').trim()?'👤 <b>'+esc(c.recomendante)+'</b>':'<span style="color:var(--muted)">👤 sem recomendante</span>', (logado()&&escAtual().id==='todos')?'🏷️ '+esc(escRotuloDe(c)):''].filter(Boolean);
     return `<div class="ta-card" onclick="${abrir}">
       <div class="ta-card-h"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()">${taAvatar(c)}<div style="flex:1;min-width:0"><div class="ta-nm">${esc(c.nome)}</div><div class="ta-sub">${esc(sub)}</div></div>${badge}</div>
       ${chips.length?`<div class="ta-chips" style="margin:6px 0 0">${chips.map(x=>'<span class="ta-chip">'+x+'</span>').join('')}</div>`:''}
       <div class="ta-card-f"><span class="ta-tel">${taTemFone(c)?esc(c.telefone):'sem telefone'}</span><span style="flex:1"></span>${taTemFone(c)?`<a class="ta-ib" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun?`<button class="ta-ib" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>
       ${comRes?`<div onclick="event.stopPropagation()" style="margin-top:6px">${resBtns(c)}</div>`:''}</div>`; };
-  const cols=taColsVis();
   $('#main').innerHTML=`
     <div class="ta-wrap">${lateral}<section class="ta-main">
       ${taKpisHtml()}
@@ -15894,6 +15943,7 @@ function viewBnTa(){
         <span style="flex:1"></span>
         <div class="seg"><button class="${TAV.seg==='lista'?'on':''}" onclick="TAV.seg='lista';viewBnTa()">▤ Lista</button><button class="${TAV.seg==='rec'?'on':''}" onclick="TAV.seg='rec';viewBnTa()">🌳 Recomendações</button></div>
         <button class="btn btn-s btn-mini bn-mob" onclick="fxSheetAbrir('ta')">🎛️ Filtros${taFiltrosAtivos()?' ('+taFiltrosAtivos()+')':''}</button>
+        ${fxColsHtml('ta',TA_COLS,cols,'')}
         <button class="btn btn-s btn-mini" onclick="taExportCsv()">⬇ CSV</button>
         ${!wa&&taFocoFila().length?`<button class="btn btn-p btn-mini" onclick="taFocoAbrir()">▶ Foco nesta lista</button>`:''}
       </div>
@@ -15902,7 +15952,7 @@ function viewBnTa(){
       ${trab?`<div class="toolbar" style="gap:6px"><input id="bnta-add" data-so-leitura="lido no clique de Adicionar (bnTaAddPorNome)" list="bnta-cand" style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'a Hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)"><datalist id="bnta-cand">${vivos.filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hoje : !(c.listas||[]).includes(BNTA.lista))).slice(0,400).map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}"></option>`).join('')}</datalist><button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
         ${BNTA.lista!=='hoje'?`<button class="btn btn-s btn-mini" onclick="taListaRenomear('${esc(jsq(BNTA.lista))}')">Renomear</button><button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(jsq(BNTA.lista))}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}</div>`:''}
       ${selNaLista.length?`<div class="ta-selbar"><b>${selNaLista.length} selecionado${selNaLista.length>1?'s':''}</b><span style="flex:1"></span><button class="btn btn-s btn-mini" onclick="taBulkMenu(event)">Mover / adicionar…</button>${trab?`<button class="btn btn-s btn-mini" onclick="bnTaTirarLote()">✕ Tirar da lista</button>`:''}<button class="btn btn-s btn-mini" onclick="FTA.sel.clear();viewBnTa()">Limpar</button></div>`:''}
-      ${TAV.seg==='rec'? taRecsHtml(lista) : lista.length? `<div class="card ta-tblwrap"><table class="ta-tbl"><thead><tr><th></th>${fxTh('ta','nome','Nome')}<th class="ta-hide">Profissão / empresa</th>${fxTh('ta','idade','Idade')}${fxTh('ta','renda_estimada','Renda')}${fxTh('ta','estagio','Estágio')}<th class="ta-hide">Listas</th><th class="ta-hide">Indicado por</th><th>Telefone</th>${comRes?fxTh('ta','res',wa?'Zap de hoje':'Resultado de hoje'):''}<th></th></tr></thead><tbody>${lista.slice(0,400).map(linha).join('')}</tbody></table>${lista.length>400?`<div class="ta-sub" style="padding:8px">Mostrando 400 de ${lista.length} — afine os filtros.</div>`:''}</div><div class="ta-cards">${lista.slice(0,200).map(card).join('')}</div>`
+      ${TAV.seg==='rec'? taRecsHtml(lista) : lista.length? `<div class="card ta-tblwrap"><table class="ta-tbl"><thead><tr><th></th>${fxTh('ta','nome','Nome')}${cols.map(taThHtml).join('')}${comRes?fxTh('ta','res',wa?'Zap de hoje':'Resultado de hoje'):''}<th></th></tr></thead><tbody>${lista.slice(0,400).map(linha).join('')}</tbody></table>${lista.length>400?`<div class="ta-sub" style="padding:8px">Mostrando 400 de ${lista.length} — afine os filtros.</div>`:''}</div><div class="ta-cards">${lista.slice(0,200).map(card).join('')}</div>`
         : `<div class="vazio" style="padding:36px 12px;text-align:center">${base.length?'Nenhuma pessoa com esses filtros.<br><small>Afrouxe um filtro ou troque de lista.</small>':smk?'Ninguém nesta lista ainda.':(BNTA.lista==='hoje'?'Lista de hoje vazia — puxe nomes pelo ⋯ de qualquer lista ou pela caixa acima.':'Lista vazia.')}</div>`}
     </section></div>`;
 }
@@ -17897,7 +17947,12 @@ function lpSelfCheck(){
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
         /* TA-LINHA-V2 */
         ok('painel TA/WA: resultado do dia é um seletor só por linha (Estoque, funil e Zap) — nada de botão empilhado', (()=>{ const bn={id:'zzl1',nome:'Zz',estagio:'estoque',hist:[]}; const a=taResBtnsHtml(bn), b=waResBtnsHtml(bn); return /<select class="res-sel"/.test(a) && !/<button/.test(a) && /bnResultado\('zzl1'/.test(a) && /<select class="res-sel"/.test(b) && /waResultado\('zzl1'/.test(b) && BN_RES.every(r=>a.includes('value="'+r[0]+'"')) && WA_RES.every(r=>b.includes('value="'+r[0]+'"')); })());
-        ok('painel TA/WA: a linha mostra funil · etapa e as listas em que a pessoa está', (()=>{ const bak=S.contatos; try{ const f=normContato({id:'zzl2',nome:'Zz Fun',funil:'bc',etapa:'PC',telefone:'81999990011',sitplan:hojeISO()}); S.contatos=[f]; const bn={id:'zzl3',nome:'Zz Bn',estagio:'lista_ta',ta_dia:hojeISO(),listas:['RCP Teste']}; return /BC/.test(taEtapaBadge(f)) && /PC/.test(taEtapaBadge(f)) && taListasDe(f).join()==='📅 Hoje' && taListasDe(bn).join()==='📅 Hoje,📋 RCP Teste' && /RCP Teste/.test(taListasChips(bn)) && /<th class="ta-hide">Listas<\/th>/.test(String(viewBnTa)); } finally{ S.contatos=bak; } })());
+        ok('painel TA/WA: a linha mostra funil · etapa e as listas em que a pessoa está', (()=>{ const bak=S.contatos; try{ const f=normContato({id:'zzl2',nome:'Zz Fun',funil:'bc',etapa:'PC',telefone:'81999990011',sitplan:hojeISO()}); S.contatos=[f]; const bn={id:'zzl3',nome:'Zz Bn',estagio:'lista_ta',ta_dia:hojeISO(),listas:['RCP Teste']}; return /BC/.test(taEtapaBadge(f)) && /PC/.test(taEtapaBadge(f)) && taListasDe(f).join()==='📅 Hoje' && taListasDe(bn).join()==='📅 Hoje,📋 RCP Teste' && /RCP Teste/.test(taListasChips(bn)) && !!TA_COLS.listas && TA_COLS_DEF.includes('listas') && TA_COLS_DEF.includes('estagio'); } finally{ S.contatos=bak; } })());
+        /* TA-COLUNAS-V1 */
+        ok('painel TA/WA: colunas vêm do catálogo (padrão = as 7 de hoje), ligam/desligam e mudam de ordem, salvas por aparelho', (()=>{ const bak=TAP.cols; try{ TAP.cols=null; const d=taColsVis(); TAP.cols=fxColsSet(d,'endereco',true,''); const a=taColsVis(); TAP.cols=fxColsMover(a,'endereco',-1,''); const b=taColsVis(); return d.join()==='prof,idade,renda,estagio,listas,rec,telefone' && a[a.length-1]==='endereco' && b[b.length-2]==='endereco' && Object.keys(TA_COLS).every(k=>TA_COLS[k].label) && /fxColsHtml\('ta',TA_COLS/.test(String(viewBnTa)) && /cols\.map\(taThHtml\)/.test(String(viewBnTa)); } finally{ TAP.cols=bak; } })());
+        ok('painel TA/WA: campos linkados — endereço abre no Google Maps, telefone liga, recomendante abre a ficha, e-mail é mailto', (()=>{ const c={id:'zzc1',nome:'Zz Col',telefone:'81999990012',recomendante:'Fulano Indicador',email:'zz@teste.com',cidade:'Recife',empresa:'Clínica Zz',locais:[{tipo:'trabalho',nome:'Clínica Zz',end:'Rua Teste 1, Recife'}]};
+            const end=taCelHtml(c,'endereco'), tel=taCelHtml(c,'telefone'), rec=taCelHtml(c,'rec'), em=taCelHtml(c,'email'), cid=taCelHtml(c,'cidade');
+            return /google\.com\/maps\/search\/\?api=1&amp;query=Cl%C3%ADnica%20Zz%2C%20Rua%20Teste/.test(end) && /target="_blank"/.test(end) && /href="tel:81999990012"/.test(tel) && /taAbrirPorNome\('Fulano Indicador'\)/.test(rec) && /mailto:zz@teste\.com/.test(em) && /query=Recife/.test(cid) && /event\.stopPropagation\(\)/.test(end+tel+rec+em); })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
       } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }

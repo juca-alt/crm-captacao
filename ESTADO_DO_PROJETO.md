@@ -2,6 +2,20 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (28ª onda) — TA-COLUNAS-V1: colunas ajustáveis nos painéis TA/WA + campos linkados (endereço → Maps) (v7.86)
+
+Voz dele: *"tem também a possibilidade de ajustar essas colunas — a pessoa quer botar o endereço, que já vai brincar com o link dos mapas no fluxo de visitação direta. Trabalha bem esses campos linkados."*
+
+### O que mudou (Painel TA e WA — mesma tela)
+- **🧩 Colunas** na barra (desktop), no mesmo desenho do Estoque: ligar/desligar + ↑↓, salvo por aparelho (`crmlp_ta_cols_v2`), botão Padrão. Nome, resultado do dia e ações ficam fixos.
+- **Catálogo próprio** (`TA_COLS`, serve funil e Estoque): Profissão/empresa · Idade · Renda · Estágio · Listas · Indicado por · Telefone (padrão = as 7 de hoje) + **📍 Endereço** · Cidade · Empresa · E-mail · Nascimento · Última tentativa. Ordenação nas que têm campo (`fxTh`).
+- **Campos linkados:** 📍 Endereço → **Google Maps** em nova aba (coordenada quando o local tem lat/lng, senão o texto; vem do Mapa de locais / pontos da carteira via `locPrincipalPessoa`) · Telefone → `tel:` · 👤 Indicado por → **abre a ficha do recomendante** (Estoque, funil ou carteira; sem ficha, avisa) · E-mail → `mailto:` · Cidade e Empresa → busca no Maps.
+- **Celular:** o card ganha o chip 📍 do endereço, linkado. O seletor de colunas não aparece (é card, não tabela).
+- ⚠️ A preferência antiga (`crmlp_ta_cols_v1`, nunca renderizada) foi aposentada.
+
+### Prova
+- Portão aberto (40 telas) · `--prova` OK · guard OK · `teste-ta-colunas.mjs` **8/8** (1280: padrão, ligar Endereço + E-mail, mover pra 1ª coluna, Maps em nova aba, clicar no recomendante abre a gaveta, vale no WA, Padrão volta; 390: chip linkado, sem seletor, sem estouro) · regressão dos 6 testes anteriores verde · 2 invariantes novos. ⚠️ Lição: `esc()` troca `&` por `&amp;` no href — invariante que confere URL precisa esperar isso.
+
 ## 18/09/2026 (27ª onda) — TA-LINHA-V2: coluna Listas, funil na etapa e resultado num seletor só (Painel TA e WA) (v7.85)
 
 Print dele do Painel TA no iPad (linhas altas, 5 botões empilhados por pessoa): *"tanto pro Painel TA como pro do WhatsApp: mais colunas — a etapa que ele está, as listas — porque é o fluxo que vai ligar cada estágio. E reorganiza esses botões num único seletor, pra ficar mais curto entre as linhas."*
