@@ -2,6 +2,25 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (31ª onda) — PIPES-V1: Pipe Vida Individual + Pipe Vida em Grupo + Pipe Prud. Demais + Pipe MFO, cada um com Consolidada · Novos Negócios · Negócios na Base (v7.89)
+
+Print do menu (iPad): *"Pipe Negócios vira Pipe Vida Individual — Visão Consolidada, Novos Negócios, Negócios na Base. Depois Pipe Vida em Grupo, Pipe Prud. Demais e Pipe MFO, a mesma lógica, mesmo estilo de card. O Daniel não vai ter acesso."*
+
+### O que mudou
+- **Menu:** "Pipe Negócios" → **Pipe Vida Individual** (Consolidada · Novos Negócios · Negócios na Base). Nascem **Pipe Vida em Grupo**, **Pipe Prud. Demais** e **Pipe MFO**, cada um com o mesmo trio. Os funis VG/Prud/MFO saíram do grupo antigo e viraram o "Novos Negócios" do seu pipe. Grupos nascem fechados; o da tela atual abre sozinho.
+- **Funis novos "Negócios na Base"** (`vg-bc`, `prud-bc`, `mfo-bc`) na fábrica, mesmo desenho do BC num esqueleto curto: Clientes Ativos → Contato/Revisita → Revisita agendada → Proposta → Fechamento · Ganho · Perdido. Board pelo `viewFunilExtra` (arrastar, ➕ Novo negócio fixado no funil, status por etapa).
+- **Consolidada por pipe** (`PIPES` = 2 funis por pipe): `consol-vg`, `consol-prud`, `consol-mfo` usam a mesma `viewConsolidado`, restrita aos funis do pipe, com chip do pipe no título e escolha lembrada em chave própria (`crmlp_consol_<pipe>_v1`; a Vida Individual segue em `crmlp_consol_v1`).
+- **Cfg do funil vinda do servidor** agora mescla com a fábrica (`Object.assign(funFabMat(), v)`): funil de fábrica que ainda não está na cfg salva não some mais ao sincronizar (era o risco de os `-bc` sumirem ao logar).
+- **WA em fluxo** ficou genérico pros funis novos (encerrado e Clientes Ativos ficam de fora). Siglas `VG·B`, `PRUD·B`, `MFO·B` nos painéis e na Consolidada.
+
+### Gate
+- Só na base dele: chave **`pipes`** em `NOVO_SO_MEU` (`data-novo="pipes"` nos 9 itens dos 3 pipes novos; cabeçalho do pipe some quando não sobra item). Pra liberar por pessoa: tirar de `NOVO_SO_MEU` — as views já estão em `MODS.funis_extra` (que o Daniel tem desligado). Pipe Vida Individual continua pra todos.
+
+### Prova
+- Portão aberto (46 telas × 3 larguras × cheia/vazia) · `--prova` OK · guard OK · `teste-pipes.mjs` **22/22** em 390 e 1280 (menu 4 pipes, Consolidada do pipe soma só os 2 funis e lembra em chave própria, Vida Individual intacta, board `vg-bc`, Novo negócio fixado, WA em fluxo, Daniel vê só Vida Individual, mescla da cfg) · regressão ciclo 14/14 e WA 18/18 · 2 invariantes novos.
+
+---
+
 ## 18/09/2026 (30ª onda) — CICLO-V1: PA emitido e FYC emitido por ciclo (mensal ou de compensação) na Consolidada, nos funis e na Emissão Diária (v7.88)
 
 Prints dele (Consolidada, NN, BC, Emissão Diária): *"tira Parados e A entregar da Consolidada. Bota PA emitido e FYC emitido — pelo ciclo do mês (1 a 30) e pelo ciclo de compensação (ex.: 21/08 → 20/09) — na Consolidada, nos dois funis e na Emissão Diária, com um botãozinho pra trocar e ajustar os períodos."*
