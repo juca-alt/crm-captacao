@@ -2,6 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (27ª onda) — TA-LINHA-V2: coluna Listas, funil na etapa e resultado num seletor só (Painel TA e WA) (v7.85)
+
+Print dele do Painel TA no iPad (linhas altas, 5 botões empilhados por pessoa): *"tanto pro Painel TA como pro do WhatsApp: mais colunas — a etapa que ele está, as listas — porque é o fluxo que vai ligar cada estágio. E reorganiza esses botões num único seletor, pra ficar mais curto entre as linhas."*
+
+### O que mudou (vale pros dois painéis — é a mesma tela)
+- **Resultado do dia virou um seletor** por linha: Estoque (`Resultado…` com os 5 do TA), funil (`Status da ligação…`, agora sem os resultados de Zap) e WA (`Zap de hoje…`). Registrado, a linha mostra o rótulo + ↩︎ como antes. **Linha no desktop: ~240px → 65px.** Celular: seletor de 44px, largura cheia.
+- **Coluna Estágio** ganhou o funil: `NN · OI/FF`, `BC · PC`; Estoque segue `Lista de TA` / `Estoque`…
+- **Coluna Listas** (nova, desktop): chips `📅 Hoje` e `📋 <lista nomeada>` de cada pessoa. No celular entram como chips do card.
+- Modo Foco não mudou (botões grandes fazem sentido lá).
+
+### Prova
+- Portão aberto (40 telas) · `--prova` OK · guard OK · `teste-painel-wa` 18/18 · 2 invariantes novos (seletor único sem botão; funil·etapa + listas na linha).
+
 ## 18/09/2026 (26ª onda) — WA-PAINEL-V1: Painel WA (WhatsApp Approach), irmão do Painel TA, só na base dele (v7.84)
 
 Pedido dele (print do Painel TA no iPad): *"constrói um painel WA, WhatsApp Approach. Não vai ser liberado ainda pro Daniel — fase beta que eu vou desenvolver. Pega a mesma lógica do Painel TA, só que pra quem está em fluxo no funil, com abordagens de WhatsApp. Em sinergia com o funil: se virou ganho, sai. Os de delay do RCP, os de marcar — a mesma coisa, com foco de WhatsApp."*

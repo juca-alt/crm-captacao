@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.84 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.85 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -867,7 +867,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nncol-enc-head{cursor:pointer;min-width:150px;max-width:170px;background:#faf6f6;border:1px dashed #e3cccc}
   .nncol-enc-head:hover{background:#f5eaea}
   .sp-sug{background:var(--azul-claro);border:1px solid var(--azul-borda);border-radius:10px;padding:10px 14px;font-size:13px;margin:10px 0 4px}
-  .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff}
+  .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff;min-height:36px}
+  .ta-lchip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--linha);background:var(--bg);white-space:nowrap;margin:1px 0}
+  @media(max-width:980px){ .res-sel{min-height:44px;max-width:none;width:100%;font-size:14px} }
   .meta-in{font-size:11px;color:var(--muted);margin-top:4px;text-align:center}
   .meta-in input{width:64px;border:1px solid var(--linha);border-radius:8px;padding:3px 6px;font-size:12px;text-align:center}
   .banner-homolog{background:var(--amarelo-bg);border-bottom:1px solid #e8d9b0;color:#7a5b07;font-size:12.5px;padding:7px 18px;display:flex;gap:10px;align-items:center}
@@ -15325,8 +15327,9 @@ function taResultadoUni(id,res){ const c=spPorId(id); if(!c) return Promise.reso
   return bnResultado(id,res); }
 function taResBtnsHtml(c){ const r=taResHoje(c), id=esc(jsq(c.id));
   if(r) return `<b>${esc(taResLabel(c))}</b> ${spEhFunil(c)?'':`<button class="btn btn-s btn-mini" onclick="bnResultadoDesfazer('${id}')" title="Desfaz o resultado de hoje">↩︎</button>`}`;
-  if(spEhFunil(c)) return `<select class="res-sel" onchange="if(this.value)taResultadoUni('${id}',this.value)"><option value="">Status da ligação…</option>${RESULTADOS.map(x=>`<option value="${x.k}">${x.l}</option>`).join('')}</select>`;
-  return BN_RES.map(x=>`<button class="btn btn-s btn-mini" onclick="bnResultado('${id}','${x[0]}')">${x[1]}</button>`).join(' '); }
+  if(spEhFunil(c)) return `<select class="res-sel" onchange="if(this.value)taResultadoUni('${id}',this.value)"><option value="">Status da ligação…</option>${RESULTADOS.filter(x=>!x.wa).map(x=>`<option value="${x.k}">${x.l}</option>`).join('')}</select>`;
+  /* TA-LINHA-V2 (18/09): "reorganiza esses botões num único seletor, pra ficar mais curto entre as linhas" */
+  return `<select class="res-sel" onchange="if(this.value)bnResultado('${id}',this.value)"><option value="">Resultado…</option>${BN_RES.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select>`; }
 /* ═══ PAINEL-TA-NATIVO-V1 (10/09) ═══════════════════════════════════════════
    O Painel de TA 2.0 morava em painel-lp.html (outro arquivo: recarregava tudo,
    baixava a base de novo, parecia um link). Virou ESTA tela, em cima do mesmo
@@ -15426,6 +15429,14 @@ const WA_SMART={
   reccli:    {ic:'💎', label:'Rec de cliente',        pool:bnVivos, base:c=>taTemFone(c)&&TA_SMART.reccli.base(c)},
   clientes:  {ic:'⭐', label:'Clientes (carteira)',   pool:bnVivos, base:c=>taTemFone(c)&&taEhCliente(c)}
 };
+/* TA-LINHA-V2: "colocar mais colunas — a etapa que ele está, as listas — porque é o fluxo que vai ligar cada estágio" */
+const TA_FUNIL_SIGLA={nn:'NN',bc:'BC',vg:'VG',prud:'PRUD',mfo:'MFO'};
+function taListasDe(c){ const hoje=hojeISO(); if(!c) return [];
+  if(spEhFunil(c)) return c.sitplan===hoje?['📅 Hoje']:[];
+  return (c.ta_dia===hoje?['📅 Hoje']:[]).concat((c.listas||[]).map(n=>'📋 '+n)); }
+function taListasChips(c){ const l=taListasDe(c); return l.length?l.map(x=>`<span class="ta-lchip">${esc(x)}</span>`).join(' '):'<span class="ta-sub">—</span>'; }
+function taEtapaBadge(c){ if(!spEhFunil(c)) return `<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`;
+  const f=funilDe(c); return `<span class="ta-sub" title="${esc((FUNIS.find(x=>x[0]===f)||[])[1]||f)}">${esc(TA_FUNIL_SIGLA[f]||String(f).toUpperCase())}</span> ${badgeEtapa(c.etapa)}`; }
 function taSmartMapa(){ return taCanal()==='wa'?WA_SMART:TA_SMART; }
 function taSmartDef(k){ return k?taSmartMapa()[k]:null; }
 function taSmartPool(k){ const d=taSmartDef(k); if(!d) return []; return d.pool? d.pool() : taPoolDe(k); }
@@ -15449,7 +15460,7 @@ async function waResDesfazer(id){ const c=spPorId(id); if(!c||spEhFunil(c)) retu
   const h=c.hist.splice(idx,1)[0]; bnSalvar(); viewBnTa(); if(h&&h.rid!=null&&LPC_REMOTE&&sb){ try{ await sb.from('lp_interacoes').delete().eq('id',h.rid); }catch(e){ console.warn('lp_interacoes (wa) desfazer',e); } } }
 function waResBtnsHtml(c){ const r=waResHoje(c), id=esc(jsq(c.id));
   if(r) return `<b>${esc(waResLabel(r))}</b> ${spEhFunil(c)?'':(r==='agendou'||r==='recusou')?`<button class="btn btn-s btn-mini" onclick="bnResultadoDesfazer('${id}')" title="Desfaz o resultado de hoje">↩︎</button>`:`<button class="btn btn-s btn-mini" onclick="waResDesfazer('${id}')" title="Desfaz o resultado de hoje">↩︎</button>`}`;
-  return WA_RES.map(x=>`<button class="btn btn-s btn-mini" onclick="waResultado('${id}','${x[0]}')">${x[1]}</button>`).join(' '); }
+  return `<select class="res-sel" onchange="if(this.value)waResultado('${id}',this.value)"><option value="">Zap de hoje…</option>${WA_RES.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select>`; }
 function viewBnWa(){ if(!novoOn('painel-wa')){ irPara('bn-ta'); return; } viewBnTa(); }
 window.waResultado=waResultado; window.waResDesfazer=waResDesfazer;
 function taPoolDe(k){ return (k==='delay'||k==='naoatendeu'||k==='ficou')? [...bnVivos(),...meusContatos()] : bnVivos(); }   /* TA-LISTAS-V2: essas três atravessam funil e Estoque */
@@ -15850,7 +15861,7 @@ function viewBnTa(){
       </div></aside>`;
   const linha=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'',c.origem&&c.origem!=='—'?c.origem:''].filter(Boolean).join(' · ')||'—':[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
     const pri=c.prioridade==1?'var(--verm)':c.prioridade==3?'var(--muted)':'transparent';
-    const badge=(fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`)+(smk==='delay'?` <span class="badge b-amarelo">⏳ ${esc(taDelayTipo(c)||'')}</span>`
+    const badge=taEtapaBadge(c)+(smk==='delay'?` <span class="badge b-amarelo">⏳ ${esc(taDelayTipo(c)||'')}</span>`
         :smk==='naoatendeu'?` <span class="badge b-amarelo">🔕 não atendeu${taTentouTxt(c)?' · '+esc(taTentouTxt(c)):''}</span>`
         :smk==='ficou'?` <span class="badge b-amarelo">🕗 ${esc(taDiaPerdidoTxt(c)||'ficou pra trás')}</span>`:'');
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
@@ -15862,12 +15873,13 @@ function viewBnTa(){
       <td class="ta-hide"><div>${esc((fun?c.profissao:c.cargo)||'—')}</div><div class="ta-sub">${esc(fun?'funil':(c.empresa||''))}</div></td>
       <td>${c.idade??'<span class="ta-sub">—</span>'}</td><td>${taRenda(c.renda_estimada)}</td>
       <td>${badge}</td>
+      <td class="ta-hide">${taListasChips(c)}</td>
       <td class="ta-hide">${(c.recomendante||'').trim()?`👤 <b>${esc(c.recomendante)}</b>`:'<span class="ta-sub">—</span>'}</td>
       <td>${taTemFone(c)?`<span class="ta-tel">${esc(c.telefone)}</span>`:'<span class="ta-sub">sem telefone</span>'}</td>${res}<td>${acoes}</td></tr>`; };
   const card=c=>{ const fun=spEhFunil(c), tel=String(c.telefone||'').replace(/[^+\d]/g,''), sub=fun?[c.profissao&&c.profissao!=='—'?c.profissao:'','funil'].filter(Boolean).join(' · '):[c.cargo,c.empresa].filter(Boolean).join(' · ')||'—';
-    const badge=fun?badgeEtapa(c.etapa):`<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`;
+    const badge=taEtapaBadge(c);
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
-    const chips=[c.idade!=null?'🎂 '+c.idade:'', c.renda_estimada?'💰 '+taRenda(c.renda_estimada):'', c.cidade?'📍 '+esc(c.cidade):'', (c.recomendante||'').trim()?'👤 <b>'+esc(c.recomendante)+'</b>':'<span style="color:var(--muted)">👤 sem recomendante</span>', (logado()&&escAtual().id==='todos')?'🏷️ '+esc(escRotuloDe(c)):''].filter(Boolean);
+    const chips=[...taListasDe(c).map(x=>esc(x)),c.idade!=null?'🎂 '+c.idade:'', c.renda_estimada?'💰 '+taRenda(c.renda_estimada):'', c.cidade?'📍 '+esc(c.cidade):'', (c.recomendante||'').trim()?'👤 <b>'+esc(c.recomendante)+'</b>':'<span style="color:var(--muted)">👤 sem recomendante</span>', (logado()&&escAtual().id==='todos')?'🏷️ '+esc(escRotuloDe(c)):''].filter(Boolean);
     return `<div class="ta-card" onclick="${abrir}">
       <div class="ta-card-h"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()">${taAvatar(c)}<div style="flex:1;min-width:0"><div class="ta-nm">${esc(c.nome)}</div><div class="ta-sub">${esc(sub)}</div></div>${badge}</div>
       ${chips.length?`<div class="ta-chips" style="margin:6px 0 0">${chips.map(x=>'<span class="ta-chip">'+x+'</span>').join('')}</div>`:''}
@@ -15890,7 +15902,7 @@ function viewBnTa(){
       ${trab?`<div class="toolbar" style="gap:6px"><input id="bnta-add" data-so-leitura="lido no clique de Adicionar (bnTaAddPorNome)" list="bnta-cand" style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'a Hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)"><datalist id="bnta-cand">${vivos.filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hoje : !(c.listas||[]).includes(BNTA.lista))).slice(0,400).map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}"></option>`).join('')}</datalist><button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
         ${BNTA.lista!=='hoje'?`<button class="btn btn-s btn-mini" onclick="taListaRenomear('${esc(jsq(BNTA.lista))}')">Renomear</button><button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(jsq(BNTA.lista))}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}</div>`:''}
       ${selNaLista.length?`<div class="ta-selbar"><b>${selNaLista.length} selecionado${selNaLista.length>1?'s':''}</b><span style="flex:1"></span><button class="btn btn-s btn-mini" onclick="taBulkMenu(event)">Mover / adicionar…</button>${trab?`<button class="btn btn-s btn-mini" onclick="bnTaTirarLote()">✕ Tirar da lista</button>`:''}<button class="btn btn-s btn-mini" onclick="FTA.sel.clear();viewBnTa()">Limpar</button></div>`:''}
-      ${TAV.seg==='rec'? taRecsHtml(lista) : lista.length? `<div class="card ta-tblwrap"><table class="ta-tbl"><thead><tr><th></th>${fxTh('ta','nome','Nome')}<th class="ta-hide">Profissão / empresa</th>${fxTh('ta','idade','Idade')}${fxTh('ta','renda_estimada','Renda')}${fxTh('ta','estagio','Estágio')}<th class="ta-hide">Indicado por</th><th>Telefone</th>${comRes?fxTh('ta','res',wa?'Zap de hoje':'Resultado de hoje'):''}<th></th></tr></thead><tbody>${lista.slice(0,400).map(linha).join('')}</tbody></table>${lista.length>400?`<div class="ta-sub" style="padding:8px">Mostrando 400 de ${lista.length} — afine os filtros.</div>`:''}</div><div class="ta-cards">${lista.slice(0,200).map(card).join('')}</div>`
+      ${TAV.seg==='rec'? taRecsHtml(lista) : lista.length? `<div class="card ta-tblwrap"><table class="ta-tbl"><thead><tr><th></th>${fxTh('ta','nome','Nome')}<th class="ta-hide">Profissão / empresa</th>${fxTh('ta','idade','Idade')}${fxTh('ta','renda_estimada','Renda')}${fxTh('ta','estagio','Estágio')}<th class="ta-hide">Listas</th><th class="ta-hide">Indicado por</th><th>Telefone</th>${comRes?fxTh('ta','res',wa?'Zap de hoje':'Resultado de hoje'):''}<th></th></tr></thead><tbody>${lista.slice(0,400).map(linha).join('')}</tbody></table>${lista.length>400?`<div class="ta-sub" style="padding:8px">Mostrando 400 de ${lista.length} — afine os filtros.</div>`:''}</div><div class="ta-cards">${lista.slice(0,200).map(card).join('')}</div>`
         : `<div class="vazio" style="padding:36px 12px;text-align:center">${base.length?'Nenhuma pessoa com esses filtros.<br><small>Afrouxe um filtro ou troque de lista.</small>':smk?'Ninguém nesta lista ainda.':(BNTA.lista==='hoje'?'Lista de hoje vazia — puxe nomes pelo ⋯ de qualquer lista ou pela caixa acima.':'Lista vazia.')}</div>`}
     </section></div>`;
 }
@@ -17883,6 +17895,9 @@ function lpSelfCheck(){
         ok('painel WA: resultado do Zap grava no lugar certo (funil = interação wa:1; agendou/recusou seguem o caminho do TA) e nunca conta como ligação', Object.values(WA_RES_FUN).every(k=>RES_BY_K[k]) && WA_RES_FUN.agendou==='agendou_oi' && WA_RES_FUN.recusou==='sem_interesse' && RESULTADOS.filter(r=>r.wa).every(r=>!r.lig) && WA_RES.length===5 && (()=>{ const c={id:'zzwa',nome:'Zz',hist:[{tipo:'wa',res:'mandei',dia:hojeISO()}]}; return waResHoje(c)==='mandei' && /Mandei msg/.test(waResBtnsHtml(c)) && /waResDesfazer/.test(waResBtnsHtml(c)); })());
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
+        /* TA-LINHA-V2 */
+        ok('painel TA/WA: resultado do dia é um seletor só por linha (Estoque, funil e Zap) — nada de botão empilhado', (()=>{ const bn={id:'zzl1',nome:'Zz',estagio:'estoque',hist:[]}; const a=taResBtnsHtml(bn), b=waResBtnsHtml(bn); return /<select class="res-sel"/.test(a) && !/<button/.test(a) && /bnResultado\('zzl1'/.test(a) && /<select class="res-sel"/.test(b) && /waResultado\('zzl1'/.test(b) && BN_RES.every(r=>a.includes('value="'+r[0]+'"')) && WA_RES.every(r=>b.includes('value="'+r[0]+'"')); })());
+        ok('painel TA/WA: a linha mostra funil · etapa e as listas em que a pessoa está', (()=>{ const bak=S.contatos; try{ const f=normContato({id:'zzl2',nome:'Zz Fun',funil:'bc',etapa:'PC',telefone:'81999990011',sitplan:hojeISO()}); S.contatos=[f]; const bn={id:'zzl3',nome:'Zz Bn',estagio:'lista_ta',ta_dia:hojeISO(),listas:['RCP Teste']}; return /BC/.test(taEtapaBadge(f)) && /PC/.test(taEtapaBadge(f)) && taListasDe(f).join()==='📅 Hoje' && taListasDe(bn).join()==='📅 Hoje,📋 RCP Teste' && /RCP Teste/.test(taListasChips(bn)) && /<th class="ta-hide">Listas<\/th>/.test(String(viewBnTa)); } finally{ S.contatos=bak; } })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
         ok('solic: outro LP segue vendo a tela antiga (regra "só na minha base") — e o Agora dele não ganha o item', novoOn('solic-v2')===false && !inicioAgora().some(x=>x.k==='solic'));
       } finally{ PERFIL=_p; SO.itens=_so; SO_EV=_ev; }
