@@ -2,6 +2,25 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (35ª onda) — SEMANA-GRADE-V1: a vista Semana da Agenda vira grade de horas no estilo do Google (v7.93)
+
+Prints dele (vista Dia e vista Semana no iPhone): *"essa visualização do Dia já está no estilo do calendário do Google. É a mesma lógica pra Semana."*
+
+### O que mudou
+- **Semana = grade de horas** (`gcalSemanaGradeHTML`): eixo de horas à esquerda (fixo), **7 colunas** (hoje + 6, hoje com o número em círculo azul), **faixa "dia todo"** no topo, **linha vermelha do agora** na coluna de hoje, faixa de horas compartilhada (7–20h, alarga com os eventos e com o agora). Blocos são os mesmos da vista Dia (`.gcal-ev`, com sobreposição em faixas), com a classe (pessoal tracejado/apagado, feito riscado, etiqueta do negócio).
+- **Toque no vazio** de uma coluna cria naquele dia e hora (reuso de `gcalCliqueVazio`). **＋** no cabeçalho do dia cria às 9h.
+- **Arrasto** (motor AGENDA-FLUIDA): vertical muda a hora; **horizontal muda o dia** (a coluna-alvo acende; o bloco não pega o ponteiro enquanto arrasta); borda de baixo estica; toque curto abre o **cartão ⋯** (com a classe ligada) ou o editor. Chips de dia todo aceitam as células novas como alvo.
+- **Celular:** colunas de 120px e a grade **rola de lado dentro do card** (eixo e cabeçalhos com `position:sticky`); a página não estoura. Desktop: 7 colunas cabem.
+- A semana de chips antiga ficou como `gcalSemanaChipsHTML` (é o que quem não tem a chave vê).
+
+### Gate
+- Só na base dele: chave **`agenda-semana`** em `NOVO_SO_MEU`.
+
+### Prova
+- Portão aberto (47 telas) · guard OK · `teste-agenda-semana.mjs` **10/10** em 390 e 1280 (grade com 7 colunas, evento na coluna/altura certas, pessoal apagado, dia todo, linha do agora, rolagem lateral sem estouro, toque no vazio → editor com dia e 10:00, arrasto pra outra coluna → PATCH com o dia novo mantendo a hora, Daniel nos chips) · regressão Agenda-classe 20/20 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (34ª onda) — AGENDA-CLASSE-V1: compromisso do Google com classe (negócio · trabalho · pessoal), várias agendas, e o botão ⋯ ação (v7.92)
 
 Prints da Agenda no iPhone (lista do Google com Gym, Gael Escola, Ponto de Apoio, cada um com 5 botões de tarefa): *"compromisso pessoal é só OCUPADO, não faz sentido tratar como tarefa. Deixa configurado pra linkar conforme as listas do Google (RCP, OI, OI Novo…). Nos de trabalho: associar ao negócio do funil, marcar feito/não feito, adiar mais do que +1d/+7d — um botão 'pra depois' que abre um cardzinho de opção."*
