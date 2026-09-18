@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.91 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.92 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1117,6 +1117,25 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .pln-real{font-size:12px}
   .pln-pct{font-weight:700;font-size:11px;margin-left:4px}
   .pln-mob{display:none}
+  /* AGENDA-CLASSE-V1 */
+  .gcal-pess{opacity:.72} .gcal-pess .tt{color:var(--muted)}
+  .gcal-tag{font-size:10px;font-weight:700;color:var(--muted);background:var(--fundo);border:1px solid var(--linha);border-radius:999px;padding:0 6px;vertical-align:middle}
+  .gcal-tag.ok{color:var(--verde);border-color:#bbf7d0;background:#f0fdf4} .gcal-tag.nao{color:var(--verm);border-color:#fecaca;background:#fef2f2}
+  .gcal-feito .tt>b{text-decoration:line-through;color:var(--muted)}
+  .gcal-vinc{font:inherit;font-size:10.5px;font-weight:700;color:var(--azul);background:transparent;border:1px dashed var(--azul-borda);border-radius:999px;padding:0 7px;cursor:pointer;vertical-align:middle}
+  .gcal-chip.pess{opacity:.5}
+  .gcal-pess-dobra{margin:4px 0 2px} .gcal-pess-dobra>summary{cursor:pointer;list-style:none;font-size:12px;color:var(--muted);padding:9px 0;min-height:44px;display:flex;align-items:center;gap:6px} .gcal-pess-dobra>summary::-webkit-details-marker{display:none}
+  .gm-sheet{padding:16px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+  .gm-hd{display:flex;align-items:flex-start;gap:10px;margin-bottom:6px} .gm-hd>div{flex:1;min-width:0} .gm-hd b{font-size:15px}
+  .gm-sub{font-size:12px;color:var(--muted);margin-top:2px} .gm-x{border:0;background:var(--fundo);border-radius:50%;width:36px;height:36px;font-size:16px;cursor:pointer;color:var(--muted);flex:none}
+  .gm-sec{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+  .gm-grid{display:flex;gap:8px;flex-wrap:wrap} .gm-btn{min-height:44px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;flex:1 1 auto}
+  .gm-neg{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;margin-bottom:8px}
+  .gm-txt{font-size:12.5px;color:var(--muted)}
+  .gm-data{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px} .gm-data input{min-height:44px;flex:1 1 130px}
+  .gm-cals{display:flex;flex-direction:column;gap:6px} .gm-cal{display:flex;align-items:center;gap:8px;font-size:13px} .gm-cal select{margin-left:auto;max-width:56%;min-height:44px}
+  .gm-cal-dot{width:10px;height:10px;border-radius:50%;flex:none} .gm-cal-nome{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .gm-cal-nome small{color:var(--muted);font-weight:400}
+  .gm-sheet textarea{width:100%;font:inherit;font-size:13px;padding:8px;border:1px solid var(--linha);border-radius:9px;resize:vertical}
   .pln-card{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:0 12px;margin-bottom:8px}
   .pln-card>summary{display:flex;align-items:center;gap:8px;min-height:48px;cursor:pointer;list-style:none;flex-wrap:wrap}
   .pln-card>summary::-webkit-details-marker{display:none}
@@ -9801,10 +9820,20 @@ async function gcalCarregar(interactive){ if(GCAL.carregando) return; GCAL.carre
     const tok=await gcalToken(!!interactive);
     const ini=new Date(); ini.setHours(0,0,0,0);
     const fim=new Date(ini); fim.setDate(fim.getDate()+8);
-    const u='https://www.googleapis.com/calendar/v3/calendars/primary/events?singleEvents=true&orderBy=startTime&maxResults=50'
-      +'&timeMin='+encodeURIComponent(ini.toISOString())+'&timeMax='+encodeURIComponent(fim.toISOString());
-    const r=await fetch(u,{headers:{Authorization:'Bearer '+tok}}); if(!r.ok) throw new Error('HTTP '+r.status+(r.status===403?' — confira se a Google Calendar API está ativa':''));
-    const j=await r.json(); GCAL.eventos=(j.items||[]).filter(e=>e.status!=='cancelled'); GCAL.conectado=true; GCAL.erro=null; GCAL.ultimoSync=Date.now();
+    const H={headers:{Authorization:'Bearer '+tok}};
+    /* AGENDA-CLASSE-V1: as agendas do Google (só as que ele pode escrever); a regra por agenda diz o que entra */
+    if(gcalClasseOn()&&(!GCAL.cals||!GCAL.calsTs||(Date.now()-GCAL.calsTs)>30*60*1000)){
+      try{ const rc=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer&showHidden=false',H);
+        if(rc.ok){ const jc=await rc.json(); GCAL.cals=(jc.items||[]).map(c=>({id:c.id,nome:c.summaryOverride||c.summary||c.id,primary:!!c.primary,cor:c.backgroundColor||''})); GCAL.calsTs=Date.now(); } }catch(_){}
+    }
+    const cals=gcalClasseOn()? (GCAL.cals&&GCAL.cals.length? GCAL.cals.filter(c=>gcalCalModo(c.id)!=='off') : [{id:'primary',nome:'Principal',primary:true}]) : [{id:'primary',nome:'Principal',primary:true}];
+    if(!cals.length) cals.push({id:'primary',nome:'Principal',primary:true});
+    const lote=await Promise.all(cals.map(async c=>{
+      const u='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(c.primary?'primary':c.id)+'/events?singleEvents=true&orderBy=startTime&maxResults=50'
+        +'&timeMin='+encodeURIComponent(ini.toISOString())+'&timeMax='+encodeURIComponent(fim.toISOString());
+      const r=await fetch(u,H); if(!r.ok){ if(c.primary) throw new Error('HTTP '+r.status+(r.status===403?' — confira se a Google Calendar API está ativa':'')); return []; }
+      const j=await r.json(); return (j.items||[]).filter(e=>e.status!=='cancelled').map(e=>{ e._cal=c.primary?'primary':c.id; e._calNome=c.nome; return e; }); }));
+    GCAL.eventos=lote.flat().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date)))); GCAL.conectado=true; GCAL.erro=null; GCAL.ultimoSync=Date.now();
   }catch(e){ if(interactive){ GCAL.erro=String(e&&e.message||e||'erro'); } /* silencioso que falhou = só "não conectado", sem alarde */ GCAL.conectado=!!GCAL.tok; }
   finally{ GCAL.carregando=false; if(VIEW==='agenda') viewAgenda(); }
 }
@@ -9815,6 +9844,98 @@ function gcalDesconectar(){ try{ if(GCAL.tok&&window.google&&google.accounts&&go
   if(VIEW==='agenda') viewAgenda(); toast('Google Agenda desconectado'); }
 function gcalDiaISO(ev){ const s=ev.start&&(ev.start.dateTime||ev.start.date); return s? s.slice(0,10):''; }
 function gcalHora(ev){ if(ev.start&&ev.start.date&&!ev.start.dateTime) return 'dia todo'; const s=ev.start&&ev.start.dateTime; if(!s) return ''; try{ return new Date(s).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return ''; } }
+/* ═══ AGENDA-CLASSE-V1 (18/09/2026) ═══════════════════════════════════════════════════════
+   Prints da Agenda no iPhone: "tá cheio de compromisso que eu puxo do Google — Gym, escola — e ele
+   fica com botão de tarefa. Compromisso pessoal é só OCUPADO, não faz sentido tratar como tarefa.
+   Deixa configurado pra linkar conforme as listas do Google (RCP, OI, OI Novo…). E nos de trabalho:
+   associar ao negócio do funil, marcar feito / não feito, adiar mais do que +1d/+7d — um botão
+   'pra depois' que abre um cardzinho de opção."
+   Toda linha do Google ganha uma CLASSE: negócio (casou com um negócio do funil) · trabalho ·
+   pessoal (só ocupado). A classe vem, nesta ordem: marca no próprio evento (crmClasse, vale em
+   qualquer aparelho) → regra da agenda do Google de onde veio → casou com negócio → palavra-chave
+   (trabalho / pessoal) ou prefixo de etapa. As regras moram no PL (um doc por dono). */
+function gcalClasseOn(){ return novoOn('agenda-classe'); }
+const GCAL_PESSOAL_SEED=['gym','academia','treino','escola','colégio','dentista','médico','pediatra'];
+function gcalCfg(){ if(typeof PL==='undefined'||!PL) return {cals:{},pessoal:GCAL_PESSOAL_SEED.slice(),trabalho:[],ocultar:true};
+  if(!PL.gcalCfg||typeof PL.gcalCfg!=='object') PL.gcalCfg={}; const c=PL.gcalCfg;
+  if(!c.cals||typeof c.cals!=='object') c.cals={}; if(!Array.isArray(c.pessoal)){ c.pessoal=GCAL_PESSOAL_SEED.slice(); } if(!Array.isArray(c.trabalho)) c.trabalho=[]; if(c.ocultar==null) c.ocultar=true; return c; }
+function gcalCfgSalvar(){ if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); }
+/* modo da agenda do Google: auto (classifica pelo evento) · trabalho · pessoal · off (não puxa). Principal nasce em auto; as outras em off até ele ligar. */
+function gcalCalModo(calId){ const c=gcalCfg(); const m=c.cals[calId||'primary']; if(m) return m; const ehPrim=!calId||calId==='primary'||(GCAL.cals||[]).some(x=>x.id===calId&&x.primary); return ehPrim?'auto':'off'; }
+function gcalKwBate(txt,lista){ const k=normKey(txt); if(!k) return false; return (lista||[]).some(w=>{ const nw=normKey(w); return nw&&k.includes(nw); }); }
+function gcalPriv(e){ return (e&&e.extendedProperties&&e.extendedProperties.private)||{}; }
+function gcalClasse(e){ if(!e) return 'trabalho';
+  const cn=gcalNegocioDoEvento(e);
+  if(!gcalClasseOn()) return cn?'negocio':'trabalho';
+  const p=gcalPriv(e);
+  if(p.crmClasse==='pessoal') return 'pessoal';
+  if(p.crmClasse==='trabalho') return cn?'negocio':'trabalho';
+  const modo=gcalCalModo(e._cal||'primary');
+  if(modo==='pessoal') return 'pessoal';
+  if(cn) return 'negocio';
+  if(modo==='trabalho') return 'trabalho';
+  const t=String(e.summary||''); const cfg=gcalCfg();
+  if(gcalKwBate(t,cfg.trabalho)||RE_PREFIXO_REUNIAO.test(t)) return 'trabalho';
+  if(gcalKwBate(t,cfg.pessoal)) return 'pessoal';
+  return 'trabalho'; }
+function gcalFeito(e){ return gcalPriv(e).crmFeito==='1'; }
+/* grava marcas no próprio evento (classe, feito) — sobrevive a renomear e vale em todo aparelho */
+async function gcalPatchPriv(e,obj){ const priv=Object.assign({},gcalPriv(e)); Object.keys(obj).forEach(k=>{ if(obj[k]==null) delete priv[k]; else priv[k]=String(obj[k]); }); priv.crmApp=priv.crmApp||GSYNC_APP;
+  const ev=await gcalApi('PATCH','/'+encodeURIComponent(e.id),{extendedProperties:{private:priv}},{sendUpdates:'none'},e._cal); if(ev&&ev.id) Object.assign(e,ev); else e.extendedProperties={private:priv}; return e; }
+function gcalMaisFechar(){ const b=document.getElementById('gcal-mais-bd'); if(b) b.remove(); }
+/* o cartão de opções de um compromisso (UM botão na linha abre isto) */
+function gcalMais(id){ const e=gcalEvPorId(id); if(!e){ toast('Evento não encontrado — atualize',false); return; }
+  gcalMaisFechar(); const cl=gcalClasse(e), cn=gcalNegocioDoEvento(e), feito=gcalFeito(e), p=gcalPriv(e), hoje=hojeISO();
+  const s=gcalDT(e,'start'); const allday=!s.t; const wa=cn&&cn.telefone?waHref(cn.telefone):'';
+  const b=(k,l,cls,tt)=>`<button type="button" class="btn ${cls||'btn-s'} gm-btn" onclick="gcalMaisAcao('${esc(jsq(id))}','${k}')" ${tt?`title="${esc(tt)}"`:''}>${l}</button>`;
+  const cab=`<div class="gm-hd"><div><b>${esc(e.summary||'(sem título)')}</b><div class="gm-sub">${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}${e._calNome?' · 📆 '+esc(e._calNome):''}${e.location?' · '+esc(e.location):''}</div></div><button type="button" class="gm-x" onclick="gcalMaisFechar()" aria-label="Fechar">✕</button></div>`;
+  let corpo='';
+  if(cl==='negocio'){ corpo+=`<div class="gm-sec">Negócio</div><div class="gm-neg">${negSeloHTML(cn)} <b>${esc(cn.nome||'')}</b> ${etStatusChip(cn)}</div>
+    <div class="gm-grid">${b('feito',feito?'↩︎ Desfazer feito':'✓ Feito','btn-p','Registra na ficha; se nasceu de uma atividade do CRM, conclui a atividade')}${b('naofoi','✗ Não aconteceu',null,'Registra na ficha e você remarca abaixo')}${b('delay','⏳ Delay 7d',null,'Cliente pediu pra adiar — o negócio entra em Delay e o compromisso anda 7 dias')}${b('ficha','👤 Abrir ficha')}${wa?`<a class="btn btn-s gm-btn" href="${esc(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}</div>`; }
+  else if(cl==='trabalho'){ corpo+=`<div class="gm-sec">Trabalho · sem negócio</div><div class="gm-grid">${b('feito',feito?'↩︎ Desfazer feito':'✓ Feito','btn-p')}${b('vincular','🎯 Vincular a um negócio',null,'Abre o editor com a busca de negócio')}</div>`; }
+  else { corpo+=`<div class="gm-sec">Pessoal · só ocupado</div><div class="gm-txt">Compromisso pessoal: aparece só como horário ocupado, sem virar tarefa.</div>`; }
+  corpo+=`<div class="gm-sec">Adiar</div><div class="gm-grid">${b('mais1','+1 dia')}${b('mais7','+7 dias')}${b('proxseg','próx. segunda')}</div>
+    <div class="gm-data"><input type="date" id="gm-dia" value="${esc(s.d)}" aria-label="Novo dia"><input type="time" id="gm-hora" value="${esc(s.t||'')}" ${allday?'disabled title="evento de dia todo"':''} aria-label="Nova hora">${b('data','📅 Mover pra esta data','btn-p')}</div>`;
+  corpo+=`<div class="gm-sec">Tipo</div><div class="gm-grid">${cl==='pessoal'?b('trabalho','💼 É trabalho'):b('pessoal','🔒 É pessoal (só ocupado)')}${cl==='pessoal'?'':b('pessoaltodos','🔒 Pessoal — este e os com o mesmo nome',null,'Vira regra: todo compromisso com este nome passa a ser só ocupado')}</div>`;
+  corpo+=`<div class="gm-sec">Mais</div><div class="gm-grid">${b('editar','✏️ Editar')}${b('excluir','🗑️ Excluir')}<a class="btn btn-s gm-btn" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener">↗ Abrir no Google</a>${b('regras','⚙ Agendas e regras')}</div>`;
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd mais-centro" id="gcal-mais-bd" onclick="if(event.target===this)gcalMaisFechar()"><div class="sheet gm-sheet" role="dialog" aria-label="Opções do compromisso">${cab}${corpo}</div></div>`); }
+async function gcalMaisAcao(id,k){ const e=gcalEvPorId(id); if(!e) return; const cn=gcalNegocioDoEvento(e), p=gcalPriv(e), hoje=hojeISO();
+  const nota=txt=>{ if(!cn) return; interacoesDe(cn).push({id:uid(),k:'nota',l:txt,dia:hoje,ts:new Date().toISOString(),por:quemFez()}); salvar(); };
+  try{
+    if(k==='feito'){ const ja=gcalFeito(e);
+      if(!ja&&p.crmTarefa&&p.crmContato&&tarContato(p.crmContato)){ gcalMaisFechar(); tarConcluir(p.crmContato,p.crmTarefa); return; }   /* nasceu de atividade do CRM: conclui a atividade (ela cuida do resto) */
+      await gcalPatchPriv(e,{crmFeito:ja?null:'1'}); if(!ja) nota('✓ Compromisso feito: '+(e.summary||'')+' ('+dataBR(gcalDiaISO(e))+')'); toast(ja?'Feito desfeito':'Feito ✓',true); gcalMaisFechar(); }
+    else if(k==='naofoi'){ await gcalPatchPriv(e,{crmFeito:'nao'}); nota('✗ Compromisso não aconteceu: '+(e.summary||'')+' ('+dataBR(gcalDiaISO(e))+')'); toast('Registrado — escolha quando remarcar',true); gcalMais(id); const d=document.getElementById('gm-dia'); if(d){ d.focus(); } return; }
+    else if(k==='delay'){ if(cn){ negDelayMarcar(cn,isoAddDias(hoje,7),'pelo compromisso da Agenda'); salvar(); } gcalMaisFechar(); await gcalAdiar(id,7); return; }
+    else if(k==='ficha'){ gcalMaisFechar(); if(cn) abrirContato(cn.id); return; }
+    else if(k==='vincular'){ gcalMaisFechar(); gcalEditar(id); return; }
+    else if(k==='mais1'||k==='mais7'){ gcalMaisFechar(); await gcalAdiar(id,k==='mais1'?1:7); return; }
+    else if(k==='proxseg'){ const d=new Date(gcalDiaISO(e)+'T12:00:00'); let add=(8-d.getDay())%7; if(!add) add=7; gcalMaisFechar(); await gcalAdiar(id,add); return; }
+    else if(k==='data'){ const dia=(document.getElementById('gm-dia')||{}).value, hora=(document.getElementById('gm-hora')||{}).value; if(!dia){ toast('Escolha o dia'); return; } const alvo={dia}; if(hora&&e.start&&e.start.dateTime){ alvo.ini=gcalHhmm2Min(hora); const dur=(gcalEvMin(e,'end')!=null&&gcalEvMin(e,'start')!=null)?(gcalEvMin(e,'end')-gcalEvMin(e,'start')):60; alvo.fim=alvo.ini+Math.max(15,dur); } gcalMaisFechar(); await gcalMoverEvento(id,alvo); return; }
+    else if(k==='pessoal'||k==='trabalho'){ await gcalPatchPriv(e,{crmClasse:k}); toast(k==='pessoal'?'Marcado como pessoal — só ocupado':'Marcado como trabalho',true); gcalMaisFechar(); }
+    else if(k==='pessoaltodos'){ const cfg=gcalCfg(); const kw=normKey(e.summary||''); if(kw&&!cfg.pessoal.map(normKey).includes(kw)) cfg.pessoal.push(String(e.summary||'').trim()); gcalCfgSalvar(); await gcalPatchPriv(e,{crmClasse:'pessoal'}); toast('"'+(e.summary||'')+'" virou pessoal — este e os próximos',true); gcalMaisFechar(); }
+    else if(k==='editar'){ gcalMaisFechar(); gcalEditar(id); return; }
+    else if(k==='excluir'){ gcalMaisFechar(); gcalExcluir(id); return; }
+    else if(k==='regras'){ gcalMaisFechar(); gcalRegras(); return; }
+    if(VIEW==='agenda') viewAgenda();
+  }catch(err){ toast('Não deu: '+(err&&err.message||err),false); } }
+/* ⚙ Agendas e regras: o que cada agenda do Google vira aqui + palavras que marcam pessoal/trabalho */
+function gcalRegras(){ gcalMaisFechar(); const cfg=gcalCfg(); const cals=(GCAL.cals&&GCAL.cals.length)?GCAL.cals:[{id:'primary',nome:'Principal',primary:true}];
+  const modos=[['auto','Automático (classifica pelo compromisso)'],['trabalho','Trabalho'],['pessoal','Pessoal (só ocupado)'],['off','Não mostrar']];
+  const linhas=cals.map(c=>`<label class="gm-cal"><span class="gm-cal-dot" style="background:${esc(c.cor||'#94a3b8')}"></span><span class="gm-cal-nome">${esc(c.nome)}${c.primary?' <small>principal</small>':''}</span><select onchange="gcalRegraCal('${esc(jsq(c.primary?'primary':c.id))}',this.value)">${modos.map(m=>`<option value="${m[0]}" ${gcalCalModo(c.primary?'primary':c.id)===m[0]?'selected':''}>${m[1]}</option>`).join('')}</select></label>`).join('');
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd mais-centro" id="gcal-mais-bd" onclick="if(event.target===this)gcalMaisFechar()"><div class="sheet gm-sheet" role="dialog" aria-label="Agendas e regras">
+    <div class="gm-hd"><div><b>⚙ Agendas e regras</b><div class="gm-sub">O que cada agenda do Google vira aqui, e as palavras que separam pessoal de trabalho.</div></div><button type="button" class="gm-x" onclick="gcalMaisFechar()" aria-label="Fechar">✕</button></div>
+    <div class="gm-sec">Agendas do Google</div><div class="gm-cals">${linhas}</div>
+    ${GCAL.cals&&GCAL.cals.length?'':'<div class="gm-txt">Só a agenda principal apareceu. Toque em 🔄 na Agenda pra buscar as outras.</div>'}
+    <div class="gm-sec">Palavras que marcam PESSOAL (só ocupado)</div><textarea id="gm-kw-pess" rows="2" placeholder="gym, escola, dentista…">${esc(cfg.pessoal.join(', '))}</textarea>
+    <div class="gm-sec">Palavras que marcam TRABALHO</div><textarea id="gm-kw-trab" rows="2" placeholder="RCP, OI, ponto de apoio…">${esc(cfg.trabalho.join(', '))}</textarea>
+    <label class="check-row" style="margin-top:10px"><input type="checkbox" id="gm-ocultar" ${cfg.ocultar?'checked':''}> Na lista, recolher os pessoais num bloco só ("🔒 ocupados")</label>
+    <div class="gm-grid" style="margin-top:12px"><button type="button" class="btn btn-p gm-btn" onclick="gcalRegrasSalvar()">Salvar e atualizar</button><button type="button" class="btn btn-s gm-btn" onclick="gcalMaisFechar()">Cancelar</button></div></div></div>`); }
+function gcalRegraCal(calId,modo){ const cfg=gcalCfg(); cfg.cals[calId]=modo; }
+function gcalRegrasSalvar(){ const cfg=gcalCfg(); const split=v=>String(v||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
+  cfg.pessoal=split((document.getElementById('gm-kw-pess')||{}).value); cfg.trabalho=split((document.getElementById('gm-kw-trab')||{}).value); cfg.ocultar=!!(document.getElementById('gm-ocultar')||{}).checked;
+  gcalCfgSalvar(); gcalMaisFechar(); toast('Regras salvas',true); if(GCAL.conectado) gcalCarregar(); else if(VIEW==='agenda') viewAgenda(); }
+window.gcalMais=gcalMais; window.gcalMaisAcao=gcalMaisAcao; window.gcalMaisFechar=gcalMaisFechar; window.gcalRegras=gcalRegras; window.gcalRegraCal=gcalRegraCal; window.gcalRegrasSalvar=gcalRegrasSalvar;
 function gcalBlocoHTML(){
   if(!GCAL.conectado){
     return `<div class="card" style="padding:14px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -9831,7 +9952,7 @@ function gcalBlocoHTML(){
   const header=`<div class="gcal-hd">
       <button class="btn btn-s btn-mini" onclick="gcalRecolher()" title="${GCAL.recolhido?'Expandir':'Recolher'}">${GCAL.recolhido?'▸':'▾'}</button>
       <span class="tit">📅 Sua Agenda Google</span>
-      <span class="sub">${GCAL.carregando?'sincronizando…':hojeEv.length+' hoje · atualiza sozinha'}</span>
+      <span class="sub">${GCAL.carregando?'sincronizando…':(gcalClasseOn()?(hojeEv.filter(e=>gcalClasse(e)!=='pessoal').length+' hoje'+(hojeEv.some(e=>gcalClasse(e)==='pessoal')?' · '+hojeEv.filter(e=>gcalClasse(e)==='pessoal').length+' ocupado(s)':'')):(hojeEv.length+' hoje'))+' · atualiza sozinha'}</span>
       <span style="flex:1"></span>
       ${GCAL.recolhido?'':seg}
       <select class="gcal-dest" onchange="gtSetSemHora(this.value)" title="Atividade SEM hora: vai como Tarefa do Google (lista de afazer) ou como evento de dia inteiro na Agenda">
@@ -9839,15 +9960,30 @@ function gcalBlocoHTML(){
         <option value="evento" ${GT.semHora==='evento'?'selected':''}>sem hora → 📅 Agenda</option></select>
       <button class="btn btn-p btn-mini" onclick="gcalNovo()" title="Criar evento">＋ Novo</button>
       <button class="btn btn-s btn-mini" onclick="gcalCarregar()" title="Atualizar">🔄</button>
+      ${gcalClasseOn()?`<button class="btn btn-s btn-mini" onclick="gcalRegras()" title="Agendas do Google e regras (pessoal × trabalho)">⚙</button>`:''}
       <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>`;
   if(GCAL.recolhido) return header;
   if(GCAL.vista==='dia') return header+gcalDiaHTML(evs,hoje);
   if(GCAL.vista==='semana') return header+gcalSemanaHTML(evs,hoje);
   const prox=evs.filter(e=>gcalDiaISO(e)>hoje);
   const lista=[...hojeEv,...prox.slice(0,14)];
-  return header+`<div class="card" style="padding:6px 14px">${lista.length?lista.map(gcalLinhaEv).join(''):'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. Crie um em <b>＋ Novo</b>. 🎉</div>'}</div>`;
+  /* AGENDA-CLASSE-V1: pessoais (só ocupado) recolhidos num bloco só, que nasce fechado */
+  const ocultar=gcalClasseOn()&&gcalCfg().ocultar; const pess=ocultar?lista.filter(e=>gcalClasse(e)==='pessoal'):[]; const vis=ocultar?lista.filter(e=>gcalClasse(e)!=='pessoal'):lista;
+  const blocoPess=pess.length?`<details class="gcal-pess-dobra"><summary>🔒 <b>${pess.length}</b> ocupado${pess.length===1?'':'s'} (pessoal) · ${esc(pess.slice(0,3).map(e=>e.summary||'').join(' · '))}${pess.length>3?' …':''}</summary>${pess.map(gcalLinhaEv).join('')}</details>`:'';
+  return header+`<div class="card" style="padding:6px 14px">${vis.length?vis.map(gcalLinhaEv).join(''):(pess.length?'':'<div style="padding:10px;color:var(--muted)">Sem compromissos nos próximos 7 dias. Crie um em <b>＋ Novo</b>. 🎉</div>')}${blocoPess}</div>`;
 }
-function gcalLinhaEv(e){ const hoje=hojeISO(); const cn=gcalNegocioDoEvento(e); return `<div class="tarlin"><span>📅</span>
+function gcalLinhaEv(e){ const hoje=hojeISO(); const cn=gcalNegocioDoEvento(e);
+  if(gcalClasseOn()){ const cl=gcalClasse(e), feito=gcalFeito(e), quando=`${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}`, wa=cn&&cn.telefone?waHref(cn.telefone):'';
+    if(cl==='pessoal') return `<div class="tarlin gcal-pess" data-classe="pessoal"><span>🔒</span>
+      <span class="tt"><span class="clicavel" style="cursor:pointer" onclick="gcalMais('${esc(e.id)}')">${esc(e.summary||'(sem título)')}</span> <span class="gcal-tag">ocupado</span>${e._calNome&&e._cal!=='primary'?` <span class="gcal-tag">${esc(e._calNome)}</span>`:''}</span>
+      <span class="qd" style="background:transparent;padding:0">${quando}</span>
+      <span class="ac"><button class="btn btn-s btn-mini" onclick="gcalMais('${esc(e.id)}')" title="Opções">⋯</button></span></div>`;
+    return `<div class="tarlin${feito?' gcal-feito':''}" data-classe="${cl}"><span>${cl==='negocio'?'🎯':'📅'}</span>
+      <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalMais('${esc(e.id)}')" title="Opções do compromisso">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''} ${negSeloHTML(cn)}${cl==='trabalho'?` <button class="gcal-vinc" onclick="gcalEditar('${esc(e.id)}')" title="Ligar este compromisso a um negócio do funil">🎯 vincular</button>`:''}${feito?' <span class="gcal-tag ok">✓ feito</span>':(gcalPriv(e).crmFeito==='nao'?' <span class="gcal-tag nao">✗ não aconteceu</span>':'')}
+        <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees&&e.attendees.length?e.attendees.length+' convidado(s)':''))}${e._calNome&&e._cal!=='primary'?' · 📆 '+esc(e._calNome):''}</div></span>
+      <span class="qd" style="background:transparent;padding:0">${quando}</span>
+      <span class="ac"><button class="btn btn-p btn-mini" onclick="gcalMais('${esc(e.id)}')" title="Feito · não aconteceu · adiar · vincular · tipo">⋯ ação</button>${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="WhatsApp">💬</a>`:''}<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener" title="Abrir no Google">↗</a></span></div>`; }
+  return `<div class="tarlin"><span>📅</span>
     <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalEditar('${esc(e.id)}')" title="Editar evento">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''} ${negSeloHTML(cn)}
       <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees&&e.attendees.length?e.attendees.length+' convidado(s)':''))}</div></span>
     <span class="qd" style="background:transparent;padding:0">${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}</span>
@@ -9863,7 +9999,7 @@ function gcalSemanaHTML(evs,hoje){
   /* AGENDA-FLUIDA-V1: o chip virou alça de arrasto — puxar pra outra coluna muda o DIA
      mantendo a hora (é o que ele faz no Google Agenda). Clique curto abre o editor. */
   const chip=e=>{ const ad=e.start&&e.start.date&&!e.start.dateTime; const cn=gcalNegocioDoEvento(e);
-    return `<div class="gcal-chip${ad?' allday':''}" data-ev="${esc(e.id)}" data-dia="${esc(gcalDiaISO(e))}" title="${esc(e.summary||'')}${cn?' — '+esc(negEtiqueta(cn)):''} — arraste pra outro dia"><span class="h">${ad?'dia todo':gcalHora(e)}${cn?' · '+esc(ET_LABEL[cn.etapa]||cn.etapa||''):''}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
+    return `<div class="gcal-chip${ad?' allday':''}${gcalClasse(e)==='pessoal'?' pess':''}" data-ev="${esc(e.id)}" data-dia="${esc(gcalDiaISO(e))}" title="${esc(e.summary||'')}${cn?' — '+esc(negEtiqueta(cn)):''} — arraste pra outro dia"><span class="h">${ad?'dia todo':gcalHora(e)}${cn?' · '+esc(ET_LABEL[cn.etapa]||cn.etapa||''):''}</span><span class="s">${esc(e.summary||'(sem título)')}</span></div>`; };
   const col=dISO=>{ const p=dISO.split('-').map(Number); const dow=new Date(p[0],p[1]-1,p[2]).getDay();
     const evD=evs.filter(e=>gcalDiaISO(e)===dISO);
     return `<div class="gcal-day${dISO===hoje?' hoje':''}" data-dia="${dISO}"><div class="dh"><span>${SEM[dow]} ${p[2]}<span class="dn">${dISO===hoje?' · hoje':''}</span></span><span class="add" onclick="gcalNovoDia('${dISO}')" title="Novo evento neste dia">＋</span></div>
@@ -10056,7 +10192,7 @@ async function gcalMoverEvento(id,alvo){
   e.start=body.start; e.end=body.end;                 /* otimista: a tela responde no mesmo toque */
   if(VIEW==='agenda') viewAgenda();
   try{
-    const ev=await gcalApi('PATCH','/'+encodeURIComponent(id),body,{sendUpdates:'none'});
+    const ev=await gcalApi('PATCH','/'+encodeURIComponent(id),body,{sendUpdates:'none'},e._cal);
     if(ev&&ev.id) Object.assign(e,ev);
     gsyncEspelharNaTarefa(e);                          /* nasceu de atividade do CRM? ela anda junto */
     toast((e.summary||'Evento')+' → '+dataBR(dia)+(temHora?' '+String(body.start.dateTime).slice(11,16):' (dia todo)'),true);
@@ -10080,10 +10216,10 @@ if(typeof document!=='undefined'){
 }
 /* ── CRUD da Agenda Google (Fase 2): criar / editar / adiar / excluir pelo CRM ── */
 const GCAL_TZ='America/Recife';
-async function gcalApi(method,path,body,params){
+async function gcalApi(method,path,body,params,calId){
   const tok=await gcalToken(false).catch(()=>gcalToken(true));
   const qs=Object.assign({},params||{}); const q=Object.keys(qs).map(k=>k+'='+encodeURIComponent(qs[k])).join('&');
-  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events'+path+(q?('?'+q):''),
+  const r=await fetch('https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(calId||'primary')+'/events'+path+(q?('?'+q):''),   /* AGENDA-CLASSE-V1: evento de outra agenda do Google vai pra agenda dele */
     {method,headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
   if(!r.ok){ let m='HTTP '+r.status; try{ const j=await r.json(); if(j.error&&j.error.message) m=j.error.message; }catch(_){}; throw new Error(m); }
   return method==='DELETE'? true : r.json();
@@ -10668,20 +10804,20 @@ async function gcalSalvar(id){
   if(meet && !id){ body.conferenceData={createRequest:{requestId:'crm'+Date.now(), conferenceSolutionKey:{type:'hangoutsMeet'}}}; }
   const btn=err&&err.parentElement&&err.parentElement.querySelector('.btn-p'); if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
   try{
-    if(id) await gcalApi('PATCH','/'+encodeURIComponent(id),body,params);
+    if(id) await gcalApi('PATCH','/'+encodeURIComponent(id),body,params,(gcalEvPorId(id)||{})._cal);
     else   await gcalApi('POST','',body,params);
     gcalFecharModal(); toast(id?'Evento atualizado ✓':'Evento criado ✓ (convite enviado)',true); gcalCarregar();
   }catch(e){ setErr('Não deu: '+(e.message||e)); if(btn){ btn.disabled=false; btn.textContent=id?'Salvar alterações':'Criar evento'; } }
 }
 async function gcalExcluir(id){
   const e=gcalEvPorId(id); if(!confirm('Excluir "'+((e&&e.summary)||'este evento')+'" da sua Agenda Google?'+((e&&e.attendees&&e.attendees.length)?' Os convidados são avisados.':''))) return;
-  try{ await gcalApi('DELETE','/'+encodeURIComponent(id),null,{sendUpdates:'all'}); gcalFecharModal(); toast('Evento excluído',true); gcalCarregar(); }
+  try{ await gcalApi('DELETE','/'+encodeURIComponent(id),null,{sendUpdates:'all'},(e||{})._cal); gcalFecharModal(); toast('Evento excluído',true); gcalCarregar(); }
   catch(err){ toast('Não consegui excluir: '+(err.message||err),false); }
 }
 async function gcalAdiar(id,dias){
   const e=gcalEvPorId(id); if(!e) return;
   const shift=o=>{ if(!o) return o; if(o.date){ return {date:isoAddDias(o.date,dias)}; } const dt=new Date(o.dateTime); dt.setDate(dt.getDate()+dias); return {dateTime:dt.toISOString(), timeZone:o.timeZone||GCAL_TZ}; };
-  try{ await gcalApi('PATCH','/'+encodeURIComponent(id),{start:shift(e.start),end:shift(e.end)},{sendUpdates:'all'}); toast('Adiado '+dias+'d ✓',true); gcalCarregar(); }
+  try{ await gcalApi('PATCH','/'+encodeURIComponent(id),{start:shift(e.start),end:shift(e.end)},{sendUpdates:'all'},e._cal); toast('Adiado '+dias+'d ✓',true); gcalCarregar(); }
   catch(err){ toast('Não consegui adiar: '+(err.message||err),false); }
 }
 function viewAgenda(){
@@ -14775,6 +14911,7 @@ const NOVO_SO_MEU={
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
   'pes-sugere':   {o:'Campo de pessoa (Recomendante na ficha, no Novo contato e no Estoque) autocompleta com quem já está na base — funil, carteira e estoque — e grava a grafia registrada', desde:'2026-09-18'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
+  'agenda-classe':{o:'Agenda: compromisso do Google com classe (negócio · trabalho · pessoal/só ocupado), várias agendas do Google com regra por agenda + palavras-chave, e o botão ⋯ ação (feito · não aconteceu · delay · adiar com data · vincular · tipo)', desde:'2026-09-18'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return MODS[k]? modOn(k) : true;   /* não listado = liberado; se virou módulo em MODS, obedece ao mapa do usuário (pessoa a pessoa) */
@@ -19043,6 +19180,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const e=['pipe','pvg','pprud','pmfo'].every(g=>document.getElementById(g+'-toggle')&&document.getElementById(g+'-group')&&document.getElementById(g+'-group').querySelectorAll('.nav-btn[data-view]').length===3);
       const f=!!NOVO_SO_MEU.pipes && ['consol-vg','vg-funil','vg-bc-funil','consol-prud','prud-funil','prud-bc-funil','consol-mfo','mfo-funil','mfo-bc-funil'].every(v=>MODS.funis_extra.views.includes(v)&&document.querySelector(`.nav-btn[data-view="${v}"][data-novo="pipes"]`));
       return a&&b&&c&&d&&e&&f; })());
+    ok('AGENDA-CLASSE-V1: classe por marca no evento > agenda do Google > negócio > palavra/prefixo; principal em auto e as outras em off; gcalApi vai na agenda do evento; ⋯ e ⚙ existem', (()=>{ const _pl=JSON.stringify(PL), _p=PERFIL, _c=S.contatos, _cals=GCAL.cals; try{ PERFIL=null; S.contatos=[{id:'gcz1',nome:'Zuleica Teste Classe',funil:'nn',etapa:'C2',telefone:'81999990071',lp:S.activeUser,eventos:[],recs:[],interacoes:[]}]; negIndexLimpar();
+      PL.gcalCfg={}; GCAL.cals=[{id:'primary',nome:'Principal',primary:true},{id:'fam@x',nome:'Família'}];
+      const a=gcalClasse({id:'e1',summary:'Gym — Sábado',_cal:'primary'})==='pessoal' && gcalClasse({id:'e2',summary:'Ponto de Apoio',_cal:'primary'})==='trabalho' && gcalClasse({id:'e3',summary:'🎯 [OI/FF] Fulano Novo',_cal:'primary'})==='trabalho';
+      const b=gcalClasse({id:'e4',summary:'Almoço Zuleica Teste Classe',_cal:'primary'})==='negocio' && gcalClasse({id:'e5',summary:'Gym',extendedProperties:{private:{crmClasse:'trabalho'}},_cal:'primary'})==='trabalho' && gcalClasse({id:'e6',summary:'Reunião Zuleica Teste Classe',extendedProperties:{private:{crmClasse:'pessoal'}}})==='pessoal';
+      const c=gcalCalModo('primary')==='auto' && gcalCalModo('fam@x')==='off' && (gcalCfg().cals['fam@x']='pessoal', gcalClasse({id:'e7',summary:'Reunião Zuleica Teste Classe',_cal:'fam@x'})==='pessoal');
+      const d=String(gcalApi).includes("encodeURIComponent(calId||'primary')") && String(gcalAdiar).includes(',e._cal)') && String(gcalExcluir).includes('._cal)') && String(gcalSalvar).includes('._cal)');
+      const e=typeof gcalMais==='function' && typeof gcalRegras==='function' && !!NOVO_SO_MEU['agenda-classe'] && String(gcalLinhaEv).includes('gcalMais(') && String(gcalBlocoHTML).includes('gcal-pess-dobra');
+      return a&&b&&c&&d&&e; } finally{ PL=plNorm(JSON.parse(_pl)); PERFIL=_p; S.contatos=_c; GCAL.cals=_cals; negIndexLimpar(); } })());
     ok('PLANO-V1: mês = n×PA médio; total do ano; período prorrateado por dia; replicar; Metas/MF/Emissão Diária leem o plano; card no hub gateado', (()=>{ const _pl=JSON.stringify(PL), _p=PERFIL; try{ PERFIL=null;
       PL.plano={}; PL.edPlanoAno={}; const ano=mfAno(); plnLer(ano)['03']={n:12,pam:5000,csm:500000,com:1600};
       const m=plnMes(ano,'03'); const a=m.pa===60000&&m.cs===6000000&&m.com===1600;

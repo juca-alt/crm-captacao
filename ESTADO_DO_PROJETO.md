@@ -2,6 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (34ª onda) — AGENDA-CLASSE-V1: compromisso do Google com classe (negócio · trabalho · pessoal), várias agendas, e o botão ⋯ ação (v7.92)
+
+Prints da Agenda no iPhone (lista do Google com Gym, Gael Escola, Ponto de Apoio, cada um com 5 botões de tarefa): *"compromisso pessoal é só OCUPADO, não faz sentido tratar como tarefa. Deixa configurado pra linkar conforme as listas do Google (RCP, OI, OI Novo…). Nos de trabalho: associar ao negócio do funil, marcar feito/não feito, adiar mais do que +1d/+7d — um botão 'pra depois' que abre um cardzinho de opção."*
+
+### O que mudou
+- **Classe do compromisso** (`gcalClasse`): **negócio** (casou com um negócio do funil — carimbo, telefone ou nome), **trabalho**, **pessoal** (só ocupado). Ordem: marca no próprio evento (`extendedProperties.private.crmClasse`, vale em qualquer aparelho) → regra da agenda do Google de onde veio → negócio → palavra-chave (listas pessoal/trabalho) ou prefixo de etapa `[OI/FF]`. Seed de pessoal: gym, academia, treino, escola, colégio, dentista, médico, pediatra.
+- **Linha da Agenda:** negócio = 🎯 selo + **um botão "⋯ ação"** (+ 💬 e ↗); trabalho = idem + "🎯 vincular"; pessoal = 🔒 apagado, só ⋯. Os pessoais ficam **recolhidos num bloco "🔒 N ocupados"** (nasce fechado; opcional em ⚙). Cabeçalho: "2 hoje · 2 ocupado(s)". Semana: chip pessoal apagado.
+- **Cartão ⋯** (`gcalMais`, folha no celular / centrado no desktop): **✓ Feito** (nasceu de atividade do CRM → conclui a atividade; senão grava `crmFeito` no evento + nota na ficha, linha riscada) · **✗ Não aconteceu** (nota + já abre pra remarcar) · **⏳ Delay 7d** (negócio entra em Delay pelo DELAY-SINC + evento anda 7d) · 👤 Ficha · 💬 · **Adiar** +1 · +7 · próx. segunda · **data e hora escolhidas** (duração mantida) · **Tipo** 🔒 É pessoal / 💼 É trabalho / **🔒 Pessoal — este e os com o mesmo nome** (vira palavra-chave) · ✏️ Editar · 🗑️ Excluir · ↗ Google · ⚙ Regras.
+- **Várias agendas do Google** (`users/me/calendarList`, só as que ele pode escrever): `gcalApi` passou a receber a agenda do evento (Adiar/Mover/Salvar/Excluir vão na agenda certa). **⚙ Agendas e regras:** por agenda — Automático · Trabalho · Pessoal · Não mostrar (principal nasce em auto, as outras em off até ele ligar) + palavras pessoal/trabalho + "recolher pessoais". Regras moram em `PL.gcalCfg` (placed_estado, por dono → sincroniza).
+
+### Gate
+- Só na base dele: chave **`agenda-classe`** em `NOVO_SO_MEU`. Daniel: linha do Google como antes (+1d/+7d), sem ⋯ e sem ⚙; só a agenda principal.
+
+### Prova
+- Portão aberto (47 telas) · guard OK · `teste-agenda-classe.mjs` **20/20** em 390 e 1280 com a API do Google simulada (classes certas, bloco de ocupados fechado, cartão completo com botões ≥44px, Feito grava e risca, Pessoal-todos vira regra e salva no PL, É trabalho desfaz, Delay sincroniza e move 7d, mover pra data/hora mantém duração, ⚙ com 2 agendas e palavras, Daniel na linha antiga) · regressão Agenda V2 18/18 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (33ª onda) — PLANO-V1: Plano Prudential (Planejamento Financeiro por mês) distribuído nos cards (v7.91)
 
 Print do painel "Planejamento Financeiro 2026" da Prudential | franquia (Mês · Apólices Emitidas · PA Total · PA Médio · CS Total · CS Médio · Faturamento/Comissão Bruta): *"coloca as informações — o que vai fazer de apólice, o que está pensando pra aquele período — e isso distribui nos desdobramentos das nossas metas, dos acompanhamentos, dos cards. Botar nos outros módulos."*
