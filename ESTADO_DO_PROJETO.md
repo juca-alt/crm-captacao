@@ -2,6 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (36ª onda) — CORES-3DIAS-V1: as cores do Google (as "listas" dele) pintam e classificam; vista 3 dias (v7.94)
+
+Prints do Google Agenda dele: o seletor de cor com as 11 cores renomeadas (**RCP/FF · RCP/PC · GAEL + FAMÍLIA · CORPORE SANO · STRATEGIC · TA/PIPE · URGENTE · LEMBRETE · OI/FF · P/C · C2 · DELIVERY**), a lista de agendas (Minha agenda · Tarefas · Camila · DSC · Gael) e as vistas **Três dias** e **Mês** que ele usa no celular. As "listas" que ele citou são as **cores de evento** do Google.
+
+### O que mudou
+- **Cor do Google no bloco** (`gcalCorHex`): `colorId` do evento → hex pela tabela `calendar/v3/colors` (buscada uma vez; fallback nas 11 cores padrão) → senão a cor da agenda de onde veio. Bloco pintado sólido com texto claro/escuro conforme a cor (`gcalCorInk`), na grade (Semana/3 dias) e na vista Dia. Na lista: **bolinha da cor + nome que ele deu**.
+- **Regra por cor** (⚙ Agendas e regras → "Cores do Google (as suas listas)"): 11 linhas com a bolinha, **nome** (o nome só existe no aparelho dele; a API manda só o número) e **classe** (auto · Trabalho · Pessoal). A cor decide **antes** do nome/palavra-chave: "Almoço Zoraide" com cor GAEL + FAMÍLIA vira pessoal mesmo casando com um negócio. Ordem final: marca no evento → agenda → **cor** → negócio → palavra/prefixo. Salvo em `PL.gcalCfg.cores`.
+- **Vista "3 dias"** (a do Google no celular): `gcalSemanaGradeHTML(evs,hoje,3,ini)`, 3 colunas que cabem na tela sem rolar de lado, **◀ ▶** avançam de 3 em 3 dentro dos 8 dias carregados, botão "hoje" volta. Botão no seletor (só com `agenda-semana`).
+- Próxima onda sugerida: vista **Mês**.
+
+### Gate
+- Cores: dentro de `agenda-classe` · 3 dias: dentro de `agenda-semana` (sem chave nova).
+
+### Prova
+- Portão aberto (47 telas) · guard OK · `teste-cores-3dias.mjs` **8/8** em 390 e 1280 (3 colunas cabem, bloco pintado com o hex do colorId, evento sem cor herda a cor da agenda, ▶/hoje, ⚙ com 11 cores, cor pessoal vence o nome do negócio, nome da cor no bloco de ocupados, salvo no PL) · regressão semana 10/10 e classe 20/20 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (35ª onda) — SEMANA-GRADE-V1: a vista Semana da Agenda vira grade de horas no estilo do Google (v7.93)
 
 Prints dele (vista Dia e vista Semana no iPhone): *"essa visualização do Dia já está no estilo do calendário do Google. É a mesma lógica pra Semana."*

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.93 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.94 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -9805,7 +9805,7 @@ function gcalRecolher(){ GCAL.recolhido=!GCAL.recolhido; gcalUiSalvar(); if(VIEW
   /* SEMANA-GRADE-V1 */
   .gcal-wg-card{padding:8px 10px 12px}
   .gcal-wg{overflow-x:auto;overflow-y:hidden;--wcol:minmax(0,1fr);--eixo:54px;position:relative}
-  .gcal-wg-hd,.gcal-wg-ad,.gcal-wg-body{display:grid;grid-template-columns:var(--eixo) repeat(7,var(--wcol));min-width:100%}
+  .gcal-wg-hd,.gcal-wg-ad,.gcal-wg-body{display:grid;grid-template-columns:var(--eixo) repeat(var(--ncols,7),var(--wcol));min-width:100%}   /* CORES-3DIAS-V1: 3 ou 7 colunas */
   .gcal-wg-corner,.gcal-wg-adlab,.gcal-wg-eixo{position:sticky;left:0;background:var(--card,#fff);z-index:3}
   .gcal-wg-h{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 2px 6px;border-bottom:1px solid var(--linha);font-size:11px;color:var(--muted);text-transform:capitalize;position:relative;min-width:0}
   .gcal-wg-h .dn{font-size:16px;font-weight:700;color:var(--ink);width:30px;height:30px;line-height:30px;text-align:center;border-radius:50%}
@@ -9823,6 +9823,11 @@ function gcalRecolher(){ GCAL.recolhido=!GCAL.recolhido; gcalUiSalvar(); if(VIEW
   .gcal-wg-col .gcal-ev{padding:2px 4px} .gcal-wg-col .gcal-ev .h{font-size:10px} .gcal-wg-col .gcal-ev .s{white-space:normal;display:-webkit-box;-webkit-line-clamp:var(--lc,1);-webkit-box-orient:vertical;font-size:11px;line-height:1.2}
   .gcal-ev.pess,.gcal-chip.pess{opacity:.55;border-style:dashed} .gcal-ev.feito .s{text-decoration:line-through;color:var(--muted)}
   .gcal-ev.arrastando{pointer-events:none}
+  /* CORES-3DIAS-V1: bloco com a cor do Google */
+  .gcal-ev.cor{background:var(--evc);border-color:var(--evc);color:var(--evk,#0f172a)} .gcal-ev.cor .h{color:var(--evk,#0f172a);opacity:.85} .gcal-ev.cor .s{color:var(--evk,#0f172a)}
+  .gcal-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;flex:none}
+  .gm-cores{display:flex;flex-direction:column;gap:6px} .gm-cor{display:flex;align-items:center;gap:8px} .gm-cor .gm-cor-nome{flex:1;min-width:0;min-height:44px} .gm-cor select{width:auto;max-width:40%;min-height:44px}
+  .gcal-wg.n3{--wcol:minmax(0,1fr)}
   @media (max-width:980px){ .gcal-wg{--wcol:120px;--eixo:46px} .gcal-wg-col .gcal-ev .s{font-size:12px} .gcal-wg-h .dn{width:34px;height:34px;line-height:34px} .gcal-wg-hl{font-size:10px} .gcal-wg-adlab{font-size:9px} }`; document.head.appendChild(s); })();
 let _gcalTC=null,_gcalPending=null;
 function gcalGisReady(cb){ if(window.google&&google.accounts&&google.accounts.oauth2){cb();return;}
@@ -9848,6 +9853,7 @@ async function gcalCarregar(interactive){ if(GCAL.carregando) return; GCAL.carre
       try{ const rc=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer&showHidden=false',H);
         if(rc.ok){ const jc=await rc.json(); GCAL.cals=(jc.items||[]).map(c=>({id:c.id,nome:c.summaryOverride||c.summary||c.id,primary:!!c.primary,cor:c.backgroundColor||''})); GCAL.calsTs=Date.now(); } }catch(_){}
     }
+    if(gcalClasseOn()&&!GCAL.cores){ try{ const rk=await fetch('https://www.googleapis.com/calendar/v3/colors',H); if(rk.ok){ const jk=await rk.json(); GCAL.cores=jk.event||null; } }catch(_){} }   /* CORES-3DIAS-V1: hex de cada colorId, uma vez */
     const cals=gcalClasseOn()? (GCAL.cals&&GCAL.cals.length? GCAL.cals.filter(c=>gcalCalModo(c.id)!=='off') : [{id:'primary',nome:'Principal',primary:true}]) : [{id:'primary',nome:'Principal',primary:true}];
     if(!cals.length) cals.push({id:'primary',nome:'Principal',primary:true});
     const lote=await Promise.all(cals.map(async c=>{
@@ -9894,12 +9900,30 @@ function gcalClasse(e){ if(!e) return 'trabalho';
   if(p.crmClasse==='trabalho') return cn?'negocio':'trabalho';
   const modo=gcalCalModo(e._cal||'primary');
   if(modo==='pessoal') return 'pessoal';
+  const cc=e.colorId?gcalCorCfg(e.colorId):null;   /* CORES-3DIAS-V1: a cor do Google (a "lista" dele) decide antes do nome */
+  if(cc&&cc.classe==='pessoal') return 'pessoal';
+  if(cc&&cc.classe==='trabalho') return cn?'negocio':'trabalho';
   if(cn) return 'negocio';
   if(modo==='trabalho') return 'trabalho';
   const t=String(e.summary||''); const cfg=gcalCfg();
   if(gcalKwBate(t,cfg.trabalho)||RE_PREFIXO_REUNIAO.test(t)) return 'trabalho';
   if(gcalKwBate(t,cfg.pessoal)) return 'pessoal';
   return 'trabalho'; }
+/* ═══ CORES-3DIAS-V1 (18/09/2026) — as cores do Google são as "listas" dele ═══════════════════
+   Print do seletor de cor do Google Agenda dele: RCP/FF · RCP/PC · GAEL + FAMÍLIA · CORPORE SANO ·
+   STRATEGIC · TA/PIPE · URGENTE · LEMBRETE · OI/FF · P/C · C2 · DELIVERY — são os 11 colorId do Google
+   com nome dado por ele (o nome só existe no aparelho dele; a API manda só o colorId). Aqui: o bloco
+   ganha a cor do Google (evento → cor da agenda), e no ⚙ ele nomeia cada cor e diz se é trabalho ou
+   pessoal — a cor passa a classificar antes do nome/palavra. */
+const GCAL_CORES_PADRAO={'1':'#a4bdfc','2':'#7ae7bf','3':'#dbadff','4':'#ff887c','5':'#fbd75b','6':'#ffb878','7':'#46d6db','8':'#e1e1e1','9':'#5484ed','10':'#51b749','11':'#dc2127'};
+function gcalCorHexId(id){ id=String(id||''); if(!id) return ''; const c=GCAL.cores&&GCAL.cores[id]; return (c&&c.background)||GCAL_CORES_PADRAO[id]||''; }
+function gcalCorHex(e){ if(!e) return ''; const h=gcalCorHexId(e.colorId); if(h) return h; const cal=(GCAL.cals||[]).find(c=>(c.primary?'primary':c.id)===(e._cal||'primary')); return (cal&&cal.cor)||''; }
+function gcalCorCfg(id){ const c=gcalCfg(); if(!c.cores||typeof c.cores!=='object') c.cores={}; return c.cores[String(id)]||{}; }
+function gcalCorNome(e){ return e&&e.colorId?String(gcalCorCfg(e.colorId).nome||'').trim():''; }
+/* texto escuro em cor clara, claro em cor escura */
+function gcalCorInk(hex){ const m=/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex||'')); if(!m) return '#0f172a'; const L=(0.299*parseInt(m[1],16)+0.587*parseInt(m[2],16)+0.114*parseInt(m[3],16)); return L>150?'#0f172a':'#fff'; }
+function gcalCorStyle(e){ const h=gcalCorHex(e); return h?` style="--evc:${esc(h)};--evk:${gcalCorInk(h)}"`:''; }
+function gcalCorDot(e){ const h=gcalCorHex(e); const nm=gcalCorNome(e); if(!h&&!nm) return ''; return `<span class="gcal-dot" style="background:${esc(h||'#94a3b8')}" title="${esc(nm||'cor do Google')}"></span>${nm?`<span class="gcal-tag" style="border-color:${esc(h)}">${esc(nm)}</span>`:''}`; }
 function gcalFeito(e){ return gcalPriv(e).crmFeito==='1'; }
 /* grava marcas no próprio evento (classe, feito) — sobrevive a renomear e vale em todo aparelho */
 async function gcalPatchPriv(e,obj){ const priv=Object.assign({},gcalPriv(e)); Object.keys(obj).forEach(k=>{ if(obj[k]==null) delete priv[k]; else priv[k]=String(obj[k]); }); priv.crmApp=priv.crmApp||GSYNC_APP;
@@ -9949,11 +9973,15 @@ function gcalRegras(){ gcalMaisFechar(); const cfg=gcalCfg(); const cals=(GCAL.c
     <div class="gm-hd"><div><b>⚙ Agendas e regras</b><div class="gm-sub">O que cada agenda do Google vira aqui, e as palavras que separam pessoal de trabalho.</div></div><button type="button" class="gm-x" onclick="gcalMaisFechar()" aria-label="Fechar">✕</button></div>
     <div class="gm-sec">Agendas do Google</div><div class="gm-cals">${linhas}</div>
     ${GCAL.cals&&GCAL.cals.length?'':'<div class="gm-txt">Só a agenda principal apareceu. Toque em 🔄 na Agenda pra buscar as outras.</div>'}
+    <div class="gm-sec">Cores do Google (as suas listas)</div><div class="gm-txt" style="margin-bottom:6px">Dê a cada cor o nome que ela tem no seu Google (RCP/FF, TA/PIPE, GAEL + FAMÍLIA…) e diga se é trabalho ou pessoal. A cor passa a classificar o compromisso antes do nome.</div>
+    <div class="gm-cores">${Object.keys(GCAL_CORES_PADRAO).map(id=>{ const cc=gcalCorCfg(id); const hex=gcalCorHexId(id); return `<div class="gm-cor"><span class="gm-cal-dot" style="background:${esc(hex)}"></span><input class="gm-cor-nome" placeholder="nome da cor ${id}" value="${esc(cc.nome||'')}" onchange="gcalRegraCor('${id}','nome',this.value)"><select onchange="gcalRegraCor('${id}','classe',this.value)"><option value="" ${!cc.classe?'selected':''}>auto</option><option value="trabalho" ${cc.classe==='trabalho'?'selected':''}>Trabalho</option><option value="pessoal" ${cc.classe==='pessoal'?'selected':''}>Pessoal</option></select></div>`; }).join('')}</div>
     <div class="gm-sec">Palavras que marcam PESSOAL (só ocupado)</div><textarea id="gm-kw-pess" rows="2" placeholder="gym, escola, dentista…">${esc(cfg.pessoal.join(', '))}</textarea>
     <div class="gm-sec">Palavras que marcam TRABALHO</div><textarea id="gm-kw-trab" rows="2" placeholder="RCP, OI, ponto de apoio…">${esc(cfg.trabalho.join(', '))}</textarea>
     <label class="check-row" style="margin-top:10px"><input type="checkbox" id="gm-ocultar" ${cfg.ocultar?'checked':''}> Na lista, recolher os pessoais num bloco só ("🔒 ocupados")</label>
     <div class="gm-grid" style="margin-top:12px"><button type="button" class="btn btn-p gm-btn" onclick="gcalRegrasSalvar()">Salvar e atualizar</button><button type="button" class="btn btn-s gm-btn" onclick="gcalMaisFechar()">Cancelar</button></div></div></div>`); }
 function gcalRegraCal(calId,modo){ const cfg=gcalCfg(); cfg.cals[calId]=modo; }
+function gcalRegraCor(id,k,v){ const cfg=gcalCfg(); if(!cfg.cores||typeof cfg.cores!=='object') cfg.cores={}; const c=cfg.cores[String(id)]||(cfg.cores[String(id)]={}); if(k==='nome') c.nome=String(v||'').trim(); else c.classe=(v==='trabalho'||v==='pessoal')?v:''; }
+window.gcalRegraCor=gcalRegraCor;
 function gcalRegrasSalvar(){ const cfg=gcalCfg(); const split=v=>String(v||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
   cfg.pessoal=split((document.getElementById('gm-kw-pess')||{}).value); cfg.trabalho=split((document.getElementById('gm-kw-trab')||{}).value); cfg.ocultar=!!(document.getElementById('gm-ocultar')||{}).checked;
   gcalCfgSalvar(); gcalMaisFechar(); toast('Regras salvas',true); if(GCAL.conectado) gcalCarregar(); else if(VIEW==='agenda') viewAgenda(); }
@@ -9970,7 +9998,7 @@ function gcalBlocoHTML(){
   const hoje=hojeISO();
   const evs=(GCAL.eventos||[]).slice().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date))));
   const hojeEv=evs.filter(e=>gcalDiaISO(e)===hoje);
-  const seg=`<span class="gcal-seg"><button class="${GCAL.vista==='lista'?'on':''}" onclick="gcalSetVista('lista')">📋 Lista</button><button class="${GCAL.vista==='dia'?'on':''}" onclick="gcalSetVista('dia')">📆 Dia</button><button class="${GCAL.vista==='semana'?'on':''}" onclick="gcalSetVista('semana')">🗓️ Semana</button></span>`;
+  const seg=`<span class="gcal-seg"><button class="${GCAL.vista==='lista'?'on':''}" onclick="gcalSetVista('lista')">📋 Lista</button><button class="${GCAL.vista==='dia'?'on':''}" onclick="gcalSetVista('dia')">📆 Dia</button>${novoOn('agenda-semana')?`<button class="${GCAL.vista==='3dias'?'on':''}" onclick="gcalSetVista('3dias')" title="Três dias, como no Google do celular">3 dias</button>`:''}<button class="${GCAL.vista==='semana'?'on':''}" onclick="gcalSetVista('semana')">🗓️ Semana</button></span>`;
   const header=`<div class="gcal-hd">
       <button class="btn btn-s btn-mini" onclick="gcalRecolher()" title="${GCAL.recolhido?'Expandir':'Recolher'}">${GCAL.recolhido?'▸':'▾'}</button>
       <span class="tit">📅 Sua Agenda Google</span>
@@ -9987,6 +10015,7 @@ function gcalBlocoHTML(){
   if(GCAL.recolhido) return header;
   if(GCAL.vista==='dia') return header+gcalDiaHTML(evs,hoje);
   if(GCAL.vista==='semana') return header+gcalSemanaHTML(evs,hoje);
+  if(GCAL.vista==='3dias') return header+(novoOn('agenda-semana')?gcalSemanaGradeHTML(evs,hoje,3,GCAL.ini3||0):gcalSemanaHTML(evs,hoje));
   const prox=evs.filter(e=>gcalDiaISO(e)>hoje);
   const lista=[...hojeEv,...prox.slice(0,14)];
   /* AGENDA-CLASSE-V1: pessoais (só ocupado) recolhidos num bloco só, que nasce fechado */
@@ -9997,11 +10026,11 @@ function gcalBlocoHTML(){
 function gcalLinhaEv(e){ const hoje=hojeISO(); const cn=gcalNegocioDoEvento(e);
   if(gcalClasseOn()){ const cl=gcalClasse(e), feito=gcalFeito(e), quando=`${gcalDiaISO(e)!==hoje?dataBR(gcalDiaISO(e))+' · ':''}${gcalHora(e)}`, wa=cn&&cn.telefone?waHref(cn.telefone):'';
     if(cl==='pessoal') return `<div class="tarlin gcal-pess" data-classe="pessoal"><span>🔒</span>
-      <span class="tt"><span class="clicavel" style="cursor:pointer" onclick="gcalMais('${esc(e.id)}')">${esc(e.summary||'(sem título)')}</span> <span class="gcal-tag">ocupado</span>${e._calNome&&e._cal!=='primary'?` <span class="gcal-tag">${esc(e._calNome)}</span>`:''}</span>
+      <span class="tt">${gcalCorDot(e)}<span class="clicavel" style="cursor:pointer" onclick="gcalMais('${esc(e.id)}')">${esc(e.summary||'(sem título)')}</span> <span class="gcal-tag">ocupado</span>${e._calNome&&e._cal!=='primary'?` <span class="gcal-tag">${esc(e._calNome)}</span>`:''}</span>
       <span class="qd" style="background:transparent;padding:0">${quando}</span>
       <span class="ac"><button class="btn btn-s btn-mini" onclick="gcalMais('${esc(e.id)}')" title="Opções">⋯</button></span></div>`;
     return `<div class="tarlin${feito?' gcal-feito':''}" data-classe="${cl}"><span>${cl==='negocio'?'🎯':'📅'}</span>
-      <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="gcalMais('${esc(e.id)}')" title="Opções do compromisso">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''} ${negSeloHTML(cn)}${cl==='trabalho'?` <button class="gcal-vinc" onclick="gcalEditar('${esc(e.id)}')" title="Ligar este compromisso a um negócio do funil">🎯 vincular</button>`:''}${feito?' <span class="gcal-tag ok">✓ feito</span>':(gcalPriv(e).crmFeito==='nao'?' <span class="gcal-tag nao">✗ não aconteceu</span>':'')}
+      <span class="tt">${gcalCorDot(e)}<b class="clicavel" style="cursor:pointer" onclick="gcalMais('${esc(e.id)}')" title="Opções do compromisso">${esc(e.summary||'(sem título)')}</b>${e.hangoutLink?` · <a href="${esc(e.hangoutLink)}" target="_blank" rel="noopener" style="font-size:11px">Meet</a>`:''} ${negSeloHTML(cn)}${cl==='trabalho'?` <button class="gcal-vinc" onclick="gcalEditar('${esc(e.id)}')" title="Ligar este compromisso a um negócio do funil">🎯 vincular</button>`:''}${feito?' <span class="gcal-tag ok">✓ feito</span>':(gcalPriv(e).crmFeito==='nao'?' <span class="gcal-tag nao">✗ não aconteceu</span>':'')}
         <div style="font-size:11px;color:var(--muted)">${esc(e.location||(e.attendees&&e.attendees.length?e.attendees.length+' convidado(s)':''))}${e._calNome&&e._cal!=='primary'?' · 📆 '+esc(e._calNome):''}</div></span>
       <span class="qd" style="background:transparent;padding:0">${quando}</span>
       <span class="ac"><button class="btn btn-p btn-mini" onclick="gcalMais('${esc(e.id)}')" title="Feito · não aconteceu · adiar · vincular · tipo">⋯ ação</button>${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="WhatsApp">💬</a>`:''}<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(e.htmlLink||'#')}" target="_blank" rel="noopener" title="Abrir no Google">↗</a></span></div>`; }
@@ -10024,8 +10053,9 @@ function gcalLinhaEv(e){ const hoje=hojeISO(); const cn=gcalNegocioDoEvento(e);
    dia (horizontal); a borda de baixo estica. No celular as colunas têm 120px e a grade rola de
    lado dentro do card (o eixo fica fixo). Os blocos são os mesmos da vista Dia (`.gcal-ev`). */
 function gcalSemanaHTML(evs,hoje){ return novoOn('agenda-semana')? gcalSemanaGradeHTML(evs,hoje) : gcalSemanaChipsHTML(evs,hoje); }
-function gcalSemanaGradeHTML(evs,hoje){
-  const SEM=['dom','seg','ter','qua','qui','sex','sáb']; const dias=[]; for(let i=0;i<7;i++) dias.push(isoAddDias(hoje,i));
+function gcalSemanaGradeHTML(evs,hoje,nDias,ini0){
+  nDias=nDias===3?3:7; ini0=Math.max(0,Math.min(7-(nDias-1),+ini0||0));
+  const SEM=['dom','seg','ter','qua','qui','sex','sáb']; const dias=[]; for(let i=0;i<nDias;i++) dias.push(isoAddDias(hoje,ini0+i));
   const HPX=gcalHpx(), pad2=x=>(x<10?'0':'')+x, ag=new Date(), agMin=ag.getHours()*60+ag.getMinutes();
   const porDia={}; dias.forEach(d=>porDia[d]={allday:[],timed:[]});
   evs.forEach(e=>{ const d=gcalDiaISO(e); if(!porDia[d]) return; if(e.start&&e.start.date&&!e.start.dateTime){ porDia[d].allday.push(e); return; } if(!(e.start&&e.start.dateTime)) return;
@@ -10045,11 +10075,13 @@ function gcalSemanaGradeHTML(evs,hoje){
     const linhas=[]; for(let h=minH;h<=maxH;h++) linhas.push(`<div class="gcal-hl" style="top:${(h-minH)*HPX}px"></div>`);
     const agora=(d===hoje&&agMin>=top0&&agMin<=maxH*60)?`<div class="gcal-now" style="top:${(agMin-top0)*(HPX/60)}px"><span></span></div>`:'';
     const blocos=T.map(t=>{ const w=100/t.cols, left=t.lane*w, top=(t.s-top0)*(HPX/60), h=Math.max(30,(t.f-t.s)*(HPX/60)); const lc=h>=80?3:h>=54?2:1; const cn=gcalNegocioDoEvento(t.e), cls=gcalClasse(t.e);
-      return `<div class="gcal-ev${cls==='pessoal'?' pess':''}${gcalFeito(t.e)?' feito':''}" data-ev="${esc(t.e.id)}" data-ini="${t.s}" data-fim="${t.f}" data-dia="${d}" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);--lc:${lc}" title="${esc(t.e.summary||'')} — arraste pra mover (hora ou dia), borda de baixo pra esticar">
+      const hex=gcalCorHex(t.e);
+      return `<div class="gcal-ev${cls==='pessoal'?' pess':''}${gcalFeito(t.e)?' feito':''}${hex?' cor':''}" data-ev="${esc(t.e.id)}" data-ini="${t.s}" data-fim="${t.f}" data-dia="${d}" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);--lc:${lc}${hex?`;--evc:${esc(hex)};--evk:${gcalCorInk(hex)}`:''}" title="${esc(t.e.summary||'')}${gcalCorNome(t.e)?' · '+esc(gcalCorNome(t.e)):''} — arraste pra mover (hora ou dia), borda de baixo pra esticar">
         <span class="h">${gcalMin2Hhmm(t.s)}${h>=44?'–'+gcalMin2Hhmm(t.f):''}${cn?' · '+esc(ET_LABEL[cn.etapa]||cn.etapa||''):''}</span><span class="s">${esc(t.e.summary||'(sem título)')}</span><span class="gcal-rz" title="Arraste pra mudar a duração"></span></div>`; }).join('');
     return `<div class="gcal-dg gcal-wg-col${d===hoje?' hoje':''}" data-dia="${d}" data-minh="${minH}" data-hpx="${HPX}" style="height:${alt}px" onclick="gcalCliqueVazio(event)">${linhas.join('')}${agora}${blocos}</div>`; };
   setTimeout(gcalWgRolarHoje,0);
-  return `<div class="card gcal-wg-card"><div class="gcal-wg" data-cols="7">
+  const nav3=nDias===3?`<div class="gcal-daynav"><button class="nb" onclick="gcalSet3(${ini0-3})" ${ini0>0?'':'disabled'} title="3 dias antes">◀</button><b>${dataBR(dias[0])} – ${dataBR(dias[dias.length-1])}${ini0===0?' · hoje':''}</b><button class="nb" onclick="gcalSet3(${ini0+3})" ${ini0+3<=4?'':'disabled'} title="Próximos 3 dias">▶</button><span style="flex:1"></span>${ini0?`<button class="btn btn-s btn-mini" onclick="gcalSet3(0)">hoje</button>`:''}</div>`:'';
+  return `<div class="card gcal-wg-card">${nav3}<div class="gcal-wg n${nDias}" data-cols="${nDias}" style="--ncols:${nDias}">
       <div class="gcal-wg-hd"><div class="gcal-wg-corner"></div>${hd}</div>
       ${ad}
       <div class="gcal-wg-body"><div class="gcal-wg-eixo" style="height:${alt}px">${eixo.join('')}</div>${dias.map(col).join('')}</div>
@@ -10057,6 +10089,8 @@ function gcalSemanaGradeHTML(evs,hoje){
 }
 /* no celular a grade rola de lado: começa mostrando o eixo + hoje */
 function gcalWgRolarHoje(){ const sc=document.querySelector('.gcal-wg'); if(!sc) return; sc.scrollLeft=0; }
+function gcalSet3(ini){ GCAL.ini3=Math.max(0,Math.min(4,+ini||0)); if(VIEW==='agenda') viewAgenda(); }
+window.gcalSet3=gcalSet3;
 function gcalSemanaChipsHTML(evs,hoje){
   const SEM=['dom','seg','ter','qua','qui','sex','sáb']; const dias=[]; for(let i=0;i<7;i++) dias.push(isoAddDias(hoje,i));
   /* AGENDA-FLUIDA-V1: o chip virou alça de arrasto — puxar pra outra coluna muda o DIA
@@ -10105,7 +10139,8 @@ function gcalDiaHTML(evs,hoje){
   const agoraHtml=(ehHoje&&agMin>=top0&&agMin<=maxH*60)?`<div class="gcal-now" style="top:${(agMin-top0)*(HPX/60)}px"><span></span></div>`:'';
   const blocos=timed.map(t=>{ const w=100/t.cols, left=t.lane*w, top=(t.s-top0)*(HPX/60), h=Math.max(34,(t.f-t.s)*(HPX/60));
     const lc=h>=80?3:h>=54?2:1;
-    return `<div class="gcal-ev" data-ev="${esc(t.e.id)}" data-ini="${t.s}" data-fim="${t.f}" data-dia="${dia}" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);--lc:${lc}" title="${esc(t.e.summary||'')} — arraste pra mover, borda de baixo pra esticar">
+    const hexD=(typeof gcalClasseOn==='function'&&gcalClasseOn())?gcalCorHex(t.e):'';
+    return `<div class="gcal-ev${hexD?' cor':''}${(typeof gcalClasseOn==='function'&&gcalClasseOn()&&gcalClasse(t.e)==='pessoal')?' pess':''}" data-ev="${esc(t.e.id)}" data-ini="${t.s}" data-fim="${t.f}" data-dia="${dia}" style="top:${top}px;height:${h}px;left:calc(${left}% + 2px);width:calc(${w}% - 4px);--lc:${lc}${hexD?`;--evc:${esc(hexD)};--evk:${gcalCorInk(hexD)}`:''}" title="${esc(t.e.summary||'')} — arraste pra mover, borda de baixo pra esticar">
       <span class="h">${gcalMin2Hhmm(t.s)}–${gcalMin2Hhmm(t.f)}${t.e.hangoutLink?' · Meet':''}${(()=>{ const cn=gcalNegocioDoEvento(t.e); return cn?' · '+esc(ET_LABEL[cn.etapa]||cn.etapa||''):''; })()}</span>
       <span class="s">${esc(t.e.summary||'(sem título)')}</span>
       <span class="gcal-rz" title="Arraste pra mudar a duração"></span></div>`;
@@ -19248,6 +19283,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const e=['pipe','pvg','pprud','pmfo'].every(g=>document.getElementById(g+'-toggle')&&document.getElementById(g+'-group')&&document.getElementById(g+'-group').querySelectorAll('.nav-btn[data-view]').length===3);
       const f=!!NOVO_SO_MEU.pipes && ['consol-vg','vg-funil','vg-bc-funil','consol-prud','prud-funil','prud-bc-funil','consol-mfo','mfo-funil','mfo-bc-funil'].every(v=>MODS.funis_extra.views.includes(v)&&document.querySelector(`.nav-btn[data-view="${v}"][data-novo="pipes"]`));
       return a&&b&&c&&d&&e&&f; })());
+    ok('CORES-3DIAS-V1: cor do colorId (API ou padrão) pinta o bloco; cor com classe decide antes do nome; 3 dias = 3 colunas com ◀ ▶; ⚙ tem as 11 cores', (()=>{ const _pl=JSON.stringify(PL), _p=PERFIL, _c=S.contatos, _k=GCAL.cores; try{ PERFIL=null; GCAL.cores=null; PL.gcalCfg={}; S.contatos=[{id:'gcc1',nome:'Zoraide Teste Cor',funil:'nn',etapa:'C2',telefone:'81999990072',lp:S.activeUser,eventos:[],recs:[],interacoes:[]}]; negIndexLimpar();
+      const a=gcalCorHexId('7')===GCAL_CORES_PADRAO['7'] && gcalCorHex({colorId:'11'})==='#dc2127' && gcalCorInk('#dc2127')==='#fff' && gcalCorInk('#fbd75b')==='#0f172a';
+      gcalRegraCor('7','nome','GAEL + FAMÍLIA'); gcalRegraCor('7','classe','pessoal'); gcalRegraCor('5','nome','RCP/FF'); gcalRegraCor('5','classe','trabalho');
+      const b=gcalClasse({id:'c1',summary:'Almoço Zoraide Teste Cor',colorId:'7',_cal:'primary'})==='pessoal' && gcalClasse({id:'c2',summary:'Gym',colorId:'5',_cal:'primary'})==='trabalho' && gcalClasse({id:'c3',summary:'Gym Zoraide Teste Cor',colorId:'5',_cal:'primary'})==='negocio' && gcalCorNome({colorId:'7'})==='GAEL + FAMÍLIA';
+      const hj=hojeISO(); const h3=gcalSemanaGradeHTML([{id:'c4',summary:'Bloco cor',colorId:'11',start:{dateTime:isoAddDias(hj,1)+'T10:00:00'},end:{dateTime:isoAddDias(hj,1)+'T11:00:00'},_cal:'primary'}],hj,3,0);
+      const c=(h3.match(/class="gcal-dg gcal-wg-col/g)||[]).length===3 && h3.includes('gcal-wg n3') && h3.includes('gcalSet3(3)') && /gcal-ev[^"]*cor"[^>]*--evc:#dc2127/.test(h3);
+      const d=String(gcalRegras).includes('gm-cores') && typeof gcalSet3==='function' && String(gcalBlocoHTML).includes("gcalSetVista('3dias')");
+      return a&&b&&c&&d; } finally{ PL=plNorm(JSON.parse(_pl)); PERFIL=_p; S.contatos=_c; GCAL.cores=_k; negIndexLimpar(); } })());
     ok('SEMANA-GRADE-V1: 7 colunas .gcal-dg com data-dia/minh/hpx, eixo de horas, faixa de dia todo, blocos .gcal-ev com data-ini/fim; sem a chave volta aos chips; arrasto solta no dia-alvo', (()=>{ const _p=PERFIL, _e=GCAL.eventos; try{ PERFIL=null; const hj=hojeISO(); const d2=isoAddDias(hj,2);
       GCAL.eventos=[{id:'wg1',status:'confirmed',summary:'Teste Grade',start:{dateTime:d2+'T10:00:00'},end:{dateTime:d2+'T11:30:00'},_cal:'primary'},{id:'wg2',status:'confirmed',summary:'Dia todo grade',start:{date:hj},end:{date:isoAddDias(hj,1)},_cal:'primary'}];
       const h=gcalSemanaGradeHTML(GCAL.eventos,hj); const cols=(h.match(/class="gcal-dg gcal-wg-col/g)||[]).length; const a=cols===7 && h.includes('data-minh=') && h.includes('class="gcal-wg-eixo"') && h.includes('class="gcal-wg-ad"') && /gcal-ev[^>]*data-ev="wg1"[^>]*data-ini="600"[^>]*data-fim="690"[^>]*data-dia="\d{4}-\d\d-\d\d"/.test(h.split(d2).join('0000-00-00')) && h.includes('class="gcal-now"');
