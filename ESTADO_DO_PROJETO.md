@@ -2,6 +2,23 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (32ª onda) — PESSOA-SUGERE-V1: campo de pessoa autocompleta com quem já está na base e grava a grafia registrada (v7.90)
+
+Print da ficha no iPad (Recomendante digitado "Fábio barrão", em minúscula): *"esses campos de pessoas já cadastradas têm que autocompletar — digito Fábio e aparecem os Fábios que já existem, pra não ficar cadastro bagunçado e cair no perfil certo do recomendante."*
+
+### O que mudou
+- **Lista própria de sugestões** (`pesCandidatos` / `pesSug*`), no lugar do `<datalist>` nativo que não dava conta no iPad: junta **funil + carteira + estoque** (sem repetir por nome normalizado, descartado do estoque fora), "começa com" primeiro, depois carteira → funil → estoque, alfabética. Cada linha traz o nome + onde a pessoa está (funil · etapa / Carteira / estágio do estoque · rec.) + etiqueta. Fixa na tela, abaixo ou acima do campo, linha ≥44px, teclado (↓ ↑ Enter Esc), reposiciona ao rolar.
+- **Grafia registrada** (`pesCanon`): ao escolher na lista ou ao salvar um nome que já existe (caixa/acento diferentes), grava como está na base ("fábio barrão" → "Fábio Barrão") — o selo do recomendante passa a achar a ficha certa.
+- **Onde:** Recomendante da ficha (`pes_rec`), "Origem / recomendante" do ➕ Novo contato (`ncOrigem`) e Recomendante da ficha do Estoque (`bne-rec`). Pendura-se em qualquer input com `${pesSugAttrs()}`.
+
+### Gate
+- Só na base dele: chave **`pes-sugere`** em `NOVO_SO_MEU`. Com a chave desligada o campo fica exatamente como era (datalist antigo, sem canônico).
+
+### Prova
+- Portão aberto (46 telas) · guard OK · `teste-pessoa-sugere.mjs` **18/18** em 390 e 1280 (widget na ficha sem datalist, "fab" → 3 nomes certos sem repetir, dentro da tela e colada ao campo, toque e teclado preenchem, salvar torto vira canônico e o selo aponta pra ficha, Novo contato e Estoque, Daniel fica com o campo antigo) · regressão ficha 18/18 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (31ª onda) — PIPES-V1: Pipe Vida Individual + Pipe Vida em Grupo + Pipe Prud. Demais + Pipe MFO, cada um com Consolidada · Novos Negócios · Negócios na Base (v7.89)
 
 Print do menu (iPad): *"Pipe Negócios vira Pipe Vida Individual — Visão Consolidada, Novos Negócios, Negócios na Base. Depois Pipe Vida em Grupo, Pipe Prud. Demais e Pipe MFO, a mesma lógica, mesmo estilo de card. O Daniel não vai ter acesso."*

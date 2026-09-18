@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.89 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.90 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1100,6 +1100,11 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .tb-drop{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 18px 50px rgba(16,30,54,.18);max-height:60vh;overflow:auto;z-index:80;padding:6px;display:none}
   .tb-drop.on{display:block}
   .tb-drop .cmdk-row{padding:7px 10px}
+  /* PESSOA-SUGERE-V1: lista de sugestões de pessoa (fixa na tela, abaixo ou acima do campo) */
+  .pes-sug{position:fixed;z-index:200;background:var(--card);border:1px solid var(--linha);border-radius:12px;box-shadow:0 18px 50px rgba(16,30,54,.18);overflow:auto;padding:6px;display:none}
+  .pes-sug.on{display:block}
+  .pes-sug .cmdk-row{padding:9px 10px;min-height:44px}
+  .pes-sug .ck{font-size:11px;color:var(--muted);background:var(--fundo);border-radius:999px;padding:2px 8px;white-space:nowrap}
   .tb-so-mob{display:none}
   @media(max-width:980px){ .tb-busca{display:none} .tb-so-mob{display:inline-flex} }
   .cmdk-bd{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(2px)}
@@ -5170,6 +5175,47 @@ function recomendanteDatalist(){
   const nomes=new Set(); (S.contatos||[]).filter(escVisivel).forEach(c=>{ if(c.nome) nomes.add(c.nome); }); cartVis().forEach(c=>{ if(c.nome) nomes.add(c.nome); });   /* ESCOPO-TUDO-V2 */
   return `<datalist id="pes_rec_lista">${[...nomes].sort().slice(0,400).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
 }
+/* ═══ PESSOA-SUGERE-V1 (18/09/2026) ═══════════════════════════════════════════════════════
+   Pedido dele (ficha no iPad, campo Recomendante): "esses campos de pessoas já cadastradas têm que
+   autocompletar — digito Fábio e aparecem os Fábios que já existem, pra não ficar cadastro bagunçado
+   e cair no perfil certo do recomendante." O datalist nativo não dava conta no iPad. Aqui: uma lista
+   própria, no dedo, que junta funil + carteira + estoque, sem repetir, com "começa com" primeiro; ao
+   escolher (ou ao salvar um nome que já existe), grava a GRAFIA registrada ("fábio barrão" → "Fábio Barrão"). */
+function pesFontes(){ const out=[]; const vistos=new Set();
+  const add=(nome,tag,sub,peso)=>{ const k=normKey(nome); if(!k||vistos.has(k)) return; vistos.add(k); out.push({nome:String(nome).trim(),k,tag,sub,peso}); };
+  try{ cartVis().forEach(c=>add(c.nome,'cliente','Carteira de clientes',0)); }catch(_){}
+  try{ (S.contatos||[]).filter(escVisivel).forEach(c=>add(c.nome,'funil',funilNome(funilDe(c))+' · '+(ET_LABEL[c.etapa]||c.etapa||''),1)); }catch(_){}
+  try{ (typeof bnVivos==='function'?bnVivos():[]).forEach(b=>{ if(b.estagio==='descartado') return; add(b.nome,'estoque',(BN_EST_LABEL[b.estagio]||b.estagio||'Estoque')+((b.recomendante||'').trim()?' · rec. '+b.recomendante:''),2); }); }catch(_){}
+  return out; }
+function pesCandidatos(q,max){ const n=normKey(q); if(n.length<2) return []; const toks=n.split(' ').filter(Boolean);
+  const l=pesFontes().filter(c=>{ if(c.k.includes(n)) return true; const ws=c.k.split(' '); return toks.every(t=>ws.some(w=>w.startsWith(t))); });   /* frase contida, ou cada pedaço digitado começa uma palavra ("fábio a" → Fábio Alpha, não Fábio Barrão) */
+  l.sort((a,b)=>{ const sa=a.k.startsWith(n)?0:1, sb=b.k.startsWith(n)?0:1; return sa-sb||a.peso-b.peso||a.nome.localeCompare(b.nome,'pt-BR'); });
+  return l.slice(0,max||8); }
+/* grafia registrada de um nome digitado (caixa/acentos diferentes); desconhecido volta como veio */
+function pesCanon(nome){ nome=String(nome==null?'':nome).trim(); if(!nome||!novoOn('pes-sugere')) return nome; const k=normKey(nome); const c=pesFontes().find(x=>x.k===k); return c?c.nome:nome; }
+let PSUG={inp:null,res:[],sel:0};
+function pesSugBox(){ let b=document.getElementById('pes-sug'); if(!b){ b=document.createElement('div'); b.id='pes-sug'; b.className='pes-sug'; document.body.appendChild(b); b.addEventListener('mousedown',e=>e.preventDefault()); } return b; }
+function pesSugInput(inp){ if(!inp) return; PSUG.inp=inp; PSUG.res=pesCandidatos(inp.value); PSUG.sel=0; pesSugRender(); }
+function pesSugRender(){ const b=pesSugBox(), inp=PSUG.inp; if(!inp||!PSUG.res.length||!document.body.contains(inp)){ b.classList.remove('on'); b.innerHTML=''; return; }
+  const r=inp.getBoundingClientRect(), abaixo=window.innerHeight-r.bottom, emb=abaixo>=180;
+  const alto=Math.max(100,Math.min(280,(emb?abaixo:r.top)-14));
+  const left=Math.max(8,Math.min(r.left,window.innerWidth-268)); const larg=Math.min(Math.max(r.width,260),window.innerWidth-8-left);
+  b.style.left=left+'px'; b.style.width=larg+'px'; b.style.maxHeight=alto+'px';
+  if(emb){ b.style.top=(r.bottom+4)+'px'; b.style.bottom='auto'; } else { b.style.bottom=(window.innerHeight-r.top+4)+'px'; b.style.top='auto'; }
+  b.innerHTML=PSUG.res.map((c,i)=>`<div class="cmdk-row ${i===PSUG.sel?'sel':''}" onclick="pesSugPick(${i})"><div class="cm"><div class="cn">${esc(c.nome)}</div><div class="cs">${esc(c.sub)}</div></div><div class="ck">${esc(c.tag)}</div></div>`).join('');
+  b.classList.add('on'); }
+function pesSugPick(i){ const c=PSUG.res[i], inp=PSUG.inp; if(!c||!inp) return; inp.value=c.nome; pesSugFechar(); try{ inp.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){} }
+function pesSugFechar(){ const b=document.getElementById('pes-sug'); if(b){ b.classList.remove('on'); b.innerHTML=''; } PSUG.res=[]; }
+function pesSugKey(e,inp){ if(!PSUG.res.length||PSUG.inp!==inp) return;
+  if(e.key==='ArrowDown'){ e.preventDefault(); PSUG.sel=Math.min(PSUG.sel+1,PSUG.res.length-1); pesSugRender(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); PSUG.sel=Math.max(PSUG.sel-1,0); pesSugRender(); }
+  else if(e.key==='Enter'){ e.preventDefault(); pesSugPick(PSUG.sel); }
+  else if(e.key==='Escape'){ pesSugFechar(); } }
+/* atributos pra pendurar em qualquer <input> de pessoa (vazio quando a chave ainda não está liberada → o campo segue como era) */
+function pesSugAttrs(){ return novoOn('pes-sugere')?`oninput="pesSugInput(this)" onfocus="pesSugInput(this)" onkeydown="pesSugKey(event,this)" onblur="setTimeout(pesSugFechar,160)" autocomplete="off" spellcheck="false" data-pes-sug="1"`:''; }
+document.addEventListener('scroll',()=>{ if(PSUG.res.length) pesSugRender(); },true);
+window.addEventListener('resize',()=>{ if(PSUG.res.length) pesSugRender(); });
+window.pesSugInput=pesSugInput; window.pesSugKey=pesSugKey; window.pesSugPick=pesSugPick; window.pesSugFechar=pesSugFechar;
 function drwPessoaHtml(c){
   const n=pessoaIrmaos(c).length;
   const campo=(id,rot,val,tipo)=>`<div style="flex:1;min-width:130px">
@@ -5191,8 +5237,8 @@ function drwPessoaHtml(c){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
         <div style="flex:1;min-width:200px">
           <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Recomendante (quem indicou)</label>
-          <input id="pes_rec" list="pes_rec_lista" autocomplete="off" data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" value="${esc(c.recomendante||'')}" placeholder="Nome de quem indicou" style="width:100%">
-          ${recomendanteDatalist()}
+          <input id="pes_rec" ${novoOn('pes-sugere')?pesSugAttrs():'list="pes_rec_lista" autocomplete="off"'} data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" value="${esc(c.recomendante||'')}" placeholder="Nome de quem indicou — digite e escolha na lista" style="width:100%">
+          ${novoOn('pes-sugere')?'':recomendanteDatalist()}
         </div>
         <div style="flex:1;min-width:160px;padding-bottom:4px">${recomendanteChip(c)||`<span style="font-size:11.5px;color:var(--muted)">Sem recomendante registrado.</span>`}</div>
       </div>
@@ -5223,7 +5269,7 @@ function pessoaSalvarDados(id){
      Preenchendo a data, a idade vem junto (e não sobrescreve idade digitada à mão sem data). */
   const nasc=v('pes_nasc');
   if(nasc!==undefined){ c.nascimento=nasc||''; if(nasc){ const ia=(typeof mtIdade==='function')?mtIdade(nasc):null; if(ia!=null) c.idade=ia; } }
-  const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec||'';
+  const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec?pesCanon(rec):'';   /* PESSOA-SUGERE-V1: grafia registrada */
   const n=pessoaPropagar(c);
   const lpNovo=v('pes_lp'); const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
   salvar(); renderDrawer(); render();
@@ -6267,7 +6313,7 @@ function openNovoContato(funil){
           <input id="ncIdade" type="number" placeholder="Idade" style="max-width:90px">
           <input id="ncProf" placeholder="Profissão" style="flex:1">
         </div>
-        <input id="ncOrigem" placeholder="${bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'}">
+        <input id="ncOrigem" ${pesSugAttrs()} placeholder="${bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'}">
         ${lps}
         <label class="check-row" id="ncSitplanRow" style="margin:0${(bc||extra)?';display:none':''}"><input type="checkbox" id="ncSitplan" checked> Entrar na lista de discagem de HOJE</label>
         <div class="msg-erro" id="ncErro" style="display:none;color:var(--verm);font-size:12px"></div>
@@ -6292,7 +6338,7 @@ function salvarNovoContato(){
   const et0 = fid==='bc'?'Clientes Ativos' : fid==='nn'?'SitPlan' : ((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade');
   const c={ id:uid(), lp: lpSel? lpSel.value : escLpNovo(), nome, sexo:'—', idade:+v('ncIdade')||null,
     profissao:v('ncProf')||'—', telefone:v('ncTel'), estrelas:0, ance:null, etapa: et0, funil: fid,
-    origem:v('ncOrigem')||'—', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
+    origem:pesCanon(v('ncOrigem'))||'—', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
     sitplan: (fid==='nn' && sp && sp.checked)? hojeISO() : null };
   S.contatos.push(c); salvar();
@@ -14620,6 +14666,7 @@ const NOVO_SO_MEU={
   'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
+  'pes-sugere':   {o:'Campo de pessoa (Recomendante na ficha, no Novo contato e no Estoque) autocompleta com quem já está na base — funil, carteira e estoque — e grava a grafia registrada', desde:'2026-09-18'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return MODS[k]? modOn(k) : true;   /* não listado = liberado; se virou módulo em MODS, obedece ao mapa do usuário (pessoa a pessoa) */
@@ -15261,7 +15308,7 @@ function bnEditorHtml(c){
     </div>
     <details class="bne-grp" data-sec="pessoa" ${bneSecAberta('pessoa')?'open':''} ontoggle="bneSecToggle('pessoa',this.open)"><summary><span class="bne-grp-t">👤 Quem é a pessoa</span><span class="bne-grp-r">${esc(fichaPessoaResumo(c,'lead'))}</span><span class="bne-grp-c">▾</span></summary><div style="padding:6px 0 10px">${fichaPessoaHtml(c,'lead')}</div></details>
     ${grp('q','🎯 Qualificação do TA',qualR,
-      f('Recomendante',`<input id="bne-rec" value="${esc(c.recomendante||'')}" placeholder="quem indicou (vazio = sem recomendante)">`)
+      f('Recomendante',`<input id="bne-rec" ${pesSugAttrs()} value="${esc(c.recomendante||'')}" placeholder="quem indicou (vazio = sem recomendante)">`)
      +(logado()? f('Dono (LP)', souAdm()? `<select id="bne-lp">${escRotulosTodos().map(r=>`<option value="${esc(r.rotulo)}" ${escLpNorm(r.rotulo)===escLpNorm(escRotuloDe(c))?'selected':''}>${esc(r.rotulo)}</option>`).join('')}</select>` : `<input value="${esc(escRotuloDe(c)||'—')}" disabled title="Só o admin muda o dono">`) : '')
      +f('Estágio',`<select id="bne-est">${BN_ESTAGIOS.map(e=>`<option ${c.estagio===e?'selected':''} value="${e}">${BN_EST_LABEL[e]}</option>`).join('')}</select>`)
      +f('Prioridade',`<select id="bne-pri"><option value="">—</option><option ${String(c.prioridade)==='1'?'selected':''} value="1">🔥 P1 · Alta</option><option ${String(c.prioridade)==='2'?'selected':''} value="2">P2 · Normal</option><option ${String(c.prioridade)==='3'?'selected':''} value="3">P3 · Baixa</option></select>`)
@@ -15297,7 +15344,7 @@ function bnEditar(id){ FBN.edit=FBN.edit===id?null:id;
 function bnSalvarEdicao(id){
   const c=bnPor(id); if(!c) return;
   c.nome=$('#bne-nome').value.trim()||c.nome; c.contexto=$('#bne-ctx').value.trim();
-  c.telefone=$('#bne-tel').value.trim()||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=$('#bne-rec').value.trim()||null;
+  c.telefone=$('#bne-tel').value.trim()||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=pesCanon($('#bne-rec').value.trim())||null;
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
   c.idade=(()=>{ const n=parseInt($('#bne-idade').value,10); return isFinite(n)?n:null; })();
@@ -18887,6 +18934,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const e=['pipe','pvg','pprud','pmfo'].every(g=>document.getElementById(g+'-toggle')&&document.getElementById(g+'-group')&&document.getElementById(g+'-group').querySelectorAll('.nav-btn[data-view]').length===3);
       const f=!!NOVO_SO_MEU.pipes && ['consol-vg','vg-funil','vg-bc-funil','consol-prud','prud-funil','prud-bc-funil','consol-mfo','mfo-funil','mfo-bc-funil'].every(v=>MODS.funis_extra.views.includes(v)&&document.querySelector(`.nav-btn[data-view="${v}"][data-novo="pipes"]`));
       return a&&b&&c&&d&&e&&f; })());
+    ok('PESSOA-SUGERE-V1: candidatos de funil+carteira+estoque sem repetir, "começa com" primeiro, canônico corrige caixa/acento, campos da ficha/novo contato/estoque penduram o widget', (()=>{ const _c=S.contatos,_b=BN.contatos,_p=PERFIL; try{ PERFIL=null;
+      S.contatos=[{id:'ps1',nome:'Fábio Barrão',funil:'nn',etapa:'C2',lp:S.activeUser,eventos:[],recs:[]},{id:'ps2',nome:'Fabiana Zeta',funil:'nn',etapa:'TA',lp:S.activeUser,eventos:[],recs:[]}];
+      BN.contatos=[{id:'psb1',nome:'fabio barrao',estagio:'estoque',lp:S.activeUser,listas:[]},{id:'psb2',nome:'Fábio Alpha',estagio:'estoque',lp:S.activeUser,listas:[]},{id:'psb3',nome:'Fábio Fora',estagio:'descartado',lp:S.activeUser,listas:[]}];
+      const r=pesCandidatos('fab'); const nomes=r.map(x=>x.nome); const a=nomes.includes('Fábio Barrão')&&nomes.includes('Fábio Alpha')&&nomes.includes('Fabiana Zeta')&&!nomes.includes('fabio barrao')&&!nomes.includes('Fábio Fora');
+      const b=pesCandidatos('barr')[0].nome==='Fábio Barrão' && pesCandidatos('f').length===0;
+      const c=pesCanon('fábio barrão')==='Fábio Barrão' && pesCanon('Zé Ninguém')==='Zé Ninguém' && pesCanon('')==='';
+      const d=/pesSugInput/.test(pesSugAttrs()) && String(drwPessoaHtml).includes("pesSugAttrs()") && String(openNovoContato).includes('pesSugAttrs()') && String(bnEditorHtml).includes('pesSugAttrs()');
+      return a&&b&&c&&d; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; } })());
     ok('PIPES-V1: a Consolidada de um pipe só soma os funis dele e lembra a escolha em chave própria', (()=>{ const _p=CONSOL.pipe,_f=CONSOL.funis,_fo=CONSOL.foco; try{
       consolPipe('vg'); const d=consolDisponiveis().map(x=>x[0]).join(); const k=consolChave(); consolPipe('vi'); const d2=consolDisponiveis().map(x=>x[0]);
       return d==='vg,vg-bc' && k==='crmlp_consol_vg_v1' && d2.includes('nn') && d2.includes('bc') && !d2.includes('vg') && consolChave()==='crmlp_consol_v1'; } finally{ CONSOL.pipe=_p; CONSOL.funis=_f; CONSOL.foco=_fo; } })());
