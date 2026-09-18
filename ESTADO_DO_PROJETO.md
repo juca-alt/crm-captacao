@@ -2,6 +2,23 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (29ª onda) — AGENDA-V2 + DELAY-SINC-V1: delay sincronizado com o funil, 3 KPIs, um fluxo por linha, seções dobráveis/organizáveis (v7.87)
+
+Prints dele da Agenda no iPad: *"essa linguagem de tarefas precisa ter sincronia — se eu boto o delay no Felipe (RCP), ele já atualiza em todos os pontos. Tira os cards A finalizar e Negócios sem atividade; deixa Atrasadas, Hoje e Em aberto. As linhas com a mesma lógica dos painéis. Tópicos clicáveis, expansíveis, organizáveis."*
+
+### DELAY-SINC-V1 — o delay mora no negócio
+- `c.delay_ate` (data) + `negDelayMarcar(c, ate, motivo)`: marca a data, **põe o status "Delay …" da etapa** quando ele existe na configuração do funil (`Delay OI/FF`, `Delay P/C`, `Delay C2` hoje), grava na linha do tempo (`etstatus`). **Expira sozinho na data.**
+- Quem lê: `taDelayTipo` (→ listas **Delay** do Painel TA e WA), `etStatusChip` (chip ⏳ no card do negócio, na ficha, na Agenda), linha do tempo. BC não tem status configurado → o delay vale mesmo assim, pela data.
+- Duas portas: **⏳ Delay 7d** no seletor da atividade (remarca +7d e marca o negócio) e o desfecho novo da reunião **"⏳ Cliente pediu pra adiar (Delay)"** (pede a data nova; remarca e marca até lá).
+
+### AGENDA-V2
+- **KPIs:** Atrasadas · Hoje · Em aberto (o "Em aberto" avisa "N reuniões a finalizar" no rodapé). Saíram "A finalizar" e "Negócios sem atividade".
+- **Seções dobráveis** (`agBloco`, nascem fechadas, resumo com contagem + primeiros nomes, memória `crmlp_agenda_secs_v1`): Reuniões a finalizar · Atrasadas · Hoje · Amanhã · Próximas · Sem data · Sem próxima atividade. Botões **⌄ abrir tudo · ⌃ recolher tudo · ⋮⋮ organizar** (ordem/esconder, `crmlp_agenda_ordem_v1`, mesma regra de "nova entra no lugar natural").
+- **Linha com um fluxo só:** seletor **Ação…** (✓ Feita · ⏳ Delay 7d · +1 dia · +7 dias · ✏️ Editar · ✕ Remover) + 💬 + Google. Reunião a finalizar: **Finalizar** + "Mais…" (sem Feita). Chip de status/delay na linha.
+
+### Prova
+- Portão aberto (40 telas) · `--prova` OK · guard OK · `teste-agenda-v2.mjs` **18/18** em 390 e 1280 (KPIs, seções fechadas com resumo, abrir tudo, seletor, Delay pela linha → lista Delay do TA, desfecho Delay na reunião, organizar/esconder/restaurar) · regressão dos testes de painéis/ficha verde · 2 invariantes novos, 1 antigo ajustado (editar mora no seletor).
+
 ## 18/09/2026 (28ª onda) — TA-COLUNAS-V1: colunas ajustáveis nos painéis TA/WA + campos linkados (endereço → Maps) (v7.86)
 
 Voz dele: *"tem também a possibilidade de ajustar essas colunas — a pessoa quer botar o endereço, que já vai brincar com o link dos mapas no fluxo de visitação direta. Trabalha bem esses campos linkados."*

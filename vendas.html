@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.86 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.87 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -870,6 +870,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff;min-height:36px}
   .ta-link{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:none;border-bottom:1px dotted var(--muted)} .ta-link:hover{color:var(--azul);border-bottom-color:var(--azul)}
   .ta-chip a{color:inherit;text-decoration:none}
+  .ag-sel{max-width:150px} @media(max-width:980px){ .ag-sel{max-width:none;flex:1 1 100%} .tarlin .ac{width:100%} }
   .ta-lchip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--linha);background:var(--bg);white-space:nowrap;margin:1px 0}
   @media(max-width:980px){ .res-sel{min-height:44px;max-width:none;width:100%;font-size:14px} }
   .meta-in{font-size:11px;color:var(--muted);margin-top:4px;text-align:center}
@@ -1582,7 +1583,22 @@ function etStatusOpts(c){ const arr=(FUNIL_CFG&&FUNIL_CFG[etCfgKey(c&&c.funil)])
 function etStatusDe(c){ const s=c&&String(c.status||'').trim(); if(s&&c.status_etapa&&c.status_etapa!==c.etapa) return '';   /* BUGS-V7: status marcado em outra etapa não vale (caminhos que mudam etapa sem logEtapa) */
   return (s&&etStatusOpts(c).includes(s))?s:''; }
 function etStatusTodos(){ const out=[]; Object.keys(FUNIL_CFG||{}).forEach(f=>(FUNIL_CFG[f]||[]).forEach(e=>((e&&e.status)||[]).forEach(x=>{ const s=String(x||'').trim(); if(s&&!out.includes(s)) out.push(s); }))); return out; }
-function etStatusChip(c){ const s=etStatusDe(c); return s?`<span class="nc-status" title="Status nesta etapa">⚑ ${esc(s)}</span>`:''; }
+/* ═══ DELAY-SINC-V1 (18/09/2026) ═══════════════════════════════════════════════
+   Pedido dele (Agenda no iPad): "essa linguagem de tarefas precisa ter sincronia: se eu boto o
+   delay no Felipe, que está no RCP, ele já atualiza em todos os pontos — no funil, na carteira,
+   nas listas." O delay passa a morar NO NEGÓCIO (c.delay_ate) e, quando a etapa tem um status
+   "Delay …" configurado, o status também é marcado. Painel TA/WA (taDelayTipo), chip do card
+   (etStatusChip) e a linha do tempo leem daqui. Expira sozinho na data. */
+function negDelayAtivo(c){ return !!(c&&c.delay_ate&&String(c.delay_ate)>=hojeISO()); }
+function negDelayStatusOpt(c){ return etStatusOpts(c).find(x=>/^delay/i.test(x))||''; }
+function negDelayMarcar(c,ate,motivo){ if(!c) return null; ate=ate||isoAddDias(hojeISO(),7);
+  c.delay_ate=ate; const st=negDelayStatusOpt(c);
+  if(st&&etStatusDe(c)!==st){ c.status=st; c.status_etapa=c.etapa; }
+  interacoesDe(c).push({id:uid(),k:'etstatus',l:'⏳ Delay até '+dataBR(ate)+(st?' · status '+st:'')+(motivo?' — '+motivo:''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
+  return ate; }
+function negDelayLimpar(c){ if(!c||!c.delay_ate) return; delete c.delay_ate; if(/^delay/i.test(etStatusDe(c))){ delete c.status; delete c.status_etapa; } }
+function etStatusChip(c){ const s=etStatusDe(c); const d=negDelayAtivo(c)&&!/^delay/i.test(s)?`<span class="nc-status" title="Cliente pediu pra adiar — vale até ${esc(dataBR(c.delay_ate))}">⏳ Delay até ${esc(dataBR(c.delay_ate))}</span>`:'';
+  return (s?`<span class="nc-status" title="Status nesta etapa">⚑ ${esc(s)}</span>`:'')+d; }
 function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; const s=etStatusDe(c);
   return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)"><option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
 function etSetStatus(v){ const c=ct(); if(!c) return; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return; const de=etStatusDe(c); if(de===v) return;
@@ -3209,7 +3225,9 @@ const REUN_DESFECHOS=[
   {k:'faltou',    l:'Cliente não compareceu',     ico:'🚫', etapa:null,      remarca:true,
    ajuda:'Registra a falta e já marca a nova tentativa.'},
   {k:'nao_rolou', l:'Não aconteceu / cancelada',  ico:'✖️', etapa:null,      proxima:true,
-   ajuda:'Nem você nem ele. Registra e pede o próximo passo.'}
+   ajuda:'Nem você nem ele. Registra e pede o próximo passo.'},
+  {k:'delay',     l:'Cliente pediu pra adiar (Delay)', ico:'⏳', etapa:null,  remarca:true, delay:true,
+   ajuda:'Remarca a reunião e marca o negócio em Delay até a data nova — ele aparece nas listas de Delay do TA e do WA.'}
 ];
 const REUN_BY_K=Object.fromEntries(REUN_DESFECHOS.map(d=>[d.k,d]));
 
@@ -3240,6 +3258,7 @@ function reunAplicar(c,t,k,novaData,notas){
     tarefasDe(c).push(nova);
     marca.remarcadaPara=novaData;
   }
+  if(d.delay) negDelayMarcar(c,novaData||isoAddDias(hojeISO(),7),'pela reunião');   /* DELAY-SINC-V1 */
   interacoesDe(c).push({id:uid(),k:'reuniao',l:'Reunião '+d.l.toLowerCase()+(marca.remarcadaPara?(' para '+dataBR(marca.remarcadaPara)):''),
                         dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   /* GC-44: anotações da reunião → ficam no registro da tarefa (vão pro Google Agenda)
@@ -3557,6 +3576,14 @@ function tarNovaData(t,dias){
   const base=(t&&t.quando&&t.quando>hojeISO())? t.quando : hojeISO();
   return isoAddDias(base,dias);
 }
+/* DELAY-SINC-V1: "⏳ Delay" numa atividade = cliente pediu pra adiar → remarca a atividade e marca o delay no negócio */
+window.tarDelay = (cid,tid,dias) => {
+  const c=tarContato(cid); if(!c) return; const t=tarDe(c,tid); if(!t) return; dias=Number(dias)||7;
+  const ate=isoAddDias(hojeISO(),dias); t.quando=ate; t.delay=true;
+  negDelayMarcar(c,ate,'pela atividade "'+(t.tit||tarNomeTipo(t.tipo))+'"');
+  if(typeof gsyncMudou==='function') gsyncMudou(c,t);
+  salvar(); render(); toast('⏳ Delay até '+dataBR(ate)+' — '+c.nome.split(' ')[0]+' entra nas listas de Delay',true);
+};
 window.tarAdiar = (cid,tid,dias) => {
   const c=tarContato(cid); if(!c) return;
   const t=tarDe(c,tid); if(!t) return;
@@ -10414,72 +10441,103 @@ function viewAgenda(){
   ];
   const cont=agendaContagem();
   const semAtiv=contatosDoLp().filter(c=>!ETAPAS_ENCERR.includes(c.etapa)&&!ETAPAS_BC_ENCERR.includes(c.etapa)&&semProxAtividade(c));
+  /* AGENDA-V2 (18/09/2026): "tira os cards A finalizar e Negócios sem atividade — deixa Atrasadas,
+     Hoje e Em aberto. As linhas com a mesma lógica dos painéis (um fluxo só). Os tópicos clicáveis,
+     expansíveis e organizáveis como nas outras telas." Cada linha: um seletor de ação + 💬 + Google.
+     Cada seção: bloco dobrável (nasce fechado, resumo no cabeçalho) que ele ordena/esconde. */
   const linha=x=>{
     const t=x.t, c=x.c, sit=tarSituacao(t), wa=waHref(c.telefone);
     return `<div class="tarlin">
       <span title="${esc(tarNomeTipo(t.tipo))}">${tarIco(t.tipo)}</span>
       <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(c.id)}')">${esc(c.nome)}</b>
         <span style="color:var(--muted)"> · ${esc(t.tit||tarNomeTipo(t.tipo))}</span>
-        <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${esc(telBR(c.telefone))} ${gsyncBadgeHTML(c,t)}</div></span>
+        <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${etStatusChip(c)} ${esc(telBR(c.telefone))} ${gsyncBadgeHTML(c,t)}</div></span>
       <span class="qd ${tarClasse(sit)}" style="background:transparent;padding:0">${esc(tarQuandoTxt(t))}</span>
-      <span class="ac">
-        <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')">✓ feita</button>
-        <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',1)">+1d</button>
-        <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)">+7d</button>
+      <span class="ac">${agAcaoSel(c,t,false)}
         ${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
         ${tarGcalAcaoHTML(c,t)}
-        <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar: tipo, título, dia, hora, duração, destino no Google">✏️</button>
-        <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Remover">✕</button>
       </span></div>`;
   };
-  /* REUNIÃO A FINALIZAR V1: vem ANTES das atrasadas porque é dívida de outra
-     natureza — não é algo que você deixou de fazer, é algo que aconteceu e
-     ninguém contou o resultado. */
-  let corpo = pend.length ? `<div class="tar-grp">🤝 Reuniões a finalizar <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${pend.length} · aconteceram e ninguém registrou o que saiu delas</span></div>
-    <div class="card" style="padding:6px 14px">${pend.map(x=>{
-      const dias=reunDiasParada(x.t);
-      return `<div class="tarlin">
-        <span title="Reunião">🤝</span>
-        <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(x.c.id)}')">${esc(x.c.nome)}</b>
-          <span style="color:var(--muted)"> · ${esc(x.t.tit||'Reunião')}</span>
-          <div style="font-size:11px;color:var(--muted)">${badgeEtapa(x.c.etapa)} ${esc(telBR(x.c.telefone))}</div></span>
-        <span class="qd tar-atrasada" style="background:transparent;padding:0">${dataBR(x.t.quando)}${dias>0?` · ${dias}d sem desfecho`:''}</span>
-        <span class="ac"><button class="btn btn-p btn-mini" onclick="reunFinalizar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Registrar o desfecho da reunião">Finalizar</button>
-          <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Editar dia, hora, título ou destino">✏️</button>
-          <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}',1)" title="Remarcar para amanhã">+1d</button>
-          <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Remover a reunião">✕</button></span>
-      </div>`; }).join('')}</div>` : '';
+  const linhaReun=x=>{ const dias=reunDiasParada(x.t), wa=waHref(x.c.telefone);
+    return `<div class="tarlin">
+      <span title="Reunião">🤝</span>
+      <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(x.c.id)}')">${esc(x.c.nome)}</b>
+        <span style="color:var(--muted)"> · ${esc(x.t.tit||'Reunião')}</span>
+        <div style="font-size:11px;color:var(--muted)">${badgeEtapa(x.c.etapa)} ${etStatusChip(x.c)} ${esc(telBR(x.c.telefone))}</div></span>
+      <span class="qd tar-atrasada" style="background:transparent;padding:0">${dataBR(x.t.quando)}${dias>0?` · ${dias}d sem desfecho`:''}</span>
+      <span class="ac"><button class="btn btn-p btn-mini" onclick="reunFinalizar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Registrar o desfecho da reunião">Finalizar</button>
+        ${agAcaoSel(x.c,x.t,true)}
+        ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:''}</span>
+    </div>`; };
+  const linhaSem=c=>`<div class="tarlin">
+        <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContatoTarefa('${esc(c.id)}')">${esc(c.nome)}</b>
+          <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${etStatusChip(c)} ${esc(telBR(c.telefone))}</div></span>
+        <span class="ac">
+          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',0,'ligar')">📞 hoje</button>
+          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',1,'whats')">💬 amanhã</button>
+          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',7,'follow')">🔁 7d</button>
+        </span></div>`;
+  const pecas=[];
+  if(pend.length) pecas.push(['reun', agBloco('reun','🤝 Reuniões a finalizar',`<b>${pend.length}</b> · aconteceram e ninguém registrou o que saiu delas`,`<div class="card" style="padding:6px 14px">${pend.map(linhaReun).join('')}</div>`)]);
   grupos.forEach(g=>{
     const l=itens.filter(x=>tarSituacao(x.t)===g[0] && !reunPendente(x.t));   /* já listada acima, não repetir */
     if(!l.length) return;
-    corpo+=`<div class="tar-grp">${g[1]} <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${l.length}${g[2]?' · '+g[2]:''}</span></div>
-      <div class="card" style="padding:6px 14px">${l.map(linha).join('')}</div>`;
+    const nomes=l.slice(0,3).map(x=>x.c.nome.split(' ')[0]).join(' · ');
+    pecas.push([g[0], agBloco(g[0],g[1],`<b>${l.length}</b>${g[2]?' · '+esc(g[2]):''}${nomes?' · '+esc(nomes)+(l.length>3?' …':''):''}`,`<div class="card" style="padding:6px 14px">${l.map(linha).join('')}</div>`)]);
   });
-  if(!itens.length) corpo=`<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
-      Nenhuma atividade marcada ainda.<br><span style="font-size:12.5px">Abra um negócio no funil e marque a próxima — o card passa a mostrar o combinado.</span></div>`;
+  if(semAtiv.length) pecas.push(['semativ', agBloco('semativ','💤 Sem próxima atividade',`<b>${semAtiv.length}</b> · negócio parado é o que mais custa`,`<div class="card" style="padding:6px 14px">${semAtiv.slice(0,40).map(linhaSem).join('')}
+        ${semAtiv.length>40?`<div style="font-size:12px;color:var(--muted);padding:8px 0">…e mais ${semAtiv.length-40}. Os 40 mais recentes aparecem aqui.</div>`:''}</div>`)]);
+  const corpo=itens.length||pend.length? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
+      Nenhuma atividade marcada ainda.<br><span style="font-size:12.5px">Abra um negócio no funil e marque a próxima — o card passa a mostrar o combinado.</span></div>`+(semAtiv.length?agOrdRender(pecas):'');
   $('#main').innerHTML=`<h1 class="pg">Agenda &amp; Tarefas</h1>
     <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
     ${gcalBlocoHTML()}
     ${gsyncAvisoHTML()}
     <div class="kpis" style="margin-bottom:12px">
-      ${cont.aFinalizar?`<div class="kpi" style="border:1.5px solid #f3c9c9"><div class="lbl">A finalizar</div><div class="num" style="font-size:19px">${cont.aFinalizar}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">reuniões sem desfecho</div></div>`:''}
       <div class="kpi"${cont.atrasadas?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Atrasadas</div><div class="num" style="font-size:19px">${cont.atrasadas}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">venceram e seguem abertas</div></div>
       <div class="kpi"><div class="lbl">Hoje</div><div class="num" style="font-size:19px">${cont.hoje}</div><div style="font-size:11px;color:var(--muted)">combinado para hoje</div></div>
-      <div class="kpi"><div class="lbl">Em aberto</div><div class="num" style="font-size:19px">${itens.length}</div><div style="font-size:11px;color:var(--muted)">no total</div></div>
-      <div class="kpi"${semAtiv.length?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Negócios sem atividade</div><div class="num" style="font-size:19px">${semAtiv.length}</div><div style="font-size:11px;color:var(--muted)">${semAtiv.length?'parados por falta de próximo passo':'nenhum parado'}</div></div>
+      <div class="kpi"><div class="lbl">Em aberto</div><div class="num" style="font-size:19px">${itens.length}</div><div style="font-size:11px;color:var(--muted)">no total${pend.length?' · '+pend.length+' reuni'+(pend.length===1?'ão':'ões')+' a finalizar':''}</div></div>
     </div>
-    ${corpo}
-    ${semAtiv.length?`<div class="tar-grp">Sem próxima atividade <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">${semAtiv.length} · negócio parado é o que mais custa</span></div>
-      <div class="card" style="padding:6px 14px">${semAtiv.slice(0,40).map(c=>`<div class="tarlin">
-        <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContatoTarefa('${esc(c.id)}')">${esc(c.nome)}</b>
-          <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${esc(telBR(c.telefone))}</div></span>
-        <span class="ac">
-          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',0,'ligar')">📞 hoje</button>
-          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',1,'whats')">💬 amanhã</button>
-          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',7,'follow')">🔁 7d</button>
-        </span></div>`).join('')}
-        ${semAtiv.length>40?`<div style="font-size:12px;color:var(--muted);padding:8px 0">…e mais ${semAtiv.length-40}. Os 40 mais recentes aparecem aqui.</div>`:''}</div>`:''}`;
+    <div class="ini-tudo" style="margin:0 0 8px"><button class="btn btn-s btn-mini" onclick="agTudo(true)" title="Abre todas as seções">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="agTudo(false)" title="Recolhe todas as seções">⌃ recolher tudo</button><button class="btn ${AG_ORD.modo?'btn-p':'btn-s'} btn-mini" onclick="agOrdModo(${AG_ORD.modo?'false':'true'})" title="Mudar a ordem das seções e esconder o que você não usa">⋮⋮ ${AG_ORD.modo?'pronto':'organizar'}</button></div>
+    ${corpo}`;
 }
+/* ── AGENDA-V2: seções dobráveis (nascem fechadas) + organizar, por aparelho ── */
+const AG_SEC_CHAVE='crmlp_agenda_secs_v1', AG_ORD_CHAVE='crmlp_agenda_ordem_v1';
+const AG_NOMES={reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',hoje:'📌 Hoje',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
+let AG_ORD={modo:false,ch:[]};
+function agSecsLer(){ try{ return JSON.parse(localStorage.getItem(AG_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
+function agAberta(k){ return dobraAberta(k, agSecsLer()); }
+function agToggle(k){ const st=agSecsLer(); const novo=!agAberta(k); st[k]=novo?1:0; try{ localStorage.setItem(AG_SEC_CHAVE,JSON.stringify(st)); }catch(_){}
+  const bl=document.querySelector('.ini-bl[data-ag="'+k+'"]'); if(!bl){ render(); return; } bl.classList.toggle('fechado',!novo); const h=bl.querySelector('.ini-h'); if(h) h.setAttribute('aria-expanded',novo?'true':'false'); const car=bl.querySelector('.ini-car'); if(car) car.textContent=novo?'▾':'▸'; }
+function agTudo(abrir){ const st=agSecsLer(); document.querySelectorAll('.ini-bl[data-ag]').forEach(bl=>{ st[bl.dataset.ag]=abrir?1:0; }); try{ localStorage.setItem(AG_SEC_CHAVE,JSON.stringify(st)); }catch(_){} render(); }
+function agBloco(k,titulo,resumo,corpo){ const ab=agAberta(k);
+  return `<div class="ini-bl${ab?'':' fechado'}" data-ag="${esc(k)}"><button class="ini-h" onclick="agToggle('${esc(jsq(k))}')" aria-expanded="${ab?'true':'false'}"><span class="ini-car">${ab?'▾':'▸'}</span><span class="ini-t">${titulo}</span><span class="ini-res">${resumo}</span></button><div class="ini-b">${corpo}</div></div>`; }
+function agOrdLer(){ try{ const o=JSON.parse(localStorage.getItem(AG_ORD_CHAVE)||'{}')||{}; return {ordem:Array.isArray(o.ordem)?o.ordem.map(String):[], ocultos:Array.isArray(o.ocultos)?o.ocultos.map(String):[]}; }catch(_){ return {ordem:[],ocultos:[]}; } }
+function agOrdGravar(o){ try{ localStorage.setItem(AG_ORD_CHAVE,JSON.stringify(o)); }catch(_){} }
+function agOrdModo(v){ AG_ORD.modo=!!v; render(); }
+function agOrdMover(k,d){ const o=AG_ORD.ch.slice(); const i=o.indexOf(k); if(i<0) return; const j=i+d; if(j<0||j>=o.length) return; o[i]=o[j]; o[j]=k; const st=agOrdLer(); st.ordem=o; agOrdGravar(st); render(); }
+function agOrdOcultar(k){ const st=agOrdLer(); const i=st.ocultos.indexOf(k); if(i>=0) st.ocultos.splice(i,1); else st.ocultos.push(k); agOrdGravar(st); render(); }
+function agOrdRestaurar(){ agOrdGravar({ordem:[],ocultos:[]}); render(); }
+function agOrdRender(pecas){
+  const mapa={}; const chaves=[]; (pecas||[]).forEach(p=>{ if(p&&p[1]){ mapa[p[0]]=p[1]; chaves.push(p[0]); } });
+  const st=agOrdLer(); AG_ORD.ch=drwOrdCalc(chaves,st);   /* mesma regra do Início e da ficha: seção nova entra no lugar natural */
+  const lista=AG_ORD.modo?AG_ORD.ch:AG_ORD.ch.filter(k=>!st.ocultos.includes(k));
+  const corpo=lista.map(k=>{ if(!AG_ORD.modo) return mapa[k]; const oculto=st.ocultos.includes(k), i=AG_ORD.ch.indexOf(k), nome=AG_NOMES[k]||k;
+    return `<div class="pord-it${oculto?' off':''}" data-ag-it="${esc(k)}"><div class="pord-bar"><span class="pord-n">${esc(nome)}</span>
+      <button class="btn btn-s btn-mini" ${i===0?'disabled':''} onclick="agOrdMover('${esc(jsq(k))}',-1)" title="Subir">↑</button><button class="btn btn-s btn-mini" ${i===AG_ORD.ch.length-1?'disabled':''} onclick="agOrdMover('${esc(jsq(k))}',1)" title="Descer">↓</button>
+      <button class="btn ${oculto?'btn-p':'btn-s'} btn-mini" onclick="agOrdOcultar('${esc(jsq(k))}')">${oculto?'👁 mostrar':'🚫 esconder'}</button></div>${oculto?'<div class="pord-off">escondida da Agenda</div>':mapa[k]}</div>`; }).join('');
+  const hd=AG_ORD.modo?`<div class="pord-hd"><b>Organizando a Agenda</b> — ↑ ↓ muda a ordem, 🚫 esconde. Vale só neste aparelho.<span style="flex:1"></span><button class="btn btn-ghost btn-mini" onclick="agOrdRestaurar()">↺ voltar ao padrão</button><button class="btn btn-p btn-mini" onclick="agOrdModo(false)">✓ pronto</button></div>`:'';
+  const n=st.ocultos.filter(k=>chaves.includes(k)).length;
+  const esc0=(!AG_ORD.modo&&n)?`<div class="pord-esc">${n} seç${n===1?'ão escondida':'ões escondidas'} da Agenda — <button class="btn btn-s btn-mini" onclick="agOrdModo(true)">organizar</button></div>`:'';
+  return hd+corpo+esc0; }
+window.agToggle=agToggle; window.agTudo=agTudo; window.agOrdModo=agOrdModo; window.agOrdMover=agOrdMover; window.agOrdOcultar=agOrdOcultar; window.agOrdRestaurar=agOrdRestaurar;
+/* um seletor de ação por linha — o mesmo fluxo dos painéis TA/WA */
+const AG_ACOES=[['feita','✓ Feita'],['delay','⏳ Delay 7d (cliente pediu pra adiar)'],['mais1','📅 +1 dia'],['mais7','📅 +7 dias'],['editar','✏️ Editar'],['remover','✕ Remover']];
+function agAcaoSel(c,t,reuniao){ const ops=reuniao?AG_ACOES.filter(a=>a[0]!=='feita'):AG_ACOES;
+  return `<select class="res-sel ag-sel" onchange="agAcao('${esc(jsq(c.id))}','${esc(jsq(t.id))}',this.value);this.value=''"><option value="">${reuniao?'Mais…':'Ação…'}</option>${ops.map(a=>`<option value="${a[0]}">${a[1]}</option>`).join('')}</select>`; }
+function agAcao(cid,tid,k){ if(!k) return;
+  if(k==='feita') tarConcluir(cid,tid); else if(k==='delay') tarDelay(cid,tid,7); else if(k==='mais1') tarAdiar(cid,tid,1); else if(k==='mais7') tarAdiar(cid,tid,7); else if(k==='editar') tarEditar(cid,tid); else if(k==='remover') tarRemover(cid,tid); }
+window.agAcao=agAcao;
 
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -15412,6 +15470,7 @@ const TA_DELAY_ETAPAS={'OI/FF':'OI','P/C':'P/C','C2':'C2','Agendada Revisita':'R
 function taDelayTipo(c){ if(!c) return null; const hoje=hojeISO();
   if(spEhFunil(c)){
     const st=etStatusDe(c); if(/^delay/i.test(st)) return st;   /* STATUS-ETAPA-V1: "Delay X" marcado à mão */
+    if(typeof negDelayAtivo==='function'&&negDelayAtivo(c)) return 'Delay '+LBLE(c.etapa);   /* DELAY-SINC-V1: delay marcado pela Agenda/reunião */
     const its=interacoesDe(c).filter(i=>RES_BY_K[i.k]); const ult=its.length?its[its.length-1]:null;
     if(ult&&ult.k==='pediu_retornar'&&!(c.sitplan&&c.sitplan>=hoje)) return 'Retornar';
     const et=TA_DELAY_ETAPAS[c.etapa]; if(!et) return null;
@@ -17390,7 +17449,7 @@ function lpSelfCheck(){
        (()=>{ const c={id:'zt',nome:'Zz',tarefas:[{id:12345,tipo:'reuniao',tit:'R',quando:'2026-10-01'}],interacoes:[]};
          return !!tarDe(c,'12345')&&!!tarDe(c,12345)&&!String(reunFinalizar).includes('find(x=>x.id===tid)'); })());
     ok('atividade: dá pra editar e excluir de todo lugar (ficha, agenda e reunião a finalizar)',
-       typeof tarEditar==='function'&&String(tarBlocoDrawer).includes('tarEditar(')&&String(viewAgenda).includes('tarEditar('));
+       typeof tarEditar==='function'&&String(tarBlocoDrawer).includes('tarEditar(')&&(String(viewAgenda).includes('tarEditar(')||String(agAcao).includes('tarEditar(')));   /* AGENDA-V2: na agenda o editar mora no seletor de ação */
     ok('google: com hora vai pra AGENDA, sem hora vai pras TAREFAS (e o seletor manda nos dois)',
        gtDestino({hora:'10:00'})==='evento'&&gtDestino({hora:''})===(GT.semHora==='tarefa'?'tarefa':'evento')
        &&gtDestino({hora:'10:00',destino:'tarefa'})==='tarefa'&&gtDestino({hora:'',destino:'evento'})==='evento');
@@ -17951,6 +18010,10 @@ function lpSelfCheck(){
         /* TA-COLUNAS-V1 */
         ok('painel TA/WA: colunas vêm do catálogo (padrão = as 7 de hoje), ligam/desligam e mudam de ordem, salvas por aparelho', (()=>{ const bak=TAP.cols; try{ TAP.cols=null; const d=taColsVis(); TAP.cols=fxColsSet(d,'endereco',true,''); const a=taColsVis(); TAP.cols=fxColsMover(a,'endereco',-1,''); const b=taColsVis(); return d.join()==='prof,idade,renda,estagio,listas,rec,telefone' && a[a.length-1]==='endereco' && b[b.length-2]==='endereco' && Object.keys(TA_COLS).every(k=>TA_COLS[k].label) && /fxColsHtml\('ta',TA_COLS/.test(String(viewBnTa)) && /cols\.map\(taThHtml\)/.test(String(viewBnTa)); } finally{ TAP.cols=bak; } })());
         ok('painel TA/WA: campos linkados — endereço abre no Google Maps, telefone liga, recomendante abre a ficha, e-mail é mailto', (()=>{ const c={id:'zzc1',nome:'Zz Col',telefone:'81999990012',recomendante:'Fulano Indicador',email:'zz@teste.com',cidade:'Recife',empresa:'Clínica Zz',locais:[{tipo:'trabalho',nome:'Clínica Zz',end:'Rua Teste 1, Recife'}]};
+        /* AGENDA-V2 + DELAY-SINC-V1 */
+        ok('delay sincronizado: marcar delay no negócio o põe na lista de Delay do TA/WA, no chip do card e na linha do tempo; expira na data', (()=>{ const bak=S.contatos; try{ const c=normContato({id:'zzdl',nome:'Zz Delay',funil:'nn',etapa:'OI/FF',telefone:'81999990021'}); S.contatos=[c]; const antes=taDelayTipo(c); const ate=negDelayMarcar(c,isoAddDias(hojeISO(),5),'teste'); const dep=taDelayTipo(c); const chip=etStatusChip(c); const it=interacoesDe(c).slice(-1)[0]; c.delay_ate=isoAddDias(hojeISO(),-1); if(/^delay/i.test(etStatusDe(c))){ delete c.status; delete c.status_etapa; } const exp=taDelayTipo(c); return !antes && !!dep && /^Delay/i.test(dep) && /Delay/.test(chip) && it && it.k==='etstatus' && /Delay até/.test(it.l) && !exp && REUN_BY_K.delay && REUN_BY_K.delay.remarca && REUN_BY_K.delay.delay && typeof tarDelay==='function'; } finally{ S.contatos=bak; } })());
+        ok('agenda V2: 3 KPIs (Atrasadas · Hoje · Em aberto), seções dobráveis que nascem fechadas e organizáveis, uma ação por linha (seletor com Feita · Delay · +1d · +7d · Editar · Remover)', (()=>{ const src=String(viewAgenda); const bak=(()=>{ try{ return localStorage.getItem(AG_SEC_CHAVE); }catch(_){ return null; } })(); try{ try{ localStorage.removeItem(AG_SEC_CHAVE); }catch(_){} const h=agBloco('zz-ag','T','r','<i>c</i>'); const sel=agAcaoSel({id:'zc'},{id:'zt'},false), selR=agAcaoSel({id:'zc'},{id:'zt'},true);
+            return !/A finalizar<\/div>/.test(src) && !/Negócios sem atividade<\/div>/.test(src) && /agTudo\(true\)/.test(src) && /agTudo\(false\)/.test(src) && /agOrdModo\(/.test(src) && /ini-bl fechado/.test(h) && /data-ag="zz-ag"/.test(h) && AG_ACOES.map(a=>a[0]).join()==='feita,delay,mais1,mais7,editar,remover' && /<select class="res-sel ag-sel"/.test(sel) && /value="delay"/.test(sel) && !/value="feita"/.test(selR) && /agAcao\('zc','zt'/.test(sel) && drwOrdCalc(['reun','atrasada','hoje'],{ordem:['hoje','reun'],ocultos:[]}).join()==='hoje,reun,atrasada'; } finally{ try{ if(bak===null) localStorage.removeItem(AG_SEC_CHAVE); else localStorage.setItem(AG_SEC_CHAVE,bak); }catch(_){} } })());
             const end=taCelHtml(c,'endereco'), tel=taCelHtml(c,'telefone'), rec=taCelHtml(c,'rec'), em=taCelHtml(c,'email'), cid=taCelHtml(c,'cidade');
             return /google\.com\/maps\/search\/\?api=1&amp;query=Cl%C3%ADnica%20Zz%2C%20Rua%20Teste/.test(end) && /target="_blank"/.test(end) && /href="tel:81999990012"/.test(tel) && /taAbrirPorNome\('Fulano Indicador'\)/.test(rec) && /mailto:zz@teste\.com/.test(em) && /query=Recife/.test(cid) && /event\.stopPropagation\(\)/.test(end+tel+rec+em); })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};
