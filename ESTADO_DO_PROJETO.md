@@ -2,6 +2,27 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (26ª onda) — WA-PAINEL-V1: Painel WA (WhatsApp Approach), irmão do Painel TA, só na base dele (v7.84)
+
+Pedido dele (print do Painel TA no iPad): *"constrói um painel WA, WhatsApp Approach. Não vai ser liberado ainda pro Daniel — fase beta que eu vou desenvolver. Pega a mesma lógica do Painel TA, só que pra quem está em fluxo no funil, com abordagens de WhatsApp. Em sinergia com o funil: se virou ganho, sai. Os de delay do RCP, os de marcar — a mesma coisa, com foco de WhatsApp."*
+
+### Desenho: a MESMA tela, canal trocado
+- `viewBnWa` = `viewBnTa` com `taCanal()==='wa'` (lido da VIEW). Nada duplicado: lateral, filtros, busca, tabela/cards, CSV, listas nomeadas — tudo é o do Painel TA. O que muda por canal: **listas inteligentes**, **resultado do dia**, título com selo **💬 WA**, e o Modo Foco fica só no TA por enquanto.
+- **Listas do WA** (`WA_SMART`): 🌊 Em fluxo (funil) · 🎯 Novos Negócios · 🏠 Base de Clientes · ⏳ Delay · 🔕 TA não atendeu → Zap · 🕗 Ficou pra trás · 🙌 Recomendações · 💎 Rec de cliente · ⭐ Clientes (carteira). Todas exigem telefone.
+- **"Em fluxo"** (`waEmFluxo`): negócio do funil, com telefone, **não** encerrado, **não** ganho, **não** pós-venda (BC: fora Ativos, Venda ganha e Delivery). É recorte vivo: mudou a etapa no funil, a lista muda — **ganho sai sozinho**.
+- **Resultado do Zap** (`WA_RES`): 💬 Mandei msg · ✅ Respondeu · 🗓️ Agendou · 🔇 Sem resposta · 🚫 Sem interesse. Funil → interação (`RESULTADOS` ganhou `whatsapp`/`whats_respondeu`/`whats_sem_resposta` com `wa:1`, **sem contar como ligação**; agendou = `agendou_oi`, recusou = `sem_interesse`, mesmo caminho do TA). Estoque → `hist` tipo **`wa`** (agendou/recusou passam pelo `bnResultado`, que leva pro funil / descarta) + espelho em `lp_interacoes` (migration `lp_interacoes_wa_v1.sql` aplicada em prod: tipo `wa` e resultados do Zap no CHECK). ↩︎ desfaz o Zap de hoje.
+- Cada canal **lembra a própria lista** (`TA_LISTA_MEM`); trocar de painel zera seleção e filtro de resultado.
+- **Gate:** `novoOn('painel-wa')`; item do menu com `data-novo` (o `aplicarGates` esconde pra quem não tem a chave) e a tela cai no Painel TA se alguém chegar por link. `bn-wa` entrou em `MODS.bn.views`, `VIEWS_CONHECIDAS` (portão: 40 telas), `TITULO_VIEW`, contador do menu = pessoas em fluxo.
+
+### Prova
+- Portão aberto (40 telas × 3 × 2, lpSelfCheck 0) · `--prova` OK · guard OK.
+- `teste-painel-wa.mjs` **18/18** em 390 e 1280: Em fluxo lista só negócio aberto com telefone; listas do canal; 💬 + resultado em cada linha; Mandei msg no funil vira interação `whatsapp` sem ligação; no Estoque vira `hist wa` com ↩︎; canal lembra a lista; Daniel não vê o item e cai no TA. Regressão: os 5 testes anteriores seguem verdes.
+- 4 invariantes novos. ⚠️ Lição de teste: a tela desenha tabela **e** cards (um escondido por CSS) — contar linhas só pelas visíveis (`getClientRects().length`).
+
+### Ele vai lapidar (beta)
+- Mensagens prontas por lista/etapa (hoje é o template do TA: com/sem recomendante) — dá pra plugar o Repertório.
+- Modo Foco no WA · resultados do Zap no SitPlan · sair da lista quando "roda alguma etapa" (hoje: ganho/encerrado saem; delay e etapa seguem a régua do TA).
+
 ## 18/09/2026 (25ª onda) — FORM-BASE-V1 (campos sem borda) + DRW-ORDEM-V1 (organizar tópicos da ficha) (v7.83)
 
 Print dele da ficha no iPad: *"alguns campos como telefone aparecem em branco. Verifica todos os campos e corrige. Permite também no card do cliente, além de expandir e recolher, organizar os tópicos — tipo o Início."*
