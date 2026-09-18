@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.87 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.88 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -870,6 +870,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff;min-height:36px}
   .ta-link{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:none;border-bottom:1px dotted var(--muted)} .ta-link:hover{color:var(--azul);border-bottom-color:var(--azul)}
   .ta-chip a{color:inherit;text-decoration:none}
+  .cic-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;font-size:12.5px}
+  .cic-lbl{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  .cic-bar .seg button{min-height:36px} .cic-f{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+  .cic-f input{width:auto;min-height:36px;padding:4px 8px} .cic-f input[type=number]{width:64px} .cic-per{font-weight:700}
+  .cic-kpi .num{white-space:nowrap}
+  @media(max-width:980px){ .cic-bar .seg button{min-height:44px} .cic-f input{min-height:44px} }
   .ag-sel{max-width:150px} @media(max-width:980px){ .ag-sel{max-width:none;flex:1 1 100%} .tarlin .ac{width:100%} }
   .ta-lchip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--linha);background:var(--bg);white-space:nowrap;margin:1px 0}
   @media(max-width:980px){ .res-sel{min-height:44px;max-width:none;width:100%;font-size:14px} }
@@ -3118,8 +3124,9 @@ function nnNegocioHtml(lista,fluxo,ns,rec){
       ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?`${fechMes.length} negócio(s) · ponderado ${brlCurto(paPonderado(fechMes))}`:'nenhuma previsão neste mês')}
       ${kpiLente('vencido','Fechamento vencido',atrasados.length||'0',atrasados.length?'previsão passou — renegociar':'nenhuma previsão atrasada',atrasados.length>0)}
       ${kpiLente('semativ','Sem próxima atividade',semAtiv.length||'0',semAtiv.length?'negócio parado não anda':'todo negócio tem tarefa',semAtiv.length>0)}
+      ${cicloCardsHtml(cicloEmitidas(cicloAtual(),null,cicloFiltroFunil(ns)),{num:true})}
     </div>`;
-  const resto=aberto?`<div class="kpis kpis-funil" style="margin-bottom:8px">
+  const resto=aberto?`${cicloBarraHtml()}<div class="kpis kpis-funil" style="margin-bottom:8px">
       ${kpi('PA ponderado',brlCurto(pond),(pa?Math.round(pond/pa*100)+'% do total · ':'')+(FUNP.probFonte==='funil'&&_PROB_CAL&&_PROB_CAL.mapa?'pelo seu funil':'pela tabela por etapa'))}
       ${kpi('Ticket médio (PA)',comValor?brlCurto(pa/comValor):'—',comValor<vivos.length?`${vivos.length-comValor} sem prêmio informado`:'todos com prêmio')}
       ${kpi('Previsto emitir no mês',emisMes.length?brlCurto(somaPA(emisMes)):'—',emisMes.length?emisMes.length+' apólice(s)':'nenhuma previsão neste mês')}
@@ -3918,6 +3925,49 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
        embaixo). Em 2 colunas o valor cabe inteiro. */
     .kpis-consol{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
   }`; document.head.appendChild(s); })();
+/* ═══ CICLO-V1 (18/09/2026): PA emitido e FYC emitido por ciclo ═══════════════════════
+   Pedido dele (prints da Consolidada, dos funis e da Emissão Diária): "bota cards de PA emitido e
+   FYC emitido — tanto pelo ciclo do mês (1 a 30) como pelo ciclo de compensação (ex.: 21/08 → 20/09).
+   Na Consolidada, nos dois funis e na Emissão Diária, com um botãozinho pra trocar e ajustar."
+   Uma fonte só: as emitidas do app (EX, o relatório UW & Emissão) — Ativa soma, cancelada desconta,
+   igual à Emissão Diária. FYC = AFYC projetado do relatório. O ciclo é escolha por aparelho. */
+const CIC_CHAVE='crmlp_ciclo_v1';
+let CIC={modo:'mes',corte:21,ini:null,fim:null};
+(function(){ try{ const o=JSON.parse(localStorage.getItem(CIC_CHAVE)||'null'); if(o&&typeof o==='object'){ if(o.modo==='comp'||o.modo==='mes') CIC.modo=o.modo; if(+o.corte>=1&&+o.corte<=28) CIC.corte=+o.corte; if(o.ini&&o.fim) { CIC.ini=String(o.ini); CIC.fim=String(o.fim); } } }catch(_){} })();
+function cicSalvar(){ try{ localStorage.setItem(CIC_CHAVE,JSON.stringify(CIC)); }catch(_){} }
+function cicIso(y,m,d){ const dt=new Date(y,m,d); return dt.getFullYear()+'-'+('0'+(dt.getMonth()+1)).slice(-2)+'-'+('0'+dt.getDate()).slice(-2); }
+/* pura: período do ciclo pra uma data de referência. modo 'mes' = 1º ao último dia do mês;
+   'comp' = do dia de corte ao dia anterior ao corte do mês seguinte (hoje antes do corte → ciclo começou no mês passado);
+   ini/fim explícitos ganham de tudo (ele ajusta o período na mão). */
+function cicloPeriodo(modo,ref,corte,ini,fim){
+  modo=modo||CIC.modo; ref=ref||atHojeISO(); corte=+(corte||CIC.corte)||21;
+  const y=+ref.slice(0,4), m=+ref.slice(5,7)-1, d=+ref.slice(8,10);
+  if(modo==='comp'&&ini&&fim) return {modo,ini:String(ini),fim:String(fim),rotulo:dataBR(ini)+' → '+dataBR(fim),custom:true};
+  if(modo==='comp'){ const mi=d>=corte?m:m-1; return {modo,ini:cicIso(y,mi,corte),fim:cicIso(y,mi+1,corte-1),rotulo:dataBR(cicIso(y,mi,corte)).slice(0,5)+' → '+dataBR(cicIso(y,mi+1,corte-1)).slice(0,5),custom:false}; }
+  return {modo:'mes',ini:cicIso(y,m,1),fim:cicIso(y,m+1,0),rotulo:['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][m]+'/'+String(y).slice(2)+' (1 → '+(+cicIso(y,m+1,0).slice(8,10))+')',custom:false}; }
+function cicloAtual(){ return cicloPeriodo(CIC.modo,atHojeISO(),CIC.corte,CIC.modo==='comp'?CIC.ini:null,CIC.modo==='comp'?CIC.fim:null); }
+/* pura: soma das emitidas no período (Ativa +, cancelada −), com filtro opcional (ex.: só quem está num funil) */
+function cicloEmitidas(per,linhas,filtro){ per=per||cicloAtual(); linhas=linhas||exVis(); if(typeof filtro==='function') linhas=linhas.filter(filtro);
+  const no=linhas.filter(r=>{ const e=String(r.emissao||'').slice(0,10); return e>=per.ini&&e<=per.fim; });
+  let n=0,nEmit=0,pa=0,fyc=0; no.forEach(r=>{ const canc=r.status_apolice&&r.status_apolice!=='Ativa'; const sg=canc?-1:1; n+=sg; if(!canc) nEmit++; pa+=sg*(r.pa_sem_iof||0); fyc+=sg*(r.afyc_projetado||0); });
+  return {per,n,nEmit,pa,fyc,linhas:no}; }
+/* filtro "só quem tem negócio neste funil": casa a emitida (segurado / resp. pagamento) com os contatos do funil pelas mesmas chaves do card do cliente */
+function cicloFiltroFunil(ns){ const ks=new Set(); (S.contatos||[]).filter(c=>escVisivel(c)&&funilDe(c)===ns).forEach(c=>{ try{ cartChaves(c).forEach(k=>ks.add(k)); }catch(_){} });
+  return r=>{ try{ for(const k of pessoaChaves(r,['segurado','resp_pagamento'],[])) if(ks.has(k)) return true; }catch(_){} return false; }; }
+function cicloCardsHtml(agg,opts){ opts=opts||{}; const per=agg.per; const sub=`${agg.nEmit} apólice${agg.nEmit===1?'':'s'} · ${esc(per.rotulo)}`;
+  const k=(l,v,s,t)=>`<div class="kpi cic-kpi" title="${esc(t||'')}"><div class="lbl">${l}</div><div class="num"${opts.num?' style="font-size:19px"':''}>${v}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div></div>`;
+  return k('PA emitido',agg.nEmit||agg.n?brlCurto(agg.pa):'—',sub,'PA sem IOF das emitidas no ciclo, líquido de cancelamento (mesma conta da Emissão Diária)')
+       + k('FYC emitido',agg.nEmit||agg.n?brlCurto(agg.fyc):'—',per.modo==='comp'?'ciclo de compensação':'ciclo do mês','AFYC projetado das emitidas no ciclo'); }
+function cicloBarraHtml(){ const per=cicloAtual(); const comp=CIC.modo==='comp';
+  return `<div class="cic-bar"><span class="cic-lbl">Ciclo</span><span class="seg"><button class="${!comp?'on':''}" onclick="cicloSetModo('mes')">📅 Mensal</button><button class="${comp?'on':''}" onclick="cicloSetModo('comp')">💰 Compensação</button></span>
+    ${comp?`<label class="cic-f">corte dia <input type="number" min="1" max="28" value="${CIC.corte}" onchange="cicloSetCorte(this.value)" title="Dia em que o ciclo de compensação vira"></label>
+    <label class="cic-f">de <input type="date" value="${esc(per.ini)}" onchange="cicloSetIni(this.value)"></label><label class="cic-f">até <input type="date" value="${esc(per.fim)}" onchange="cicloSetFim(this.value)"></label>${per.custom?`<button class="btn btn-ghost btn-mini" onclick="cicloLimparRange()" title="Volta pro ciclo calculado pelo dia de corte">↺ pelo corte</button>`:''}`:`<span class="cic-per">${esc(per.rotulo)}</span>`}</div>`; }
+function cicloSetModo(m){ CIC.modo=m==='comp'?'comp':'mes'; cicSalvar(); render(); }
+function cicloSetCorte(v){ v=+v; if(!(v>=1&&v<=28)) return; CIC.corte=v; CIC.ini=null; CIC.fim=null; cicSalvar(); render(); }
+function cicloSetIni(v){ if(!v) return; const per=cicloAtual(); CIC.ini=v; CIC.fim=per.fim>=v?per.fim:v; cicSalvar(); render(); }
+function cicloSetFim(v){ if(!v) return; const per=cicloAtual(); CIC.fim=v; CIC.ini=per.ini<=v?per.ini:v; cicSalvar(); render(); }
+function cicloLimparRange(){ CIC.ini=null; CIC.fim=null; cicSalvar(); render(); }
+window.cicloSetModo=cicloSetModo; window.cicloSetCorte=cicloSetCorte; window.cicloSetIni=cicloSetIni; window.cicloSetFim=cicloSetFim; window.cicloLimparRange=cicloLimparRange;
 function viewConsolidado(){
   const disp=consolDisponiveis(), sel=consolSel();
   const lista=consolLista(sel);
@@ -3963,12 +4013,12 @@ function viewConsolidado(){
     <div class="cs-chips">${chips}<span style="flex:1"></span>
       <button class="cs-chip" onclick="consolTodos()" title="Marcar todos os funis disponíveis">⊕ todos</button></div>
     <div class="kpis kpis-consol" style="margin-bottom:14px">
-      <div class="kpi"><div class="lbl">PA em jogo</div><div class="num">${brlCurto(pa)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${jogo.length} ${jogo.length===1?'negócio':'negócios'} · ${brlCurto(pa/12)}/mês</div></div>
+      <div class="kpi"><div class="lbl">PA em jogo</div><div class="num">${brlCurto(pa)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${jogo.length} ${jogo.length===1?'negócio':'negócios'} · ${brlCurto(pa/12)}/mês${parados.length?` · <a class="cs-click" style="cursor:pointer;color:var(--verm);font-weight:700" onclick="consolIrTravados()" title="Ver quem está travado">${parados.length} parados</a>`:''}</div></div>
       <div class="kpi"><div class="lbl">Ponderado</div><div class="num">${brlCurto(pond)}</div></div>
       <div class="kpi"><div class="lbl">PA médio</div><div class="num">${brlCurto(ticket)}</div></div>
-      <div class="kpi${parados.length?' cs-click':''}"${parados.length?' style="border:1.5px solid #f3c9c9" onclick="consolIrTravados()" title="Ver quem está travado"':''}><div class="lbl">Parados</div><div class="num">${parados.length}</div></div>
-      <div class="kpi"><div class="lbl">A entregar</div><div class="num">${paEntr?brlCurto(paEntr):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${porFaixa.entr.length} ${porFaixa.entr.length===1?'apólice':'apólices'}</div></div>
+      ${cicloCardsHtml(cicloEmitidas(cicloAtual()))}
     </div>
+    ${cicloBarraHtml()}
     <div class="cs-grp"><span class="t">Régua única</span></div>
     <div class="card" style="padding:16px 18px"><div class="cs-regua">${regua}</div></div>
     ${foco?`<div class="cs-grp"><span class="t">${fx.ic} ${fx.nome}</span><span class="q">${porFaixa[foco].length} · maiores primeiro</span>
@@ -8862,6 +8912,8 @@ function viewEmissaoDiaria(){
       <button class="btn btn-s btn-mini" onclick="irPara('lp-pendencias')">📌 Pendências</button>
     </div>
     ${semDados?`<div class="card" style="text-align:center;padding:26px;color:var(--muted)">Nenhuma emitida no app ainda. Cole o relatório <b>Apólices Emitidas no Período</b> (botão acima) e este painel se monta sozinho.${!logado()?' <button class="btn btn-ghost btn-mini" onclick="exExemplo()">Ver exemplo</button>':''}</div>`:''}
+    ${cicloBarraHtml()}
+    <div class="kpis" style="margin-bottom:8px">${cicloCardsHtml(cicloEmitidas(cicloAtual()),{num:true})}</div>
     <div class="kpis" style="margin-bottom:12px">
       ${kpi('PA Bruto do Dia',brlCurto(d.paDia),d.ultimoDia?'dia '+d.ultimoDia:'sem emissão',true)}
       ${kpi('Apol. Emit.',edN(d.nLiq),d.canc.length?`${d.nEmit} emitidas − ${d.canc.length} canc.`:'')}
@@ -17755,8 +17807,8 @@ function lpSelfCheck(){
         const fonte=String(viewConsolidado).replace(/\/\*[\s\S]*?\*\//g,'');
         ok('consol: "Ticket médio" virou "PA médio" (é prêmio anualizado, na língua dele)',
            fonte.includes('PA médio') && !fonte.includes('Ticket médio'));
-        ok('consol: "Entrega + encerrados" saiu — somava apólice ganha com negócio perdido',
-           !fonte.includes('Entrega + encerrados') && fonte.includes('A entregar'));
+        ok('consol: "Entrega + encerrados" saiu — somava apólice ganha com negócio perdido; 18/09 o card "A entregar" também saiu (pedido dele) e a Entrega ficou só na régua',
+           !fonte.includes('Entrega + encerrados') && !/A entregar<\/div>/.test(fonte) && fonte.includes('cicloCardsHtml'));
         ok('consol: os rodapés de explicação saíram da tela (cs-nota, "sem valor lançado", subtítulo)',
            !fonte.includes('sem valor lançado') && !fonte.includes('cs-nota') && !fonte.includes('funil(is) somados'));
         ok('consol: o número "Parados" é caminho, não só informação — leva à lista de travados',
@@ -18014,6 +18066,13 @@ function lpSelfCheck(){
         ok('delay sincronizado: marcar delay no negócio o põe na lista de Delay do TA/WA, no chip do card e na linha do tempo; expira na data', (()=>{ const bak=S.contatos; try{ const c=normContato({id:'zzdl',nome:'Zz Delay',funil:'nn',etapa:'OI/FF',telefone:'81999990021'}); S.contatos=[c]; const antes=taDelayTipo(c); const ate=negDelayMarcar(c,isoAddDias(hojeISO(),5),'teste'); const dep=taDelayTipo(c); const chip=etStatusChip(c); const it=interacoesDe(c).slice(-1)[0]; c.delay_ate=isoAddDias(hojeISO(),-1); if(/^delay/i.test(etStatusDe(c))){ delete c.status; delete c.status_etapa; } const exp=taDelayTipo(c); return !antes && !!dep && /^Delay/i.test(dep) && /Delay/.test(chip) && it && it.k==='etstatus' && /Delay até/.test(it.l) && !exp && REUN_BY_K.delay && REUN_BY_K.delay.remarca && REUN_BY_K.delay.delay && typeof tarDelay==='function'; } finally{ S.contatos=bak; } })());
         ok('agenda V2: 3 KPIs (Atrasadas · Hoje · Em aberto), seções dobráveis que nascem fechadas e organizáveis, uma ação por linha (seletor com Feita · Delay · +1d · +7d · Editar · Remover)', (()=>{ const src=String(viewAgenda); const bak=(()=>{ try{ return localStorage.getItem(AG_SEC_CHAVE); }catch(_){ return null; } })(); try{ try{ localStorage.removeItem(AG_SEC_CHAVE); }catch(_){} const h=agBloco('zz-ag','T','r','<i>c</i>'); const sel=agAcaoSel({id:'zc'},{id:'zt'},false), selR=agAcaoSel({id:'zc'},{id:'zt'},true);
             return !/A finalizar<\/div>/.test(src) && !/Negócios sem atividade<\/div>/.test(src) && /agTudo\(true\)/.test(src) && /agTudo\(false\)/.test(src) && /agOrdModo\(/.test(src) && /ini-bl fechado/.test(h) && /data-ag="zz-ag"/.test(h) && AG_ACOES.map(a=>a[0]).join()==='feita,delay,mais1,mais7,editar,remover' && /<select class="res-sel ag-sel"/.test(sel) && /value="delay"/.test(sel) && !/value="feita"/.test(selR) && /agAcao\('zc','zt'/.test(sel) && drwOrdCalc(['reun','atrasada','hoje'],{ordem:['hoje','reun'],ocultos:[]}).join()==='hoje,reun,atrasada'; } finally{ try{ if(bak===null) localStorage.removeItem(AG_SEC_CHAVE); else localStorage.setItem(AG_SEC_CHAVE,bak); }catch(_){} } })());
+        /* CICLO-V1 */
+        ok('ciclo: mensal = 1º ao último dia; compensação = do corte ao dia anterior ao corte seguinte (antes do corte, começou no mês passado); período na mão ganha de tudo', (()=>{ const a=cicloPeriodo('mes','2026-09-18',21), b=cicloPeriodo('comp','2026-09-18',21), c=cicloPeriodo('comp','2026-09-25',21), d=cicloPeriodo('comp','2026-09-18',21,'2026-08-21','2026-09-18'), e=cicloPeriodo('mes','2026-02-10',21);
+            return a.ini==='2026-09-01'&&a.fim==='2026-09-30' && b.ini==='2026-08-21'&&b.fim==='2026-09-20' && c.ini==='2026-09-21'&&c.fim==='2026-10-20' && d.ini==='2026-08-21'&&d.fim==='2026-09-18'&&d.custom && e.fim==='2026-02-28' && /→/.test(b.rotulo); })());
+        ok('ciclo: PA e FYC emitidos somam Ativa e descontam cancelada dentro do período (mesma conta da Emissão Diária), e o filtro por funil casa a emitida com o negócio pelo nome', (()=>{ const per={modo:'comp',ini:'2026-08-21',fim:'2026-09-20',rotulo:'x'};
+            const L=[{emissao:'2026-09-02',status_apolice:'Ativa',pa_sem_iof:1000,afyc_projetado:400,segurado:'Fulano Ciclo'},{emissao:'2026-09-10',status_apolice:'Cancelada',pa_sem_iof:300,afyc_projetado:100,segurado:'Zz Canc'},{emissao:'2026-08-20',status_apolice:'Ativa',pa_sem_iof:999,afyc_projetado:9,segurado:'Fora'},{emissao:'2026-09-20',status_apolice:'Ativa',pa_sem_iof:500,afyc_projetado:200,segurado:'Beltrano Outro'}];
+            const g=cicloEmitidas(per,L); const bak=S.contatos; let f; try{ S.contatos=[normContato({id:'zzcf',nome:'Fulano Ciclo',funil:'nn',etapa:'OI/FF',telefone:''})]; f=cicloEmitidas(per,L,cicloFiltroFunil('nn')); } finally{ S.contatos=bak; }
+            const h=cicloCardsHtml(g); return g.n===1&&g.nEmit===2&&g.pa===1200&&g.fyc===500 && f.nEmit===1&&f.pa===1000 && /PA emitido/.test(h)&&/FYC emitido/.test(h)&&/R\$\s?1\.200/.test(h)&&/R\$\s?500/.test(h) && /cicloCardsHtml/.test(String(viewConsolidado))&&/cicloCardsHtml/.test(String(nnNegocioHtml))&&/cicloCardsHtml/.test(String(viewEmissaoDiaria)) && !/A entregar<\/div>/.test(String(viewConsolidado)); })());
             const end=taCelHtml(c,'endereco'), tel=taCelHtml(c,'telefone'), rec=taCelHtml(c,'rec'), em=taCelHtml(c,'email'), cid=taCelHtml(c,'cidade');
             return /google\.com\/maps\/search\/\?api=1&amp;query=Cl%C3%ADnica%20Zz%2C%20Rua%20Teste/.test(end) && /target="_blank"/.test(end) && /href="tel:81999990012"/.test(tel) && /taAbrirPorNome\('Fulano Indicador'\)/.test(rec) && /mailto:zz@teste\.com/.test(em) && /query=Recife/.test(cid) && /event\.stopPropagation\(\)/.test(end+tel+rec+em); })());
         PERFIL={email:'outro@x.com',papel:'lp',modulos:{}};

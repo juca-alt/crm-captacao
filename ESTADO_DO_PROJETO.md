@@ -2,6 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (30ª onda) — CICLO-V1: PA emitido e FYC emitido por ciclo (mensal ou de compensação) na Consolidada, nos funis e na Emissão Diária (v7.88)
+
+Prints dele (Consolidada, NN, BC, Emissão Diária): *"tira Parados e A entregar da Consolidada. Bota PA emitido e FYC emitido — pelo ciclo do mês (1 a 30) e pelo ciclo de compensação (ex.: 21/08 → 20/09) — na Consolidada, nos dois funis e na Emissão Diária, com um botãozinho pra trocar e ajustar os períodos."*
+
+### Motor (`CIC`, por aparelho em `crmlp_ciclo_v1`)
+- `cicloPeriodo(modo, ref, corte, ini, fim)` — pura: **mensal** = 1º ao último dia; **compensação** = do dia de corte (padrão **21**) ao dia anterior ao corte do mês seguinte (antes do corte, o ciclo começou no mês passado); **de/até na mão** ganham de tudo.
+- `cicloEmitidas(per, linhas, filtro)` — uma fonte só: as emitidas do app (`EX`, relatório UW & Emissão). **Ativa soma, cancelada desconta** (mesma conta da Emissão Diária). **FYC = AFYC projetado** do relatório.
+- `cicloFiltroFunil(ns)` — nos funis, só as emitidas de quem tem negócio naquele funil (casa segurado/resp. pagamento com os contatos pelas chaves do card do cliente).
+- Barra **Ciclo**: 📅 Mensal · 💰 Compensação; em compensação aparecem **corte dia**, **de**, **até** e "↺ pelo corte" quando o período foi ajustado na mão.
+
+### Onde
+- **Consolidada:** KPIs = PA em jogo · Ponderado · PA médio · **PA emitido · FYC emitido**. "Parados" virou link vermelho no sub do PA em jogo (continua caminho pra "Onde está travado"); "A entregar" saiu (a Entrega segue na régua). Barra do ciclo abaixo dos KPIs.
+- **Funis NN e BC:** os dois cards na faixa que sempre aparece (filtrados pelo funil); barra do ciclo em "mais números".
+- **Emissão Diária:** barra do ciclo + os dois cards acima dos KPIs do mês (o seletor mês/dias continua).
+
+### Prova
+- Portão aberto (40 telas) · `--prova` OK · guard OK · `teste-ciclo.mjs` **14/14** em 390 e 1280 (KPIs certos, cancelada desconta, troca pra compensação, corte e período na mão, funil filtra, Emissão Diária) · regressão (Agenda, WA, Início) verde · 2 invariantes novos, 1 antigo ajustado ("A entregar" saiu a pedido).
+
 ## 18/09/2026 (29ª onda) — AGENDA-V2 + DELAY-SINC-V1: delay sincronizado com o funil, 3 KPIs, um fluxo por linha, seções dobráveis/organizáveis (v7.87)
 
 Prints dele da Agenda no iPad: *"essa linguagem de tarefas precisa ter sincronia — se eu boto o delay no Felipe (RCP), ele já atualiza em todos os pontos. Tira os cards A finalizar e Negócios sem atividade; deixa Atrasadas, Hoje e Em aberto. As linhas com a mesma lógica dos painéis. Tópicos clicáveis, expansíveis, organizáveis."*
