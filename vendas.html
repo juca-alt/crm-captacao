@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.94 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.95 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -9826,7 +9826,7 @@ function gcalRecolher(){ GCAL.recolhido=!GCAL.recolhido; gcalUiSalvar(); if(VIEW
   /* CORES-3DIAS-V1: bloco com a cor do Google */
   .gcal-ev.cor{background:var(--evc);border-color:var(--evc);color:var(--evk,#0f172a)} .gcal-ev.cor .h{color:var(--evk,#0f172a);opacity:.85} .gcal-ev.cor .s{color:var(--evk,#0f172a)}
   .gcal-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle;flex:none}
-  .gm-cores{display:flex;flex-direction:column;gap:6px} .gm-cor{display:flex;align-items:center;gap:8px} .gm-cor .gm-cor-nome{flex:1;min-width:0;min-height:44px} .gm-cor select{width:auto;max-width:40%;min-height:44px}
+  .gm-cores{display:flex;flex-direction:column;gap:8px} .gm-cor{display:flex;align-items:center;gap:8px} .gm-cor-mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px} .gm-cor input.gm-cor-nome:not([type=checkbox]){width:100%;min-height:46px;box-sizing:border-box} .gm-cor-ex{font-size:10.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .gm-cor select{width:auto;max-width:38%;min-height:44px}
   .gcal-wg.n3{--wcol:minmax(0,1fr)}
   @media (max-width:980px){ .gcal-wg{--wcol:120px;--eixo:46px} .gcal-wg-col .gcal-ev .s{font-size:12px} .gcal-wg-h .dn{width:34px;height:34px;line-height:34px} .gcal-wg-hl{font-size:10px} .gcal-wg-adlab{font-size:9px} }`; document.head.appendChild(s); })();
 let _gcalTC=null,_gcalPending=null;
@@ -9924,6 +9924,27 @@ function gcalCorNome(e){ return e&&e.colorId?String(gcalCorCfg(e.colorId).nome||
 function gcalCorInk(hex){ const m=/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex||'')); if(!m) return '#0f172a'; const L=(0.299*parseInt(m[1],16)+0.587*parseInt(m[2],16)+0.114*parseInt(m[3],16)); return L>150?'#0f172a':'#fff'; }
 function gcalCorStyle(e){ const h=gcalCorHex(e); return h?` style="--evc:${esc(h)};--evk:${gcalCorInk(h)}"`:''; }
 function gcalCorDot(e){ const h=gcalCorHex(e); const nm=gcalCorNome(e); if(!h&&!nm) return ''; return `<span class="gcal-dot" style="background:${esc(h||'#94a3b8')}" title="${esc(nm||'cor do Google')}"></span>${nm?`<span class="gcal-tag" style="border-color:${esc(h)}">${esc(nm)}</span>`:''}`; }
+/* CATEGORIAS-V1: as 12 categorias que ele usa no Google (print do seletor de cor), com a classe padrão.
+   O nome da cor não vem pela API, então o ⚙ mostra EXEMPLOS de evento por cor, oferece estes nomes na lista
+   e sugere sozinho pelos títulos ([OI/FF] → OI/FF, [RCP/PC] → RCP/PC, Gym → CORPORE SANO, Gael → GAEL + FAMÍLIA…). */
+const GCAL_CATS=[['RCP/FF','trabalho'],['RCP/PC','trabalho'],['GAEL + FAMÍLIA','pessoal'],['CORPORE SANO','pessoal'],['STRATEGIC','pessoal'],['TA/PIPE','trabalho'],['URGENTE',''],['LEMBRETE',''],['OI/FF','trabalho'],['P/C','trabalho'],['C2','trabalho'],['DELIVERY','trabalho']];
+function gcalCatClasse(nome){ const k=normKey(nome); const c=GCAL_CATS.find(x=>normKey(x[0])===k); return c?c[1]:''; }
+/* categoria que o TÍTULO de um evento sugere (prefixo canônico do CRM ou palavra) */
+function gcalCatDoTitulo(t){ t=String(t||''); const m=t.match(/\[(RCP\/FF|RCP\/PC|OI\/FF|PC|P\/C|C2|DELIVERY)\]/i); if(m){ const p=m[1].toUpperCase(); return p==='PC'?'P/C':p; }
+  const k=normKey(t); if(/\b(gym|academia|treino|movimento|along|corrida|natacao|pilates)\b/.test(k)) return 'CORPORE SANO';
+  if(/\b(gael|escola|colegio|camila|familia|pediatra|terapia)\b/.test(k)) return 'GAEL + FAMÍLIA';
+  if(/\b(ta|ligar|ligacao|sitplan|pipe)\b/.test(k)) return 'TA/PIPE'; if(/\burgente\b/.test(k)) return 'URGENTE'; if(/\blembrete\b/.test(k)) return 'LEMBRETE';
+  if(/\bdelivery\b|\bentrega\b/.test(k)) return 'DELIVERY'; return ''; }
+function gcalCorExemplos(id,max){ const vis={}, out=[]; (GCAL.eventos||[]).forEach(e=>{ if(String(e.colorId||'')!==String(id)) return; const t=String(e.summary||'').trim(); const k=normKey(t); if(!k||vis[k]) return; vis[k]=1; out.push(t); }); return out.slice(0,max||3); }
+/* sugere nome (e classe) pra cada cor pelos títulos dos eventos carregados — só preenche o que está vazio */
+function gcalCoresSugerir(){ const cfg=gcalCfg(); if(!cfg.cores) cfg.cores={}; const votos={};
+  (GCAL.eventos||[]).forEach(e=>{ const id=String(e.colorId||''); if(!id) return; const cat=gcalCatDoTitulo(e.summary); if(!cat) return; votos[id]=votos[id]||{}; votos[id][cat]=(votos[id][cat]||0)+1; });
+  let n=0; Object.keys(votos).forEach(id=>{ const c=cfg.cores[id]||(cfg.cores[id]={}); if(String(c.nome||'').trim()) return; const top=Object.entries(votos[id]).sort((a,b)=>b[1]-a[1])[0]; c.nome=top[0]; if(!c.classe) c.classe=gcalCatClasse(top[0]); n++; });
+  gcalCfgSalvar(); toast(n?n+' cor'+(n===1?'':'es')+' nomeada'+(n===1?'':'s')+' pelos títulos — confira e ajuste':'Nenhuma cor nova pra sugerir (já nomeadas ou sem pista no título)',!!n); gcalRegras(); return n; }
+/* CRM → Google: a reunião sai na cor que ELE deu à etapa (OI/FF, P/C, RCP/FF, RCP/PC, DELIVERY); sem nome configurado, Pavão como sempre */
+function gcalCorIdPorNome(nome){ const k=normKey(nome); if(!k) return ''; const cfg=gcalCfg(); const cores=cfg.cores||{}; const id=Object.keys(cores).find(i=>normKey(cores[i].nome||'')===k); return id||''; }
+function gcalCorIdReuniao(c){ if(typeof gcalClasseOn!=='function'||!gcalClasseOn()) return ''; const p=reuniaoPrefixoDe(c); if(!p) return ''; const nome=p.pfx==='[PC]'?'P/C':p.pfx.replace(/[\[\]]/g,''); return gcalCorIdPorNome(nome); }
+window.gcalCoresSugerir=gcalCoresSugerir;
 function gcalFeito(e){ return gcalPriv(e).crmFeito==='1'; }
 /* grava marcas no próprio evento (classe, feito) — sobrevive a renomear e vale em todo aparelho */
 async function gcalPatchPriv(e,obj){ const priv=Object.assign({},gcalPriv(e)); Object.keys(obj).forEach(k=>{ if(obj[k]==null) delete priv[k]; else priv[k]=String(obj[k]); }); priv.crmApp=priv.crmApp||GSYNC_APP;
@@ -9974,13 +9995,17 @@ function gcalRegras(){ gcalMaisFechar(); const cfg=gcalCfg(); const cals=(GCAL.c
     <div class="gm-sec">Agendas do Google</div><div class="gm-cals">${linhas}</div>
     ${GCAL.cals&&GCAL.cals.length?'':'<div class="gm-txt">Só a agenda principal apareceu. Toque em 🔄 na Agenda pra buscar as outras.</div>'}
     <div class="gm-sec">Cores do Google (as suas listas)</div><div class="gm-txt" style="margin-bottom:6px">Dê a cada cor o nome que ela tem no seu Google (RCP/FF, TA/PIPE, GAEL + FAMÍLIA…) e diga se é trabalho ou pessoal. A cor passa a classificar o compromisso antes do nome.</div>
-    <div class="gm-cores">${Object.keys(GCAL_CORES_PADRAO).map(id=>{ const cc=gcalCorCfg(id); const hex=gcalCorHexId(id); return `<div class="gm-cor"><span class="gm-cal-dot" style="background:${esc(hex)}"></span><input class="gm-cor-nome" placeholder="nome da cor ${id}" value="${esc(cc.nome||'')}" onchange="gcalRegraCor('${id}','nome',this.value)"><select onchange="gcalRegraCor('${id}','classe',this.value)"><option value="" ${!cc.classe?'selected':''}>auto</option><option value="trabalho" ${cc.classe==='trabalho'?'selected':''}>Trabalho</option><option value="pessoal" ${cc.classe==='pessoal'?'selected':''}>Pessoal</option></select></div>`; }).join('')}</div>
+    <div class="gm-grid" style="margin-bottom:8px"><button type="button" class="btn btn-s gm-btn" onclick="gcalCoresSugerir()" title="Lê os títulos dos eventos carregados ([OI/FF], [RCP/PC], Gym, Gael…) e nomeia as cores que ainda estão vazias">✨ Sugerir pelos títulos</button></div>
+    <datalist id="gm-cats">${GCAL_CATS.map(c=>`<option value="${esc(c[0])}">`).join('')}</datalist>
+    <div class="gm-cores">${Object.keys(GCAL_CORES_PADRAO).map(id=>{ const cc=gcalCorCfg(id); const hex=gcalCorHexId(id); const ex=gcalCorExemplos(id,3); return `<div class="gm-cor"><span class="gm-cal-dot" style="background:${esc(hex)}"></span><div class="gm-cor-mid"><input class="gm-cor-nome" list="gm-cats" placeholder="nome da cor ${id}" value="${esc(cc.nome||'')}" onchange="gcalRegraCor('${id}','nome',this.value);gcalRegrasPintarClasse('${id}')"><div class="gm-cor-ex">${ex.length?'ex.: '+esc(ex.join(' · ')):'<span style="opacity:.6">sem evento com esta cor nos próximos dias</span>'}</div></div><select id="gm-cor-cl-${id}" onchange="gcalRegraCor('${id}','classe',this.value)"><option value="" ${!cc.classe?'selected':''}>auto</option><option value="trabalho" ${cc.classe==='trabalho'?'selected':''}>Trabalho</option><option value="pessoal" ${cc.classe==='pessoal'?'selected':''}>Pessoal</option></select></div>`; }).join('')}</div>
     <div class="gm-sec">Palavras que marcam PESSOAL (só ocupado)</div><textarea id="gm-kw-pess" rows="2" placeholder="gym, escola, dentista…">${esc(cfg.pessoal.join(', '))}</textarea>
     <div class="gm-sec">Palavras que marcam TRABALHO</div><textarea id="gm-kw-trab" rows="2" placeholder="RCP, OI, ponto de apoio…">${esc(cfg.trabalho.join(', '))}</textarea>
     <label class="check-row" style="margin-top:10px"><input type="checkbox" id="gm-ocultar" ${cfg.ocultar?'checked':''}> Na lista, recolher os pessoais num bloco só ("🔒 ocupados")</label>
     <div class="gm-grid" style="margin-top:12px"><button type="button" class="btn btn-p gm-btn" onclick="gcalRegrasSalvar()">Salvar e atualizar</button><button type="button" class="btn btn-s gm-btn" onclick="gcalMaisFechar()">Cancelar</button></div></div></div>`); }
 function gcalRegraCal(calId,modo){ const cfg=gcalCfg(); cfg.cals[calId]=modo; }
-function gcalRegraCor(id,k,v){ const cfg=gcalCfg(); if(!cfg.cores||typeof cfg.cores!=='object') cfg.cores={}; const c=cfg.cores[String(id)]||(cfg.cores[String(id)]={}); if(k==='nome') c.nome=String(v||'').trim(); else c.classe=(v==='trabalho'||v==='pessoal')?v:''; }
+function gcalRegraCor(id,k,v){ const cfg=gcalCfg(); if(!cfg.cores||typeof cfg.cores!=='object') cfg.cores={}; const c=cfg.cores[String(id)]||(cfg.cores[String(id)]={}); if(k==='nome'){ c.nome=String(v||'').trim(); if(!c.classe){ const cl=gcalCatClasse(c.nome); if(cl) c.classe=cl; } } else c.classe=(v==='trabalho'||v==='pessoal')?v:''; }   /* CATEGORIAS-V1: nome conhecido já traz a classe */
+function gcalRegrasPintarClasse(id){ const sel=document.getElementById('gm-cor-cl-'+id); if(sel) sel.value=gcalCorCfg(id).classe||''; }
+window.gcalRegrasPintarClasse=gcalRegrasPintarClasse;
 window.gcalRegraCor=gcalRegraCor;
 function gcalRegrasSalvar(){ const cfg=gcalCfg(); const split=v=>String(v||'').split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean);
   cfg.pessoal=split((document.getElementById('gm-kw-pess')||{}).value); cfg.trabalho=split((document.getElementById('gm-kw-trab')||{}).value); cfg.ocultar=!!(document.getElementById('gm-ocultar')||{}).checked;
@@ -10430,7 +10455,7 @@ function gsyncCorpoEvento(c,t){
     extendedProperties:{private:{crmApp:GSYNC_APP,crmTarefa:String(t.id),crmContato:String(c.id)}} };
   if(t.hora){ const iv=tarReuniaoInterval(t); body.start={dateTime:iv.ini,timeZone:GCAL_TZ}; body.end={dateTime:iv.fim,timeZone:GCAL_TZ}; }
   else { const d=t.quando||hojeISO(); body.start={date:d}; body.end={date:isoAddDias(d,1)}; }   /* sem hora = dia inteiro */
-  if(t.tipo==='reuniao'&&reuniaoTituloAlvo(c)) body.colorId=REUNIAO_COLOR_ID;
+  if(t.tipo==='reuniao'&&reuniaoTituloAlvo(c)) body.colorId=(typeof gcalCorIdReuniao==='function'&&gcalCorIdReuniao(c))||REUNIAO_COLOR_ID;   /* CATEGORIAS-V1: cor da etapa que ele nomeou; senão Pavão */
   return body;
 }
 function gsyncSumiu(e){ return /404|410|not ?found|deleted|has been deleted|resource has been/i.test(String(e&&e.message||e)); }
@@ -19283,6 +19308,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const e=['pipe','pvg','pprud','pmfo'].every(g=>document.getElementById(g+'-toggle')&&document.getElementById(g+'-group')&&document.getElementById(g+'-group').querySelectorAll('.nav-btn[data-view]').length===3);
       const f=!!NOVO_SO_MEU.pipes && ['consol-vg','vg-funil','vg-bc-funil','consol-prud','prud-funil','prud-bc-funil','consol-mfo','mfo-funil','mfo-bc-funil'].every(v=>MODS.funis_extra.views.includes(v)&&document.querySelector(`.nav-btn[data-view="${v}"][data-novo="pipes"]`));
       return a&&b&&c&&d&&e&&f; })());
+    ok('CATEGORIAS-V1: título sugere a categoria; sugerir preenche só o vazio e traz a classe; nome conhecido traz a classe; reunião do CRM sai na cor da etapa nomeada (senão Pavão)', (()=>{ const _pl=JSON.stringify(PL), _e=GCAL.eventos, _p=PERFIL, _ps=plSalvar; try{ PERFIL=null; PL.gcalCfg={}; plSalvar=()=>{};   /* o self-check roda no boot: nada dele pode gravar (nem no cache local) */
+      const a=gcalCatDoTitulo('🟡 [OI/FF] Fulano')==='OI/FF' && gcalCatDoTitulo('🟢 [PC] Beltrano')==='P/C' && gcalCatDoTitulo('[RCP/PC] Sicrano')==='RCP/PC' && gcalCatDoTitulo('Movimento/Along/Gym')==='CORPORE SANO' && gcalCatDoTitulo('Gael Escola')==='GAEL + FAMÍLIA' && gcalCatDoTitulo('Ponto de Apoio')==='';
+      GCAL.eventos=[{id:'s1',summary:'🟡 [OI/FF] Fulano',colorId:'5'},{id:'s2',summary:'[OI/FF] Outro',colorId:'5'},{id:'s3',summary:'Gym — Sábado',colorId:'8'},{id:'s4',summary:'Ponto de Apoio',colorId:'8'}];
+      const _t=window.toast, _r=window.gcalRegras; window.toast=()=>{}; gcalRegras=()=>{}; const nSug=gcalCoresSugerir(); gcalRegras=_r; window.toast=_t;
+      const c5=gcalCorCfg('5'), c8=gcalCorCfg('8'); const b=nSug===2 && c5.nome==='OI/FF' && c5.classe==='trabalho' && c8.nome==='CORPORE SANO' && c8.classe==='pessoal' && gcalCorExemplos('8').join('|')==='Gym — Sábado|Ponto de Apoio';
+      gcalRegraCor('7','nome','GAEL + FAMÍLIA'); const c=gcalCorCfg('7').classe==='pessoal' && gcalCatClasse('URGENTE')==='';
+      const ctt={id:'zr',nome:'Zé Reunião',funil:'nn',etapa:'OI/FF'}; const d=gcalCorIdReuniao(ctt)==='5' && gcalCorIdReuniao({id:'zr2',nome:'X',funil:'nn',etapa:'C2'})==='' && String(gsyncCorpoEvento).includes('gcalCorIdReuniao(c))||REUNIAO_COLOR_ID');
+      return a&&b&&c&&d; } finally{ plSalvar=_ps; PL=plNorm(JSON.parse(_pl)); GCAL.eventos=_e; PERFIL=_p; } })());
     ok('CORES-3DIAS-V1: cor do colorId (API ou padrão) pinta o bloco; cor com classe decide antes do nome; 3 dias = 3 colunas com ◀ ▶; ⚙ tem as 11 cores', (()=>{ const _pl=JSON.stringify(PL), _p=PERFIL, _c=S.contatos, _k=GCAL.cores; try{ PERFIL=null; GCAL.cores=null; PL.gcalCfg={}; S.contatos=[{id:'gcc1',nome:'Zoraide Teste Cor',funil:'nn',etapa:'C2',telefone:'81999990072',lp:S.activeUser,eventos:[],recs:[],interacoes:[]}]; negIndexLimpar();
       const a=gcalCorHexId('7')===GCAL_CORES_PADRAO['7'] && gcalCorHex({colorId:'11'})==='#dc2127' && gcalCorInk('#dc2127')==='#fff' && gcalCorInk('#fbd75b')==='#0f172a';
       gcalRegraCor('7','nome','GAEL + FAMÍLIA'); gcalRegraCor('7','classe','pessoal'); gcalRegraCor('5','nome','RCP/FF'); gcalRegraCor('5','classe','trabalho');

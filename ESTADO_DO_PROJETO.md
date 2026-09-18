@@ -2,6 +2,23 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (37ª onda) — CATEGORIAS-V1: as 12 categorias dele puxadas sozinhas; reunião do CRM na cor da etapa (v7.95)
+
+Prints do Google dele (Agenda em lista com as cores, menu de vistas, Semana de 7 no celular) e a palavra: *"te mandei as 10 categorias que eu uso; vai cair tudo de Minha agenda e Tarefas. Se ele puxar já de cada categoria fica mais fácil a associação."*
+
+### O que mudou
+- **`GCAL_CATS`** — as 12 categorias dele com classe padrão: RCP/FF · RCP/PC · TA/PIPE · OI/FF · P/C · C2 · DELIVERY = trabalho; GAEL + FAMÍLIA · CORPORE SANO · STRATEGIC = pessoal; URGENTE · LEMBRETE = auto.
+- **⚙ Cores do Google:** cada cor mostra **exemplos** de evento carregado com ela ("ex.: 🟡 [OI/FF] Fulano · [OI/FF] Beltrano"), o campo do nome tem a **lista das 12 categorias**, e **✨ Sugerir pelos títulos** nomeia as cores vazias lendo os títulos (prefixo canônico `[OI/FF]`/`[PC]`/`[RCP/PC]`/`[DELIVERY]`, ou palavra: gym/movimento → CORPORE SANO, gael/escola → GAEL + FAMÍLIA, ligar/TA → TA/PIPE…) por maioria de votos, trazendo a classe junto. Digitar um nome conhecido também traz a classe.
+- **CRM → Google na cor dele:** a reunião criada pelo CRM (`gsyncCorpoEvento`) sai com o `colorId` que ele nomeou pra etapa (`[OI/FF]` → OI/FF, `[PC]` → P/C, `[RCP/FF]`, `[RCP/PC]`, `[DELIVERY]`); sem nome configurado, segue Pavão (7) como sempre.
+
+### Gate
+- Dentro de `agenda-classe` (sem chave nova).
+
+### Prova
+- Portão aberto (47 telas) · guard OK · `teste-categorias.mjs` **12/12** em 390 e 1280 · regressão cores 8/8 e classe 20/20 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (36ª onda) — CORES-3DIAS-V1: as cores do Google (as "listas" dele) pintam e classificam; vista 3 dias (v7.94)
 
 Prints do Google Agenda dele: o seletor de cor com as 11 cores renomeadas (**RCP/FF · RCP/PC · GAEL + FAMÍLIA · CORPORE SANO · STRATEGIC · TA/PIPE · URGENTE · LEMBRETE · OI/FF · P/C · C2 · DELIVERY**), a lista de agendas (Minha agenda · Tarefas · Camila · DSC · Gael) e as vistas **Três dias** e **Mês** que ele usa no celular. As "listas" que ele citou são as **cores de evento** do Google.
