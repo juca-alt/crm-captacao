@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.90 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.91 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1105,6 +1105,28 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .pes-sug.on{display:block}
   .pes-sug .cmdk-row{padding:9px 10px;min-height:44px}
   .pes-sug .ck{font-size:11px;color:var(--muted);background:var(--fundo);border-radius:999px;padding:2px 8px;white-space:nowrap}
+  /* PLANO-V1: tabela no desktop, cards por mês no celular */
+  .pln-t{width:100%;border-collapse:collapse;font-size:13px}
+  .pln-t th{text-align:left;font-size:11px;color:var(--muted);padding:8px 6px;white-space:nowrap}
+  .pln-t td{padding:4px 6px;border-top:1px solid var(--linha);white-space:nowrap}
+  .pln-t tr.hoje td{background:var(--azul-claro,#eff6ff)}
+  .pln-t .pln-in{width:96px;min-height:34px;text-align:right}
+  .pln-mes{font-weight:700}
+  .pln-hj{font-size:10px;font-weight:700;color:var(--azul);background:var(--azul-claro,#eff6ff);border-radius:999px;padding:1px 6px;vertical-align:middle}
+  .pln-calc{color:var(--muted)}
+  .pln-real{font-size:12px}
+  .pln-pct{font-weight:700;font-size:11px;margin-left:4px}
+  .pln-mob{display:none}
+  .pln-card{background:var(--card);border:1px solid var(--linha);border-radius:12px;padding:0 12px;margin-bottom:8px}
+  .pln-card>summary{display:flex;align-items:center;gap:8px;min-height:48px;cursor:pointer;list-style:none;flex-wrap:wrap}
+  .pln-card>summary::-webkit-details-marker{display:none}
+  .pln-card .pln-res{font-size:12px;color:var(--muted);flex:1;text-align:right}
+  .pln-card.hoje{border-color:var(--azul)}
+  .pln-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px 0 8px}
+  .pln-grid label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+  .pln-grid input.pln-in:not([type=checkbox]){min-height:46px;box-sizing:border-box;width:100%;text-align:right}   /* ganha do min-height:42px genérico do celular */
+  .pln-calc-row{font-size:12px;color:var(--muted);padding:0 0 12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  @media(max-width:720px){ .pln-tab{display:none} .pln-mob{display:block} }
   .tb-so-mob{display:none}
   @media(max-width:980px){ .tb-busca{display:none} .tb-so-mob{display:inline-flex} }
   .cmdk-bd{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:90;display:flex;align-items:flex-start;justify-content:center;padding-top:10vh;backdrop-filter:blur(2px)}
@@ -3169,7 +3191,7 @@ function nnNegocioHtml(lista,fluxo,ns,rec){
       ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?`${fechMes.length} negócio(s) · ponderado ${brlCurto(paPonderado(fechMes))}`:'nenhuma previsão neste mês')}
       ${kpiLente('vencido','Fechamento vencido',atrasados.length||'0',atrasados.length?'previsão passou — renegociar':'nenhuma previsão atrasada',atrasados.length>0)}
       ${kpiLente('semativ','Sem próxima atividade',semAtiv.length||'0',semAtiv.length?'negócio parado não anda':'todo negócio tem tarefa',semAtiv.length>0)}
-      ${cicloCardsHtml(cicloEmitidas(cicloAtual(),null,cicloFiltroFunil(ns)),{num:true})}
+      ${cicloCardsHtml(cicloEmitidas(cicloAtual(),null,cicloFiltroFunil(ns)),{num:true,semPlano:true})}
     </div>`;
   const resto=aberto?`${cicloBarraHtml()}<div class="kpis kpis-funil" style="margin-bottom:8px">
       ${kpi('PA ponderado',brlCurto(pond),(pa?Math.round(pond/pa*100)+'% do total · ':'')+(FUNP.probFonte==='funil'&&_PROB_CAL&&_PROB_CAL.mapa?'pelo seu funil':'pela tabela por etapa'))}
@@ -4006,7 +4028,9 @@ function cicloFiltroFunil(ns){ const ks=new Set(); (S.contatos||[]).filter(c=>es
   return r=>{ try{ for(const k of pessoaChaves(r,['segurado','resp_pagamento'],[])) if(ks.has(k)) return true; }catch(_){} return false; }; }
 function cicloCardsHtml(agg,opts){ opts=opts||{}; const per=agg.per; const sub=`${agg.nEmit} apólice${agg.nEmit===1?'':'s'} · ${esc(per.rotulo)}`;
   const k=(l,v,s,t)=>`<div class="kpi cic-kpi" title="${esc(t||'')}"><div class="lbl">${l}</div><div class="num"${opts.num?' style="font-size:19px"':''}>${v}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div></div>`;
-  return k('PA emitido',agg.nEmit||agg.n?brlCurto(agg.pa):'—',sub,'PA sem IOF das emitidas no ciclo, líquido de cancelamento (mesma conta da Emissão Diária)')
+  /* PLANO-V1: com plano preenchido, o card diz quanto do plano do período já saiu */
+  const pl=(typeof plnOn==='function'&&plnOn()&&!opts.semPlano)?plnPeriodo(per.ini,per.fim):null; const plTxt=pl&&pl.pa>0?` · plano ${brlCurto(pl.pa)} ${plnPctHtml(agg.pa,pl.pa)}`:'';
+  return k('PA emitido',agg.nEmit||agg.n?brlCurto(agg.pa):'—',sub+plTxt,'PA sem IOF das emitidas no ciclo, líquido de cancelamento (mesma conta da Emissão Diária)'+(pl&&pl.pa>0?' · plano do período pelo Plano Prudential':''))
        + k('FYC emitido',agg.nEmit||agg.n?brlCurto(agg.fyc):'—',per.modo==='comp'?'ciclo de compensação':'ciclo do mês','AFYC projetado das emitidas no ciclo'); }
 function cicloBarraHtml(){ const per=cicloAtual(); const comp=CIC.modo==='comp';
   return `<div class="cic-bar"><span class="cic-lbl">Ciclo</span><span class="seg"><button class="${!comp?'on':''}" onclick="cicloSetModo('mes')">📅 Mensal</button><button class="${comp?'on':''}" onclick="cicloSetModo('comp')">💰 Compensação</button></span>
@@ -6245,8 +6269,11 @@ function mtRealizado(){
 }
 function mtMetas(){ if(!S.metas) S.metas={}; const u=S.activeUser; if(!S.metas[u]) S.metas[u]={sem:{},mes:{}}; if(!S.metas[u][MT_PER]) S.metas[u][MT_PER]={}; return S.metas[u][MT_PER]; }
 function setMeta(k,v){ mtMetas()[k]=Math.max(0,parseInt(v||'0',10)||0); salvar(); render(); }
+/* PLANO-V1: sem meta digitada, a meta de emissão do mês/trimestre vem do Plano Prudential */
+function mtMetaPlano(key){ if(typeof plnOn!=='function'||!plnOn()||MT_PER==='sem') return 0; const ano=mfAno(), m=+atHojeISO().slice(5,7); const meses=MT_PER==='tri'?[1,2,3].map(i=>Math.floor((m-1)/3)*3+i):[m];
+  let n=0,pa=0; meses.forEach(x=>{ const p=plnMes(ano,String(x).padStart(2,'0')); n+=p.n; pa+=p.pa; }); return key==='emit'?n:key==='pa'?Math.round(pa):0; }
 function anelHtml(key,lbl,real,cor,fmt){
-  const meta=mtMetas()[key]||0; const pct=meta>0?Math.min(1,real/meta):0; const C=2*Math.PI*30;
+  const digitada=mtMetas()[key]||0, doPlano=digitada?0:mtMetaPlano(key); const meta=digitada||doPlano; const pct=meta>0?Math.min(1,real/meta):0; const C=2*Math.PI*30;
   const cheio=meta>0&&real>=meta; const disp=fmt?fmt(real):real; const fs=fmt?12:16;
   return `<div class="kpi" style="min-width:150px;padding:14px">
     <svg width="76" height="76" viewBox="0 0 76 76" style="display:block;margin:0 auto">
@@ -6255,7 +6282,7 @@ function anelHtml(key,lbl,real,cor,fmt){
       <text x="38" y="43" text-anchor="middle" font-size="${fs}" font-weight="800" fill="var(--ink)">${disp}</text>
     </svg>
     <div class="lbl" style="margin-top:6px">${lbl}${cheio?' ✅':''}</div>
-    <div class="meta-in">meta: <input type="number" min="0" value="${meta||''}" placeholder="—" onchange="setMeta('${key}',this.value)"> ${meta>0?Math.round(pct*100)+'%':''}</div>
+    <div class="meta-in">meta: <input type="number" min="0" value="${digitada||''}" placeholder="${doPlano?edN(doPlano):'—'}" title="${doPlano?'Vem do Plano Prudential — digite pra sobrescrever':''}" onchange="setMeta('${key}',this.value)"> ${meta>0?Math.round(pct*100)+'%':''}${doPlano?' <span class="pln-hj" title="meta do Plano Prudential">plano</span>':''}</div>
   </div>`;
 }
 function viewMetas(){
@@ -8961,7 +8988,8 @@ function edDados(mes,d1,d2){
   /* LPs cadastrados sem emissão no mês entram com zero (o plano deles conta no total) */
   ((typeof PL!=='undefined'&&PL&&PL.lps)||[]).forEach(l=>{ if(!porLp[l.id]) lps.push({id:l.id,nome:l.nome,n:0,pa:0,cts:[],plano:+(edPlano()[l.id+'|'+mes]||0),paMedio:0,cycle:null}); });
   const lpsComEmissao=lps.filter(l=>l.n>0).length;
-  const plano=lps.reduce((s,l)=>s+l.plano,0);
+  const planoLps=lps.reduce((s,l)=>s+l.plano,0);
+  const plano=planoLps||((typeof plnOn==='function'&&plnOn())?Math.round(plnMes(+mes.slice(0,4),mes.slice(5,7)).pa):0);   /* PLANO-V1: sem plano por LP, vale o do Plano Prudential */
   /* estoque = pendentes ativas hoje (não depende do mês) */
   const pend=emVis().filter(emAtivo); const hoje=atHojeISO();
   const estoquePA=pend.reduce((s,r)=>s+(r.pa_sem_iof||0),0), estoqueN=pend.length;
@@ -9060,6 +9088,80 @@ function viewEmissaoDiaria(){
 window.edSetMes=edSetMes; window.edSetDias=edSetDias; window.edSetPlano=edSetPlano; window.viewEmissaoDiaria=viewEmissaoDiaria;
 
 
+/* ═══ PLANO-V1 (18/09/2026) — PLANO PRUDENTIAL (Planejamento Financeiro da franquia) ═══════════
+   Print dele (painel "Planejamento Financeiro 2026" da Prudential | franquia): uma tabela por mês —
+   Apólices Emitidas · PA Total · PA Médio · CS Total · CS Médio · Faturamento (Comissão Bruta).
+   "Coloca lá as informações — o que vai fazer de apólice, o que está pensando pra aquele período —
+   e isso distribui nos desdobramentos das nossas metas, dos acompanhamentos, dos cards."
+   Você digita 4 números por mês (apólices, PA médio, CS médio, comissão); PA total e CS total saem
+   sozinhos. Mora no PL (placed_estado, um documento por dono — já sincroniza entre aparelhos).
+   Quem lê o plano: cards do ciclo (Consolidada, funis, Emissão Diária), Metas (meta padrão do mês),
+   Resumo MF (plano do ano no gauge + linha do plano no gráfico) e o plano × real da Emissão Diária. */
+const PLN={ano:null};
+const PLN_MESES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const PLN_CAMPOS=[['n','Apólices','un'],['pam','PA médio','R$'],['csm','CS médio','R$'],['com','Comissão bruta','R$']];
+function plnOn(){ return novoOn('plano'); }
+function plnAno(){ return PLN.ano||mfAno(); }
+function plnRaiz(){ if(typeof PL==='undefined'||!PL) return {}; if(!PL.plano||typeof PL.plano!=='object') PL.plano={}; return PL.plano; }
+function plnLer(ano){ const r=plnRaiz(); if(!r[ano]||typeof r[ano]!=='object') r[ano]={}; return r[ano]; }
+function plnMes(ano,mm){ const r=plnLer(ano)[mm]||{}; const n=+r.n||0, pam=+r.pam||0, csm=+r.csm||0, com=+r.com||0; return {n,pam,csm,com,pa:n*pam,cs:n*csm}; }
+function plnTemAlgo(ano){ return Object.values(plnLer(ano)).some(r=>r&&(+r.n||+r.pam||+r.csm||+r.com)); }
+function plnTotal(ano){ ano=ano||plnAno(); const t={n:0,pa:0,cs:0,com:0}; for(let i=1;i<=12;i++){ const m=plnMes(ano,String(i).padStart(2,'0')); t.n+=m.n; t.pa+=m.pa; t.cs+=m.cs; t.com+=m.com; } t.pam=t.n?t.pa/t.n:0; t.csm=t.n?t.cs/t.n:0; return t; }
+/* plano de um período qualquer (ciclo mensal ou de compensação): cada dia leva 1/dias-do-mês do plano do mês */
+function plnPeriodo(ini,fim){ const t={n:0,pa:0,cs:0,com:0}; if(!ini||!fim||ini>fim) return t;
+  let d=new Date(ini+'T12:00:00'); const F=new Date(fim+'T12:00:00'); let guarda=0;
+  while(d<=F&&guarda++<800){ const y=d.getFullYear(), mm=String(d.getMonth()+1).padStart(2,'0'); const dias=new Date(y,d.getMonth()+1,0).getDate(); const m=plnMes(y,mm);
+    t.n+=m.n/dias; t.pa+=m.pa/dias; t.cs+=m.cs/dias; t.com+=m.com/dias; d.setDate(d.getDate()+1); }
+  return t; }
+function plnSet(ano,mm,k,v){ const r=plnLer(ano); r[mm]=r[mm]||{}; const num=Math.max(0,Math.round(atBrNum(v)||+v||0)); r[mm][k]=num; if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); if(VIEW==='plano') viewPlano(); }
+/* repete os números de um mês nos meses seguintes do ano (o plano da franquia costuma ser igual mês a mês) */
+function plnReplicar(ano,mm){ const r=plnLer(ano); const de=r[mm]||{}; for(let i=+mm+1;i<=12;i++){ r[String(i).padStart(2,'0')]=Object.assign({},de); } if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); toast('Plano de '+PLN_MESES[+mm-1]+' repetido até dezembro',true); viewPlano(); }
+function plnCopiarAno(de,para){ const r=plnRaiz(); r[para]=JSON.parse(JSON.stringify(r[de]||{})); if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); toast('Plano de '+de+' copiado pra '+para,true); viewPlano(); }
+function plnSetAno(v){ PLN.ano=+v||null; viewPlano(); }
+function plnTodas(ab){ document.querySelectorAll('.pln-card').forEach(d=>{ d.open=!!ab; }); }
+/* realizado do mês, na mesma conta do Resumo MF (emitidas Ativas por mês de emissão) */
+function plnRealMes(ano,mm){ let n=0,pa=0; exVis().forEach(r=>{ if(r.status_apolice!=='Ativa') return; const e=String(r.emissao||''); if(e.slice(0,4)!==String(ano)||e.slice(5,7)!==mm) return; n++; pa+=r.pa_sem_iof||0; }); return {n,pa}; }
+function plnPct(real,plano){ return plano>0?Math.round(real/plano*100):null; }
+function plnPctHtml(real,plano){ const p=plnPct(real,plano); if(p==null) return ''; const cor=p>=100?'var(--verde)':p>=70?'var(--azul)':'var(--amarelo)'; return `<span class="pln-pct" style="color:${cor}" title="realizado ÷ plano">${p}%</span>`; }
+function plnFmt(v){ return v?edN(v):''; }
+function viewPlano(){
+  const ano=plnAno(), hoje=atHojeISO(), mesHoje=hoje.slice(0,7), T=plnTotal(ano), real={n:0,pa:0};
+  const anos=[ano-1,ano,ano+1]; if(!anos.includes(mfAno())) anos.push(mfAno()); anos.sort();
+  const inp=(mm,k,val,un)=>`<input class="pln-in" inputmode="numeric" value="${esc(plnFmt(val))}" placeholder="${un==='R$'?'R$':'—'}" onchange="plnSet(${ano},'${mm}','${k}',this.value)" aria-label="${esc(k)} de ${PLN_MESES[+mm-1]}">`;
+  const linhas=[], cards=[];
+  for(let i=1;i<=12;i++){ const mm=String(i).padStart(2,'0'), m=plnMes(ano,mm), r=plnRealMes(ano,mm), ehHoje=(ano+'-'+mm)===mesHoje, passou=(ano+'-'+mm)<mesHoje; real.n+=r.n; real.pa+=r.pa;
+    const realTxt=(passou||ehHoje)&&(r.n||m.n)?`${edN(r.n)} · ${brlCurto(r.pa)} ${plnPctHtml(r.pa,m.pa)}`:'<span style="color:#cbd5e1">—</span>';
+    linhas.push(`<tr class="${ehHoje?'hoje':''}"><td class="pln-mes">${PLN_MESES[i-1]}${ehHoje?' <span class="pln-hj">hoje</span>':''}</td>
+      <td>${inp(mm,'n',m.n,'un')}</td><td>${inp(mm,'pam',m.pam,'R$')}</td><td class="pln-calc">${m.pa?brlCurto(m.pa):'—'}</td>
+      <td>${inp(mm,'csm',m.csm,'R$')}</td><td class="pln-calc">${m.cs?brlCurto(m.cs):'—'}</td><td>${inp(mm,'com',m.com,'R$')}</td>
+      <td class="pln-real">${realTxt}</td><td><button class="btn btn-ghost btn-mini" title="Repetir este mês nos seguintes" onclick="plnReplicar(${ano},'${mm}')">⤓</button></td></tr>`);
+    cards.push(`<details class="pln-card${ehHoje?' hoje':''}"><summary><b>${PLN_MESES[i-1]}</b>${ehHoje?' <span class="pln-hj">hoje</span>':''}<span class="pln-res">${m.n?edN(m.n)+' apól. · PA '+brlCurto(m.pa):'sem plano'}${(passou||ehHoje)&&r.n?' · real '+brlCurto(r.pa)+' '+plnPctHtml(r.pa,m.pa):''}</span></summary>
+      <div class="pln-grid">${PLN_CAMPOS.map(([k,l,un])=>`<label>${l}${inp(mm,k,m[k],un)}</label>`).join('')}</div>
+      <div class="pln-calc-row">PA total <b>${m.pa?brlCurto(m.pa):'—'}</b> · CS total <b>${m.cs?brlCurto(m.cs):'—'}</b> <button class="btn btn-ghost btn-mini" onclick="plnReplicar(${ano},'${mm}')">⤓ repetir nos seguintes</button></div></details>`);
+  }
+  $('#main').innerHTML=`<h1 class="pg">🧭 Plano Prudential <span class="cs-pipe">${ano}</span></h1>
+    <div class="sub">O Planejamento Financeiro da franquia, do seu jeito: você digita <b>apólices, PA médio, CS médio e comissão bruta</b> de cada mês; PA total e CS total saem sozinhos. O plano vira a referência dos cards — Consolidada, funis, Emissão Diária, Metas e Resumo MF passam a mostrar <b>realizado × plano</b>.</div>
+    <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <select onchange="plnSetAno(this.value)" style="width:auto;min-height:44px">${anos.map(a=>`<option value="${a}" ${a===ano?'selected':''}>${a}</option>`).join('')}</select>
+      ${plnTemAlgo(ano-1)&&!plnTemAlgo(ano)?`<button class="btn btn-s btn-mini" onclick="plnCopiarAno(${ano-1},${ano})">Copiar plano de ${ano-1}</button>`:''}
+      <span style="flex:1"></span>
+      <span style="font-size:12px;color:var(--muted)">Salvo no seu perfil (sincroniza entre aparelhos quando logado)</span>
+    </div>
+    <div class="kpis" style="margin:10px 0 12px">
+      <div class="kpi"><div class="lbl">Apólices no ano</div><div class="num">${edN(T.n)}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">realizado ${edN(real.n)} ${plnPctHtml(real.n,T.n)}</div></div>
+      <div class="kpi"><div class="lbl">PA total</div><div class="num">${T.pa?brlCurto(T.pa):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">realizado ${brlCurto(real.pa)} ${plnPctHtml(real.pa,T.pa)}</div></div>
+      <div class="kpi"><div class="lbl">PA médio</div><div class="num">${T.pam?brlCurto(T.pam):'—'}</div></div>
+      <div class="kpi"><div class="lbl">CS total</div><div class="num">${T.cs?brlCurto(T.cs):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">CS médio ${T.csm?brlCurto(T.csm):'—'}</div></div>
+      <div class="kpi"><div class="lbl">Comissão bruta</div><div class="num">${T.com?brlCurto(T.com):'—'}</div></div>
+    </div>
+    <div class="card pln-tab" style="padding:6px 10px;overflow-x:auto"><table class="pln-t"><thead><tr><th>Mês</th><th>Apólices</th><th>PA médio</th><th>PA total</th><th>CS médio</th><th>CS total</th><th>Comissão bruta</th><th>Realizado (apól. · PA)</th><th></th></tr></thead>
+      <tbody>${linhas.join('')}</tbody>
+      <tfoot><tr><td><b>Total</b></td><td><b>${edN(T.n)}</b></td><td><b>${T.pam?brlCurto(T.pam):'—'}</b></td><td><b>${T.pa?brlCurto(T.pa):'—'}</b></td><td><b>${T.csm?brlCurto(T.csm):'—'}</b></td><td><b>${T.cs?brlCurto(T.cs):'—'}</b></td><td><b>${T.com?brlCurto(T.com):'—'}</b></td><td><b>${edN(real.n)} · ${brlCurto(real.pa)}</b> ${plnPctHtml(real.pa,T.pa)}</td><td></td></tr></tfoot></table></div>
+    <div class="pln-mob"><div style="display:flex;gap:8px;margin:0 0 8px"><button class="btn btn-s btn-mini" onclick="plnTodas(true)">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="plnTodas(false)">⌃ recolher tudo</button><span style="flex:1"></span><span style="font-size:11px;color:var(--muted);align-self:center">toque no mês pra editar</span></div>${cards.join('')}</div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">Realizado = emitidas Ativas do app por mês de emissão (mesma conta do Resumo MF e da Emissão Diária). ⤓ repete o mês nos seguintes.</div>`;
+}
+window.plnSet=plnSet; window.plnTodas=plnTodas; window.plnReplicar=plnReplicar; window.plnCopiarAno=plnCopiarAno; window.plnSetAno=plnSetAno; window.viewPlano=viewPlano;
+
 /* ═══ RESUMO MF (04/09) — o "Resumo MF" do BI HUB-MFB, no Início ═════════════
    Pedido dele: o painel é visual e ajuda a acompanhar os indicadores; as
    lacunas de informação vão sendo trazidas. Fonte: emitidas (EX) por ano de
@@ -9069,7 +9171,8 @@ const MF={tab:'pa'};
 const MF_TABS=[['n','Apólices emitidas'],['pa','PA total'],['pam','PA médio'],['afyc','NAFYC total'],['afycm','NAFYC médio'],['prodpa','Prod. de PA'],['prod','Produtividade']];
 const MF_LACUNAS=[['CS Emit.','capital segurado'],['ISF Geral',''],['CS Médio',''],['LP Mês STA',''],['Captação',''],['Resilição',''],['Early Lapse',''],['PAV/PANCEC','']];
 function mfAno(){ return +atHojeISO().slice(0,4); }
-function mfPlanoAno(ano){ if(typeof PL==='undefined'||!PL) return 0; if(!PL.edPlanoAno||typeof PL.edPlanoAno!=='object') PL.edPlanoAno={}; return +(PL.edPlanoAno[ano]||0); }
+function mfPlanoAno(ano){ if(typeof PL==='undefined'||!PL) return 0; if(!PL.edPlanoAno||typeof PL.edPlanoAno!=='object') PL.edPlanoAno={}; const d=+(PL.edPlanoAno[ano]||0); if(d) return d;
+  return (typeof plnOn==='function'&&plnOn())?Math.round(plnTotal(ano).pa):0; }   /* PLANO-V1: sem plano digitado no gauge, vale a soma do Plano Prudential */
 function mfSetPlanoAno(v){ const ano=mfAno(); if(typeof PL==='undefined'||!PL) return; if(!PL.edPlanoAno) PL.edPlanoAno={}; PL.edPlanoAno[ano]=Math.max(0,Math.round(atBrNum(v)||+v||0)); if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); render(); }
 function mfSetTab(t){ MF.tab=t; render(); }
 function mfPlacedAtual(){ try{ if(typeof PL==='undefined'||!PL||!PL.lps.length||!Object.keys(PL.meses||{}).length) return null; const J=plJanela(PL.cfg.leitura||PL_HOJE); const c=plAgrega(J.ms); return plPct(c.e,c.a); }catch(e){ return null; } }
@@ -9090,18 +9193,21 @@ function mfDados(ano){
 function mfFmt(tab,v){ return tab==='n'||tab==='prod'?edN(v,tab==='prod'?1:0):brlCurto(v); }
 function mfGraficoHTML(ano,tab){
   const A=mfSerie(ano,tab), B=mfSerie(ano-1,tab); const W=640,H=170,px=34,py=18;
-  const max=Math.max(1,...A,...B); const X=i=>px+i*((W-2*px)/11), Y=v=>H-py-(v/max)*(H-2*py-10);
+  /* PLANO-V1: linha tracejada do plano (apólices, PA total ou PA médio) */
+  const P=(typeof plnOn==='function'&&plnOn()&&(tab==='n'||tab==='pa'||tab==='pam')&&plnTemAlgo(ano))?Array.from({length:12},(_,i)=>{ const m=plnMes(ano,String(i+1).padStart(2,'0')); return tab==='n'?m.n:tab==='pa'?m.pa:m.pam; }):null;
+  const max=Math.max(1,...A,...B,...(P||[])); const X=i=>px+i*((W-2*px)/11), Y=v=>H-py-(v/max)*(H-2*py-10);
   const path=(S)=>S.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)).join(' ');
   const meses=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   const lab=(S,dy,cor)=>S.map((v,i)=>v?`<text x="${X(i)}" y="${Y(v)+dy}" font-size="9" text-anchor="middle" fill="${cor}">${esc(mfFmt(tab,v).replace('R$ ',''))}</text>`:'').join('');
   return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
     <line x1="${px}" x2="${W-px}" y1="${H-py}" y2="${H-py}" stroke="#cbd5e1"></line>
     <path d="${path(B)}" fill="none" stroke="#93c5fd" stroke-width="2"></path>${B.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="3" fill="#93c5fd"></circle>`).join('')}
+    ${P?`<path d="${path(P)}" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 3"></path>`:''}
     <path d="${path(A)}" fill="none" stroke="#1d4ed8" stroke-width="2.5"></path>${A.map((v,i)=>`<circle cx="${X(i)}" cy="${Y(v)}" r="3.5" fill="#1d4ed8"></circle>`).join('')}
     ${lab(A,-7,'#1e3a8a')}
     ${meses.map((m,i)=>`<text x="${X(i)}" y="${H-4}" font-size="9" text-anchor="middle" fill="var(--muted)">${m}</text>`).join('')}
   </svg>
-  <div style="display:flex;gap:14px;font-size:11px;color:var(--muted)"><span><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:#1d4ed8"></span> Realizado ${ano}</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:#93c5fd"></span> Realizado ${ano-1}</span></div>`;
+  <div style="display:flex;gap:14px;font-size:11px;color:var(--muted)"><span><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:#1d4ed8"></span> Realizado ${ano}</span><span><span style="display:inline-block;width:10px;height:10px;border-radius:5px;background:#93c5fd"></span> Realizado ${ano-1}</span>${P?`<span><span style="display:inline-block;width:10px;height:3px;border-top:2px dashed #f59e0b;vertical-align:middle"></span> Plano ${ano}</span>`:''}</div>`;
 }
 function mfGaugeHTML(real,plano){
   const pct=plano>0?Math.min(1,real/plano):0; const R=54, C=Math.PI*R; const cor=pct>=1?'#0ca30c':pct>=.7?'#1d4ed8':'#f0a500';
@@ -12833,7 +12939,8 @@ const HUB_SECOES=[
     {view:'beneficios',        ic:'🩹', titulo:'Benefícios (sinistro)', desc:'Acompanhamento de sinistro/benefício, do aviso ao pagamento.', mod:'beneficios', cnt:()=>(BF.itens||[]).filter(escLinhaOk).filter(bfAtivo).length}
   ]},
   {titulo:'Visão', itens:[
-    {view:'consolidado', ic:'🔭', titulo:'Visão Consolidada', desc:'Os funis que você escolher numa régua só — onde o negócio está, sem operar.'}
+    {view:'consolidado', ic:'🔭', titulo:'Visão Consolidada', desc:'Os funis que você escolher numa régua só — onde o negócio está, sem operar.'},
+    {view:'plano',       ic:'🧭', titulo:'Plano Prudential',  desc:'O Planejamento Financeiro da franquia por mês: apólices, PA médio, CS médio e comissão. Vira a referência de realizado × plano nos cards.', novo:'plano'}
   ]},
   {titulo:'Prospecção', itens:[
     {view:'mapa',    ic:'🗺️', titulo:'Mapa de locais',      desc:'Hospitais, clínicas, empresas e casas de leads e clientes — quem está em cada lugar.'},
@@ -12899,7 +13006,7 @@ function hubSecoesHtml(secoes,filtro,tagPadrao,prefixo){
       <div class="hub-grid">${it.map(i=>hubCardHtml(i,tagPadrao)).join('')}</div></details>`; }).join('');
 }
 function viewModulos(){
-  const secs=hubSecoesHtml(HUB_SECOES,i=>!i.mod||modOn(i.mod),'● módulo','mod');
+  const secs=hubSecoesHtml(HUB_SECOES,i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)),'● módulo','mod');   /* PLANO-V1: card com `novo` só aparece pra quem a chave libera */
   $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card.</div>${hubBotoesHtml()}${secs}`;
 }
 
@@ -14667,6 +14774,7 @@ const NOVO_SO_MEU={
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
   'pes-sugere':   {o:'Campo de pessoa (Recomendante na ficha, no Novo contato e no Estoque) autocompleta com quem já está na base — funil, carteira e estoque — e grava a grafia registrada', desde:'2026-09-18'},
+  'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return MODS[k]? modOn(k) : true;   /* não listado = liberado; se virou módulo em MODS, obedece ao mapa do usuário (pessoa a pessoa) */
@@ -16751,7 +16859,7 @@ const TITULO_VIEW={inicio:'Início',consolidado:'Visão Consolidada',modulos:'M�
   'bn-estoque':'Estoque de Nomes','bn-ta':'Painel TA','bn-wa':'Painel WA',mapa:'Mapa de locais','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo · Novos Negócios','prud-funil':'Prud. Demais · Novos Negócios','mfo-funil':'MFO · Novos Negócios',
-  'consol-vg':'Consolidada · Vida em Grupo','consol-prud':'Consolidada · Prud. Demais','consol-mfo':'Consolidada · MFO','vg-bc-funil':'Vida em Grupo · Negócios na Base','prud-bc-funil':'Prud. Demais · Negócios na Base','mfo-bc-funil':'MFO · Negócios na Base','lp-atrasos':'Lista de Atraso',
+  plano:'Plano Prudential','consol-vg':'Consolidada · Vida em Grupo','consol-prud':'Consolidada · Prud. Demais','consol-mfo':'Consolidada · MFO','vg-bc-funil':'Vida em Grupo · Negócios na Base','prud-bc-funil':'Prud. Demais · Negócios na Base','mfo-bc-funil':'MFO · Negócios na Base','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
   revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice', 'pc-simulador':'Melhor dia de vencimento'};
@@ -16858,6 +16966,7 @@ function render(){
   if(VIEW==='inicio') viewInicio();
   else if(VIEW==='sitplan') viewSitplan();
   else if(VIEW==='metas') viewMetas();
+  else if(VIEW==='plano') viewPlano();
   else if(VIEW==='config-funil'){ if(logado()&&!souAdm()){ $('#main').innerHTML='<h1 class="pg">Funil & Etapas</h1><div class="sub">Configuração gerencial da unidade — só o administrador altera. As etapas e os status que você vê nos funis vêm daqui.</div>'; } else viewFunilCfg(); }   /* CFG-ADMIN-V1 */
   else if(VIEW==='cart-visao') viewCartVisao();
   else if(VIEW==='cart-clientes') viewCartClientes();
@@ -18934,6 +19043,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const e=['pipe','pvg','pprud','pmfo'].every(g=>document.getElementById(g+'-toggle')&&document.getElementById(g+'-group')&&document.getElementById(g+'-group').querySelectorAll('.nav-btn[data-view]').length===3);
       const f=!!NOVO_SO_MEU.pipes && ['consol-vg','vg-funil','vg-bc-funil','consol-prud','prud-funil','prud-bc-funil','consol-mfo','mfo-funil','mfo-bc-funil'].every(v=>MODS.funis_extra.views.includes(v)&&document.querySelector(`.nav-btn[data-view="${v}"][data-novo="pipes"]`));
       return a&&b&&c&&d&&e&&f; })());
+    ok('PLANO-V1: mês = n×PA médio; total do ano; período prorrateado por dia; replicar; Metas/MF/Emissão Diária leem o plano; card no hub gateado', (()=>{ const _pl=JSON.stringify(PL), _p=PERFIL; try{ PERFIL=null;
+      PL.plano={}; PL.edPlanoAno={}; const ano=mfAno(); plnLer(ano)['03']={n:12,pam:5000,csm:500000,com:1600};
+      const m=plnMes(ano,'03'); const a=m.pa===60000&&m.cs===6000000&&m.com===1600;
+      const r=plnLer(ano); for(let i=4;i<=12;i++) r[String(i).padStart(2,'0')]=Object.assign({},r['03']); const T=plnTotal(ano); const b=T.n===120&&T.pa===600000&&T.pam===5000;
+      const pp=plnPeriodo(ano+'-03-01',ano+'-03-31'); const c=Math.abs(pp.pa-60000)<1 && Math.abs(plnPeriodo(ano+'-02-21',ano+'-03-20').pa-60000*20/31)<1;
+      const d=mfPlanoAno(ano)===600000 && (()=>{ const _m=MT_PER; try{ MT_PER='mes'; const mm=+atHojeISO().slice(5,7); return mtMetaPlano('emit')===(mm>=3?12:0); } finally{ MT_PER=_m; } })();
+      const e=VIEWS_CONHECIDAS.includes('plano') && HUB_VIEWS.includes('plano') && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='plano'&&i.novo==='plano')) && !!NOVO_SO_MEU.plano && typeof viewPlano==='function';
+      return a&&b&&c&&d&&e; } finally{ PL=plNorm(JSON.parse(_pl)); PERFIL=_p; } })());
     ok('PESSOA-SUGERE-V1: candidatos de funil+carteira+estoque sem repetir, "começa com" primeiro, canônico corrige caixa/acento, campos da ficha/novo contato/estoque penduram o widget', (()=>{ const _c=S.contatos,_b=BN.contatos,_p=PERFIL; try{ PERFIL=null;
       S.contatos=[{id:'ps1',nome:'Fábio Barrão',funil:'nn',etapa:'C2',lp:S.activeUser,eventos:[],recs:[]},{id:'ps2',nome:'Fabiana Zeta',funil:'nn',etapa:'TA',lp:S.activeUser,eventos:[],recs:[]}];
       BN.contatos=[{id:'psb1',nome:'fabio barrao',estagio:'estoque',lp:S.activeUser,listas:[]},{id:'psb2',nome:'Fábio Alpha',estagio:'estoque',lp:S.activeUser,listas:[]},{id:'psb3',nome:'Fábio Fora',estagio:'descartado',lp:S.activeUser,listas:[]}];
@@ -19849,7 +19966,7 @@ function abrirAjustesVisual(){
 /* FLUIDEZ-V1:VIEWS — espelho das views que o render() sabe pintar. Serve ao
    self-check: botão de menu apontando para view inexistente cai em silêncio
    na tela de Princípios, e ninguém percebe. */
-const VIEWS_CONHECIDAS=['inicio','sitplan','metas','cart-visao','cart-clientes','cart-oportunidades',
+const VIEWS_CONHECIDAS=['inicio','sitplan','metas','plano','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado'];
 /* PAINEL-TA-NATIVO-V1: vendas.html#view=bn-ta&q=Nome abre direto a tela (é o que o

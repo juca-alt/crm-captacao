@@ -2,6 +2,27 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (33ª onda) — PLANO-V1: Plano Prudential (Planejamento Financeiro por mês) distribuído nos cards (v7.91)
+
+Print do painel "Planejamento Financeiro 2026" da Prudential | franquia (Mês · Apólices Emitidas · PA Total · PA Médio · CS Total · CS Médio · Faturamento/Comissão Bruta): *"coloca as informações — o que vai fazer de apólice, o que está pensando pra aquele período — e isso distribui nos desdobramentos das nossas metas, dos acompanhamentos, dos cards. Botar nos outros módulos."*
+
+### O que mudou
+- **Módulos → Visão → 🧭 Plano Prudential** (`viewPlano`): 12 meses do ano escolhido; você digita **apólices, PA médio, CS médio e comissão bruta**; **PA total = apólices × PA médio** e **CS total = apólices × CS médio** saem sozinhos; coluna **Realizado (apól. · PA · %)** por mês (emitidas Ativas, mesma conta do Resumo MF); totais do ano em 5 KPIs; botão **⤓ repetir nos seguintes** (o plano da franquia costuma ser igual mês a mês); "Copiar plano do ano anterior" quando o ano está vazio. Desktop = tabela; celular = um card por mês, **fechados** (abrir/recolher tudo), campos ≥44px.
+- **Onde mora:** `PL.plano[ano][mm] = {n, pam, csm, com}` no documento `placed_estado` (um por dono, RLS) — já sincroniza entre iPad/iPhone/desktop quando logado; cache local `crmlp_placed_v1`.
+- **Distribuição (só lê, não obriga):**
+  - **Cards do ciclo** (Consolidada e Emissão Diária): PA emitido ganha "· plano R$ X · Y%" — plano do período **prorrateado por dia** (`plnPeriodo`), então vale igual pro ciclo mensal e pro de compensação. Nos funis não entra (o recorte é por funil; o plano é da operação).
+  - **Metas** (mês/trimestre): sem meta digitada, Apólices emitidas e PA emitida usam o plano como meta padrão (placeholder + selo "plano"); digitar sobrescreve.
+  - **Resumo MF:** gauge usa a soma do plano do ano quando não há "plano do ano" digitado ali; gráfico ganha a **linha tracejada do plano** (apólices, PA total, PA médio).
+  - **Emissão Diária:** sem plano por LP no mês, o plano × real usa o PA do Plano Prudential daquele mês.
+
+### Gate
+- Só na base dele: chave **`plano`** em `NOVO_SO_MEU` (card do hub com `novo:'plano'`; todas as leituras passam por `plnOn()`). Daniel: sem card, sem "plano" nos cards, Metas como antes.
+
+### Prova
+- Portão aberto (47 telas) · guard OK · `teste-plano.mjs` **16/16** em 390 e 1280 (tabela/cards, preencher pelo campo → totais e realizado 30%, repetir até dezembro, salvo no PL, Consolidada "plano R$ 60.000 · 30%", Metas com meta do plano, Resumo MF gauge + linha, Emissão Diária, Daniel) · regressão ciclo 14/14 · 1 invariante novo.
+
+---
+
 ## 18/09/2026 (32ª onda) — PESSOA-SUGERE-V1: campo de pessoa autocompleta com quem já está na base e grava a grafia registrada (v7.90)
 
 Print da ficha no iPad (Recomendante digitado "Fábio barrão", em minúscula): *"esses campos de pessoas já cadastradas têm que autocompletar — digito Fábio e aparecem os Fábios que já existem, pra não ficar cadastro bagunçado e cair no perfil certo do recomendante."*
