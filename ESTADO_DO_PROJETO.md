@@ -2,6 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 18/09/2026 (decisão dele, 20h20) — "FIC emitido" = FYC (First Year Commission) ✅
+Palavra dele: *"Fyc = first year comission"*. O card **FYC emitido** (CICLO-V1, v7.88) está certo: soma o **AFYC projetado** do relatório de emitidas no ciclo (Ativa soma, cancelada desconta). Pendência fechada. Sugestão em aberto: ligar a **Comissão bruta** do Plano Prudential ao FYC emitido (% do plano) — ele decide.
+
+---
+
 ## 18/09/2026 (38ª onda) — MES-V1: vista Mês da Agenda no estilo do Google (v7.96)
 
 Print do Mês do Google no celular dele: semanas em linha com o número da semana à esquerda, seg→dom, hoje em círculo azul, 2–3 chips coloridos por dia e "•••" quando tem mais. Pedido: *"B — antes, vista Mês e sobe tudo junto"* (deploy já autorizado).
