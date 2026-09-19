@@ -2,6 +2,27 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 19/09/2026 (42ª onda) — TA-MOB-V2: Painel TA/WA no celular do jeito que ele pediu — só na base dele (v8.00)
+
+Voz dele, em cima dos prints do Painel TA no iPhone: *"as próprias listas que já são feitas do SitPlan, pra clicar… esse Adicionar bota o campo de autocompletar — começa a escrever e vai buscar alguém que já tem no CRM… tira esse botão de CSV… esses pré-filtros (toda a base, delay, enfim) ficam muito compridos pra rolar até o final da tela — bota num tópico expandível ou num botão de filtro… e outros filtros pra ranquear pra quem ligar: renda, e se é cliente, quanto paga, PA, localização, profissão."*
+
+### O que mudou (chave `ta-mob`, só na base dele)
+- **Faixa do celular** = `🎯 Recortes` · `📅 Hoje (do SitPlan)` · as **listas nomeadas dele** · `＋ Nova lista`. As 10 listas inteligentes (Toda a base, Rec com fone, Recomendações, Delay, TA não atendeu, Ficou pra trás, Rec sem fone, Clientes, Rec de cliente, Descartados) saíram da faixa e viram a **folha 🎯 Recortes** (`taRecortesAbrir`), com contagem e alvo de 48px; escolher um recorte fecha a folha e o chip 🎯 passa a mostrar o nome dele, ativo. Desktop: lateral igual à de antes.
+- **＋ Adicionar a “lista”**: quando `pes-sugere` está ligado, o campo usa o **autocompletar do CRM** (funil + carteira + estoque) em vez do `datalist` do Safari (aquela lista preta de nome · telefone); **escolher já põe na lista** e limpa o campo (`bnTaAddPorNome(txt, silencioso)` — texto solto não reclama; o botão Adicionar continua reclamando).
+- **CSV** some no celular (`.ta-main .btn.ta-csv-mob{display:none}`; o `.btn` fixa `display`, por isso o peso). No desktop continua.
+- **Filtros de perfil**: `renda ≤` (`rmax`) e, pra quem é **cliente da carteira** (cruzamento por nome/telefone, `taCliDe`), **paga ≥ R$/mês** (`pmmin`, `cob.pm`) e **CS ≥** (`csmin`, `cob.cs`). Na folha do celular os campos ficaram em duas seções (`👤 Perfil de quem ligar` · `💎 Cliente da carteira`; `fxSheetRender` ganhou `secoes`); no desktop entraram no "Mais filtros". **PA e produto/plano por apólice não entraram**: a carga da carteira não traz produto, e o PA por cliente é o `cob.pm` × periodicidade — fica pra quando a carteira tiver o campo.
+- **▶ Foco nesta lista** já era alinhado com a lista selecionada + filtros (`taFocoFila = taFiltrados()` sem resultado hoje) — confirmado, nada a mudar.
+
+### Prova
+- `teste-ta-mob.mjs` **10/10** em 390 e 1280 (faixa com 4 chips, folha com 10 recortes e contagem, escolher recorte, seções da folha de filtros, "Paga ≥ 400" deixa só o cliente da carteira e "Renda ≤ 3000" deixa 4, Adicionar pelo autocompletar entra na lista, Daniel vê a faixa antiga e o CSV, desktop igual).
+- Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto (fonte<16 zerado) · 17 testes verdes.
+
+### Pra ele decidir
+- Liberar `ta-mob` pro Daniel/Victor depois de usar uns dias.
+- **Gravar reunião** (Granola × Gravador do iPhone × gravação no próprio CRM): opções com custo e fluxo estão no chat desta sessão; nada construído ainda.
+
+---
+
 ## 19/09/2026 (41ª onda) — TA-LISTAS-MOB-V1: a faixa de listas do Painel TA/WA no celular acha a lista ativa (v7.99)
 
 Print dele do Painel TA no iPhone (sem zoom): a faixa de listas parada com o primeiro chip cortado ("la a base 4773") e a lista em uso, **RCP Clientes**, fora da tela — no Chromium a 390px ela ficava em x=1567px, quatro telas à direita. Só o cabeçalho dizia em que lista ele estava.
