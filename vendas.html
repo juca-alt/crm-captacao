@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v7.98 · Vendas LP</title>
+<title>CRM SeguroComJucá · v7.99 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -509,8 +509,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .ta-meter{height:5px;border-radius:3px;background:var(--linha);overflow:hidden;margin-bottom:6px} .ta-meter i{display:block;height:100%;background:var(--azul)}
   @media(max-width:900px){
     .ta-wrap{grid-template-columns:1fr} .ta-side{display:none}
-    .ta-listas-mob{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}
-    .ta-listas-mob .ta-nav{width:auto;flex:0 0 auto;min-height:44px;border:1px solid var(--linha);background:var(--card);white-space:nowrap}
+    .ta-listas-mob{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}  /* TA-LISTAS-MOB-V1: para em borda de chip */
+    .ta-listas-mob .ta-nav{width:auto;flex:0 0 auto;min-height:44px;border:1px solid var(--linha);background:var(--card);white-space:nowrap;scroll-snap-align:start}
     .ta-listas-mob .ta-nav.on{background:var(--azul);color:#fff;border-color:var(--azul)} .ta-listas-mob .ta-nav.on .ct{color:#fff}
     .ta-tblwrap{display:none} .ta-cards{display:block} .ta-ib{width:44px;height:44px}
   }
@@ -16533,6 +16533,14 @@ function taRecsHtml(lista){ const map={}; lista.forEach(c=>{ const k=(c.recomend
       <h4>${esc(o.label)}</h4><div style="font-size:12px;color:var(--muted)">${o.total} indicado${o.total>1?'s':''} na base</div>
       <div class="ta-recmini"><div><b>${o.trab}</b>a trabalhar</div><div><b>${o.fone}</b>com fone</div><div><b>${pct}%</b>alcançável</div></div>
       <div class="ta-meter"><i style="width:${pct}%"></i></div><div style="font-size:11px;color:var(--muted);display:flex;justify-content:space-between"><span>toque para filtrar a lista</span><span>→</span></div></div>`; }).join('')}</div>`; }
+/* TA-LISTAS-MOB-V1 (19/09): no celular a faixa de listas do Painel TA/WA rola de lado. Print dele no
+   iPhone: a faixa parada com o primeiro chip cortado ("la a base") e a lista em uso (RCP Clientes) fora da
+   tela, lá na direita. Agora, ao renderizar, a lista ativa entra na tela (centrada quando cabe) e a rolagem
+   encosta em borda de chip (scroll-snap) — parado, nunca fica meio chip. No desktop a faixa nem existe
+   (display:none), a função não faz nada. */
+function taListasMobAjustar(){ requestAnimationFrame(()=>{ const st=document.querySelector('.ta-listas-mob'); if(!st||st.scrollWidth<=st.clientWidth+1) return;
+  const on=st.querySelector('.ta-nav.on'); if(!on) return; const r=on.getBoundingClientRect(), f=st.getBoundingClientRect();
+  if(r.left<f.left||r.right>f.right) st.scrollLeft+=Math.round((r.left-f.left)-Math.max(0,(f.width-r.width)/2)); }); }
 function viewBnTa(){
   fxReg('ta',FTA,'viewBnTa'); _taCli=null;
   taCanalSync(); const wa=taCanal()==='wa';   /* WA-PAINEL-V1: mesma tela, canal trocado */
@@ -16614,6 +16622,7 @@ function viewBnTa(){
       ${TAV.seg==='rec'? taRecsHtml(lista) : lista.length? `<div class="card ta-tblwrap"><table class="ta-tbl"><thead><tr><th></th>${fxTh('ta','nome','Nome')}${cols.map(taThHtml).join('')}${comRes?fxTh('ta','res',wa?'Zap de hoje':'Resultado de hoje'):''}<th></th></tr></thead><tbody>${lista.slice(0,400).map(linha).join('')}</tbody></table>${lista.length>400?`<div class="ta-sub" style="padding:8px">Mostrando 400 de ${lista.length} — afine os filtros.</div>`:''}</div><div class="ta-cards">${lista.slice(0,200).map(card).join('')}</div>`
         : `<div class="vazio" style="padding:36px 12px;text-align:center">${base.length?'Nenhuma pessoa com esses filtros.<br><small>Afrouxe um filtro ou troque de lista.</small>':smk?'Ninguém nesta lista ainda.':(BNTA.lista==='hoje'?'Lista de hoje vazia — puxe nomes pelo ⋯ de qualquer lista ou pela caixa acima.':'Lista vazia.')}</div>`}
     </section></div>`;
+  taListasMobAjustar();
 }
 let _taBuscaT=null; function taBuscaTimer(){ clearTimeout(_taBuscaT); _taBuscaT=setTimeout(()=>{ const el=document.querySelector('.ta-search input'); const pos=el?el.selectionStart:null; viewBnTa(); const el2=document.querySelector('.ta-search input'); if(el2){ el2.focus(); try{ el2.setSelectionRange(pos,pos); }catch(_){} } },250); }
 function bnTaAdd(id){ const c=bnPor(id); if(!c) return;
@@ -19439,6 +19448,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('REVISÃO-SEGURANÇA-V1: link de fora só entra num href se for http(s) — javascript:/data:/vazio viram "#"; Agenda (cartão ⋯ e linha) passa pelo urlSegura',
        urlSegura('javascript:alert(1)')==='#' && urlSegura('data:text/html,x')==='#' && urlSegura('')==='#' && urlSegura(null)==='#' && urlSegura(' https://calendar.google.com/calendar/event?eid=abc ')==='https://calendar.google.com/calendar/event?eid=abc' && urlSegura('HTTP://x.y/z')==='HTTP://x.y/z'
        && String(gcalMais).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.hangoutLink)') && !/href="\$\{esc\(e\.(htmlLink|hangoutLink)/.test(String(gcalMais)+String(gcalLinhaEv)));
+    ok('TA-LISTAS-MOB-V1: a faixa de listas do Painel TA/WA no celular traz a lista ativa pra tela ao renderizar e para em borda de chip (scroll-snap)',
+       typeof taListasMobAjustar==='function' && String(viewBnTa).includes('taListasMobAjustar()') && /\.ta-listas-mob\{[^}]*scroll-snap-type:x proximity/.test([...document.querySelectorAll('style')].map(x=>x.textContent).join('')) && /\.ta-listas-mob \.ta-nav\{[^}]*scroll-snap-align:start/.test([...document.querySelectorAll('style')].map(x=>x.textContent).join('')));
     ok('ZOOM-IOS-V1: no bloco do celular (max-width:980px) existe a regra que põe input/select/textarea em 16px com !important — sem ela o iOS dá zoom ao tocar num campo e a tela escorrega de lado',
        (()=>{ try{ for(const sh of document.styleSheets){ let rs; try{ rs=sh.cssRules; }catch(_){ continue; } for(const r of rs){ if(!(r instanceof CSSMediaRule)||!/max-width:\s*980px/.test(r.conditionText||r.media.mediaText)) continue;
                 for(const q of r.cssRules){ if(q.style&&/textarea/.test(q.selectorText||'')&&/select/.test(q.selectorText||'')&&q.style.getPropertyValue('font-size')==='16px'&&q.style.getPropertyPriority('font-size')==='important') return true; } } } }catch(_){ } return false; })());

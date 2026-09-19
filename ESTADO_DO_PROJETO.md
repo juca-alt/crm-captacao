@@ -2,6 +2,21 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 19/09/2026 (41ª onda) — TA-LISTAS-MOB-V1: a faixa de listas do Painel TA/WA no celular acha a lista ativa (v7.99)
+
+Print dele do Painel TA no iPhone (sem zoom): a faixa de listas parada com o primeiro chip cortado ("la a base 4773") e a lista em uso, **RCP Clientes**, fora da tela — no Chromium a 390px ela ficava em x=1567px, quatro telas à direita. Só o cabeçalho dizia em que lista ele estava.
+
+### O que mudou
+- `taListasMobAjustar()` (chamada no fim do `viewBnTa`, que também renderiza o WA): ao renderizar, se a faixa rola, a lista ativa entra na tela (centrada quando cabe). No desktop a faixa é `display:none` e a função não faz nada.
+- CSS da faixa: `scroll-snap-type:x proximity` + `scroll-snap-align:start` nos chips — a rolagem parada encosta em borda de chip, nunca no meio de um.
+- Invariante `TA-LISTAS-MOB-V1` no `lpSelfCheck`.
+
+### Prova
+- `teste-ta-listas.mjs` **6/6** em 390 e 1280 (abre no RCP Clientes com o chip dentro da faixa, rolou 1446px sozinha; tocar em "Toda a base" volta pro começo; WA idem; desktop sem faixa e sem estouro).
+- Rodadas completas A/B no mesmo sha: auditoria 0 · guard OK · portão aberto · 16 testes verdes.
+
+---
+
 ## 19/09/2026 (40ª onda) — ZOOM-IOS-V1: a tela parou de escorregar de lado no iPhone ao tocar num campo (v7.98)
 
 Cinco prints dele do Painel TA no iPhone, sem texto. Sequência lida dos prints: abriu a lista de nomes do campo "＋ Adicionar a “RCP Clientes”" (o `datalist` do Safari 17+), tocou no campo, o teclado subiu e a **tela inteira deu zoom de ~14% e escorregou pra esquerda**, cortada na borda (número do telefone, botão Renomear, chips) — e **ficou assim** depois de fechar o teclado.
