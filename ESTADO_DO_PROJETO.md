@@ -2,6 +2,34 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 19/09/2026 (39ª onda) — REVISÃO-SEGURANÇA-V1: geral de segurança, vazamento, integridade, botões e erros — duas rodadas limpas (v7.97)
+
+Pedido dele: *"Roda revisão de segurança, avaliação de vazamento de dados e de informações, integridade dos dados, os botões, conectores, erros, faz aquela geral com o time de engenharia e roda aí pelo menos até a gente ter duas rodadas limpas sem erros."*
+
+### O que foi varrido
+| Frente | Como | Resultado |
+|---|---|---|
+| **Segredos no repo** | grep de chaves/tokens em todos os arquivos versionados | só chaves **anon/publishable** (públicas por desenho); `SUPABASE_SERVICE_ROLE_KEY` só lida do ambiente na Edge Function `crm-mcp` ✅ |
+| **Banco (RLS)** | SQL no projeto `cjieobmdpqcupzdpckef`: tabelas sem RLS, policies abertas, views sem `security_invoker`, funções executáveis por `anon` | **0 tabelas sem RLS**; nenhuma policy aberta (a única "pública" é `lp_mcp_audit_ins`, INSERT com `dono = auth.jwt()->>'email'`, correta); `placed_estado`/`lp_perfis`/`lp_delegacoes`/`app_settings`/`solicitacoes`/`lp_interacoes`/`lp_niver_feito` todas por dono/admin; só `unaccent*` (extensão) executável por anon ✅ |
+| **PII em arquivo versionado** (repo público) | grep de nomes/apólices/telefones reais em `.html`, `.md`, `.ts` | **8 pontos corrigidos**: comentários viram iniciais (delay do F.; A. B. na agenda↔negócio; F. L. e S. no NIVER-V2; T./R. nas rotinas), fixtures viram nome inventado (Beltrano Sampaio, Fulana Costa, Fábio Zenório, Segurada Exemplo Cinco com apólice/celular de exemplo), tabela do NIVER-V2 no ESTADO com iniciais, e o **exemplo do prompt** da Edge Function `importar-relatorio-lp` (tinha nome, apólice e telefone reais de um cliente) trocado por FULANO DE TAL EXEMPLO ✅ |
+| **XSS / injeção** | `auditoria.mjs`: carrega o app com **dados maliciosos** (`<img onerror>` e `javascript:` em nome, recomendante, profissão, origem, notas, título/local/descrição/link do evento, nome de agenda, nome de cor, lead do estoque, solicitação, emitidas) e passa por **todas as 47 telas** + Agenda em 5 vistas + cartão ⋯ + ⚙ regras + folha do dia + gaveta do negócio + autocompletar + novo negócio + ficha do lead + painéis TA/WA + Plano + consolidada VG + Módulos, em **390 e 1280** | **1 vetor real**: `htmlLink` e `hangoutLink` do evento do Google entravam direto no `href` (um evento com link `javascript:` renderizava clicável no cartão ⋯, na linha da lista e na folha do dia). Corrigido com **`urlSegura()`**: só `http(s)://` vira link, o resto vira `#`. Nenhum HTML injetado escapou do `esc()` em nenhuma tela ✅ |
+| **Botões / conectores** | todo `onclick/onchange/oninput/…` renderizado tem que apontar pra função que existe (escopo global, incluindo `const` de topo) | 0 handler morto (os "achados" da 1ª rodada — `$` e `Solteiro(a)` — eram do verificador: `$` é `const` de topo e o rótulo estava dentro de aspas; verificador corrigido) ✅ |
+| **Erros de console / exceção** | `pageerror` + `console.error` em todas as telas | 0 (o que sobrou era ruído do sandbox: certificado do proxy no SDK externo e o service worker servido como `text/html` pelo servidorzinho local — sem rede real) ✅ |
+| **Outros HTML** (`index.html`, `revisao-protecao.html`, `carteira.html`) | mesmo grep de `href` dinâmico | `index.html` já tinha `safeHref` (http/mailto/tel); os demais montam link só de dígitos de telefone ou de constantes do Drive — sem achado (visão Captação não foi editada, regra de uma sessão por visão) ✅ |
+
+### Rodadas
+- **R1** (v7.96 no ar): 19 achados — 6 de XSS real (link `javascript:`), 13 falsos positivos do verificador + ruído de sandbox.
+- **R2 e R3** (v7.97, mesmo arquivo, sha igual): auditoria **0 achados** · guard OK · **portão aberto** (47 telas × 375/1024/1280 × cheia/vazia, lpSelfCheck 0) · **15 testes como usuário** todos verdes (252 asserções).
+
+### Invariante novo
+- `REVISÃO-SEGURANÇA-V1` no `lpSelfCheck`: `urlSegura` recusa `javascript:`/`data:`/vazio e aceita http(s); `gcalMais` e `gcalLinhaEv` passam `htmlLink`/`hangoutLink` por ele (o portão acusa se alguém voltar ao `esc(e.htmlLink)` cru).
+
+### Fica de nota (não é bug do app)
+- O histórico do git ainda guarda as menções antigas (nomes reais de antes da higienização de 15/09 e destas 8 trocas). Só sai com reescrita de histórico ou tornando o repo privado — decisão dele.
+- A Edge Function `importar-relatorio-lp` **implantada** ainda roda com o prompt antigo (o exemplo com dado real vive só dentro da função, não é público). Redeploy quando ele quiser — não muda comportamento.
+
+---
+
 ## 18/09/2026 (decisão dele, 20h20) — "FIC emitido" = FYC (First Year Commission) ✅
 Palavra dele: *"Fyc = first year comission"*. O card **FYC emitido** (CICLO-V1, v7.88) está certo: soma o **AFYC projetado** do relatório de emitidas no ciclo (Ativa soma, cancelada desconta). Pendência fechada. Sugestão em aberto: ligar a **Comissão bruta** do Plano Prudential ao FYC emitido (% do plano) — ele decide.
 
@@ -174,7 +202,7 @@ Prints dele (Consolidada, NN, BC, Emissão Diária): *"tira Parados e A entregar
 
 ## 18/09/2026 (29ª onda) — AGENDA-V2 + DELAY-SINC-V1: delay sincronizado com o funil, 3 KPIs, um fluxo por linha, seções dobráveis/organizáveis (v7.87)
 
-Prints dele da Agenda no iPad: *"essa linguagem de tarefas precisa ter sincronia — se eu boto o delay no Felipe (RCP), ele já atualiza em todos os pontos. Tira os cards A finalizar e Negócios sem atividade; deixa Atrasadas, Hoje e Em aberto. As linhas com a mesma lógica dos painéis. Tópicos clicáveis, expansíveis, organizáveis."*
+Prints dele da Agenda no iPad: *"essa linguagem de tarefas precisa ter sincronia — se eu boto o delay no F. (RCP), ele já atualiza em todos os pontos. Tira os cards A finalizar e Negócios sem atividade; deixa Atrasadas, Hoje e Em aberto. As linhas com a mesma lógica dos painéis. Tópicos clicáveis, expansíveis, organizáveis."*
 
 ### DELAY-SINC-V1 — o delay mora no negócio
 - `c.delay_ate` (data) + `negDelayMarcar(c, ate, motivo)`: marca a data, **põe o status "Delay …" da etapa** quando ele existe na configuração do funil (`Delay OI/FF`, `Delay P/C`, `Delay C2` hoje), grava na linha do tempo (`etstatus`). **Expira sozinho na data.**
@@ -506,16 +534,16 @@ O `onclick` de cada aniversariante saía com um `${...}` **literal** (escape a m
 
 ## 15/09/2026 (14ª onda) — NIVER-V2: aniversariantes de TODAS as bases (v7.69)
 
-Ele: *"foi aniversário do Felipe Leonardo ontem e do Sinval hoje, e nenhum dos dois apareceu. Esses dois têm apólice comigo E com o Daniel."* E o pedido junto: *"quero aniversariante GERAL, não só cliente — prospect e lead também, com filtro, porque dar parabéns é ponto de contato que ajuda a venda depois."*
+Ele: *"foi aniversário do F. L. ontem e do S. hoje, e nenhum dos dois apareceu. Esses dois têm apólice comigo E com o Daniel."* E o pedido junto: *"quero aniversariante GERAL, não só cliente — prospect e lead também, com filtro, porque dar parabéns é ponto de contato que ajuda a venda depois."*
 
 ### Três causas somadas (as duas primeiras ele viu; a terceira estava escondida)
 Conferido no banco — os dois existem, com a data certa:
 
 | Caso | Onde está | Por que sumiu |
 |---|---|---|
-| **Sinval** (hoje, 15/09) | carteira do **Daniel** | `cartVis()` corta pelo **escopo** da tela |
-| **Felipe Leonardo** (ontem, 14/09) | carteira do **Daniel** | mesmo corte **+** o card só olhava pra frente (ontem virava "faltam 364 dias") |
-| **Cinthia e Diego** (hoje, 15/09) | base **dele**, rótulo **`lp: Rebeca`** | `pxLpOk` corta pelo **rótulo** — 2 dos 3 do dia |
+| **S.** (hoje, 15/09) | carteira do **Daniel** | `cartVis()` corta pelo **escopo** da tela |
+| **F. L.** (ontem, 14/09) | carteira do **Daniel** | mesmo corte **+** o card só olhava pra frente (ontem virava "faltam 364 dias") |
+| **C. e D.** (hoje, 15/09) | base **dele**, rótulo **`lp: Rebeca`** | `pxLpOk` corta pelo **rótulo** — 2 dos 3 do dia |
 
 Medido com os 4 casos reais: **motor antigo devolvia 0 aniversariantes hoje; o novo devolve os 4**, cada um com a carteira de origem.
 
@@ -523,7 +551,7 @@ Medido com os 4 casos reais: **motor antigo devolvia 0 aniversariantes hoje; o n
 - Lê **todas as bases que ele tem direito de ver** (o RLS já manda — ele é delegado do Daniel), com **selo de qual carteira** e filtro por LP. Aniversário é exceção declarada ao escopo: é ponto de contato, não recorte de operação.
 - Inclui **quem passou há até 3 dias** ("foi ontem") — ainda dá pra ligar.
 - Junta **carteira + negócios do funil + leads do Estoque**, com filtro por tipo (🛡 Cliente · 🎯 Negócio · 📇 Lead).
-- **Mesma pessoa em duas bases = uma linha**, com os dois selos (o Sinval está na carteira do Daniel e como negócio na dele).
+- **Mesma pessoa em duas bases = uma linha**, com os dois selos (o S. está na carteira do Daniel e como negócio na dele).
 - **Data de nascimento virou campo editável na ficha da pessoa** — é isso que põe lead e negócio na lista.
 
 ### Estado do dado (sem maquiar)
