@@ -68,8 +68,9 @@ def imprimir(r):
             if t['erros']: det.append(f"{len(t['erros'])} exceção(ões): " + ' | '.join(t['erros'])[:240])
             if t['mortos']: det.append('campo morto: ' + ', '.join(t['mortos']))
             if t['estouro'] > 1: det.append(f"estouro {t['estouro']}px")
+            if t.get('fontes'): det.append(f"{t['fontes']} campo(s) com fonte <16px (zoom do iOS): " + ', '.join(t.get('fontesLista', [])[:8]))
             fi = t.get('ficha')
-            if fi and (fi['mortos'] or fi['estouro'] > 1): det.append(f"{fi['nome']}: mortos {fi['mortos']} estouro {fi['estouro']}px")
+            if fi and (fi['mortos'] or fi['estouro'] > 1 or fi.get('fontes')): det.append(f"{fi['nome']}: mortos {fi['mortos']} estouro {fi['estouro']}px fonte<16 {fi.get('fontes', 0)} {', '.join(fi.get('fontesLista', [])[:6])}")
             print(f"     {t['view']}: " + ' · '.join(det))
         avisos = sum(t.get('alvos', 0) for t in c['telas'])
         if avisos:
@@ -123,7 +124,7 @@ def main():
     ap.add_argument('--sem-abrir', action='store_true')
     ap.add_argument('--aba', action='store_true', help='abrir numa aba do seu navegador (antes era o padrão)')
     ap.add_argument('--timeout', type=int, default=300)
-    ap.add_argument('--json', help='grava o resultado bruto (por tela: exceções, mortos, estouro, alvos<44 com lista) neste arquivo')
+    ap.add_argument('--json', help='grava o resultado bruto (por tela: exceções, mortos, estouro, alvos<44 com lista, campos com fonte<16px) neste arquivo')
     a = ap.parse_args()
     if a.servido:
         sys.exit(servido())

@@ -38,7 +38,7 @@
 </header>
 <main>
   <div id="rel">
-    <div class="sub">Cada cenário abre o <b>vendas.html</b> desta pasta num iframe (mesma origem), passa por TODAS as telas de <code>VIEWS_CONHECIDAS</code> (a lista é lida do próprio app, então tela nova entra sozinha) e mede, em cada uma: exceção no console · campo morto (<code>qaCamposMortos</code>) · estouro horizontal · alvos de toque abaixo de 44px (aviso). Por cenário roda <code>lpSelfCheck()</code> e <code>funSelfCheck()</code>. Base <b>cheia</b> = fixture inventada escrita no localStorage + os "Ver exemplo" dos módulos; base <b>vazia</b> = localStorage limpo. Nada aqui grava no banco: o iframe nunca está logado.</div>
+    <div class="sub">Cada cenário abre o <b>vendas.html</b> desta pasta num iframe (mesma origem), passa por TODAS as telas de <code>VIEWS_CONHECIDAS</code> (a lista é lida do próprio app, então tela nova entra sozinha) e mede, em cada uma: exceção no console · campo morto (<code>qaCamposMortos</code>) · estouro horizontal · alvos de toque abaixo de 44px (aviso) · campo de formulário com fonte abaixo de 16px a 375px (fecha — é o que faz o iOS dar zoom e a tela escorregar). Por cenário roda <code>lpSelfCheck()</code> e <code>funSelfCheck()</code>. Base <b>cheia</b> = fixture inventada escrita no localStorage + os "Ver exemplo" dos módulos; base <b>vazia</b> = localStorage limpo. Nada aqui grava no banco: o iframe nunca está logado.</div>
     <div id="cenarios"></div>
   </div>
   <div id="palco"><iframe id="f" width="1280" height="820" title="app"></iframe></div>
@@ -170,14 +170,23 @@ function medirTela(w,largura){
   /* tabela dentro de container com overflow:auto pode rolar — o que não pode é a PÁGINA rolar de lado */
   const estouroPagina=d.documentElement.scrollWidth-w.innerWidth;
   const mortos=w.qaCamposMortos?w.qaCamposMortos():[];
-  let alvos=0; const alvosLista=[];
+  let alvos=0; const alvosLista=[]; let fontes=0; const fontesLista=[];
   if(largura<600){
     /* só o que está visível: o drawer fechado continua com o HTML da última ficha dentro */
     const sel=(drw&&drw.classList.contains('aberto'))?'#drawer button, #drawer a.btn':'#main button, #main a.btn';
     d.querySelectorAll(sel).forEach(b=>{ if(b.offsetParent===null) return; const r=b.getBoundingClientRect(); if(r.width&&r.height&&r.height<ALVO_MIN){ alvos++;
       /* ALVOS-LISTA-V1 (05/09): guarda quem é o botão pequeno (classe + texto + altura) pra corrigir sem chute */
       if(alvosLista.length<12) alvosLista.push((b.className||'').split(' ').filter(Boolean).slice(0,3).join('.')+'|'+(b.textContent||'').trim().slice(0,28)+'|'+Math.round(r.height)); } }); }
-  return { estouro:estouroPagina, mortos:mortos.map(m=>m.id+'@'+m.view), alvos, alvosLista };
+  if(largura<600){
+    /* ZOOM-IOS-V1 (19/09): campo visível com fonte computada <16px faz o Safari do iPhone dar zoom ao focar
+       (a tela escorrega de lado e fica assim). Mede o que está visível: drawer aberto → só o drawer; senão a
+       página inteira menos o drawer (o cabeçalho, com o seletor "ver como", está fora do #main). */
+    const aberto=drw&&drw.classList.contains('aberto'); const raiz=aberto?drw:d;
+    raiz.querySelectorAll('input,select,textarea').forEach(el=>{ if(!aberto&&drw&&drw.contains(el)) return; if(['checkbox','radio','hidden','range','color','file','submit','button'].includes(el.type)) return; if(el.offsetParent===null) return;
+      const r=el.getBoundingClientRect(); if(!r.width||!r.height) return; const fs=parseFloat(w.getComputedStyle(el).fontSize); if(fs<16){ fontes++;
+        if(fontesLista.length<12) fontesLista.push((el.id?'#'+el.id:(el.className||el.tagName.toLowerCase()).toString().split(' ').filter(Boolean).slice(0,2).join('.'))+'|'+fs+'px'); } });
+  }
+  return { estouro:estouroPagina, mortos:mortos.map(m=>m.id+'@'+m.view), alvos, alvosLista, fontes, fontesLista };
 }
 
 /* ── um cenário = uma largura × uma base ── */
@@ -207,7 +216,7 @@ async function rodarCenario(largura,base,opts){
     /* fichas: abrir, medir, fechar — o drawer é onde os campos mortos se escondem */
     if(base==='cheia'&&fichas[v]){ try{ const nome=fichas[v](); if(nome){ await assentar(); const m2=medirTela(w,largura); linha.ficha={nome,...m2}; } }catch(e){ linha.erros.push('ficha: '+e.message); }
       try{ w.fecharDrawer&&w.fecharDrawer(); w.atClose&&w.atClose(); }catch(_){ } }
-    linha.ok=!linha.erros.length&&!linha.mortos.length&&linha.estouro<=1&&(!linha.ficha||(!linha.ficha.mortos.length&&linha.ficha.estouro<=1&&!linha.ficha.erros));
+    linha.ok=!linha.erros.length&&!linha.mortos.length&&linha.estouro<=1&&!linha.fontes&&(!linha.ficha||(!linha.ficha.mortos.length&&linha.ficha.estouro<=1&&!linha.ficha.fontes&&!linha.ficha.erros));
     if(!linha.ok) cen.ok=false;
     cen.telas.push(linha);
     pintar();
@@ -251,9 +260,9 @@ function pintar(){
     <h2>${c.largura}px · base ${c.base} — <span class="${c.ok?'ok':'bad'}">${c.ok?'ok':'FALHOU'}</span> <span class="sub">${c.telas.length} tela(s)${c.ms?' · '+(c.ms/1000).toFixed(1)+' s':''}</span></h2>
     <div class="sub">lpSelfCheck: <b class="${c.selfcheck.length?'bad':'ok'}">${c.selfcheck.length} falha(s)</b> · funSelfCheck: <b class="${c.funcheck.length?'bad':'ok'}">${c.funcheck.length}</b></div>
     ${c.selfcheck.length?`<pre>${c.selfcheck.map(esc).join('\n')}</pre>`:''}
-    <table><thead><tr><th>tela</th><th>exceção</th><th>campo morto</th><th>estouro</th><th>alvos&lt;44</th><th>ficha</th></tr></thead><tbody>
-    ${c.telas.map(t=>`<tr><td>${esc(t.view)}</td><td class="n ${t.erros.length?'bad':''}">${t.erros.length||''}</td><td class="n ${t.mortos.length?'bad':''}">${t.mortos.length?esc(t.mortos.join(', ')):''}</td><td class="n ${t.estouro>1?'bad':''}">${t.estouro>1?t.estouro+'px':''}</td><td class="n ${t.alvos?'warn':''}">${t.alvos||''}</td><td class="${t.ficha&&(t.ficha.mortos.length||t.ficha.estouro>1)?'bad':''}">${t.ficha?esc(t.ficha.nome)+(t.ficha.mortos.length?' · mortos: '+esc(t.ficha.mortos.join(', ')):'')+(t.ficha.estouro>1?' · estouro '+t.ficha.estouro+'px':''):''}</td></tr>
-      ${t.erros.length?`<tr><td colspan="6"><pre>${t.erros.map(esc).join('\n')}</pre></td></tr>`:''}`).join('')}
+    <table><thead><tr><th>tela</th><th>exceção</th><th>campo morto</th><th>estouro</th><th>alvos&lt;44</th><th>fonte&lt;16</th><th>ficha</th></tr></thead><tbody>
+    ${c.telas.map(t=>`<tr><td>${esc(t.view)}</td><td class="n ${t.erros.length?'bad':''}">${t.erros.length||''}</td><td class="n ${t.mortos.length?'bad':''}">${t.mortos.length?esc(t.mortos.join(', ')):''}</td><td class="n ${t.estouro>1?'bad':''}">${t.estouro>1?t.estouro+'px':''}</td><td class="n ${t.alvos?'warn':''}">${t.alvos||''}</td><td class="n ${t.fontes?'bad':''}" title="${esc((t.fontesLista||[]).join(', '))}">${t.fontes||''}</td><td class="${t.ficha&&(t.ficha.mortos.length||t.ficha.estouro>1||t.ficha.fontes)?'bad':''}">${t.ficha?esc(t.ficha.nome)+(t.ficha.mortos.length?' · mortos: '+esc(t.ficha.mortos.join(', ')):'')+(t.ficha.estouro>1?' · estouro '+t.ficha.estouro+'px':'')+(t.ficha.fontes?' · fonte<16: '+t.ficha.fontes:''):''}</td></tr>
+      ${t.erros.length?`<tr><td colspan="7"><pre>${t.erros.map(esc).join('\n')}</pre></td></tr>`:''}`).join('')}
     </tbody></table></div>`).join('')+(RESULTADO.fatal?`<div class="cen bad">Fatal: ${esc(RESULTADO.fatal)}</div>`:'')+(RESULTADO.prova?`<div class="cen"><h2>Prova do guarda</h2><div class="${RESULTADO.prova.acusou?'ok':'bad'}">${RESULTADO.prova.acusou?'acusou o campo morto e o estouro injetados':'NÃO acusou'}</div></div>`:'');
 }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

@@ -2,6 +2,26 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 19/09/2026 (40ª onda) — ZOOM-IOS-V1: a tela parou de escorregar de lado no iPhone ao tocar num campo (v7.98)
+
+Cinco prints dele do Painel TA no iPhone, sem texto. Sequência lida dos prints: abriu a lista de nomes do campo "＋ Adicionar a “RCP Clientes”" (o `datalist` do Safari 17+), tocou no campo, o teclado subiu e a **tela inteira deu zoom de ~14% e escorregou pra esquerda**, cortada na borda (número do telefone, botão Renomear, chips) — e **ficou assim** depois de fechar o teclado.
+
+### Causa
+Auto-zoom do Safari iOS em campo de formulário com fonte **<16px**. O bloco do celular já tinha `input,select,textarea{font-size:16px}` desde a UX-mobile, mas era regra **só de elemento**: perdia pra qualquer regra de classe posterior (`.bne-f input` 14px, `.px-sel` 12.5px do "ver como" no cabeçalho, `.fc-prob input` 11.5px, `.drw-funil-sel` 14px!important…) e pra estilo inline. Varredura a 390px: **135 campos abaixo de 16px em 49 telas** — o seletor "ver como" do cabeçalho aparece em toda tela, então o zoom podia acontecer em qualquer lugar do app.
+
+### O que mudou
+- Bloco do celular: `input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select,textarea{font-size:16px!important}`. O `!important` é de propósito e está comentado no código. `.drw-funil-sel` (que tinha `14px!important` próprio) foi pra 16px.
+- **Portão mede "fonte<16"** em toda tela a 375px (drawer aberto → só o drawer; senão a página menos o drawer, pegando o cabeçalho) e **FECHA** se achar. Coluna nova na tabela do `portao.html`, saída do `portao.py` lista os campos.
+- Invariante `ZOOM-IOS-V1` no `lpSelfCheck`: confere pelo CSSOM que a regra de 16px com `!important` existe dentro do `@media (max-width:980px)`.
+- `CLAUDE.md`: a regra "verificar nos dois antes de subir" ganhou o item **campo de formulário ≥16px no celular**.
+
+### Prova
+- Varredura a 390px: **135 → 0** campos abaixo de 16px (todas as telas + gaveta do negócio + ficha do lead).
+- Duas rodadas completas (mesmo sha): auditoria com dados maliciosos 0 achados · guard OK · portão aberto (47 telas × 375/1024/1280 × cheia/vazia, com a coluna nova zerada) · 15 testes como usuário, 252 asserções verdes · `--prova` OK.
+- Limite do teste: o Chromium do Playwright não reproduz o zoom do iOS; a prova é a medida da causa (fonte computada), não do sintoma. Confirmação final é no iPhone dele.
+
+---
+
 ## 19/09/2026 (39ª onda) — REVISÃO-SEGURANÇA-V1: geral de segurança, vazamento, integridade, botões e erros — duas rodadas limpas (v7.97)
 
 Pedido dele: *"Roda revisão de segurança, avaliação de vazamento de dados e de informações, integridade dos dados, os botões, conectores, erros, faz aquela geral com o time de engenharia e roda aí pelo menos até a gente ter duas rodadas limpas sem erros."*
