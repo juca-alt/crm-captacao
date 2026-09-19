@@ -2,6 +2,28 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 19/09/2026 (44ª onda) — VICTOR-V1: o doc "Dúvidas novo CRM" do Victor (semana de 15–18/09) respondido em código (v8.02)
+
+Ele mandou o PDF de 2 páginas que o Victor montou subindo os relatórios durante a semana: 6 itens, com prints. Leitura e resposta, item a item:
+
+| # | O que o Victor viu | Causa | O que mudou |
+|---|---|---|---|
+| 1 | **Duplicatas** no Detalhado da Emissão Diária: a mesma pessoa em duas linhas — uma só com a proposta (`0007…43E`, nome quebrado) e outra com a apólice (`0022…101`, nome do segurado + nome do responsável colados) | O texto copiado do PDF intercala pedaços de nome ENTRE a proposta e a apólice; o parser só juntava os dois quando entre eles havia espaço/barra → abria dois registros | `impGapJuntavel`: só letra, curto e sem dígito entre proposta e apólice = **uma linha** (nos dois parsers, emitidas e pendências). E a leitura passa por `exDedupeProposta`: mesma proposta duas vezes → mostra só a que tem apólice. Emitida com apólice agora **atualiza** o registro que só tinha a proposta (`ja` casa por proposta), em vez de somar |
+| 1a | "Como validar se o número final bate com o relatório" | — | A resposta já está na tela: o parser confere contra o **Total MFB** do rodapé e avisa quando diverge ("O que li não bate com o rodapé"). Sem aviso = bateu |
+| 2 | "No CRM o **22.994,07** bate com o relatório, mas o **Prêmio em risco 23,5k** diverge — é por conta dos casos que saíram?" | **Sim.** As 2 apólices que **sumiram** do último relatório (status "Sumiu — verificar") ainda somavam no Prêmio em risco e no Total em atraso | `emRisco` = ativos menos as sumidas: **Prêmio em risco, Total em atraso e Críticas** contam só o que está no relatório; o KPI **Sumiram** continua mostrando as 2 pra ele verificar, e o subtítulo do Prêmio em risco diz "2 sumiram do relatório, fora da conta" |
+| 3 | Colar relatório de pendências: "Registro 0007…06E: não achei contestação/dias/data/PA/AFYC no bloco — pulei" | O texto do PDF vem com caracteres de controle/uso privado (aparecem como □) no lugar das colunas; o rabo `<contestação> <dias> <data> <PA> <AFYC>` não casava | `impLimparTexto` troca esses caracteres por espaço antes de parsear (nos dois parsers). ⚠️ Pra fechar de vez este caso preciso do **texto cru** que ele colou (salvar o `.txt`) — a ordem das palavras no PDF pode ter embaralhado esse registro |
+| 4·5·6 | "**Nada subiu pro servidor**: Daniel: 5 linha(s) não subiram (null value in column id of relation emissao_emitidas violates not-null constraint) · Gustavo: 4 linha(s)…" — nas emitidas do mês, do dia e do período | **Bug de verdade.** O upsert mandava num lote só as linhas **já gravadas (com id)** e as **novas (sem id)**; o PostgREST completa a chave que falta com `null` → o banco recusa o lote inteiro. Por isso "4 nova(s), 5 atualizada(s)" ficavam **só no aparelho** | `impUpsertPorDono` separa: linha **com id** sobe por `onConflict:'id'` (a chave pode ter virado apólice); linha **nova** sobe por `lp_email,chave`. Vale pra emitidas e pendências (`emissao_emitidas`, `emissao_pendencias`). O que ficou só no aparelho do Victor sobe na próxima vez que ele importar (o app reenvia) |
+
+### Prova
+- Invariante `VICTOR-V1` no `lpSelfCheck`: os dois lotes no upsert · limpeza de caracteres · `emParse` e `exParse` com "proposta / pedaço de nome apólice …" devolvem **1** registro com proposta+apólice e campos certos · `exDedupeProposta` · Atrasos com `emRisco`.
+- Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto · 18 testes verdes.
+
+### Pra ele / pro Victor
+- Pedir ao Victor o **.txt cru** do relatório de pendências de 16/09 (o que ele colou) pra fechar o item 3 com certeza.
+- Depois que a v8.02 subir, o Victor **reimporta** os três relatórios (emitidas do mês, do dia e do período): é o que faz as linhas que ficaram no aparelho chegarem ao servidor.
+
+---
+
 ## 19/09/2026 (43ª onda) — RES-DANIEL-V1: "Sem interesse" e "Já é cliente" no Resultado do contato (v8.01) — pra todo mundo
 
 Pedido do **Daniel** no WhatsApp (18/09 10:37, print do Foco do Painel TA): *"minha joia, cabe colocar a opção de sem interesse e já é cliente nesse painel"*. Ele: *"Vou add sim"* e, no chat: *"implementa isso que o Daniel pediu — solicitação direta de usuário"*. Por isso **não** entrou atrás de `novoOn`: é pedido de quem usa, ele autorizou.

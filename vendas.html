@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.01 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.02 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -8770,7 +8770,7 @@ async function exUpsertRemoto(recs){ if(!EX_REMOTE||!sb||!recs.length) return {d
 
 /* ── parser ───────────────────────────────────────────────────────────────
    Aceita os DOIS jeitos de colar: (a) o texto do PDF/tela, em que cada proposta
-   vem em várias linhas ("000748143E /\n002245101\nNOME…\nAtiva 01/09/2026
+   vem em várias linhas ("000000001E /\n000000002\nNOME…\nAtiva 01/09/2026
    04/09/2026 6.012,48 2.360,41"); (b) linhas com TAB (Excel do portal). Em (a)
    o segurado e o responsável pelo pagamento vêm colados sem separador: quando
    o texto é o mesmo nome duas vezes, são a mesma pessoa; quando não, guardo o
@@ -8785,7 +8785,7 @@ function exNomes(bloco){
   return {segurado:t,resp:null,conferir:true};
 }
 function exParse(txt){
-  const errors=[], warnings=[]; let m;
+  const errors=[], warnings=[]; let m; txt=impLimparTexto(txt);   /* VICTOR-V1 */
   const lpMarks=[]; const lpRe=/(?:^|\n)\s*LP:\s*([^\n]+)/gi;
   while((m=lpRe.exec(txt))){ lpMarks.push({idx:m.index, nome:m[1].trim(), k:emNormLp(m[1])}); }
   const lpAt=(idx)=>{ let r=null; for(const l of lpMarks){ if(l.idx<idx) r=l; else break; } return r; };
@@ -8803,7 +8803,7 @@ function exParse(txt){
     while((m=tokRe.exec(txt))) toks.push({tok:m[1], kind:emClassTok(m[1]), idx:m.index, end:m.index+m[1].length});
     const marks=[];
     toks.forEach(tk=>{ const cur=marks[marks.length-1];
-      if(cur&&!cur[tk.kind]&&txt.slice(cur.end,tk.idx).replace(/[\s\/]/g,'')===''){ cur[tk.kind]=tk.tok; cur.end=tk.end; return; }
+      if(cur&&!cur[tk.kind]&&impGapJuntavel(txt.slice(cur.end,tk.idx))){ cur[tk.kind]=tk.tok; cur.end=tk.end; return; }
       marks.push({proposta:null,apolice:null,[tk.kind]:tk.tok,idx:tk.idx,end:tk.end}); });
     if(!marks.length){ errors.push('Não encontrei números de proposta/apólice. Cole o relatório "Apólices Emitidas no Período" inteiro (ou as linhas do Excel).'); return {records:[],errors,warnings,totais:null}; }
     const cutRe=/\n\s*(?:LP:|Total\s+(?:LP|MFB)\s*:)/i;
@@ -8850,7 +8850,7 @@ function exPlanoLinha(r){
   const premio=r.pa_sem_iof?Math.round(r.pa_sem_iof/12*100)/100:0;
   const venda=(r.status_apolice==='Ativa')?vendaPlano({segurado:r.segurado, celular:null, apolice:r.apolice, proposta:r.proposta, premio, premioEstimado:!!r.pa_sem_iof, origem:'emissao'}):null;
   const negs=(venda&&venda.negocios)?venda.negocios.filter(n=>!funEhGanho(n)):[];
-  const ja=EX.itens.find(x=>exChave(x)===exChave(r))||null;
+  const ja=EX.itens.find(x=>exChave(x)===exChave(r))||(r.proposta?EX.itens.find(x=>x.proposta===r.proposta&&!x.apolice):null)||null;   /* VICTOR-V1: mesma proposta, ainda sem apólice = a mesma pessoa */
   return {r,pend,venda,negs,ja,dup:!!(venda&&venda.dup)};
 }
 function exPreview(p){
@@ -9301,7 +9301,12 @@ function pxPintar(){ const el=document.getElementById('px-escopo'); if(!el) retu
 function pxRotulo(){ const e=pxEscopo(); return e==='meu'?'só a minha base':e==='todos'?'Pipe X · todos os LPs':'LP '+e; }
 function cartVis(){ /* ESCOPO-TUDO-V1: carteira também passa pelo dono, não só pelo rótulo */ return (CART.clientes||[]).filter(c=>pxLpOk(c.lp)&&(!logado()||escRegOk({_dono:c._dono,lp:c.lp}))); }
 function cartApVis(){ return (CART.apolices||[]).filter(a=>pxLpOk(a.lp)&&(!logado()||escRegOk({_dono:a._dono,lp:a.lp}))); }   /* ESCOPO-TUDO-V2 */
-function exVis(){ return (EX.itens||[]).filter(r=>pxLpOk(r.lp)&&escLinhaOk(r)); }
+/* VICTOR-V1: se a mesma proposta existe duas vezes (uma só com proposta, outra já com apólice), a tela mostra UMA —
+   a que tem apólice (senão a mais recente). O doc do Victor trouxe "000000001E / Sobre Nome" + "000000002 com o nome inteiro". */
+function exDedupeProposta(l){ const porProp=new Map(); (l||[]).forEach(r=>{ if(!r||!r.proposta) return; const k=String(r.proposta); const o=porProp.get(k);
+    if(!o||(!o.apolice&&r.apolice)||(!!o.apolice===!!r.apolice&&String(r.atualizado_em||'')>String(o.atualizado_em||''))) porProp.set(k,r); });
+  return (l||[]).filter(r=>!r||!r.proposta||porProp.get(String(r.proposta))===r); }
+function exVis(){ return exDedupeProposta((EX.itens||[]).filter(r=>pxLpOk(r.lp)&&escLinhaOk(r))); }
 function emVis(){ return (EM.itens||[]).filter(r=>pxLpOk(r.lp)&&escLinhaOk(r)); }
 window.pxSet=pxSet;
 
@@ -9452,7 +9457,7 @@ window.adSet=adSet; window.adCsv=adCsv; window.viewApolicesDetalhado=viewApolice
 
 
 /* ═══ GRUPO-FAMILIAR-V1 (04/09) ═══════════════════════════════════════════
-   Pedido dele (caso Amanda/Ricardo): mostrar no card quem paga pra quem e quem
+   Pedido dele (caso A./R.): mostrar no card quem paga pra quem e quem
    divide contato. O relatório de apólices traz o RESPONSÁVEL PELO PAGAMENTO —
    quando é outra pessoa da carteira, é família (ou sócio). Mesmo e-mail/telefone
    em dois clientes também amarra. Sai como chip no card e na ficha. */
@@ -11997,8 +12002,12 @@ function viewLpAtrasos(){
   /* CARDS-SEGUEM-FILTRO (02/09): igual à emissão — cards seguem LP e busca; lentes ficam de fora */
   const ativos=todosAtivos.filter(r=>atRecorte(r));
   const recorteOn=!!(FAT.lp||FAT.q);
-  const totV=ativos.reduce((s,r)=>s+(r.premio||0),0);
-  const crit=ativos.filter(r=>(atDiasAtraso(r.vencido_em,hoje)||0)>=50); const critV=crit.reduce((s,r)=>s+(r.premio||0),0);
+  /* VICTOR-V1 (19/09): "no CRM o 22.994,07 bate com o relatório, mas o prêmio em risco 23,5k diverge" — eram as 2 que
+     SUMIRAM do último relatório (status 'Sumiu — verificar') ainda somando. Agora só o que está no relatório conta;
+     as sumidas ficam no KPI "Sumiram" até ele resolver. */
+  const emRisco=ativos.filter(r=>r.status!==AT_STATUS.SUMIU);
+  const totV=emRisco.reduce((s,r)=>s+(r.premio||0),0);
+  const crit=emRisco.filter(r=>(atDiasAtraso(r.vencido_em,hoje)||0)>=50); const critV=crit.reduce((s,r)=>s+(r.premio||0),0);
   const semTL=ativos.filter(r=>atDerivarStatus(r,hoje)===AT_STATUS.SEM);
   const semT=semTL.length, semTV=semTL.reduce((a,r)=>a+(r.premio||0),0);
   /* DINHEIRO-A-VISTA-V1: quantas apólices o script de cobrança reconheceu pelo
@@ -12028,8 +12037,8 @@ function viewLpAtrasos(){
     <div class="sub">${AT.carregadoEm?'Último relatório: '+atFmtBR(AT.carregadoEm)+' · ':''}${AT_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias recalculam pela data de hoje.</div>
     ${delegFaixa()}${impFaixa('atraso','relatório de atraso')}
     <div class="kpis" style="margin-top:10px">
-      ${kpi('💰 Prêmio em risco'+(recorteOn?' · filtrado':''),brl(totV),ativos.length+' apólice'+(ativos.length===1?'':'s')+(critV?' · '+brl(critV)+' crítico':'')+(recorteOn?' · de '+todosAtivos.length:''))}
-      ${kpi('Total em atraso',ativos.length,brl(totV))}
+      ${kpi('💰 Prêmio em risco'+(recorteOn?' · filtrado':''),brl(totV),emRisco.length+' apólice'+(emRisco.length===1?'':'s')+(critV?' · '+brl(critV)+' crítico':'')+(sumiu?' · '+sumiu+' sumiram do relatório, fora da conta':'')+(recorteOn?' · de '+todosAtivos.length:''))}
+      ${kpi('Total em atraso',emRisco.length,brl(totV))}
       ${kpiLente(FAT.faixa==='50',"FAT.faixa=FAT.faixa==='50'?'':'50';viewLpAtrasos()",'Críticas ≥50d',crit.length,brl(critV))}
       ${kpiLente(FAT.status===AT_STATUS.SEM,"FAT.status=FAT.status==='"+"Sem tratativa"+"'?'':'"+"Sem tratativa"+"';viewLpAtrasos()",'Sem tratativa',semT,brl(semTV)+' parado')}
       ${kpiLente(FAT.mudo,"FAT.mudo=!FAT.mudo;viewLpAtrasos()",'🔇 Casos mudos',ativos.filter(boMudo).length,'sem status ou sem próxima ação')}
@@ -12249,7 +12258,7 @@ function emClassTok(tok){ return /[A-Z]$/i.test(tok)?'proposta':'apolice'; }
 /* chave de identidade: proposta quando existe, apólice como fallback. NUNCA um no campo do outro. */
 function emChave(r){ return (r&&(r.proposta||r.apolice))||''; }
 function emParse(txt){
-  const errors=[], warnings=[]; let m;
+  const errors=[], warnings=[]; let m; txt=impLimparTexto(txt);   /* VICTOR-V1 */
   const lpMarks=[]; const lpRe=/(?:^|\n)\s*LP:\s*([^\n]+)/gi;
   while((m=lpRe.exec(txt))){ lpMarks.push({idx:m.index, nome:m[1].trim(), k:emNormLp(m[1])}); }
   const lpAt=(idx)=>{ let r=null; for(const l of lpMarks){ if(l.idx<idx) r=l; else break; } return r; };
@@ -12261,7 +12270,7 @@ function emParse(txt){
   while((m=tokRe.exec(txt))) toks.push({tok:m[1], kind:emClassTok(m[1]), idx:m.index, end:m.index+m[1].length});
   const marks=[];
   toks.forEach(tk=>{ const cur=marks[marks.length-1];
-    if(cur&&!cur[tk.kind]&&txt.slice(cur.end,tk.idx).replace(/[\s\/]/g,'')===''){   /* no PDF real vem "000739996E /\n002237044": barra + quebra de linha entre os dois */ cur[tk.kind]=tk.tok; cur.end=tk.end; return; }
+    if(cur&&!cur[tk.kind]&&impGapJuntavel(txt.slice(cur.end,tk.idx))){   /* no PDF real vem "000739996E /\n002237044": barra + quebra de linha entre os dois */ cur[tk.kind]=tk.tok; cur.end=tk.end; return; }
     marks.push({proposta:null,apolice:null,[tk.kind]:tk.tok,idx:tk.idx,end:tk.end}); });
   if(!marks.length){ errors.push('Não encontrei números de proposta/apólice (9 dígitos, proposta com letra no fim). Confira se colou o relatório de Propostas Pendentes completo.'); return {records:[],errors,warnings,totais:null}; }
   const cutRe=/\n\s*(?:LP:|Total\s+(?:LP|MFB)\s*:)/i;
@@ -15192,8 +15201,20 @@ function escEmailDoLp(lp, fallback){ const p=escLpNorm(String(lp||'').trim().spl
 function impDedupe(rows, chaveDe){ const m=new Map(); rows.forEach(r=>{ const k=(r.lp_email||'')+'|'+(chaveDe(r)||''); m.set(k,r); }); return [...m.values()]; }
 async function impUpsertPorDono(tabela, rows, chaveDe){ rows=impDedupe(rows,chaveDe); const grupos={}; rows.forEach(r=>{ (grupos[r.lp_email||'']=grupos[r.lp_email||'']||[]).push(r); });
   const data=[], falhas=[];
-  for(const dono of Object.keys(grupos)){ if(!dono){ falhas.push({dono:'(sem dono)',n:grupos[dono].length,erro:'linha sem dono — não subiu'}); continue; } const {data:d,error}=await sb.from(tabela).upsert(grupos[dono],{onConflict:'lp_email,chave'}).select('id,chave'); if(error) falhas.push({dono,n:grupos[dono].length,erro:error.message||String(error)}); else (d||[]).forEach(x=>data.push(x)); }
+  for(const dono of Object.keys(grupos)){ if(!dono){ falhas.push({dono:'(sem dono)',n:grupos[dono].length,erro:'linha sem dono — não subiu'}); continue; }
+    /* VICTOR-V1 (19/09): num lote misto (linhas já gravadas COM id + linhas novas SEM id) o PostgREST completa a
+       chave ausente com null → "null value in column id … not-null constraint" e NADA subia (doc do Victor, itens 4-6).
+       Linha com id atualiza pelo id (a chave pode ter mudado: proposta → apólice); linha nova casa por lp_email+chave. */
+    const g=grupos[dono], comId=g.filter(r=>r.id!=null&&r.id!==''), semId=g.filter(r=>r.id==null||r.id==='');
+    for(const [lote,conf] of [[comId,'id'],[semId,'lp_email,chave']]){ if(!lote.length) continue;
+      const {data:d,error}=await sb.from(tabela).upsert(lote,{onConflict:conf}).select('id,chave'); if(error) falhas.push({dono,n:lote.length,erro:error.message||String(error)}); else (d||[]).forEach(x=>data.push(x)); } }
   return {data,falhas}; }
+/* VICTOR-V1: o texto copiado do PDF do portal traz caracteres de controle / uso privado (aparecem como □) no lugar
+   das colunas; sem isto o rabo "<contestação> <dias> <data> <PA> <AFYC>" não casa e a linha é pulada (item 3). */
+function impLimparTexto(t){ return String(t||'').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\uE000-\uF8FF\uFEFF\uFFFD]/g,' '); }
+/* VICTOR-V1: entre a PROPOSTA (com letra) e a APÓLICE (9 dígitos) da mesma linha o PDF às vezes intercala pedaços de
+   nome ("000000001E / Sobre Nome 000000002 …"). Só letra, curto e sem dígito = mesma linha; com dígito é outra. */
+function impGapJuntavel(gap){ const g=String(gap||'').replace(/[\s\/]/g,''); return g===''||(g.length<=60&&!/\d/.test(g)); }
 function impFalhasMsg(falhas){ return falhas.map(f=>`${escRotuloDe({_dono:f.dono})||f.dono}: ${f.n} linha(s) não subiram (${/row-level security|policy/i.test(f.erro)?'sem permissão pra gravar nesse dono':f.erro})`).join(' · '); }
 function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
 function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
@@ -19488,6 +19509,15 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('REVISÃO-SEGURANÇA-V1: link de fora só entra num href se for http(s) — javascript:/data:/vazio viram "#"; Agenda (cartão ⋯ e linha) passa pelo urlSegura',
        urlSegura('javascript:alert(1)')==='#' && urlSegura('data:text/html,x')==='#' && urlSegura('')==='#' && urlSegura(null)==='#' && urlSegura(' https://calendar.google.com/calendar/event?eid=abc ')==='https://calendar.google.com/calendar/event?eid=abc' && urlSegura('HTTP://x.y/z')==='HTTP://x.y/z'
        && String(gcalMais).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.hangoutLink)') && !/href="\$\{esc\(e\.(htmlLink|hangoutLink)/.test(String(gcalMais)+String(gcalLinhaEv)));
+    ok('VICTOR-V1: upsert por dono separa lote com id (onConflict id) do lote sem id (lp_email,chave); texto do PDF limpo de caracteres de controle; proposta e apólice com pedaço de nome no meio viram UMA linha nos dois parsers; leitura das emitidas não mostra a mesma proposta duas vezes; Atrasos tira quem sumiu do prêmio em risco',
+       /\[comId,'id'\],\[semId,'lp_email,chave'\]/.test(String(impUpsertPorDono)) && /onConflict:conf/.test(String(impUpsertPorDono))
+       && impLimparTexto('a\u0000b\uE000c\uFFFDd')==='a b c d' && impGapJuntavel(' / Sobre\nNome ') && !impGapJuntavel(' 09/09/2026 5.848,56 ') && impGapJuntavel('')
+       && (()=>{ const p=emParse('LP: Gustavo Melo Juca\n000000001E / Sobre\u0000Nome\u0000\n000000002\nFULANO DE TAL\u0000FULANO DE TAL\u0000Pendente de Emissão\u0000Não Médica\u00007\u000009/09/2026\u00005.848,56\u00001.904,00\n');
+              return p.records.length===1&&p.records[0].proposta==='000000001E'&&p.records[0].apolice==='000000002'&&p.records[0].segurado==='Fulano De Tal'&&p.records[0].dias_pendentes===7&&p.records[0].pa_sem_iof===5848.56; })()
+       && (()=>{ const p=exParse('LP: Gustavo Melo Juca\n000000001E / Sobre Nome\n000000002\nFULANO DE TAL FULANO DE TAL\nAtiva 01/09/2026 04/09/2026 6.012,48 2.360,41\n');
+              return p.records.length===1&&p.records[0].proposta==='000000001E'&&p.records[0].apolice==='000000002'&&p.records[0].segurado==='FULANO DE TAL'&&p.records[0].afyc_projetado===2360.41; })()
+       && (()=>{ const l=exDedupeProposta([{proposta:'P1',apolice:null,segurado:'x'},{proposta:'P1',apolice:'A1'},{apolice:'A2'},{proposta:'P2'}]); return l.length===3&&l.some(r=>r.proposta==='P1'&&r.apolice==='A1')&&!l.some(r=>r.proposta==='P1'&&!r.apolice); })()
+       && /emRisco=ativos\.filter\(r=>r\.status!==AT_STATUS\.SUMIU\)/.test(String(viewLpAtrasos)) && /Total em atraso',emRisco\.length/.test(String(viewLpAtrasos)));
     ok('RES-DANIEL-V1: Resultado do contato tem "Sem interesse" (→ descartado) e "Já é cliente" (→ cliente), no Foco e no seletor da lista; contato do funil mapeia pra sem_interesse/lig_atendida',
        BN_RES.some(r=>r[0]==='sem_interesse') && BN_RES.some(r=>r[0]==='ja_cliente') && TA_RES_FUN.sem_interesse==='sem_interesse' && TA_RES_FUN.ja_cliente==='lig_atendida'
        && /res==='recusou'\|\|res==='sem_interesse'/.test(String(bnResultado)) && /res==='ja_cliente'\) c\.estagio='cliente'/.test(String(bnResultado))
