@@ -2,6 +2,21 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 19/09/2026 (43ª onda) — RES-DANIEL-V1: "Sem interesse" e "Já é cliente" no Resultado do contato (v8.01) — pra todo mundo
+
+Pedido do **Daniel** no WhatsApp (18/09 10:37, print do Foco do Painel TA): *"minha joia, cabe colocar a opção de sem interesse e já é cliente nesse painel"*. Ele: *"Vou add sim"* e, no chat: *"implementa isso que o Daniel pediu — solicitação direta de usuário"*. Por isso **não** entrou atrás de `novoOn`: é pedido de quem usa, ele autorizou.
+
+### O que mudou
+- `BN_RES` ganhou **🙅 Sem interesse** (`sem_interesse`) e **⭐ Já é cliente** (`ja_cliente`), entre Agendou e Recusou. Aparece no **Foco** (botões, "Já é cliente" em âmbar, "Sem interesse" em vermelho), no **seletor "Resultado…"** da lista e no filtro "Resultado de hoje" (desktop e folha).
+- Efeito no estoque (`bnResultado`): **sem interesse → Descartado** (igual ao Recusou; o ↩︎ devolve o estágio de antes) · **já é cliente → estágio Cliente** (sai dos recortes de TA "Rec com telefone" e "Recomendações"). Contato do funil: `TA_RES_FUN` mapeia sem interesse → `sem_interesse`, já é cliente → `lig_atendida`.
+- Invariante `RES-DANIEL-V1`.
+
+### Prova
+- `teste-res-daniel.mjs` **12/12** em 390 e 1280, como o Daniel (perfil LP): seletor com 7 opções, Foco com 7 botões, Sem interesse → descartado e sai da fila, Já é cliente → cliente, ↩︎ desfaz os dois.
+- Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto · 18 testes verdes.
+
+---
+
 ## 19/09/2026 (42ª onda) — TA-MOB-V2: Painel TA/WA no celular do jeito que ele pediu — só na base dele (v8.00)
 
 Voz dele, em cima dos prints do Painel TA no iPhone: *"as próprias listas que já são feitas do SitPlan, pra clicar… esse Adicionar bota o campo de autocompletar — começa a escrever e vai buscar alguém que já tem no CRM… tira esse botão de CSV… esses pré-filtros (toda a base, delay, enfim) ficam muito compridos pra rolar até o final da tela — bota num tópico expandível ou num botão de filtro… e outros filtros pra ranquear pra quem ligar: renda, e se é cliente, quanto paga, PA, localização, profissão."*
