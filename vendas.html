@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.06 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.07 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2774,6 +2774,7 @@ function iniFunilBloco(k,titulo,lista,fluxo,encerr,view){
    cabeçalho leva o número (fechado nunca apaga o número). `lista` opcional = testável. */
 function iniSolicBloco(lista){
   if(!novoOn('ini-acomp')||!modOn('backoffice')||typeof SO==='undefined') return '';
+  if(!lista&&novoOn('solic-tarefas')) return '';   /* SOLIC-TAREFAS-V1: "leva esse tópico que tá no Início, manda pra Tarefas" */
   const hj=atHojeISO(), hjl=atHojeLocal();
   const ab=(lista||(SO.itens||[]).filter(escLinhaOk)).filter(soAberta);
   const venc=ab.filter(s=>soVencida(s,hj)), par=ab.filter(s=>soParada(s,hjl)&&!soVencida(s,hj));
@@ -4036,6 +4037,15 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .ac-l1{display:flex;gap:8px;align-items:center;flex-wrap:wrap} .ac-l1 b{min-width:0;overflow-wrap:anywhere}
   .ac-l2{font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere;line-height:1.35}
   .ac-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  /* SOLIC-TAREFAS-V1: linha estilo Google Tarefas */
+  .sot-row{display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-top:1px solid var(--linha)} .sot-row.venc .sot-tit{color:var(--verm)}
+  .sot-chkw{width:44px;height:44px;flex:none;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;margin-left:-10px}
+  .sot-chk{width:22px;height:22px;border-radius:50%;border:2px solid var(--muted);display:block} .sot-chkw:hover .sot-chk{border-color:var(--verde);background:var(--verde-claro,#e8f7ee)}
+  .sot-t{flex:1;min-width:0} .sot-tit,.sot-prox{display:block;width:100%;border:0;background:transparent;padding:4px 0;border-radius:6px;color:var(--txt)} .sot-tit{font-weight:700;font-size:14px} .sot-prox{font-size:12.5px}
+  .sot-tit:focus,.sot-prox:focus,.sot-add input:focus{outline:none;background:var(--azul-claro,#eef4ff);padding-left:6px}
+  .sot-sub{font-size:11.5px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;padding:0 0 2px}
+  .sot-add{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--linha)} .sot-add input{flex:1;min-width:0;border:0;background:transparent;padding:10px 0;font-size:14px;color:var(--txt);border-radius:6px}
+  @media(max-width:980px){ .sot-tit,.sot-prox,.sot-add input{font-size:16px} }
   /* SOLIC-AGENDA-V1: folha de agendar e o 📅 da linha */
   .so-ag{min-width:40px;min-height:40px;padding:0 8px;flex:0 0 auto}
   @media(max-width:980px){ .so-ag{min-width:44px;min-height:44px} }   /* dedo */
@@ -11257,6 +11267,7 @@ function viewAgenda(){
           <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',7,'follow')">🔁 7d</button>
         </span></div>`;
   const pecas=[];
+  { const ps=agSolicBloco(); if(ps) pecas.push(ps); }   /* SOLIC-TAREFAS-V1 */
   if(pend.length) pecas.push(['reun', agBloco('reun','🤝 Reuniões a finalizar',`<b>${pend.length}</b> · aconteceram e ninguém registrou o que saiu delas`,`<div class="card" style="padding:6px 14px">${pend.map(linhaReun).join('')}</div>`)]);
   grupos.forEach(g=>{
     const l=itens.filter(x=>tarSituacao(x.t)===g[0] && !reunPendente(x.t));   /* já listada acima, não repetir */
@@ -11266,8 +11277,9 @@ function viewAgenda(){
   });
   if(semAtiv.length) pecas.push(['semativ', agBloco('semativ','💤 Sem próxima atividade',`<b>${semAtiv.length}</b> · negócio parado é o que mais custa`,`<div class="card" style="padding:6px 14px">${semAtiv.slice(0,40).map(linhaSem).join('')}
         ${semAtiv.length>40?`<div style="font-size:12px;color:var(--muted);padding:8px 0">…e mais ${semAtiv.length-40}. Os 40 mais recentes aparecem aqui.</div>`:''}</div>`)]);
-  const corpo=itens.length||pend.length? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
+  const corpo=itens.length||pend.length||pecas.some(p=>p[0]==='solic')? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
       Nenhuma atividade marcada ainda.<br><span style="font-size:12.5px">Abra um negócio no funil e marque a próxima — o card passa a mostrar o combinado.</span></div>`+(semAtiv.length?agOrdRender(pecas):'');
+  setTimeout(()=>{ try{ soGtSync(); }catch(_){} },800);   /* SOLIC-TAREFAS-V1: ponte com o Google Tarefas (silenciosa, no máx. 1×/min) */
   $('#main').innerHTML=`<h1 class="pg">Agenda &amp; Tarefas</h1>
     <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
     ${gcalBlocoHTML()}
@@ -11282,7 +11294,7 @@ function viewAgenda(){
 }
 /* ── AGENDA-V2: seções dobráveis (nascem fechadas) + organizar, por aparelho ── */
 const AG_SEC_CHAVE='crmlp_agenda_secs_v1', AG_ORD_CHAVE='crmlp_agenda_ordem_v1';
-const AG_NOMES={reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',hoje:'📌 Hoje',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
+const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',hoje:'📌 Hoje',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
 let AG_ORD={modo:false,ch:[]};
 function agSecsLer(){ try{ return JSON.parse(localStorage.getItem(AG_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function agAberta(k){ return dobraAberta(k, agSecsLer()); }
@@ -13058,6 +13070,69 @@ async function soSalvarFicha(id){ const s=SO.itens.find(x=>String(x.id)===String
   }
   const st=v('sof_st')||'aberta'; if(st!==s.status&&(st==='respondida'||st==='executada')&&!s.respondida_em) s.respondida_em=new Date().toISOString();
   s.status=st; s.resultado=v('sof_res')||null; s.protocolo=v('sof_prot')||null; await soGravar(s); atClose(); render(); toast('Salvo',true); }
+
+/* ═══ SOLIC-TAREFAS-V1 (21/09/2026) ═══════════════════════════════════════════════
+   Pedido dele (voz, print do Início e da Agenda no iPhone): "Solicitações são tarefas em
+   andamento. Leva esse tópico que tá no Início e manda pra Tarefas. Ajusta o UX: botar
+   múltiplas tarefas e ir editando fácil, com conclusão no final — tipo Google Tarefas, e
+   integrado com ele também."
+   Desenho: seção 📨 na Agenda & Tarefas (dobrável, organizável como as outras). Cada
+   solicitação aberta é UMA linha: ○ conclui · segurado editável · próximo passo editável ·
+   ✎ abre a ficha completa. Embaixo, "＋ Adicionar…": Enter cria e mantém o foco pra próxima.
+   Google Tarefas: reaproveita gtApi/GT_LISTA das atividades; a marca `#crmlp-so-<id>` nas
+   notas identifica a tarefa (sem coluna nova no banco, funciona em qualquer aparelho).
+   Concluiu no Google → conclui aqui; criou/editou/concluiu aqui → espelha lá. Atrás de
+   novoOn('solic-tarefas'). */
+const SO_GT_MARCA='#crmlp-so-';
+let _soGtAt=0,_soGtRodando=false;
+function soGtOn(){ return novoOn('solic-tarefas')&&typeof gtAutorizado==='function'&&gtAutorizado()&&typeof GCAL!=='undefined'&&!!GCAL.tok&&typeof logado==='function'&&logado(); }
+function soGtTitulo(s){ return '📨 '+(s.segurado||'—')+' · '+soTipoRot(s.tipo); }
+function soGtCorpo(s){ const p=soPrazoEfetivo(s); const o={title:soGtTitulo(s),notes:[s.proxima_acao?'➡️ '+s.proxima_acao:'',s.contexto||'','com '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'),SO_GT_MARCA+s.id].filter(Boolean).join('\n'),status:soAberta(s)?'needsAction':'completed'}; if(p) o.due=p+'T12:00:00.000Z'; return o; }
+async function soGtLista(){ const j=await gtApi('GET','/lists/'+GT_LISTA+'/tasks?showCompleted=true&showHidden=true&showDeleted=true&maxResults=100'); const m=new Map(); (j&&j.items||[]).forEach(g=>{ const x=String(g.notes||'').match(/#crmlp-so-(\S+)/); if(x) m.set(x[1],g); }); return m; }
+async function soGtSync(op){ op=op||{}; if(!soGtOn()||_soGtRodando||typeof SO==='undefined') return; if(!op.forca&&Date.now()-_soGtAt<60000) return; _soGtRodando=true;
+  try{ const m=await soGtLista(); _soGtAt=Date.now(); let mud=0, sobe=0;
+    const itens=(SO.itens||[]).filter(escLinhaOk).filter(s=>!String(s.id).startsWith('loc_'));
+    for(const s of itens){ const g=m.get(String(s.id));
+      if(g&&g.deleted) continue;                                                                  /* apagou lá → não recria */
+      if(g&&g.status==='completed'&&soAberta(s)&&(!s._gtUpd||!g.updated||g.updated>s._gtUpd)){ await soConcluir(s.id,{silencioso:true,origem:'google'}); mud++; continue; }
+      if(!g){ if(soAberta(s)){ const r=await gtApi('POST','/lists/'+GT_LISTA+'/tasks',soGtCorpo(s)); s._gtUpd=r&&r.updated; sobe++; } continue; }
+      const c=soGtCorpo(s); const dif=g.title!==c.title||String(g.due||'').slice(0,10)!==String(c.due||'').slice(0,10)||g.status!==c.status||String(g.notes||'')!==c.notes;
+      if(dif){ const r=await gtApi('PATCH','/lists/'+GT_LISTA+'/tasks/'+g.id,c); s._gtUpd=r&&r.updated; sobe++; } }
+    if(mud||sobe) soSalvarLocal();
+    if(mud){ if(!syncOcupado()) render(); toast(mud+' solicitação(ões) concluída(s) pelas Tarefas do Google',true); }
+    else if(op.forca&&!op.silencioso) toast(sobe?sobe+' tarefa(s) espelhada(s) no Google':'Google Tarefas em dia',true);
+  }catch(e){ console.warn('[so-gt]',e); if(op.forca&&!op.silencioso) toast('Google Tarefas: '+(e&&e.message||'falhou'),false); } finally{ _soGtRodando=false; } }
+async function soConcluir(id,op){ op=op||{}; const s=(SO.itens||[]).find(x=>String(x.id)===String(id)); if(!s||!soAberta(s)) return; const antes={status:s.status,encerrada_em:s.encerrada_em||null};
+  const now=new Date().toISOString(); s.status='executada'; s.encerrada_em=now; s.ultimo_toque_em=now; s.bola_com='nos';
+  await soGravar(s); try{ await soEvento(s,'status','Concluída '+(op.origem==='google'?'nas Tarefas do Google':'na lista de tarefas')); }catch(_){}
+  if(op.silencioso) return;
+  render(); toastDesfazer('✓ '+(s.segurado||'Solicitação')+' concluída',async()=>{ s.status=antes.status; s.encerrada_em=antes.encerrada_em; await soGravar(s); render(); soGtSync({forca:true,silencioso:true}); });
+  soGtSync({forca:true,silencioso:true}); }
+async function soInline(id,campo,valor){ const s=(SO.itens||[]).find(x=>String(x.id)===String(id)); if(!s) return; valor=String(valor||'').trim();
+  if(campo==='segurado'&&!valor){ toast('Segurado não pode ficar vazio',false); render(); return; }
+  if((s[campo]||'')===(valor||'')) return; s[campo]=valor||null; s.ultimo_toque_em=new Date().toISOString(); await soGravar(s); soGtSync({forca:true,silencioso:true}); }
+async function soRapida(txt){ txt=String(txt||'').trim(); if(!txt) return; const p=txt.split(/\s+[·\-–—]\s+/); const seg=p[0].trim(), prox=(p[1]||'').trim(); if(!seg) return;
+  const now=new Date().toISOString(); const s={ id:'loc_'+uid(), frente:'outro', ref_atraso_id:null, ref_emissao_id:null, segurado:seg, apolice:null, base_lp:null, acao:'consultar', tipo:'outro', contexto:null, prazo:null, contato_com:'lm', aberta_por:soQuemSou(), aberta_em:now, respondida_em:null, resultado:null, protocolo:null, status:'aberta' };
+  if(novoOn('solic-v2')){ s.area='lm'; s.prazo_area_dias=soAreaDias('lm'); s.proxima_acao=prox||null; s.bola_com='area'; s.ultimo_toque_em=now; }
+  await soGravar(s); if(novoOn('solic-v2')&&!String(s.id).startsWith('loc_')){ try{ await soEvento(s,'abertura','Aberta por '+(s.aberta_por||'—')+' pela lista de tarefas'); }catch(_){} }
+  render(); setTimeout(()=>{ const e=document.getElementById('sot-novo'); if(e) e.focus(); },0); soGtSync({forca:true,silencioso:true}); }
+function agSolicBloco(){ if(!novoOn('solic-tarefas')||!modOn('backoffice')||typeof SO==='undefined') return null;
+  const hj=atHojeISO(), hjl=atHojeLocal(); const ab=(SO.itens||[]).filter(escLinhaOk).filter(soAberta); const venc=ab.filter(s=>soVencida(s,hj));
+  const peso=s=>(soVencida(s,hj)?0:soParada(s,hjl)?1:soMuda(s)?2:3); const ord=ab.slice().sort((a,b)=>peso(a)-peso(b)||soDiasAberta(b,hjl)-soDiasAberta(a,hjl));
+  const resumo=ab.length?`<b>${ab.length}</b> em aberto${venc.length?` · <b style="color:var(--verm)">${venc.length}</b> prazo passou`:''}`:'nada em aberto';
+  const row=s=>{ const id=esc(jsq(String(s.id))), p=soPrazoEfetivo(s), v=soVencida(s,hj), par=soParada(s,hjl);
+    return `<div class="sot-row${v?' venc':''}" data-so="${esc(String(s.id))}">
+      <button class="sot-chkw" title="Concluir" aria-label="Concluir" onclick="soConcluir('${id}')"><span class="sot-chk"></span></button>
+      <div class="sot-t">
+        <input class="sot-tit" value="${esc(s.segurado||'')}" placeholder="Segurado" onchange="soInline('${id}','segurado',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
+        <div class="sot-sub"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span style="${v?'color:var(--verm);font-weight:700':''}">⏳ ${p?esc(atFmtBR(p)):'—'}</span>${par?`<span>🔇 ${soDiasSemToque(s,hjl)}d parada</span>`:''}${s._gtUpd?'<span title="espelhada nas Tarefas do Google">☑️ Google</span>':''}</div>
+        <input class="sot-prox" value="${esc(s.proxima_acao||'')}" placeholder="➡️ próximo passo…" onchange="soInline('${id}','proxima_acao',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
+      </div>
+      <button class="btn btn-s btn-mini" style="min-height:44px;flex:none" title="Abrir a ficha completa" onclick="soAbrir('${id}')">✎</button></div>`; };
+  const corpo=`<div class="card" style="padding:4px 14px">${ord.map(row).join('')||'<div style="padding:12px 0;color:var(--muted);font-size:13px">Nada em aberto.</div>'}
+    <div class="sot-add"><span style="font-size:20px;color:var(--azul);width:24px;text-align:center">＋</span><input id="sot-novo" placeholder="Adicionar solicitação… (segurado · próximo passo) — Enter adiciona e já abre a próxima" onkeydown="if(event.key==='Enter'){soRapida(this.value);this.value='';event.preventDefault()}"></div>
+    <div class="ac-acts"><button class="btn btn-s btn-mini" onclick="irPara('solicitacoes')">abrir Solicitações</button><button class="btn btn-s btn-mini" onclick="soNova()">📨 nova completa</button>${soGtOn()?`<button class="btn btn-s btn-mini" onclick="soGtSync({forca:true})">☑️ sincronizar Google Tarefas</button>`:''}</div></div>`;
+  return ['solic',agBloco('solic','📨 Solicitações em acompanhamento',resumo,corpo)]; }
 function viewSolicitacoesV2(){
   const hoje=atHojeLocal(), hj=atHojeISO();
   const SOV=SO.itens.filter(escLinhaOk);
@@ -15301,6 +15376,7 @@ const NOVO_SO_MEU={
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
   /* 'solic-v2' — nasceu aqui em 17/09 e no MESMO DIA foi pra MODS com def:false, ligado pro Victor. Palavra dele: "ajusta já essa solicitação pro Victor poder acompanhar". */
   'ini-acomp':    {o:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o Victor na onda das tratativas', desde:'2026-09-17'},
+  'solic-tarefas':{o:'Solicitações viram tarefas em andamento na Agenda & Tarefas (o card sai do Início): lista estilo Google Tarefas — ○ conclui, título e próximo passo editáveis na linha, campo "＋ Adicionar" que aceita várias em sequência — e cada solicitação aberta vira uma Tarefa do Google (conclui lá, conclui aqui)', desde:'2026-09-21'},
   'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
@@ -18868,6 +18944,16 @@ function lpSelfCheck(){
         ok('painel WA: resultado do Zap grava no lugar certo (funil = interação wa:1; agendou/recusou seguem o caminho do TA) e nunca conta como ligação', Object.values(WA_RES_FUN).every(k=>RES_BY_K[k]) && WA_RES_FUN.agendou==='agendou_oi' && WA_RES_FUN.recusou==='sem_interesse' && RESULTADOS.filter(r=>r.wa).every(r=>!r.lig) && WA_RES.length===5 && (()=>{ const c={id:'zzwa',nome:'Zz',hist:[{tipo:'wa',res:'mandei',dia:hojeISO()}]}; return waResHoje(c)==='mandei' && /Mandei msg/.test(waResBtnsHtml(c)) && /waResDesfazer/.test(waResBtnsHtml(c)); })());
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
+        /* SOLIC-TAREFAS-V1 */
+        ok('SOLIC-TAREFAS: seção 📨 na Agenda (○ conclui, título e próximo passo na linha, ＋ Adicionar em sequência), card sai do Início, ponte com Google Tarefas pela marca #crmlp-so-, tudo atrás de solic-tarefas', (()=>{
+          if(!NOVO_SO_MEU['solic-tarefas']) return false; const bak=SO.itens, hj=atHojeLocal(); try{
+            SO.itens=[{id:'zzso1',segurado:'Fulano Teste',tipo:'outro',area:'lm',status:'aberta',aberta_em:new Date(hj-864e5*10).toISOString(),proxima_acao:'LM confirmar'}];
+            const b=agSolicBloco(); const h=b&&b[1]||''; const c=soGtCorpo(SO.itens[0]);
+            const rap=String(soRapida.toString()), agv=String(viewAgenda.toString());
+            return b&&b[0]==='solic'&&/sot-chkw/.test(h)&&/soConcluir\('zzso1'\)/.test(h)&&/sot-tit/.test(h)&&/sot-prox/.test(h)&&/id="sot-novo"/.test(h)&&/prazo passou/.test(h)
+              &&c.status==='needsAction'&&/#crmlp-so-zzso1/.test(c.notes)&&/Fulano Teste/.test(c.title)&&!!c.due
+              &&iniSolicBloco()===''&&/agSolicBloco\(\)/.test(agv)&&AG_NOMES.solic&&rap.includes("id:'loc_'")&&rap.includes('sot-novo')&&String(soGtLista.toString()).includes('#crmlp-so-');
+          } finally{ SO.itens=bak; } })());
         /* SYNC-3VIAS-V1 · SYNC-PUXA-V1 */
         ok('SYNC-3VIAS: iPad pôs na lista, Mac mudou a etapa do mesmo contato → os dois ficam; array recebe os dois lados; tirar local tira do resultado', (()=>{
           const base={id:'z',nome:'Zz',etapa:'SitPlan',listas:['A'],interacoes:[{k:'x',dia:'2026-09-01'}]};
