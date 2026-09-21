@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.02 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.03 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -5974,6 +5974,88 @@ function spAddPorNome(txt){ const t=String(txt||'').trim(); if(!t){ toast('Digit
   toast('Não achei esse nome (já está na lista?)',false); }
 function spReagBn(id,iso){ const c=bnPor(id); if(!c) return; c.ta_dia=iso; bnSalvar(); toast(`${String(c.nome||'').split(' ')[0]} reagendado p/ ${dataBR(iso)}`,true); render(); }
 function spPuxarEstoque(){ const D=spData(); const l=bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&c.estagio==='lista_ta').slice(0,12); l.forEach(c=>{ c.ta_dia=D; }); bnSalvar(); toast(l.length+' nome(s) do Estoque na lista de '+dataBR(D),true); render(); }
+/* ═══ SP-LISTAS-V1 (21/09/2026) ═══════════════════════════════════════════════
+   Pedido dele (print do SitPlan no iPad): "Ajusta para eu poder add as listas de TA. E nos
+   tópicos add os recortes como tem no Painel TA. A lógica é que o SitPlan é onde organizo e
+   jogo para as listas do TA; o Painel TA é onde sigo meu foco nas listas."
+   Desenho: o SitPlan ganha dois tópicos dobráveis — 📋 Listas de TA (as mesmas do Painel TA:
+   puxar a lista inteira pro dia, abrir no Painel, salvar o dia como lista) e 🎯 Recortes da base
+   (TA_SMART, o MESMO mapa do Painel TA — nada duplica) — e cada linha ganha o botão 📋 que põe
+   o nome numa lista de TA. Lista nomeada passou a aceitar contato do funil (taListaMembros).
+   Nasce atrás de novoOn('sp-listas'). Todo tópico do SitPlan nasce fechado (dobraAberta). */
+const SP_SEC_CHAVE='crmlp_sp_secs_v1';
+function spSecsLer(){ try{ return JSON.parse(localStorage.getItem(SP_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
+function spSecAberta(k){ return dobraAberta(k, spSecsLer()); }
+function spSecToggle(k,aberto){ const st=spSecsLer(); st[k]=aberto?1:0; try{ localStorage.setItem(SP_SEC_CHAVE,JSON.stringify(st)); }catch(_){} }
+function spSecsTodas(abrir){ document.querySelectorAll('#main details.sp-dobra').forEach(d=>{ d.open=!!abrir; }); }
+function spDobra(k,titulo,resumo,corpo){ const ab=spSecAberta(k);
+  return `<details class="card sp-dobra" data-sec="${esc(k)}" style="padding:0;margin:8px 0" ${ab?'open':''} ontoggle="spSecToggle('${esc(jsq(k))}',this.open)">
+    <summary style="padding:12px 14px;cursor:pointer;font-weight:700">${titulo} <span style="font-weight:400;font-size:12px;color:var(--muted)">${resumo}</span></summary>
+    <div style="padding:0 14px 14px">${corpo}</div></details>`; }
+function spBotoesHtml(){ return `<div class="hub-tudo" style="margin:0 0 6px"><button class="btn btn-s btn-mini" onclick="spSecsTodas(true)" title="Abre todos os tópicos">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="spSecsTodas(false)" title="Recolhe todos os tópicos">⌃ recolher tudo</button></div>`; }
+let SP_REC='', SP_LISTA_AB={};
+function spSalvarDe(c){ if(spEhFunil(c)) salvar(); else bnSalvar(); }
+function spNoDia(c,D){ return !!c && ((spEhFunil(c)?c.sitplan:c.ta_dia)===D); }
+function spListasChips(c){ const l=(c&&c.listas)||[]; return l.length? `<div style="margin-top:2px">${l.map(n=>`<span class="ta-lchip">📋 ${esc(n)}</span>`).join(' ')}</div>`:''; }
+function spAbrirFicha(c){ if(spEhFunil(c)) abrirContato(c.id); else taFichaAbrir(c.id); }
+function spListaBtn(c){ return novoOn('sp-listas')? `<button class="btn btn-s btn-mini" title="Listas de TA" onclick="spListaMenu(event,'${esc(jsq(c.id))}')">📋</button>`:''; }
+function spListaMenu(ev,id){ ev.stopPropagation(); const c=spPorId(id); if(!c) return; const listas=bnListasTodas(), D=spData(), j=esc(jsq(id));
+  taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} → listas de TA</div>
+    <button onclick="spListaTgl('${j}','__dia')">${spNoDia(c,D)?'✓ Tirar da lista de '+esc(dataBR(D)):'📅 Pôr na lista de '+esc(dataBR(D))}</button>
+    ${listas.map(n=>`<button onclick="spListaTgl('${j}','${esc(jsq(n))}')">${(c.listas||[]).includes(n)?'✓ ':'📋 '}${esc(n)}</button>`).join('')}
+    <button onclick="spListaNova('${j}')">＋ Nova lista…</button>`); }
+function spListaTgl(id,nome){ taFecharMenu(); const c=spPorId(id); if(!c) return; const D=spData(), p=String(c.nome||'').split(' ')[0];
+  if(nome==='__dia'){ const tinha=spNoDia(c,D); if(tinha) spTirarDoDia(id,D); else spPorNoDia(id,D); toast(p+(tinha?' saiu da lista de ':' na lista de ')+dataBR(D),true); render(); return; }
+  const tem=(c.listas||[]).includes(nome); c.listas=tem?(c.listas||[]).filter(x=>x!==nome):[...new Set([...(c.listas||[]),nome])]; spSalvarDe(c);
+  toast(p+(tem?' saiu de “':' → “')+nome+'”',true); render(); }
+function spListaNova(id){ taFecharMenu(); let n=prompt('Nome da nova lista de TA:'); if(!n) return; n=n.trim(); if(!n) return;
+  if(id){ spListaTgl(id,n); return; }
+  if(bnListasTodas().includes(n)){ toast('Já existe uma lista com esse nome',false); return; }
+  BNTA.novas=[...new Set([...(BNTA.novas||[]),n])]; SP_LISTA_AB[n]=true; render(); toast('Lista “'+n+'” criada — agora jogue nomes nela pelo 📋',true); }
+function spListaAb(n){ SP_LISTA_AB[n]=!SP_LISTA_AB[n]; render(); }
+function spListaPuxar(nome){ const D=spData(); const l=taListaMembros(nome).filter(c=>!spNoDia(c,D)&&taTemFone(c)); if(!l.length){ toast('Todo mundo dessa lista já está no dia (ou sem telefone)',false); return; }
+  let f=false,b=false; l.forEach(c=>{ if(spEhFunil(c)){ c.sitplan=D; f=true; } else { c.ta_dia=D; b=true; } }); if(f) salvar(); if(b) bnSalvar();
+  toast(l.length+' de “'+nome+'” na lista de '+dataBR(D),true); render(); }
+function spDiaVirarLista(){ const D=spData(); const l=spListaDoDia(D); const todos=[...l.fun,...l.bn]; if(!todos.length){ toast('A lista deste dia está vazia',false); return; }
+  let n=prompt('Salvar a lista de '+dataBR(D)+' ('+todos.length+' nomes) como lista de TA:'); if(!n) return; n=n.trim(); if(!n) return;
+  let f=false,b=false; todos.forEach(c=>{ c.listas=[...new Set([...(c.listas||[]),n])]; if(spEhFunil(c)) f=true; else b=true; }); if(f) salvar(); if(b) bnSalvar();
+  SP_LISTA_AB[n]=true; toast('Lista “'+n+'” com '+todos.length+' nomes',true); render(); }
+function spRecSet(k){ SP_REC=SP_REC===k?'':k; render(); }
+function spRecLista(k){ const d=TA_SMART[k]; return d? taPoolDe(k).filter(d.base) : []; }
+function spRecPuxar(k){ const D=spData(); const l=spRecLista(k).filter(c=>taTemFone(c)&&!spNoDia(c,D)).slice(0,12); if(!l.length){ toast('Ninguém desse recorte fora da lista do dia',false); return; }
+  let f=false,b=false; l.forEach(c=>{ if(spEhFunil(c)){ c.sitplan=D; f=true; } else { c.ta_dia=D; b=true; } }); if(f) salvar(); if(b) bnSalvar();
+  toast(l.length+' de “'+TA_SMART[k].label+'” na lista de '+dataBR(D),true); render(); }
+/* tabela de nomes usada pelos dois tópicos (lista nomeada e recorte): quem é · onde está · contato · listas · ação */
+function spNomesTabela(l,D,opts){ opts=opts||{}; const hoje=hojeISO();
+  if(!l.length) return `<div style="font-size:13px;color:var(--muted);padding:6px 0">${esc(opts.vazio||'Ninguém aqui.')}</div>`;
+  const rows=l.slice(0,opts.max||60).map(c=>{ const id=esc(jsq(c.id)); return `<tr style="border-top:1px solid var(--linha)">
+    <td style="padding:6px 9px"><b class="clicavel" style="cursor:pointer" onclick="spAbrirFicha(spPorId('${id}'))">${esc(c.nome)}</b>${spEhFunil(c)&&isQuente(c)?' 🔥':''}${(c.recomendante||'').trim()?`<br><span style="font-size:11px;color:var(--muted)">rec: ${esc(c.recomendante)}</span>`:''}${spListasChips(c)}</td>
+    <td style="padding:6px 9px">${taEtapaBadge(c)}</td>
+    <td style="padding:6px 9px">${esc(c.telefone||'—')}${waHref(c.telefone)?` <a href="${esc(spEhFunil(c)?waHref(c.telefone):taWaHref(c))}" target="_blank" rel="noopener" style="text-decoration:none">💬</a>`:''}</td>
+    <td style="padding:4px 9px;text-align:right;white-space:nowrap">${spNoDia(c,D)?`<span style="font-size:11px;color:var(--muted)">na lista de ${D===hoje?'hoje':esc(dataBR(D))}</span> `:`<button class="btn btn-s btn-mini" style="min-height:44px" title="Pôr na lista deste dia" onclick="spListaTgl('${id}','__dia')">➕ dia</button> `}${spListaBtn(c)}${opts.lista?` <button class="btn btn-s btn-mini" style="min-height:44px" title="Tirar desta lista" onclick="spListaTgl('${id}','${esc(jsq(opts.lista))}')">✕</button>`:''}</td></tr>`; }).join('');
+  return `<div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Onde está</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px;text-align:right">Ação</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${l.length>(opts.max||60)?`<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando ${opts.max||60} de ${l.length} — o resto está no Painel TA.</div>`:''}`; }
+function spListasTaHtml(D){ const hoje=hojeISO(); const nomes=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const acoes=`<div class="toolbar" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-s btn-mini" style="min-height:44px" onclick="spListaNova()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="min-height:44px" title="Todo mundo que está na lista deste dia vira uma lista de TA com nome" onclick="spDiaVirarLista()">💾 Salvar o dia como lista</button></div>`;
+  const corpo=nomes.length? nomes.map(n=>{ const m=taListaMembros(n), noDia=m.filter(c=>spNoDia(c,D)).length, ab=!!SP_LISTA_AB[n], jn=esc(jsq(n));
+    return `<div style="border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:6px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <b class="clicavel" style="cursor:pointer;flex:1;min-width:140px" onclick="spListaAb('${jn}')">${ab?'▾':'▸'} 📋 ${esc(n)}</b>
+        <span style="font-size:12px;color:var(--muted)">${m.length} nome${m.length===1?'':'s'}${noDia?' · '+noDia+' no dia':''}</span>
+        <button class="btn btn-p btn-mini" style="min-height:44px" ${m.length-noDia?'':'disabled'} onclick="spListaPuxar('${jn}')">➕ Puxar p/ ${D===hoje?'hoje':esc(dataBR(D))}</button>
+        <button class="btn btn-s btn-mini" style="min-height:44px" onclick="BNTA.lista='${jn}';irPara('bn-ta')">🧭 Painel TA</button>
+      </div>${ab?`<div style="margin-top:8px">${spNomesTabela(m,D,{lista:n,vazio:'Lista vazia — jogue nomes nela pelo 📋 de cada linha ou pelos Recortes.'})}</div>`:''}</div>`; }).join('')
+    : `<div style="font-size:13px;color:var(--muted);padding:6px 0">Nenhuma lista de TA ainda. Crie uma e vá jogando nomes: pelo 📋 de cada linha, pelos 🎯 Recortes ou salvando a lista do dia.</div>`;
+  const tot=nomes.reduce((a,n)=>a+taListaMembros(n).length,0);
+  return spDobra('listas','📋 Listas de TA',`· ${nomes.length} lista${nomes.length===1?'':'s'}${tot?' · '+tot+' nomes':''} · as mesmas do Painel TA`,acoes+corpo); }
+function spRecortesHtml(D){ const hoje=hojeISO(); const ks=Object.keys(TA_SMART);
+  const chips=ks.map(k=>{ const n=spRecLista(k).length; return `<button class="btn ${SP_REC===k?'btn-p':'btn-s'} btn-mini" style="min-height:44px" onclick="spRecSet('${k}')">${TA_SMART[k].ic} ${esc(TA_SMART[k].label)} <span style="opacity:.75;font-weight:700">${n}</span></button>`; }).join('');
+  let corpo=''; if(SP_REC&&TA_SMART[SP_REC]){ const l=spRecLista(SP_REC), fora=l.filter(c=>taTemFone(c)&&!spNoDia(c,D));
+    corpo=`<div class="toolbar" style="gap:6px;flex-wrap:wrap;margin:10px 0 8px">${fora.length?`<button class="btn btn-p btn-mini" style="min-height:44px" onclick="spRecPuxar('${SP_REC}')">➕ Puxar ${Math.min(12,fora.length)} p/ ${D===hoje?'hoje':esc(dataBR(D))}</button>`:''}<button class="btn btn-s btn-mini" style="min-height:44px" onclick="BNTA.lista='sm:${SP_REC}';irPara('bn-ta')">🧭 Abrir no Painel TA</button><span style="font-size:12px;color:var(--muted);align-self:center">${l.length} no recorte · ${fora.length} com telefone fora do dia</span></div>${spNomesTabela(l,D,{vazio:'Ninguém neste recorte.'})}`; }
+  return spDobra('recortes','🎯 Recortes da base',`· os mesmos do Painel TA${SP_REC&&TA_SMART[SP_REC]?' · '+esc(TA_SMART[SP_REC].label):''}`,
+    `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Escolha um recorte, olhe os nomes e jogue pra lista deste dia (➕) ou pra uma lista de TA (📋). Executar é no Painel TA.</div><div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>${corpo}`); }
+
 /* ═══ MODO FOCO · sessão de discagem (01/09) ════════════════════════════════
    Medido no celular a 375px: o SitPlan gastava 560px — 69% da tela — antes do
    primeiro nome. Navegador de data 148px, KPIs 132px, sugestão 69px, filtros
@@ -6075,7 +6157,7 @@ function spFocoPinta(){
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&SP_FOCO.on) spFocoFechar(); });
 
 function viewSitplan(){
-  const D=spData(); const k=spKpis(D); const hoje=hojeISO();
+  const D=spData(); const k=spKpis(D); const hoje=hojeISO(); const spLis=novoOn('sp-listas');   /* SP-LISTAS-V1 */
   const comRes=k.naLista.filter(c=>ultimoResultado(c,D));
   const listaTab= SP_TAB==='sem'? k.semRes : SP_TAB==='com'? comRes : k.naLista;
   const foraDaLista=meusContatos().filter(c=>c.sitplan!==D && !ETAPAS_ENCERR.includes(c.etapa))
@@ -6086,7 +6168,7 @@ function viewSitplan(){
   const _cold=spNaoAbordados(), _andamento=_ativos.length-_cold.length;
   const _agend=_ativos.filter(c=>c.sitplan&&c.sitplan>=hoje).length;
   const _coldFora=_cold.filter(c=>c.sitplan!==D).length;
-  const resumoTA=`<details class="card" style="padding:0;margin:8px 0"${SP_RESUMO?' open':''} ontoggle="SP_RESUMO=this.open">
+  const resumoTA=`<details class="card sp-dobra" data-sec="resumo" style="padding:0;margin:8px 0"${spSecAberta('resumo')?' open':''} ontoggle="spSecToggle('resumo',this.open)">
     <summary style="padding:12px 14px;cursor:pointer;font-weight:700">🧭 Meu SitPlan — resumo do TA <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${_ativos.length} no funil · <b style="color:var(--verm)">${_cold.length} nunca abordados</b> · ${_andamento} em andamento · ${_agend} agendados</span></summary>
     <div style="padding:0 14px 14px">
     ${_cold.length? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Nomes que você tem no funil mas <b>nunca abordou</b> (quentes primeiro). Puxe pra lista de discagem e comece.</div>
@@ -6106,7 +6188,7 @@ function viewSitplan(){
   const totNaLista=k.naLista.length+bnDia.length, totFeitas=k.feitas+bnHist.length, totAtend=k.atend+bnHist.filter(h=>h.res==='atendeu'||h.res==='agendou').length, totAgend=k.agend+bnHist.filter(h=>h.res==='agendou').length;
   const bnSem=bnDia.filter(c=>!taResHoje(c));
   const bnCand=bnVivos().filter(c=>c.ta_dia!==D&&taTemFone(c)&&c.estagio==='lista_ta').slice(0,12);
-  const bnSecao=`<details class="card" style="padding:0;margin:8px 0">
+  const bnSecao=`<details class="card sp-dobra" data-sec="estoque" style="padding:0;margin:8px 0"${spSecAberta('estoque')?' open':''} ontoggle="spSecToggle('estoque',this.open)">
     <summary style="padding:12px 14px;cursor:pointer;font-weight:700">🗃️ Do Estoque de Nomes <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${bnDia.length} na lista de ${D===hoje?'hoje':dataBR(D)}${D===hoje?' · '+bnSem.length+' sem resultado':''}</span></summary>
     <div style="padding:0 14px 14px">
       <div class="toolbar" style="gap:6px;flex-wrap:wrap">
@@ -6116,17 +6198,20 @@ function viewSitplan(){
       ${bnDia.length?`<div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Estágio</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px">Resultado</th><th style="padding:7px 9px;text-align:right">Reagendar</th></tr></thead>
       <tbody>${bnDia.map(c=>`<tr style="border-top:1px solid var(--linha)">
-        <td style="padding:6px 9px"><b class="clicavel" style="cursor:pointer" onclick="taFichaAbrir('${esc(jsq(c.id))}')">${esc(c.nome)}</b>${(c.recomendante||'').trim()?`<br><span style="font-size:11px;color:var(--muted)">rec: ${esc(c.recomendante)}</span>`:''}</td>
+        <td style="padding:6px 9px"><b class="clicavel" style="cursor:pointer" onclick="taFichaAbrir('${esc(jsq(c.id))}')">${esc(c.nome)}</b>${(c.recomendante||'').trim()?`<br><span style="font-size:11px;color:var(--muted)">rec: ${esc(c.recomendante)}</span>`:''}${spLis?spListasChips(c):''}</td>
         <td style="padding:6px 9px"><span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span></td>
         <td style="padding:6px 9px">${esc(c.telefone||'—')}${waHref(c.telefone)?` <a href="${esc(taWaHref(c))}" target="_blank" rel="noopener" style="text-decoration:none">💬</a>`:''}</td>
         <td style="padding:6px 9px">${D===hoje?taResBtnsHtml(c):'<span style="font-size:11px;color:var(--muted)">registre no dia</span>'}</td>
-        <td style="padding:4px 9px;text-align:right;white-space:nowrap"><button class="btn btn-s btn-mini" onclick="spReagBn('${esc(jsq(c.id))}',proxDiaSemana(2))">⏭ ter</button> <button class="btn btn-s btn-mini" onclick="spReagBn('${esc(jsq(c.id))}',proxDiaSemana(5))">⏭ sex</button> <button class="btn btn-s btn-mini" title="Tirar da lista" onclick="spTirarDoDia('${esc(jsq(c.id))}','${esc(D)}');render()">✕</button></td></tr>`).join('')}</tbody></table></div>`
+        <td style="padding:4px 9px;text-align:right;white-space:nowrap"><button class="btn btn-s btn-mini" onclick="spReagBn('${esc(jsq(c.id))}',proxDiaSemana(2))">⏭ ter</button> <button class="btn btn-s btn-mini" onclick="spReagBn('${esc(jsq(c.id))}',proxDiaSemana(5))">⏭ sex</button> ${spListaBtn(c)} <button class="btn btn-s btn-mini" title="Tirar da lista" onclick="spTirarDoDia('${esc(jsq(c.id))}','${esc(D)}');render()">✕</button></td></tr>`).join('')}</tbody></table></div>`
       :`<div style="font-size:13px;color:var(--muted)">Nenhum nome do Estoque neste dia. Puxe os prontos p/ ligar ou marque pelo ⋯ no Painel TA.</div>`}
     </div></details>`;
   $('#main').innerHTML=`
     <h1 class="pg">SitPlan</h1>
-    <div class="sub">Planeje a discagem por data — funil e Estoque de Nomes numa lista só. Executar é no <b>Painel TA</b>.</div>
+    <div class="sub">Planeje a discagem por data — funil e Estoque de Nomes numa lista só. ${spLis?'Organize aqui, jogue pras listas de TA; executar':'Executar'} é no <b>Painel TA</b>.</div>
+    ${spBotoesHtml()}
     ${resumoTA}
+    ${spLis?spListasTaHtml(D):''}
+    ${spLis?spRecortesHtml(D):''}
     ${bnSecao}
     <div class="toolbar" style="align-items:center;flex-wrap:wrap">
       <button class="btn btn-s btn-mini" onclick="spSet(isoAddDias(spData(),-1))" title="dia anterior">‹</button>
@@ -6167,7 +6252,7 @@ function viewSitplan(){
       return `<tr class="sp-row" style="cursor:pointer" title="Abrir a ficha do lead (editar etapa, dados, tarefas)" onclick="if(!event.target.closest('select,button,a,input')) abrirContato('${esc(c.id)}')">
         <td><b class="clicavel" style="cursor:pointer;color:var(--azul);text-decoration:underline dotted">${esc(c.nome)}</b> <span style="font-size:11px;color:var(--muted)">✎ ficha</span>${isQuente(c)?' 🔥':''}<br>
           <span style="font-size:11.5px;color:var(--muted)">${esc(c.telefone||'—')}${esc(c.origem?(' · '+c.origem):'')}</span>
-          ${waHref(c.telefone)?` <a href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener" title="Abrir WhatsApp" style="text-decoration:none">💬</a>`:''}</td>
+          ${waHref(c.telefone)?` <a href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener" title="Abrir WhatsApp" style="text-decoration:none">💬</a>`:''}${spLis?spListasChips(c):''}</td>
         <td>${badgeEtapa(c.etapa)}</td>
         <td>${estrelasHtml(estrelasDe(c))}</td>
         <td><select class="res-sel" onchange="if(this.value)registrarResultado('${esc(c.id)}',this.value,'${esc(D)}')">
@@ -6177,6 +6262,7 @@ function viewSitplan(){
         <td style="white-space:nowrap">
           <button class="btn btn-s btn-mini" title="Reagendar pra próxima terça" onclick="spReag('${esc(c.id)}',proxDiaSemana(2))">⏭ ter</button>
           <button class="btn btn-s btn-mini" title="Reagendar pra próxima sexta" onclick="spReag('${esc(c.id)}',proxDiaSemana(5))">⏭ sex</button>
+          ${spListaBtn(c)}
         </td>
       </tr>`; }).join('') || `<tr><td colspan="5" class="vazio">${SP_TAB==='sem'?'Ninguém sem resultado — lista esgotada. ✅':'Lista vazia — adicione contatos pela caixa acima ou crie um novo.'}</td></tr>`}
     </tbody></table></div>
@@ -15127,6 +15213,7 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
+  'sp-listas':    {o:'SitPlan organiza, Painel TA executa: tópicos 📋 Listas de TA (puxar a lista inteira pro dia, salvar o dia como lista) e 🎯 Recortes da base (os mesmos do Painel TA) dentro do SitPlan, botão 📋 em cada linha pra pôr o nome numa lista de TA, e lista nomeada aceita contato do funil (não só do Estoque)', desde:'2026-09-21'},
   'agenda-classe':{o:'Agenda: compromisso do Google com classe (negócio · trabalho · pessoal/só ocupado), várias agendas do Google com regra por agenda + palavras-chave, e o botão ⋯ ação (feito · não aconteceu · delay · adiar com data · vincular · tipo)', desde:'2026-09-18'},
 };
 function novoOn(k){
@@ -15857,7 +15944,10 @@ function bnLote(acao){
   FBN.sel.clear(); bnSalvar(); render();
   toast(ids.length+' atualizado'+(ids.length>1?'s':''),true);
 }
-function bnListasTodas(){ const set=new Set(); bnVivos().forEach(c=>(c.listas||[]).forEach(n=>set.add(n))); return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+/* SP-LISTAS-V1 (21/09): lista nomeada de TA atravessa Estoque E funil — o SitPlan organiza os dois numa lista só */
+function spListaPool(){ return [...bnVivos(), ...meusContatos()]; }
+function taListaMembros(n){ return n? spListaPool().filter(c=>(c.listas||[]).includes(n)) : []; }
+function bnListasTodas(){ const set=new Set(); spListaPool().forEach(c=>(c.listas||[]).forEach(n=>set.add(n))); return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
 /* TA acionável = lista de HOJE ∪ listas nomeadas (união distinta) — é o que o
    card do Início e o badge do menu contam (achado #2 da varredura 04/08) */
 function bnEmListaTa(){ const hoje=hojeISO(); return bnVivos().filter(c=>c.ta_dia===hoje||((c.listas||[]).length>0)); }
@@ -16179,8 +16269,8 @@ const WA_SMART={
 /* TA-LINHA-V2: "colocar mais colunas — a etapa que ele está, as listas — porque é o fluxo que vai ligar cada estágio" */
 const TA_FUNIL_SIGLA={nn:'NN',bc:'BC',vg:'VG',prud:'PRUD',mfo:'MFO','vg-bc':'VG·B','prud-bc':'PRUD·B','mfo-bc':'MFO·B'};
 function taListasDe(c){ const hoje=hojeISO(); if(!c) return [];
-  if(spEhFunil(c)) return c.sitplan===hoje?['📅 Hoje']:[];
-  return (c.ta_dia===hoje?['📅 Hoje']:[]).concat((c.listas||[]).map(n=>'📋 '+n)); }
+  const dia=spEhFunil(c)?c.sitplan:c.ta_dia;
+  return (dia===hoje?['📅 Hoje']:[]).concat((c.listas||[]).map(n=>'📋 '+n)); }
 function taListasChips(c){ const l=taListasDe(c); return l.length?l.map(x=>`<span class="ta-lchip">${esc(x)}</span>`).join(' '):'<span class="ta-sub">—</span>'; }
 function taEtapaBadge(c){ if(!spEhFunil(c)) return `<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`;
   const f=funilDe(c); return `<span class="ta-sub" title="${esc((FUNIS.find(x=>x[0]===f)||[])[1]||f)}">${esc(TA_FUNIL_SIGLA[f]||String(f).toUpperCase())}</span> ${badgeEtapa(c.etapa)}`; }
@@ -16229,7 +16319,7 @@ function taRegistradosHoje(){ const hoje=hojeISO(); return bnVivos().reduce((n,c
 function taDaLista(){ const hoje=hojeISO(), k=taSmartKey();
   if(k&&taSmartDef(k)) return taSmartPool(k).filter(taSmartDef(k).base);   /* WA-PAINEL-V1: listas do canal */
   if(BNTA.lista==='hoje'){ const l=spListaDoDia(hoje); return [...l.bn,...l.fun]; }
-  return bnVivos().filter(c=>(c.listas||[]).includes(BNTA.lista)); }
+  return taListaMembros(BNTA.lista); }
 function taKpisHtml(){ return ''; /* 11/09: 'tira esses cards' — as contagens já estão no card Listas */ }
 function taKpisHtml_antigo(){
   const v=bnVivos(), n=k=>taPoolDe(k).filter(TA_SMART[k].base).length;
@@ -16387,14 +16477,15 @@ function taNovaLista(){ let n=prompt('Nome da nova lista de TA:'); if(!n) return
 function taListaDoFiltro(){ let n=prompt('Salvar a lista atual (com os filtros) como:'); if(!n) return; n=n.trim(); if(!n) return;
   const l=taFiltrados(); l.forEach(c=>{ c.listas=[...new Set([...(c.listas||[]),n])]; }); bnSalvar(); taListaSet(n); toast('Lista “'+n+'” criada com '+l.length+' pessoas',true); }
 function taListaRenomear(old){ let n=prompt('Renomear lista:',old); if(n==null) return; n=n.trim(); if(!n||n===old) return;
-  BN.contatos.forEach(c=>{ if(c.listas&&c.listas.includes(old)) c.listas=c.listas.map(x=>x===old?n:x); }); bnSalvar(); if(BNTA.lista===old) BNTA.lista=n; render(); toast('Lista renomeada ✓',true); }
+  const ren=c=>{ if(c&&c.listas&&c.listas.includes(old)) c.listas=c.listas.map(x=>x===old?n:x); };
+  BN.contatos.forEach(ren); (S.contatos||[]).forEach(ren); bnSalvar(); salvar(); if(BNTA.lista===old) BNTA.lista=n; render(); toast('Lista renomeada ✓',true); }
 function taFecharMenu(){ document.querySelectorAll('.ta-menu').forEach(m=>m.remove()); }
 document.addEventListener('click',taFecharMenu);
 function taMenuAt(ev,html){ ev.stopPropagation(); taFecharMenu(); const m=document.createElement('div'); m.className='ta-menu'; m.innerHTML=html;
   document.body.appendChild(m); const r=m.getBoundingClientRect(); m.style.left=Math.max(8,Math.min(ev.clientX,innerWidth-r.width-8))+'px'; m.style.top=Math.min(ev.clientY,innerHeight-r.height-8)+'px'; m.onclick=e=>e.stopPropagation(); }
-function taRowMenu(ev,id){ const c=bnPor(id); if(!c) return; const listas=bnListasTodas();
-  taMenuAt(ev,`<div class="ta-menu-h">Mover estágio</div>${BN_ESTAGIOS.map(e=>`<button ${c.estagio===e?'disabled':''} onclick="taMoverEstagio(['${esc(jsq(id))}'],'${e}')">${esc(BN_EST_LABEL[e])}</button>`).join('')}
-    <div class="ta-menu-h">Listas de TA</div><button onclick="taListasAplicar(['${esc(jsq(id))}'],'hoje',${c.ta_dia===hojeISO()?'false':'true'})">${c.ta_dia===hojeISO()?'✓ Tirar de Hoje':'📅 Pôr em Hoje'}</button>
+function taRowMenu(ev,id){ const c=spPorId(id); if(!c) return; const listas=bnListasTodas(); const fun=spEhFunil(c), noDia=(fun?c.sitplan:c.ta_dia)===hojeISO();
+  taMenuAt(ev,`${fun?'':`<div class="ta-menu-h">Mover estágio</div>${BN_ESTAGIOS.map(e=>`<button ${c.estagio===e?'disabled':''} onclick="taMoverEstagio(['${esc(jsq(id))}'],'${e}')">${esc(BN_EST_LABEL[e])}</button>`).join('')}`}
+    <div class="ta-menu-h">Listas de TA</div><button onclick="taListasAplicar(['${esc(jsq(id))}'],'hoje',${noDia?'false':'true'})">${noDia?'✓ Tirar de Hoje':'📅 Pôr em Hoje'}</button>
     ${listas.map(n=>`<button onclick="taListasAplicar(['${esc(jsq(id))}'],'${esc(jsq(n))}',${(c.listas||[]).includes(n)?'false':'true'})">${(c.listas||[]).includes(n)?'✓ ':'📋 '}${esc(n)}</button>`).join('')}
     <button onclick="taListasNova(['${esc(jsq(id))}'])">＋ Nova lista…</button>`); }
 function taBulkMenu(ev){ const ids=taSelVisivel(); if(!ids.length) return; const listas=bnListasTodas(); const j=JSON.stringify(ids).replace(/"/g,'&quot;');
@@ -16403,9 +16494,9 @@ function taBulkMenu(ev){ const ids=taSelVisivel(); if(!ids.length) return; const
     <button onclick="taListasNova(${j})">＋ Nova lista…</button>`); }
 function taMoverEstagio(ids,e){ taFecharMenu(); let n=0; ids.forEach(id=>{ const c=bnPor(id); if(!c||c.estagio===e) return; (c.hist=c.hist||[]).push({tipo:'estagio',de:c.estagio,para:e,dia:hojeISO(),ts:new Date().toISOString()}); c.estagio=e; n++; });
   FTA.sel.clear(); bnSalvar(); render(); toast(n+' → '+BN_EST_LABEL[e],true); }
-function taListasAplicar(ids,nome,add){ taFecharMenu(); ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
-    if(nome==='hoje') c.ta_dia=add?hojeISO():null; else c.listas=add?[...new Set([...(c.listas||[]),nome])]:(c.listas||[]).filter(x=>x!==nome); });
-  FTA.sel.clear(); bnSalvar(); render(); toast(ids.length+(add?' → “':' saiu de “')+(nome==='hoje'?'Hoje':nome)+'”',true); }
+function taListasAplicar(ids,nome,add){ taFecharMenu(); let fun=false,bn=false; ids.forEach(id=>{ const c=spPorId(id); if(!c) return; const f=spEhFunil(c); if(f) fun=true; else bn=true;
+    if(nome==='hoje'){ if(f) c.sitplan=add?hojeISO():null; else c.ta_dia=add?hojeISO():null; } else c.listas=add?[...new Set([...(c.listas||[]),nome])]:(c.listas||[]).filter(x=>x!==nome); });
+  FTA.sel.clear(); if(bn) bnSalvar(); if(fun) salvar(); render(); toast(ids.length+(add?' → “':' saiu de “')+(nome==='hoje'?'Hoje':nome)+'”',true); }
 function taListasNova(ids){ taFecharMenu(); let n=prompt('Nome da nova lista:'); if(!n) return; n=n.trim(); if(!n) return; taListasAplicar(ids,n,true); }
 /* ═══ REPERTORIO-V1 (16/09/2026) ═══════════════════════════════════════════════
    Pedido dele (handoff): "dentro do painel do lead, dar ao LP o SCRIPT certo pra cada
@@ -16616,7 +16707,7 @@ function viewBnTa(){
       </div>
       <div class="ta-sec"><h3>Listas de TA</h3>
         ${BNTA.lista==='hoje'?navItem('hoje','📅','Hoje (do SitPlan)',emHoje.length,true):''}
-        ${nomes.map(n=>navItem(n,'📋',n,vivos.filter(c=>(c.listas||[]).includes(n)).length,BNTA.lista===n)).join('')||''}
+        ${nomes.map(n=>navItem(n,'📋',n,taListaMembros(n).length,BNTA.lista===n)).join('')||''}
         <div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-s btn-mini" style="flex:1" onclick="taNovaLista()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="flex:1" onclick="taListaDoFiltro()" title="Salva a lista filtrada atual">＋ Do filtro</button></div>
       </div>
       <div class="ta-sec ta-filtros"><h3 style="display:flex;align-items:center;gap:6px">Filtros ${taFiltrosAtivos()?`<span class="ct" style="color:var(--azul)">${taFiltrosAtivos()} ativo${taFiltrosAtivos()>1?'s':''}</span>`:''}<span style="flex:1"></span>${taFiltrosAtivos()?`<button class="btn btn-s btn-mini" style="min-height:28px;font-size:11px" onclick="taFiltroLimpar()">Limpar</button>`:''}</h3>
@@ -16644,7 +16735,7 @@ function viewBnTa(){
         :smk==='naoatendeu'?` <span class="badge b-amarelo">🔕 não atendeu${taTentouTxt(c)?' · '+esc(taTentouTxt(c)):''}</span>`
         :smk==='ficou'?` <span class="badge b-amarelo">🕗 ${esc(taDiaPerdidoTxt(c)||'ficou pra trás')}</span>`:'');
     const abrir=fun?`abrirContato('${esc(jsq(c.id))}')`:`taFichaAbrir('${esc(jsq(c.id))}')`;
-    const acoes=`<div class="ta-acts">${taTemFone(c)?`<a class="ta-ib" title="Ligar" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" title="WhatsApp" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun?`<button class="ta-ib" title="Tirar de Hoje" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" title="Mover / listas" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" title="Foco a partir daqui" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>`;
+    const acoes=`<div class="ta-acts">${taTemFone(c)?`<a class="ta-ib" title="Ligar" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" title="WhatsApp" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun&&!(novoOn('sp-listas')&&BNTA.lista!=='hoje')?`<button class="ta-ib" title="Tirar de Hoje" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" title="Mover / listas" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" title="Foco a partir daqui" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>`;
     const res=comRes?`<td onclick="event.stopPropagation()">${resBtns(c)}</td>`:'';
     return `<tr class="ta-row" onclick="${abrir}" title="Abrir ficha">
       <td onclick="event.stopPropagation()"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()"></td>
@@ -16657,7 +16748,7 @@ function viewBnTa(){
     return `<div class="ta-card" onclick="${abrir}">
       <div class="ta-card-h"><input type="checkbox" ${FTA.sel.has(c.id)?'checked':''} onclick="event.stopPropagation()" onchange="this.checked?FTA.sel.add('${esc(jsq(c.id))}'):FTA.sel.delete('${esc(jsq(c.id))}');viewBnTa()">${taAvatar(c)}<div style="flex:1;min-width:0"><div class="ta-nm">${esc(c.nome)}</div><div class="ta-sub">${esc(sub)}</div></div>${badge}</div>
       ${chips.length?`<div class="ta-chips" style="margin:6px 0 0">${chips.map(x=>'<span class="ta-chip">'+x+'</span>').join('')}</div>`:''}
-      <div class="ta-card-f"><span class="ta-tel">${taTemFone(c)?esc(c.telefone):'sem telefone'}</span><span style="flex:1"></span>${taTemFone(c)?`<a class="ta-ib" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun?`<button class="ta-ib" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>
+      <div class="ta-card-f"><span class="ta-tel">${taTemFone(c)?esc(c.telefone):'sem telefone'}</span><span style="flex:1"></span>${taTemFone(c)?`<a class="ta-ib" href="tel:${esc(tel)}" onclick="event.stopPropagation()">📞</a><a class="ta-ib" target="_blank" rel="noopener" href="${esc(taWaHref(c))}" onclick="event.stopPropagation()">💬</a>`:''}${fun&&!(novoOn('sp-listas')&&BNTA.lista!=='hoje')?`<button class="ta-ib" onclick="event.stopPropagation();bnTaTirar('${esc(jsq(c.id))}')">✕</button>`:`<button class="ta-ib" onclick="taRowMenu(event,'${esc(jsq(c.id))}')">⋯</button>`}<button class="ta-ib foco" onclick="event.stopPropagation();taFocoAbrir('${esc(jsq(c.id))}')">▶</button></div>
       ${comRes?`<div onclick="event.stopPropagation()" style="margin-top:6px">${resBtns(c)}</div>`:''}</div>`; };
   $('#main').innerHTML=`
     <div class="ta-wrap">${lateral}<section class="ta-main">
@@ -16673,9 +16764,9 @@ function viewBnTa(){
       </div>
       <div class="ta-listas-mob">${taMob
         ? `<button class="ta-nav ta-nav-rec${smk?' on':''}" onclick="taRecortesAbrir()" title="Recortes da base: toda a base, recomendações, delay, não atendeu…"><span class="ic">🎯</span><span class="lbl">${smk?esc(taSmartDef(smk).label):'Recortes'}</span><span class="ct">${smk?base.length:Object.keys(taSmartMapa()).length}</span></button>${wa?'':navItem('hoje','📅','Hoje (do SitPlan)',emHoje.length,BNTA.lista==='hoje')}`
-        : `${BNTA.lista==='hoje'?navItem('hoje','📅','Hoje (do SitPlan)',emHoje.length,true):''}${taSmartNavHtml(navItem)}`}${nomes.map(n=>navItem(n,'📋',n,vivos.filter(c=>(c.listas||[]).includes(n)).length,BNTA.lista===n)).join('')}<button class="ta-nav" onclick="taNovaLista()"><span class="ic">＋</span><span class="lbl">Nova lista</span></button></div>
+        : `${BNTA.lista==='hoje'?navItem('hoje','📅','Hoje (do SitPlan)',emHoje.length,true):''}${taSmartNavHtml(navItem)}`}${nomes.map(n=>navItem(n,'📋',n,taListaMembros(n).length,BNTA.lista===n)).join('')}<button class="ta-nav" onclick="taNovaLista()"><span class="ic">＋</span><span class="lbl">Nova lista</span></button></div>
       <div class="ta-search"><span>🔎</span><input type="search" placeholder="Buscar contato — nome, empresa, telefone, quem indicou…" value="${esc(FTA.busca)}" oninput="FTA.busca=this.value;taBuscaTimer()">${FTA.busca?`<button class="btn btn-s btn-mini" onclick="FTA.busca='';viewBnTa()">✕</button>`:''}</div>
-      ${trab?`<div class="toolbar" style="gap:6px"><input id="bnta-add" data-so-leitura="lido no clique de Adicionar (bnTaAddPorNome)" ${pesOn?pesSugAttrs()+' onchange="bnTaAddPorNome(this.value,true)"':'list="bnta-cand"'} style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'a Hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)">${pesOn?'':`<datalist id="bnta-cand">${vivos.filter(c=>c.telefone&&(BNTA.lista==='hoje'? c.ta_dia!==hoje : !(c.listas||[]).includes(BNTA.lista))).slice(0,400).map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}"></option>`).join('')}</datalist>`}<button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
+      ${trab?`<div class="toolbar" style="gap:6px"><input id="bnta-add" data-so-leitura="lido no clique de Adicionar (bnTaAddPorNome)" ${pesOn?pesSugAttrs()+' onchange="bnTaAddPorNome(this.value,true)"':'list="bnta-cand"'} style="max-width:340px" placeholder="＋ Adicionar ${BNTA.lista==='hoje'?'a Hoje':'a “'+esc(BNTA.lista)+'”'}… (digite o nome)">${pesOn?'':`<datalist id="bnta-cand">${(BNTA.lista==='hoje'? vivos.filter(c=>c.telefone&&c.ta_dia!==hoje) : (novoOn('sp-listas')?spListaPool():vivos).filter(c=>c.telefone&&!(c.listas||[]).includes(BNTA.lista))).slice(0,400).map(c=>`<option value="${esc(c.nome)} · ${esc(c.telefone)}"></option>`).join('')}</datalist>`}<button class="btn btn-p btn-mini" onclick="bnTaAddPorNome($('#bnta-add').value)">Adicionar</button>
         ${BNTA.lista!=='hoje'?`<button class="btn btn-s btn-mini" onclick="taListaRenomear('${esc(jsq(BNTA.lista))}')">Renomear</button><button class="btn btn-s btn-mini" onclick="bnListaApagar('${esc(jsq(BNTA.lista))}')" title="Apagar esta lista (os contatos ficam)">🗑️</button>`:''}</div>`:''}
       ${selNaLista.length?`<div class="ta-selbar"><b>${selNaLista.length} selecionado${selNaLista.length>1?'s':''}</b><span style="flex:1"></span><button class="btn btn-s btn-mini" onclick="taBulkMenu(event)">Mover / adicionar…</button>${trab?`<button class="btn btn-s btn-mini" onclick="bnTaTirarLote()">✕ Tirar da lista</button>`:''}<button class="btn btn-s btn-mini" onclick="FTA.sel.clear();viewBnTa()">Limpar</button></div>`:''}
       ${TAV.seg==='rec'? taRecsHtml(lista) : lista.length? `<div class="card ta-tblwrap"><table class="ta-tbl"><thead><tr><th></th>${fxTh('ta','nome','Nome')}${cols.map(taThHtml).join('')}${comRes?fxTh('ta','res',wa?'Zap de hoje':'Resultado de hoje'):''}<th></th></tr></thead><tbody>${lista.slice(0,400).map(linha).join('')}</tbody></table>${lista.length>400?`<div class="ta-sub" style="padding:8px">Mostrando 400 de ${lista.length} — afine os filtros.</div>`:''}</div><div class="ta-cards">${lista.slice(0,200).map(card).join('')}</div>`
@@ -16692,16 +16783,18 @@ function bnTaAdd(id){ const c=bnPor(id); if(!c) return;
 function bnTaAddPorNome(txt,silencioso){
   const t=String(txt||'').trim(); if(!t){ if(!silencioso) toast('Digite um nome',false); return; }
   const nome=t.split(' · ')[0].trim().toLowerCase(), tel=(t.split(' · ')[1]||'').trim();
-  const pool=BNTA.lista==='hoje'? [...bnVivos().filter(c=>c.telefone&&c.ta_dia!==hojeISO()),...meusContatos().filter(c=>c.telefone&&c.sitplan!==hojeISO()&&!ETAPAS_ENCERR.includes(c.etapa))] : bnVivos().filter(c=>c.telefone&&!(c.listas||[]).includes(BNTA.lista));
+  const pool=BNTA.lista==='hoje'? [...bnVivos().filter(c=>c.telefone&&c.ta_dia!==hojeISO()),...meusContatos().filter(c=>c.telefone&&c.sitplan!==hojeISO()&&!ETAPAS_ENCERR.includes(c.etapa))] : (novoOn('sp-listas')?spListaPool():bnVivos()).filter(c=>c.telefone&&!(c.listas||[]).includes(BNTA.lista));
   const c=pool.find(x=>(x.nome||'').toLowerCase()===nome&&(!tel||x.telefone===tel))||pool.find(x=>(x.nome||'').toLowerCase()===nome);
   if(!c){ if(!silencioso) toast('Não achei esse nome entre os candidatos (já está na lista?)',false); return; }
-  if(spEhFunil(c)) spPorNoDia(c.id); else bnTaAdd(c.id); const el=$('#bnta-add'); if(el) el.value='';
+  if(BNTA.lista==='hoje'){ if(spEhFunil(c)) spPorNoDia(c.id); else bnTaAdd(c.id); }
+  else { c.listas=[...new Set([...(c.listas||[]),BNTA.lista])]; if(spEhFunil(c)) salvar(); else bnSalvar(); render(); }   /* SP-LISTAS-V1: lista nomeada, funil ou Estoque */
+  const el=$('#bnta-add'); if(el) el.value='';
   toast(c.nome.split(' ')[0]+' na lista ✓',true);
 }
 function bnTaTirar(id){ const c=spPorId(id); if(!c) return;
   if(BNTA.lista==='hoje'){ spTirarDoDia(id); FTA.sel.delete(id); render(); return; }
   c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista);
-  FTA.sel.delete(id); bnSalvar(); render(); }
+  FTA.sel.delete(id); if(spEhFunil(c)) salvar(); else bnSalvar(); render(); }
 /* A seleção sobrevive à mudança de filtro: quem foi marcado e depois saiu do
    filtro continua em FTA.sel. A barra conta só os VISÍVEIS, então a ação tem
    que agir sobre o mesmo conjunto — senão o rótulo diz 4 e saem 11
@@ -16710,9 +16803,9 @@ function taSelVisivel(){ const vis=new Set(taFiltrados().map(c=>c.id)); return [
 function bnTaTirarLote(){
   if(!taListaTrabalho()){ toast('Lista inteligente: tire o nome pelo estágio na ficha',false); return; }
   const ids=taSelVisivel(); if(!ids.length) return;
-  ids.forEach(id=>{ if(BNTA.lista==='hoje'){ spTirarDoDia(id); return; } const c=bnPor(id); if(!c) return;
+  ids.forEach(id=>{ if(BNTA.lista==='hoje'){ spTirarDoDia(id); return; } const c=spPorId(id); if(!c) return;
     c.listas=(c.listas||[]).filter(n=>n!==BNTA.lista); });
-  ids.forEach(id=>FTA.sel.delete(id)); bnSalvar(); render();
+  ids.forEach(id=>FTA.sel.delete(id)); bnSalvar(); salvar(); render();
   toast(ids.length+' tirado'+(ids.length>1?'s':'')+' da lista (seguem no Estoque)',true);
 }
 function bnTaMoverLote(){
@@ -16720,15 +16813,16 @@ function bnTaMoverLote(){
   const atuais=bnListasTodas();
   const nome=prompt('Mover para qual lista? (nova ou existente'+(atuais.length? ' — já existem: '+atuais.join(', '):'')+')'); if(!nome) return;
   const n=nome.trim(); if(!n) return;
-  ids.forEach(id=>{ const c=bnPor(id); if(!c) return;
+  ids.forEach(id=>{ const c=spPorId(id); if(!c) return;
     c.listas=[...new Set([...(c.listas||[]),n])];
-    if(BNTA.lista==='hoje') c.ta_dia=null; else c.listas=c.listas.filter(x=>x!==BNTA.lista); });
-  ids.forEach(id=>FTA.sel.delete(id)); bnSalvar(); render();
+    if(BNTA.lista==='hoje'){ if(spEhFunil(c)) c.sitplan=null; else c.ta_dia=null; } else c.listas=c.listas.filter(x=>x!==BNTA.lista); });
+  ids.forEach(id=>FTA.sel.delete(id)); bnSalvar(); salvar(); render();
   toast(ids.length+' movido'+(ids.length>1?'s':'')+' pra “'+n+'”',true);
 }
 function bnListaApagar(nome){ if(!confirm('Apagar a lista “'+nome+'”? (os contatos continuam na base)')) return;
-  BN.contatos.forEach(c=>{ if(c.listas) c.listas=c.listas.filter(n=>n!==nome); });
-  BNTA.lista='hoje'; bnSalvar(); render(); toast('Lista apagada',true); }
+  const tira=c=>{ if(c&&c.listas) c.listas=c.listas.filter(n=>n!==nome); };
+  BN.contatos.forEach(tira); (S.contatos||[]).forEach(tira); BNTA.novas=(BNTA.novas||[]).filter(n=>n!==nome);
+  BNTA.lista='hoje'; bnSalvar(); salvar(); render(); toast('Lista apagada',true); }
 async function bnResultado(id,res){
   const c=bnPor(id); if(!c) return;
   // `estAntes` é o que torna o ↩︎ (desfazer) fiel: sem ele, um clique errado em
@@ -18679,6 +18773,15 @@ function lpSelfCheck(){
         ok('painel WA: resultado do Zap grava no lugar certo (funil = interação wa:1; agendou/recusou seguem o caminho do TA) e nunca conta como ligação', Object.values(WA_RES_FUN).every(k=>RES_BY_K[k]) && WA_RES_FUN.agendou==='agendou_oi' && WA_RES_FUN.recusou==='sem_interesse' && RESULTADOS.filter(r=>r.wa).every(r=>!r.lig) && WA_RES.length===5 && (()=>{ const c={id:'zzwa',nome:'Zz',hist:[{tipo:'wa',res:'mandei',dia:hojeISO()}]}; return waResHoje(c)==='mandei' && /Mandei msg/.test(waResBtnsHtml(c)) && /waResDesfazer/.test(waResBtnsHtml(c)); })());
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
+        /* SP-LISTAS-V1 */
+        ok('SP-LISTAS: lista nomeada de TA atravessa funil + Estoque; o SitPlan tem os tópicos Listas de TA e Recortes (o MESMO TA_SMART do Painel TA), botão 📋 por linha, dois botões abrir/recolher tudo, e nasce atrás de sp-listas', (()=>{ const bakS=S.contatos, bakB=BN.contatos; try{
+          S.contatos=[normContato({id:'zzsl1',nome:'Zz Fun',lp:S.activeUser,telefone:'81999990012',etapa:'SitPlan',listas:['SP Teste']})]; BN.contatos=[{id:'zzsl2',nome:'Zz Bn',estagio:'lista_ta',lp:S.activeUser,listas:['SP Teste'],hist:[],telefone:'81999990013'}];
+          const m=taListaMembros('SP Teste'), v=String(viewSitplan.toString()), r=String(spRecortesHtml.toString());
+          return m.length===2 && m.some(spEhFunil) && bnListasTodas().includes('SP Teste') && taListasDe(S.contatos[0]).join()==='📋 SP Teste' && !!NOVO_SO_MEU['sp-listas']
+            && v.includes('spListasTaHtml') && v.includes('spRecortesHtml') && v.includes("novoOn('sp-listas')") && r.includes('TA_SMART') && r.includes('spRecLista')
+            && v.includes('spBotoesHtml') && /spSecsTodas\(true\)/.test(String(spBotoesHtml.toString())) && /spSecsTodas\(false\)/.test(String(spBotoesHtml.toString()))
+            && spSecAberta('__novo__')===false && !/<details[^>]*\sopen[\s>]/.test(v) && String(spListaBtn.toString()).includes('spListaMenu') && String(taRowMenu.toString()).includes('spPorId');
+        } finally{ S.contatos=bakS; BN.contatos=bakB; } })());
         /* TA-LINHA-V2 */
         ok('painel TA/WA: resultado do dia é um seletor só por linha (Estoque, funil e Zap) — nada de botão empilhado', (()=>{ const bn={id:'zzl1',nome:'Zz',estagio:'estoque',hist:[]}; const a=taResBtnsHtml(bn), b=waResBtnsHtml(bn); return /<select class="res-sel"/.test(a) && !/<button/.test(a) && /bnResultado\('zzl1'/.test(a) && /<select class="res-sel"/.test(b) && /waResultado\('zzl1'/.test(b) && BN_RES.every(r=>a.includes('value="'+r[0]+'"')) && WA_RES.every(r=>b.includes('value="'+r[0]+'"')); })());
         ok('painel TA/WA: a linha mostra funil · etapa e as listas em que a pessoa está', (()=>{ const bak=S.contatos; try{ const f=normContato({id:'zzl2',nome:'Zz Fun',funil:'bc',etapa:'PC',telefone:'81999990011',sitplan:hojeISO()}); S.contatos=[f]; const bn={id:'zzl3',nome:'Zz Bn',estagio:'lista_ta',ta_dia:hojeISO(),listas:['RCP Teste']}; return /BC/.test(taEtapaBadge(f)) && /PC/.test(taEtapaBadge(f)) && taListasDe(f).join()==='📅 Hoje' && taListasDe(bn).join()==='📅 Hoje,📋 RCP Teste' && /RCP Teste/.test(taListasChips(bn)) && !!TA_COLS.listas && TA_COLS_DEF.includes('listas') && TA_COLS_DEF.includes('estagio'); } finally{ S.contatos=bak; } })());

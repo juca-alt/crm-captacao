@@ -2,6 +2,27 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 21/09/2026 (45ª onda) — SP-LISTAS-V1: o SitPlan organiza e joga pras listas de TA; o Painel TA executa (v8.03) — só na base dele
+
+Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de TA. E nos tópicos add os recortes como tem no Painel TA. A lógica é que o SitPlan é onde organizo e jogo para as listas do TA; o Painel TA é onde sigo meu foco nas listas."*
+
+**O que mudou (tudo atrás de `novoOn('sp-listas')`, registrado em `NOVO_SO_MEU`):**
+- **SitPlan › 📋 Listas de TA** (tópico novo): as mesmas listas nomeadas do Painel TA, com contagem e "N no dia"; por lista: **➕ Puxar p/ hoje** (todo mundo com telefone que ainda não está no dia), **🧭 Painel TA** (abre a lista lá) e expandir pra ver os nomes (➕ dia · 📋 listas · ✕ tirar). Ações do tópico: **＋ Nova lista** e **💾 Salvar o dia como lista** (a lista do dia vira uma lista de TA com nome).
+- **SitPlan › 🎯 Recortes da base** (tópico novo): chips com o **MESMO `TA_SMART` do Painel TA** (Toda a base, Rec com fone, Recomendações, Delay, Não atendeu, Ficou pra trás, Rec sem fone, Clientes, Rec de cliente, Descartados) — nada duplicado. Escolheu um: tabela dos nomes com ➕ dia / 📋 listas, **➕ Puxar 12 p/ hoje** e **🧭 Abrir no Painel TA**.
+- **Botão 📋 em cada linha** do SitPlan (funil e Estoque): menu com "pôr/tirar da lista deste dia", cada lista de TA (✓ = já está) e "＋ Nova lista…". Chips das listas aparecem embaixo do nome.
+- **Lista nomeada de TA passou a aceitar contato do funil** (antes só Estoque): `spListaPool()` / `taListaMembros(n)` são a fonte única; `bnListasTodas`, `taDaLista`, `taListasDe`, `taListasAplicar`, `bnTaTirar(Lote)`, `bnTaMoverLote`, renomear e apagar leem/gravam nos dois (`salvar()` + `bnSalvar()`). No Painel TA, contato do funil numa lista nomeada ganha o ⋯ (sem "mover estágio"). O funil sincroniza o objeto inteiro (`dados` jsonb) — sem migration.
+- **Tópicos do SitPlan seguem a regra da dobra:** todos nascem fechados, lembrados por aparelho (`crmlp_sp_secs_v1`, via `dobraAberta`), e a tela ganhou os **dois botões fixos** ⌄ abrir tudo · ⌃ recolher tudo (isso não está atrás da chave: é a regra de 16/09).
+
+### Prova
+- Invariante `SP-LISTAS` no `lpSelfCheck` (lista nomeada atravessa funil+Estoque; tópicos presentes; TA_SMART reaproveitado; botões abrir/recolher; nenhum `details` aberto literal; ⋯ lê `spPorId`).
+- Portão: 6 cenários (375/1024/1280 × cheia/vazia), 47 telas, 0 falhas. Screenshot do SitPlan e do Painel TA em 390 e 1280 com fixture + listas nomeadas: zero estouro, console sem exceção.
+
+### Fica com ele
+- Liberar pro Daniel/outros = tirar `sp-listas` de `NOVO_SO_MEU` (decisão dele no chat).
+- Merge na main só com OK explícito.
+
+---
+
 ## 19/09/2026 (44ª onda) — VICTOR-V1: o doc "Dúvidas novo CRM" do Victor (semana de 15–18/09) respondido em código (v8.02)
 
 Ele mandou o PDF de 2 páginas que o Victor montou subindo os relatórios durante a semana: 6 itens, com prints. Leitura e resposta, item a item:
