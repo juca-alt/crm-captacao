@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.08 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.09 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6092,12 +6092,13 @@ function spSelAplicar(sel){ const v=sel.value; sel.value=''; const ids=[...SP_SE
     if(spEhFunil(c)) f=true; else b=true; });
   if(f) salvar(); if(b) bnSalvar(); SP_SEL.clear();
   toast(n+(v==='__dia'?' na lista de '+dataBR(D):' → “'+nome+'”'),true); render(); }
-function spSelBarra(vis){ const nSel=vis.filter(c=>SP_SEL.has(c.id)).length; const listas=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR')); const D=spData(), hoje=hojeISO();
+function spSelBarra(vis,opts){ opts=opts||{}; const nSel=vis.filter(c=>SP_SEL.has(c.id)).length; const listas=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR')); const D=spData(), hoje=hojeISO();
   const todos=vis.length&&vis.every(c=>SP_SEL.has(c.id)); const j=JSON.stringify(vis.map(c=>c.id)).replace(/"/g,'&quot;');
   return `<div class="ta-selbar" style="margin:8px 0 6px;flex-wrap:wrap;gap:6px">
     <label style="display:flex;align-items:center;gap:6px;min-height:44px;font-size:12.5px"><input type="checkbox" ${todos?'checked':''} onchange="spSelTodos(${j},this.checked)" style="width:20px;height:20px"> todos (${vis.length})</label>
     <b>${nSel} marcado${nSel===1?'':'s'}</b><span style="flex:1"></span>
     <select onchange="spSelAplicar(this)" style="min-height:44px;font-size:16px;max-width:240px" ${nSel?'':'disabled'}><option value="">→ Colocar em…</option><option value="__dia">📅 Lista de ${D===hoje?'hoje':esc(dataBR(D))}</option>${listas.map(n=>`<option value="${esc(n)}">📋 ${esc(n)}</option>`).join('')}<option value="__nova">＋ Nova lista…</option></select>
+    ${opts.etapa?`<select onchange="spSelEtapa(this)" style="min-height:44px;font-size:16px;max-width:200px" ${nSel?'':'disabled'}><option value="">→ Mover etapa…</option>${ETAPAS.map(e=>`<option value="${esc(e)}">${esc(ET_LABEL[e]||e)}</option>`).join('')}</select>`:''}
     ${SP_SEL.size?`<button class="btn btn-s btn-mini" style="min-height:44px" onclick="spSelLimpar()">Limpar</button>`:''}</div>`; }
 function spBuscaHtml(chave,total){ const q=spBusca(chave); return `<div class="ta-search" style="margin:6px 0"><span>🔎</span><input type="search" id="sp-q-${esc(chave)}" placeholder="Buscar nome, telefone, quem indicou…" value="${esc(q)}" oninput="spBuscaSet('${esc(jsq(chave))}',this.value)" style="font-size:16px">${q?`<button class="btn btn-s btn-mini" onclick="spBuscaSet('${esc(jsq(chave))}','')">✕</button>`:''}</div>`; }
 function spSalvarDe(c){ if(spEhFunil(c)) salvar(); else bnSalvar(); }
@@ -6126,6 +6127,25 @@ function spDiaVirarLista(){ const D=spData(); const l=spListaDoDia(D); const tod
   let n=prompt('Salvar a lista de '+dataBR(D)+' ('+todos.length+' nomes) como lista de TA:'); if(!n) return; n=n.trim(); if(!n) return;
   let f=false,b=false; todos.forEach(c=>{ c.listas=[...new Set([...(c.listas||[]),n])]; if(spEhFunil(c)) f=true; else b=true; }); if(f) salvar(); if(b) bnSalvar();
   SP_LISTA_AB[n]=true; toast('Lista “'+n+'” com '+todos.length+' nomes',true); render(); }
+/* SP-FUNIL-V1 (21/09): "esse SitPlan vem quem tá nessa etapa do Novos Negócios — é o SitPlan de Novos Negócios; os tópicos têm que
+   ser de fácil edição: abro, escolho a lista de TA, vejo etapa". O tópico Meu SitPlan mostra o funil NN por etapa (chips), com a
+   mesma tabela dos outros tópicos (busca · marcar · Colocar em… · ✎ ficha) e "Mover etapa" em lote. */
+let SP_ET='cold';
+function spEtSet(k){ SP_ET=k; render(); }
+function spFunilLista(k){ const ativos=meusContatos().filter(c=>!ETAPAS_ENCERR.includes(c.etapa));
+  if(k==='cold') return spNaoAbordados(); if(k==='todos') return ativos.slice().sort((a,b)=>(estrelasDe(b)-estrelasDe(a))||a.nome.localeCompare(b.nome));
+  return ativos.filter(c=>c.etapa===k).sort((a,b)=>(estrelasDe(b)-estrelasDe(a))||a.nome.localeCompare(b.nome)); }
+function spFunilCorpo(D,_cold,_coldFora){ const hoje=hojeISO(); const ativos=meusContatos().filter(c=>!ETAPAS_ENCERR.includes(c.etapa));
+  const chips=[['cold','🔥 Nunca abordados',_cold.length],['todos','Todos no funil',ativos.length]].concat(ETAPAS_FLUXO.map(e=>[e,ET_LABEL[e]||e,ativos.filter(c=>c.etapa===e).length])).filter(x=>x[2]||x[0]===SP_ET||x[0]==='cold');
+  if(!chips.some(x=>x[0]===SP_ET)) SP_ET='cold';
+  const l=spFunilLista(SP_ET);
+  return `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Funil de Novos Negócios por etapa. Escolha a etapa, busque, marque e jogue pra lista do dia ou pra uma lista de TA — ou mova de etapa.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${chips.map(x=>`<button class="btn ${SP_ET===x[0]?'btn-p':'btn-s'} btn-mini" style="min-height:44px" onclick="spEtSet('${esc(jsq(x[0]))}')">${esc(x[1])} <span style="opacity:.75;font-weight:700">${x[2]}</span></button>`).join('')}</div>
+    ${SP_ET==='cold'&&_coldFora?`<div style="margin-top:8px"><button class="btn btn-p btn-mini" style="min-height:44px" onclick="spPuxarNaoAbord()">➕ Puxar os ${Math.min(12,_coldFora)} mais quentes p/ ${D===hoje?'hoje':esc(dataBR(D))}</button></div>`:''}
+    <div style="margin-top:6px">${spNomesTabela(l,D,{chave:'fun',etapa:true,vazio:SP_ET==='cold'?'🎉 Todo mundo do funil já foi abordado ao menos uma vez.':'Ninguém nesta etapa.'})}</div>`; }
+async function spSelEtapa(sel){ const e=sel.value; sel.value=''; if(!e) return; const ids=[...SP_SEL]; let n=0;
+  ids.forEach(id=>{ const c=spPorId(id); if(!c||!spEhFunil(c)||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); try{ funOrdemInserir(c,e,null); }catch(_){} n++; });
+  if(!n){ toast('Nenhum contato do funil marcado (nome do Estoque não tem etapa)',false); return; } salvar(); SP_SEL.clear(); toast(n+' → '+(ET_LABEL[e]||e),true); render(); }
 function spRecSet(k){ SP_REC=SP_REC===k?'':k; render(); }
 function spRecLista(k){ const d=TA_SMART[k]; return d? taPoolDe(k).filter(d.base) : []; }
 function spRecPuxar(k){ const D=spData(); const l=spRecLista(k).filter(c=>taTemFone(c)&&!spNoDia(c,D)).slice(0,12); if(!l.length){ toast('Ninguém desse recorte fora da lista do dia',false); return; }
@@ -6135,7 +6155,7 @@ function spRecPuxar(k){ const D=spData(); const l=spRecLista(k).filter(c=>taTemF
 function spNomesTabela(l,D,opts){ opts=opts||{}; const hoje=hojeISO(); const chave=opts.chave||'x';
   if(!l.length) return `<div style="font-size:13px;color:var(--muted);padding:6px 0">${esc(opts.vazio||'Ninguém aqui.')}</div>`;
   const tot=l.length; l=spBuscaFiltra(l,chave); const vis=l.slice(0,opts.max||60);
-  const cabec=spBuscaHtml(chave,tot)+spSelBarra(vis);
+  const cabec=spBuscaHtml(chave,tot)+spSelBarra(vis,{etapa:!!opts.etapa});
   if(!l.length) return cabec+`<div style="font-size:13px;color:var(--muted);padding:6px 0">Ninguém com “${esc(spBusca(chave))}” aqui (${tot} no total).</div>`;
   const rows=vis.map(c=>{ const id=esc(jsq(c.id)); return `<tr style="border-top:1px solid var(--linha)${SP_SEL.has(c.id)?';background:var(--azul-claro,#eef4ff)':''}">
     <td style="padding:6px 9px;width:28px"><input type="checkbox" ${SP_SEL.has(c.id)?'checked':''} onchange="spSelTgl('${id}',this.checked)" style="width:22px;height:22px"></td>
@@ -6281,7 +6301,7 @@ function viewSitplan(){
   const resumoTA=`<details class="card sp-dobra" data-sec="resumo" style="padding:0;margin:8px 0"${spSecAberta('resumo')?' open':''} ontoggle="spSecToggle('resumo',this.open)">
     <summary style="padding:12px 14px;cursor:pointer;font-weight:700">🧭 Meu SitPlan — resumo do TA <span style="font-weight:400;font-size:12px;color:var(--muted)">· ${_ativos.length} no funil · <b style="color:var(--verm)">${_cold.length} nunca abordados</b> · ${_andamento} em andamento · ${_agend} agendados</span></summary>
     <div style="padding:0 14px 14px">
-    ${_cold.length? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Nomes que você tem no funil mas <b>nunca abordou</b> (quentes primeiro). Puxe pra lista de discagem e comece.</div>
+    ${spLis? spFunilCorpo(D,_cold,_coldFora) : _cold.length? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Nomes que você tem no funil mas <b>nunca abordou</b> (quentes primeiro). Puxe pra lista de discagem e comece.</div>
       ${_coldFora?`<button class="btn btn-p btn-mini" style="min-height:44px;margin-bottom:8px" onclick="spPuxarNaoAbord()">➕ Puxar os ${Math.min(12,_coldFora)} mais quentes p/ ${D===hoje?'hoje':dataBR(D)}</button>`:''}
       <div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Etapa</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px;text-align:right">Ação</th></tr></thead>
@@ -18989,7 +19009,7 @@ function lpSelfCheck(){
             && v.includes('spListasTaHtml') && v.includes('spRecortesHtml') && v.includes("novoOn('sp-listas')") && r.includes('TA_SMART') && r.includes('spRecLista')
             && v.includes('spBotoesHtml') && /spSecsTodas\(true\)/.test(String(spBotoesHtml.toString())) && /spSecsTodas\(false\)/.test(String(spBotoesHtml.toString()))
             && spSecAberta('__novo__')===false && !/<details[^>]*\sopen[\s>]/.test(v) && String(spListaBtn.toString()).includes('spListaMenu') && String(taRowMenu.toString()).includes('spPorId')
-            && String(spNomesTabela.toString()).includes('spBuscaHtml') && String(spNomesTabela.toString()).includes('spSelBarra') && spBuscaFiltra([{nome:'Zz Fun',telefone:'81999990012'},{nome:'Outro'}],'__t').length===2 && (SP_Q.__t='fun', spBuscaFiltra([{nome:'Zz Fun'},{nome:'Outro'}],'__t').length===1) && (SP_Q.__t='99990012', spBuscaFiltra([{nome:'Zz',telefone:'81999990012'},{nome:'Outro'}],'__t').length===1) && (delete SP_Q.__t, true);
+            && String(viewSitplan.toString()).includes('spFunilCorpo') && String(spFunilCorpo.toString()).includes('ETAPAS_FLUXO') && String(spSelBarra.toString()).includes('spSelEtapa') && String(spNomesTabela.toString()).includes('spBuscaHtml') && String(spNomesTabela.toString()).includes('spSelBarra') && spBuscaFiltra([{nome:'Zz Fun',telefone:'81999990012'},{nome:'Outro'}],'__t').length===2 && (SP_Q.__t='fun', spBuscaFiltra([{nome:'Zz Fun'},{nome:'Outro'}],'__t').length===1) && (SP_Q.__t='99990012', spBuscaFiltra([{nome:'Zz',telefone:'81999990012'},{nome:'Outro'}],'__t').length===1) && (delete SP_Q.__t, true);
         } finally{ S.contatos=bakS; BN.contatos=bakB; } })());
         /* TA-LINHA-V2 */
         ok('painel TA/WA: resultado do dia é um seletor só por linha (Estoque, funil e Zap) — nada de botão empilhado', (()=>{ const bn={id:'zzl1',nome:'Zz',estagio:'estoque',hist:[]}; const a=taResBtnsHtml(bn), b=waResBtnsHtml(bn); return /<select class="res-sel"/.test(a) && !/<button/.test(a) && /bnResultado\('zzl1'/.test(a) && /<select class="res-sel"/.test(b) && /waResultado\('zzl1'/.test(b) && BN_RES.every(r=>a.includes('value="'+r[0]+'"')) && WA_RES.every(r=>b.includes('value="'+r[0]+'"')); })());
