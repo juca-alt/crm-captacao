@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.10 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.11 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -10115,7 +10115,7 @@ async function gcalCarregar(interactive){ if(GCAL.carregando) return; GCAL.carre
         +'&timeMin='+encodeURIComponent(ini.toISOString())+'&timeMax='+encodeURIComponent(fim.toISOString());
       const r=await fetch(u,H); if(!r.ok){ if(c.primary) throw new Error('HTTP '+r.status+(r.status===403?' — confira se a Google Calendar API está ativa':'')); return []; }
       const j=await r.json(); return (j.items||[]).filter(e=>e.status!=='cancelled').map(e=>{ e._cal=c.primary?'primary':c.id; e._calNome=c.nome; return e; }); }));
-    GCAL.eventos=lote.flat().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date)))); GCAL.conectado=true; GCAL.erro=null; GCAL.ultimoSync=Date.now();
+    GCAL.eventos=lote.flat().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date)))); GCAL.conectado=true; GCAL.erro=null; GCAL.ultimoSync=Date.now(); setTimeout(()=>{ try{ gcalAtivEspelhar(); }catch(x){ console.warn('agenda-ativ',x); } },0);   /* AGENDA-ATIV-V1 */
   }catch(e){ if(interactive){ GCAL.erro=String(e&&e.message||e||'erro'); } /* silencioso que falhou = só "não conectado", sem alarde */ GCAL.conectado=!!GCAL.tok; }
   finally{ GCAL.carregando=false; if(VIEW==='agenda') viewAgenda(); }
 }
@@ -10385,6 +10385,7 @@ async function gcalCarregarMes(ym){ if(GCAL.mesCarregando) return; ym=ym||gcalMe
     const lote=await Promise.all(cals.map(async c=>{ const u='https://www.googleapis.com/calendar/v3/calendars/'+encodeURIComponent(c.primary?'primary':c.id)+'/events?singleEvents=true&orderBy=startTime&maxResults=400&timeMin='+encodeURIComponent(tMin.toISOString())+'&timeMax='+encodeURIComponent(tMax.toISOString());
       const r=await fetch(u,H); if(!r.ok) return []; const j=await r.json(); return (j.items||[]).filter(e=>e.status!=='cancelled').map(e=>{ e._cal=c.primary?'primary':c.id; e._calNome=c.nome; return e; }); }));
     GCAL.mes={ym,itens:lote.flat().sort((a,b)=>String(a.start&&(a.start.dateTime||a.start.date)).localeCompare(String(b.start&&(b.start.dateTime||b.start.date)))),ts:Date.now()};
+    setTimeout(()=>{ try{ gcalAtivEspelhar(); }catch(x){ console.warn('agenda-ativ',x); } },0);   /* AGENDA-ATIV-V1 */
   }catch(e){ GCAL.mes={ym,itens:[],ts:Date.now(),erro:String(e&&e.message||e)}; }
   finally{ GCAL.mesCarregando=false; if(VIEW==='agenda'&&GCAL.vista==='mes') viewAgenda(); } }
 function gcalMesItens(ym){ if(GCAL.mes&&GCAL.mes.ym===ym) return GCAL.mes.itens||[]; return (GCAL.eventos||[]).filter(e=>gcalDiaISO(e).slice(0,7)===ym); }
@@ -11090,6 +11091,29 @@ function negIndex(){
   _NEG_IDX={nome,fone}; _NEG_IDX_TS=Date.now(); return _NEG_IDX;
 }
 function negIndexLimpar(){ _NEG_IDX=null; }
+
+/* ═══ AGENDA-ATIV-V1 (21/09/2026) ═══ "Associei da agenda ao lead da Larissa — deveria atualizar nas atividades do cliente também."
+   O vínculo evento→negócio já existia (crmContato no evento, ou nome/telefone batendo), mas ficava só na Agenda: a ficha
+   seguia "sem próxima atividade". Agora todo evento ligado a um negócio ganha uma atividade espelho na ficha (gcalEvId),
+   com data/hora/título do Google. Não é a atividade nascida no CRM (essa tem crmTarefa e já volta pelo gsync) e o CRM
+   NÃO reescreve o evento do Google a partir dela (campo próprio, fora do gsync). ✓ feito no Google conclui aqui. */
+function gcalAtivTipo(e){ const t=String(e&&e.summary||'').toUpperCase(); if(/\bTA\b|LIGA/.test(t)) return 'ligar'; if(/ZAP|WHATS/.test(t)) return 'whats'; if(/PROPOSTA/.test(t)) return 'proposta'; return 'reuniao'; }
+function gcalAtivEspelhar(){ if(!novoOn('agenda-ativ')||typeof S==='undefined') return 0;
+  const evs=[...(GCAL.eventos||[]),...((GCAL.mes&&GCAL.mes.itens)||[])], vistos=new Set(); let mud=0;
+  evs.forEach(e=>{ if(!e||!e.id||vistos.has(e.id)||e.status==='cancelled') return; vistos.add(e.id);
+    const p=gcalPriv(e); if(p.crmTarefa) return;                        /* nasceu de atividade do CRM: o gsync cuida */
+    const c=gcalNegocioDoEvento(e); if(!c) return;
+    const ini=gcalDT(e,'start'), fim=gcalDT(e,'end'); if(!ini.d) return;
+    let dur=60; if(ini.t&&fim.t){ const a=ini.t.split(':'), b=fim.t.split(':'); dur=Math.max(15,(+b[0]*60+ +b[1])-(+a[0]*60+ +a[1])); }
+    const tit=String(e.summary||'').replace(RE_PREFIXO_REUNIAO,'').trim()||'Compromisso';
+    let t=tarefasDe(c).find(x=>x&&x.gcalEvId===e.id);
+    if(!t){ t={id:uid(),tipo:gcalAtivTipo(e),tit,quando:ini.d,hora:ini.t||'',dur,feito:null,notas:'',criadoEm:new Date().toISOString(),por:quemFez(),gcalEvId:e.id,gcalFonte:'google'};
+      tarefasDe(c).push(t); interacoesDe(c).push({id:uid(),k:'tarefa',l:'Compromisso da Agenda Google vinculado: '+tit+' · '+dataBR(ini.d)+(ini.t?' '+ini.t:''),dia:hojeISO(),ts:t.criadoEm,por:quemFez()}); mud++; }
+    else { if(t.quando!==ini.d||t.hora!==(ini.t||'')||t.tit!==tit){ t.quando=ini.d; t.hora=ini.t||''; t.tit=tit; t.dur=dur; mud++; } }
+    if(p.crmFeito==='sim'&&!t.feito){ t.feito=new Date().toISOString(); interacoesDe(c).push({id:uid(),k:'tarefa',l:'Concluída na Agenda Google: '+tit,dia:hojeISO(),ts:t.feito,por:quemFez()}); mud++; }
+    else if(p.crmFeito!=='sim'&&t.feito&&t.gcalFonte==='google'&&p.crmFeito==='nao'){ /* "não aconteceu" no Google: fica aberta pra remarcar */ t.feito=null; mud++; } });
+  if(mud){ salvar(); if(typeof negIndexLimpar==='function') negIndexLimpar(); if(!syncOcupado()&&typeof agendarRender==='function') agendarRender(); }
+  return mud; }
 /* de que negócio é este compromisso do Google? */
 function gcalNegocioDoEvento(ev){
   if(!ev) return null;
@@ -15413,6 +15437,7 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
+  'agenda-ativ':  {o:'Compromisso da Agenda Google ligado a um negócio (vínculo manual ou nome/telefone batendo) vira atividade na ficha do lead — Tarefas & Atividades deixa de dizer "sem próxima atividade"; ✓ feito no Google conclui a atividade', desde:'2026-09-21'},
   'rec-funil':    {o:'Recomendações lê também o FUNIL (não só o Estoque): quem indicou um lead do funil (campo recomendante, ou a origem quando é um nome de pessoa) aparece como recomendante com os nomes dele; o recorte Recomendações do Painel TA e o contador do menu acompanham', desde:'2026-09-21'},
   'sp-listas':    {o:'SitPlan organiza, Painel TA executa: tópicos 📋 Listas de TA (puxar a lista inteira pro dia, salvar o dia como lista) e 🎯 Recortes da base (os mesmos do Painel TA) dentro do SitPlan, botão 📋 em cada linha pra pôr o nome numa lista de TA, e lista nomeada aceita contato do funil (não só do Estoque)', desde:'2026-09-21'},
   'agenda-classe':{o:'Agenda: compromisso do Google com classe (negócio · trabalho · pessoal/só ocupado), várias agendas do Google com regra por agenda + palavras-chave, e o botão ⋯ ação (feito · não aconteceu · delay · adiar com data · vincular · tipo)', desde:'2026-09-18'},
@@ -18980,6 +19005,17 @@ function lpSelfCheck(){
         ok('painel WA: resultado do Zap grava no lugar certo (funil = interação wa:1; agendou/recusou seguem o caminho do TA) e nunca conta como ligação', Object.values(WA_RES_FUN).every(k=>RES_BY_K[k]) && WA_RES_FUN.agendou==='agendou_oi' && WA_RES_FUN.recusou==='sem_interesse' && RESULTADOS.filter(r=>r.wa).every(r=>!r.lig) && WA_RES.length===5 && (()=>{ const c={id:'zzwa',nome:'Zz',hist:[{tipo:'wa',res:'mandei',dia:hojeISO()}]}; return waResHoje(c)==='mandei' && /Mandei msg/.test(waResBtnsHtml(c)) && /waResDesfazer/.test(waResBtnsHtml(c)); })());
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
+        /* AGENDA-ATIV-V1 */
+        ok('AGENDA-ATIV: evento do Google vinculado ao negócio vira atividade na ficha (data/hora/título), não duplica, remarca junto e ✓ feito no Google conclui; evento nascido no CRM (crmTarefa) fica de fora', (()=>{ if(!NOVO_SO_MEU['agenda-ativ']) return false; const bakS=S.contatos, bakE=GCAL.eventos, bakM=GCAL.mes; try{
+          S.contatos=[normContato({id:'zzga1',nome:'Larissa Teste',lp:S.activeUser,funil:'bc',etapa:'RC/OI',telefone:'81999990041'})]; negIndexLimpar();
+          const ev=id=>({id,status:'confirmed',summary:'RC/OI Larissa Teste',start:{dateTime:'2026-09-23T08:00:00-03:00'},end:{dateTime:'2026-09-23T09:00:00-03:00'},extendedProperties:{private:{crmApp:'crmlp',crmContato:'zzga1'}}});
+          GCAL.eventos=[ev('zzev1'),{id:'zzev2',status:'confirmed',summary:'Nasceu no CRM',start:{dateTime:'2026-09-24T08:00:00-03:00'},end:{dateTime:'2026-09-24T09:00:00-03:00'},extendedProperties:{private:{crmApp:'crmlp',crmTarefa:'t1',crmContato:'zzga1'}}}]; GCAL.mes=null;
+          const n1=gcalAtivEspelhar(); const ts=tarefasDe(S.contatos[0]); const t=ts.find(x=>x.gcalEvId==='zzev1');
+          const n2=gcalAtivEspelhar();
+          GCAL.eventos[0].start.dateTime='2026-09-25T10:00:00-03:00'; GCAL.eventos[0].end.dateTime='2026-09-25T11:00:00-03:00'; gcalAtivEspelhar();
+          GCAL.eventos[0].extendedProperties.private.crmFeito='sim'; gcalAtivEspelhar();
+          return n1===1&&n2===0&&ts.length===1&&!!t&&t.tipo==='reuniao'&&t.hora==='10:00'&&t.quando==='2026-09-25'&&t.dur===60&&!!t.feito&&t.tit==='RC/OI Larissa Teste';
+        } finally{ S.contatos=bakS; GCAL.eventos=bakE; GCAL.mes=bakM; negIndexLimpar(); } })());
         /* REC-FUNIL-V1 */
         ok('REC-FUNIL: lead do funil com recomendante (ou origem que é nome de pessoa) entra em Recomendações; origem genérica não; recorte Recomendações do TA atravessa o funil', (()=>{ if(!NOVO_SO_MEU['rec-funil']) return false; const bak=S.contatos; try{
           S.contatos=[normContato({id:'zzr1',nome:'Adeline Teste',lp:S.activeUser,telefone:'81999990031',etapa:'SitPlan',origem:'Glysse Teste'}),normContato({id:'zzr2',nome:'Bea Teste',lp:S.activeUser,telefone:'81999990032',etapa:'TA',recomendante:'Glysse Teste',origem:'Indicação'}),normContato({id:'zzr3',nome:'Solta',lp:S.activeUser,etapa:'TA',origem:'Indicação'})];
