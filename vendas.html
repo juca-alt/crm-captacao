@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.05 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.06 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1948,14 +1948,41 @@ function pendSalvar(){ if(window.CONTA_TROCANDO) return; try{ localStorage.setIt
 function pendMarcar(fila,ids){ (ids||[]).forEach(id=>{ PEND[fila][String(id)]=1; }); pendSalvar(); }
 function pendLimpar(fila,ids){ (ids||[]).forEach(id=>{ delete PEND[fila][String(id)]; }); pendSalvar(); }
 function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).length; }
-function fundMerge(locais, remotos, pend, completo){
+/* ═══ SYNC-3VIAS-V1 (21/09/2026) ═══════════════════════════════════════════════
+   Pedido dele: "vario muito de devices e não posso perder informações". Antes, o registro
+   inteiro vencia: se o iPad pôs o nome numa lista e o Mac (sem ter puxado) mudou a etapa
+   do MESMO contato, o Mac subia o objeto inteiro e a lista do iPad sumia. Agora o merge é
+   CAMPO A CAMPO contra a última versão conhecida do servidor (a base): o que EU mudei
+   vence no meu campo; o que o OUTRO mudou fica no campo dele; array (listas, interações,
+   histórico) recebe os dois lados. A base vive em _lpcBase/_bnBase (id → JSON do servidor). */
+let _lpcBase={}, _bnBase={};
+function fund3(base,local,remoto){ base=base||{}; local=local||{}; remoto=remoto||{}; const out={...remoto}; const J=v=>JSON.stringify(v===undefined?null:v);
+  new Set([...Object.keys(base),...Object.keys(local),...Object.keys(remoto)]).forEach(k=>{ if(k==='_upd'||k==='_dono') return;
+    const bl=J(base[k]), ll=J(local[k]), rl=J(remoto[k]);
+    if(ll===bl) return;                                   /* não mexi aqui → fica o do servidor */
+    if(rl===bl||rl===ll){ out[k]=local[k]; return; }      /* só eu mexi → o meu */
+    if(Array.isArray(local[k])&&Array.isArray(remoto[k])){ /* os dois mexeram num array: tira o que eu tirei, soma o que cada um pôs */
+      const b=Array.isArray(base[k])?base[k]:[], bs=new Set(b.map(J)), ls=new Set(local[k].map(J)), tirei=new Set(b.filter(x=>!ls.has(J(x))).map(J));
+      const arr=remoto[k].filter(x=>!tirei.has(J(x))), rs=new Set(arr.map(J)); local[k].forEach(x=>{ if(!bs.has(J(x))&&!rs.has(J(x))) arr.push(x); }); out[k]=arr; return; }
+    out[k]=local[k]; });                                  /* escalar disputado: a edição que está na mão dele agora vence */
+  out._upd=[local._upd,remoto._upd].filter(Boolean).sort().pop()||new Date().toISOString();
+  const d=local._dono||remoto._dono; if(d) out._dono=d; if(local.id!=null) out.id=local.id; return out; }
+function fundBaseAnotar(mapa,remotos){ (remotos||[]).forEach(r=>{ if(r&&r.id!=null) mapa[String(r.id)]=JSON.stringify(r); }); }
+/* antes de subir: puxa do servidor só os ids que vou mandar e, se alguém mexeu desde a minha base, funde campo a campo */
+async function fund3Servidor(ids,acharLocal,mapaBase,extraRow){ if(!ids.length||!sb) return; const sc=o=>{ const x={...o}; delete x._upd; delete x._dono; return JSON.stringify(x); };
+  for(let i=0;i<ids.length;i+=200){ const lote=ids.slice(i,i+200); let r; try{ r=await sb.from(LPC_T).select('id,dono,dados').in('id',lote); }catch(e){ return; } if(!r||r.error) return;
+    (r.data||[]).forEach(x=>{ const srv=lpcComDono(x); if(!srv) return; const k=String(srv.id), loc=acharLocal(k); if(!loc) return; const b=mapaBase[k]?JSON.parse(mapaBase[k]):null;
+      if(!b||sc(b)===sc(srv)||sc(b)===sc(loc)) return;          /* ninguém mexeu lá (ou eu não mexi) → nada a fundir */
+      const m=fund3(b,loc,srv); Object.keys(loc).forEach(q=>{ delete loc[q]; }); Object.assign(loc,m); mapaBase[k]=JSON.stringify(srv); }); } }
+function fundMerge(locais, remotos, pend, completo, base){
   const out=new Map((remotos||[]).map(c=>[String(c.id),c]));       /* servidor manda */
   /* v7.43.1: pendente cujo conteúdo (sem carimbos) é IGUAL ao do servidor não deve nada → deixa de ser pendente */
   const semCarimbo=o=>{ const x={...o}; delete x._upd; delete x._dono; return JSON.stringify(x); };
   if(pend){ let mudou=false; (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id); const r=out.get(k); if(pend[k]&&r&&semCarimbo(r)===semCarimbo(c)){ delete pend[k]; mudou=true; } }); if(mudou&&typeof pendSalvar==='function') try{ pendSalvar(); }catch(_){} }   /* BUGS-V5 #13 */
   (locais||[]).forEach(c=>{ if(!c||c.id==null) return; const k=String(c.id);
     const pendente=!!(pend&&pend[k]);                               /* só o que está na FILA vence (criado aqui entra na fila ao salvar); local sem dono e fora da fila = fantasma de versão antiga → sai na carga completa */
-    if(pendente){ out.set(k,c); return; }                           /* o que este aparelho deve ao servidor vence */
+    if(pendente){ const r=out.get(k), bj=base&&base[k]; if(r&&bj&&bj!==JSON.stringify(c)&&semCarimbo(JSON.parse(bj))!==semCarimbo(r)){ out.set(k,fund3(JSON.parse(bj),c,r)); return; }   /* SYNC-3VIAS-V1: os dois mexeram → campo a campo */
+      out.set(k,c); return; }                                       /* o que este aparelho deve ao servidor vence */
     if(!out.has(k) && !completo) out.set(k,c);                      /* carga parcial: não apaga o que não voltou */
   });
   return [...out.values()];
@@ -1988,7 +2015,8 @@ function _lpcMergeBn(remotosBn,completo){
 }
 function _lpcMergeFunis(remotos,completo){
   if(remotos.length||completo){
-    S.contatos=fundMerge(S.contatos,remotos,PEND.lpc,completo!==false);   /* FUNDAÇÃO V1: servidor manda; pendente vence */
+    S.contatos=fundMerge(S.contatos,remotos,PEND.lpc,completo!==false,_lpcBase);   /* FUNDAÇÃO V1: servidor manda; pendente vence (3 vias se os dois mexeram) */
+    fundBaseAnotar(_lpcBase,remotos);
     normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
     salvar({doServidor:true});
   }
@@ -2014,9 +2042,37 @@ function escLpParaDono(dono, lp){ const rs=((typeof ESC!=='undefined'&&ESC&&ESC.
 function lpcRowOut(k,d,extra){ const dados={...d,...(extra||{})}; const dono=dados._dono||(typeof delegAtivo==='function'?delegAtivo():null); delete dados._dono;
   const donoEf=dono||(typeof escEu==='function'?escEu():null); if(donoEf){ const nlp=escLpParaDono(donoEf,dados.lp); if(nlp!==dados.lp) dados.lp=nlp; }
   const row={id:k,dados}; if(dono) row.dono=dono; else if(donoEf) row.dono=donoEf; return row; }
+/* ═══ SYNC-PUXA-V1 (21/09/2026) ═══════════════════════════════════════════════
+   Antes o outro aparelho só via a mudança no boot, no 🔄 ou ao reconectar. Agora o app puxa
+   do servidor, INCREMENTAL (só linhas com `atualizado` depois da última puxada), ao voltar
+   pra aba, ao reconectar e a cada 60 s enquanto a aba está visível. Merge parcial (não
+   apaga nada) + 3 vias. Se ele está digitando ou com modal aberto, os dados entram e a
+   tela só repinta quando ele soltar. */
+let SYNC_DESDE=null, _syncPuxando=false, _syncRenderPend=false;
+async function syncPuxar(motivo){
+  if(!LPC_REMOTE||!sb||_syncPuxando||window.CONTA_TROCANDO||navigator.onLine===false||!SYNC_DESDE) return; if(typeof _syncRodando!=='undefined'&&_syncRodando) return;
+  _syncPuxando=true;
+  try{
+    const r=await sb.from(LPC_T).select('id,dono,dados,atualizado').gt('atualizado',SYNC_DESDE).order('atualizado').limit(2000); if(r.error) throw r.error;
+    const rows=r.data||[]; if(!rows.length) return;
+    SYNC_DESDE=rows[rows.length-1].atualizado;
+    const todos=rows.map(lpcComDono).filter(Boolean), bn=todos.filter(c=>c.funil==='bn'), fun=todos.filter(c=>c.funil!=='bn');
+    if(fun.length) _lpcMergeFunis(fun,false);
+    if(bn.length&&_bnRemoteLoaded){ BN.contatos=fundMerge(BN.contatos,bn,PEND.bn,false,_bnBase); fundBaseAnotar(_bnBase,bn); _bnPrev=_bnSnap(); bnSalvar({doServidor:true}); }
+    syncRepintar();
+  }catch(e){ console.warn('sync: puxada incremental falhou ('+motivo+')',e); }
+  finally{ _syncPuxando=false; }
+}
+function syncOcupado(){ const a=document.activeElement; return !!document.querySelector('.overlay.aberto, #at-ov, .cmdk-bd, .ta-ficha, .ta-menu, .sheet-bd')||(!!a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName||'')); }
+function syncRepintar(){ if(syncOcupado()){ _syncRenderPend=true; return; } _syncRenderPend=false; if(typeof agendarRender==='function') agendarRender(); }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) syncPuxar('voltou pra aba'); });
+window.addEventListener('online',()=>setTimeout(()=>syncPuxar('reconectou'),2500));
+window.addEventListener('focusout',()=>{ if(_syncRenderPend) setTimeout(()=>{ if(_syncRenderPend&&!syncOcupado()) syncRepintar(); },300); });
+setInterval(()=>{ if(!document.hidden) syncPuxar('60s'); },60000);
 async function lpcCarregar(){
   LPC_REMOTE=await lpcRemoteOn();
   if(!LPC_REMOTE) return;
+  if(!SYNC_DESDE) SYNC_DESDE=new Date(Date.now()-5000).toISOString();   /* SYNC-PUXA-V1: daqui em diante, só o que mudar */
   try{
     /* Duas voltas em vez de uma. Medido em 16/08: a query única traz 3,09 MB
        (5.180 linhas), das quais 5.135 são Base de Nomes — que o Dashboard, os
@@ -2092,8 +2148,10 @@ async function pushResiliente(rows){ const falhas=new Set(); if(!rows.length) re
 async function lpcPush(){
   if(!LPC_REMOTE||!sb) return;
   try{
+    const pre=_lpcSnap(); await fund3Servidor(Object.keys(pre).filter(k=>pre[k]!==_lpcPrev[k]||PEND.lpc[k]),k=>(S.contatos||[]).find(y=>String(y.id)===k),_lpcBase);   /* SYNC-3VIAS-V1 */
     const atual=_lpcSnap(), rows=[], mortos=[];
-    Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]))); });
+    Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]||PEND.lpc[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]))); });
+    if(JSON.stringify(atual)!==JSON.stringify(pre)) salvar({doServidor:true});
     Object.keys(_lpcPrev).forEach(k=>{ if(!(k in atual)) mortos.push(k); });
     const falhas=await pushResiliente(rows);
     /* SEGURANÇA-V1: delete só por (dono,id) da linha que ESTE aparelho conhecia, e nunca em massa —
@@ -2104,6 +2162,7 @@ async function lpcPush(){
     const prevOld=_lpcPrev; _lpcPrev=atual; const desiste=[]; falhas.forEach(k=>{ if((PUSH_ERR[k]||0)>=5){ desiste.push(k); return; } if(prevOld[k]!==undefined) _lpcPrev[k]=prevOld[k]; else delete _lpcPrev[k]; });
     if(desiste.length){ toast('⚠️ '+desiste.length+' edição(ões) não puderam ser enviadas depois de 5 tentativas (dono/permissão). Ficam só neste aparelho.',false); }
     pendLimpar('lpc',rows.map(x=>String(x.id)).filter(k=>!falhas.has(k)||desiste.includes(k))); pendLimpar('lpc',mortos);
+    rows.forEach(x=>{ if(!falhas.has(String(x.id))) _lpcBase[String(x.id)]=atual[String(x.id)]; });   /* subiu = é a base agora */
     rows.forEach(x=>{ if(falhas.has(String(x.id))) return; const c=(S.contatos||[]).find(y=>String(y.id)===String(x.id)); if(c&&!c._dono&&x.dono){ c._dono=x.dono; _lpcPrev[String(x.id)]=JSON.stringify(c); } });   /* confirmado: agora tem dono (e o snapshot acompanha, senão sobe de novo) */
   }catch(e){ console.warn('lp_contatos: push falhou (retenta no próximo salvar)',e); }
 }
@@ -15180,7 +15239,8 @@ function bnSemOsApagados(locais, remotos, completo){ if(!completo) return locais
   const ids=new Set((remotos||[]).map(c=>String(c.id)));
   return (locais||[]).filter(c=>!c._dono||ids.has(String(c.id))); }
 function bnMergeRemoto(remotos,completo){
-  BN.contatos=fundMerge(BN.contatos,remotos,PEND.bn,!!completo);   /* FUNDAÇÃO V1: servidor manda; pendente vence */
+  BN.contatos=fundMerge(BN.contatos,remotos,PEND.bn,!!completo,_bnBase);   /* FUNDAÇÃO V1: servidor manda; pendente vence (3 vias se os dois mexeram) */
+  fundBaseAnotar(_bnBase,remotos);
   _bnPrev=_bnSnap(); bnSalvar({doServidor:true}); render();
 }
 function bnAgendarPush(){ if(!LPC_REMOTE) return; clearTimeout(_bnTimer); _bnTimer=setTimeout(bnPush,2000); }
@@ -15192,12 +15252,15 @@ async function bnPush(){
      sem bn remoto e libera). */
   if(!_bnRemoteLoaded){ bnAgendarPush(); return; }
   try{
+    const pre=_bnSnap(); await fund3Servidor(Object.keys(pre).filter(k=>pre[k]!==_bnPrev[k]||PEND.bn[k]),k=>bnPor(k),_bnBase);   /* SYNC-3VIAS-V1 */
     const atual=_bnSnap(), rows=[];
-    Object.keys(atual).forEach(k=>{ if(atual[k]!==_bnPrev[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]),{funil:'bn'})); });
+    Object.keys(atual).forEach(k=>{ if(atual[k]!==_bnPrev[k]||PEND.bn[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]),{funil:'bn'})); });
+    if(JSON.stringify(atual)!==JSON.stringify(pre)) bnSalvar({doServidor:true});
     const falhas=await pushResiliente(rows);
     const prevOld=_bnPrev; _bnPrev=atual; const desiste=[]; falhas.forEach(k=>{ if((PUSH_ERR[k]||0)>=5){ desiste.push(k); return; } if(prevOld[k]!==undefined) _bnPrev[k]=prevOld[k]; else delete _bnPrev[k]; });
     if(desiste.length) toast('⚠️ '+desiste.length+' nome(s) do Estoque não puderam ser enviados após 5 tentativas (dono/permissão). Ficam só neste aparelho.',false);
     pendLimpar('bn',rows.map(x=>String(x.id)).filter(k=>!falhas.has(k)||desiste.includes(k)));
+    rows.forEach(x=>{ if(!falhas.has(String(x.id))) _bnBase[String(x.id)]=atual[String(x.id)]; });   /* subiu = é a base agora */
     rows.forEach(x=>{ if(falhas.has(String(x.id))) return; const c=bnPor(x.id); if(c&&!c._dono&&x.dono){ c._dono=x.dono; _bnPrev[x.id]=JSON.stringify(c); } });   /* confirmado: agora tem dono */
   }catch(e){ console.warn('bn: push falhou (retenta no próximo salvar)',e); }
 }
@@ -18805,6 +18868,24 @@ function lpSelfCheck(){
         ok('painel WA: resultado do Zap grava no lugar certo (funil = interação wa:1; agendou/recusou seguem o caminho do TA) e nunca conta como ligação', Object.values(WA_RES_FUN).every(k=>RES_BY_K[k]) && WA_RES_FUN.agendou==='agendou_oi' && WA_RES_FUN.recusou==='sem_interesse' && RESULTADOS.filter(r=>r.wa).every(r=>!r.lig) && WA_RES.length===5 && (()=>{ const c={id:'zzwa',nome:'Zz',hist:[{tipo:'wa',res:'mandei',dia:hojeISO()}]}; return waResHoje(c)==='mandei' && /Mandei msg/.test(waResBtnsHtml(c)) && /waResDesfazer/.test(waResBtnsHtml(c)); })());
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
+        /* SYNC-3VIAS-V1 · SYNC-PUXA-V1 */
+        ok('SYNC-3VIAS: iPad pôs na lista, Mac mudou a etapa do mesmo contato → os dois ficam; array recebe os dois lados; tirar local tira do resultado', (()=>{
+          const base={id:'z',nome:'Zz',etapa:'SitPlan',listas:['A'],interacoes:[{k:'x',dia:'2026-09-01'}]};
+          const mac={...base,etapa:'TA'};                                          /* eu mudei só a etapa */
+          const ipad={...base,listas:['A','B'],interacoes:[{k:'x',dia:'2026-09-01'},{k:'y',dia:'2026-09-21'}]};   /* servidor: o iPad pôs na lista B e registrou y */
+          const m=fund3(base,mac,ipad);
+          const m2=fund3(base,{...base,listas:[]},{...base,listas:['A','C']});   /* eu tirei A, o outro pôs C */
+          return m.etapa==='TA'&&m.listas.join()==='A,B'&&m.interacoes.length===2&&m2.listas.join()==='C';
+        })());
+        ok('SYNC-3VIAS: fundMerge com base — pendente + remoto diferente da base = fusão, não sobrescrita; sem base, pendente vence como antes', (()=>{
+          const base={'z':JSON.stringify({id:'z',nome:'Zz',etapa:'SitPlan',listas:['A']})};
+          const loc=[{id:'z',nome:'Zz',etapa:'TA',listas:['A']}], rem=[{id:'z',nome:'Zz',etapa:'SitPlan',listas:['A','B']}];
+          const r=fundMerge(loc,rem,{z:1},true,base)[0], r0=fundMerge(loc,rem,{z:1},true,{})[0];
+          return r.etapa==='TA'&&r.listas.join()==='A,B'&&r0.etapa==='TA'&&r0.listas.join()==='A';
+        })());
+        ok('SYNC-PUXA: puxada incremental por `atualizado` ligada ao voltar pra aba, ao reconectar e a cada 60 s; push leva os pendentes e funde antes de subir', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join('');
+          return typeof syncPuxar==='function'&&String(syncPuxar.toString()).includes(".gt('atualizado',SYNC_DESDE)")&&/visibilitychange[^\n]*syncPuxar/.test(src)&&/'online'[^\n]*syncPuxar/.test(src)&&/setInterval\(\(\)=>\{ if\(!document\.hidden\) syncPuxar/.test(src)
+            &&String(lpcPush.toString()).includes('fund3Servidor')&&String(bnPush.toString()).includes('fund3Servidor')&&String(lpcPush.toString()).includes('||PEND.lpc[k]')&&String(bnPush.toString()).includes('||PEND.bn[k]'); })());
         /* SP-LISTAS-V1 */
         ok('SP-LISTAS: lista nomeada de TA atravessa funil + Estoque; o SitPlan tem os tópicos Listas de TA e Recortes (o MESMO TA_SMART do Painel TA), botão 📋 por linha, dois botões abrir/recolher tudo, e nasce atrás de sp-listas', (()=>{ const bakS=S.contatos, bakB=BN.contatos; try{
           S.contatos=[normContato({id:'zzsl1',nome:'Zz Fun',lp:S.activeUser,telefone:'81999990012',etapa:'SitPlan',listas:['SP Teste']})]; BN.contatos=[{id:'zzsl2',nome:'Zz Bn',estagio:'lista_ta',lp:S.activeUser,listas:['SP Teste'],hist:[],telefone:'81999990013'}];
