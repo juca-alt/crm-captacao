@@ -13,6 +13,8 @@ Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de 
 - **Lista nomeada de TA passou a aceitar contato do funil** (antes só Estoque): `spListaPool()` / `taListaMembros(n)` são a fonte única; `bnListasTodas`, `taDaLista`, `taListasDe`, `taListasAplicar`, `bnTaTirar(Lote)`, `bnTaMoverLote`, renomear e apagar leem/gravam nos dois (`salvar()` + `bnSalvar()`). No Painel TA, contato do funil numa lista nomeada ganha o ⋯ (sem "mover estágio"). O funil sincroniza o objeto inteiro (`dados` jsonb) — sem migration.
 - **Tópicos do SitPlan seguem a regra da dobra:** todos nascem fechados, lembrados por aparelho (`crmlp_sp_secs_v1`, via `dobraAberta`), e a tela ganhou os **dois botões fixos** ⌄ abrir tudo · ⌃ recolher tudo (isso não está atrás da chave: é a regra de 16/09).
 
+- **SP-BUSCA-V1 (v8.04, mesmo dia):** pedido dele no iPad: *"bota campo de buscar em cada tópico, aí busco e seleciono a qual lista quero colocar"*. Cada tabela dos tópicos (cada lista de TA e o recorte escolhido) ganhou **🔎 busca própria** (nome, telefone, quem indicou, empresa/profissão), **caixa de marcar por linha** + "todos", e a barra **"N marcados → Colocar em… ▾"** (lista do dia · cada lista de TA · nova lista). A seleção (`SP_SEL`) é uma só e vale entre os tópicos.
+
 ### Prova
 - Invariante `SP-LISTAS` no `lpSelfCheck` (lista nomeada atravessa funil+Estoque; tópicos presentes; TA_SMART reaproveitado; botões abrir/recolher; nenhum `details` aberto literal; ⋯ lê `spPorId`).
 - Portão: 6 cenários (375/1024/1280 × cheia/vazia), 47 telas, 0 falhas. Screenshot do SitPlan e do Painel TA em 390 e 1280 com fixture + listas nomeadas: zero estouro, console sem exceção.

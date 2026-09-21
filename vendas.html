@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.03 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.04 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -5993,7 +5993,35 @@ function spDobra(k,titulo,resumo,corpo){ const ab=spSecAberta(k);
     <summary style="padding:12px 14px;cursor:pointer;font-weight:700">${titulo} <span style="font-weight:400;font-size:12px;color:var(--muted)">${resumo}</span></summary>
     <div style="padding:0 14px 14px">${corpo}</div></details>`; }
 function spBotoesHtml(){ return `<div class="hub-tudo" style="margin:0 0 6px"><button class="btn btn-s btn-mini" onclick="spSecsTodas(true)" title="Abre todos os tópicos">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="spSecsTodas(false)" title="Recolhe todos os tópicos">⌃ recolher tudo</button></div>`; }
-let SP_REC='', SP_LISTA_AB={};
+let SP_REC='', SP_LISTA_AB={}, SP_Q={}, SP_SEL=new Set();
+/* SP-BUSCA-V1 (21/09): "bota campo de buscar em cada tópico, aí busco e seleciono a qual lista quero colocar" —
+   cada tabela dos tópicos tem busca própria (SP_Q[chave]), caixa de marcar por linha e a barra
+   "N marcados → lista ▾ Aplicar". A seleção é uma só (SP_SEL) e vale entre os tópicos. */
+function spBusca(chave){ return SP_Q[chave]||''; }
+let _spQT=null;
+function spBuscaSet(chave,v){ SP_Q[chave]=v; clearTimeout(_spQT); _spQT=setTimeout(()=>{ const el=document.getElementById('sp-q-'+chave); const pos=el?el.selectionStart:null; render();
+  const el2=document.getElementById('sp-q-'+chave); if(el2){ el2.focus(); try{ el2.setSelectionRange(pos,pos); }catch(_){} } },250); }
+function spBuscaFiltra(l,chave){ const q=normKey(spBusca(chave)); if(!q) return l; const dig=q.replace(/\D/g,'');
+  return l.filter(c=>normKey(c.nome).includes(q)||normKey(c.recomendante||'').includes(q)||normKey(c.empresa||'').includes(q)||normKey(c.cargo||c.profissao||'').includes(q)||(dig.length>=3&&String(c.telefone||'').replace(/\D/g,'').includes(dig))); }
+function spSelTgl(id,on){ if(on) SP_SEL.add(id); else SP_SEL.delete(id); render(); }
+function spSelTodos(ids,on){ ids.forEach(id=>on?SP_SEL.add(id):SP_SEL.delete(id)); render(); }
+function spSelLimpar(){ SP_SEL.clear(); render(); }
+function spSelAplicar(sel){ const v=sel.value; sel.value=''; const ids=[...SP_SEL]; if(!ids.length){ toast('Marque pelo menos um nome',false); return; } if(!v) return;
+  const D=spData(); let nome=v;
+  if(v==='__nova'){ nome=prompt('Nome da nova lista de TA:'); if(!nome) return; nome=nome.trim(); if(!nome) return; }
+  let f=false,b=false,n=0; ids.forEach(id=>{ const c=spPorId(id); if(!c) return; n++;
+    if(v==='__dia'){ if(spEhFunil(c)) c.sitplan=D; else c.ta_dia=D; } else c.listas=[...new Set([...(c.listas||[]),nome])];
+    if(spEhFunil(c)) f=true; else b=true; });
+  if(f) salvar(); if(b) bnSalvar(); SP_SEL.clear();
+  toast(n+(v==='__dia'?' na lista de '+dataBR(D):' → “'+nome+'”'),true); render(); }
+function spSelBarra(vis){ const nSel=vis.filter(c=>SP_SEL.has(c.id)).length; const listas=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR')); const D=spData(), hoje=hojeISO();
+  const todos=vis.length&&vis.every(c=>SP_SEL.has(c.id)); const j=JSON.stringify(vis.map(c=>c.id)).replace(/"/g,'&quot;');
+  return `<div class="ta-selbar" style="margin:8px 0 6px;flex-wrap:wrap;gap:6px">
+    <label style="display:flex;align-items:center;gap:6px;min-height:44px;font-size:12.5px"><input type="checkbox" ${todos?'checked':''} onchange="spSelTodos(${j},this.checked)" style="width:20px;height:20px"> todos (${vis.length})</label>
+    <b>${nSel} marcado${nSel===1?'':'s'}</b><span style="flex:1"></span>
+    <select onchange="spSelAplicar(this)" style="min-height:44px;font-size:16px;max-width:240px" ${nSel?'':'disabled'}><option value="">→ Colocar em…</option><option value="__dia">📅 Lista de ${D===hoje?'hoje':esc(dataBR(D))}</option>${listas.map(n=>`<option value="${esc(n)}">📋 ${esc(n)}</option>`).join('')}<option value="__nova">＋ Nova lista…</option></select>
+    ${SP_SEL.size?`<button class="btn btn-s btn-mini" style="min-height:44px" onclick="spSelLimpar()">Limpar</button>`:''}</div>`; }
+function spBuscaHtml(chave,total){ const q=spBusca(chave); return `<div class="ta-search" style="margin:6px 0"><span>🔎</span><input type="search" id="sp-q-${esc(chave)}" placeholder="Buscar nome, telefone, quem indicou…" value="${esc(q)}" oninput="spBuscaSet('${esc(jsq(chave))}',this.value)" style="font-size:16px">${q?`<button class="btn btn-s btn-mini" onclick="spBuscaSet('${esc(jsq(chave))}','')">✕</button>`:''}</div>`; }
 function spSalvarDe(c){ if(spEhFunil(c)) salvar(); else bnSalvar(); }
 function spNoDia(c,D){ return !!c && ((spEhFunil(c)?c.sitplan:c.ta_dia)===D); }
 function spListasChips(c){ const l=(c&&c.listas)||[]; return l.length? `<div style="margin-top:2px">${l.map(n=>`<span class="ta-lchip">📋 ${esc(n)}</span>`).join(' ')}</div>`:''; }
@@ -6026,16 +6054,20 @@ function spRecPuxar(k){ const D=spData(); const l=spRecLista(k).filter(c=>taTemF
   let f=false,b=false; l.forEach(c=>{ if(spEhFunil(c)){ c.sitplan=D; f=true; } else { c.ta_dia=D; b=true; } }); if(f) salvar(); if(b) bnSalvar();
   toast(l.length+' de “'+TA_SMART[k].label+'” na lista de '+dataBR(D),true); render(); }
 /* tabela de nomes usada pelos dois tópicos (lista nomeada e recorte): quem é · onde está · contato · listas · ação */
-function spNomesTabela(l,D,opts){ opts=opts||{}; const hoje=hojeISO();
+function spNomesTabela(l,D,opts){ opts=opts||{}; const hoje=hojeISO(); const chave=opts.chave||'x';
   if(!l.length) return `<div style="font-size:13px;color:var(--muted);padding:6px 0">${esc(opts.vazio||'Ninguém aqui.')}</div>`;
-  const rows=l.slice(0,opts.max||60).map(c=>{ const id=esc(jsq(c.id)); return `<tr style="border-top:1px solid var(--linha)">
+  const tot=l.length; l=spBuscaFiltra(l,chave); const vis=l.slice(0,opts.max||60);
+  const cabec=spBuscaHtml(chave,tot)+spSelBarra(vis);
+  if(!l.length) return cabec+`<div style="font-size:13px;color:var(--muted);padding:6px 0">Ninguém com “${esc(spBusca(chave))}” aqui (${tot} no total).</div>`;
+  const rows=vis.map(c=>{ const id=esc(jsq(c.id)); return `<tr style="border-top:1px solid var(--linha)${SP_SEL.has(c.id)?';background:var(--azul-claro,#eef4ff)':''}">
+    <td style="padding:6px 9px;width:28px"><input type="checkbox" ${SP_SEL.has(c.id)?'checked':''} onchange="spSelTgl('${id}',this.checked)" style="width:22px;height:22px"></td>
     <td style="padding:6px 9px"><b class="clicavel" style="cursor:pointer" onclick="spAbrirFicha(spPorId('${id}'))">${esc(c.nome)}</b>${spEhFunil(c)&&isQuente(c)?' 🔥':''}${(c.recomendante||'').trim()?`<br><span style="font-size:11px;color:var(--muted)">rec: ${esc(c.recomendante)}</span>`:''}${spListasChips(c)}</td>
     <td style="padding:6px 9px">${taEtapaBadge(c)}</td>
     <td style="padding:6px 9px">${esc(c.telefone||'—')}${waHref(c.telefone)?` <a href="${esc(spEhFunil(c)?waHref(c.telefone):taWaHref(c))}" target="_blank" rel="noopener" style="text-decoration:none">💬</a>`:''}</td>
     <td style="padding:4px 9px;text-align:right;white-space:nowrap">${spNoDia(c,D)?`<span style="font-size:11px;color:var(--muted)">na lista de ${D===hoje?'hoje':esc(dataBR(D))}</span> `:`<button class="btn btn-s btn-mini" style="min-height:44px" title="Pôr na lista deste dia" onclick="spListaTgl('${id}','__dia')">➕ dia</button> `}${spListaBtn(c)}${opts.lista?` <button class="btn btn-s btn-mini" style="min-height:44px" title="Tirar desta lista" onclick="spListaTgl('${id}','${esc(jsq(opts.lista))}')">✕</button>`:''}</td></tr>`; }).join('');
-  return `<div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
-    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Onde está</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px;text-align:right">Ação</th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${l.length>(opts.max||60)?`<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando ${opts.max||60} de ${l.length} — o resto está no Painel TA.</div>`:''}`; }
+  return cabec+`<div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Marcar</th><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Onde está</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px;text-align:right">Ação</th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${l.length>(opts.max||60)?`<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando ${opts.max||60} de ${l.length} — afine a busca ou abra no Painel TA.</div>`:''}`; }
 function spListasTaHtml(D){ const hoje=hojeISO(); const nomes=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   const acoes=`<div class="toolbar" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-s btn-mini" style="min-height:44px" onclick="spListaNova()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="min-height:44px" title="Todo mundo que está na lista deste dia vira uma lista de TA com nome" onclick="spDiaVirarLista()">💾 Salvar o dia como lista</button></div>`;
   const corpo=nomes.length? nomes.map(n=>{ const m=taListaMembros(n), noDia=m.filter(c=>spNoDia(c,D)).length, ab=!!SP_LISTA_AB[n], jn=esc(jsq(n));
@@ -6045,14 +6077,14 @@ function spListasTaHtml(D){ const hoje=hojeISO(); const nomes=[...new Set([...bn
         <span style="font-size:12px;color:var(--muted)">${m.length} nome${m.length===1?'':'s'}${noDia?' · '+noDia+' no dia':''}</span>
         <button class="btn btn-p btn-mini" style="min-height:44px" ${m.length-noDia?'':'disabled'} onclick="spListaPuxar('${jn}')">➕ Puxar p/ ${D===hoje?'hoje':esc(dataBR(D))}</button>
         <button class="btn btn-s btn-mini" style="min-height:44px" onclick="BNTA.lista='${jn}';irPara('bn-ta')">🧭 Painel TA</button>
-      </div>${ab?`<div style="margin-top:8px">${spNomesTabela(m,D,{lista:n,vazio:'Lista vazia — jogue nomes nela pelo 📋 de cada linha ou pelos Recortes.'})}</div>`:''}</div>`; }).join('')
+      </div>${ab?`<div style="margin-top:8px">${spNomesTabela(m,D,{chave:'l:'+n,lista:n,vazio:'Lista vazia — jogue nomes nela pelo 📋 de cada linha ou pelos Recortes.'})}</div>`:''}</div>`; }).join('')
     : `<div style="font-size:13px;color:var(--muted);padding:6px 0">Nenhuma lista de TA ainda. Crie uma e vá jogando nomes: pelo 📋 de cada linha, pelos 🎯 Recortes ou salvando a lista do dia.</div>`;
   const tot=nomes.reduce((a,n)=>a+taListaMembros(n).length,0);
   return spDobra('listas','📋 Listas de TA',`· ${nomes.length} lista${nomes.length===1?'':'s'}${tot?' · '+tot+' nomes':''} · as mesmas do Painel TA`,acoes+corpo); }
 function spRecortesHtml(D){ const hoje=hojeISO(); const ks=Object.keys(TA_SMART);
   const chips=ks.map(k=>{ const n=spRecLista(k).length; return `<button class="btn ${SP_REC===k?'btn-p':'btn-s'} btn-mini" style="min-height:44px" onclick="spRecSet('${k}')">${TA_SMART[k].ic} ${esc(TA_SMART[k].label)} <span style="opacity:.75;font-weight:700">${n}</span></button>`; }).join('');
   let corpo=''; if(SP_REC&&TA_SMART[SP_REC]){ const l=spRecLista(SP_REC), fora=l.filter(c=>taTemFone(c)&&!spNoDia(c,D));
-    corpo=`<div class="toolbar" style="gap:6px;flex-wrap:wrap;margin:10px 0 8px">${fora.length?`<button class="btn btn-p btn-mini" style="min-height:44px" onclick="spRecPuxar('${SP_REC}')">➕ Puxar ${Math.min(12,fora.length)} p/ ${D===hoje?'hoje':esc(dataBR(D))}</button>`:''}<button class="btn btn-s btn-mini" style="min-height:44px" onclick="BNTA.lista='sm:${SP_REC}';irPara('bn-ta')">🧭 Abrir no Painel TA</button><span style="font-size:12px;color:var(--muted);align-self:center">${l.length} no recorte · ${fora.length} com telefone fora do dia</span></div>${spNomesTabela(l,D,{vazio:'Ninguém neste recorte.'})}`; }
+    corpo=`<div class="toolbar" style="gap:6px;flex-wrap:wrap;margin:10px 0 8px">${fora.length?`<button class="btn btn-p btn-mini" style="min-height:44px" onclick="spRecPuxar('${SP_REC}')">➕ Puxar ${Math.min(12,fora.length)} p/ ${D===hoje?'hoje':esc(dataBR(D))}</button>`:''}<button class="btn btn-s btn-mini" style="min-height:44px" onclick="BNTA.lista='sm:${SP_REC}';irPara('bn-ta')">🧭 Abrir no Painel TA</button><span style="font-size:12px;color:var(--muted);align-self:center">${l.length} no recorte · ${fora.length} com telefone fora do dia</span></div>${spNomesTabela(l,D,{chave:'rec',vazio:'Ninguém neste recorte.'})}`; }
   return spDobra('recortes','🎯 Recortes da base',`· os mesmos do Painel TA${SP_REC&&TA_SMART[SP_REC]?' · '+esc(TA_SMART[SP_REC].label):''}`,
     `<div style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Escolha um recorte, olhe os nomes e jogue pra lista deste dia (➕) ou pra uma lista de TA (📋). Executar é no Painel TA.</div><div style="display:flex;gap:6px;flex-wrap:wrap">${chips}</div>${corpo}`); }
 
@@ -18780,7 +18812,8 @@ function lpSelfCheck(){
           return m.length===2 && m.some(spEhFunil) && bnListasTodas().includes('SP Teste') && taListasDe(S.contatos[0]).join()==='📋 SP Teste' && !!NOVO_SO_MEU['sp-listas']
             && v.includes('spListasTaHtml') && v.includes('spRecortesHtml') && v.includes("novoOn('sp-listas')") && r.includes('TA_SMART') && r.includes('spRecLista')
             && v.includes('spBotoesHtml') && /spSecsTodas\(true\)/.test(String(spBotoesHtml.toString())) && /spSecsTodas\(false\)/.test(String(spBotoesHtml.toString()))
-            && spSecAberta('__novo__')===false && !/<details[^>]*\sopen[\s>]/.test(v) && String(spListaBtn.toString()).includes('spListaMenu') && String(taRowMenu.toString()).includes('spPorId');
+            && spSecAberta('__novo__')===false && !/<details[^>]*\sopen[\s>]/.test(v) && String(spListaBtn.toString()).includes('spListaMenu') && String(taRowMenu.toString()).includes('spPorId')
+            && String(spNomesTabela.toString()).includes('spBuscaHtml') && String(spNomesTabela.toString()).includes('spSelBarra') && spBuscaFiltra([{nome:'Zz Fun',telefone:'81999990012'},{nome:'Outro'}],'__t').length===2 && (SP_Q.__t='fun', spBuscaFiltra([{nome:'Zz Fun'},{nome:'Outro'}],'__t').length===1) && (SP_Q.__t='99990012', spBuscaFiltra([{nome:'Zz',telefone:'81999990012'},{nome:'Outro'}],'__t').length===1) && (delete SP_Q.__t, true);
         } finally{ S.contatos=bakS; BN.contatos=bakB; } })());
         /* TA-LINHA-V2 */
         ok('painel TA/WA: resultado do dia é um seletor só por linha (Estoque, funil e Zap) — nada de botão empilhado', (()=>{ const bn={id:'zzl1',nome:'Zz',estagio:'estoque',hist:[]}; const a=taResBtnsHtml(bn), b=waResBtnsHtml(bn); return /<select class="res-sel"/.test(a) && !/<button/.test(a) && /bnResultado\('zzl1'/.test(a) && /<select class="res-sel"/.test(b) && /waResultado\('zzl1'/.test(b) && BN_RES.every(r=>a.includes('value="'+r[0]+'"')) && WA_RES.every(r=>b.includes('value="'+r[0]+'"')); })());
