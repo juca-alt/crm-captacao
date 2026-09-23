@@ -2,7 +2,22 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 21/09/2026 (45ª onda) — SP-LISTAS-V1: o SitPlan organiza e joga pras listas de TA; o Painel TA executa (v8.03) — só na base dele
+## 🟢 RETOMAR AQUI — 23/09/2026 — v8.14 no ar (main = Pages, conferido pelo título servido)
+
+**Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil`.
+
+**Checagem geral de 23/09 (retomada no PC):** repo ✅ (branch `claude/sitplan-ta-lists-i74eo9` = `main` = Pages v8.14) · banco ✅ (lp_contatos dele: 5.278 linhas, última gravação 23/09 20:36, 12 nas últimas 72 h, **5 leads do funil já com `listas`** — a lista nomeada atravessando funil+Estoque está viva no servidor) · docs ✅ (este arquivo + CLAUDE.md) · Drive ✅ (DELTA 2026-09-23) · Notion ✅ (LOG DE SESSÕES).
+
+**Pendências reais (dele):**
+1. Agenda › evento "Lariss Diagmax Recife" (23/09) → ⋯ ação → 🎯 Vincular → Larissa S. A. (nome não bate sozinho). Depois disso o `agenda-ativ` espelha na ficha.
+2. Teste de 2 aparelhos logados (SYNC-PUXA/3VIAS): iPad põe nome numa lista → Mac vê o chip em até 60 s sem tocar em nada.
+3. Ponte Google Tarefas das Solicitações: precisa da Agenda Google conectada no aparelho (mesmo escopo). Conferir na lista do Google.
+4. V2 dos cards do funil: validar "PA emitido" pelo relatório UW & Emissão (hoje o relatório é a referência no rodapé do card).
+5. Decidir o que libera pro Daniel/Victor das 5 chaves acima.
+
+---
+
+## 21→23/09/2026 (45ª–55ª ondas) — v8.03 → v8.14: SitPlan organiza, Painel TA executa · Solicitações viram tarefas · sync entre aparelhos · Recomendações e Agenda linkadas ao funil · cards do funil no ciclo
 
 Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de TA. E nos tópicos add os recortes como tem no Painel TA. A lógica é que o SitPlan é onde organizo e jogo para as listas do TA; o Painel TA é onde sigo meu foco nas listas."*
 
@@ -23,6 +38,10 @@ Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de 
 - **SP-FUNIL-V1 (v8.09):** tópico Meu SitPlan = funil NN por etapa (chips), mesma tabela dos outros tópicos, "Mover etapa" em lote.
 - **REC-FUNIL-V1 (v8.10):** *"Cadê a Glysse recomendante? tudo deve tá linkado"* — Recomendações lia só o Estoque; agora lê o funil (recomendante, ou origem quando é nome de pessoa; genéricas como "Indicação"/"LinkedIn" ficam de fora). Recorte 🙌 do TA/SitPlan e contador do menu acompanham. Atrás de `rec-funil`.
 - **AGENDA-ATIV-V1 (v8.11):** *"associei da agenda ao lead da Larissa — deveria atualizar nas atividades do cliente"* — evento do Google ligado a um negócio (crmContato ou nome/telefone) vira atividade espelho na ficha (`gcalEvId`, campo próprio fora do gsync: o CRM não reescreve o evento). Remarca junto; ✓ feito no Google conclui; evento nascido no CRM (crmTarefa) fica com o gsync. Atrás de `agenda-ativ`.
+
+- **BLOCO-CURTO-V1 (v8.12):** bloco de menos de 45 min na grade do dia vira uma linha (hora + nome com reticências) — "nomes engolidos".
+- **DIGITA-V1 (v8.13):** busca/cidade/mín. de Recomendações e profissão/cidade/idade/renda do Estoque não re-renderizam a cada tecla (`fxDigita`: 250 ms + foco e cursor devolvidos). Provado digitando "glysse" letra a letra no Playwright.
+- **CARDS-FUNIL-V1 (v8.14):** *"os números não batem com o período; os cards têm de estar em sincronia com o funil"* — (1) "Previsto fechar/emitir" ignorava o ciclo (Compensação mostrava mês-calendário) → seguem o ciclo; (2) "PA emitido" vinha só do relatório UW → **PA emitido (funil)** = negócios que viraram ganho no ciclo (data do log de etapa; sem log, cai na previsão; sem nada, conta "ganho sem data"), pelo prêmio digitado (PA = 12× mensal), com o relatório UW de referência no rodapé; FYC segue do relatório (v2: validar pelo relatório). Atrás de `cards-funil`.
 
 ### Prova
 - Invariante `SP-LISTAS` no `lpSelfCheck` (lista nomeada atravessa funil+Estoque; tópicos presentes; TA_SMART reaproveitado; botões abrir/recolher; nenhum `details` aberto literal; ⋯ lê `spPorId`).
