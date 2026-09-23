@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.18 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.19 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -13006,6 +13006,7 @@ function soNova(pre){ pre=pre||{}; atClose();
    <div class="sub">Gera o registro E o texto pronto pra colar no WhatsApp da assessoria. <b>AÇÃO</b> é obrigatória: consulta ou ordem — é isso que acaba com as duas rodadas.</div>
    ${lbl('Frente')}${boSel('so_fr',[['atraso','Atraso'],['emissao','Emissão'],['outro','Outro']],pre.frente||'outro',boSelectVivo())}
    ${lbl('Segurado *')}<input id="so_seg" ${boSelectVivo()} value="${esc(pre.segurado||'')}" style="width:100%;margin-top:3px">
+   ${novoOn('solic-negocio')?`${lbl('🎯 Negócio / cliente no funil (opcional)')}<input id="so_neg" list="so-neg-cand" ${boSelectVivo()} value="${esc(pre.contato_id?((tarContato(pre.contato_id)||{}).nome||''):'')}" placeholder="digite o nome — liga a solicitação à oportunidade" style="width:100%;margin-top:3px" onchange="soNovaNegEscolhido(this)"><datalist id="so-neg-cand">${(S.contatos||[]).filter(c=>c&&escVisivel(c)&&!ETAPAS_ENCERR.includes(c.etapa)).slice(0,800).map(c=>`<option value="${esc(c.nome)}">${esc(negEtiqueta(c))}</option>`).join('')}</datalist>`:''}
    <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Apólice / proposta')}<input id="so_ap" ${boSelectVivo()} value="${esc(pre.apolice||'')}" style="width:100%;margin-top:3px"></div>
      <div style="flex:1;min-width:140px">${lbl('Base')}${boSel('so_lp',[['','—'],['Gustavo','Gustavo'],['Daniel','Daniel'],['Rebeca','Rebeca']],pre.base_lp||'',boSelectVivo())}</div></div>
    ${lbl('Ação *')}<div style="display:flex;gap:14px;margin-top:3px;font-size:13px"><label><input type="radio" name="so_acao" value="consultar" ${boSelectVivo()}> Consultar</label><label><input type="radio" name="so_acao" value="executar" ${boSelectVivo()}> Executar</label></div>
@@ -13017,7 +13018,7 @@ function soNova(pre){ pre=pre||{}; atClose();
      <div style="flex:1;min-width:140px">${lbl('Contato')}${boSel('so_ct',SO_CONTATO,'lm',boSelectVivo())}</div>
      <div style="flex:1;min-width:140px">${lbl('Aberta por')}${boSel('so_por',[['victor','Victor'],['gustavo','Gustavo']],soQuemSou(),boSelectVivo())}</div></div>
    <div id="so_err" style="color:var(--verm);font-size:12px;margin-top:6px"></div>
-   <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null,contato_id:pre.contato_id||null})).replace(/"/g,'&quot;')})">Registrar e gerar texto</button></div>`);
+   <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><span style="flex:1"></span><button class="btn btn-s" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null,contato_id:pre.contato_id||null,semTexto:true})).replace(/"/g,'&quot;')})" title="Só cria a solicitação (sem o texto do WhatsApp)">✓ Registrar</button><button class="btn btn-p" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null,contato_id:pre.contato_id||null})).replace(/"/g,'&quot;')})">Registrar e gerar texto</button></div>`);
   setTimeout(()=>{ const e=$('#so_seg'); if(e&&!e.value) e.focus(); },50);
 }
 /* o prazo sugerido acompanha a área escolhida — se ele já digitou um prazo, não mexe */
@@ -13030,10 +13031,13 @@ async function soConfNova(refs){ refs=refs||{};
     acao, tipo:v('so_tipo')||'outro', contexto:v('so_ctx')||null, prazo:v('so_prazo')||null, contato_com:v('so_ct')||null, aberta_por:v('so_por')||soQuemSou(), aberta_em:new Date().toISOString(), respondida_em:null, resultado:null, protocolo:null, status:'aberta' };
   if(novoOn('solic-v2')){ s.area=v('so_area')||'lm'; s.prazo_area_dias=soAreaDias(s.area); s.proxima_acao=v('so_prox')||null; s.bola_com='area'; s.ultimo_toque_em=s.aberta_em; }
   if(refs.contato_id&&novoOn('solic-negocio')) s.contato_id=String(refs.contato_id);   /* SOLIC-NEGOCIO-V1 */
+  if(novoOn('solic-negocio')&&v('so_neg')){ const nk=normKey(v('so_neg')); const c=(S.contatos||[]).find(x=>x&&escVisivel(x)&&normKey(x.nome||'')===nk); if(c) s.contato_id=String(c.id); }
   await soGravar(s);
   if(novoOn('solic-v2')&&!String(s.id).startsWith('loc_')) await soEvento(s,'abertura','Aberta por '+(s.aberta_por||'—')+' · '+soTipoRot(s.tipo)+' · com '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area)+(s.contexto?' — '+s.contexto:''));
+  if(refs.semTexto){ atClose(); render(); toast('📨 '+s.segurado+' registrada'+(s.contato_id?' · ligada ao negócio':''),true); return; }   /* SOLIC-REGISTRAR-V1: "quero poder criar a solicitação" sem o texto */
   soMostrarTexto(s); render();
 }
+window.soNovaNegEscolhido=function(el){ const nk=normKey(el.value||''); const c=(S.contatos||[]).find(x=>x&&escVisivel(x)&&normKey(x.nome||'')===nk); const seg=$('#so_seg'); if(c&&seg&&!seg.value.trim()) seg.value=c.nome; };
 function soMostrarTexto(s){ atModal(`<h2>Texto pronto pra colar</h2><div class="sub">Registrada como <b>${esc(soRot(SO_STATUS,s.status))}</b> por ${esc(s.aberta_por||'—')}.</div>
    <textarea id="so_txt" rows="9" ${boSelectVivo()} style="width:100%;margin-top:8px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px">${esc(soTexto(s))}</textarea>
    <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" onclick="atClose()">Fechar</button><button class="btn btn-p" style="margin-left:auto" onclick="soCopiar()">📋 Copiar</button></div>`); }
@@ -19183,6 +19187,7 @@ function lpSelfCheck(){
           return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/>📎 boleto\.pdf</.test(anxLinkHtml(l[0]))
             &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
         } finally{ SO_EV=bak; } })());
+        ok('SOLIC-REGISTRAR: Nova solicitação tem "Registrar" (sem texto) além de "Registrar e gerar texto", e o campo 🎯 Negócio com autocompletar liga o contato', String(soNova.toString()).includes('semTexto:true')&&String(soNova.toString()).includes('id="so_neg"')&&String(soConfNova.toString()).includes('refs.semTexto')&&String(soConfNova.toString()).includes("v('so_neg')"));
         ok('SOLIC-NEGOCIO: solicitação liga ao negócio (contato_id), sugere pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 na ficha do negócio, e a coluna só sobe quando o servidor a tem', (()=>{ if(!NOVO_SO_MEU['solic-negocio']) return false; const bakS=S.contatos, bakSO=SO.itens, bakT=SO_TEM_CONTATO; try{
           S.contatos=[normContato({id:'zzsn1',nome:'Marcus Tulio Teste',lp:S.activeUser,funil:'bc',etapa:'RC/OI',telefone:'81999990051'})]; negIndexLimpar();
           SO.itens=[{id:'zso1',segurado:'Marcus Tulio Teste',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString()},{id:'zso2',segurado:'Outro Nome',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString(),contato_id:'zzsn1'}];
