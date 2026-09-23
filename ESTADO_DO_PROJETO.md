@@ -2,18 +2,21 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 23/09/2026 — v8.14 no ar (main = Pages, conferido pelo título servido)
+## 🟢 RETOMAR AQUI — 23/09/2026 (noite) — v8.19 no ar (main = Pages, conferido pelo título servido)
 
 **Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil` · `solic-kanban` · `solic-negocio` · `anexos-drive`.
 
 **Checagem geral de 23/09 (retomada no PC):** repo ✅ (branch `claude/sitplan-ta-lists-i74eo9` = `main` = Pages v8.14) · banco ✅ (lp_contatos dele: 5.278 linhas, última gravação 23/09 20:36, 12 nas últimas 72 h, **5 leads do funil já com `listas`** — a lista nomeada atravessando funil+Estoque está viva no servidor) · docs ✅ (este arquivo + CLAUDE.md) · Drive ✅ (DELTA 2026-09-23) · Notion ✅ (LOG DE SESSÕES).
+
+**Fechamento 23/09 (noite):** v8.15 Kanban de Solicitações · v8.16 vínculo solicitação↔negócio (migration `contato_id` rodada) · v8.17 📎 anexos no Drive · v8.18 chip 🎯 na lista · v8.19 "✓ Registrar" sem texto + campo 🎯 Negócio + associação automática pelo nome. Drive: DELTA 2026-09-23 (noite). Notion: LOG DE SESSÕES + Mapa da Casa (linha do CRM, endereço dos anexos).
 
 **Pendências reais (dele):**
 1. Agenda › evento "Lariss Diagmax Recife" (23/09) → ⋯ ação → 🎯 Vincular → Larissa S. A. (nome não bate sozinho). Depois disso o `agenda-ativ` espelha na ficha.
 2. Teste de 2 aparelhos logados (SYNC-PUXA/3VIAS): iPad põe nome numa lista → Mac vê o chip em até 60 s sem tocar em nada.
 3. Ponte Google Tarefas das Solicitações: precisa da Agenda Google conectada no aparelho (mesmo escopo). Conferir na lista do Google.
 4. V2 dos cards do funil: validar "PA emitido" pelo relatório UW & Emissão (hoje o relatório é a referência no rodapé do card).
-5. Decidir o que libera pro Daniel/Victor das 5 chaves acima.
+5. Decidir o que libera pro Daniel/Victor das 8 chaves acima.
+6. Anexos: 1º upload real pede consentimento do Google (escopo Drive somado) — testar 1 print numa solicitação e conferir a pasta Histórico de Clientes / <cliente>.
 
 ---
 
@@ -43,6 +46,7 @@ Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de 
 - **DIGITA-V1 (v8.13):** busca/cidade/mín. de Recomendações e profissão/cidade/idade/renda do Estoque não re-renderizam a cada tecla (`fxDigita`: 250 ms + foco e cursor devolvidos). Provado digitando "glysse" letra a letra no Playwright.
 - **CARDS-FUNIL-V1 (v8.14):** *"os números não batem com o período; os cards têm de estar em sincronia com o funil"* — (1) "Previsto fechar/emitir" ignorava o ciclo (Compensação mostrava mês-calendário) → seguem o ciclo; (2) "PA emitido" vinha só do relatório UW → **PA emitido (funil)** = negócios que viraram ganho no ciclo (data do log de etapa; sem log, cai na previsão; sem nada, conta "ganho sem data"), pelo prêmio digitado (PA = 12× mensal), com o relatório UW de referência no rodapé; FYC segue do relatório (v2: validar pelo relatório). Atrás de `cards-funil`.
 
+- **SOLIC-REGISTRAR (v8.18–8.19):** chip 🎯 do negócio (ou sugerido ✓) e 📎 na LISTA de Solicitações; "Nova solicitação" com **✓ Registrar** (sem gerar texto) e **Registrar e gerar texto**; campo 🎯 Negócio com autocompletar (preenche o segurado); segurado que bate com nome do funil já nasce ligado.
 - **SOLIC-KANBAN-V1 (v8.15):** Solicitações com visão Kanban por "com quem está a bola" (Nós · A área · O cliente · Concluídas 30d · Canceladas 30d), arrasto no desktop, "mover →" no celular; ▦/☰ lembrado por aparelho.
 - **SOLIC-NEGOCIO-V1 (v8.16):** *"associar as solicitações aos clientes e oportunidades no funil (Marcus Tulio: ajuste na apólice antiga destrava a emissão)"* — `contato_id` na solicitação (migration `solicitacoes_v3_contato.sql` **rodada em 23/09 via MCP**), 🎯 vincular com sugestão pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 Solicitações na ficha do negócio, "📅 agendar" honra o vínculo. `soContatoDe` = vínculo explícito antes do nome.
 - **ANEXOS-DRIVE-V1 (v8.17):** *"colar anexos nas solicitações ou tarefas, tudo salvando em pasta no Google Drive, organizado"* — camada `drv*` (escopo `auth/drive` somado à conexão Google da Agenda; 1ª vez pede consentimento de novo). Pasta: Pipe X / CRM Life Planner / **Histórico de Clientes** / `<cliente>` (a mesma das Revisões) · arquivo `AAAA-MM-DD_HHMM_<solicitacao|atividade>_<nome>`. Solicitação: anexo = evento `anexo` na linha do tempo (sem coluna nova; "＋ anexar arquivo" ou **Ctrl+V** com a ficha aberta). Atividade: `t.anexos` + nota na linha do tempo do lead; botão 📎 na atividade. Chip 📎N na Agenda e no Kanban. Notion (Mapa da Casa) atualizado com o endereço dos anexos.
