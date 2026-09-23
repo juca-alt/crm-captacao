@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.15 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.16 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4055,6 +4055,7 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .cs-lin .pa{font-weight:800;white-space:nowrap;margin-left:auto;flex:0 0 auto;min-width:96px;text-align:right}
   /* SOLIC-V2: linha da solicitação em 3 faixas (quem · com quem/prazo · próximo passo) e a ficha */
   .so-row{padding:10px 0;border-top:1px solid var(--linha);cursor:pointer}
+  .so-neg{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap} .so-neg-sug{border-style:dashed}
   /* SOLIC-KANBAN-V1 */
   .so-kb{display:flex;gap:10px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
   .so-kcol{flex:0 0 272px;min-width:272px;background:var(--bg);border:1px solid var(--linha);border-radius:12px;padding:8px;scroll-snap-align:start;display:flex;flex-direction:column;gap:8px;max-height:72vh}
@@ -5623,6 +5624,7 @@ function renderDrawer(){
         <div style="font-size:11px;color:var(--muted);margin-top:8px">Toque pra mover · fica registrado na hora.</div>
       </div>
 
+      ${soDrawerBloco(c)}
       <div class="sec" id="tarBox">
         <h3><span>Tarefas &amp; atividades</span>${proxTarefa(c)?'':'<span style="font-size:11px;font-weight:700;color:var(--verm);text-transform:none;letter-spacing:0">sem próxima atividade</span>'}</h3>
         ${tarBlocoDrawer(c)}
@@ -12972,13 +12974,15 @@ async function soEvento(s,tipo,texto){
 const SO_CONTATO=[['lm','LM'],['gustavo','Gustavo'],['ninguem','ninguém por ora']];
 function soRot(opts,v){ return boRot(opts,v); }
 async function soRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ SO_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
+let SO_TEM_CONTATO=false;   /* SOLIC-NEGOCIO-V1: a coluna contato_id existe no servidor? (sondada no load; sem ela o vínculo fica só no aparelho) */
 async function soCarregar(){
   SO_REMOTE=await soRemoteOn();
+  if(SO_REMOTE){ try{ const r=await sb.from(SO_TABLE).select('contato_id').limit(1); SO_TEM_CONTATO=!r.error; }catch(_){ SO_TEM_CONTATO=false; } }
   if(SO_REMOTE){ try{ const {data,error}=await sb.from(SO_TABLE).select('*').order('aberta_em',{ascending:false}); if(error) throw error; SO.itens=(data||[]).filter(escLinhaOk); soSalvarLocal(); await soEventosCarregar(); return; }   /* ESCOPO na porta */catch(e){ console.warn('SO load remoto falhou → local',e); SO_REMOTE=false; } }
   try{ const raw=localStorage.getItem(SO_CHAVE); if(raw){ const o=JSON.parse(raw); SO.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
 }
 function soSalvarLocal(){ try{ localStorage.setItem(SO_CHAVE,JSON.stringify(SO)); }catch(e){} }
-function soRow(s){ const row={}; ['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status','area','prazo_area_dias','proxima_acao','proxima_acao_prazo','bola_com','ultimo_toque_em','encerrada_em'].forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 */
+function soRow(s){ const row={}; (SO_TEM_CONTATO?['contato_id']:[]).concat(['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status','area','prazo_area_dias','proxima_acao','proxima_acao_prazo','bola_com','ultimo_toque_em','encerrada_em']).forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 */
 async function soGravar(s){ const i=SO.itens.findIndex(x=>x.id===s.id); if(i>=0) SO.itens[i]=s; else SO.itens.unshift(s); soSalvarLocal();
   if(SO_REMOTE&&sb){ try{ const {data,error}=await sb.from(SO_TABLE).upsert([soRow(s)]).select('id'); if(error) throw error; if(data&&data[0]&&String(s.id).startsWith('loc_')){ s.id=data[0].id; soSalvarLocal(); } return true; }catch(e){ console.error('SO gravar',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
   return true; }
@@ -13012,7 +13016,7 @@ function soNova(pre){ pre=pre||{}; atClose();
      <div style="flex:1;min-width:140px">${lbl('Contato')}${boSel('so_ct',SO_CONTATO,'lm',boSelectVivo())}</div>
      <div style="flex:1;min-width:140px">${lbl('Aberta por')}${boSel('so_por',[['victor','Victor'],['gustavo','Gustavo']],soQuemSou(),boSelectVivo())}</div></div>
    <div id="so_err" style="color:var(--verm);font-size:12px;margin-top:6px"></div>
-   <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null})).replace(/"/g,'&quot;')})">Registrar e gerar texto</button></div>`);
+   <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null,contato_id:pre.contato_id||null})).replace(/"/g,'&quot;')})">Registrar e gerar texto</button></div>`);
   setTimeout(()=>{ const e=$('#so_seg'); if(e&&!e.value) e.focus(); },50);
 }
 /* o prazo sugerido acompanha a área escolhida — se ele já digitou um prazo, não mexe */
@@ -13024,6 +13028,7 @@ async function soConfNova(refs){ refs=refs||{};
   const s={ id:'loc_'+uid(), frente:v('so_fr')||'outro', ref_atraso_id:refs.ref_atraso_id||null, ref_emissao_id:refs.ref_emissao_id||null, segurado:v('so_seg'), apolice:v('so_ap')||null, base_lp:v('so_lp')||null,
     acao, tipo:v('so_tipo')||'outro', contexto:v('so_ctx')||null, prazo:v('so_prazo')||null, contato_com:v('so_ct')||null, aberta_por:v('so_por')||soQuemSou(), aberta_em:new Date().toISOString(), respondida_em:null, resultado:null, protocolo:null, status:'aberta' };
   if(novoOn('solic-v2')){ s.area=v('so_area')||'lm'; s.prazo_area_dias=soAreaDias(s.area); s.proxima_acao=v('so_prox')||null; s.bola_com='area'; s.ultimo_toque_em=s.aberta_em; }
+  if(refs.contato_id&&novoOn('solic-negocio')) s.contato_id=String(refs.contato_id);   /* SOLIC-NEGOCIO-V1 */
   await soGravar(s);
   if(novoOn('solic-v2')&&!String(s.id).startsWith('loc_')) await soEvento(s,'abertura','Aberta por '+(s.aberta_por||'—')+' · '+soTipoRot(s.tipo)+' · com '+boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area)+(s.contexto?' — '+s.contexto:''));
   soMostrarTexto(s); render();
@@ -13060,6 +13065,7 @@ function soAbrirV2(s){
      <div class="so-k${soParada(s,hoje)?' amar':''}"><div class="lbl">Último andamento</div><div class="num">${semT===0?'hoje':'há '+semT+'d'}</div><div class="sub">${soParada(s,hoje)?'parada — cobrar':'em dia'}</div></div>
      <div class="so-k${soMuda(s)?' amar':''}"><div class="lbl">Bola com</div><div class="num" style="font-size:14px">${esc(boRot(SO_BOLA,s.bola_com||'area'))}</div></div>
    </div>
+   ${soNegOn()?`<div class="neg-linha" style="margin-top:8px"><span>🎯</span><span style="font-size:12.5px;color:var(--muted)">Negócio:</span>${soNegChip(s)}</div>`:''}
    ${s.contexto?`<div style="font-size:12.5px;margin-top:8px;color:var(--muted)"><b>Contexto:</b> ${esc(s.contexto)}</div>`:''}
    <details class="bne-grp" data-sec="so-prox" ${bneSecAberta('so-prox')?'open':''} ontoggle="bneSecToggle('so-prox',this.open)"><summary><span class="bne-grp-t">➡️ Próximo passo</span><span class="bne-grp-r">${esc(s.proxima_acao||'não definido')}${s.proxima_acao_prazo?' · até '+esc(atFmtBR(s.proxima_acao_prazo)):''}</span><span class="bne-grp-c">▾</span></summary>
      <div style="padding:6px 0 10px">
@@ -13091,6 +13097,7 @@ function soAbrirV2(s){
    andamento "atividade agendada" e, se estava sem próximo passo, passa a ter um. */
 function soContatoDe(s){
   if(!s||typeof S==='undefined'||!Array.isArray(S.contatos)) return null;
+  if(s.contato_id){ const cl=tarContato(s.contato_id); if(cl) return cl; }   /* SOLIC-NEGOCIO-V1: vínculo explícito ganha do nome */
   const nk=normKey(s.segurado||''); if(!nk) return null;
   const cands=(typeof cliNegociosDe==='function')?cliNegociosDe({nome:s.segurado||'',telefone:s.telefone||null}):[];
   const lista=cands.length?cands:S.contatos.filter(c=>c&&normKey(c.nome||'')===nk);
@@ -13215,7 +13222,7 @@ function agSolicBloco(){ if(!novoOn('solic-tarefas')||!modOn('backoffice')||type
       <button class="sot-chkw" title="Concluir" aria-label="Concluir" onclick="soConcluir('${id}')"><span class="sot-chk"></span></button>
       <div class="sot-t">
         <input class="sot-tit" value="${esc(s.segurado||'')}" placeholder="Segurado" onchange="soInline('${id}','segurado',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
-        <div class="sot-sub"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><label class="ag-data" title="Mudar o prazo" style="${v?'color:var(--verm);font-weight:700':''}"><span>⏳</span><input type="date" value="${esc(p||'')}" onchange="soInline('${id}','prazo',this.value)"></label>${par?`<span>🔇 ${soDiasSemToque(s,hjl)}d parada</span>`:''}${s._gtUpd?'<span title="espelhada nas Tarefas do Google">☑️ Google</span>':''}</div>
+        <div class="sot-sub"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><label class="ag-data" title="Mudar o prazo" style="${v?'color:var(--verm);font-weight:700':''}"><span>⏳</span><input type="date" value="${esc(p||'')}" onchange="soInline('${id}','prazo',this.value)"></label>${par?`<span>🔇 ${soDiasSemToque(s,hjl)}d parada</span>`:''}${s._gtUpd?'<span title="espelhada nas Tarefas do Google">☑️ Google</span>':''}${soNegChip(s)}</div>
         <input class="sot-prox" value="${esc(s.proxima_acao||'')}" placeholder="➡️ próximo passo…" onchange="soInline('${id}','proxima_acao',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
       </div>
       <button class="btn btn-s btn-mini" style="min-height:44px;flex:none" title="Abrir a ficha completa" onclick="soAbrir('${id}')">✎</button></div>`; };
@@ -13223,6 +13230,44 @@ function agSolicBloco(){ if(!novoOn('solic-tarefas')||!modOn('backoffice')||type
     <div class="sot-add"><span style="font-size:20px;color:var(--azul);width:24px;text-align:center">＋</span><input id="sot-novo" placeholder="Adicionar solicitação… (segurado · próximo passo) — Enter adiciona e já abre a próxima" onkeydown="if(event.key==='Enter'){soRapida(this.value);this.value='';event.preventDefault()}"></div>
     <div class="ac-acts"><button class="btn btn-s btn-mini" onclick="irPara('solicitacoes')">abrir Solicitações</button><button class="btn btn-s btn-mini" onclick="soNova()">📨 nova completa</button>${soGtOn()?`<button class="btn btn-s btn-mini" onclick="soGtSync({forca:true})">☑️ sincronizar Google Tarefas</button>`:''}</div></div>`;
   return ['solic',agBloco('solic','📨 Solicitações em acompanhamento',resumo,corpo)]; }
+/* ═══ SOLIC-NEGOCIO-V1 (23/09/2026) ═══ "permitir associar as solicitações aos clientes e oportunidades no funil —
+   por vezes são ações pra destravar a emissão (Marcus Tulio: ajuste na apólice antiga destrava a oportunidade em UW)".
+   s.contato_id → contato do funil. Sugestão automática pelo nome do segurado (negIndex). Chip 🎯 na Agenda, no
+   Kanban e na ficha; bloco 📨 na ficha do negócio. Coluna no servidor: migration solicitacoes_v3_contato.sql. */
+function soNegOn(){ return novoOn('solic-negocio'); }
+function soNegLigado(s){ return s&&s.contato_id?(tarContato(s.contato_id)||null):null; }
+function soSugereContato(s){ if(!s||s.contato_id) return null; try{ return soContatoDe(s)||null; }catch(_){ return null; } }   /* mesmo achador por nome do solic-agenda */
+function soNegChip(s,op){ if(!soNegOn()) return ''; const id=esc(jsq(String(s.id))), c=soNegLigado(s); op=op||{};
+  if(c) return `<span class="so-neg">${negSeloHTML(c,{mini:!!op.mini})}<button class="btn btn-ghost btn-mini" style="padding:0 4px;min-height:24px" title="Tirar o vínculo" onclick="event.stopPropagation();soVincular('${id}',null)">✕</button></span>`;
+  const sug=soSugereContato(s);
+  return `<span class="so-neg">${sug?`<button class="btn btn-s btn-mini so-neg-sug" style="min-height:28px" title="Parece ser este negócio — confirma?" onclick="event.stopPropagation();soVincular('${id}','${esc(jsq(String(sug.id)))}')">🎯 ${esc(String(sug.nome).split(' ').slice(0,2).join(' '))} · ${esc(ET_LABEL[sug.etapa]||sug.etapa||'')} ✓</button>`:''}<button class="btn btn-ghost btn-mini" style="min-height:28px" onclick="event.stopPropagation();soVincularAbrir('${id}')">🎯 vincular</button></span>`; }
+async function soVincular(id,cid){ const s=(SO.itens||[]).find(x=>String(x.id)===String(id)); if(!s) return; const c=cid?tarContato(cid):null; if(cid&&!c){ toast('Negócio não encontrado',false); return; }
+  s.contato_id=c?String(c.id):null; s.ultimo_toque_em=new Date().toISOString(); await soGravar(s);
+  try{ await soEvento(s,'nota',c?'Vinculada ao negócio: '+(c.nome||'')+' · '+(ET_LABEL[c.etapa]||c.etapa||''):'Vínculo com o negócio removido'); }catch(_){}
+  if(c){ interacoesDe(c).push({id:uid(),k:'nota',l:'📨 Solicitação vinculada: '+soTipoRot(s.tipo)+(s.proxima_acao?' — '+s.proxima_acao:''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); salvar(); }
+  soVincularFechar(); render(); if(c&&!SO_TEM_CONTATO&&SO_REMOTE) toast('Vinculado — mas o servidor ainda não tem a coluna contato_id (migration solicitacoes_v3_contato.sql): o vínculo fica só neste aparelho',false); else toast(c?'🎯 '+(s.segurado||'')+' → '+(c.nome||''):'Vínculo removido',true); }
+function soVincularAbrir(id){ soVincularFechar(); const s=(SO.itens||[]).find(x=>String(x.id)===String(id)); if(!s) return;
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd" id="so-vinc-bd"><div class="sheet" id="so-vinc"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="flex:1;font-size:16px">🎯 Vincular a um negócio</b><button class="btn btn-ghost btn-mini" onclick="soVincularFechar()" style="font-size:17px" aria-label="Fechar">✕</button></div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">${esc(s.segurado||'')} · ${esc(soTipoRot(s.tipo))}</div>
+    <input id="so-vinc-q" type="search" placeholder="Nome do cliente ou da oportunidade…" value="${esc(s.segurado||'')}" oninput="soVincularBusca('${esc(jsq(String(s.id)))}')" style="width:100%;font-size:16px;min-height:44px">
+    <div id="so-vinc-l" class="neg-sug" style="max-height:52vh"></div></div></div>`);
+  $('#so-vinc-bd').onclick=e=>{ if(e.target.id==='so-vinc-bd') soVincularFechar(); }; soVincularBusca(String(s.id)); setTimeout(()=>{ const e=$('#so-vinc-q'); if(e){ e.focus(); e.select(); } },30); }
+function soVincularBusca(id){ const q=normKey(($('#so-vinc-q')||{}).value||''), cx=$('#so-vinc-l'); if(!cx) return;
+  const ws=q.split(' ').filter(Boolean); const l=(S.contatos||[]).filter(c=>c&&escVisivel(c)&&(!ws.length||ws.every(w=>normKey(c.nome||'').includes(w)))).slice(0,12);
+  cx.innerHTML=l.length?l.map(c=>`<button type="button" style="min-height:44px" onclick="soVincular('${esc(jsq(id))}','${esc(jsq(String(c.id)))}')"><b>${esc(c.nome||'')}</b> <span style="color:var(--muted)">· ${esc(negEtiqueta(c))}${c.telefone?' · '+esc(telBR(c.telefone)):''}</span></button>`).join(''):'<div style="font-size:12px;color:var(--muted);padding:6px 2px">Nenhum negócio com esse nome.</div>'; }
+function soVincularFechar(){ const b=$('#so-vinc-bd'); if(b) b.remove(); }
+window.soVincular=soVincular; window.soVincularAbrir=soVincularAbrir; window.soVincularBusca=soVincularBusca; window.soVincularFechar=soVincularFechar;
+/* bloco 📨 na ficha do negócio: as solicitações que destravam este cliente */
+function soDrawerBloco(c){ if(!soNegOn()||typeof SO==='undefined'||!c) return ''; const hj=atHojeISO(), hjl=atHojeLocal();
+  const l=(SO.itens||[]).filter(escLinhaOk).filter(s=>String(s.contato_id||'')===String(c.id)); const ab=l.filter(soAberta);
+  const row=s=>{ const id=esc(jsq(String(s.id))), p=soPrazoEfetivo(s), v=soVencida(s,hj);
+    return `<div class="sot-row${v?' venc':''}" style="padding:6px 0"><div class="sot-t"><div style="font-weight:700;font-size:13px;display:flex;gap:6px;align-items:center"><span class="dias-tag ${v?'hoje':'longe'}">${soDiasAberta(s,hjl)}d</span>${esc(soTipoRot(s.tipo))}${soAberta(s)?'':' <span class="badge b-cinza">'+esc(soRot(SO_STATUS,s.status))+'</span>'}</div>
+      <div class="sot-sub"><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span style="${v?'color:var(--verm);font-weight:700':''}">⏳ ${p?esc(atFmtBR(p)):'—'}</span><span>bola com ${esc(boRot(SO_BOLA,s.bola_com||'area'))}</span></div>
+      <div style="font-size:12.5px;${s.proxima_acao?'':'color:var(--amarelo,#b45309)'}">➡️ ${s.proxima_acao?esc(s.proxima_acao):'sem próximo passo'}</div></div>
+      <button class="btn btn-s btn-mini" style="min-height:36px;flex:none" onclick="soAbrir('${id}')">✎</button></div>`; };
+  return `<div class="sec" id="soBox"><h3><span>📨 Solicitações</span>${ab.length?`<span style="font-size:11px;font-weight:700;color:var(--verm);text-transform:none;letter-spacing:0">${ab.length} em aberto</span>`:''}</h3>
+    ${l.length?l.slice().sort((a,b)=>(soAberta(b)?1:0)-(soAberta(a)?1:0)).map(row).join(''):'<div style="font-size:12.5px;color:var(--muted)">Nenhuma solicitação ligada a este negócio.</div>'}
+    <div class="ac-acts"><button class="btn btn-s btn-mini" onclick="soNova({segurado:'${esc(jsq(c.nome||''))}',contato_id:'${esc(jsq(String(c.id)))}',frente:'cliente'})">📨 nova solicitação deste cliente</button></div></div>`; }
 /* ═══ SOLIC-KANBAN-V1 (23/09/2026) ═══ "pro meu controle de pendências e solicitações de clientes, bota visão de cards Kanban".
    Colunas = com quem está a bola (é o que decide o próximo passo): Nós · A área · O cliente; mais Concluídas (30 d) e Canceladas.
    Arrasto no desktop; no celular o seletor "mover →" faz o mesmo. Mover grava bola_com/status e registra na linha do tempo. */
@@ -13247,6 +13292,7 @@ function soKanbanHtml(itens){ const hoje=atHojeLocal(), hj=atHojeISO(), corte=ne
       <div class="t"><span class="dias-tag ${v?'hoje':par?'perto':'longe'}">${soDiasAberta(s,hoje)}d</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(s.segurado||'—')}</span></div>
       <div class="m"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span style="${v?'color:var(--verm);font-weight:700':''}">⏳ ${p?esc(atFmtBR(p)):'—'}</span>${par?`<span>🔇 ${soDiasSemToque(s,hoje)}d</span>`:''}</div>
       <div class="p${s.proxima_acao?'':' muda'}">➡️ ${s.proxima_acao?esc(s.proxima_acao):'sem próximo passo'}</div>
+      ${soNegOn()?`<div class="m" style="margin-top:6px">${soNegChip(s,{mini:true})}</div>`:''}
       <div class="f"><select onchange="soKbMover('${id}',this.value)" onclick="event.stopPropagation()"><option value="">mover →</option>${SO_KB_COLS.filter(c=>c[0]!==col).map(c=>`<option value="${c[0]}">${esc(c[1])}</option>`).join('')}</select><button class="btn btn-s btn-mini" style="min-height:36px" onclick="event.stopPropagation();soAbrir('${id}')">✎</button></div></div>`; };
   return `<div class="so-kb">${SO_KB_COLS.map(c=>{ const l=vis.filter(s=>soKbColDe(s)===c[0]).sort((a,b)=>peso(a)-peso(b)||soDiasAberta(b,hoje)-soDiasAberta(a,hoje));
     return `<div class="so-kcol" data-col="${c[0]}" ondragover="soKbDragOver(event)" ondragleave="soKbDragOut(event)" ondrop="soKbDrop(event,'${c[0]}')"><div class="so-kh">${esc(c[1])}<span class="n">${l.length}</span></div><div class="so-kbody">${l.map(card).join('')||'<div style="font-size:12px;color:var(--muted);padding:8px 4px">vazio</div>'}</div></div>`; }).join('')}</div>`; }
@@ -15503,6 +15549,7 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
+  'solic-negocio':{o:'Solicitação vinculada ao cliente/oportunidade do funil (🎯): chip na Agenda, no Kanban e na ficha da solicitação; sugestão automática pelo nome do segurado; a ficha do negócio ganha o bloco 📨 Solicitações (o que está destravando a emissão dele). Precisa da migration solicitacoes_v3_contato.sql (coluna contato_id)', desde:'2026-09-23'},
   'solic-kanban': {o:'Solicitações: visão Kanban (colunas por "com quem está a bola": Nós · A área · O cliente · Concluídas 30d · Canceladas), arrasto no desktop e seletor "mover →" no celular; troca com a Lista pelo botão ▦/☰', desde:'2026-09-23'},
   'cards-funil':  {o:'Cards do funil em sincronia com o funil e com o ciclo escolhido: "Previsto fechar/emitir" seguem o ciclo (Mensal ou Compensação), e "PA emitido" nasce do FUNIL (negócios que viraram ganho no ciclo, pelo prêmio que ele digita) com o relatório UW como referência ao lado — v2: validar pelo relatório', desde:'2026-09-23'},
   'agenda-ativ':  {o:'Compromisso da Agenda Google ligado a um negócio (vínculo manual ou nome/telefone batendo) vira atividade na ficha do lead — Tarefas & Atividades deixa de dizer "sem próxima atividade"; ✓ feito no Google conclui a atividade', desde:'2026-09-21'},
@@ -19081,6 +19128,12 @@ function lpSelfCheck(){
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
         ok('BLOCO-CURTO: bloco de menos de 45 min na grade do dia vira uma linha (hora + nome) com reticências, e o CSS existe', String(gcalDiaHTML.toString()).includes("h<54?' curto':''")&&!!document.getElementById('gcal-fluida-css')&&/\.gcal-ev\.curto\{flex-direction:row/.test(document.getElementById('gcal-fluida-css').textContent));
+        ok('SOLIC-NEGOCIO: solicitação liga ao negócio (contato_id), sugere pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 na ficha do negócio, e a coluna só sobe quando o servidor a tem', (()=>{ if(!NOVO_SO_MEU['solic-negocio']) return false; const bakS=S.contatos, bakSO=SO.itens, bakT=SO_TEM_CONTATO; try{
+          S.contatos=[normContato({id:'zzsn1',nome:'Marcus Tulio Teste',lp:S.activeUser,funil:'bc',etapa:'RC/OI',telefone:'81999990051'})]; negIndexLimpar();
+          SO.itens=[{id:'zso1',segurado:'Marcus Tulio Teste',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString()},{id:'zso2',segurado:'Outro Nome',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString(),contato_id:'zzsn1'}];
+          const sug=soSugereContato(SO.itens[0]); const chip=soNegChip(SO.itens[1]); const bl=soDrawerBloco(S.contatos[0]); SO_TEM_CONTATO=false; const r0=soRow(SO.itens[1]); SO_TEM_CONTATO=true; const r1=soRow(SO.itens[1]);
+          return !!sug&&sug.id==='zzsn1'&&/neg-selo/.test(chip)&&/soVincular\('zso2',null\)/.test(chip)&&/soVincular\('zso1','zzsn1'\)/.test(soNegChip(SO.itens[0]))&&/1 em aberto/.test(bl)&&!('contato_id' in r0)&&r1.contato_id==='zzsn1'&&String(agSolicBloco.toString()).includes('soNegChip(s)')&&String(soKanbanHtml.toString()).includes('soNegChip(s,')&&[...document.scripts].some(x=>x.textContent.includes('${soDrawerBloco(c)}'));
+        } finally{ S.contatos=bakS; SO.itens=bakSO; SO_TEM_CONTATO=bakT; negIndexLimpar(); } })());
         ok('SOLIC-KANBAN: colunas por bola (nós/área/cliente) + concluídas/canceladas 30d; aberta sem bola cai em área; concluída antiga fica de fora; card tem arrasto e seletor mover', (()=>{ if(!NOVO_SO_MEU['solic-kanban']) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString(); };
           const it=[{id:'k1',segurado:'A Teste',status:'aberta',bola_com:'nos',aberta_em:d(2),tipo:'outro',area:'lm'},{id:'k2',segurado:'B Teste',status:'aberta',aberta_em:d(5),tipo:'outro',area:'lm'},{id:'k3',segurado:'C Teste',status:'executada',aberta_em:d(40),encerrada_em:d(35)},{id:'k4',segurado:'D Teste',status:'executada',aberta_em:d(9),encerrada_em:d(3)}];
           const h=soKanbanHtml(it); return soKbColDe(it[0])==='nos'&&soKbColDe(it[1])==='area'&&soKbColDe(it[2])==='executada'&&!/C Teste/.test(h)&&/D Teste/.test(h)&&(h.match(/class="so-kcol"/g)||[]).length===5&&/draggable="true"/.test(h)&&/soKbMover\('k1'/.test(h)&&String(viewSolicitacoesV2.toString()).includes("soVisSet('kanban')"); })());
