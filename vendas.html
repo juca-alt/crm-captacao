@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.16 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.17 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4834,6 +4834,7 @@ function tarBlocoDrawer(c){
         ${tarGcalAcaoHTML(c,t)}
         <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar: tipo, título, dia, hora, duração, destino no Google">✏️</button>
         <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Remover">✕</button>
+        ${tarAnexosHtml(c,t)}
       </span></div>`;
   };
   let h = abertas.length ? abertas.map(linha).join('')
@@ -10021,7 +10022,7 @@ const GCAL_CLIENT_ID="63708753663-92us3rgem9s1j6rapi86b8uerc5440fr.apps.googleus
 /* GTASKS-V1 (14/09): ele usa MUITO a função Tarefas do Google, e o app só sabia criar
    evento. Agora o consentimento pede as duas coisas. Se ele autorizar só a Agenda, o app
    percebe (GCAL.escopos) e manda tudo pra Agenda, avisando — nunca perde o compromisso. */
-const GCAL_SCOPE="https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks";
+const GCAL_SCOPE="https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks https://www.googleapis.com/auth/drive";   /* ANEXOS-DRIVE-V1: drive = anexos na pasta do cliente */
 let GCAL={tok:null,exp:0,conectado:false,carregando:false,tentouSilencioso:false,eventos:[],erro:null,vista:'lista',recolhido:false,diaSel:null,hint:null};
 /* GOOGLE-SEM-PEDIR-CONTA-V1 (04/09): o token do Google vale 1h e morria a cada
    recarga — e o pedido "silencioso" abria o "Escolha uma conta" toda vez, porque
@@ -12943,7 +12944,7 @@ const SO_AREAS=[
   ['prudential_sinistro',    'Prudential · Sinistro',     30],
   ['outro',                  'Outro',                      7]];
 const SO_BOLA=[['nos','Nós (Gustavo/Victor)'],['area','A área'],['cliente','O cliente']];
-const SO_EV_TIPOS=[['contato','Contato / cobrança'],['retorno','Retorno da área'],['protocolo','Protocolo'],['prazo','Prazo'],['status','Status'],['nota','Nota']];
+const SO_EV_TIPOS=[['anexo','📎 Anexo'],['contato','Contato / cobrança'],['retorno','Retorno da área'],['protocolo','Protocolo'],['prazo','Prazo'],['status','Status'],['nota','Nota']];
 const SO_PARADA_DIAS=3;    /* sem andamento há N dias = "parada" */
 function soAreaDias(a){ const o=SO_AREAS.find(x=>x[0]===a); return o?o[2]:7; }
 function soTipoRot(t){ return boRot(SO_TIPOS_V2.concat(SO_TIPOS),t); }
@@ -13051,7 +13052,7 @@ function soAbrir(id){ const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s
    Responde as perguntas dele na ordem em que ele as faz: há quanto tempo está aberta ·
    com quem está e até quando · qual é o próximo passo · o que já aconteceu (linha do
    tempo) · registrar o andamento de agora. Encerrar = status executada/cancelada. */
-function soAbrirV2(s){
+function soAbrirV2(s){ SO_ABERTA_ID=String(s.id);
   const lbl=t=>`<label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600">${t}</label>`;
   const hoje=atHojeLocal(), hj=atHojeISO(), dias=soDiasAberta(s,hoje), prazo=soPrazoEfetivo(s), venc=soVencida(s,hj), semT=soDiasSemToque(s,hoje);
   const areaRot=boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro');
@@ -13077,6 +13078,7 @@ function soAbrirV2(s){
          <div style="flex:1;min-width:140px">${lbl('Protocolo')}<input id="sof_prot" ${boSelectVivo()} value="${esc(s.protocolo||'')}" style="width:100%;margin-top:3px"></div>
          <div style="flex:1;min-width:140px">${lbl('Status')}${boSel('sof_st',SO_STATUS,s.status,boSelectVivo())}</div></div>
      </div></details>
+   ${soAnexosHtml(s)}
    <details class="bne-grp" data-sec="so-and" ${bneSecAberta('so-and')?'open':''} ontoggle="bneSecToggle('so-and',this.open)"><summary><span class="bne-grp-t">📝 Registrar andamento</span><span class="bne-grp-r">o que aconteceu agora</span><span class="bne-grp-c">▾</span></summary>
      <div style="padding:6px 0 10px">
        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div style="flex:0 0 170px">${lbl('Tipo')}${boSel('sof_evt',SO_EV_TIPOS,'contato',boSelectVivo())}</div>
@@ -13222,7 +13224,7 @@ function agSolicBloco(){ if(!novoOn('solic-tarefas')||!modOn('backoffice')||type
       <button class="sot-chkw" title="Concluir" aria-label="Concluir" onclick="soConcluir('${id}')"><span class="sot-chk"></span></button>
       <div class="sot-t">
         <input class="sot-tit" value="${esc(s.segurado||'')}" placeholder="Segurado" onchange="soInline('${id}','segurado',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
-        <div class="sot-sub"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><label class="ag-data" title="Mudar o prazo" style="${v?'color:var(--verm);font-weight:700':''}"><span>⏳</span><input type="date" value="${esc(p||'')}" onchange="soInline('${id}','prazo',this.value)"></label>${par?`<span>🔇 ${soDiasSemToque(s,hjl)}d parada</span>`:''}${s._gtUpd?'<span title="espelhada nas Tarefas do Google">☑️ Google</span>':''}${soNegChip(s)}</div>
+        <div class="sot-sub"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><label class="ag-data" title="Mudar o prazo" style="${v?'color:var(--verm);font-weight:700':''}"><span>⏳</span><input type="date" value="${esc(p||'')}" onchange="soInline('${id}','prazo',this.value)"></label>${par?`<span>🔇 ${soDiasSemToque(s,hjl)}d parada</span>`:''}${s._gtUpd?'<span title="espelhada nas Tarefas do Google">☑️ Google</span>':''}${soAnexosChip(s)}${soNegChip(s)}</div>
         <input class="sot-prox" value="${esc(s.proxima_acao||'')}" placeholder="➡️ próximo passo…" onchange="soInline('${id}','proxima_acao',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">
       </div>
       <button class="btn btn-s btn-mini" style="min-height:44px;flex:none" title="Abrir a ficha completa" onclick="soAbrir('${id}')">✎</button></div>`; };
@@ -13230,6 +13232,52 @@ function agSolicBloco(){ if(!novoOn('solic-tarefas')||!modOn('backoffice')||type
     <div class="sot-add"><span style="font-size:20px;color:var(--azul);width:24px;text-align:center">＋</span><input id="sot-novo" placeholder="Adicionar solicitação… (segurado · próximo passo) — Enter adiciona e já abre a próxima" onkeydown="if(event.key==='Enter'){soRapida(this.value);this.value='';event.preventDefault()}"></div>
     <div class="ac-acts"><button class="btn btn-s btn-mini" onclick="irPara('solicitacoes')">abrir Solicitações</button><button class="btn btn-s btn-mini" onclick="soNova()">📨 nova completa</button>${soGtOn()?`<button class="btn btn-s btn-mini" onclick="soGtSync({forca:true})">☑️ sincronizar Google Tarefas</button>`:''}</div></div>`;
   return ['solic',agBloco('solic','📨 Solicitações em acompanhamento',resumo,corpo)]; }
+/* ═══ ANEXOS-DRIVE-V1 (23/09/2026) ═══ "permitir colar anexos nas solicitações ou tarefas, tudo salvando em pasta no Google Drive,
+   já de forma organizada". Uma camada só (drv*): pasta raiz = Pipe X / CRM Life Planner / Histórico de Clientes (a mesma
+   das Revisões); dentro, uma pasta por cliente; arquivo = AAAA-MM-DD_<solicitacao|atividade>_<nome>. Reaproveita a conexão
+   Google da Agenda (escopo drive somado; 1ª vez pede consentimento de novo). Solicitação: o anexo vira evento 'anexo' na
+   linha do tempo (sem coluna nova). Atividade: t.anexos=[{name,url}]. Atrás de novoOn('anexos-drive'). */
+const DRV_RAIZ='1n3tbK5JoVPeWyOz5-ToUe6Yg1v3537eu';
+function anxOn(){ return novoOn('anexos-drive'); }
+async function drvToken(){ if(!/auth\/drive(\s|$)/.test(String(GCAL.escopos||''))){ GCAL.tok=null; GCAL.exp=0; } const t=await gcalToken(true); if(!t) throw new Error('sem token do Google'); return t; }
+async function drvApi(method,url,body,H){ const tok=await drvToken(); const r=await fetch(url,{method,headers:Object.assign({Authorization:'Bearer '+tok},H||{}),body});
+  if(!r.ok){ let m='HTTP '+r.status; try{ const j=await r.json(); m=(j.error&&j.error.message)||m; }catch(_){} throw new Error(m); } return r.json(); }
+const _drvPastas={};
+function drvSlug(n){ return String(n||'Cliente').replace(/\s+/g,' ').trim().replace(/[\/\\:*?"<>|]/g,'-')||'Cliente'; }
+async function drvPasta(nome,pai){ pai=pai||DRV_RAIZ; const k=pai+'/'+nome; if(_drvPastas[k]) return _drvPastas[k];
+  const q=encodeURIComponent("name = '"+nome.replace(/'/g,"\\'")+"' and '"+pai+"' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+  const j=await drvApi('GET','https://www.googleapis.com/drive/v3/files?q='+q+'&fields=files(id,name)&pageSize=1');
+  let id=j.files&&j.files[0]&&j.files[0].id;
+  if(!id){ const c=await drvApi('POST','https://www.googleapis.com/drive/v3/files?fields=id',JSON.stringify({name:nome,mimeType:'application/vnd.google-apps.folder',parents:[pai]}),{'Content-Type':'application/json'}); id=c.id; }
+  _drvPastas[k]=id; return id; }
+function drvNomeArq(prefixo,orig){ const d=new Date(),z=n=>String(n).padStart(2,'0'); const o=drvSlug(orig||'colado'); return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+'_'+(prefixo||'anexo')+'_'+o; }
+async function drvUpload(file,cliente,prefixo){ const pasta=await drvPasta(drvSlug(cliente)); let nome=file.name||''; if(!nome||/^image\.(png|jpe?g|gif|webp)$/i.test(nome)) nome='print.'+(String(file.type||'image/png').split('/')[1]||'png');
+  const meta=new Blob([JSON.stringify({name:drvNomeArq(prefixo,nome),parents:[pasta]})],{type:'application/json'}); const fd=new FormData(); fd.append('metadata',meta); fd.append('file',file,nome);
+  const j=await drvApi('POST','https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,mimeType',fd);
+  return {id:j.id,name:j.name,url:j.webViewLink,mime:j.mimeType,ts:new Date().toISOString()}; }
+function anxArquivosDe(ev){ const l=[]; if(ev&&ev.clipboardData){ [...(ev.clipboardData.items||[])].forEach(it=>{ if(it.kind==='file'){ const f=it.getAsFile(); if(f) l.push(f); } }); } return l; }
+function anxEscolher(cb){ const i=document.createElement('input'); i.type='file'; i.multiple=true; i.onchange=()=>{ const l=[...(i.files||[])]; if(l.length) cb(l); }; i.click(); }
+function anxLinkHtml(a){ return `<a href="${esc(urlSegura(a.url))}" target="_blank" rel="noopener" class="ta-lchip" style="text-decoration:none" title="${esc(a.name||'')}">📎 ${esc(String(a.name||'anexo').replace(/^\d{4}-\d{2}-\d{2}_\d{4}_(solicitacao|atividade)_/,''))}</a>`; }
+/* ── solicitação: anexo = evento 'anexo' na linha do tempo ── */
+function soAnexos(s){ return soEventos(s).filter(e=>e.tipo==='anexo').map(e=>{ const m=String(e.texto||'').match(/^📎\s*(.*?)\s+—\s+(https?:\S+)$/); return m?{name:m[1],url:m[2],ts:e.ocorrido_em}:null; }).filter(Boolean); }
+function soAnexosChip(s){ if(!anxOn()) return ''; const n=soAnexos(s).length; return n?`<span title="${n} anexo(s) no Drive">📎 ${n}</span>`:''; }
+async function soAnexar(id,files){ const s=(SO.itens||[]).find(x=>String(x.id)===String(id)); if(!s||!files||!files.length) return;
+  if(String(s.id).startsWith('loc_')){ toast('Faça login primeiro — o anexo precisa da linha do tempo no servidor',false); return; }
+  const cli=(soNegLigado(s)||{}).nome||s.segurado||'Sem nome'; let ok=0;
+  for(const f of files){ try{ toast('Enviando '+(f.name||'imagem')+' pro Drive…',true); const a=await drvUpload(f,cli,'solicitacao'); await soEvento(s,'anexo','📎 '+a.name+' — '+a.url); ok++; }catch(e){ console.warn('[anexo]',e); toast('Anexo falhou: '+(e&&e.message||e),false); } }
+  if(ok){ await soGravar(s); toast(ok+' anexo(s) salvo(s) em Histórico de Clientes / '+drvSlug(cli),true); if(document.getElementById('at-ov')) soAbrir(id); else render(); } }
+let SO_ABERTA_ID=null;
+document.addEventListener('paste',ev=>{ if(!anxOn()||!SO_ABERTA_ID||!document.getElementById('at-ov')) return; const t=ev.target; if(t&&/^(INPUT|TEXTAREA)$/.test(t.tagName)&&!t.readOnly&&t.type!=='file'){ const l=anxArquivosDe(ev); if(!l.length) return; } const l=anxArquivosDe(ev); if(!l.length) return; ev.preventDefault(); soAnexar(SO_ABERTA_ID,l); });
+function soAnexosHtml(s){ if(!anxOn()) return ''; const l=soAnexos(s), id=esc(jsq(String(s.id)));
+  return `<details class="bne-grp" data-sec="so-anx" ${bneSecAberta('so-anx')?'open':''} ontoggle="bneSecToggle('so-anx',this.open)"><summary><span class="bne-grp-t">📎 Anexos</span><span class="bne-grp-r">${l.length?l.length+' no Drive':'nenhum · arquivo ou Ctrl+V'}</span><span class="bne-grp-c">▾</span></summary>
+    <div style="padding:6px 0 10px"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">${l.map(anxLinkHtml).join('')||'<span style="font-size:12.5px;color:var(--muted)">Nenhum anexo ainda.</span>'}</div>
+    <div class="ac-acts"><button class="btn btn-s btn-mini" style="min-height:40px" onclick="anxEscolher(l=>soAnexar('${id}',l))">＋ anexar arquivo</button><span style="font-size:12px;color:var(--muted);align-self:center">ou cole um print/imagem com <b>Ctrl+V</b> (⌘V) com esta ficha aberta → vai pro Drive em Histórico de Clientes / ${esc(drvSlug((soNegLigado(s)||{}).nome||s.segurado||''))}</span></div></div></details>`; }
+/* ── atividade do negócio: t.anexos ── */
+async function tarAnexar(cid,tid,files){ const c=tarContato(cid); const t=tarDe(c,tid); if(!c||!t||!files||!files.length) return; let ok=0;
+  for(const f of files){ try{ toast('Enviando '+(f.name||'imagem')+' pro Drive…',true); const a=await drvUpload(f,c.nome,'atividade'); (t.anexos=t.anexos||[]).push({name:a.name,url:a.url,ts:a.ts}); interacoesDe(c).push({id:uid(),k:'nota',l:'📎 Anexo na atividade "'+(t.tit||tarNomeTipo(t.tipo))+'": '+a.name+' — '+a.url,dia:hojeISO(),ts:a.ts,por:quemFez()}); ok++; }catch(e){ console.warn('[anexo]',e); toast('Anexo falhou: '+(e&&e.message||e),false); } }
+  if(ok){ salvar(); render(); toast(ok+' anexo(s) salvo(s) em Histórico de Clientes / '+drvSlug(c.nome),true); } }
+function tarAnexosHtml(c,t){ if(!anxOn()) return ''; const l=t.anexos||[]; return `<button class="btn btn-s btn-mini" title="Anexar arquivo (vai pro Drive na pasta do cliente)" onclick="anxEscolher(l=>tarAnexar('${esc(jsq(c.id))}','${esc(jsq(t.id))}',l))">📎${l.length?' '+l.length:''}</button>`+(l.length?`<span style="flex-basis:100%;display:flex;gap:4px;flex-wrap:wrap">${l.map(anxLinkHtml).join('')}</span>`:''); }
+window.soAnexar=soAnexar; window.tarAnexar=tarAnexar; window.anxEscolher=anxEscolher;
 /* ═══ SOLIC-NEGOCIO-V1 (23/09/2026) ═══ "permitir associar as solicitações aos clientes e oportunidades no funil —
    por vezes são ações pra destravar a emissão (Marcus Tulio: ajuste na apólice antiga destrava a oportunidade em UW)".
    s.contato_id → contato do funil. Sugestão automática pelo nome do segurado (negIndex). Chip 🎯 na Agenda, no
@@ -13292,7 +13340,7 @@ function soKanbanHtml(itens){ const hoje=atHojeLocal(), hj=atHojeISO(), corte=ne
       <div class="t"><span class="dias-tag ${v?'hoje':par?'perto':'longe'}">${soDiasAberta(s,hoje)}d</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(s.segurado||'—')}</span></div>
       <div class="m"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span style="${v?'color:var(--verm);font-weight:700':''}">⏳ ${p?esc(atFmtBR(p)):'—'}</span>${par?`<span>🔇 ${soDiasSemToque(s,hoje)}d</span>`:''}</div>
       <div class="p${s.proxima_acao?'':' muda'}">➡️ ${s.proxima_acao?esc(s.proxima_acao):'sem próximo passo'}</div>
-      ${soNegOn()?`<div class="m" style="margin-top:6px">${soNegChip(s,{mini:true})}</div>`:''}
+      ${soNegOn()||anxOn()?`<div class="m" style="margin-top:6px">${soAnexosChip(s)}${soNegChip(s,{mini:true})}</div>`:''}
       <div class="f"><select onchange="soKbMover('${id}',this.value)" onclick="event.stopPropagation()"><option value="">mover →</option>${SO_KB_COLS.filter(c=>c[0]!==col).map(c=>`<option value="${c[0]}">${esc(c[1])}</option>`).join('')}</select><button class="btn btn-s btn-mini" style="min-height:36px" onclick="event.stopPropagation();soAbrir('${id}')">✎</button></div></div>`; };
   return `<div class="so-kb">${SO_KB_COLS.map(c=>{ const l=vis.filter(s=>soKbColDe(s)===c[0]).sort((a,b)=>peso(a)-peso(b)||soDiasAberta(b,hoje)-soDiasAberta(a,hoje));
     return `<div class="so-kcol" data-col="${c[0]}" ondragover="soKbDragOver(event)" ondragleave="soKbDragOut(event)" ondrop="soKbDrop(event,'${c[0]}')"><div class="so-kh">${esc(c[1])}<span class="n">${l.length}</span></div><div class="so-kbody">${l.map(card).join('')||'<div style="font-size:12px;color:var(--muted);padding:8px 4px">vazio</div>'}</div></div>`; }).join('')}</div>`; }
@@ -15549,6 +15597,7 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
+  'anexos-drive': {o:'📎 Anexos em solicitações e atividades: arquivo ou Ctrl+V (print/imagem) vai pro Google Drive em Pipe X / CRM Life Planner / Histórico de Clientes / <cliente> com nome datado; o link fica na linha do tempo da solicitação e na atividade; contador 📎 na Agenda e no Kanban. Pede o escopo Drive na conexão Google (reconectar 1×)', desde:'2026-09-23'},
   'solic-negocio':{o:'Solicitação vinculada ao cliente/oportunidade do funil (🎯): chip na Agenda, no Kanban e na ficha da solicitação; sugestão automática pelo nome do segurado; a ficha do negócio ganha o bloco 📨 Solicitações (o que está destravando a emissão dele). Precisa da migration solicitacoes_v3_contato.sql (coluna contato_id)', desde:'2026-09-23'},
   'solic-kanban': {o:'Solicitações: visão Kanban (colunas por "com quem está a bola": Nós · A área · O cliente · Concluídas 30d · Canceladas), arrasto no desktop e seletor "mover →" no celular; troca com a Lista pelo botão ▦/☰', desde:'2026-09-23'},
   'cards-funil':  {o:'Cards do funil em sincronia com o funil e com o ciclo escolhido: "Previsto fechar/emitir" seguem o ciclo (Mensal ou Compensação), e "PA emitido" nasce do FUNIL (negócios que viraram ganho no ciclo, pelo prêmio que ele digita) com o relatório UW como referência ao lado — v2: validar pelo relatório', desde:'2026-09-23'},
@@ -19128,6 +19177,12 @@ function lpSelfCheck(){
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
         ok('BLOCO-CURTO: bloco de menos de 45 min na grade do dia vira uma linha (hora + nome) com reticências, e o CSS existe', String(gcalDiaHTML.toString()).includes("h<54?' curto':''")&&!!document.getElementById('gcal-fluida-css')&&/\.gcal-ev\.curto\{flex-direction:row/.test(document.getElementById('gcal-fluida-css').textContent));
+        ok('ANEXOS-DRIVE: escopo drive na conexão Google; anexo da solicitação = evento anexo (📎 nome — url) lido de volta; nome de arquivo datado na pasta do cliente; botão 📎 na atividade; chip na Agenda/Kanban', (()=>{ if(!NOVO_SO_MEU['anexos-drive']) return false; const bak=SO_EV; try{
+          SO_EV={'zax1':[{tipo:'anexo',texto:'📎 2026-09-23_1015_solicitacao_boleto.pdf — https://drive.google.com/file/d/abc/view',ocorrido_em:'2026-09-23T10:15:00Z'},{tipo:'nota',texto:'x'}]};
+          const s={id:'zax1',segurado:'Fulano'}; const l=soAnexos(s); const nm=drvNomeArq('solicitacao','boleto.pdf');
+          return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/boleto\.pdf/.test(anxLinkHtml(l[0]))&&!/2026-09-23_1015_solicitacao_/.test(anxLinkHtml(l[0]))
+            &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
+        } finally{ SO_EV=bak; } })());
         ok('SOLIC-NEGOCIO: solicitação liga ao negócio (contato_id), sugere pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 na ficha do negócio, e a coluna só sobe quando o servidor a tem', (()=>{ if(!NOVO_SO_MEU['solic-negocio']) return false; const bakS=S.contatos, bakSO=SO.itens, bakT=SO_TEM_CONTATO; try{
           S.contatos=[normContato({id:'zzsn1',nome:'Marcus Tulio Teste',lp:S.activeUser,funil:'bc',etapa:'RC/OI',telefone:'81999990051'})]; negIndexLimpar();
           SO.itens=[{id:'zso1',segurado:'Marcus Tulio Teste',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString()},{id:'zso2',segurado:'Outro Nome',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString(),contato_id:'zzsn1'}];
