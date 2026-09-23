@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.13 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.14 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3253,14 +3253,30 @@ function funControlesHtml(rec,fluxo){
     ${FUNP.probFonte==='funil'&&!temCal?`<span class="badge b-amarelo" title="${esc(cal.motivo||'')}">sem amostra — usando a tabela</span>`:''}
   </div>`;
 }
+/* ═══ CARDS-FUNIL-V1 (23/09/2026) ═══ "os números não batem com o período selecionado — os cards têm que estar em
+   sincronia com o funil; no funil eu coloco o valor manualmente; v2 usa as apólices do relatório de UW."
+   Achado: (1) "Previsto fechar/emitir NO MÊS" ignorava o ciclo escolhido (Compensação 21→20 mostrava o mês-calendário);
+   (2) "PA emitido" vinha só do relatório UW (por isso "—" na Compensação enquanto o funil tinha venda ganha).
+   Agora: previsto segue o ciclo; PA emitido nasce do funil (data em que o negócio virou ganho, prêmio que ele digitou),
+   com o relatório UW como referência no rodapé do card. */
+function funGanhoData(c,ns){ const g=ET_GANHO[ns]||[]; if(!g.length) return null;
+  const its=((c&&c.interacoes)||[]).filter(x=>x&&x.k==='etapa'&&g.includes(x.para)&&x.dia).map(x=>String(x.dia).slice(0,10)).sort();
+  if(its.length) return its[0];
+  if(g.includes(c&&c.etapa)||ehPosVenda(c&&c.etapa,ns)||(ns==='bc'&&c&&c.etapa===BC_ATIVOS&&(c.interacoes||[]).some(x=>x&&x.k==='etapa'&&g.includes(x.de)))) return c.prev_emis||c.prev_fech||null;   /* ganho sem log datado: cai na previsão */
+  return null; }
+function funEmitidasCiclo(lista,ns,per){ per=per||cicloAtual(); const no=[]; let semData=0;
+  (lista||[]).forEach(c=>{ const g=ET_GANHO[ns]||[]; const jaGanhou=g.includes(c.etapa)||ehPosVenda(c.etapa,ns)||(c.interacoes||[]).some(x=>x&&x.k==='etapa'&&g.includes(x.para));
+    if(!jaGanhou) return; const d=funGanhoData(c,ns); if(!d){ semData++; return; } if(d>=per.ini&&d<=per.fim) no.push(c); });
+  return {per,lista:no,pa:somaPA(no),n:no.length,semData}; }
 function nnNegocioHtml(lista,fluxo,ns,rec){
   /* BC: cliente ativo é a carteira inteira — dinheiro só conta a partir de Contato Agenda/Revisita */
   const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&(c.etapa===BC_ATIVOS||c.etapa===BC_EMITIDA))&&!ehPosVenda(c.etapa,ns));
   const pa=somaPA(vivos), pm=somaPM(vivos), pond=paPonderado(vivos);
   const comValor=vivos.filter(c=>pmDe(c)>0).length;
-  const mes=mesAtual();
-  const fechMes=vivos.filter(c=>mesDe(prevDe(c,'fech'))===mes);
-  const emisMes=vivos.filter(c=>mesDe(prevDe(c,'emis'))===mes);
+  const mes=mesAtual(), cf=novoOn('cards-funil'), per=cicloAtual(), noCiclo=iso=>!!iso&&iso>=per.ini&&iso<=per.fim;   /* CARDS-FUNIL-V1 */
+  const fechMes=cf? vivos.filter(c=>noCiclo(prevDe(c,'fech'))) : vivos.filter(c=>mesDe(prevDe(c,'fech'))===mes);
+  const emisMes=cf? vivos.filter(c=>noCiclo(prevDe(c,'emis'))) : vivos.filter(c=>mesDe(prevDe(c,'emis'))===mes);
+  const perTxt=cf?esc(per.rotulo):'mês', fe=cf?funEmitidasCiclo(lista,ns,per):null, exAgg=cicloEmitidas(per,null,cicloFiltroFunil(ns));
   const atrasados=vivos.filter(c=>prevVencida(prevDe(c,'fech')));
   /* rec.lista e nao lista: o chip "% passam" de cada coluna le o RECORTE.
      Com um periodo escolhido, ler a lista crua aqui fazia o KPI do topo
@@ -3282,15 +3298,17 @@ function nnNegocioHtml(lista,fluxo,ns,rec){
   };
   const faixa=`<div class="kpis kpis-funil" style="margin-bottom:8px">
       ${kpi('PA em jogo',brlCurto(pa),brlCurto(pm)+'/mês · '+vivos.length+' negócio(s)')}
-      ${kpi('Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?`${fechMes.length} negócio(s) · ponderado ${brlCurto(paPonderado(fechMes))}`:'nenhuma previsão neste mês')}
+      ${kpi(cf?'Previsto fechar no ciclo':'Previsto fechar no mês',fechMes.length?brlCurto(somaPA(fechMes)):'—',fechMes.length?`${fechMes.length} negócio(s) · ponderado ${brlCurto(paPonderado(fechMes))}${cf?' · '+perTxt:''}`:'nenhuma previsão '+(cf?'em '+perTxt:'neste mês'))}
       ${kpiLente('vencido','Fechamento vencido',atrasados.length||'0',atrasados.length?'previsão passou — renegociar':'nenhuma previsão atrasada',atrasados.length>0)}
       ${kpiLente('semativ','Sem próxima atividade',semAtiv.length||'0',semAtiv.length?'negócio parado não anda':'todo negócio tem tarefa',semAtiv.length>0)}
-      ${cicloCardsHtml(cicloEmitidas(cicloAtual(),null,cicloFiltroFunil(ns)),{num:true,semPlano:true})}
+      ${cf?`<div class="kpi cic-kpi" title="Negócios deste funil que viraram ganho dentro do ciclo, pelo prêmio digitado no negócio (PA = 12× o mensal). Referência: o relatório UW & Emissão"><div class="lbl">PA emitido (funil)</div><div class="num" style="font-size:19px">${fe.n?brlCurto(fe.pa):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${fe.n} negócio${fe.n===1?'':'s'} · ${perTxt}${fe.semData?' · '+fe.semData+' ganho sem data':''}<br>relatório UW: ${exAgg.nEmit||exAgg.n?brlCurto(exAgg.pa)+' · '+exAgg.nEmit+' apólice'+(exAgg.nEmit===1?'':'s'):'—'}</div></div>
+      <div class="kpi cic-kpi" title="AFYC projetado das emitidas do relatório UW & Emissão no ciclo (v2: validar pelo relatório)"><div class="lbl">FYC emitido (relatório UW)</div><div class="num" style="font-size:19px">${exAgg.nEmit||exAgg.n?brlCurto(exAgg.fyc):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${per.modo==='comp'?'ciclo de compensação':'ciclo do mês'} · ${perTxt}</div></div>`
+      :cicloCardsHtml(exAgg,{num:true,semPlano:true})}
     </div>`;
   const resto=aberto?`${cicloBarraHtml()}<div class="kpis kpis-funil" style="margin-bottom:8px">
       ${kpi('PA ponderado',brlCurto(pond),(pa?Math.round(pond/pa*100)+'% do total · ':'')+(FUNP.probFonte==='funil'&&_PROB_CAL&&_PROB_CAL.mapa?'pelo seu funil':'pela tabela por etapa'))}
       ${kpi('Ticket médio (PA)',comValor?brlCurto(pa/comValor):'—',comValor<vivos.length?`${vivos.length-comValor} sem prêmio informado`:'todos com prêmio')}
-      ${kpi('Previsto emitir no mês',emisMes.length?brlCurto(somaPA(emisMes)):'—',emisMes.length?emisMes.length+' apólice(s)':'nenhuma previsão neste mês')}
+      ${kpi(cf?'Previsto emitir no ciclo':'Previsto emitir no mês',emisMes.length?brlCurto(somaPA(emisMes)):'—',emisMes.length?emisMes.length+' apólice(s)'+(cf?' · '+perTxt:''):'nenhuma previsão '+(cf?'em '+perTxt:'neste mês'))}
       ${pior?kpi('Gargalo',pior.pct+'%',esc(pior.de)+' → '+esc(pior.para),pior.pct<40):''}
     </div>${rec?funControlesHtml(rec,fluxo):''}`:'';
   const botao=`<button class="btn btn-s btn-mini fun-cab-btn" onclick="funCabAlternar()"
@@ -15444,6 +15462,7 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
+  'cards-funil':  {o:'Cards do funil em sincronia com o funil e com o ciclo escolhido: "Previsto fechar/emitir" seguem o ciclo (Mensal ou Compensação), e "PA emitido" nasce do FUNIL (negócios que viraram ganho no ciclo, pelo prêmio que ele digita) com o relatório UW como referência ao lado — v2: validar pelo relatório', desde:'2026-09-23'},
   'agenda-ativ':  {o:'Compromisso da Agenda Google ligado a um negócio (vínculo manual ou nome/telefone batendo) vira atividade na ficha do lead — Tarefas & Atividades deixa de dizer "sem próxima atividade"; ✓ feito no Google conclui a atividade', desde:'2026-09-21'},
   'rec-funil':    {o:'Recomendações lê também o FUNIL (não só o Estoque): quem indicou um lead do funil (campo recomendante, ou a origem quando é um nome de pessoa) aparece como recomendante com os nomes dele; o recorte Recomendações do Painel TA e o contador do menu acompanham', desde:'2026-09-21'},
   'sp-listas':    {o:'SitPlan organiza, Painel TA executa: tópicos 📋 Listas de TA (puxar a lista inteira pro dia, salvar o dia como lista) e 🎯 Recortes da base (os mesmos do Painel TA) dentro do SitPlan, botão 📋 em cada linha pra pôr o nome numa lista de TA, e lista nomeada aceita contato do funil (não só do Estoque)', desde:'2026-09-21'},
@@ -19020,6 +19039,15 @@ function lpSelfCheck(){
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
         ok('BLOCO-CURTO: bloco de menos de 45 min na grade do dia vira uma linha (hora + nome) com reticências, e o CSS existe', String(gcalDiaHTML.toString()).includes("h<54?' curto':''")&&!!document.getElementById('gcal-fluida-css')&&/\.gcal-ev\.curto\{flex-direction:row/.test(document.getElementById('gcal-fluida-css').textContent));
+        ok('CARDS-FUNIL: previsto fechar/emitir segue o ciclo escolhido; PA emitido nasce do funil (ganho datado pelo log de etapa, no ciclo) com o relatório UW como referência', (()=>{ if(!NOVO_SO_MEU['cards-funil']) return false; const bakS=S.contatos, bakC={...CIC}; try{
+          CIC.modo='comp'; CIC.corte=21; CIC.ini='2026-09-21'; CIC.fim='2026-10-20'; const per=cicloAtual(); const g=funEtapaGanho('bc');
+          S.contatos=[normContato({id:'zzc1',nome:'Ganhou Dentro',lp:S.activeUser,funil:'bc',etapa:g,pm:500,interacoes:[{id:'i1',k:'etapa',de:'RC/OI',para:g,dia:'2026-09-25'}]}),
+            normContato({id:'zzc2',nome:'Ganhou Fora',lp:S.activeUser,funil:'bc',etapa:g,pm:700,interacoes:[{id:'i2',k:'etapa',de:'RC/OI',para:g,dia:'2026-09-10'}]}),
+            normContato({id:'zzc3',nome:'Ganhou Sem Data',lp:S.activeUser,funil:'bc',etapa:g,pm:900,interacoes:[]}),
+            normContato({id:'zzc4',nome:'Aberto',lp:S.activeUser,funil:'bc',etapa:'RC/OI',pm:100,prev_fech:'2026-10-05'})];
+          const fe=funEmitidasCiclo(S.contatos,'bc',per); const src=String(nnNegocioHtml.toString());
+          return per.ini==='2026-09-21'&&fe.n===1&&fe.pa===500*12&&fe.semData===1&&src.includes("noCiclo(prevDe(c,'fech'))")&&src.includes('PA emitido (funil)')&&src.includes('FYC emitido (relatório UW)');
+        } finally{ S.contatos=bakS; Object.assign(CIC,bakC); } })());
         ok('DIGITA-V1: nenhum campo de texto de Recomendações/Estoque re-renderiza a cada tecla sem devolver o foco (busca, cidade, mín., profissão, idade, renda passam por fxDigita)', (()=>{ const src=String(viewBnRecs.toString())+String(viewBnEstoque.toString()); return typeof fxDigita==='function'&&!/oninput="BNR\.\w+=this\.value/.test(src)&&!/oninput="FBN\.(prof|cid|idmin|idmax|rmin)=this\.value/.test(src)&&(src.match(/fxDigita\(this/g)||[]).length>=8; })());
         /* AGENDA-ATIV-V1 */
         ok('AGENDA-ATIV: evento do Google vinculado ao negócio vira atividade na ficha (data/hora/título), não duplica, remarca junto e ✓ feito no Google conclui; evento nascido no CRM (crmTarefa) fica de fora', (()=>{ if(!NOVO_SO_MEU['agenda-ativ']) return false; const bakS=S.contatos, bakE=GCAL.eventos, bakM=GCAL.mes; try{
