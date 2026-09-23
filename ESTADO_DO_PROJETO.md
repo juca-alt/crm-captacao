@@ -4,7 +4,7 @@
 
 ## 🟢 RETOMAR AQUI — 23/09/2026 — v8.14 no ar (main = Pages, conferido pelo título servido)
 
-**Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil`.
+**Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil` · `solic-kanban` · `solic-negocio` · `anexos-drive`.
 
 **Checagem geral de 23/09 (retomada no PC):** repo ✅ (branch `claude/sitplan-ta-lists-i74eo9` = `main` = Pages v8.14) · banco ✅ (lp_contatos dele: 5.278 linhas, última gravação 23/09 20:36, 12 nas últimas 72 h, **5 leads do funil já com `listas`** — a lista nomeada atravessando funil+Estoque está viva no servidor) · docs ✅ (este arquivo + CLAUDE.md) · Drive ✅ (DELTA 2026-09-23) · Notion ✅ (LOG DE SESSÕES).
 
@@ -42,6 +42,10 @@ Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de 
 - **BLOCO-CURTO-V1 (v8.12):** bloco de menos de 45 min na grade do dia vira uma linha (hora + nome com reticências) — "nomes engolidos".
 - **DIGITA-V1 (v8.13):** busca/cidade/mín. de Recomendações e profissão/cidade/idade/renda do Estoque não re-renderizam a cada tecla (`fxDigita`: 250 ms + foco e cursor devolvidos). Provado digitando "glysse" letra a letra no Playwright.
 - **CARDS-FUNIL-V1 (v8.14):** *"os números não batem com o período; os cards têm de estar em sincronia com o funil"* — (1) "Previsto fechar/emitir" ignorava o ciclo (Compensação mostrava mês-calendário) → seguem o ciclo; (2) "PA emitido" vinha só do relatório UW → **PA emitido (funil)** = negócios que viraram ganho no ciclo (data do log de etapa; sem log, cai na previsão; sem nada, conta "ganho sem data"), pelo prêmio digitado (PA = 12× mensal), com o relatório UW de referência no rodapé; FYC segue do relatório (v2: validar pelo relatório). Atrás de `cards-funil`.
+
+- **SOLIC-KANBAN-V1 (v8.15):** Solicitações com visão Kanban por "com quem está a bola" (Nós · A área · O cliente · Concluídas 30d · Canceladas 30d), arrasto no desktop, "mover →" no celular; ▦/☰ lembrado por aparelho.
+- **SOLIC-NEGOCIO-V1 (v8.16):** *"associar as solicitações aos clientes e oportunidades no funil (Marcus Tulio: ajuste na apólice antiga destrava a emissão)"* — `contato_id` na solicitação (migration `solicitacoes_v3_contato.sql` **rodada em 23/09 via MCP**), 🎯 vincular com sugestão pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 Solicitações na ficha do negócio, "📅 agendar" honra o vínculo. `soContatoDe` = vínculo explícito antes do nome.
+- **ANEXOS-DRIVE-V1 (v8.17):** *"colar anexos nas solicitações ou tarefas, tudo salvando em pasta no Google Drive, organizado"* — camada `drv*` (escopo `auth/drive` somado à conexão Google da Agenda; 1ª vez pede consentimento de novo). Pasta: Pipe X / CRM Life Planner / **Histórico de Clientes** / `<cliente>` (a mesma das Revisões) · arquivo `AAAA-MM-DD_HHMM_<solicitacao|atividade>_<nome>`. Solicitação: anexo = evento `anexo` na linha do tempo (sem coluna nova; "＋ anexar arquivo" ou **Ctrl+V** com a ficha aberta). Atividade: `t.anexos` + nota na linha do tempo do lead; botão 📎 na atividade. Chip 📎N na Agenda e no Kanban. Notion (Mapa da Casa) atualizado com o endereço dos anexos.
 
 ### Prova
 - Invariante `SP-LISTAS` no `lpSelfCheck` (lista nomeada atravessa funil+Estoque; tópicos presentes; TA_SMART reaproveitado; botões abrir/recolher; nenhum `details` aberto literal; ⋯ lê `spPorId`).
