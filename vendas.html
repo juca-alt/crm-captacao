@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.14 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.15 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4055,6 +4055,17 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .cs-lin .pa{font-weight:800;white-space:nowrap;margin-left:auto;flex:0 0 auto;min-width:96px;text-align:right}
   /* SOLIC-V2: linha da solicitação em 3 faixas (quem · com quem/prazo · próximo passo) e a ficha */
   .so-row{padding:10px 0;border-top:1px solid var(--linha);cursor:pointer}
+  /* SOLIC-KANBAN-V1 */
+  .so-kb{display:flex;gap:10px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+  .so-kcol{flex:0 0 272px;min-width:272px;background:var(--bg);border:1px solid var(--linha);border-radius:12px;padding:8px;scroll-snap-align:start;display:flex;flex-direction:column;gap:8px;max-height:72vh}
+  .so-kcol.alvo{outline:2px dashed var(--azul);outline-offset:-2px}
+  .so-kh{display:flex;align-items:center;gap:6px;font-weight:800;font-size:12.5px;padding:2px 4px} .so-kh .n{margin-left:auto;font-size:11.5px;color:var(--muted);font-weight:700}
+  .so-kbody{overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:60px}
+  .so-kc{background:var(--card);border:1px solid var(--linha);border-radius:10px;padding:9px 10px;cursor:grab;box-shadow:0 1px 3px rgba(16,30,54,.08)} .so-kc.venc{border-left:4px solid var(--verm)} .so-kc.par{border-left:4px solid var(--amar,#e0a800)}
+  .so-kc .t{font-weight:800;font-size:13.5px;display:flex;gap:6px;align-items:center} .so-kc .t .dias-tag{font-size:10.5px}
+  .so-kc .m{font-size:11.5px;color:var(--muted);margin-top:3px;display:flex;gap:6px;flex-wrap:wrap} .so-kc .p{font-size:12.5px;margin-top:5px} .so-kc .p.muda{color:var(--amarelo,#b45309)}
+  .so-kc .f{display:flex;gap:6px;align-items:center;margin-top:8px} .so-kc .f select{flex:1;min-width:0;min-height:36px;font-size:12.5px;padding:4px 6px;border:1px solid var(--linha);border-radius:8px}
+  @media(max-width:980px){ .so-kcol{flex-basis:86vw;min-width:86vw;max-height:none} .so-kc .f select{min-height:44px;font-size:16px} .so-kc{cursor:default} }
   .so-row:first-child{border-top:0}
   .so-row.venc{background:linear-gradient(90deg,#fff5f5 0,transparent 60%)}
   /* INI-ACOMP-V1: linhas dos cards de acompanhamento do Início (dedo ≥44px, sem estouro) */
@@ -12901,7 +12912,8 @@ function viewLpPendencias(){
    OBRIGATÓRIO (item 4 da spec), sem improviso. */
 const SO_TABLE='solicitacoes', SO_CHAVE='crmlp_solicitacoes_v1';
 let SO={itens:[]}; let SO_REMOTE=false, SO_EMAIL='';
-let FSO={status:'aberta',q:'',area:''};
+let FSO={status:'aberta',q:'',area:'',vis:(function(){ try{ return localStorage.getItem('crmlp_so_vis_v1')||'lista'; }catch(_){ return 'lista'; } })()};
+function soVisSet(v){ FSO.vis=v==='kanban'?'kanban':'lista'; try{ localStorage.setItem('crmlp_so_vis_v1',FSO.vis); }catch(_){} viewSolicitacoes(); }
 const SO_SEM_RETORNO_DIAS=3;   /* régua de cobrança do Victor — vai mudar */
 const SO_TIPOS=[['postecipar','postecipar'],['alt_pag','ALT PAG'],['alt_dados','alteração de dados'],['boleto','boleto'],['anexar','anexar'],['beneficio','benefício'],['reabilitacao','reabilitação'],['consulta_valor','consulta de valor'],['outro','outro']];
 const SO_STATUS=[['aberta','Aberta'],['respondida','Respondida'],['executada','Executada'],['sem_retorno','Sem retorno'],['cancelada','Cancelada']];
@@ -13211,6 +13223,33 @@ function agSolicBloco(){ if(!novoOn('solic-tarefas')||!modOn('backoffice')||type
     <div class="sot-add"><span style="font-size:20px;color:var(--azul);width:24px;text-align:center">＋</span><input id="sot-novo" placeholder="Adicionar solicitação… (segurado · próximo passo) — Enter adiciona e já abre a próxima" onkeydown="if(event.key==='Enter'){soRapida(this.value);this.value='';event.preventDefault()}"></div>
     <div class="ac-acts"><button class="btn btn-s btn-mini" onclick="irPara('solicitacoes')">abrir Solicitações</button><button class="btn btn-s btn-mini" onclick="soNova()">📨 nova completa</button>${soGtOn()?`<button class="btn btn-s btn-mini" onclick="soGtSync({forca:true})">☑️ sincronizar Google Tarefas</button>`:''}</div></div>`;
   return ['solic',agBloco('solic','📨 Solicitações em acompanhamento',resumo,corpo)]; }
+/* ═══ SOLIC-KANBAN-V1 (23/09/2026) ═══ "pro meu controle de pendências e solicitações de clientes, bota visão de cards Kanban".
+   Colunas = com quem está a bola (é o que decide o próximo passo): Nós · A área · O cliente; mais Concluídas (30 d) e Canceladas.
+   Arrasto no desktop; no celular o seletor "mover →" faz o mesmo. Mover grava bola_com/status e registra na linha do tempo. */
+const SO_KB_COLS=[['nos','🙋 Bola com NÓS'],['area','🏢 Bola com A ÁREA'],['cliente','🙍 Bola com O CLIENTE'],['executada','✅ Concluídas (30 d)'],['cancelada','🚫 Canceladas (30 d)']];
+function soKbColDe(s){ if(!soAberta(s)) return s.status==='cancelada'?'cancelada':'executada'; return ['nos','area','cliente'].includes(s.bola_com)?s.bola_com:'area'; }
+async function soKbMover(id,col){ const s=(SO.itens||[]).find(x=>String(x.id)===String(id)); if(!s||!col||soKbColDe(s)===col) return; const now=new Date().toISOString();
+  if(col==='executada'){ await soConcluir(id,{silencioso:true}); render(); toast('✓ '+(s.segurado||'')+' concluída',true); soGtSync({forca:true,silencioso:true}); return; }
+  if(col==='cancelada'){ s.status='cancelada'; s.encerrada_em=now; s.ultimo_toque_em=now; await soGravar(s); try{ await soEvento(s,'status','Cancelada no Kanban'); }catch(_){} render(); soGtSync({forca:true,silencioso:true}); return; }
+  const reabriu=!soAberta(s); if(reabriu){ s.status='aberta'; s.encerrada_em=null; } s.bola_com=col; s.ultimo_toque_em=now; await soGravar(s);
+  try{ await soEvento(s,'status',(reabriu?'Reaberta · ':'')+'bola com '+boRot(SO_BOLA,col)); }catch(_){} render(); soGtSync({forca:true,silencioso:true}); }
+window.soKbMover=soKbMover;
+let _soKbDrag=null;
+function soKbDragIni(ev,id){ _soKbDrag=id; try{ ev.dataTransfer.setData('text/plain',id); ev.dataTransfer.effectAllowed='move'; }catch(_){} }
+function soKbDragOver(ev){ ev.preventDefault(); const c=ev.currentTarget; if(c) c.classList.add('alvo'); }
+function soKbDragOut(ev){ const c=ev.currentTarget; if(c) c.classList.remove('alvo'); }
+function soKbDrop(ev,col){ ev.preventDefault(); const c=ev.currentTarget; if(c) c.classList.remove('alvo'); const id=_soKbDrag||(ev.dataTransfer&&ev.dataTransfer.getData('text/plain')); _soKbDrag=null; if(id) soKbMover(id,col); }
+function soKanbanHtml(itens){ const hoje=atHojeLocal(), hj=atHojeISO(), corte=new Date(hoje); corte.setDate(corte.getDate()-30); const cortIso=corte.toISOString().slice(0,10);
+  const vis=itens.filter(s=>soAberta(s)||String(s.encerrada_em||s.aberta_em||'').slice(0,10)>=cortIso);
+  const peso=s=>(soVencida(s,hj)?0:soParada(s,hoje)?1:soMuda(s)?2:3);
+  const card=s=>{ const id=esc(jsq(String(s.id))), p=soPrazoEfetivo(s), v=soVencida(s,hj), par=soParada(s,hoje), col=soKbColDe(s);
+    return `<div class="so-kc${v?' venc':par?' par':''}" draggable="true" ondragstart="soKbDragIni(event,'${id}')" onclick="if(!event.target.closest('select')) soAbrir('${id}')">
+      <div class="t"><span class="dias-tag ${v?'hoje':par?'perto':'longe'}">${soDiasAberta(s,hoje)}d</span><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(s.segurado||'—')}</span></div>
+      <div class="m"><span>${esc(soTipoRot(s.tipo))}</span><span>🏢 ${esc(boRot(SO_AREAS.map(a=>[a[0],a[1]]),s.area||'outro'))}</span><span style="${v?'color:var(--verm);font-weight:700':''}">⏳ ${p?esc(atFmtBR(p)):'—'}</span>${par?`<span>🔇 ${soDiasSemToque(s,hoje)}d</span>`:''}</div>
+      <div class="p${s.proxima_acao?'':' muda'}">➡️ ${s.proxima_acao?esc(s.proxima_acao):'sem próximo passo'}</div>
+      <div class="f"><select onchange="soKbMover('${id}',this.value)" onclick="event.stopPropagation()"><option value="">mover →</option>${SO_KB_COLS.filter(c=>c[0]!==col).map(c=>`<option value="${c[0]}">${esc(c[1])}</option>`).join('')}</select><button class="btn btn-s btn-mini" style="min-height:36px" onclick="event.stopPropagation();soAbrir('${id}')">✎</button></div></div>`; };
+  return `<div class="so-kb">${SO_KB_COLS.map(c=>{ const l=vis.filter(s=>soKbColDe(s)===c[0]).sort((a,b)=>peso(a)-peso(b)||soDiasAberta(b,hoje)-soDiasAberta(a,hoje));
+    return `<div class="so-kcol" data-col="${c[0]}" ondragover="soKbDragOver(event)" ondragleave="soKbDragOut(event)" ondrop="soKbDrop(event,'${c[0]}')"><div class="so-kh">${esc(c[1])}<span class="n">${l.length}</span></div><div class="so-kbody">${l.map(card).join('')||'<div style="font-size:12px;color:var(--muted);padding:8px 4px">vazio</div>'}</div></div>`; }).join('')}</div>`; }
 function viewSolicitacoesV2(){
   const hoje=atHojeLocal(), hj=atHojeISO();
   const SOV=SO.itens.filter(escLinhaOk);
@@ -13244,9 +13283,11 @@ function viewSolicitacoesV2(){
       <input id="so-q" placeholder="Buscar segurado, apólice ou próximo passo…" value="${esc(FSO.q)}" oninput="FSO.q=this.value;viewSolicitacoes();atFocus('so-q')" style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
       <select onchange="FSO.area=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px"><option value="">Todas as áreas</option>${SO_AREAS.filter(a=>areasVivas.includes(a[0])||FSO.area===a[0]).map(a=>`<option value="${a[0]}"${FSO.area===a[0]?' selected':''}>${esc(a[1])}</option>`).join('')}</select>
       <select onchange="FSO.status=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">${[['aberta','Em aberto'],['todas','Todas']].concat(SO_STATUS.filter(s=>s[0]!=='aberta')).map(o=>`<option value="${o[0]}"${FSO.status===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>
+      ${novoOn('solic-kanban')?`<div class="seg"><button class="${FSO.vis==='kanban'?'on':''}" onclick="soVisSet('kanban')">▦ Kanban</button><button class="${FSO.vis!=='kanban'?'on':''}" onclick="soVisSet('lista')">☰ Lista</button></div>`:''}
       <button class="btn btn-p btn-mini" onclick="soNova()">📨 Nova solicitação</button>
     </div>
-    <div class="card" style="padding:4px 14px">${lista.length?lista.map(linha).join(''):`<div style="padding:16px;text-align:center;color:var(--muted)">Nenhuma solicitação ${FSO.status==='aberta'?'em aberto':'com esse filtro'}. <a href="#" onclick="soNova();return false">Abrir a primeira</a>.</div>`}</div>
+    ${novoOn('solic-kanban')&&FSO.vis==='kanban'? soKanbanHtml(SOV.filter(s=>{ if(FSO.area&&(s.area||'outro')!==FSO.area) return false; if(FSO.q){ const q=normKey(FSO.q); if(normKey(s.segurado).indexOf(q)<0&&normKey(s.proxima_acao||'').indexOf(q)<0) return false; } return true; })) :
+    `<div class="card" style="padding:4px 14px">${lista.length?lista.map(linha).join(''):`<div style="padding:16px;text-align:center;color:var(--muted)">Nenhuma solicitação ${FSO.status==='aberta'?'em aberto':'com esse filtro'}. <a href="#" onclick="soNova();return false">Abrir a primeira</a>.</div>`}</div>`}
     <div class="cs-grp" style="margin-top:14px"><span class="t">Prazo por área</span><span class="q">régua de hoje · o prazo do dia da abertura fica gravado em cada solicitação</span></div>
     <div class="card" style="padding:8px 14px;font-size:12.5px;display:flex;gap:6px 14px;flex-wrap:wrap">${SO_AREAS.map(a=>`<span>🏢 ${esc(a[1])} · <b>${a[2]}d</b></span>`).join('')}</div>`;
 }
@@ -15462,6 +15503,7 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
+  'solic-kanban': {o:'Solicitações: visão Kanban (colunas por "com quem está a bola": Nós · A área · O cliente · Concluídas 30d · Canceladas), arrasto no desktop e seletor "mover →" no celular; troca com a Lista pelo botão ▦/☰', desde:'2026-09-23'},
   'cards-funil':  {o:'Cards do funil em sincronia com o funil e com o ciclo escolhido: "Previsto fechar/emitir" seguem o ciclo (Mensal ou Compensação), e "PA emitido" nasce do FUNIL (negócios que viraram ganho no ciclo, pelo prêmio que ele digita) com o relatório UW como referência ao lado — v2: validar pelo relatório', desde:'2026-09-23'},
   'agenda-ativ':  {o:'Compromisso da Agenda Google ligado a um negócio (vínculo manual ou nome/telefone batendo) vira atividade na ficha do lead — Tarefas & Atividades deixa de dizer "sem próxima atividade"; ✓ feito no Google conclui a atividade', desde:'2026-09-21'},
   'rec-funil':    {o:'Recomendações lê também o FUNIL (não só o Estoque): quem indicou um lead do funil (campo recomendante, ou a origem quando é um nome de pessoa) aparece como recomendante com os nomes dele; o recorte Recomendações do Painel TA e o contador do menu acompanham', desde:'2026-09-21'},
@@ -19039,6 +19081,9 @@ function lpSelfCheck(){
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
         ok('BLOCO-CURTO: bloco de menos de 45 min na grade do dia vira uma linha (hora + nome) com reticências, e o CSS existe', String(gcalDiaHTML.toString()).includes("h<54?' curto':''")&&!!document.getElementById('gcal-fluida-css')&&/\.gcal-ev\.curto\{flex-direction:row/.test(document.getElementById('gcal-fluida-css').textContent));
+        ok('SOLIC-KANBAN: colunas por bola (nós/área/cliente) + concluídas/canceladas 30d; aberta sem bola cai em área; concluída antiga fica de fora; card tem arrasto e seletor mover', (()=>{ if(!NOVO_SO_MEU['solic-kanban']) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString(); };
+          const it=[{id:'k1',segurado:'A Teste',status:'aberta',bola_com:'nos',aberta_em:d(2),tipo:'outro',area:'lm'},{id:'k2',segurado:'B Teste',status:'aberta',aberta_em:d(5),tipo:'outro',area:'lm'},{id:'k3',segurado:'C Teste',status:'executada',aberta_em:d(40),encerrada_em:d(35)},{id:'k4',segurado:'D Teste',status:'executada',aberta_em:d(9),encerrada_em:d(3)}];
+          const h=soKanbanHtml(it); return soKbColDe(it[0])==='nos'&&soKbColDe(it[1])==='area'&&soKbColDe(it[2])==='executada'&&!/C Teste/.test(h)&&/D Teste/.test(h)&&(h.match(/class="so-kcol"/g)||[]).length===5&&/draggable="true"/.test(h)&&/soKbMover\('k1'/.test(h)&&String(viewSolicitacoesV2.toString()).includes("soVisSet('kanban')"); })());
         ok('CARDS-FUNIL: previsto fechar/emitir segue o ciclo escolhido; PA emitido nasce do funil (ganho datado pelo log de etapa, no ciclo) com o relatório UW como referência', (()=>{ if(!NOVO_SO_MEU['cards-funil']) return false; const bakS=S.contatos, bakC={...CIC}; try{
           CIC.modo='comp'; CIC.corte=21; CIC.ini='2026-09-21'; CIC.fim='2026-10-20'; const per=cicloAtual(); const g=funEtapaGanho('bc');
           S.contatos=[normContato({id:'zzc1',nome:'Ganhou Dentro',lp:S.activeUser,funil:'bc',etapa:g,pm:500,interacoes:[{id:'i1',k:'etapa',de:'RC/OI',para:g,dia:'2026-09-25'}]}),
