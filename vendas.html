@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.23 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.24 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -11488,6 +11488,7 @@ function viewAgenda(){
     const nomes=l.slice(0,3).map(x=>x.c.nome.split(' ')[0]).join(' · ');
     pecas.push([g[0], agBloco(g[0],g[1],`<b>${l.length}</b>${g[2]?' · '+esc(g[2]):''}${nomes?' · '+esc(nomes)+(l.length>3?' …':''):''}`,`<div class="card" style="padding:6px 14px">${l.map(linha).join('')}</div>`)]);
   });
+  { const pa=agAnivBloco(); if(pa){ const ih=pecas.findIndex(p=>p[0]==='hoje'); const is=pecas.findIndex(p=>p[0]==='solic'); pecas.splice(ih>=0?ih+1:(is>=0?is+1:0),0,pa); } }   /* AGENDA-ANIV-V1 */
   if(semAtiv.length) pecas.push(['semativ', agBloco('semativ','💤 Sem próxima atividade',`<b>${semAtiv.length}</b> · negócio parado é o que mais custa`,`<div class="card" style="padding:6px 14px">${semAtiv.slice(0,40).map(linhaSem).join('')}
         ${semAtiv.length>40?`<div style="font-size:12px;color:var(--muted);padding:8px 0">…e mais ${semAtiv.length-40}. Os 40 mais recentes aparecem aqui.</div>`:''}</div>`)]);
   const corpo=itens.length||pend.length||pecas.some(p=>p[0]==='solic')? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
@@ -11507,7 +11508,7 @@ function viewAgenda(){
 }
 /* ── AGENDA-V2: seções dobráveis (nascem fechadas) + organizar, por aparelho ── */
 const AG_SEC_CHAVE='crmlp_agenda_secs_v1', AG_ORD_CHAVE='crmlp_agenda_ordem_v1';
-const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',hoje:'📌 Hoje',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
+const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',hoje:'📌 Hoje',aniv:'🎂 Aniversariantes',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
 let AG_ORD={modo:false,ch:[]};
 function agSecsLer(){ try{ return JSON.parse(localStorage.getItem(AG_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function agAberta(k){ return dobraAberta(k, agSecsLer()); }
@@ -11535,6 +11536,33 @@ function agOrdRender(pecas){
   const esc0=(!AG_ORD.modo&&n)?`<div class="pord-esc">${n} seç${n===1?'ão escondida':'ões escondidas'} da Agenda — <button class="btn btn-s btn-mini" onclick="agOrdModo(true)">organizar</button></div>`:'';
   return hd+corpo+esc0; }
 window.agToggle=agToggle; window.agTudo=agTudo; window.agOrdModo=agOrdModo; window.agOrdMover=agOrdMover; window.agOrdOcultar=agOrdOcultar; window.agOrdRestaurar=agOrdRestaurar;
+/* AGENDA-ANIV-V1 (25/09): pedido dele — "um tópico da lista de aniversariantes, mesma dinâmica
+   do módulo, mas de fácil acesso pra eu visualizar diariamente". Mesma fonte (LP.aniversario:
+   carteira + relatório), mesma janela (JANELA_DIAS), mesmo seletor de status do módulo; + 💬
+   parabéns pronto. Só entra se houver alguém na janela; "ver todos" leva ao módulo. */
+function agAnivLista(){
+  try{ lpDerivar(); }catch(_){}
+  if(typeof LP==='undefined'||!LP||!Array.isArray(LP.aniversario)) return [];
+  return LP.aniversario.filter(r=>!r._resolvido).map(r=>({r,d:lpDiasAte(r.data_nasc)}))
+    .filter(x=>x.d!=null&&x.d<=JANELA_DIAS).sort((a,b)=>a.d-b.d||String(a.r.cliente||'').localeCompare(String(b.r.cliente||'')));
+}
+function agAnivBloco(){
+  const l=agAnivLista(); if(!l.length) return null;
+  const pend=l.filter(x=>(x.r.status_contato||'pendente')!=='feito'), hoje=l.filter(x=>x.d===0).length;
+  const nomes=pend.slice(0,3).map(x=>String(x.r.cliente||'').split(' ')[0]).map(n=>n.charAt(0)+n.slice(1).toLowerCase()).join(' · ');
+  const resumo=`<b>${l.length}</b> nos próximos ${JANELA_DIAS} dias${hoje?' · <b>'+hoje+' hoje 🎉</b>':''}${nomes?' · '+esc(nomes)+(pend.length>3?' …':''):''}`;
+  const linha=({r,d})=>{ const pn=String(r.cliente||'').split(' ')[0]; const w=waHref(r.telefone);
+    const wa=w?`<a class="btn btn-p btn-mini" style="text-decoration:none;white-space:nowrap" href="${esc(w+'?text='+encodeURIComponent('Feliz aniversário, '+atTitleC(pn)+'! 🎉'))}" target="_blank" rel="noopener" title="Parabenizar no WhatsApp (texto pronto)">💬 parabéns</a>`:'';
+    const feito=(r.status_contato||'pendente')==='feito';
+    return `<div class="tarlin"${feito?' style="opacity:.55"':''}>
+      <span class="dias-tag ${diasTagCls(d)}" style="min-width:64px;text-align:center">${d===0?'hoje':d===1?'amanhã':'em '+d+'d'}</span>
+      <span class="tt"><b>${esc(r.cliente||'—')}</b>
+        <div style="font-size:11px;color:var(--muted)">🎂 ${esc(dataBR(r.data_nasc))} · ${esc(r.telefone||'sem telefone')}${r.apolices&&r.apolices.length?' · 🛡 '+r.apolices.length+' apólice'+(r.apolices.length>1?'s':''):''}</div></span>
+      <span class="ac ag-ac"><span class="ag-grp">${wa}${statusSel('aniversario',r)}</span></span></div>`; };
+  const corpo=`<div class="card" style="padding:6px 14px">${l.map(linha).join('')}
+    <div style="padding:8px 0 4px"><button class="btn btn-s btn-mini" onclick="irPara('lp-aniversario')">ver todos os aniversariantes</button></div></div>`;
+  return ['aniv', agBloco('aniv','🎂 Aniversariantes',resumo,corpo)];
+}
 /* um seletor de ação por linha — o mesmo fluxo dos painéis TA/WA */
 const AG_ACOES=[['feita','✓ Feita'],['delay','⏳ Delay 7d (cliente pediu pra adiar)'],['mais1','📅 +1 dia'],['mais7','📅 +7 dias'],['editar','✏️ Editar'],['remover','✕ Remover']];
 function agAcaoSel(c,t,reuniao){ const ops=reuniao?AG_ACOES.filter(a=>a[0]!=='feita'):AG_ACOES;
@@ -18966,6 +18994,9 @@ function lpSelfCheck(){
     ok('MODAL-SOBRE-FICHA-V1: a folha de editar/nova atividade abre ACIMA da gaveta da ficha (senão o Salvar fica escondido)', (()=>{ const ov=atModal('<p>teste</p>'); try{ const dr=document.getElementById('drawer'); const zo=Number(getComputedStyle(ov).zIndex)||0, zd=dr?Number(getComputedStyle(dr).zIndex)||0:0; return zo>zd; } finally{ atClose(); } })());
     ok('AGENDA-NOVA-V1: ＋ nova da Agenda grava título, dia e hora digitados (lê antes de fechar a folha)', (()=>{ const _c=S.contatos, _r=window.render, _s=window.salvar; try{ const c={id:'zn1',nome:'Zz Nova',tarefas:[],interacoes:[]}; S.contatos=[c]; window.render=()=>{}; window.salvar=()=>{}; agNovaAtividade('zn1'); document.getElementById('tn-tit').value='Titulo X'; document.getElementById('tn-dia').value='2031-01-02'; document.getElementById('tn-hora').value=''; agNovaSalvar('zn1'); const t=c.tarefas[0]; return !!t&&t.tit==='Titulo X'&&t.quando==='2031-01-02'&&!document.getElementById('at-ov'); } finally{ atClose(); S.contatos=_c; window.render=_r; window.salvar=_s; } })());
     ok('FICHA-GOOGLE-2BOT-V1: a ficha usa o mesmo par ☑️ Tarefa | 📅 Evento da Agenda', (()=>{ const c={id:'zf1',nome:'Zz',tarefas:[{id:'t1',tipo:'ligar',tit:'x',quando:'2031-01-02',feito:null}],interacoes:[]}; const h=tarBlocoDrawer(c); return h.includes('ag-gpar')&&h.includes("tarMandarGoogle(")&&h.includes("'tarefa'")&&h.includes("'evento'"); })());
+    ok('AGENDA-ANIV-V1: Agenda tem o tópico 🎂 Aniversariantes (janela do módulo, status do módulo, 💬 parabéns)', (()=>{ const _la=LP.aniversario, _c=CART.clientes; try{ CART.clientes=[]; const h=hojeISO(); const md=h.slice(5), ano='1990-';
+      LP.aniversario=[{_key:'za',lp:'Gustavo',cliente:'ZZ HOJE TESTE',data_nasc:ano+md,telefone:'(81) 90000-0009',status_contato:'pendente'},{_key:'zb',lp:'Gustavo',cliente:'ZZ LONGE',data_nasc:'1990-'+isoAddDias(h,60).slice(5),status_contato:'pendente'}];
+      const b=agAnivBloco(); const l=agAnivLista(); return !!b&&b[0]==='aniv'&&l.length===1&&l[0].r._key==='za'&&b[1].includes('lp-status')&&b[1].includes('wa.me')&&String(viewAgenda).includes('agAnivBloco')&&AG_NOMES.aniv; } finally{ LP.aniversario=_la; CART.clientes=_c; } })());
     ok('AGENDA-GOOGLE-2BOT-V1: linha da Agenda tem ☑️ Tarefa e 📅 Evento, acende o que vale e o clique fixa o destino', (()=>{ const c={id:'c2b',nome:'Zz'}; const h=tarGoogleParHTML(c,{id:'t1',tipo:'ligar',quando:'2026-10-01',gtaskId:'g1',destino:'tarefa'}); const h2=tarGoogleParHTML(c,{id:'t2',tipo:'ligar',quando:'2026-10-01',gcalId:'e1',destino:'evento'}); const t={}; gtDestinoAplicar(t,'evento'); return h.includes("'tarefa'")&&h.includes("'evento'")&&/btn-p btn-mini[^>]*'tarefa'/.test(h)&&/btn-p btn-mini[^>]*'evento'/.test(h2)&&gtDestino(t)==='evento'&&String(tarMandarGoogle).includes('gcalCriarEventoDaTarefa')&&String(viewAgenda).includes('agNovaAtividade'); })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
