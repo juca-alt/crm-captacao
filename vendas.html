@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.25 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.26 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -747,6 +747,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .hub-tit{font-weight:700;font-size:14px}
   .hub-desc{font-size:12px;color:var(--muted);line-height:1.45;flex:1}
   .hub-tag{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--verde)}
+  .hub-card{position:relative} .hub-pin{position:absolute;top:8px;right:8px;min-width:36px;min-height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid var(--linha);background:var(--card,#fff);font-size:15px;opacity:.55;filter:grayscale(1)}
+  .hub-pin:hover{opacity:1;filter:none} .hub-pin.on{opacity:1;filter:none;background:var(--azul-claro,#e8f0fe);border-color:var(--primary)}
+  @media(max-width:980px){ .hub-grid>.hub-card{padding-right:52px} .hub-pin{top:50%;transform:translateY(-50%);min-width:40px;min-height:40px} }
+  .nav-btn.nav-fix-lbl{pointer-events:none;cursor:default;min-height:0;padding-top:4px;padding-bottom:2px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.75;background:none}
   /* PAINEL MASTER V2 — cartão por usuário (a tabela de 8 colunas não cabia no celular) */
   .adm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;margin-top:12px}
   .adm-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
@@ -1520,6 +1524,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
       <button class="nav-btn sub" data-view="bn-wa" data-novo="painel-wa" onclick="irPara('bn-wa')"><span class="ic">💬</span><span class="lbl">Painel WA</span><span class="cnt" id="cnt-bn-wa"></span></button>
       <button class="nav-btn sub" data-view="mapa" onclick="irPara('mapa')"><span class="ic">🗺️</span><span class="lbl">Mapa de locais</span></button>
     </div>
+
+    <!-- MOD-FIXAR-V1 (25/09): módulos que ele fixou pelo 📌 no card (Módulos) — desenhado por navFixRender -->
+    <div id="nav-fix"></div>
 
     <!-- nós OCULTOS: telas que moram em Módulos mas cujos contadores o render ainda escreve (guardado por if(el)) -->
     <button hidden id="nav-lp-aniversario" class="nav-btn sub" data-view="lp-aniversario" onclick="irPara('lp-aniversario')"><span class="cnt" id="cnt-aniversario"></span></button>
@@ -13991,10 +13998,12 @@ const HUB_VIEWS=HUB_SECOES.flatMap(s=>s.itens.map(i=>i.view)).filter(Boolean);
    invariante "os dois hubs desenham o MESMO cartão" fica provável em vez de
    combinado. `acao` existe porque nem todo destino é uma view (ajuste de
    visual e barra inferior abrem painel). */
-function hubCardHtml(i,tagPadrao){
+function hubCardHtml(i,tagPadrao,fixavel){
   const n=i.cnt?i.cnt():0;
   const go=i.href?`location.href='${i.href}'`:(i.acao||`irPara('${i.view}')`);
-  return `<button class="card hub-card" onclick="${go}">
+  const k=modFixKey(i), on=fixavel&&k&&modFixados().includes(k);
+  const pin=fixavel&&k?`<span class="hub-pin${on?' on':''}" role="button" tabindex="0" aria-pressed="${on?'true':'false'}" onclick="event.stopPropagation();modFixToggle('${esc(jsq(k))}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();modFixToggle('${esc(jsq(k))}')}" title="${on?'Está no menu lateral — clique pra tirar (fica só em Módulos)':'Fixar no menu lateral'}">📌</span>`:'';
+  return `<button class="card hub-card" onclick="${go}">${pin}
       <div class="hub-ic">${i.ic}</div>
       <div class="hub-tx"><div class="hub-tit">${esc(i.titulo)}${n?` <span class="badge b-azul">${n}</span>`:''}</div>
       <div class="hub-desc">${esc(i.desc)}</div></div>
@@ -14019,11 +14028,29 @@ function hubSecoesHtml(secoes,filtro,tagPadrao,prefixo){
     const resumo=it.map(i=>{ const c=i.cnt?i.cnt():0; return esc(i.titulo)+(c?' ('+c+')':''); }).join(' · ');
     return `<details class="hub-dobra" data-sec="${esc(k)}" ${ab?'open':''} ontoggle="hubSecToggle('${esc(jsq(k))}',this.open)">
       <summary class="hub-sec"><span class="hub-sec-c">▸</span><span class="hub-sec-t">${esc(s.titulo)}</span><span class="hub-sec-n">${it.length}</span><span class="hub-sec-r">${resumo}</span></summary>
-      <div class="hub-grid">${it.map(i=>hubCardHtml(i,tagPadrao)).join('')}</div></details>`; }).join('');
+      <div class="hub-grid">${it.map(i=>hubCardHtml(i,tagPadrao,prefixo==='mod')).join('')}</div></details>`; }).join('');
 }
+/* MOD-FIXAR-V1 (25/09): pedido dele — "clicar no card e ele aparece no menu lateral; ao desmarcar,
+   sai do menu e fica só nos Módulos — isso pra todos os módulos". O 📌 do card liga/desliga; o menu
+   ganha o grupo "📌 Fixados" na ordem em que ele fixou. Vale por aparelho (como a ordem da Agenda). */
+const MOD_FIX_CHAVE='crmlp_mod_fixados_v1';
+function modFixKey(i){ return i&&(i.view||i.href)||''; }
+function modFixados(){ try{ const a=JSON.parse(localStorage.getItem(MOD_FIX_CHAVE)||'[]'); return Array.isArray(a)?a.map(String):[]; }catch(_){ return []; } }
+function modFixItens(){ const todos=HUB_SECOES.flatMap(s=>s.itens).filter(i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)));
+  return modFixados().map(k=>todos.find(i=>modFixKey(i)===k)).filter(Boolean); }
+function modFixToggle(k){ const a=modFixados(); const ix=a.indexOf(k); if(ix>=0) a.splice(ix,1); else a.push(k);
+  try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){}
+  const it=HUB_SECOES.flatMap(s=>s.itens).find(i=>modFixKey(i)===k);
+  toast((ix>=0?'Saiu do menu: ':'No menu lateral: ')+(it?it.titulo:k),true); navFixRender(); if(VIEW==='modulos') viewModulos(); }
+function navFixRender(){ const box=document.getElementById('nav-fix'); if(!box) return;
+  const l=modFixItens(); if(!l.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="sep"></div><div class="nav-btn nav-fix-lbl" aria-hidden="true"><span class="lbl">📌 Fixados</span></div>`+l.map(i=>{ const n=i.cnt?(()=>{ try{ return i.cnt(); }catch(_){ return 0; } })():0;
+    const go=i.href?`location.href='${i.href}'`:`irPara('${i.view}')`;
+    return `<button class="nav-btn${i.view&&i.view===VIEW?' ativo':''}"${i.view?` data-view="${esc(i.view)}"`:''} data-fix="1" onclick="${go}" title="${esc(i.desc||'')}"><span class="ic">${i.ic}</span><span class="lbl">${esc(i.titulo)}</span>${n?`<span class="cnt">${n}</span>`:''}</button>`; }).join(''); }
+window.modFixToggle=modFixToggle; window.navFixRender=navFixRender;
 function viewModulos(){
   const secs=hubSecoesHtml(HUB_SECOES,i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)),'● módulo','mod');   /* PLANO-V1: card com `novo` só aparece pra quem a chave libera */
-  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card.</div>${hubBotoesHtml()}${secs}`;
+  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card. O <b>📌</b> do card põe (ou tira) o módulo do menu lateral.</div>${hubBotoesHtml()}${secs}`;
 }
 
 /* ════ VIEW: CONFIGURAÇÕES (o mesmo hub de cards dos Módulos) ════
@@ -18111,6 +18138,7 @@ function render(){
   { const cbo=$('#cnt-bo'); if(cbo){ const n=(AT.itens||[]).filter(escLinhaOk).filter(r=>!r.resolvido_em).length+emVis().filter(emAtivo).length; cbo.textContent=n||''; }
     const cbf=$('#cnt-beneficios'); if(cbf) cbf.textContent=(BF.itens||[]).filter(bfAtivo).length||'';
     const cso=$('#cnt-solicitacoes'); if(cso) cso.textContent=(SO.itens||[]).filter(s=>s.status==='aberta').length||''; }
+  try{ navFixRender(); }catch(_){}   /* MOD-FIXAR-V1: contadores e realce dos fixados acompanham o resto do menu */
   { const cb=$('#cnt-bn'); if(cb) cb.textContent=bnVivos().length||'';
     const cd=$('#cnt-bn-dups'); if(cd) cd.textContent=BN.dups.filter(d=>!d.decisao).length||'';
     const cr=$('#cnt-bn-recs'); if(cr) cr.textContent=(bnVivos().filter(b=>(b.recomendante||'').trim()).length+recFunilComoBn().length)||'';
@@ -19050,6 +19078,11 @@ function lpSelfCheck(){
         &&fic.includes("tarNovaDoDrawer('tarefa')")&&fic.includes("tarNovaDoDrawer('evento')")&&String(gcalBlocoHTML).includes('gtNovaAvulsa')
         &&String(window.soAgendarConfirmar).includes('tarEnviarComo')&&String(window.bnAgendarConfirmar).includes('tarEnviarComo')&&String(window.tarNovaDoDrawer).includes('tarEnviarComo')
         &&(()=>{ const t={}; gtDestinoAplicar(t,'tarefa'); return gtDestino(t)==='tarefa'; })(); })());
+    ok('MOD-FIXAR-V1: 📌 no card de Módulos põe/tira do menu lateral (todos os módulos; Configurações não)', (()=>{ const bk=localStorage.getItem(MOD_FIX_CHAVE); try{ localStorage.setItem(MOD_FIX_CHAVE,'[]');
+      const alvo=HUB_SECOES.flatMap(s=>s.itens).find(i=>i.view&&(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo))); if(!alvo) return true; const k=modFixKey(alvo);
+      const temPin=hubSecoesHtml(HUB_SECOES,()=>true,'x','mod').includes('hub-pin')&&!hubSecoesHtml(CFG_SECOES,()=>true,'x','cfg').includes('hub-pin');
+      const _t=window.toast; window.toast=()=>{}; modFixToggle(k); const noMenu=!!document.querySelector('#nav-fix .nav-btn[data-view="'+alvo.view+'"]'); modFixToggle(k); const saiu=!document.querySelector('#nav-fix .nav-btn'); window.toast=_t;
+      return temPin&&noMenu&&saiu&&HUB_SECOES.flatMap(s=>s.itens).every(i=>!!modFixKey(i)||!!i.acao); } finally{ if(bk==null) localStorage.removeItem(MOD_FIX_CHAVE); else localStorage.setItem(MOD_FIX_CHAVE,bk); navFixRender(); } })());
     ok('AGENDA-GOOGLE-2BOT-V1: linha da Agenda tem ☑️ Tarefa e 📅 Evento, acende o que vale e o clique fixa o destino', (()=>{ const c={id:'c2b',nome:'Zz'}; const h=tarGoogleParHTML(c,{id:'t1',tipo:'ligar',quando:'2026-10-01',gtaskId:'g1',destino:'tarefa'}); const h2=tarGoogleParHTML(c,{id:'t2',tipo:'ligar',quando:'2026-10-01',gcalId:'e1',destino:'evento'}); const t={}; gtDestinoAplicar(t,'evento'); return h.includes("'tarefa'")&&h.includes("'evento'")&&/btn-p btn-mini[^>]*'tarefa'/.test(h)&&/btn-p btn-mini[^>]*'evento'/.test(h2)&&gtDestino(t)==='evento'&&String(tarMandarGoogle).includes('gcalCriarEventoDaTarefa')&&String(viewAgenda).includes('agNovaAtividade'); })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
@@ -20522,7 +20555,8 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
 
     /* ANIVERSARIOS-EM-MODULOS + DERIVADOS (05/09) */
     ok('menu: Aniversariantes e Aniversário de Apólice saíram do grupo Clientes e estão em Módulos', ['nav-lp-aniversario','nav-lp-datas'].every(id=>{ const e=document.getElementById(id); return e&&getComputedStyle(e).display==='none'; }) && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='lp-aniversario')) && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='lp-datas')));
-    { const _c=CART.clientes, _e=EX.itens, _la=LP.aniversario.slice(), _ld=LP.datas.slice(), _t=new Set(LP_TOUCHED); try{ PX._teste=true;
+    { const _c=CART.clientes, _e=EX.itens, _la=LP.aniversario.slice(), _ld=LP.datas.slice(), _t=new Set(LP_TOUCHED), _sl=window.lpSalvarLocal, _pr=window.lpPersistRemoto; try{ PX._teste=true;
+        window.lpSalvarLocal=()=>{}; window.lpPersistRemoto=()=>Promise.resolve();   /* SELFCHECK-SEM-ESCRITA (25/09): lpDerivar grava — o fixture "Niver Teste" vazava pro localStorage */
         CART.clientes=[cartNormCliente({nome:'Niver Teste',ref:'niver teste',nascimento:'1990-03-15',celular:'(81) 90000-0002',cob:{pm:1}})];
         EX.itens=[{apolice:'AP9',segurado:'Niver Teste',status_apolice:'Ativa',emissao:'2025-09-10',lp:'Gustavo'}];
         LP.aniversario=LP.aniversario.filter(r=>r._key!=='cart:niver teste'); LP.datas=LP.datas.filter(r=>r._key!=='em:AP9');
@@ -20530,7 +20564,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('aniversariantes: nascimento da carteira vira linha (com telefone)', LP.aniversario.some(r=>r._key==='cart:niver teste'&&r.data_nasc==='1990-03-15'&&r.telefone));
         ok('aniversário de apólice: data de emissão das emitidas vira linha, com telefone da carteira', LP.datas.some(r=>r._key==='em:AP9'&&r.data_emissao==='2025-09-10'&&r.telefone));
         ok('derivação é idempotente (rodar de novo não duplica)', lpDerivar()===0 && n===2);
-      }catch(e){ falhas.push('aniversários derivados: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; EX.itens=_e; LP.aniversario=_la; LP.datas=_ld; LP_TOUCHED=_t; } }
+      }catch(e){ falhas.push('aniversários derivados: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; EX.itens=_e; LP.aniversario=_la; LP.datas=_ld; LP_TOUCHED=_t; window.lpSalvarLocal=_sl; window.lpPersistRemoto=_pr; } }
 
     /* SUBIR-UNIVERSAL-V1 */
     ok('REL-ANIV-V1: relatório Aniversariantes (portal) é detectado, lido sem IA e ENRIQUECE sem arquivar a carteira', (()=>{ const _la=LP.aniversario, _t=LP_TOUCHED, _p=window.lpPersistRemoto, _s=window.lpSalvarLocal, _i=LP.importadoEm; try{
