@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.19 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.20 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -16242,6 +16242,56 @@ function bneSecAberta(k){ return dobraAberta(k, bneSecsLer()); }
 function bneSecToggle(k,aberto){ const st=bneSecsLer(); st[k]=aberto?1:0; try{ localStorage.setItem(BNE_SEC_CHAVE,JSON.stringify(st)); }catch(_){} }
 function bneSecsTodas(abrir){ document.querySelectorAll('.bne details.bne-grp').forEach(d=>{ d.open=!!abrir; }); }   /* o ontoggle de cada um grava */
 window.bneSecToggle=bneSecToggle; window.bneSecsTodas=bneSecsTodas;
+/* BN-AGENDA-V1 (25/09): foto dele da ficha do lead no Estoque — "permita a opção de marcar direto no Google Agenda,
+   assim como tem o botãozinho do funil". Mesma folha do soAgendar: O quê · Tipo · Dia · Hora. Lead com contato no
+   funil → atividade do negócio (a sincronia leva pra Agenda Google); sem contato → modal de evento já preenchido.
+   Fica registrado no hist do lead (tipo 'agenda') e aparece como chip na ficha. Pra todo mundo. */
+function bnFunilContatoDe(c){ if(!c) return null; const id=c.funil_contato_id; let f=id?S.contatos.find(x=>String(x.id)===String(id)):null;
+  if(!f){ const k=normKey(c.nome||''); const d=String(c.telefone||'').replace(/\D/g,'').slice(-8);
+    f=S.contatos.find(x=>!ETAPAS_ENCERR.includes(x.etapa)&&((k&&normKey(x.nome||'')===k)||(d.length===8&&String(x.telefone||'').replace(/\D/g,'').slice(-8)===d)))||null; }
+  return f; }
+function bnAgendaUltima(c){ const h=(c&&c.hist||[]).filter(x=>x.tipo==='agenda'); return h.length?h[h.length-1]:null; }
+window.bnAgendar=function(id){
+  const c=bnPor(id); if(!c) return; soAgendarFechar();
+  const f=bnFunilContatoDe(c);
+  const tipos=TAR_TIPOS.filter(t=>t[0]!=='proposta');
+  const destino=f?`vira atividade de <b>${esc(negTitulo(f)||f.nome)}</b> e sobe pra sua Agenda Google`:`<b>${esc(c.nome||'—')}</b> ainda não está no funil — vai direto pra sua Agenda Google`;
+  const hj=hojeISO();
+  /* a ficha do Painel TA é um modal (z 205): a folha precisa ficar por cima dele */
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd mais-centro" id="so-ag-bd" style="z-index:210" onclick="if(event.target===this)soAgendarFechar()">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-tit">📅 Agendar atividade · ${esc(c.nome||'—')}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin:2px 0 6px">${destino}</div>
+      <label class="so-ag-l">O quê<input id="so-ag-tit" value="${esc('Ligar para '+(c.nome||'').split(' ')[0])}"></label>
+      <div class="so-ag-grid">
+        <label class="so-ag-l">Tipo<select id="so-ag-tipo">${tipos.map(t=>`<option value="${t[0]}"${t[0]==='ligar'?' selected':''}>${t[1]} ${esc(t[2])}</option>`).join('')}</select></label>
+        <label class="so-ag-l">Dia<input id="so-ag-dia" type="date" value="${esc(hj)}"></label>
+        <label class="so-ag-l">Hora<input id="so-ag-hora" type="time" value="09:00"></label></div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Com hora, entra como compromisso na Agenda. Sem hora, vira afazer do dia${f?'':' (na Agenda Google, dia inteiro)'}.</div>
+      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" style="flex:1;min-height:48px;justify-content:center" onclick="soAgendarFechar()">Cancelar</button><button class="btn btn-p" style="flex:2;min-height:48px;justify-content:center" onclick="bnAgendarConfirmar('${esc(jsq(String(c.id)))}')">📅 Agendar</button></div>
+    </div></div>`);
+  setTimeout(()=>{ const i=document.getElementById('so-ag-tit'); if(i&&!window.matchMedia('(max-width:980px)').matches) i.focus(); },60);
+};
+window.bnAgendarConfirmar=function(id){
+  const c=bnPor(id); if(!c) return;
+  const v=k=>{ const e=document.getElementById(k); return e?String(e.value||'').trim():''; };
+  const tit=v('so-ag-tit')||('Ligar para '+(c.nome||'').split(' ')[0]), tipo=v('so-ag-tipo')||'ligar', dia=v('so-ag-dia'), hora=v('so-ag-hora');
+  if(!dia){ toast('Escolhe o dia'); return; }
+  const f=bnFunilContatoDe(c); const naFicha=!!document.getElementById('ta-ficha')&&TAV.ficha===c.id;
+  const notas=['Lead do Estoque de Nomes',c.telefone?'Tel: '+c.telefone:'',(c.recomendante||'').trim()?'Indicado por '+c.recomendante:'',c.cidade||''].filter(Boolean).join(' · ');
+  soAgendarFechar();
+  let como='';
+  if(f){ const t=tarCriar(f.id,tipo,tit,dia,hora,notas,60); if(!t){ toast('Não consegui criar a atividade',false); return; }
+    salvar(); if(hora&&typeof gsyncDrenar==='function') gsyncDrenar({gesto:true,avisar:true});
+    como='atividade de '+(negTitulo(f)||f.nome); }
+  else { _GCAL_NEG=null; const ini=hora||'09:00', fim=gcalMin2Hhmm(gcalHhmm2Min(ini)+60);
+    if(naFicha) taFichaFechar();   /* o modal de evento (z 120) ficaria atrás da ficha (z 205) */
+    gcalModalEvento({novo:true,summary:tit,description:notas+'\nCRM Life Planner',dia:dia,ini:ini,fim:fim,local:'',convidado:'',meet:false}); como='evento na Agenda Google'; }
+  (c.hist=c.hist||[]).push({tipo:'agenda',dia:hojeISO(),ts:new Date().toISOString(),quando:dia,hora:hora||'',tit:tit,via:f?'funil':'google'});
+  bnSalvar();
+  if(f&&naFicha) taFichaAbrir(c.id); else if(VIEW==='bn-estoque'&&FBN.edit===c.id) viewBnEstoque();
+  toast('Agendado: '+dataBR(dia)+(hora?' às '+hora:'')+' · '+como,true);
+};
 function bnEditorHtml(c){
   /* FICHA-UX-V2 (11/09, time de UX): cabeçalho com avatar + nome + badges + ações rápidas; campos em
      grupos que encolhem e estendem (Contato · Qualificação do TA · Perfil · Notas), rótulo em cima,
@@ -16258,8 +16308,8 @@ function bnEditorHtml(c){
     <div class="bne-head">
       ${(typeof taAvatar==='function'?taAvatar(c):'')}
       <div class="bne-head-t"><div class="bne-nome">${esc(c.nome||'(sem nome)')}</div>
-        <div class="bne-badges">${badge(BN_EST_LABEL[c.estagio]||c.estagio,'b-'+(c.estagio||'estoque'))}${badge(c.prioridade?'P'+c.prioridade:'',c.prioridade==1?'b-verm':'b-cinza')}${badge(c.trilha==='recrutamento'?'Recrutamento':'',null)}${(c.recomendante||'').trim()?badge('👤 '+c.recomendante,'b-azul'):''}</div></div>
-      <div class="bne-acts">${tel?`<a class="btn btn-s btn-mini" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}${wa?`<a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(wa)}" title="WhatsApp">💬</a>`:''}<button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')" title="${c.funil_contato_id?'Abrir no funil':'Criar contato no funil'}">${c.funil_contato_id?'👤 Funil':'🚀 Funil'}</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodas(true)" title="Abre todos os tópicos desta ficha">⌄ tudo</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodas(false)" title="Recolhe todos os tópicos desta ficha">⌃ tudo</button></div>
+        <div class="bne-badges">${badge(BN_EST_LABEL[c.estagio]||c.estagio,'b-'+(c.estagio||'estoque'))}${badge(c.prioridade?'P'+c.prioridade:'',c.prioridade==1?'b-verm':'b-cinza')}${badge(c.trilha==='recrutamento'?'Recrutamento':'',null)}${(()=>{ const a=bnAgendaUltima(c); return a?badge('📅 '+dataBR(a.quando)+(a.hora?' '+a.hora:'')+' · '+a.tit,'b-azul'):''; })()}${(c.recomendante||'').trim()?badge('👤 '+c.recomendante,'b-azul'):''}</div></div>
+      <div class="bne-acts">${tel?`<a class="btn btn-s btn-mini" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}${wa?`<a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(wa)}" title="WhatsApp">💬</a>`:''}<button class="btn btn-s btn-mini" onclick="bnAgendar('${esc(c.id)}')" title="Agendar atividade — vai pra sua Agenda Google (pelo negócio do funil, se houver)">📅</button><button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')" title="${c.funil_contato_id?'Abrir no funil':'Criar contato no funil'}">${c.funil_contato_id?'👤 Funil':'🚀 Funil'}</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodas(true)" title="Abre todos os tópicos desta ficha">⌄ tudo</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodas(false)" title="Recolhe todos os tópicos desta ficha">⌃ tudo</button></div>
     </div>
     <details class="bne-grp" data-sec="pessoa" ${bneSecAberta('pessoa')?'open':''} ontoggle="bneSecToggle('pessoa',this.open)"><summary><span class="bne-grp-t">👤 Quem é a pessoa</span><span class="bne-grp-r">${esc(fichaPessoaResumo(c,'lead'))}</span><span class="bne-grp-c">▾</span></summary><div style="padding:6px 0 10px">${fichaPessoaHtml(c,'lead')}</div></details>
     ${grp('q','🎯 Qualificação do TA',qualR,
@@ -20101,6 +20151,12 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
               return p.records.length===1&&p.records[0].proposta==='000000001E'&&p.records[0].apolice==='000000002'&&p.records[0].segurado==='FULANO DE TAL'&&p.records[0].afyc_projetado===2360.41; })()
        && (()=>{ const l=exDedupeProposta([{proposta:'P1',apolice:null,segurado:'x'},{proposta:'P1',apolice:'A1'},{apolice:'A2'},{proposta:'P2'}]); return l.length===3&&l.some(r=>r.proposta==='P1'&&r.apolice==='A1')&&!l.some(r=>r.proposta==='P1'&&!r.apolice); })()
        && /emRisco=ativos\.filter\(r=>r\.status!==AT_STATUS\.SUMIU\)/.test(String(viewLpAtrasos)) && /Total em atraso',emRisco\.length/.test(String(viewLpAtrasos)));
+    ok('BN-AGENDA-V1: ficha do lead tem o 📅 (pra todo mundo); com contato no funil vira atividade dele, sem contato vai direto pra Agenda Google; fica no hist como agenda e vira chip',
+       typeof bnAgendar==='function' && typeof bnAgendarConfirmar==='function' && /bnAgendar\(/.test(String(bnEditorHtml)) && !/novoOn\('bn-agenda'\)/.test(String(bnEditorHtml)) && /bnAgendaUltima\(c\)/.test(String(bnEditorHtml))
+       && /tarCriar\(f\.id/.test(String(bnAgendarConfirmar)) && /gcalModalEvento\(\{novo:true/.test(String(bnAgendarConfirmar)) && /tipo:'agenda'/.test(String(bnAgendarConfirmar))
+       && (()=>{ const _c=S.contatos; try{ S.contatos=[normContato({id:'bnag1',nome:'Fulano Agenda',funil:'nn',etapa:'OI/FF',telefone:'81999990061'})];
+              const a=bnFunilContatoDe({nome:'fulano agenda',telefone:''}), b=bnFunilContatoDe({nome:'Outro',telefone:'(81) 99999-0061'}), n=bnFunilContatoDe({nome:'Ninguém',telefone:'81900000000'});
+              return !!a&&a.id==='bnag1'&&!!b&&b.id==='bnag1'&&n===null; } finally{ S.contatos=_c; } })());
     ok('RES-DANIEL-V1: Resultado do contato tem "Sem interesse" (→ descartado) e "Já é cliente" (→ cliente), no Foco e no seletor da lista; contato do funil mapeia pra sem_interesse/lig_atendida',
        BN_RES.some(r=>r[0]==='sem_interesse') && BN_RES.some(r=>r[0]==='ja_cliente') && TA_RES_FUN.sem_interesse==='sem_interesse' && TA_RES_FUN.ja_cliente==='lig_atendida'
        && /res==='recusou'\|\|res==='sem_interesse'/.test(String(bnResultado)) && /res==='ja_cliente'\) c\.estagio='cliente'/.test(String(bnResultado))

@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 23/09/2026 (noite) — v8.19 no ar (main = Pages, conferido pelo título servido)
+## 🟢 RETOMAR AQUI — 25/09/2026 — v8.20 no ar (main = Pages, conferido pelo conteúdo servido) · 56ª onda: 📅 na ficha do lead (BN-AGENDA-V1), pra todo mundo
 
 **Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil` · `solic-kanban` · `solic-negocio` · `anexos-drive`.
 
@@ -17,6 +17,23 @@
 4. V2 dos cards do funil: validar "PA emitido" pelo relatório UW & Emissão (hoje o relatório é a referência no rodapé do card).
 5. Decidir o que libera pro Daniel/Victor das 8 chaves acima.
 6. Anexos: 1º upload real pede consentimento do Google (escopo Drive somado) — testar 1 print numa solicitação e conferir a pasta Histórico de Clientes / <cliente>.
+
+---
+
+## 25/09/2026 (56ª onda) — BN-AGENDA-V1: 📅 na ficha do lead do Estoque, direto pra Agenda Google, pra todo mundo (v8.20)
+
+Foto dele da ficha de um lead no Estoque de Nomes (PC): *"nessa tela permita a opção — e já liberei para o Daniel também — de poder marcar diretamente no Google Agenda, assim como tem o botãozinho do funil, dele já agendar a atividade e jogar lá para o Google Agenda."*
+
+### O que mudou
+- **📅 na linha de ações da ficha do lead** (`bnEditorHtml`, que serve o Estoque no desktop e o modal do Painel TA no celular), ao lado de 📞 💬 e 🚀 Funil. **Sem chave** — palavra dele: já liberou pro Daniel.
+- Toque abre a **mesma folha** do 📅 das Solicitações: O quê (já vem "Ligar para <primeiro nome>") · Tipo · Dia (hoje) · Hora (09:00).
+- **Lead que já tem contato no funil** (`funil_contato_id`, ou o mesmo nome/telefone num negócio aberto — `bnFunilContatoDe`): vira **atividade do negócio** (`tarCriar`) e a fila do GCAL-BIDIRECIONAL sobe pra Agenda Google dentro do toque. **Lead sem funil**: abre o **modal "Novo evento"** já preenchido (título, notas com telefone/recomendante/cidade).
+- Fica no **hist do lead** (`tipo:'agenda'`, com dia/hora/título/via) e vira **chip 📅** no cabeçalho da ficha. O contador de tentativas do TA não muda (só conta `tipo:'ta'`).
+- Invariante `BN-AGENDA-V1` (inclui `bnFunilContatoDe` por nome e por telefone).
+
+### Prova
+- `teste-bn-agenda.mjs` **14/14** em 390 e 1280, como o Daniel: botão na ficha (desktop na tabela, celular no modal), folha preenchida, lead ligado → atividade 15:30 no negócio + fila do Google + chip; lead solto → modal "Novo evento" preenchido; hist `agenda`; a partir do modal do Painel TA a folha fica por cima (z 210 > 205) e, no caminho direto pra Agenda, a ficha fecha antes do "Novo evento" abrir.
+- Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto · 19 testes verdes.
 
 ---
 
