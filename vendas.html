@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.24 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.25 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3631,6 +3631,49 @@ function tarGcalAcaoHTML(c,t){
   const gc=tarGcalUrl(c,t);
   return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido (conecte a Agenda em Agenda &amp; Tarefas pra gravar direto)">📅</a>`:'';
 }
+/* GOOGLE-PAR-EM-TUDO-V1 (25/09): pedido dele — "sempre nos eventos, tarefas, lembretes, enfim
+   tudo que for enviado ao Google Agenda, sempre dois botões pro usuário escolher: quero mandar
+   ao Google como AGENDA ou TAREFA". Um componente só (gParEnviarHTML) como botão de confirmar
+   de toda folha que cria algo; o destino escolhido fica gravado na atividade (t.destino) e vai
+   pela fila do GCAL-BIDIRECIONAL. Sem negócio no funil, Tarefa vira Tarefa do Google avulsa. */
+function gParEnviarHTML(fn,mini){   /* fn: chamada JS com % no lugar do destino, ex.: "soAgendarConfirmar('7',%)" */
+  const b=(k,ico,rot,tit)=>`<button class="btn btn-p${mini?' btn-mini':''}" onclick="${fn.replace('%',"'"+k+"'")}" title="${tit}">${ico} ${rot}</button>`;
+  const par=b('tarefa','☑️','Tarefa','Manda pro Google como TAREFA (afazer do dia no Google Tarefas — sem horário)')
+          +b('evento','📅','Evento','Manda pro Google como EVENTO na Agenda (com a hora, se tiver; sem hora = dia inteiro)');
+  return mini?`<span class="g-par-mini" role="group" aria-label="Mandar pro Google como">${par}</span>`
+             :`<div class="g-par-env"><span class="g-par-lbl">Mandar pro Google como</span><div class="g-par-bts">${par}</div></div>`;
+}
+function tarEnviarComo(cid,t,dest){
+  if(!t||(dest!=='tarefa'&&dest!=='evento')) return;
+  if(dest==='tarefa'&&!gtAutorizado()) toast('Tarefas do Google ainda não liberadas — reconecte a Agenda (⚙️). Por ora foi como evento.',false);
+  gtDestinoAplicar(t,dest); t.gcalSync=true; t.gcalFora=false; salvar();
+  gsyncEnfileirar(cid,t.id,'upsert',{gcalId:t.gcalId});
+  gsyncDrenar({gesto:true,avisar:true});   /* dentro do toque: o Google pode pedir consentimento sem o Safari barrar */
+}
+async function gtCriarAvulsa(tit,notas,dia){
+  const tok=await gcalTokenPra(true); if(!tok){ toast('Conecte a Agenda Google pra mandar a tarefa',false); return false; }
+  if(!gtAutorizado()){ toast('Tarefas do Google ainda não liberadas — reconecte a Agenda (⚙️)',false); return false; }
+  try{ await gtApi('POST','/lists/'+GT_LISTA+'/tasks',{title:tit,notes:((notas||'')+'\nCRM Life Planner').trim(),due:(dia||hojeISO())+'T12:00:00.000Z',status:'needsAction'});
+    toast('Nas suas Tarefas do Google: '+tit,true); return true; }
+  catch(e){ toast('Não consegui criar a tarefa no Google: '+(e&&e.message||e),false); return false; }
+}
+/* "☑️ Nova tarefa" ao lado do "📅 Novo evento" em Sua Agenda Google */
+function gtNovaAvulsa(){
+  const st='width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px';
+  atModal(`<h2>☑️ Nova tarefa no Google</h2><div class="sub">Vai direto pras suas Tarefas do Google (afazer do dia, sem horário).</div>
+    <label style="display:block;font-size:12px;font-weight:600;margin-top:12px">O quê<input id="gta-tit" style="${st}" placeholder="Ex.: mandar proposta revisada"></label>
+    <label style="display:block;font-size:12px;font-weight:600;margin-top:8px">Dia<input id="gta-dia" type="date" value="${esc(hojeISO())}" style="${st}"></label>
+    <label style="display:block;font-size:12px;font-weight:600;margin-top:8px">Anotação<textarea id="gta-notas" style="${st};min-height:56px"></textarea></label>
+    <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="gtNovaAvulsaSalvar()">☑️ Criar tarefa</button></div>`);
+  setTimeout(()=>{ const i=document.getElementById('gta-tit'); if(i) i.focus(); },60);
+}
+async function gtNovaAvulsaSalvar(){
+  const g=id=>{ const e=document.getElementById(id); return e?String(e.value||'').trim():''; };
+  const v={tit:g('gta-tit'),dia:g('gta-dia')||hojeISO(),notas:g('gta-notas')};
+  if(!v.tit){ toast('Escreve o que é a tarefa'); return; }
+  atClose(); await gtCriarAvulsa(v.tit,v.notas,v.dia);
+}
+window.tarEnviarComo=tarEnviarComo; window.gtCriarAvulsa=gtCriarAvulsa; window.gtNovaAvulsa=gtNovaAvulsa; window.gtNovaAvulsaSalvar=gtNovaAvulsaSalvar;
 /* AGENDA-GOOGLE-2BOT-V1 (25/09): pedido dele — "deixa dois botões: o que vira TAREFA (como hoje)
    e outro que vira EVENTO". Um par só, com o que está valendo aceso. O clique FIXA o destino
    da atividade (t.destino) e manda pela mesma fila do GCAL-BIDIRECIONAL — trocar de um pro
@@ -3670,21 +3713,19 @@ function agNovaAtividade(cid){
         <input id="tn-hora" type="time" style="${st}"></label>
       <label style="font-size:12px;font-weight:600">Duração
         <select id="tn-dur" style="${st}">${[15,30,45,60,90,120].map(d=>`<option value="${d}" ${d===60?'selected':''}>${d<60?d+' min':(d/60)+' h'}</option>`).join('')}</select></label>
-      <label style="font-size:12px;font-weight:600">Google
-        <select id="tn-destino" style="${st}"><option value="auto">Automático (com hora = evento)</option><option value="tarefa">☑️ Tarefa do Google</option><option value="evento">📅 Evento na Agenda</option></select></label>
     </div>
-    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+    ${gParEnviarHTML(`agNovaSalvar('${esc(jsq(c.id))}',%)`)}
+    <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
       <button class="btn btn-ghost" onclick="atClose()">Cancelar</button>
-      <button class="btn btn-p" onclick="agNovaSalvar('${esc(jsq(c.id))}')">Criar</button>
     </div>`);
   setTimeout(()=>{ const i=document.getElementById('tn-tit'); if(i) i.focus(); },60);
 }
-function agNovaSalvar(cid){
+function agNovaSalvar(cid,destino){
   const g=id=>{ const el=document.getElementById(id); return el?el.value:''; };
-  const v={tipo:g('tn-tipo')||'follow',tit:g('tn-tit'),dia:g('tn-dia')||hojeISO(),hora:g('tn-hora')||'',dur:Number(g('tn-dur'))||60,dest:g('tn-destino')};
+  const v={tipo:g('tn-tipo')||'follow',tit:g('tn-tit'),dia:g('tn-dia')||hojeISO(),hora:g('tn-hora')||'',dur:Number(g('tn-dur'))||60,dest:destino||''};
   atClose();                                                   /* lê TUDO antes de fechar — fechar apaga os campos */
   const t=tarCriar(cid,v.tipo,v.tit,v.dia,v.hora,'',v.dur), dest=v.dest;
-  if(t&&(dest==='tarefa'||dest==='evento')) tarMandarGoogle(cid,t.id,dest);
+  if(t&&(dest==='tarefa'||dest==='evento')) tarEnviarComo(cid,t,dest);
 }
 window.tarMandarGoogle=tarMandarGoogle; window.agNovaAtividade=agNovaAtividade; window.agNovaSalvar=agNovaSalvar;
 /* ── ATIVIDADE-UX-V1: editar / atualizar / excluir qualquer atividade ─────────
@@ -3855,7 +3896,7 @@ window.tarRemover = (cid,tid) => {
   if((t.gcalId||t.gtaskId)&&typeof gsyncEnfileirar==='function'){ gsyncEnfileirar(c.id,t.id,'apagar',{gcalId:t.gcalId,gtaskId:t.gtaskId,titulo:t.tit||''}); gsyncAgendar(400); }
   c.tarefas=tarefasDe(c).filter(x=>String(x.id)!==String(tid)); salvar(); render();
 };
-window.tarNovaDoDrawer = () => {
+window.tarNovaDoDrawer = (destino) => {
   const c=ct(); if(!c) return;
   const tipo=$('#tarTipo').value, tit=$('#tarTit').value, quando=$('#tarData').value, hora=$('#tarHora').value;
   const dur=(($('#tarDur')||{}).value)||'60';
@@ -3865,9 +3906,10 @@ window.tarNovaDoDrawer = () => {
   /* TAR-GCAL-DIRETO-V1 (08/09) + BIDIRECIONAL-V1 (14/09): tarCriar já enfileirou; aqui a fila
      drena DENTRO do toque dele — é o único momento em que o Google pode pedir consentimento sem
      o Safari do iPad bloquear o popup. Falhou? Segue na fila, sobe sozinho. */
-  if(t&&hora) gsyncDrenar({gesto:true,avisar:true});
-  /* GC-25: só reunião gera lembrete pro cliente */
-  if(t&&tipo==='reuniao'&&lembrar!=='nao'){ tarAgendarLembrete(c.id,quando,hora,lembrar); salvar(); render();
+  if(t&&destino) tarEnviarComo(c.id,t,destino);            /* GOOGLE-PAR-EM-TUDO-V1: ele escolheu Tarefa ou Evento */
+  else if(t&&hora) gsyncDrenar({gesto:true,avisar:true});
+  /* GC-25: só reunião gera lembrete pro cliente — e o lembrete vai pro Google do MESMO jeito que ele escolheu */
+  if(t&&tipo==='reuniao'&&lembrar!=='nao'){ const lt=tarAgendarLembrete(c.id,quando,hora,lembrar); if(lt&&destino) tarEnviarComo(c.id,lt,destino); salvar(); render();
     toast('Lembrete do cliente agendado — '+(lembrar==='vespera'?'véspera':'no dia'),true); }
 };
 window.tarAtalho = (cid,dias,tipo) => {
@@ -4151,6 +4193,9 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .so-ag{min-width:40px;min-height:40px;padding:0 8px;flex:0 0 auto}
   @media(max-width:980px){ .so-ag{min-width:44px;min-height:44px} }   /* dedo */
   .so-ag-l{display:block;font-size:12px;font-weight:600;margin-top:8px}
+  .g-par-env{margin-top:12px} .g-par-lbl{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  .g-par-bts{display:flex;gap:8px} .g-par-bts .btn{flex:1;min-height:48px;justify-content:center;font-size:14.5px}
+  .g-par-mini{display:inline-flex;gap:5px;align-items:center} .g-par-mini .btn{white-space:nowrap}
   .so-ag-l input,.so-ag-l select{display:block;width:100%;margin-top:3px;font:inherit;padding:9px;border:1px solid var(--linha);border-radius:9px;min-height:44px;background:var(--fundo)}
   .so-ag-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
   @media(max-width:600px){ .so-ag-grid{grid-template-columns:1fr 1fr} .so-ag-grid .so-ag-l:first-child{grid-column:1/-1} }
@@ -4908,7 +4953,7 @@ function tarBlocoDrawer(c){
       <input id="tarHora" data-so-leitura="lido no clique de adicionar tarefa (tarAdd)" type="time" style="flex:0 0 110px">
       <select id="tarDur" data-so-leitura="lido no +marcar — duração do compromisso, vai pro Google Agenda (TAR-GCAL-DIRETO-V1)" title="Duração — define o fim do evento na sua Agenda Google" style="flex:0 0 96px"><option value="15">15 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60" selected>1 h</option><option value="90">1h30</option><option value="120">2 h</option></select>
       <select id="tarLembrar" data-so-leitura="lido no +marcar — lembrete de reunião pro cliente (GC-25)" title="Lembrar o cliente da reunião — derruba no-show" style="flex:0 0 168px;display:none"><option value="nao">🔔 Sem lembrete</option><option value="vespera">🔔 Lembrar na véspera</option><option value="dia">🔔 Lembrar no dia</option></select>
-      <button class="btn btn-p btn-mini" onclick="tarNovaDoDrawer()">+ marcar</button>
+      ${gParEnviarHTML('tarNovaDoDrawer(%)',true)}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);align-items:center">rápido:
       <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',0,'ligar')">📞 ligar hoje</button>
@@ -10438,7 +10483,7 @@ function gcalBlocoHTML(){
       <select class="gcal-dest" onchange="gtSetSemHora(this.value)" title="Atividade SEM hora: vai como Tarefa do Google (lista de afazer) ou como evento de dia inteiro na Agenda">
         <option value="tarefa" ${GT.semHora==='tarefa'?'selected':''}>sem hora → ☑️ Tarefas</option>
         <option value="evento" ${GT.semHora==='evento'?'selected':''}>sem hora → 📅 Agenda</option></select>
-      <button class="btn btn-p btn-mini" onclick="gcalNovo()" title="Criar evento">＋ Novo</button>
+      <button class="btn btn-p btn-mini" onclick="gcalNovo()" title="Criar evento na sua Agenda Google (com hora, convidado, Meet)">📅 Novo evento</button><button class="btn btn-p btn-mini" onclick="gtNovaAvulsa()" title="Criar tarefa nas suas Tarefas do Google (afazer do dia)">☑️ Nova tarefa</button>
       <button class="btn btn-s btn-mini" onclick="gcalCarregar()" title="Atualizar">🔄</button>
       ${gcalClasseOn()?`<button class="btn btn-s btn-mini" onclick="gcalRegras()" title="Agendas do Google e regras (pessoal × trabalho)">⚙</button>`:''}
       <button class="btn btn-s btn-mini" onclick="gcalDesconectar()" title="Desconectar">⏏</button></div>`;
@@ -13279,12 +13324,12 @@ window.soAgendar=function(id){
         <label class="so-ag-l">Tipo<select id="so-ag-tipo">${tipos.map(t=>`<option value="${t[0]}"${t[0]==='ligar'?' selected':''}>${t[1]} ${esc(t[2])}</option>`).join('')}</select></label>
         <label class="so-ag-l">Dia<input id="so-ag-dia" type="date" value="${esc(soAgendaDiaPadrao(s))}"></label>
         <label class="so-ag-l">Hora<input id="so-ag-hora" type="time" value="09:00"></label></div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Com hora, entra como compromisso na Agenda. Sem hora, vira afazer do dia${c?' (e Tarefa do Google, se autorizado)':''}.</div>
-      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" style="flex:1;min-height:48px;justify-content:center" onclick="soAgendarFechar()">Cancelar</button><button class="btn btn-p" style="flex:2;min-height:48px;justify-content:center" onclick="soAgendarConfirmar('${esc(jsq(String(s.id)))}')">📅 Agendar</button></div>
+      ${gParEnviarHTML(`soAgendarConfirmar('${esc(jsq(String(s.id)))}',%)`)}
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-ghost" style="flex:1;min-height:44px;justify-content:center" onclick="soAgendarFechar()">Cancelar</button></div>
     </div></div>`);
   setTimeout(()=>{ const i=document.getElementById('so-ag-tit'); if(i&&!window.matchMedia('(max-width:980px)').matches) i.focus(); },60);
 };
-window.soAgendarConfirmar=async function(id){
+window.soAgendarConfirmar=async function(id,destino){
   const s=SO.itens.find(x=>String(x.id)===String(id)); if(!s) return;
   const v=k=>{ const e=document.getElementById(k); return e?String(e.value||'').trim():''; };
   const tit=v('so-ag-tit')||soAgendaTitulo(s), tipo=v('so-ag-tipo')||'ligar', dia=v('so-ag-dia'), hora=v('so-ag-hora');
@@ -13294,8 +13339,10 @@ window.soAgendarConfirmar=async function(id){
   let como='';
   if(c){ const t=tarCriar(c.id,tipo,tit,dia,hora,notas,60); if(!t){ toast('Não consegui criar a atividade',false); return; }
     t.solicId=String(s.id); salvar();
-    if(hora&&typeof gsyncDrenar==='function') gsyncDrenar({gesto:true,avisar:true});   /* dentro do toque: é quando o Google pode pedir consentimento sem o Safari barrar */
+    if(destino) tarEnviarComo(c.id,t,destino);
+    else if(hora&&typeof gsyncDrenar==='function') gsyncDrenar({gesto:true,avisar:true});   /* dentro do toque: é quando o Google pode pedir consentimento sem o Safari barrar */
     como='atividade de '+(negTitulo(c)||c.nome); }
+  else if(destino==='tarefa'){ await gtCriarAvulsa(tit,notas,dia); como='tarefa no Google'; }
   else { _GCAL_NEG=null; const ini=hora||'09:00', fim=gcalMin2Hhmm(gcalHhmm2Min(ini)+60);
     gcalModalEvento({novo:true,summary:tit,description:notas+'\nCRM Life Planner',dia:dia,ini:ini,fim:fim,local:'',convidado:'',meet:false}); como='evento na Agenda Google'; }
   await soEvento(s,'prazo','Atividade agendada: '+dataBR(dia)+(hora?' às '+hora:'')+' — '+tit+(c?'':' (direto na Agenda)'));
@@ -16416,12 +16463,12 @@ window.bnAgendar=function(id){
         <label class="so-ag-l">Tipo<select id="so-ag-tipo">${tipos.map(t=>`<option value="${t[0]}"${t[0]==='ligar'?' selected':''}>${t[1]} ${esc(t[2])}</option>`).join('')}</select></label>
         <label class="so-ag-l">Dia<input id="so-ag-dia" type="date" value="${esc(hj)}"></label>
         <label class="so-ag-l">Hora<input id="so-ag-hora" type="time" value="09:00"></label></div>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:8px">Com hora, entra como compromisso na Agenda. Sem hora, vira afazer do dia${f?'':' (na Agenda Google, dia inteiro)'}.</div>
-      <div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-ghost" style="flex:1;min-height:48px;justify-content:center" onclick="soAgendarFechar()">Cancelar</button><button class="btn btn-p" style="flex:2;min-height:48px;justify-content:center" onclick="bnAgendarConfirmar('${esc(jsq(String(c.id)))}')">📅 Agendar</button></div>
+      ${gParEnviarHTML(`bnAgendarConfirmar('${esc(jsq(String(c.id)))}',%)`)}
+      <div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-ghost" style="flex:1;min-height:44px;justify-content:center" onclick="soAgendarFechar()">Cancelar</button></div>
     </div></div>`);
   setTimeout(()=>{ const i=document.getElementById('so-ag-tit'); if(i&&!window.matchMedia('(max-width:980px)').matches) i.focus(); },60);
 };
-window.bnAgendarConfirmar=function(id){
+window.bnAgendarConfirmar=async function(id,destino){
   const c=bnPor(id); if(!c) return;
   const v=k=>{ const e=document.getElementById(k); return e?String(e.value||'').trim():''; };
   const tit=v('so-ag-tit')||('Ligar para '+(c.nome||'').split(' ')[0]), tipo=v('so-ag-tipo')||'ligar', dia=v('so-ag-dia'), hora=v('so-ag-hora');
@@ -16431,12 +16478,13 @@ window.bnAgendarConfirmar=function(id){
   soAgendarFechar();
   let como='';
   if(f){ const t=tarCriar(f.id,tipo,tit,dia,hora,notas,60); if(!t){ toast('Não consegui criar a atividade',false); return; }
-    salvar(); if(hora&&typeof gsyncDrenar==='function') gsyncDrenar({gesto:true,avisar:true});
+    salvar(); if(destino) tarEnviarComo(f.id,t,destino); else if(hora&&typeof gsyncDrenar==='function') gsyncDrenar({gesto:true,avisar:true});
     como='atividade de '+(negTitulo(f)||f.nome); }
+  else if(destino==='tarefa'){ await gtCriarAvulsa(tit,notas,dia); como='tarefa no Google'; }
   else { _GCAL_NEG=null; const ini=hora||'09:00', fim=gcalMin2Hhmm(gcalHhmm2Min(ini)+60);
     if(naFicha) taFichaFechar();   /* o modal de evento (z 120) ficaria atrás da ficha (z 205) */
     gcalModalEvento({novo:true,summary:tit,description:notas+'\nCRM Life Planner',dia:dia,ini:ini,fim:fim,local:'',convidado:'',meet:false}); como='evento na Agenda Google'; }
-  (c.hist=c.hist||[]).push({tipo:'agenda',dia:hojeISO(),ts:new Date().toISOString(),quando:dia,hora:hora||'',tit:tit,via:f?'funil':'google'});
+  (c.hist=c.hist||[]).push({tipo:'agenda',dia:hojeISO(),ts:new Date().toISOString(),quando:dia,hora:hora||'',tit:tit,via:f?'funil':'google',destino:destino||''});
   bnSalvar();
   if(f&&naFicha) taFichaAbrir(c.id); else if(VIEW==='bn-estoque'&&FBN.edit===c.id) viewBnEstoque();
   toast('Agendado: '+dataBR(dia)+(hora?' às '+hora:'')+' · '+como,true);
@@ -18997,6 +19045,11 @@ function lpSelfCheck(){
     ok('AGENDA-ANIV-V1: Agenda tem o tópico 🎂 Aniversariantes (janela do módulo, status do módulo, 💬 parabéns)', (()=>{ const _la=LP.aniversario, _c=CART.clientes; try{ CART.clientes=[]; const h=hojeISO(); const md=h.slice(5), ano='1990-';
       LP.aniversario=[{_key:'za',lp:'Gustavo',cliente:'ZZ HOJE TESTE',data_nasc:ano+md,telefone:'(81) 90000-0009',status_contato:'pendente'},{_key:'zb',lp:'Gustavo',cliente:'ZZ LONGE',data_nasc:'1990-'+isoAddDias(h,60).slice(5),status_contato:'pendente'}];
       const b=agAnivBloco(); const l=agAnivLista(); return !!b&&b[0]==='aniv'&&l.length===1&&l[0].r._key==='za'&&b[1].includes('lp-status')&&b[1].includes('wa.me')&&String(viewAgenda).includes('agAnivBloco')&&AG_NOMES.aniv; } finally{ LP.aniversario=_la; CART.clientes=_c; } })());
+    ok('GOOGLE-PAR-EM-TUDO-V1: toda folha que manda pro Google confirma com o par ☑️ Tarefa | 📅 Evento (Solicitações, Estoque, ficha, ＋ nova, Sua Agenda)', (()=>{ const h=gParEnviarHTML("f('1',%)"); const fic=tarBlocoDrawer({id:'zp',nome:'Zz',tarefas:[],interacoes:[]});
+      return h.includes("f('1','tarefa')")&&h.includes("f('1','evento')")&&String(window.soAgendar).includes('gParEnviarHTML')&&String(window.bnAgendar).includes('gParEnviarHTML')&&String(agNovaAtividade).includes('gParEnviarHTML')
+        &&fic.includes("tarNovaDoDrawer('tarefa')")&&fic.includes("tarNovaDoDrawer('evento')")&&String(gcalBlocoHTML).includes('gtNovaAvulsa')
+        &&String(window.soAgendarConfirmar).includes('tarEnviarComo')&&String(window.bnAgendarConfirmar).includes('tarEnviarComo')&&String(window.tarNovaDoDrawer).includes('tarEnviarComo')
+        &&(()=>{ const t={}; gtDestinoAplicar(t,'tarefa'); return gtDestino(t)==='tarefa'; })(); })());
     ok('AGENDA-GOOGLE-2BOT-V1: linha da Agenda tem ☑️ Tarefa e 📅 Evento, acende o que vale e o clique fixa o destino', (()=>{ const c={id:'c2b',nome:'Zz'}; const h=tarGoogleParHTML(c,{id:'t1',tipo:'ligar',quando:'2026-10-01',gtaskId:'g1',destino:'tarefa'}); const h2=tarGoogleParHTML(c,{id:'t2',tipo:'ligar',quando:'2026-10-01',gcalId:'e1',destino:'evento'}); const t={}; gtDestinoAplicar(t,'evento'); return h.includes("'tarefa'")&&h.includes("'evento'")&&/btn-p btn-mini[^>]*'tarefa'/.test(h)&&/btn-p btn-mini[^>]*'evento'/.test(h2)&&gtDestino(t)==='evento'&&String(tarMandarGoogle).includes('gcalCriarEventoDaTarefa')&&String(viewAgenda).includes('agNovaAtividade'); })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
