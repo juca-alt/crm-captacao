@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.22 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.23 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -9933,6 +9933,7 @@ const REL_TIPOS={
   statust:{nome:'Status T — apólices emitidas na janela (relatório semanal)'},
   persistencia:{nome:'Extrato Consolidado de Comissão (persistência)'},
   beneficios:{nome:'Aviso de sinistro / benefício'},
+  aniversariantes:{nome:'Aniversariantes (Clientes, portal)'},
   semanal:{nome:'Relatório semanal do LP'} };
 function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
   if(/<table|<tr|<td/i.test(cab)){ const h=normKey(cab.replace(/<[^>]+>/g,' '));
@@ -9944,6 +9945,9 @@ function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,60
      do cabeçalho: Carteira de Clientes tem "Data de Nascimento"+"Vr. Renda"; Consulta de Apólices
      tem "Resp. Pagto."+"Primeiro/Demais prêmios". Roteia pra MESMA carteira (relRotear vê texto). */
   if(/extrato consolidado de comiss/.test(n)&&/pancec/.test(n)) return 'persistencia';
+  /* REL-ANIV-V1 (25/09): relatório "Aniversariantes" do portal (Clientes) — cabeçalho
+     "Data de Nascimento Dias Cliente Idade Contatos Núm. Apólices Situação Cliente" */
+  if(/nascimento dias cliente idade/.test(n)||(/aniversariantes/.test(n)&&/\d{2}\/\d{2}\/\d{4} (hoje|amanha|\d+ dias?) /.test(n)&&!/vr\.? ?renda|apolices emitidas|dias de atraso/.test(n))) return 'aniversariantes';
   if(/data de nascimento/.test(n)&&/vr\.? ?renda/.test(n)) return 'carteira_clientes';
   if(/resp\.? ?pagto/.test(n)&&(/primeiro premio/.test(n)||/demais premios/.test(n)||/apolice proposta segurado/.test(n))) return 'carteira_apolices';
   if(/apolices emitidas no periodo/.test(n)) return 'emitidas';
@@ -9977,6 +9981,8 @@ async function relRotear(tipo,bruto){
   if(tipo==='atraso'){ atColarRelatorio(); setTimeout(()=>{ const t=$('#at_txt'); if(t){ t.value=bruto; atProcessar(); } },80); return; }
   if(tipo==='persistencia'){ const n=pxComMerge(pxComParse(bruto)); if(!/^cart-/.test(VIEW)) irPara('persistencia'); else render(); toast('Extrato lido — '+n+' seção(ões) de persistência (PAV/PANCEC) importadas',true); return; }
   if(tipo==='beneficios'){ relAbrirBeneficio(bruto); return; }
+  if(tipo==='aniversariantes'){ const r=relAnivImportar(bruto); if(VIEW!=='lp-aniversario') irPara('lp-aniversario'); else render();
+    toast(r.lidos?('Aniversariantes: '+r.lidos+' lido(s) — '+r.novos+' novo(s), '+r.atualizados+' atualizado(s)'):'Não achei nenhum aniversariante nesse texto — confira se copiou o relatório inteiro',!!r.lidos); return; }
   openLpImport(); setTimeout(()=>{ const t=$('#lp-text'); if(t){ t.value=bruto; } },80);
 }
 /* REL-BENEF-V1 (05/09): texto de aviso de sinistro → módulo Benefícios com o caso pré-preenchido (segurado/apólice/protocolo/data) */
@@ -9991,6 +9997,57 @@ function relAbrirBeneficio(bruto){ const o=relExtrairBeneficio(bruto); if(VIEW!=
   setTimeout(()=>{ bfNovo(); setTimeout(()=>{ const set=(id,v)=>{ const e=document.getElementById(id); if(e&&v) e.value=v; }; set('bfn_seg',o.segurado); set('bfn_ap',o.apolice); set('bfn_prot',o.protocolo); set('bfn_dev',o.data); },60); },80);
   toast('Identifiquei um aviso de sinistro — abrindo o caso no módulo Benefícios',true); }
 window.relExtrairBeneficio=relExtrairBeneficio;
+/* ═══ REL-ANIV-V1 (25/09) ═════════════════════════════════════════════════
+   Pedido dele: "ajusta pro CRM estar apto a receber esse relatório de aniversariantes"
+   (portal → Clientes → Aniversariantes, PDF copiado como texto). Leitura LOCAL, sem IA.
+   Cada cliente começa em "DD/MM/AAAA  Amanhã|Hoje|N dias  NOME (pode quebrar linha)  40/41"
+   e traz Cel., Email, as apólices (9 dígitos, às vezes sobra uma depois da quebra de página)
+   e a situação. O merge ENRIQUECE: acha a linha pelo nome (inclusive a que nasceu da
+   carteira), completa telefone/nascimento e guarda email + apólices; o status de contato
+   fica. NÃO usa o lpIngest — aquele é snapshot e arquivaria os aniversários da carteira. */
+function relAnivParse(txt){
+  const t=String(txt||'').replace(/\r/g,'');
+  const lpM=t.match(/^\s*LP:\s*(.+)$/mi); const lp=(lpM&&emNormLp(lpM[1]))||'Gustavo';
+  const re=/(?:^|\n)\s*(\d{2})\/(\d{2})\/(\d{4})\s+(Hoje|Amanh[ãa]|\d+\s+dias?)\s+/gi;
+  const ini=[]; let m; while((m=re.exec(t))){ ini.push({i:m.index,fim:re.lastIndex,d:m[3]+'-'+m[2]+'-'+m[1]}); }
+  const out=[];
+  ini.forEach((a,k)=>{
+    let bloco=t.slice(a.fim, k+1<ini.length?ini[k+1].i:t.length);
+    bloco=bloco.split(/\n\s*(?:Total:|Aniversariantes\s*(?:\n|$)|Life Planner é a marca)/i)[0];   /* rodapé/quebra de página fora; apólice que sobra antes do rodapé fica com o cliente */
+    const idade=bloco.match(/\s(\d{1,3})\/(\d{1,3})(?=\s|$)/);
+    const nome=(idade?bloco.slice(0,idade.index):bloco.split(/Cel\.?:/i)[0]).replace(/\s+/g,' ').trim();
+    if(!nome) return;
+    const tel=(bloco.match(/Cel\.?:\s*(\(?\d{2}\)?\s*\d{4,5}-?\d{4})/i)||[])[1]||'';
+    const email=(bloco.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)||[])[0]||'';
+    const aps=[...new Set((bloco.match(/\b\d{9}\b/g)||[]))];
+    const sit=(bloco.match(/\b(Segurado|Pagador|Benefici[áa]rio|Titular)\b/i)||[])[1]||'';
+    out.push({lp,cliente:nome,data_nasc:a.d,telefone:tel.replace(/\s+/g,' ').trim(),email:email.toLowerCase(),apolices:aps,situacao:sit});
+  });
+  return out;
+}
+function relAnivImportar(txt){
+  const recs=relAnivParse(txt); let novos=0, atualizados=0; const tocados=new Set();
+  if(typeof LP==='undefined'||!LP||!Array.isArray(LP.aniversario)) return {lidos:0,novos:0,atualizados:0};
+  recs.forEach(r=>{
+    const k=normKey(r.cliente);
+    const ex=LP.aniversario.find(x=>normKey(x.cliente||'')===k&&!x._resolvido)||LP.aniversario.find(x=>normKey(x.cliente||'')===k);
+    if(ex){
+      if(!ex.data_nasc) ex.data_nasc=r.data_nasc;
+      if(!ex.telefone&&r.telefone) ex.telefone=r.telefone;
+      if(r.email) ex.email=r.email;
+      if(r.apolices.length) ex.apolices=r.apolices;
+      if(r.situacao) ex.situacao=r.situacao;
+      ex._visto=nowISO(); ex._resolvido=false; tocados.add('aniversario\t'+ex.lp); atualizados++;
+    }else{
+      LP.aniversario.push({_key:k,lp:r.lp,cliente:r.cliente,data_nasc:r.data_nasc,telefone:r.telefone,email:r.email,apolices:r.apolices,situacao:r.situacao,
+        status_contato:'pendente',_fonte:'relatorio',_entrou:nowISO(),_visto:nowISO(),_resolvido:false});
+      tocados.add('aniversario\t'+r.lp); novos++;
+    }
+  });
+  if(recs.length){ LP.importadoEm=new Date().toISOString(); LP_TOUCHED=tocados; lpSalvarLocal(); try{ if(typeof lpPersistRemoto==='function') lpPersistRemoto().catch(e=>toast('Aniversariantes ficaram só neste aparelho (sync falhou)',false)); }catch(_){} }
+  return {lidos:recs.length,novos,atualizados};
+}
+window.relAnivParse=relAnivParse; window.relAnivImportar=relAnivImportar;
 window.relDetectar=relDetectar; window.relRotear=relRotear;
 
 /* ══ MONTAGEM DE PLANOS (04/09) ═══════════════════════════════════════
@@ -13969,14 +14026,14 @@ function viewLpAniversario(){
   try{ lpDerivar(); }catch(_){}
   if(!LP.aniversario.length){ $('#main').innerHTML=semDados('Aniversariantes','Nasce da data de nascimento da carteira (Clientes → Importar) e do relatório da semana. Ainda não há nenhum dos dois.'); return; }
   const l=lpFiltra('aniversario').map(r=>({r,d:lpDiasAte(r.data_nasc)})).sort((a,b)=>(a.d??1e9)-(b.d??1e9));
-  $('#main').innerHTML=`<h1 class="pg">Aniversariantes</h1><div class="sub">${l.length} cliente(s) — ordenados por proximidade. Linha destacada = dentro da janela (${JANELA_DIAS}d). Fonte: nascimento da carteira${LP.aniversario.some(r=>r._fonte!=='carteira')?' + relatório da semana':''}.</div>
+  $('#main').innerHTML=`<h1 class="pg">Aniversariantes</h1><div class="sub">${l.length} cliente(s) — ordenados por proximidade. Linha destacada = dentro da janela (${JANELA_DIAS}d). Fonte: nascimento da carteira${LP.aniversario.some(r=>r._fonte!=='carteira')?' + relatório':''}. Pra atualizar: <b>Subir relatório</b> → cole o relatório <b>Aniversariantes</b> do portal (Clientes).</div>
     ${lpFiltroBar('aniversario')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Quando</th><th>Cliente</th><th>Nascimento</th><th>Telefone</th><th>Contato</th>
     </tr></thead><tbody>
     ${l.map(({r,d})=>`<tr class="${r._resolvido?'res':''} ${d!=null&&d<=JANELA_DIAS?'janela':''}">
       <td><span class="dias-tag ${diasTagCls(d)}">${d==null?'—':(d===0?'hoje':d===1?'amanhã':'em '+d+'d')}</span></td>
-      <td><b>${esc(r.cliente||'—')}</b></td>
+      <td><b>${esc(r.cliente||'—')}</b>${(r.apolices&&r.apolices.length)||r.email?`<div style="font-size:11px;color:var(--muted)">${r.apolices&&r.apolices.length?'🛡 '+r.apolices.length+' apólice'+(r.apolices.length>1?'s':''):''}${r.apolices&&r.apolices.length&&r.email?' · ':''}${esc(r.email||'')}</div>`:''}</td>
       <td style="font-size:12px">${dataBR(r.data_nasc)}</td>
       <td style="font-size:12px">${esc(r.telefone||'—')}</td>
       <td>${statusSel('aniversario',r)}</td>
@@ -20392,6 +20449,14 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       }catch(e){ falhas.push('aniversários derivados: exceção '+(e&&e.message)); } finally{ PX._teste=false; CART.clientes=_c; EX.itens=_e; LP.aniversario=_la; LP.datas=_ld; LP_TOUCHED=_t; } }
 
     /* SUBIR-UNIVERSAL-V1 */
+    ok('REL-ANIV-V1: relatório Aniversariantes (portal) é detectado, lido sem IA e ENRIQUECE sem arquivar a carteira', (()=>{ const _la=LP.aniversario, _t=LP_TOUCHED, _p=window.lpPersistRemoto, _s=window.lpSalvarLocal, _i=LP.importadoEm; try{
+      window.lpPersistRemoto=()=>Promise.resolve(); window.lpSalvarLocal=()=>{};
+      const T='Agência: Zz\nLP: Gustavo Teste\nData de\nNascimento Dias Cliente Idade Contatos Núm. Apólices Situação\nCliente\n26/09/1985 Amanhã FULANO DE\nTAL TESTE 40/41\nCel.: (81) 90000-0001\nEmail:\nfulano@teste.zz\n000000001\n000000002\nSegurado\n30/09/1975 5 dias CICRANO TESTE 50/51\nCel.: (81) 90000-0002\nEmail:\nc@teste.zz 000000003 Segurado\n000000004\nAniversariantes\nLife Planner é a marca registrada\n\n19/10/1985 24 dias BELTRANA TESTE 40/41\nCel.: (81) 90000-0003\nEmail:\nb@teste.zz 000000005 Segurado\nTotal: Gustavo Teste\n3\nAniversariantes';
+      LP.aniversario=[{_key:'cart:c',lp:'Gustavo',cliente:'Cicrano Teste',data_nasc:'1975-09-30',telefone:'',status_contato:'contatado',_fonte:'carteira'},{_key:'cart:o',lp:'Gustavo',cliente:'Outro Zz',data_nasc:'1990-01-01',status_contato:'pendente',_fonte:'carteira'}];
+      const ps=relAnivParse(T); const r=relAnivImportar(T); const c=LP.aniversario.find(x=>x._key==='cart:c'), o=LP.aniversario.find(x=>x._key==='cart:o'), f=LP.aniversario.find(x=>/FULANO/.test(x.cliente));
+      return relDetectar(T)==='aniversariantes'&&ps.length===3&&f&&f.cliente==='FULANO DE TAL TESTE'&&f.data_nasc==='1985-09-26'&&f.apolices.length===2&&f.email==='fulano@teste.zz'
+        &&c.telefone==='(81) 90000-0002'&&c.status_contato==='contatado'&&c.apolices.join()==='000000003,000000004'&&!o._resolvido&&r.novos===2&&r.atualizados===1&&relDetectar(EX_EXEMPLO_TXT)!=='aniversariantes';
+    } finally{ LP.aniversario=_la; LP_TOUCHED=_t; window.lpPersistRemoto=_p; window.lpSalvarLocal=_s; LP.importadoEm=_i; } })());
     ok('subir relatório: identifica o tipo pela assinatura do texto', relDetectar(EX_EXEMPLO_TXT)==='emitidas' && relDetectar('Propostas Pendentes\nContestação médica 12 dias')==='pendencias' && relDetectar('Relatório de atraso\nApólice 000 dias de atraso 30')==='atraso' && relDetectar('<table><tr><td>Agência</td><td>Cliente</td><td>Data de Nascimento</td><td>CS</td><td>Núm. Apólices</td></tr></table>')==='carteira_clientes' && relDetectar('<table><tr><td>Proposta</td><td>Apólice</td><td>Segurado</td><td>Resp. Pagto.</td><td>Prêmio</td><td>Periodicidade Pagto.</td></tr></table>')==='carteira_apolices' && relDetectar('LP: Fulano\nSitPlan 10 TA 5')==='semanal');
     ok('subir relatório: reconhece Status T (seção do semanal) e aviso de sinistro', relDetectar('APÓLICES EMITIDAS - DANIEL CRUZ\nMÊS PROPOSTA APÓLICE SEGURADO\n30 dias')==='statust' && relDetectar('Aviso de sinistro\nSegurado: Fulano\nApólice 1234567\nProtocolo 2026-88')==='beneficios' && REL_TIPOS.statust && REL_TIPOS.beneficios);
     /* CARTEIRA-PDF-COLADO-V1 (06/09): fixtures SINTÉTICAS (sem PII) do texto copiado do PDF */
