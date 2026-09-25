@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.20 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.21 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -929,6 +929,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .tarlin .tt{flex:1;min-width:160px;font-size:13px}
   .tarlin .qd{font-size:11.5px;font-weight:700;white-space:nowrap}
   .tarlin .ac{display:flex;gap:5px;flex-wrap:wrap}
+  .tarlin .ac.ag-ac{align-items:center;gap:8px}
+  .ag-grp{display:inline-flex;gap:5px;align-items:center}
+  .ag-gpar{display:inline-flex;align-items:center;border:1px solid var(--linha);border-radius:10px;padding:2px;gap:2px;background:var(--fundo)}
+  .ag-gpar .ag-glbl{font-size:10.5px;font-weight:700;color:var(--muted);padding:0 5px 0 4px;letter-spacing:.3px}
+  .ag-gpar .btn{border:0;box-shadow:none}
+  @media(max-width:980px){ .ag-grp{flex:1 1 auto} .ag-grp>.btn{flex:1 1 0;justify-content:center;text-align:center} .ag-gpar{flex:1 1 100%} .ag-gpar>.btn{flex:1 1 0;justify-content:center} }
   .tar-ok{opacity:.55;text-decoration:line-through}
   .tar-grp{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 4px}
 
@@ -3625,6 +3631,62 @@ function tarGcalAcaoHTML(c,t){
   const gc=tarGcalUrl(c,t);
   return gc?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(gc)}" target="_blank" rel="noopener" title="Abrir no Google Agenda com tudo preenchido (conecte a Agenda em Agenda &amp; Tarefas pra gravar direto)">📅</a>`:'';
 }
+/* AGENDA-GOOGLE-2BOT-V1 (25/09): pedido dele — "deixa dois botões: o que vira TAREFA (como hoje)
+   e outro que vira EVENTO". Um par só, com o que está valendo aceso. O clique FIXA o destino
+   da atividade (t.destino) e manda pela mesma fila do GCAL-BIDIRECIONAL — trocar de um pro
+   outro MIGRA (a fila apaga do lado antigo). Sem data, cai no botão de sempre. */
+function tarGoogleParHTML(c,t){
+  if(!t||!t.quando) return tarGcalAcaoHTML(c,t);
+  const est=(typeof gsyncEstado==='function')?gsyncEstado(c,t):'', dest=gtDestino(t);
+  const vivo=est==='ok'||est==='tarefa'||est==='fila';
+  const emT=vivo&&dest==='tarefa', emE=vivo&&dest!=='tarefa';
+  const marca=a=>a?(est==='fila'?' ⏳':' ✓'):'';
+  const b=(k,ico,rot,ativo,tit)=>`<button class="btn ${ativo?'btn-p':'btn-s'} btn-mini" onclick="tarMandarGoogle('${esc(jsq(c.id))}','${esc(jsq(t.id))}','${k}')" title="${tit}" aria-pressed="${ativo?'true':'false'}">${ico} ${rot}${marca(ativo)}</button>`;
+  return `<span class="ag-gpar" role="group" aria-label="Mandar pro Google"><span class="ag-glbl">Google</span>`
+    + b('tarefa','☑️','Tarefa',emT,emT?'Está nas suas Tarefas do Google — clique pra atualizar lá':'Mandar pras suas Tarefas do Google (afazer, sem horário)')
+    + b('evento','📅','Evento',emE,emE?'Está na sua Agenda Google — clique pra atualizar lá':'Mandar pra sua Agenda Google como evento (com horário, se tiver)')
+    + `</span>`;
+}
+function tarMandarGoogle(cid,tid,k){
+  const par=tarPar(cid,tid); if(!par){ toast('Atividade não encontrada — atualize',false); return; }
+  if(k==='tarefa'&&!gtAutorizado()){ toast('Falta liberar as Tarefas do Google — reconecte a Agenda (⚙️ em Sua Agenda Google)',false); return; }
+  gtDestinoAplicar(par.t,k==='tarefa'?'tarefa':'evento');
+  gcalCriarEventoDaTarefa(cid,tid);
+}
+/* ＋ nova atividade direto da linha da Agenda (sem abrir a ficha) — mesma folha do editar */
+function agNovaAtividade(cid){
+  const c=tarContato(cid); if(!c){ toast('Contato não encontrado — atualize',false); return; }
+  const st='width:100%;padding:10px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;font-size:15px';
+  atModal(`<h2>Nova atividade</h2>
+    <div class="sub">${esc(c.nome||'')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+      <label style="font-size:12px;font-weight:600;grid-column:1/-1">O que é
+        <select id="tn-tipo" style="${st}">${TAR_TIPOS.map(x=>`<option value="${x[0]}" ${x[0]==='follow'?'selected':''}>${x[1]} ${x[2]}</option>`).join('')}</select></label>
+      <label style="font-size:12px;font-weight:600;grid-column:1/-1">Título
+        <input id="tn-tit" placeholder="O que fazer (ex.: retomar a proposta)" style="${st}"></label>
+      <label style="font-size:12px;font-weight:600">Dia
+        <input id="tn-dia" type="date" value="${esc(isoAddDias(hojeISO(),1))}" style="${st}"></label>
+      <label style="font-size:12px;font-weight:600">Hora <span style="font-weight:400;color:var(--muted)">(vazio = dia todo)</span>
+        <input id="tn-hora" type="time" style="${st}"></label>
+      <label style="font-size:12px;font-weight:600">Duração
+        <select id="tn-dur" style="${st}">${[15,30,45,60,90,120].map(d=>`<option value="${d}" ${d===60?'selected':''}>${d<60?d+' min':(d/60)+' h'}</option>`).join('')}</select></label>
+      <label style="font-size:12px;font-weight:600">Google
+        <select id="tn-destino" style="${st}"><option value="auto">Automático (com hora = evento)</option><option value="tarefa">☑️ Tarefa do Google</option><option value="evento">📅 Evento na Agenda</option></select></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" onclick="agNovaSalvar('${esc(jsq(c.id))}')">Criar</button>
+    </div>`);
+  setTimeout(()=>{ const i=document.getElementById('tn-tit'); if(i) i.focus(); },60);
+}
+function agNovaSalvar(cid){
+  const g=id=>{ const el=document.getElementById(id); return el?el.value:''; };
+  const v={tipo:g('tn-tipo')||'follow',tit:g('tn-tit'),dia:g('tn-dia')||hojeISO(),hora:g('tn-hora')||'',dur:Number(g('tn-dur'))||60,dest:g('tn-destino')};
+  atClose();                                                   /* lê TUDO antes de fechar — fechar apaga os campos */
+  const t=tarCriar(cid,v.tipo,v.tit,v.dia,v.hora,'',v.dur), dest=v.dest;
+  if(t&&(dest==='tarefa'||dest==='evento')) tarMandarGoogle(cid,t.id,dest);
+}
+window.tarMandarGoogle=tarMandarGoogle; window.agNovaAtividade=agNovaAtividade; window.agNovaSalvar=agNovaSalvar;
 /* ── ATIVIDADE-UX-V1: editar / atualizar / excluir qualquer atividade ─────────
    Pedido dele: "preciso com uma boa UX: pode editar, atualizar ou excluir, não
    só finalizar." Uma folha só, chamada da ficha e da Agenda. O que mudar aqui
@@ -11334,9 +11396,11 @@ function viewAgenda(){
         <span style="color:var(--muted)"> · ${esc(t.tit||tarNomeTipo(t.tipo))}</span>
         <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${etStatusChip(c)} ${esc(telBR(c.telefone))} ${gsyncBadgeHTML(c,t)}</div></span>
       <span class="qd ${tarClasse(sit)}" style="background:transparent;padding:0">${esc(tarQuandoTxt(t))}</span>
-      <span class="ac">${agDataHtml(c,t)}${agAcaoSel(c,t,false)}
-        ${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
-        ${tarGcalAcaoHTML(c,t)}
+      <span class="ac ag-ac">
+        <span class="ag-grp">${agDataHtml(c,t)}${agAcaoSel(c,t,false)}</span>
+        <span class="ag-grp">${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
+          <button class="btn btn-s btn-mini" onclick="agNovaAtividade('${esc(jsq(c.id))}')" title="Nova atividade com ${esc(c.nome||'')}">＋ nova</button></span>
+        ${tarGoogleParHTML(c,t)}
       </span></div>`;
   };
   const linhaReun=x=>{ const dias=reunDiasParada(x.t), wa=waHref(x.c.telefone);
@@ -11951,7 +12015,7 @@ async function atUpsertRemoto(recs){ if(!AT_REMOTE||!sb||!recs.length) return; c
 async function atPatch(id,patch){ const r=AT.itens.find(x=>String(x.id)===String(id)||x.apolice===id); if(!r) return; Object.assign(r,patch); r.status=atDerivarStatus(r); atSalvarLocal(); if(AT_REMOTE&&sb){ try{ await atUpsertRemoto([r]); }catch(e){ console.error('AT patch remoto',e); toast('Não consegui salvar no servidor',false); } } }
 
 /* ── modais ── */
-function atModal(html){ atClose(); const ov=document.createElement('div'); ov.className='overlay aberto'; ov.id='at-ov'; ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center'; ov.innerHTML=`<div class="lp-modal-card" onclick="event.stopPropagation()">${html}</div>`; ov.onclick=()=>atClose(); document.body.appendChild(ov); return ov; }
+function atModal(html){ atClose(); const ov=document.createElement('div'); ov.className='overlay aberto'; ov.id='at-ov'; ov.style.zIndex='95'; /* MODAL-SOBRE-FICHA-V1: a gaveta da ficha é z90 — a folha abria POR BAIXO e o Salvar ficava escondido */ ov.style.display='flex'; ov.style.alignItems='center'; ov.style.justifyContent='center'; ov.innerHTML=`<div class="lp-modal-card" onclick="event.stopPropagation()">${html}</div>`; ov.onclick=()=>atClose(); document.body.appendChild(ov); return ov; }
 function atClose(){ const o=document.getElementById('at-ov'); if(o) o.remove(); }
 function atStatusCor(st){ if(st===AT_STATUS.RESOLV) return 'b-verde'; if(st===AT_STATUS.SEM) return 'b-verm'; if(st===AT_STATUS.SUMIU) return 'b-roxo'; if(st==='Boleto pago cliente'||st==='Aguardando baixa sistema') return 'b-azul'; return 'b-amarelo'; }
 function atFocus(id){ const e=document.getElementById(id); if(e){ e.focus(); try{ const v=e.value; e.setSelectionRange(v.length,v.length); }catch(_){} } }
@@ -18842,6 +18906,9 @@ function lpSelfCheck(){
        String(tarAdiar).includes('gsyncMudou')&&String(tarConcluir).includes("'apagar'")&&String(tarRemover).includes("'apagar'")&&CONTA_CHAVES.includes('crmlp_gsync_v1'));
     ok('gsync: token nunca pendura a fila (corrida com timeout) e não abre tela pra quem nunca conectou',
        String(gcalTokenPra).includes('Promise.race')&&String(gcalTokenPra).includes('setTimeout')&&String(gcalTokenPra).includes('!GCAL.conectado'));
+    ok('MODAL-SOBRE-FICHA-V1: a folha de editar/nova atividade abre ACIMA da gaveta da ficha (senão o Salvar fica escondido)', (()=>{ const ov=atModal('<p>teste</p>'); try{ const dr=document.getElementById('drawer'); const zo=Number(getComputedStyle(ov).zIndex)||0, zd=dr?Number(getComputedStyle(dr).zIndex)||0:0; return zo>zd; } finally{ atClose(); } })());
+    ok('AGENDA-NOVA-V1: ＋ nova da Agenda grava título, dia e hora digitados (lê antes de fechar a folha)', (()=>{ const _c=S.contatos, _r=window.render, _s=window.salvar; try{ const c={id:'zn1',nome:'Zz Nova',tarefas:[],interacoes:[]}; S.contatos=[c]; window.render=()=>{}; window.salvar=()=>{}; agNovaAtividade('zn1'); document.getElementById('tn-tit').value='Titulo X'; document.getElementById('tn-dia').value='2031-01-02'; document.getElementById('tn-hora').value=''; agNovaSalvar('zn1'); const t=c.tarefas[0]; return !!t&&t.tit==='Titulo X'&&t.quando==='2031-01-02'&&!document.getElementById('at-ov'); } finally{ atClose(); S.contatos=_c; window.render=_r; window.salvar=_s; } })());
+    ok('AGENDA-GOOGLE-2BOT-V1: linha da Agenda tem ☑️ Tarefa e 📅 Evento, acende o que vale e o clique fixa o destino', (()=>{ const c={id:'c2b',nome:'Zz'}; const h=tarGoogleParHTML(c,{id:'t1',tipo:'ligar',quando:'2026-10-01',gtaskId:'g1',destino:'tarefa'}); const h2=tarGoogleParHTML(c,{id:'t2',tipo:'ligar',quando:'2026-10-01',gcalId:'e1',destino:'evento'}); const t={}; gtDestinoAplicar(t,'evento'); return h.includes("'tarefa'")&&h.includes("'evento'")&&/btn-p btn-mini[^>]*'tarefa'/.test(h)&&/btn-p btn-mini[^>]*'evento'/.test(h2)&&gtDestino(t)==='evento'&&String(tarMandarGoogle).includes('gcalCriarEventoDaTarefa')&&String(viewAgenda).includes('agNovaAtividade'); })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
     ok('BF-HISTORICO-V1: Benefícios tem KPI de pagos e chip Histórico (encerrados não somem)', (()=>{ const bk=BF.itens; BF.itens=[{id:'z1',situacao:'pago',valor_pago:100,segurado:'Zz',lp:'Gustavo'}]; try{ const V=VIEW; viewBeneficios(); const h=$('#main').innerHTML; return h.includes('Pagos (histórico)')&&h.includes('Histórico (1)'); } finally{ BF.itens=bk; } })());
