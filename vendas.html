@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.27 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.28 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -577,7 +577,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .ini-h .ini-car{font-size:11px;color:var(--muted);flex:0 0 11px}
   .ini-h .ini-t{font-size:13px;font-weight:800;flex:0 0 auto}
   .ini-h .ini-res{font-size:11.5px;color:var(--muted);font-weight:600;flex:1 1 auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ini-bl:not(.fechado) .ini-res{display:none}
+  .ini-bl:not(.fechado)>.ini-h .ini-res{display:none}
+  .ag-subs{padding:0 10px 10px} .ag-subs>.ini-bl{margin-top:8px;border-radius:11px;box-shadow:none} .ag-subs>.ini-bl>.ini-h{padding:10px 12px}
   .ini-b{padding:0 14px 14px}
   .ini-bl.fechado .ini-b{display:none}
   .ini-tudo{display:flex;justify-content:flex-end;margin-top:16px;margin-bottom:-8px}
@@ -11257,10 +11258,15 @@ function gtIndex(){ const m=new Map();
 async function gsyncPuxarTarefas(op){
   op=op||{};
   if(!gtAutorizado()) return {mudou:0};
-  const idx=gtIndex(); if(!idx.size) return {mudou:0};
+  const idx=gtIndex();
   let mud=0;
   try{
     const j=await gtApi('GET','/lists/'+GT_LISTA+'/tasks?showCompleted=true&showHidden=true&maxResults=100');
+    /* AGENDA-EVT-TAR-V1: o que ele criou direto no Google (sem marca #crmlp-) aparece no tópico ☑️ Tarefas */
+    { const av=(j&&j.items||[]).filter(g=>g&&!g.deleted&&g.status!=='completed'&&!idx.has(String(g.id))&&!/#crmlp-/.test(String(g.notes||'')))
+        .map(g=>({id:g.id,title:g.title||'',notes:g.notes||'',due:g.due||'',status:g.status,updated:g.updated}));
+      const antes=JSON.stringify((GT.avulsas||[]).map(x=>[x.id,x.due,x.title])), depois=JSON.stringify(av.map(x=>[x.id,x.due,x.title]));
+      GT.avulsas=av; if(antes!==depois&&VIEW==='agenda') gsyncRepintar(); }
     (j&&j.items||[]).forEach(g=>{
       const par=idx.get(String(g.id)); if(!par) return;
       const c=par.c, t=par.t;
@@ -11563,16 +11569,26 @@ function viewAgenda(){
   const pecas=[];
   { const ps=agSolicBloco(); if(ps) pecas.push(ps); }   /* SOLIC-TAREFAS-V1 */
   if(pend.length) pecas.push(['reun', agBloco('reun','🤝 Reuniões a finalizar',`<b>${pend.length}</b> · aconteceram e ninguém registrou o que saiu delas`,`<div class="card" style="padding:6px 14px">${pend.map(linhaReun).join('')}</div>`)]);
-  grupos.forEach(g=>{
-    const l=itens.filter(x=>tarSituacao(x.t)===g[0] && !reunPendente(x.t));   /* já listada acima, não repetir */
-    if(!l.length&&!(g[0] in AG_NOVO_DIA)) return;   /* Hoje/Amanhã/Próximas ficam sempre — o ＋ Novo mora nelas */
-    const nomes=l.slice(0,3).map(x=>x.c.nome.split(' ')[0]).join(' · ');
-    pecas.push([g[0], agBloco(g[0],g[1],`<b>${l.length}</b>${g[2]?' · '+esc(g[2]):''}${nomes?' · '+esc(nomes)+(l.length>3?' …':''):''}`,`<div class="card" style="padding:6px 14px">${l.length?l.map(linha).join(''):'<div style="padding:10px 0;font-size:12.5px;color:var(--muted)">Nada marcado — toque em <b>＋ Novo</b> aqui em cima.</div>'}</div>`)]);
+  /* AGENDA-EVT-TAR-V1 (25/09): pedido dele — "tá misturando tarefas com eventos; melhor um tópico de
+     Tarefas com subtópicos hoje, amanhã, próxima semana, próximas semanas — mesma lógica pros eventos
+     (reuniões etc.)". O lado de cada atividade é o destino dela no Google (gtDestino). O tópico de
+     Tarefas também traz o que foi criado DIRETO no Google Tarefas (GT.avulsas), com ✓ e 💾. */
+  ['evt','tar'].forEach(kind=>{
+    const ehT=kind==='tar';
+    const l=itens.filter(x=>!reunPendente(x.t)&&((gtDestino(x.t)==='tarefa')===ehT));
+    const av=ehT?agAvulsas():[];
+    const subs=AG_FAIXAS.map(f=>{ const li=l.filter(x=>agFaixa(x.t.quando)===f[0]), ai=av.filter(g=>agFaixa(gtDataDaTarefa(g))===f[0]);
+      const n=li.length+ai.length; if(!n&&!(f[0] in AG_NOVO_DIA)) return '';
+      const nomes=li.slice(0,3).map(x=>x.c.nome.split(' ')[0]).concat(ai.slice(0,Math.max(0,3-li.length)).map(g=>String(g.title||'').split(' ')[0])).join(' · ');
+      return agBloco(kind+'-'+f[0],f[1],`<b>${n}</b>${nomes?' · '+esc(nomes)+(n>3?' …':''):''}`,
+        `<div class="card" style="padding:6px 14px">${n?li.map(linha).join('')+ai.map(agAvulsaLinha).join(''):'<div style="padding:10px 0;font-size:12.5px;color:var(--muted)">Nada marcado — toque em <b>＋ Novo</b> aqui em cima.</div>'}</div>`); }).join('');
+    const tot=l.length+av.length, hj=l.filter(x=>agFaixa(x.t.quando)==='hoje').length+av.filter(g=>agFaixa(gtDataDaTarefa(g))==='hoje').length, atr=l.filter(x=>agFaixa(x.t.quando)==='atrasada').length+av.filter(g=>agFaixa(gtDataDaTarefa(g))==='atrasada').length;
+    pecas.push([kind, agBloco(kind,ehT?'☑️ Tarefas':'📅 Eventos',`<b>${tot}</b>${hj?' · '+hj+' hoje':''}${atr?' · <span style="color:var(--verm,#dc2626)">'+atr+' atrasada'+(atr>1?'s':'')+'</span>':''} · ${ehT?'afazeres (Google Tarefas)':'compromissos e reuniões (Agenda)'}`,`<div class="ag-subs">${subs}</div>`)]);
   });
-  { const pa=agAnivBloco(); if(pa){ const ih=pecas.findIndex(p=>p[0]==='hoje'); const is=pecas.findIndex(p=>p[0]==='solic'); pecas.splice(ih>=0?ih+1:(is>=0?is+1:0),0,pa); } }   /* AGENDA-ANIV-V1 */
+  { const pa=agAnivBloco(); if(pa){ const ih=pecas.findIndex(p=>p[0]==='tar'); const is=pecas.findIndex(p=>p[0]==='solic'); pecas.splice(ih>=0?ih+1:(is>=0?is+1:0),0,pa); } }   /* AGENDA-ANIV-V1 */
   if(semAtiv.length) pecas.push(['semativ', agBloco('semativ','💤 Sem próxima atividade',`<b>${semAtiv.length}</b> · negócio parado é o que mais custa`,`<div class="card" style="padding:6px 14px">${semAtiv.slice(0,40).map(linhaSem).join('')}
         ${semAtiv.length>40?`<div style="font-size:12px;color:var(--muted);padding:8px 0">…e mais ${semAtiv.length-40}. Os 40 mais recentes aparecem aqui.</div>`:''}</div>`)]);
-  const corpo=itens.length||pend.length||pecas.some(p=>p[0]==='solic')? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
+  const corpo=true? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
       Nenhuma atividade marcada ainda.<br><span style="font-size:12.5px">Abra um negócio no funil e marque a próxima — o card passa a mostrar o combinado.</span></div>`+(semAtiv.length?agOrdRender(pecas):'');
   setTimeout(()=>{ try{ soGtSync(); }catch(_){} },800);   /* SOLIC-TAREFAS-V1: ponte com o Google Tarefas (silenciosa, no máx. 1×/min) */
   $('#main').innerHTML=`<h1 class="pg">Agenda &amp; Tarefas</h1>
@@ -11589,16 +11605,37 @@ function viewAgenda(){
 }
 /* ── AGENDA-V2: seções dobráveis (nascem fechadas) + organizar, por aparelho ── */
 const AG_SEC_CHAVE='crmlp_agenda_secs_v1', AG_ORD_CHAVE='crmlp_agenda_ordem_v1';
-const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',hoje:'📌 Hoje',aniv:'🎂 Aniversariantes',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
+const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',evt:'📅 Eventos',tar:'☑️ Tarefas',hoje:'📌 Hoje',aniv:'🎂 Aniversariantes',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
 let AG_ORD={modo:false,ch:[]};
 function agSecsLer(){ try{ return JSON.parse(localStorage.getItem(AG_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function agAberta(k){ return dobraAberta(k, agSecsLer()); }
 function agToggle(k){ const st=agSecsLer(); const novo=!agAberta(k); st[k]=novo?1:0; try{ localStorage.setItem(AG_SEC_CHAVE,JSON.stringify(st)); }catch(_){}
   const bl=document.querySelector('.ini-bl[data-ag="'+k+'"]'); if(!bl){ render(); return; } bl.classList.toggle('fechado',!novo); const h=bl.querySelector('.ini-h'); if(h) h.setAttribute('aria-expanded',novo?'true':'false'); const car=bl.querySelector('.ini-car'); if(car) car.textContent=novo?'▾':'▸'; }
 function agTudo(abrir){ const st=agSecsLer(); document.querySelectorAll('.ini-bl[data-ag]').forEach(bl=>{ st[bl.dataset.ag]=abrir?1:0; }); try{ localStorage.setItem(AG_SEC_CHAVE,JSON.stringify(st)); }catch(_){} render(); }
-const AG_NOVO_DIA={hoje:0,amanha:1,futuro:7};   /* AGENDA-NOVA-V2: o ＋ Novo da seção já nasce no dia dela */
+const AG_NOVO_DIA={hoje:0,amanha:1,futuro:7,semana:7,semanas:14};   /* AGENDA-NOVA-V2: o ＋ Novo da seção já nasce no dia dela */
+const AG_FAIXAS=[['atrasada','⚠️ Atrasadas'],['hoje','📌 Hoje'],['amanha','→ Amanhã'],['semana','🗓️ Próxima semana'],['semanas','📆 Próximas semanas'],['sem-data','• Sem data']];
+function agFaixa(iso){ if(!iso) return 'sem-data'; const h=hojeISO(); if(iso<h) return 'atrasada'; if(iso===h) return 'hoje'; if(iso===isoAddDias(h,1)) return 'amanha'; return iso<=isoAddDias(h,7)?'semana':'semanas'; }
+/* tarefas criadas DIRETO no Google Tarefas (sem #crmlp-): o pull guarda em GT.avulsas */
+function agAvulsas(){ return (GT.avulsas||[]).filter(g=>g&&g.status!=='completed'&&!g.deleted); }
+function agAvulsaLinha(g){ const d=gtDataDaTarefa(g), id=esc(jsq(g.id));
+  return `<div class="tarlin"><span title="Tarefa do Google">☑️</span>
+    <span class="tt"><b>${esc(g.title||'(sem título)')}</b> <span class="gsync-b ok" title="Criada direto no Google Tarefas — concluir ou mudar o dia aqui reflete lá">só no Google</span>
+      ${g.notes?`<div style="font-size:11px;color:var(--muted);white-space:pre-line">${esc(String(g.notes).slice(0,140))}</div>`:''}</span>
+    <span class="qd" style="background:transparent;padding:0">${d?esc(d===hojeISO()?'hoje':dataBR(d)):'sem data'}</span>
+    <span class="ac ag-ac"><span class="ag-grp"><label class="ag-data" title="Mudar o dia — depois toque em 💾 Salvar"><span>📅</span><input type="date" value="${esc(d)}" data-orig="${esc(d)}" oninput="agDataMexeu(this)" onchange="agDataMexeu(this)"></label>
+      <button class="btn btn-s btn-mini ag-salvar" onclick="gtAvulsaData(this.closest('.tarlin'),'${id}')">💾 Salvar</button></span>
+      <button class="btn btn-p btn-mini" onclick="gtAvulsaConcluir('${id}')" title="Concluir no Google Tarefas">✓ feita</button></span></div>`; }
+async function gtAvulsaConcluir(id){ const g=(GT.avulsas||[]).find(x=>x.id===id); if(!g) return;
+  try{ await gtApi('PATCH','/lists/'+GT_LISTA+'/tasks/'+encodeURIComponent(id),{status:'completed'}); g.status='completed'; toast('Concluída no Google Tarefas: '+(g.title||''),true); render(); }
+  catch(e){ toast('Não consegui concluir no Google: '+(e&&e.message||e),false); } }
+async function gtAvulsaData(lin,id){ const inp=lin&&lin.querySelector('.ag-data input'); const iso=inp&&inp.value; const g=(GT.avulsas||[]).find(x=>x.id===id); if(!g) return;
+  if(!iso||!/^\d{4}-\d{2}-\d{2}$/.test(iso)||iso<'2000-01-01'){ toast('Escolhe um dia válido',false); return; }
+  try{ const r=await gtApi('PATCH','/lists/'+GT_LISTA+'/tasks/'+encodeURIComponent(id),{due:iso+'T12:00:00.000Z'}); g.due=(r&&r.due)||iso+'T12:00:00.000Z'; toast('Remarcada no Google Tarefas: '+dataBR(iso),true); render(); }
+  catch(e){ toast('Não consegui mudar no Google: '+(e&&e.message||e),false); } }
+window.gtAvulsaConcluir=gtAvulsaConcluir; window.gtAvulsaData=gtAvulsaData;
 function agBloco(k,titulo,resumo,corpo){ const ab=agAberta(k);
-  const nv=(k in AG_NOVO_DIA)?`<span class="btn btn-p btn-mini ag-novo" role="button" tabindex="0" onclick="event.stopPropagation();agNovaAtividade('',isoAddDias(hojeISO(),${AG_NOVO_DIA[k]}),'＋ Novo · ${esc(String(titulo).replace(/<[^>]+>/g,'').replace(/^\W+/,''))}')" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();this.click()}" title="Nova atividade já no dia desta seção">＋ Novo</span>`:'';
+  const kn=String(k).replace(/^(evt|tar)-/,'');
+  const nv=(kn in AG_NOVO_DIA)?`<span class="btn btn-p btn-mini ag-novo" role="button" tabindex="0" onclick="event.stopPropagation();agNovaAtividade('',isoAddDias(hojeISO(),${AG_NOVO_DIA[kn]}),'＋ Novo · ${esc(String(titulo).replace(/<[^>]+>/g,'').replace(/^\W+/,''))}')" onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();this.click()}" title="Nova atividade já no dia desta seção">＋ Novo</span>`:'';
   return `<div class="ini-bl${ab?'':' fechado'}" data-ag="${esc(k)}"><button class="ini-h" onclick="agToggle('${esc(jsq(k))}')" aria-expanded="${ab?'true':'false'}"><span class="ini-car">${ab?'▾':'▸'}</span><span class="ini-t">${titulo}</span>${nv}<span class="ini-res">${resumo}</span></button><div class="ini-b">${corpo}</div></div>`; }
 function agOrdLer(){ try{ const o=JSON.parse(localStorage.getItem(AG_ORD_CHAVE)||'{}')||{}; return {ordem:Array.isArray(o.ordem)?o.ordem.map(String):[], ocultos:Array.isArray(o.ocultos)?o.ocultos.map(String):[]}; }catch(_){ return {ordem:[],ocultos:[]}; } }
 function agOrdGravar(o){ try{ localStorage.setItem(AG_ORD_CHAVE,JSON.stringify(o)); }catch(_){} }
@@ -19121,6 +19158,14 @@ function lpSelfCheck(){
         &&String(agNovaAtividade).includes('tn-hora')&&String(agNovaAtividade).includes('tn-dur')&&String(agNovaAtividade).includes('tn-pessoa')
         &&!String(agDataHtml).includes('onchange="tarSetData')&&String(agSalvarData).includes('tarSetData')&&String(viewAgenda).includes('agSalvarHtml')
         &&par.indexOf("'evento'")<par.indexOf("'tarefa'")&&row.indexOf("'evento'")<row.indexOf("'tarefa'")&&!row.includes('ag-glbl'); })());
+    ok('AGENDA-EVT-TAR-V1: Agenda separa 📅 Eventos e ☑️ Tarefas, cada um com Hoje/Amanhã/Próxima semana/Próximas semanas (+ ＋ Novo) e as tarefas só do Google', (()=>{ const _c=S.contatos, _a=GT.avulsas, _m=$('#main').innerHTML, _v=VIEW; try{ const h=hojeISO();
+      S.contatos=[{id:'ze',nome:'Zz Evt',etapa:'OI/FF',funil:'nn',interacoes:[],eventos:[],tarefas:[{id:'e1',tipo:'reuniao',tit:'R',quando:isoAddDias(h,3),hora:'10:00',feito:null},{id:'t1',tipo:'follow',tit:'T',quando:isoAddDias(h,20),destino:'tarefa',feito:null}]}];
+      GT.avulsas=[{id:'gv1',title:'Avulsa Zz',due:h+'T00:00:00.000Z',status:'needsAction'}];
+      VIEW='agenda'; viewAgenda(); const m=document.getElementById('main');
+      const ev=m.querySelector('.ini-bl[data-ag="evt-semana"]'), tr=m.querySelector('.ini-bl[data-ag="tar-semanas"]'), av=m.querySelector('.ini-bl[data-ag="tar-hoje"]');
+      return !!m.querySelector('.ini-bl[data-ag="evt"]')&&!!m.querySelector('.ini-bl[data-ag="tar"]')&&!!ev&&ev.textContent.includes('Zz Evt')&&!!tr&&tr.textContent.includes('Zz Evt')&&!!av&&av.textContent.includes('Avulsa Zz')
+        &&['evt-hoje','evt-amanha','tar-hoje','tar-amanha','tar-semana'].every(k=>{ const b=m.querySelector('.ini-bl[data-ag="'+k+'"]'); return b&&b.querySelector('.ag-novo'); })
+        &&agFaixa(isoAddDias(h,7))==='semana'&&agFaixa(isoAddDias(h,8))==='semanas'&&String(gsyncPuxarTarefas).includes('GT.avulsas'); } finally{ S.contatos=_c; GT.avulsas=_a; VIEW=_v; $('#main').innerHTML=_m; } })());
     ok('AGENDA-GOOGLE-2BOT-V1: linha da Agenda tem ☑️ Tarefa e 📅 Evento, acende o que vale e o clique fixa o destino', (()=>{ const c={id:'c2b',nome:'Zz'}; const h=tarGoogleParHTML(c,{id:'t1',tipo:'ligar',quando:'2026-10-01',gtaskId:'g1',destino:'tarefa'}); const h2=tarGoogleParHTML(c,{id:'t2',tipo:'ligar',quando:'2026-10-01',gcalId:'e1',destino:'evento'}); const t={}; gtDestinoAplicar(t,'evento'); return h.includes("'tarefa'")&&h.includes("'evento'")&&/btn-p btn-mini[^>]*'tarefa'/.test(h)&&/btn-p btn-mini[^>]*'evento'/.test(h2)&&gtDestino(t)==='evento'&&String(tarMandarGoogle).includes('gcalCriarEventoDaTarefa')&&String(agBloco).includes('agNovaAtividade'); })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
