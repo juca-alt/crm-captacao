@@ -16,6 +16,7 @@
 3. Ponte Google Tarefas das Solicitações: precisa da Agenda Google conectada no aparelho (mesmo escopo). Conferir na lista do Google.
 4. V2 dos cards do funil: validar "PA emitido" pelo relatório UW & Emissão (hoje o relatório é a referência no rodapé do card).
 5. Decidir o que libera pro Daniel/Victor das 8 chaves acima.
+7. **Testes de scratchpad defasados** (não são do app): `teste-ciclo`, `teste-agenda-v2`, `teste-solic`, `teste-ini-acomp`, `teste-ta-listas` foram escritos na v7.9x e falham IGUAL na v8.19 e na v8.20 (as ondas 45–55 mudaram essas telas). Reescrever ou aposentar; o portão, a auditoria e os invariantes seguem sendo o gate.
 6. Anexos: 1º upload real pede consentimento do Google (escopo Drive somado) — testar 1 print numa solicitação e conferir a pasta Histórico de Clientes / <cliente>.
 
 ---
