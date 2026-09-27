@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.28 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.29 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -396,6 +396,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .fc-r.ok{background:#eaf6f0;border-color:#9fd9b8;color:#0f7a52;font-weight:700}
   .fc-r.no{color:var(--verm);border-color:#f0c9c6}
 .fc-r.cli{background:#fff7e6;border-color:#f3d28a;color:#8a5a00;font-weight:700}   /* RES-DANIEL-V1: já é cliente */
+.vneg.vneg-pad{border:1px dashed currentColor;opacity:.85} .vneg i{font-style:normal;opacity:.7;font-size:.9em}   /* PM-PADRAO-V1 */
   .fc-pe{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;padding-bottom:8px}
   .fc-fim{text-align:center;padding:44px 16px}
   .fc-fim-ic{width:64px;height:64px;border-radius:50%;background:#eaf6f0;color:#0f7a52;
@@ -2278,7 +2279,19 @@ function brlCurto(v){ v=Number(v||0); return 'R$ '+v.toLocaleString('pt-BR',{max
    nova no banco.
    ══════════════════════════════════════════════════════════════════ */
 const PA_MESES=12;
-function pmDe(c){ const n=Number(c&&c.pm); return isFinite(n)&&n>0? n : 0; }
+/* PM-PADRAO-V1 (27/09): palavra dele, print do Negócios na Base cheio de "R$ definir prêmio": "coloca como regra pra
+   preencher valor de prêmio, no caso da negociação da oportunidade minha, 250/mês — o menor valor base da Prudential,
+   salvo exceções. A partir de TA/RCP já pode atribuir valor." Regra de LEITURA: negócio ABERTO sem prêmio informado vale
+   PM_PADRAO em tudo que lê pmDe (card, PA, ponderado, % passam, ficha); nada é gravado, e informar o valor substitui.
+   Encerrado (ganho/perdido) não ganha padrão — ali o valor tem que ser o real. Só na base dele (chave pm-padrao). */
+const PM_PADRAO=250;
+function pmInformado(c){ const n=Number(c&&c.pm); return isFinite(n)&&n>0? n : 0; }
+const PM_PADRAO_DESDE='TA';   /* "a partir de TA/RCP já pode atribuir valor": SitPlan (antes do TA) ainda não vale */
+function pmPadraoVale(c){ if(!c||pmInformado(c)||!c.etapa||ETAPAS_ENCERR.includes(c.etapa)||ETAPAS_BC_ENCERR.includes(c.etapa)||!novoOn('pm-padrao')) return false;
+  const L=ETAPAS_FLUXO.includes(c.etapa)?ETAPAS_FLUXO:(ETAPAS_BC_FLUXO.includes(c.etapa)?ETAPAS_BC_FLUXO:null);
+  if(L){ const ta=L.indexOf(PM_PADRAO_DESDE); if(ta>=0&&L.indexOf(c.etapa)<ta) return false; }
+  return true; }
+function pmDe(c){ const n=pmInformado(c); return n? n : (pmPadraoVale(c)? PM_PADRAO : 0); }
 function paDe(c){ return pmDe(c)*PA_MESES; }
 function somaPM(lista){ return (lista||[]).reduce((t,c)=>t+pmDe(c),0); }
 function somaPA(lista){ return somaPM(lista)*PA_MESES; }
@@ -2289,7 +2302,8 @@ function parsePM(txt){
 }
 function valorTag(c){
   const pm=pmDe(c); if(!pm) return '';
-  return `<span class="vneg" title="Prêmio mensal × ${PA_MESES} = prêmio anual (PA)">${brlCurto(pm)}/mês · <b>PA ${brlCurto(paDe(c))}</b></span>`;
+  const pad=pmPadraoVale(c);   /* PM-PADRAO-V1: o padrão aparece marcado e continua clicável pra informar o negociado */
+  return `<span class="vneg${pad?' vneg-pad':''}"${pad?` onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" style="cursor:pointer"`:''} title="${pad?'Prêmio padrão (mínimo base da Prudential, R$ 250/mês) — toque pra informar o negociado':'Prêmio mensal × '+PA_MESES+' = prêmio anual (PA)'}">${brlCurto(pm)}/mês · <b>PA ${brlCurto(paDe(c))}</b>${pad?' · <i>padrão</i>':''}</span>`;
 }
 function estrelasHtml(n){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="${i<=n?'':'off'}">★</span>`; return `<span class="estrelas">${h}</span>`; }
 /* ── ANCE: estrelas derivadas dos critérios (fallback: estrelas manuais antigas) ── */
@@ -5785,7 +5799,7 @@ function renderDrawer(){
         ${(()=>{ const t=negTitulo(c); return (t&&!String(c.titulo||'').trim())?`<div style="font-size:11.5px;color:var(--muted);margin:-4px 0 8px">Vindo da simulação ativada: <b>${esc(t)}</b>. Escreva acima para usar outro título.</div>`:''; })()}
         <div class="linha-form" style="align-items:center">
           <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Prêmio mensal R$</span>
-          <input id="drwPM" type="text" inputmode="decimal" placeholder="600" value="${pmDe(c)? String(pmDe(c)).replace('.',','):''}"
+          <input id="drwPM" type="text" inputmode="decimal" placeholder="${pmPadraoVale(c)?'250 · padrão (mínimo Prudential)':'600'}" value="${pmInformado(c)? String(pmInformado(c)).replace('.',','):''}"
                  style="flex:0 0 120px;min-width:100px" oninput="drwPMPreview()" onblur="drwSalvarPM(true)" onkeydown="if(event.key==='Enter')drwSalvarPM()">
           <button class="btn btn-p btn-mini" onclick="drwSalvarPM()">Salvar</button>
           ${pmDe(c)? `<button class="btn btn-ghost btn-mini" onclick="drwLimparPM()">Limpar</button>`:''}
@@ -5982,7 +5996,7 @@ function drwSalvarPM(auto){
   const c=ct(), el=$('#drwPM'); if(!c||!el) return;
   const pm=parsePM(el.value);
   if(String(el.value).trim() && !pm){ toast('Valor inválido — use só números (ex.: 600 ou 1.200,50)'); return; }
-  if(auto && pm===pmDe(c)) return;
+  if(auto && pm===pmInformado(c)) return;   /* PM-PADRAO-V1: compara com o INFORMADO, senão o padrão nunca daria pra sobrescrever */
   c.pm = pm || null;                       // salvar() carimba o _upd do sync sozinho
   c.premio_mes = c.pm;                     // campos canônicos (regra_premio): espelham o pm
   if(c.pm) c.premio_total = c.premio_total_manual? c.premio_total : Math.round(c.pm*PA_MESES*100)/100;
@@ -15881,6 +15895,7 @@ const MODS={
    pede nasce. */
 const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
+  'pm-padrao':    {o:'Negócio aberto sem prêmio informado vale R$ 250/mês por padrão (mínimo base da Prudential) nos cards, somas e PA — desde TA/RCP; informar o valor na ficha substitui', desde:'2026-09-27'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
   /* 'solic-v2' — nasceu aqui em 17/09 e no MESMO DIA foi pra MODS com def:false, ligado pro Victor. Palavra dele: "ajusta já essa solicitação pro Victor poder acompanhar". */
@@ -20476,6 +20491,12 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
               return p.records.length===1&&p.records[0].proposta==='000000001E'&&p.records[0].apolice==='000000002'&&p.records[0].segurado==='FULANO DE TAL'&&p.records[0].afyc_projetado===2360.41; })()
        && (()=>{ const l=exDedupeProposta([{proposta:'P1',apolice:null,segurado:'x'},{proposta:'P1',apolice:'A1'},{apolice:'A2'},{proposta:'P2'}]); return l.length===3&&l.some(r=>r.proposta==='P1'&&r.apolice==='A1')&&!l.some(r=>r.proposta==='P1'&&!r.apolice); })()
        && /emRisco=ativos\.filter\(r=>r\.status!==AT_STATUS\.SUMIU\)/.test(String(viewLpAtrasos)) && /Total em atraso',emRisco\.length/.test(String(viewLpAtrasos)));
+    ok('PM-PADRAO-V1: negócio aberto sem prêmio vale R$ 250/mês (só na base dele); informado substitui; encerrado não recebe padrão; card marca "padrão" e continua clicável; ficha compara com o informado',
+       (()=>{ const _p=PERFIL; try{ PERFIL=null; const ab=ETAPAS_FLUXO.includes('TA')?'TA':ETAPAS_FLUXO[1], antes=ETAPAS_FLUXO[0], enc=(ETAPAS_ENCERR&&ETAPAS_ENCERR[0])||'Ganho';
+              const a={id:'pmp1',nome:'Fulano Padrão',funil:'nn',etapa:ab,pm:null}, b={id:'pmp2',nome:'Fulano Informado',funil:'nn',etapa:ab,pm:600}, e={id:'pmp3',nome:'Fulano Encerrado',funil:'nn',etapa:enc,pm:null};
+              const sp={id:'pmp0',nome:'Fulano SitPlan',funil:'nn',etapa:antes,pm:null}; const okAdm=pmDe(a)===250&&pmDe(b)===600&&pmDe(e)===0&&(antes===ab||pmDe(sp)===0)&&pmPadraoVale(a)&&!pmPadraoVale(b)&&paDe(a)===250*PA_MESES&&/padrão/.test(valorTag(a))&&/abrirContatoPM/.test(valorTag(a))&&!/padrão/.test(valorTag(b));
+              PERFIL={papel:'lp',modulos:{},email:'x@x'}; const okLp=pmDe(a)===0&&valorTag(a)==='';
+              return okAdm&&okLp&&!!NOVO_SO_MEU['pm-padrao']&&/pm===pmInformado\(c\)/.test(String(drwSalvarPM)); } finally{ PERFIL=_p; } })());
     ok('BN-AGENDA-V1: ficha do lead tem o 📅 (pra todo mundo); com contato no funil vira atividade dele, sem contato vai direto pra Agenda Google; fica no hist como agenda e vira chip',
        typeof bnAgendar==='function' && typeof bnAgendarConfirmar==='function' && /bnAgendar\(/.test(String(bnEditorHtml)) && !/novoOn\('bn-agenda'\)/.test(String(bnEditorHtml)) && /bnAgendaUltima\(c\)/.test(String(bnEditorHtml))
        && /tarCriar\(f\.id/.test(String(bnAgendarConfirmar)) && /gcalModalEvento\(\{novo:true/.test(String(bnAgendarConfirmar)) && /tipo:'agenda'/.test(String(bnAgendarConfirmar))

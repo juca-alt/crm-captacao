@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 25/09/2026 — v8.20 no ar (main = Pages, conferido pelo conteúdo servido) · 56ª onda: 📅 na ficha do lead (BN-AGENDA-V1), pra todo mundo
+## 🟢 RETOMAR AQUI — 27/09/2026 — v8.29 no ar (main = Pages, conferido pelo conteúdo servido) · 57ª onda: prêmio padrão R$ 250/mês desde TA (PM-PADRAO-V1, só na base dele)
 
 **Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil` · `solic-kanban` · `solic-negocio` · `anexos-drive`.
 
@@ -18,6 +18,28 @@
 5. Decidir o que libera pro Daniel/Victor das 8 chaves acima.
 7. **Testes de scratchpad defasados** (não são do app): `teste-ciclo`, `teste-agenda-v2`, `teste-solic`, `teste-ini-acomp`, `teste-ta-listas` foram escritos na v7.9x e falham IGUAL na v8.19 e na v8.20 (as ondas 45–55 mudaram essas telas). Reescrever ou aposentar; o portão, a auditoria e os invariantes seguem sendo o gate.
 6. Anexos: 1º upload real pede consentimento do Google (escopo Drive somado) — testar 1 print numa solicitação e conferir a pasta Histórico de Clientes / <cliente>.
+
+---
+
+## 27/09/2026 (57ª onda) — PM-PADRAO-V1: negócio aberto sem prêmio vale R$ 250/mês por padrão, desde TA/RCP — só na base dele (v8.29)
+
+Print dele do Negócios na Base no iPhone, coluna TA/RCP cheia de "R$ definir prêmio": *"coloca como regra pra preencher valor de prêmio, no caso da negociação da oportunidade minha, de 250/mês — e o menor valor base da Prudential, salvo exceções que não vêm ao caso. Ajusta isso e já atualiza tudo. A partir de TA/RC já pode atribuir valor."*
+
+### O que mudou (chave `pm-padrao`, só na base dele)
+- **`PM_PADRAO = 250`** (mínimo base da Prudential). **Regra de leitura**, não de gravação: `pmDe(c)` devolve o informado; sem informado e negócio **aberto** numa etapa **a partir de TA** (`PM_PADRAO_DESDE='TA'`; SitPlan ainda não vale), devolve 250. Nada é escrito no negócio — todos os aparelhos enxergam igual na hora, e se o valor padrão mudar um dia, muda em tudo.
+- Vale em **tudo que lê `pmDe`**: card do funil (`valorTag`), **PA** (`paDe`), **somas do estágio** (PA · ponderado · % passam), PA da ficha, consolidadas.
+- **Card**: "R$ 250/mês · PA R$ 3.000 · *padrão*", tracejado e **clicável** (abre a ficha no campo do prêmio) — o "R$ definir prêmio" só fica pro SitPlan.
+- **Ficha**: campo do prêmio vem **vazio** com placeholder "250 · padrão (mínimo Prudential)"; digitar um valor grava e substitui o padrão; apagar volta ao padrão sem gravar nada. `drwSalvarPM` compara com o **informado** (senão o padrão nunca daria pra sobrescrever).
+- **Encerrado** (ganho/perdido/cancelado) **não recebe padrão** — ali o valor tem que ser o real.
+- Daniel/Victor: sem a chave, tudo como antes ("definir prêmio").
+- Invariante `PM-PADRAO-V1`.
+
+### Prova
+- `teste-pm-padrao.mjs` **10/10** em 390 e 1280: card em TA com "250/mês · PA 3.000 · padrão" clicável, com valor informado mostra o valor, SitPlan fica em "definir prêmio", soma do estágio 250+600, Negócios na Base idem, ficha (placeholder · 600 grava · apagar volta ao padrão), Daniel sem padrão.
+- Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto.
+
+### Pra ele decidir
+- Liberar `pm-padrao` pro Daniel (o padrão de 250 é regra da negociação dele; pro Daniel talvez seja outro número — dá pra virar valor por LP).
 
 ---
 
