@@ -84,7 +84,10 @@ const LPC_FUNIS={
   nn:{label:'Novos Negócios', cor:'#8b5cf6', etapas:['SitPlan','TA','OI/FF','P/C','C2','N','FA','EMISSÃO','DELIVERY','Não','Prop. Cancelada','Apól. Cancelada']},
   bc:{label:'Base de Clientes', cor:'#0d9488', etapas:['Clientes Ativos','Pendência/Atraso','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Delivery','Venda ganha','Venda perdida']}
 };
-function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }
+function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }   /* só p/ rótulo/cor legados — NUNCA pra gravar (v2.0) */
+/* v2.0: o funil GRAVADO é preservado como veio (vg, prud, mfo, *-bc, prospects…). Antes o normalizador forçava 'nn' e editar
+   um contato de VG pela extensão o jogava pra Novos Negócios. Só vazio vira 'nn'; 'bn' (Estoque) nunca passa pelo card do funil. */
+function lpcFunilGravar(c){ const f=c&&typeof c.funil==='string'&&c.funil.trim(); return f||'nn'; }
 
 // ===== SHAPE CANÔNICO DO CONTATO LP — port fiel de salvarNovoContato
 // (vendas.html L1593-1606, v0.9.4). O contato tem que NASCER completo aqui:
@@ -112,8 +115,8 @@ function lpcNormContato(c){
   // espelho canônico do prêmio (regra_premio do normContato, v0.9.1): `pm` é o
   // campo do funil; `premio_mes` é o canônico da ficha. Só ESPELHA, nunca inventa.
   if(c.pm!=null&&c.premio_mes==null){ const n=Number(c.pm); if(isFinite(n)&&n>0) c.premio_mes=n; }
-  c.funil=lpcFunilDe(c);                     // ausente/estranho ⇒ 'nn', igual ao app
-  if(!c.etapa) c.etapa=LPC_FUNIS[c.funil].etapas[0];  // nn → SitPlan, bc → Clientes Ativos
+  c.funil=lpcFunilGravar(c);                 // v2.0: preserva vg/prud/mfo/prospects; ausente ⇒ 'nn'
+  if(!c.etapa&&LPC_FUNIS[c.funil]) c.etapa=LPC_FUNIS[c.funil].etapas[0];  // nn → SitPlan, bc → Clientes Ativos
   if(!c.criadoEm) c.criadoEm=lpcHojeISO();   // data LOCAL (hojeISO do app), não UTC
   return c;
 }
@@ -148,3 +151,47 @@ function nameStrongMatch(chatName,candName){
   const fl=firstLastKey(candName||'');
   return !!(fl&&fl.split(' ').every(t=>set.has(t)));
 }
+
+
+// ===== EXTENSÃO 2.0 (28/09/2026) — Visão LP no WhatsApp com o MESMO cadastro do app =====
+// Funil & Etapas (app_settings.lp_funil_cfg), status por etapa, motivos de perda (status da etapa de
+// encerramento), listas de TA (lp_listas_ta + em uso) e registros no histórico no formato do vendas.html
+// (interacoes: {id,k,l,dia,ts,por}). Tudo PURO aqui (roda no SW e no painel) — espelho das regras:
+//   etCfgKey/etStatusOpts/etStatusDe/logEtapa/etSetStatusDe/taListaDefinir/jornadaAddNota do app.
+function lpcUid(){ return 'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function lpcCfgKey(c){ const f=c&&c.funil; return (!f||f==='nn')?'lp':f; }
+function lpcEtapasDe(cfg,c){ const arr=(cfg&&cfg[lpcCfgKey(c)])||null;
+  if(Array.isArray(arr)&&arr.length) return arr.filter(e=>e&&e.id).map(e=>({id:e.id,label:String(e.label||e.id).trim()||e.id,cor:e.cor||'cinza',enc:!!e.enc,status:Array.isArray(e.status)?e.status.map(x=>String(x||'').trim()).filter(Boolean):[]}));
+  const f=LPC_FUNIS[lpcFunilDe(c)]; return f.etapas.map((id,i)=>({id,label:id,cor:'cinza',enc:/^(N[aã]o|Prop\. Cancelada|Ap[oó]l\. Cancelada|Venda perdida)$/.test(id),status:[]})); }
+function lpcEtapaDe(cfg,c){ return lpcEtapasDe(cfg,c).find(e=>e.id===(c&&c.etapa))||null; }
+function lpcStatusOpts(cfg,c){ const e=lpcEtapaDe(cfg,c); return e?e.status:[]; }
+function lpcStatusDe(cfg,c){ const s=c&&String(c.status||'').trim(); if(!s) return ''; if(c.status_etapa&&c.status_etapa!==c.etapa) return ''; return lpcStatusOpts(cfg,c).includes(s)?s:''; }
+function lpcEhEnc(cfg,c){ const e=lpcEtapaDe(cfg,c); return !!(e&&e.enc); }
+function lpcInteracao(k,l,por,extra){ return Object.assign({id:lpcUid(),k,l,dia:lpcHojeISO(),ts:new Date().toISOString(),por:por||''},extra||{}); }
+/* Aplica UMA ação a uma cópia de `dados` e devolve {dados, mudou}. O SW chama sobre a versão FRESCA do banco
+   (relida na hora), então nada que o app mudou nesse meio-tempo é desfeito. Ações:
+   {tipo:'etapa',para} · {tipo:'status',v} · {tipo:'listas',para:[…]} · {tipo:'nota',texto} · {tipo:'campos',set:{telefone,notas}} */
+function lpcAplicar(cfg,dados,acao,por){
+  const c=JSON.parse(JSON.stringify(dados||{})); const bn=c.funil==='bn'; if(!Array.isArray(c.interacoes)) c.interacoes=[];
+  const t=acao&&acao.tipo;
+  if(t==='etapa'){ if(bn) return {dados,mudou:false}; const para=String(acao.para||''); if(!para||para===c.etapa||!lpcEtapasDe(cfg,c).some(e=>e.id===para)) return {dados,mudou:false};
+    const de=c.etapa; c.etapa=para; delete c.status; delete c.status_etapa;           /* logEtapa: mudar etapa limpa o status */
+    c.interacoes.push(lpcInteracao('etapa',`Etapa: ${de} → ${para}`,por,{de,para})); return {dados:c,mudou:true}; }
+  if(t==='status'){ if(bn) return {dados,mudou:false}; const v=String(acao.v||'').trim(); if(v&&!lpcStatusOpts(cfg,c).includes(v)) return {dados,mudou:false};
+    const antes=lpcStatusDe(cfg,c)||(c.status_etapa===c.etapa?String(c.status||''):''); if(antes===v) return {dados,mudou:false};
+    const rot=lpcEhEnc(cfg,c)?'Motivo da perda':'Status';
+    if(v){ c.status=v; c.status_etapa=c.etapa; } else { delete c.status; delete c.status_etapa; }
+    c.interacoes.push(lpcInteracao('etstatus',v?`${rot}: ${v}`:`${rot} removido${antes?' ('+antes+')':''}`,por)); return {dados:c,mudou:true}; }
+  if(t==='listas'){ const antes=Array.isArray(c.listas)?c.listas.slice():[]; const dep=[...new Set((acao.para||[]).map(x=>String(x||'').trim()).filter(Boolean))];
+    if(antes.length===dep.length&&antes.every(x=>dep.includes(x))) return {dados,mudou:false}; c.listas=dep;
+    if(!bn) c.interacoes.push(lpcInteracao('lista',`Lista TA: ${antes.join(', ')||'—'} → ${dep.join(', ')||'—'}`,por,{de:antes,para:dep})); return {dados:c,mudou:true}; }
+  if(t==='nota'){ const txt=String(acao.texto||'').trim(); if(!txt) return {dados,mudou:false};
+    if(bn){ c.notas=(c.notas?String(c.notas)+'\n':'')+lpcHojeISO().split('-').reverse().join('/')+' · '+txt; return {dados:c,mudou:true}; }   /* Estoque não tem histórico: vai pras notas */
+    c.interacoes.push(lpcInteracao('nota',txt,por,{via:'whatsapp'})); return {dados:c,mudou:true}; }
+  if(t==='campos'){ const set=acao.set||{}; let m=false; ['telefone','notas'].forEach(k=>{ if(k in set){ const v=set[k]==null?'':String(set[k]); if(String(c[k]==null?'':c[k])!==v){ c[k]=v||(k==='telefone'?null:''); m=true; } } }); return {dados:c,mudou:m}; }
+  return {dados,mudou:false};
+}
+function lpcListasCatalogo(oficiais,rows){ const set=new Set((oficiais||[]).map(x=>String(x||'').trim()).filter(Boolean));
+  (rows||[]).forEach(r=>{ const l=r&&r.dados&&r.dados.listas; if(Array.isArray(l)) l.forEach(n=>{ n=String(n||'').trim(); if(n) set.add(n); }); });
+  return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
+function lpcUltimos(c,n){ return (Array.isArray(c&&c.interacoes)?c.interacoes:[]).slice().sort((a,b)=>String(b.ts||b.dia||'').localeCompare(String(a.ts||a.dia||''))).slice(0,n||5); }

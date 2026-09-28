@@ -71,6 +71,7 @@ let CHAT=null;                      // conversa aberta (wa-dom)
 let LEAD=null;                      // lead em exibição
 let OPEN=false;
 let BUSY=false;
+let LPCFG={funil:null,listas:[]};   // v2.0: Funil & Etapas + listas de TA do app (lpcfg.get)
 let VIEW='captacao';                // 'captacao' (leads) | 'lp' (Carteira) — persiste no chrome.storage
 function saveView(){ try{ chrome.storage.local.set({wa_crm_view:VIEW}); }catch(_){} }
 
@@ -82,7 +83,7 @@ function toast(msg){
 
 // ---------- blocos de UI ----------
 function headerHTML(){
-  return `<div class="ph"><b>Captação · CRM</b><span class="sub">${esc(EXT_VERSION)}</span>
+  return `<div class="ph"><b>${VIEW==='lp'?'Visão LP · CRM':'Captação · CRM'}</b><span class="sub">${esc(EXT_VERSION)}</span>
     ${AUTH.logged?`<button class="btn ghost" id="wa-logout" style="color:#cbd5e1">sair</button>`:''}
     <button class="x" id="wa-close" title="Fechar">×</button></div>`;
 }
@@ -436,49 +437,95 @@ function renderLpPicker(list){
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpCliente(list[+el.dataset.i]); });
 }
 
-// ---------- Visão LP · contato do FUNIL (lp_contatos, sync do vendas.html) ----------
+// ---------- Visão LP · contato do FUNIL — v2.0 (28/09/2026) ----------
+// O MESMO cadastro do app (Funil & Etapas, status por etapa, motivos de perda, listas de TA). Cada toque vira uma
+// AÇÃO que o SW aplica sobre a versão fresca do banco (lpc.patch) — nunca uma cópia velha inteira por cima.
+const LPC_COR={cinza:'#5b6770',azul:'#2563eb',amarelo:'#d97706',roxo:'#7c3aed',verde:'#16a34a',verm:'#dc2626'};
+async function loadLpCfg(force){ const r=await send('lpcfg.get',{force:!!force}); if(r&&r.ok&&r.data) LPCFG=r.data; return r; }
+async function lpcAcao(row,acoes,okMsg,cartHit){
+  if(BUSY) return; BUSY=true; panel.querySelectorAll('.lp2 button,.lp2 select').forEach(b=>b.disabled=true);
+  const r=await send('lpc.patch',{id:row.id,acoes}); BUSY=false;
+  if(!handleAuthFail(r)) return;
+  if(r.ok){ if(r.data&&r.data.semMudanca){ toast('Nada mudou.'); renderLpContato(r.data,cartHit); return; } await loadLpCfg(); renderLpContato(r.data,cartHit); toast(okMsg||'✓ Salvo no CRM'); }
+  else { renderLpContato(row,cartHit); toast('Erro: '+(r.error||'falha ao salvar')); }
+}
 function renderLpContato(row,cartHit){
-  const c=row.dados||{};
-  const fk=lpcFunilDe(c), fun=LPC_FUNIS[fk];
-  renderShell(`
+  const c=row.dados||{}, cfg=LPCFG.funil, etapas=lpcEtapasDe(cfg,c), atual=lpcEtapaDe(cfg,c);
+  const fluxo=etapas.filter(e=>!e.enc), enc=etapas.filter(e=>e.enc), ehEnc=!!(atual&&atual.enc);
+  const st=lpcStatusDe(cfg,c), opts=lpcStatusOpts(cfg,c), orf=(!st&&c.status&&(!c.status_etapa||c.status_etapa===c.etapa))?String(c.status):'';
+  const listas=Array.isArray(c.listas)?c.listas:[], cat=[...listas,...LPCFG.listas.filter(n=>!listas.includes(n))];
+  const funNome={nn:'Novos Negócios',bc:'Base de Clientes',vg:'Vida em Grupo',prud:'Prud. Demais',mfo:'MFO','vg-bc':'Vida em Grupo · Base','prud-bc':'Prud. Demais · Base','mfo-bc':'MFO · Base'}[c.funil||'nn']||String(c.funil||'Funil');
+  const ult=lpcUltimos(c,5);
+  renderShell(`<div class="lp2">
     <div class="card">
       <h2>${esc(c.nome||'—')}</h2>
-      <span class="badge" style="background:${fun.cor}"><span class="dot"></span>${esc(fun.label)}</span>
-      <div class="muted">${esc(c.telefone||'sem telefone')}${c.lp?' · LP: '+esc(c.lp):''}${c.taStatus&&c.taStatus!=='—'?' · TA: '+esc(c.taStatus):''}</div>
+      <span class="badge" style="background:${LPC_COR[(atual&&atual.cor)||'cinza']||'#5b6770'}"><span class="dot"></span>${esc(funNome)} · ${esc((atual&&atual.label)||c.etapa||'—')}</span>
+      <div class="muted">${esc(c.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div>
       ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
     </div>
     <div class="card">
-      <div class="field"><label>Etapa (${esc(fun.label)})</label>
-        <select id="wa-lpc-etapa">${fun.etapas.map(e=>`<option ${e===c.etapa?'selected':''}>${esc(e)}</option>`).join('')}</select></div>
-      ${fieldHTML('wa-lpc-tel','Telefone',c.telefone)}
-      <div class="field"><label>Notas</label><textarea id="wa-lpc-notas">${esc(c.notas||'')}</textarea></div>
-      <button class="btn primary" id="wa-lpc-save">💾 Salvar na Visão LP</button>
+      <div class="sec-t">Etapa</div>
+      <div class="chips">${fluxo.map(e=>`<button class="chip${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
+      ${enc.length?`<div class="enc-l">Encerrar: ${enc.map(e=>`<button class="chip enc${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}">${esc(e.label)}</button>`).join('')}</div>`:''}
+      <div class="field" style="margin-top:8px"><label>${ehEnc?'✖ Motivo da perda':'⚑ Status nesta etapa'}</label>
+        ${opts.length?`<select id="lp2-status" class="${ehEnc&&!st?'destaque':''}">${orf?`<option value="" selected>⚠ ${esc(orf)} (saiu da lista)</option>`:''}<option value="">${ehEnc?'— escolha o motivo —':'— sem status —'}</option>${opts.map(o=>`<option ${o===st?'selected':''}>${esc(o)}</option>`).join('')}</select>`
+          :`<div class="muted">${ehEnc?'nenhum motivo cadastrado':'esta etapa não tem status'} — cadastre em Funil &amp; Etapas no CRM</div>`}</div>
+      <div class="field"><label>📋 Listas de TA</label>
+        <div class="chips">${listas.map(n=>`<span class="lchip">${esc(n)}<button class="lx" data-tira="${esc(n)}" title="Tirar desta lista">✕</button></span>`).join('')||'<span class="muted">sem lista</span>'}</div>
+        <select id="lp2-lista" style="margin-top:6px"><option value="">＋ pôr numa lista…</option>${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}${listas.length?`<optgroup label="Mover (sai das outras)">${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="mv:${esc(n)}">↪ só em ${esc(n)}</option>`).join('')}</optgroup>`:''}<option value="__nova">＋ Nova lista…</option></select></div>
     </div>
+    <div class="card">
+      <div class="sec-t">📝 Registrar na oportunidade</div>
+      <textarea id="lp2-nota" placeholder="o que rolou nesta conversa (vai pro histórico da oportunidade)"></textarea>
+      <button class="btn primary" id="lp2-nota-ok" style="margin-top:6px">Registrar nota</button>
+      ${ult.length?`<div class="hist">${ult.map(x=>`<div class="hi"><span class="hd">${esc(String(x.dia||'').split('-').reverse().join('/'))}</span> ${esc(x.l||'')}</div>`).join('')}</div>`:''}
+    </div>
+    <details class="card"><summary class="sec-t" style="cursor:pointer">Telefone e observação fixa</summary>
+      ${fieldHTML('lp2-tel','Telefone',c.telefone)}
+      <div class="field"><label>Observação fixa (campo Notas)</label><textarea id="lp2-notas">${esc(c.notas||'')}</textarea></div>
+      <button class="btn" id="lp2-campos">💾 Salvar telefone/observação</button>
+    </details>
     ${msgCardHTML()}
-    <div class="note">Sincroniza com o funil do vendas.html (tabela lp_contatos) — o app pega as mudanças ao recarregar.</div>
-  `);
+    <div class="note">Mesmo cadastro do CRM (Funil &amp; Etapas, listas de TA). Cada toque grava na hora e fica no histórico.</div>
+  </div>`);
   wireMsgCard(c);
-  $('#wa-lpc-save').onclick=async()=>{
-    if(BUSY) return;
-    const novo=Object.assign({},c,{
-      etapa:$('#wa-lpc-etapa').value,
-      telefone:$('#wa-lpc-tel').value.trim()||null,
-      notas:$('#wa-lpc-notas').value
-    });
-    if(JSON.stringify(novo)===JSON.stringify(c)){ toast('Nada mudou.'); return; }
-    BUSY=true; $('#wa-lpc-save').disabled=true;
-    const r=await send('lpc.save',{id:row.id,dados:novo});
-    BUSY=false;
-    if(!handleAuthFail(r)) return;
-    if(r.ok){ renderLpContato(r.data,cartHit); toast('✓ Salvo na Visão LP'); }
-    else { $('#wa-lpc-save').disabled=false; toast('Erro: '+(r.error||'falha ao salvar')); }
-  };
+  panel.querySelectorAll('[data-etapa]').forEach(b=>b.onclick=()=>{ const para=b.dataset.etapa; if(para===c.etapa) return; const e=etapas.find(x=>x.id===para);
+    lpcAcao(row,[{tipo:'etapa',para}].concat(e&&e.enc?[{tipo:'listas',para:[]}]:[]),`✓ ${e?e.label:para}${e&&e.enc?' — escolha o motivo':''}`,cartHit); });
+  const ss=$('#lp2-status'); if(ss) ss.onchange=()=>lpcAcao(row,[{tipo:'status',v:ss.value}],ss.value?`✓ ${ss.value}`:'✓ Status removido',cartHit);
+  panel.querySelectorAll('[data-tira]').forEach(b=>b.onclick=()=>{ const n=b.dataset.tira; lpcAcao(row,[{tipo:'listas',para:listas.filter(x=>x!==n)}],`✓ Saiu de “${n}”`,cartHit); });
+  const sl=$('#lp2-lista'); if(sl) sl.onchange=()=>{ let v=sl.value; if(!v) return;
+    if(v==='__nova'){ const n=(window.prompt('Nome da nova lista de TA:')||'').trim(); if(!n){ sl.value=''; return; } v=n; }
+    if(v.startsWith('mv:')){ const n=v.slice(3); lpcAcao(row,[{tipo:'listas',para:[n]}],`✓ Movido pra “${n}”`,cartHit); return; }
+    lpcAcao(row,[{tipo:'listas',para:[...listas,v]}],`✓ Em “${v}”`,cartHit); };
+  $('#lp2-nota-ok').onclick=()=>{ const t=$('#lp2-nota').value.trim(); if(!t){ toast('Escreva a nota primeiro.'); return; } lpcAcao(row,[{tipo:'nota',texto:t}],'✓ Nota registrada',cartHit); };
+  $('#lp2-campos').onclick=()=>lpcAcao(row,[{tipo:'campos',set:{telefone:$('#lp2-tel').value.trim(),notas:$('#lp2-notas').value}}],'✓ Salvo',cartHit);
+  if(ehEnc&&ss&&!st) try{ ss.focus(); }catch(_){}
 }
+// Estoque (funil 'bn'): nome ainda não é negócio — card enxuto: listas de TA + nota (vai pras notas do Estoque)
+function renderLpEstoque(row){
+  const c=row.dados||{}, listas=Array.isArray(c.listas)?c.listas:[], cat=[...listas,...LPCFG.listas.filter(n=>!listas.includes(n))];
+  renderShell(`<div class="lp2">
+    <div class="card"><h2>${esc(c.nome||'—')}</h2><span class="badge" style="background:#64748b"><span class="dot"></span>📦 Estoque de Nomes</span>
+      <div class="muted">${esc(c.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div></div>
+    <div class="card"><div class="field"><label>📋 Listas de TA</label>
+      <div class="chips">${listas.map(n=>`<span class="lchip">${esc(n)}<button class="lx" data-tira="${esc(n)}">✕</button></span>`).join('')||'<span class="muted">sem lista</span>'}</div>
+      <select id="lp2-lista" style="margin-top:6px"><option value="">＋ pôr numa lista…</option>${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div>
+      <textarea id="lp2-nota" placeholder="nota (vai pras notas do nome no Estoque)"></textarea>
+      <button class="btn primary" id="lp2-nota-ok" style="margin-top:6px">Registrar nota</button></div>
+    <div class="note">Nome do <b>Estoque</b>: pra virar negócio, use "levar pro funil" no CRM (Painel TA / Estoque).</div>
+    ${msgCardHTML()}</div>`);
+  wireMsgCard(c);
+  panel.querySelectorAll('[data-tira]').forEach(b=>b.onclick=()=>{ const n=b.dataset.tira; lpcAcaoBn(row,[{tipo:'listas',para:listas.filter(x=>x!==n)}],`✓ Saiu de “${n}”`); });
+  const sl=$('#lp2-lista'); if(sl) sl.onchange=()=>{ const v=sl.value; if(v) lpcAcaoBn(row,[{tipo:'listas',para:[...listas,v]}],`✓ Em “${v}”`); };
+  $('#lp2-nota-ok').onclick=()=>{ const t=$('#lp2-nota').value.trim(); if(!t){ toast('Escreva a nota primeiro.'); return; } lpcAcaoBn(row,[{tipo:'nota',texto:t}],'✓ Nota registrada'); };
+}
+async function lpcAcaoBn(row,acoes,okMsg){ if(BUSY) return; BUSY=true; const r=await send('lpc.patch',{id:row.id,acoes}); BUSY=false;
+  if(!handleAuthFail(r)) return; if(r.ok){ renderLpEstoque(r.data); toast(okMsg); } else toast('Erro: '+(r.error||'falha ao salvar')); }
 function renderLpContatoPicker(list){
   renderShell(`<div class="note">${list.length} contatos parecidos no funil LP — escolha:</div>`+
-    list.map((r,i)=>{ const c=r.dados||{}; const fun=LPC_FUNIS[lpcFunilDe(c)];
+    list.map((r,i)=>{ const c=r.dados||{}; const e=lpcEtapaDe(LPCFG.funil,c);
       return `<div class="pick" data-i="${i}"><b>${esc(c.nome||'—')}</b><br>
-      <span class="muted">${esc(fun.label)} · ${esc(c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
+      <span class="muted">${esc((e&&e.label)||c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpContato(list[+el.dataset.i]); });
 }
 function renderLpCreate(sugestoes){
@@ -571,11 +618,12 @@ async function lookup(){
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
-  if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Carteira → criar
-    let contatos=[],carteira=[],byName=null;
-    const r=await send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||''});
+  if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Estoque → Carteira → criar
+    let contatos=[],carteira=[],byName=null,estoque=[];
+    const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||''}),loadLpCfg()]);
     if(!handleAuthFail(r)) return;
-    if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; byName=r.data.byName; }
+    if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; byName=r.data.byName; estoque=r.data.estoque||[]; }
+    if(!contatos.length&&!(byName&&byName.strong)&&estoque.length===1){ renderLpEstoque(estoque[0]); return; }
     if(contatos.length===1) renderLpContato(contatos[0],carteira[0]||null);
     else if(contatos.length>1) renderLpContatoPicker(contatos);
     else if(byName&&byName.strong){ renderLpContato(byName.strong,carteira[0]||null); toast('Casado pelo NOME do contato — confira se é a pessoa certa'); }
@@ -612,7 +660,7 @@ handle.onclick=()=>setOpen(false);
 // boot
 try{ const o=await chrome.storage.local.get('wa_crm_view'); if(o&&o.wa_crm_view==='lp') VIEW='lp'; }catch(_){}
 const st=await send('auth.status');
-if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); }
+if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); loadLpCfg(); }
 refreshFab();
 WA_DOM.observe(c=>{ CHAT=c; LEAD=null; lookup(); });
 })();
