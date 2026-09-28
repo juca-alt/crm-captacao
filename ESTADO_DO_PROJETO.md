@@ -2,7 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 27/09/2026 — v8.29 no ar (main = Pages, conferido pelo conteúdo servido) · 57ª onda: prêmio padrão R$ 250/mês desde TA (PM-PADRAO-V1, só na base dele)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.30 no ar · 58ª onda: campo Instagram na ficha do contato (INSTAGRAM-V1, só na base dele)
+
+**Chave nova só na base dele:** `instagram` (+ as 8 abaixo e `pm-padrao`).
+
+_(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês desde TA)_
 
 **Chaves que nasceram nesta rodada e seguem SÓ na base dele** (liberar = decisão dele no chat; tirar de `NOVO_SO_MEU`): `sp-listas` · `solic-tarefas` · `rec-funil` · `agenda-ativ` · `cards-funil` · `solic-kanban` · `solic-negocio` · `anexos-drive`.
 
@@ -21,7 +25,23 @@
 
 ---
 
-## 27/09/2026 (57ª onda) — PM-PADRAO-V1: negócio aberto sem prêmio vale R$ 250/mês por padrão, desde TA/RCP — só na base dele (v8.29)
+## 28/09/2026 (58ª onda) — INSTAGRAM-V1: campo Instagram no contato — só na base dele (v8.30)
+
+Backlog de Melhorias (Notion) item #4. A assistente comercial já gravava `lp_contatos.dados.instagram` (`@handle`); faltava a UI.
+
+### O que mudou (chave `instagram`, só na base dele)
+- **`normalizaInstagram(entrada)` = fonte única** do handle: aceita `@Handle`, `handle`, URL (com/sem www, barra, `?igsh=`) e espaços → grava `@handle` minúsculo; vazio **remove** a chave; fora de `[a-z0-9._]{1,30}` → erro inline "Instagram inválido" e **nada é gravado**. Acessor `pInstagram(o)`.
+- **Leitura:** `@handle` como link (`https://instagram.com/handle`, `_blank`) na linha 📞 Contato da `fichaPessoaHtml` (funil, lead e cliente).
+- **Edição:** drawer › Dados da pessoa (`pessoaSalvarDados`, propaga pros irmãos inclusive a remoção) e ficha do Estoque/Painel TA (`bnSalvarEdicao`; save recusado não fecha a ficha). Promover lead→card leva o handle.
+- **`pessoaSalvarDados` agora só grava o que MUDOU** (`put`): antes criava `email:""`, `idade:null`, `nascimento:""` em todo save.
+- **Busca global** (`lpkMatches`, topbar + ⌘K) acha pelo handle com e sem `@`.
+- 2 invariantes `INSTAGRAM-V1` no `lpSelfCheck` (provados quebrando). Portão verde nos 6 cenários.
+
+### Sobrou (pré-existente, não tocado)
+- `bnSalvarEdicao` ainda grava chaves vazias em todo save.
+- Input Recomendante do drawer sem `type="text"` (fica sem padding).
+
+ — PM-PADRAO-V1: negócio aberto sem prêmio vale R$ 250/mês por padrão, desde TA/RCP — só na base dele (v8.29)
 
 Print dele do Negócios na Base no iPhone, coluna TA/RCP cheia de "R$ definir prêmio": *"coloca como regra pra preencher valor de prêmio, no caso da negociação da oportunidade minha, de 250/mês — e o menor valor base da Prudential, salvo exceções que não vêm ao caso. Ajusta isso e já atualiza tudo. A partir de TA/RC já pode atribuir valor."*
 
