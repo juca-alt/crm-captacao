@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.47 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.48 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4030,6 +4030,17 @@ window.tarDelay = (cid,tid,dias) => {
   salvar(); render(); toast('⏳ Delay até '+dataBR(ate)+' — '+c.nome.split(' ')[0]+' entra nas listas de Delay',true);
 };
 /* DATA-NA-LINHA-V1 (21/09): "facilidade para mudar dia/data também" — o 📅 da linha é um seletor de data */
+/* AG-TIPO-INLINE-V1 (28/09): print dele na Agenda — "Rogerio tá em Ligação, mas na verdade queria Follow-up; já posso
+   corrigir aí nessa tela mesmo". O tipo vira seletor na própria linha; título que era o nome do tipo acompanha a troca. */
+function agTipoSel(c,t){ return `<select class="ag-tipo" onchange="tarSetTipo('${esc(jsq(c.id))}','${esc(jsq(t.id))}',this.value)" onclick="event.stopPropagation()" title="Trocar o tipo desta atividade">${TAR_TIPOS.map(x=>`<option value="${x[0]}"${x[0]===tarTipo(t.tipo)[0]?' selected':''}>${x[1]} ${esc(x[2])}</option>`).join('')}</select>`; }
+window.tarSetTipo = (cid,tid,k) => {
+  const c=tarContato(cid); if(!c) return; const t=tarDe(c,tid); if(!t||!k||t.tipo===k||!TAR_TIPOS.some(x=>x[0]===k)) return;
+  const antes=tarNomeTipo(t.tipo), tituloPadrao=!String(t.tit||'').trim()||String(t.tit).trim()===antes;
+  t.tipo=k; if(tituloPadrao) t.tit=tarNomeTipo(k);
+  interacoesDe(c).push({id:uid(),k:'tarefa',l:'Atividade: '+antes+' → '+tarNomeTipo(k),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
+  if(typeof gsyncMudou==='function') gsyncMudou(c,t);
+  salvar(); render(); toast(c.nome.split(' ')[0]+': agora é '+tarNomeTipo(k)+(t.gcalId||t.gtaskId?' · também no Google':''),true);
+};
 window.tarSetData = (cid,tid,iso) => {
   const c=tarContato(cid); if(!c) return; const t=tarDe(c,tid); if(!t||!iso||t.quando===iso) return;
   t.quando=iso; if(typeof gsyncMudou==='function') gsyncMudou(c,t);
@@ -4378,6 +4389,7 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .so-k .num{font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .so-kpis.so-kpis3{grid-template-columns:repeat(3,minmax(0,1fr))}   /* SO-COM-V1 */
   .rel-sup{border:1px solid var(--linha);border-radius:10px;padding:8px 10px;font-size:13px}.rel-sup.pri{border-color:var(--verde,#16a34a);background:#f0fdf4}.rel-sup-m{font-size:12.5px;color:var(--muted);margin-top:3px}   /* REL-SUPORTADOS-V1 */
+  .ag-tipo{font-size:13px;padding:2px 6px;min-height:32px;border:1px solid var(--linha);border-radius:8px;background:var(--card,#fff);margin-left:4px;vertical-align:middle}   /* AG-TIPO-INLINE-V1 */
   .so-kls{display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:12.5px}.so-kl{display:flex;gap:6px;min-width:0}.so-kl-r{flex:0 0 auto;color:var(--muted);font-weight:600}.so-kl-v{min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}   /* SO-ETAPAS-V1 */
   .so-k .sub{font-size:11px;color:var(--muted)}
   .so-k.verm{border-color:#f3c9c9;background:#fff5f5} .so-k.amar{border-color:#f3e2b0;background:#fffbeb}
@@ -11806,7 +11818,7 @@ function viewAgenda(){
     return `<div class="tarlin">
       <span title="${esc(tarNomeTipo(t.tipo))}">${tarIco(t.tipo)}</span>
       <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContato('${esc(c.id)}')">${esc(c.nome)}</b>
-        <span style="color:var(--muted)"> · ${esc(t.tit||tarNomeTipo(t.tipo))}</span>
+        ${String(t.tit||'').trim()&&String(t.tit).trim()!==tarNomeTipo(t.tipo)?`<span style="color:var(--muted)"> · ${esc(t.tit)}</span>`:''} ${agTipoSel(c,t)}
         <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${etStatusChip(c)} ${esc(telBR(c.telefone))} ${gsyncBadgeHTML(c,t)}</div></span>
       <span class="qd ${tarClasse(sit)}" style="background:transparent;padding:0">${esc(tarQuandoTxt(t))}</span>
       <span class="ac ag-ac">
@@ -19990,7 +20002,13 @@ function lpSelfCheck(){
         ok('solic: tempo em aberto conta até hoje se aberta, até o encerramento se fechou', soDiasAberta(s1)===10 && soDiasAberta(s3)===5);
         ok('solic: parada = sem andamento há '+SO_PARADA_DIAS+'d+; sem próximo passo escrito = muda', soParada(s1)===true && soParada(s2)===false && soMuda(s2)===true && soMuda(s1)===false);
         ok('solic: encerrada não é vencida nem parada nem muda', !soVencida(s3,hj) && !soParada(s3) && !soMuda(s3));
-        ok('REL-SUPORTADOS-V1: catálogo cobre os 10 tipos que o Subir relatório identifica, 4 prioritários (emitidas · pendências · atraso · aniversariantes), botão no Subir relatório e registro de importação nos pontos de aplicar', (()=>{
+        ok('AG-TIPO-INLINE-V1: tipo da atividade troca na linha da Agenda; título padrão acompanha, título escrito à mão fica', (()=>{ const bak=S.contatos, _s=window.salvar, _r=window.render, _t=window.toast; try{
+      window.salvar=()=>{}; window.render=()=>{}; window.toast=()=>{};
+      const c=normContato({id:'zzt1',nome:'Tipo Teste',funil:'nn',etapa:'TA',lp:S.activeUser}); c.tarefas=[{id:'t1',tipo:'ligar',tit:'Ligar',quando:hojeISO()},{id:'t2',tipo:'ligar',tit:'Confirmar horário',quando:hojeISO()}]; S.contatos=[c];
+      tarSetTipo('zzt1','t1','follow'); tarSetTipo('zzt1','t2','whats');
+      return c.tarefas[0].tipo==='follow'&&c.tarefas[0].tit==='Follow-up'&&c.tarefas[1].tipo==='whats'&&c.tarefas[1].tit==='Confirmar horário'&&/class="ag-tipo"/.test(agTipoSel(c,c.tarefas[0])); }
+      finally{ S.contatos=bak; window.salvar=_s; window.render=_r; window.toast=_t; } })());
+    ok('REL-SUPORTADOS-V1: catálogo cobre os 10 tipos que o Subir relatório identifica, 4 prioritários (emitidas · pendências · atraso · aniversariantes), botão no Subir relatório e registro de importação nos pontos de aplicar', (()=>{
       const ks=REL_CATALOGO.map(r=>r.k).sort().join(), tipos=Object.keys(REL_TIPOS).sort().join();
       const pri=REL_CATALOGO.filter(r=>r.pri).map(r=>r.k).join()==='emitidas,pendencias,atraso,aniversariantes';
       const log=String(exAplicarUI).includes("relLog('emitidas'")&&String(emAplicarUI).includes("relLog('pendencias'")&&String(atAplicarOficialUI).includes("relLog('atraso'")&&String(relRotear).includes("relLog('aniversariantes'");
