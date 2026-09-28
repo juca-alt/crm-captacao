@@ -42,7 +42,7 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 ---
 
 ## 28/09/2026 (65ª onda) — CARD-STATUS-LISTA-V2 (v8.37)
-Print dele: mudou o status da Camila A. pela ficha e o card não acompanhou. Palavra dele: *"deixa eu alterar status direto do card; na ordem status · lista, um ao lado do outro, pra todas as etapas mesmo após TA; se tem mais de uma lista fica o nome de uma e o +, e ao clicar abre as listas em que ele está primeiro e as demais."*
+Print dele: mudou o status de uma cliente (C. A.) pela ficha e o card não acompanhou. Palavra dele: *"deixa eu alterar status direto do card; na ordem status · lista, um ao lado do outro, pra todas as etapas mesmo após TA; se tem mais de uma lista fica o nome de uma e o +, e ao clicar abre as listas em que ele está primeiro e as demais."*
 - **Bug:** `etSetStatus` (ficha) só redesenhava a ficha → agora redesenha o quadro também.
 - Card (chave `card-ta-status`): **⚑ status | 📋 lista** lado a lado em TODA etapa aberta (encerrada fica só com o chip); toque no ⚑ muda o status, toque no 📋 abre as listas (as dele primeiro, depois as demais; mover/tirar/nova). Várias listas = "1ª lista +N".
 - Ele criou os status da TA no Funil & Etapas: "Não atende" e "Wapp" (config do banco).
