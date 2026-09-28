@@ -1,4 +1,15 @@
-# Extensão Chrome — CRM · WhatsApp (Captação + Visão LP) — v2.0.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.1.0
+
+## 2.1 (28/09/2026) — o card COMPLETO do CRM na conversa
+- **🗂 Card completo** (padrão): a MESMA ficha do negócio do CRM — etapa, status, listas, tarefas, agenda, jornada, valor,
+  recomendações… — embutida ao lado da conversa. O WhatsApp bloqueia iframe de outros sites, então o painel embute
+  `content/embed.html` (página da extensão) que embute `vendas.html?wa=1` (modo WhatsApp do app: só a ficha, tela cheia).
+  Trocar de conversa manda `{tipo:'wa-abrir',tel,nome}` por postMessage (não recarrega o CRM); o app acha o negócio pelo
+  telefone (aberto e mais recente primeiro) → Estoque → senão sugere pelo nome e oferece criar já preenchido.
+  Login: o do próprio CRM, 1 vez dentro do painel (e-mail e senha).
+- **⚡ Rápido**: o card nativo da 2.0, agora com tópicos que encolhem/estendem (escolha lembrada).
+- **A aba Captação saiu** (o código de leads segue no crm-api.js, sem entrada na tela).
+
 
 ## 2.0 (28/09/2026) — a oportunidade da Visão LP dentro da conversa
 Aba **Visão LP** do painel, com o MESMO cadastro do CRM (lê `app_settings.lp_funil_cfg` e `lp_listas_ta`):

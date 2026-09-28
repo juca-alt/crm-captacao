@@ -72,7 +72,11 @@ let LEAD=null;                      // lead em exibição
 let OPEN=false;
 let BUSY=false;
 let LPCFG={funil:null,listas:[]};   // v2.0: Funil & Etapas + listas de TA do app (lpcfg.get)
-let VIEW='captacao';                // 'captacao' (leads) | 'lp' (Carteira) — persiste no chrome.storage
+let VIEW='lp';                      // 2.1: Captação saiu (palavra dele: "não faço mais nada de Captação")
+let MODO='completo';                // 'completo' (ficha do CRM embutida) | 'rapido' (card nativo 2.0)
+let FRAME=null;                     // iframe persistente do card completo (recriar = recarregar o CRM)
+let DOB={};                         // tópicos do card rápido: aberto/fechado lembrado
+                // 'captacao' (leads) | 'lp' (Carteira) — persiste no chrome.storage
 function saveView(){ try{ chrome.storage.local.set({wa_crm_view:VIEW}); }catch(_){} }
 
 function toast(msg){
@@ -83,7 +87,7 @@ function toast(msg){
 
 // ---------- blocos de UI ----------
 function headerHTML(){
-  return `<div class="ph"><b>${VIEW==='lp'?'Visão LP · CRM':'Captação · CRM'}</b><span class="sub">${esc(EXT_VERSION)}</span>
+  return `<div class="ph"><b>Visão LP · CRM</b><span class="sub">${esc(EXT_VERSION)}</span>
     ${AUTH.logged?`<button class="btn ghost" id="wa-logout" style="color:#cbd5e1">sair</button>`:''}
     <button class="x" id="wa-close" title="Fechar">×</button></div>`;
 }
@@ -92,15 +96,15 @@ function searchHTML(){
   return `<div class="search"><input id="wa-q" placeholder="${ph}">
     <button class="btn" id="wa-q-go" style="width:auto">🔍</button></div>`;
 }
-function tabsHTML(){
+function tabsHTML(){   /* 2.1: as abas agora são o MODO do card (a aba Captação saiu) */
   return `<div class="tabs">
-    <button class="tab ${VIEW==='captacao'?'on':''}" data-view="captacao">Captação</button>
-    <button class="tab lp ${VIEW==='lp'?'on':''}" data-view="lp">Visão LP</button></div>`;
+    <button class="tab lp ${MODO==='completo'?'on':''}" data-modo="completo" title="A mesma ficha do negócio que você abre no CRM">🗂 Card completo</button>
+    <button class="tab lp ${MODO==='rapido'?'on':''}" data-modo="rapido" title="Card enxuto: etapa, status, listas e nota">⚡ Rápido</button></div>`;
 }
 function wireTabs(){
-  panel.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
-    if(VIEW===b.dataset.view) return;
-    VIEW=b.dataset.view; saveView(); LEAD=null; lookup();
+  panel.querySelectorAll('.tab[data-modo]').forEach(b=>b.onclick=()=>{
+    if(MODO===b.dataset.modo) return;
+    MODO=b.dataset.modo; try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){} lookup();
   });
 }
 function badgeHTML(l){
@@ -437,6 +441,21 @@ function renderLpPicker(list){
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpCliente(list[+el.dataset.i]); });
 }
 
+// ---------- 2.1: CARD COMPLETO — a ficha do próprio CRM embutida (content/embed.html → vendas.html?wa=1) ----------
+function extOrigin(){ try{ return new URL(chrome.runtime.getURL('')).origin; }catch(_){ return '*'; } }
+function waMsg(c){ return {tipo:'wa-abrir',tel:(c&&c.phoneRaw)||'',nome:(c&&c.name)||''}; }
+function renderCompleto(c){
+  panel.classList.add('largo'); handle.classList.add('largo');
+  if(!FRAME){ FRAME=document.createElement('iframe'); FRAME.className='full-frame'; FRAME.title='Ficha do negócio no CRM'; FRAME.setAttribute('allow','clipboard-write');
+    const h=new URLSearchParams(); if(c&&c.phoneRaw) h.set('tel',c.phoneRaw); if(c&&c.name) h.set('nome',c.name);
+    FRAME.src=chrome.runtime.getURL('content/embed.html')+'#'+h.toString(); }
+  if(!panel.querySelector('.full-wrap')){   /* monta 1 vez; trocar de conversa só avisa o CRM (não recarrega) */
+    panel.innerHTML=headerHTML()+`<div class="pb pb-full">${tabsHTML()}<div class="full-wrap"></div><div class="toast" id="wa-toast"></div></div>`;
+    panel.querySelector('.full-wrap').appendChild(FRAME); wireHeader(); wireTabs(); }
+  try{ FRAME.contentWindow&&FRAME.contentWindow.postMessage(waMsg(c),extOrigin()); }catch(_){}
+}
+function sairCompleto(){ panel.classList.remove('largo'); handle.classList.remove('largo'); }
+
 // ---------- Visão LP · contato do FUNIL — v2.0 (28/09/2026) ----------
 // O MESMO cadastro do app (Funil & Etapas, status por etapa, motivos de perda, listas de TA). Cada toque vira uma
 // AÇÃO que o SW aplica sobre a versão fresca do banco (lpc.patch) — nunca uma cópia velha inteira por cima.
@@ -449,6 +468,9 @@ async function lpcAcao(row,acoes,okMsg,cartHit){
   if(r.ok){ if(r.data&&r.data.semMudanca){ toast('Nada mudou.'); renderLpContato(r.data,cartHit); return; } await loadLpCfg(); renderLpContato(r.data,cartHit); toast(okMsg||'✓ Salvo no CRM'); }
   else { renderLpContato(row,cartHit); toast('Erro: '+(r.error||'falha ao salvar')); }
 }
+/* 2.1: cada tópico do card rápido encolhe/estende (palavra dele); a escolha fica lembrada neste Chrome */
+function dobAberto(k){ return DOB[k]!==false; }
+function wireDob(){ panel.querySelectorAll('details.dob').forEach(d=>d.addEventListener('toggle',()=>{ DOB[d.dataset.k]=d.open; try{ chrome.storage.local.set({wa_crm_dob:DOB}); }catch(_){} })); }
 function renderLpContato(row,cartHit){
   const c=row.dados||{}, cfg=LPCFG.funil, etapas=lpcEtapasDe(cfg,c), atual=lpcEtapaDe(cfg,c);
   const fluxo=etapas.filter(e=>!e.enc), enc=etapas.filter(e=>e.enc), ehEnc=!!(atual&&atual.enc);
@@ -463,8 +485,8 @@ function renderLpContato(row,cartHit){
       <div class="muted">${esc(c.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div>
       ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
     </div>
-    <div class="card">
-      <div class="sec-t">Etapa</div>
+    <details class="card dob" data-k="etapa" ${dobAberto('etapa')?'open':''}>
+      <summary class="sec-t">Etapa · status · listas <span class="dob-r">${esc((atual&&atual.label)||c.etapa||'')}${st?' · '+esc(st):''}${listas.length?' · 📋 '+listas.length:''}</span></summary>
       <div class="chips">${fluxo.map(e=>`<button class="chip${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
       ${enc.length?`<div class="enc-l">Encerrar: ${enc.map(e=>`<button class="chip enc${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}">${esc(e.label)}</button>`).join('')}</div>`:''}
       <div class="field" style="margin-top:8px"><label>${ehEnc?'✖ Motivo da perda':'⚑ Status nesta etapa'}</label>
@@ -473,14 +495,14 @@ function renderLpContato(row,cartHit){
       <div class="field"><label>📋 Listas de TA</label>
         <div class="chips">${listas.map(n=>`<span class="lchip">${esc(n)}<button class="lx" data-tira="${esc(n)}" title="Tirar desta lista">✕</button></span>`).join('')||'<span class="muted">sem lista</span>'}</div>
         <select id="lp2-lista" style="margin-top:6px"><option value="">＋ pôr numa lista…</option>${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}${listas.length?`<optgroup label="Mover (sai das outras)">${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="mv:${esc(n)}">↪ só em ${esc(n)}</option>`).join('')}</optgroup>`:''}<option value="__nova">＋ Nova lista…</option></select></div>
-    </div>
-    <div class="card">
-      <div class="sec-t">📝 Registrar na oportunidade</div>
+    </details>
+    <details class="card dob" data-k="nota" ${dobAberto('nota')?'open':''}>
+      <summary class="sec-t">📝 Registrar na oportunidade <span class="dob-r">${ult.length?ult.length+' registros':''}</span></summary>
       <textarea id="lp2-nota" placeholder="o que rolou nesta conversa (vai pro histórico da oportunidade)"></textarea>
       <button class="btn primary" id="lp2-nota-ok" style="margin-top:6px">Registrar nota</button>
       ${ult.length?`<div class="hist">${ult.map(x=>`<div class="hi"><span class="hd">${esc(String(x.dia||'').split('-').reverse().join('/'))}</span> ${esc(x.l||'')}</div>`).join('')}</div>`:''}
-    </div>
-    <details class="card"><summary class="sec-t" style="cursor:pointer">Telefone e observação fixa</summary>
+    </details>
+    <details class="card dob" data-k="campos" ${DOB.campos===true?'open':''}><summary class="sec-t">Telefone e observação fixa</summary>
       ${fieldHTML('lp2-tel','Telefone',c.telefone)}
       <div class="field"><label>Observação fixa (campo Notas)</label><textarea id="lp2-notas">${esc(c.notas||'')}</textarea></div>
       <button class="btn" id="lp2-campos">💾 Salvar telefone/observação</button>
@@ -488,7 +510,7 @@ function renderLpContato(row,cartHit){
     ${msgCardHTML()}
     <div class="note">Mesmo cadastro do CRM (Funil &amp; Etapas, listas de TA). Cada toque grava na hora e fica no histórico.</div>
   </div>`);
-  wireMsgCard(c);
+  wireMsgCard(c); wireDob();
   panel.querySelectorAll('[data-etapa]').forEach(b=>b.onclick=()=>{ const para=b.dataset.etapa; if(para===c.etapa) return; const e=etapas.find(x=>x.id===para);
     lpcAcao(row,[{tipo:'etapa',para}].concat(e&&e.enc?[{tipo:'listas',para:[]}]:[]),`✓ ${e?e.label:para}${e&&e.enc?' — escolha o motivo':''}`,cartHit); });
   const ss=$('#lp2-status'); if(ss) ss.onchange=()=>lpcAcao(row,[{tipo:'status',v:ss.value}],ss.value?`✓ ${ss.value}`:'✓ Status removido',cartHit);
@@ -613,8 +635,10 @@ async function loadFunil(){
 
 async function lookup(){
   if(!OPEN) return;
-  if(!AUTH.logged){ renderLogin(); return; }
   const c=CHAT;
+  if(MODO==='completo'&&!(c&&c.isGroup)){ renderCompleto(c); return; }   /* 2.1: o CRM embutido cuida do login e da busca */
+  sairCompleto();
+  if(!AUTH.logged){ renderLogin(); return; }
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
@@ -658,7 +682,7 @@ fab.onclick=()=>{ setOpen(true); lookup(); };
 handle.onclick=()=>setOpen(false);
 
 // boot
-try{ const o=await chrome.storage.local.get('wa_crm_view'); if(o&&o.wa_crm_view==='lp') VIEW='lp'; }catch(_){}
+try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); if(o&&o.wa_crm_modo==='rapido') MODO='rapido'; if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
 const st=await send('auth.status');
 if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); loadLpCfg(); }
 refreshFab();
