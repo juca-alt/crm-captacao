@@ -1,4 +1,25 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.2.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.5.0
+
+## 2.3 → 2.5 (28/09/2026) — card completo DENTRO do painel + conversa ligada ao negócio
+- **2.2.x (caminho, testado com ele):** o painel lateral do Chrome não abriu confiável; a janela separada do CRM funcionou,
+  mas ele pediu o completo DENTRO do painel "pra operar normal no WhatsApp".
+- **2.3.0 — card completo dentro do painel:** `rules.json` (declarativeNetRequest) põe `Cross-Origin-Embedder-Policy:
+  credentialless` + `Cross-Origin-Resource-Policy: cross-origin` SÓ na resposta do CRM (`juca-alt.github.io/crm-captacao/`)
+  quando carregado como frame → o Chrome deixa embutir sob o COEP do WhatsApp. O iframe nasce 1 vez e nunca muda de lugar
+  (mover iframe = recarregar). Quem acha o negócio é a extensão (`lpLookup`: telefone → nome tolerante às etiquetas) e o
+  SW injeta `ABRIR_NO_CRM` no frame do CRM (`allFrames`, só o hostname do CRM) → `abrirContato(id)`. Login do CRM dentro
+  do painel = 1 vez (storage particionado sob web.whatsapp.com). "↗ abrir em janela separada" fica como alternativa.
+- **2.4.0 — conversa ligada ao negócio:** o WhatsApp novo esconde o telefone (`@lid`) e o nome vem com etiquetas. Ao
+  ESCOLHER/criar o negócio no ⚡ Rápido (ou "📌 ligar esta conversa"), grava chave-da-conversa → id do negócio
+  (`tel:` · `lid:` id fixo do WhatsApp · `nome:`). O vínculo vence qualquer busca, no rápido e no completo.
+  "não é esta pessoa" desfaz. `wa-dom.js` passou a ler `@lid`.
+- **2.5.0 — vínculo no cadastro do CRM:** além do atalho local (`chrome.storage.local.wa_vinc`), vai pra `dados.wa_chats`
+  do negócio (ações `wa_vinc`/`wa_desv` no `lpcAplicar`, via `lpcPatch`) → vale em qualquer aparelho. Uma conversa = um
+  negócio (sai dos outros). Histórico do negócio ganha "📌 Conversa do WhatsApp ligada".
+- Permissões novas: `declarativeNetRequest`, host `juca-alt.github.io`.
+- **Carregar no Chrome:** "Carregar sem compactação" apontando pra `extensao-whatsapp/` do clone; depois de atualizar o
+  código, ↻ no card da extensão em chrome://extensions e ⌘+Shift+R no WhatsApp.
+
 
 ## 2.2 (28/09/2026) — card completo no PAINEL LATERAL do Chrome + card rápido com 💾 Salvar
 - **Por que o card completo mostrava o ícone cinza de página quebrada (2.1):** o `web.whatsapp.com` responde com
