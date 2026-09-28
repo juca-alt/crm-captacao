@@ -1583,6 +1583,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     <button class="nav-btn modulo" data-view="config" onclick="irPara('config')"><span class="ic">⚙️</span><span class="lbl">Configurações</span></button>
 
     <div class="sep"></div>
+    <button class="nav-btn" onclick="navOrdEditar()" title="Pôr o menu lateral na ordem que você quiser"><span class="ic">↕️</span><span class="lbl">Organizar menu</span></button>   <!-- NAV-ORDEM-V1 -->
     <button class="nav-cta" onclick="openLpImport()"><span>📄</span><span class="lbl">Subir relatório</span></button>
     <div class="mini">Arquivo único · localStorage · porta pro Supabase na fase 2 (mesma trilha do módulo de substituição).</div>
   </nav>
@@ -14354,14 +14355,105 @@ function modFixToggle(k){ const a=modFixados(); const ix=a.indexOf(k); if(ix>=0)
   const it=HUB_SECOES.flatMap(s=>s.itens).find(i=>modFixKey(i)===k);
   toast((ix>=0?'Saiu do menu: ':'No menu lateral: ')+(it?it.titulo:k),true); navFixRender(); if(VIEW==='modulos') viewModulos(); }
 function navFixRender(){ const box=document.getElementById('nav-fix'); if(!box) return;
-  const l=modFixItens(); if(!l.length){ box.innerHTML=''; return; }
-  box.innerHTML=`<div class="sep"></div><div class="nav-btn nav-fix-lbl" aria-hidden="true"><span class="lbl">📌 Fixados</span></div>`+l.map(i=>{ const n=i.cnt?(()=>{ try{ return i.cnt(); }catch(_){ return 0; } })():0;
+  document.querySelectorAll('#nav-ordem [data-fixk]').forEach(e=>e.remove());   /* NAV-ORDEM-V1: os da rodada anterior saem; os novos entram na ordem dele */
+  const l=modFixItens(); if(!l.length){ box.innerHTML=''; navOrdAplicar(); return; }
+  box.innerHTML=l.map(i=>{ const n=i.cnt?(()=>{ try{ return i.cnt(); }catch(_){ return 0; } })():0;
     const go=i.href?`location.href='${i.href}'`:`irPara('${i.view}')`;
-    return `<button class="nav-btn${i.view&&i.view===VIEW?' ativo':''}"${i.view?` data-view="${esc(i.view)}"`:''} data-fix="1" onclick="${go}" title="${esc(i.desc||'')}"><span class="ic">${i.ic}</span><span class="lbl">${esc(i.titulo)}</span>${n?`<span class="cnt">${n}</span>`:''}</button>`; }).join(''); }
+    return `<button class="nav-btn${i.view&&i.view===VIEW?' ativo':''}"${i.view?` data-view="${esc(i.view)}"`:''} data-fix="1" data-fixk="${esc(modFixKey(i))}" onclick="${go}" title="${esc(i.desc||'')}"><span class="ic">${i.ic}</span><span class="lbl">${esc(i.titulo)}</span>${n?`<span class="cnt">${n}</span>`:''}</button>`; }).join('');
+  navOrdAplicar(); }
+/* ═══ NAV-ORDEM-V1 (28/09/2026) ══════════════════════════════════════════════════════════
+   Pedido dele: "trouxe pro menu conforme selecionei, mas não é pra ficar fixo — quero organizar o meu lateral como
+   eu quiser: organizo todos os módulos e boto na ordem que quero; cada usuário também pode assim."
+   O menu vira uma lista de BLOCOS (item solto, grupo com seus subitens, divisor, módulo fixado pelo 📌) que cada
+   usuário põe na ordem dele em ↕️ Organizar menu. Os blocos são lidos do próprio HTML no boot (nada de reescrever o
+   menu à mão); a ordem salva por usuário e aparelho. Item novo que o app ganhar entra perto de onde nasceu. */
+const NAV_ORD_CHAVE='crmlp_nav_ordem_v1';
+let NAV_BLOCOS=null, NAV_PADRAO=[], NAV_SEPS={};
+function navOrdKey(){ const e=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():'local'; return NAV_ORD_CHAVE+':'+e; }
+function navOrdLer(){ try{ const o=JSON.parse(localStorage.getItem(navOrdKey())||'null'); return (o&&Array.isArray(o.ordem))?{ordem:o.ordem.map(String),fora:Array.isArray(o.fora)?o.fora.map(String):[]}:null; }catch(_){ return null; } }
+function navOrdGravar(o){ try{ if(o) localStorage.setItem(navOrdKey(),JSON.stringify(o)); else localStorage.removeItem(navOrdKey()); }catch(_){} }
+function navOrdCapturar(){
+  if(NAV_BLOCOS) return true; const sb=document.querySelector('nav.sidebar'); if(!sb) return false;
+  const ini=sb.querySelector(':scope > .nav-btn[data-view="inicio"]'), fim=sb.querySelector(':scope > .nav-btn[data-view="config"]'); if(!ini||!fim) return false;
+  const nodes=[]; for(let el=ini; el; el=el.nextElementSibling){ nodes.push(el); if(el===fim) break; }
+  const box=document.createElement('div'); box.id='nav-ordem'; sb.insertBefore(box,ini);
+  NAV_BLOCOS={}; NAV_PADRAO=[]; let n=0, grp=null;
+  nodes.forEach(x=>{
+    if(x.id==='nav-fix'){ NAV_PADRAO.push('@fix'); return; }                                   /* lugar de nascença dos fixados */
+    if(x.classList.contains('sep')){ const id='s:'+(++n); NAV_BLOCOS[id]=[x]; NAV_PADRAO.push(id); grp=null; return; }
+    if(x.classList.contains('nav-grp-wrap')){ if(grp) NAV_BLOCOS[grp].push(x); grp=null; return; }
+    if(!x.querySelector('.lbl')||!x.classList.contains('nav-btn')&&!x.classList.contains('nav-grp')) return;   /* nós ocultos de contador (sem rótulo) ficam onde estão */
+    const ehGrp=x.classList.contains('nav-grp-btn'), id=(ehGrp?'g:':'v:')+(x.id||x.dataset.view||('n'+(++n)));
+    NAV_BLOCOS[id]=[x]; NAV_PADRAO.push(id); grp=ehGrp?id:null;
+  });
+  NAV_PADRAO.forEach(id=>(NAV_BLOCOS[id]||[]).forEach(x=>box.appendChild(x)));
+  return true; }
+function navOrdPins(){ return [...document.querySelectorAll('#nav-fix [data-fixk], #nav-ordem [data-fixk]')]; }
+function navOrdBlocos(){ const bl=Object.assign({},NAV_BLOCOS||{}); navOrdPins().forEach(p=>{ bl['fix:'+p.dataset.fixk]=[p]; }); return bl; }
+function navOrdPadrao(){ const pins=navOrdPins().map(p=>'fix:'+p.dataset.fixk); return NAV_PADRAO.flatMap(id=>id==='@fix'?pins:[id]); }
+/* ordem salva + o que nasceu depois (entra logo após o vizinho de nascença), sem o que ele tirou */
+function navOrdResolver(salvo,padrao,existe){
+  if(!salvo) return padrao.filter(existe);
+  const fora=new Set(salvo.fora||[]), r=[];
+  (salvo.ordem||[]).forEach(id=>{ if(existe(id)&&!fora.has(id)&&!r.includes(id)) r.push(id); });
+  padrao.forEach((id,i)=>{ if(!existe(id)||fora.has(id)||r.includes(id)) return;
+    let j=i-1; while(j>=0&&!r.includes(padrao[j])) j--; r.splice(j<0?0:r.indexOf(padrao[j])+1,0,id); });
+  return r; }
+function navOrdSep(id){ if(NAV_BLOCOS&&NAV_BLOCOS[id]) return NAV_BLOCOS[id][0]; if(!NAV_SEPS[id]){ const d=document.createElement('div'); d.className='sep'; NAV_SEPS[id]=d; } return NAV_SEPS[id]; }
+function navOrdAtual(){ const bl=navOrdBlocos(); return navOrdResolver(navOrdLer(),navOrdPadrao(),id=>!!bl[id]||/^s:/.test(id)); }
+function navOrdAplicar(){
+  if(!navOrdCapturar()) return; const box=document.getElementById('nav-ordem'); if(!box) return;
+  const bl=navOrdBlocos(), ordem=navOrdAtual(), vivos=new Set();
+  ordem.forEach(id=>{ const ns=/^s:/.test(id)?[navOrdSep(id)]:(bl[id]||[]); ns.forEach(x=>{ box.appendChild(x); vivos.add(x); }); });
+  [...box.children].forEach(x=>{ if(!vivos.has(x)){ if(x.classList.contains('sep')) x.remove(); else x.hidden=true; } });   /* divisor tirado some; nada de item sumir sem ele pedir */
+}
+/* ── editor ── */
+let NAV_ED=null;
+function navOrdRotulo(id){ if(/^s:/.test(id)) return '<span style="color:var(--muted)">── divisor ──</span>';
+  const bl=navOrdBlocos(), x=(bl[id]||[])[0]; if(!x) return esc(id);
+  const ic=(x.querySelector('.ic')||{}).textContent||'', lb=((x.querySelector('.lbl')||{}).textContent||x.textContent||'').trim();
+  return `${esc(ic)} ${esc(lb)}${/^g:/.test(id)?' <span style="color:var(--muted);font-size:12px">· grupo</span>':''}${/^fix:/.test(id)?' <span style="color:var(--muted);font-size:12px">· 📌 módulo</span>':''}`; }
+function navOrdEditar(){ if(!navOrdCapturar()) return; NAV_ED={ordem:navOrdAtual(),fora:((navOrdLer()||{}).fora||[]).slice()}; navOrdEdRender(); }
+function navOrdEdRender(){
+  const l=NAV_ED.ordem, btn='class="btn btn-s btn-mini" style="min-width:44px;min-height:44px"';
+  atModal(`<h2>↕️ Organizar menu</h2><div class="sub">Ponha o menu lateral na ordem que você quiser — arraste a linha (no computador) ou use ↑ ↓. Grupos (Pipe, SitPlan, Estoque) andam com os subitens. Vale pra você neste aparelho.</div>
+    <div id="nav-ed-l" style="display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:min(60vh,520px);overflow:auto">${l.map((id,i)=>`
+      <div class="nav-ed-row" draggable="true" data-i="${i}" style="display:flex;align-items:center;gap:6px;border:1px solid var(--linha);border-radius:10px;padding:4px 6px;background:var(--card,#fff);cursor:grab">
+        <span style="flex:1;min-width:0;font-size:14px">${navOrdRotulo(id)}</span>
+        <button ${btn} onclick="navOrdMover(${i},-1)" ${i?'':'disabled'} aria-label="Subir">↑</button>
+        <button ${btn} onclick="navOrdMover(${i},1)" ${i<l.length-1?'':'disabled'} aria-label="Descer">↓</button>
+        ${/^s:/.test(id)?`<button ${btn} onclick="navOrdTirar(${i})" title="Tirar divisor" aria-label="Tirar divisor">✕</button>`:/^fix:/.test(id)?`<button ${btn} onclick="navOrdTirar(${i})" title="Tirar do menu (volta a ficar só em Módulos)" aria-label="Tirar do menu">📌</button>`:''}
+      </div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-s" onclick="navOrdSepNovo()">＋ divisor</button>
+      <button class="btn btn-s" onclick="navOrdPadraoVolta()">↺ ordem original</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-s" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" onclick="navOrdSalvar()">Salvar</button></div>`);
+  const box=document.getElementById('nav-ed-l'); if(!box) return; let de=null;
+  box.querySelectorAll('.nav-ed-row').forEach(r=>{
+    r.addEventListener('dragstart',e=>{ de=+r.dataset.i; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(de)); }catch(_){} r.style.opacity='.5'; });
+    r.addEventListener('dragend',()=>{ r.style.opacity=''; });
+    r.addEventListener('dragover',e=>{ e.preventDefault(); r.style.boxShadow='0 -3px 0 var(--azul,#2563eb) inset'; });
+    r.addEventListener('dragleave',()=>{ r.style.boxShadow=''; });
+    r.addEventListener('drop',e=>{ e.preventDefault(); r.style.boxShadow=''; const para=+r.dataset.i; if(de==null||de===para) return;
+      const [x]=NAV_ED.ordem.splice(de,1); NAV_ED.ordem.splice(para,0,x); navOrdEdRender(); });
+  }); }
+function navOrdMover(i,d){ const l=NAV_ED.ordem, j=i+d; if(j<0||j>=l.length) return; [l[i],l[j]]=[l[j],l[i]]; navOrdEdRender(); }
+function navOrdTirar(i){ const id=NAV_ED.ordem[i]; if(!id) return;
+  if(/^fix:/.test(id)){ NAV_ED.ordem.splice(i,1); NAV_ED.tirarPin=(NAV_ED.tirarPin||[]).concat(id.slice(4)); navOrdEdRender(); return; }
+  NAV_ED.ordem.splice(i,1); if(NAV_BLOCOS&&NAV_BLOCOS[id]&&!NAV_ED.fora.includes(id)) NAV_ED.fora.push(id); navOrdEdRender(); }
+function navOrdSepNovo(){ NAV_ED.ordem.push('s:u'+Date.now().toString(36)); navOrdEdRender(); setTimeout(()=>{ const b=document.getElementById('nav-ed-l'); if(b) b.scrollTop=b.scrollHeight; },0); }
+function navOrdPadraoVolta(){ NAV_ED={ordem:navOrdPadrao(),fora:[]}; navOrdEdRender(); }
+function navOrdSalvar(){ const pins=NAV_ED.tirarPin||[];
+  navOrdGravar({ordem:NAV_ED.ordem.slice(),fora:NAV_ED.fora.slice()});
+  if(pins.length){ try{ const a=modFixados().filter(k=>!pins.includes(k)); localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){} }
+  atClose(); NAV_ED=null; navFixRender(); toast('Menu organizado',true); }
+window.navOrdEditar=navOrdEditar; window.navOrdMover=navOrdMover; window.navOrdTirar=navOrdTirar; window.navOrdSepNovo=navOrdSepNovo; window.navOrdPadraoVolta=navOrdPadraoVolta; window.navOrdSalvar=navOrdSalvar;
 window.modFixToggle=modFixToggle; window.navFixRender=navFixRender;
 function viewModulos(){
   const secs=hubSecoesHtml(HUB_SECOES,i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)),'● módulo','mod');   /* PLANO-V1: card com `novo` só aparece pra quem a chave libera */
-  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card. O <b>📌</b> do card põe (ou tira) o módulo do menu lateral.</div>${hubBotoesHtml()}${secs}`;
+  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card. O <b>📌</b> do card põe (ou tira) o módulo do menu lateral — e em <b>↕️ Organizar menu</b> você põe tudo na ordem que quiser.</div>${hubBotoesHtml()}${secs}`;
 }
 
 /* ════ VIEW: CONFIGURAÇÕES (o mesmo hub de cards dos Módulos) ════
@@ -19429,7 +19521,7 @@ function lpSelfCheck(){
     ok('MOD-FIXAR-V1: 📌 no card de Módulos põe/tira do menu lateral (todos os módulos; Configurações não)', (()=>{ const bk=localStorage.getItem(MOD_FIX_CHAVE); try{ localStorage.setItem(MOD_FIX_CHAVE,'[]');
       const alvo=HUB_SECOES.flatMap(s=>s.itens).find(i=>i.view&&(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo))); if(!alvo) return true; const k=modFixKey(alvo);
       const temPin=hubSecoesHtml(HUB_SECOES,()=>true,'x','mod').includes('hub-pin')&&!hubSecoesHtml(CFG_SECOES,()=>true,'x','cfg').includes('hub-pin');
-      const _t=window.toast; window.toast=()=>{}; modFixToggle(k); const noMenu=!!document.querySelector('#nav-fix .nav-btn[data-view="'+alvo.view+'"]'); modFixToggle(k); const saiu=!document.querySelector('#nav-fix .nav-btn'); window.toast=_t;
+      const _t=window.toast; window.toast=()=>{}; modFixToggle(k); const noMenu=!!document.querySelector('nav.sidebar [data-fixk][data-view="'+alvo.view+'"]'); modFixToggle(k); const saiu=!document.querySelector('nav.sidebar [data-fixk]'); window.toast=_t;
       return temPin&&noMenu&&saiu&&HUB_SECOES.flatMap(s=>s.itens).every(i=>!!modFixKey(i)||!!i.acao); } finally{ if(bk==null) localStorage.removeItem(MOD_FIX_CHAVE); else localStorage.setItem(MOD_FIX_CHAVE,bk); navFixRender(); } })());
     ok('AGENDA-NOVA-V2 + SALVAR-DATA-V1: ＋ Novo nas seções Hoje/Amanhã/Próximas; folha com hora/duração/pessoa; data da linha só vale no 💾 Salvar; par Evento antes de Tarefa', (()=>{
       const h=agBloco('hoje','📌 Hoje','r','c'), a=agBloco('amanha','→ Amanhã','r','c'), o=agBloco('reun','x','r','c');
@@ -20744,6 +20836,21 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c=pesCanon('fábio zenório')==='Fábio Zenório' && pesCanon('Zé Ninguém')==='Zé Ninguém' && pesCanon('')==='';
       const d=/pesSugInput/.test(pesSugAttrs()) && String(drwPessoaHtml).includes("pesSugAttrs()") && String(openNovoContato).includes('pesSugAttrs()') && String(bnEditorHtml).includes('pesSugAttrs()');
       return a&&b&&c&&d; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; } })());
+    ok('NAV-ORDEM-V1: menu lateral na ordem do usuário — grupo anda com os subitens, item novo nasce perto do vizinho, divisor tirado não volta, ordem por usuário', (()=>{
+      const r1=navOrdResolver({ordem:['c','a','b'],fora:[]},['a','b','c','d'],id=>id!=='x');          /* d nasceu depois de c no padrão */
+      const r2=navOrdResolver({ordem:['b','a'],fora:['s:1']},['a','s:1','b','n'],()=>true);            /* divisor tirado fica fora; n entra após b */
+      const r3=navOrdResolver(null,['a','b'],id=>id==='b');
+      const a=JSON.stringify(r1)==='["c","d","a","b"]' && JSON.stringify(r2)==='["b","n","a"]' && JSON.stringify(r3)==='["b"]';
+      if(!navOrdCapturar()) return false;
+      const g=Object.keys(NAV_BLOCOS).find(id=>/^g:/.test(id)&&NAV_BLOCOS[id].length===2);
+      const b=!!g && NAV_BLOCOS[g][1].classList.contains('nav-grp-wrap') && !!document.getElementById('nav-ordem') && NAV_PADRAO.includes('@fix');
+      const k0=navOrdKey(), bk=localStorage.getItem(k0);
+      try{ const pad=navOrdPadrao(), inv=pad.slice().reverse(); navOrdGravar({ordem:inv,fora:[]}); navOrdAplicar();
+        const box=document.getElementById('nav-ordem'), prim=box.firstElementChild, ult=(NAV_BLOCOS[inv[0]]||[])[0]||null;
+        const c=!!ult && (prim===ult || (/^s:/.test(inv[0])&&prim.classList.contains('sep')));
+        const d=navOrdKey().startsWith(NAV_ORD_CHAVE+':');
+        return a&&b&&c&&d; }
+      finally{ if(bk==null) localStorage.removeItem(k0); else localStorage.setItem(k0,bk); navOrdAplicar(); } })());
     ok('MODAL-NO-WA-V1: no modo WhatsApp (?wa=1) só o fundo da gaveta (#overlay) some — janela de editar atividade (atModal, class overlay) continua visível', (()=>{
       const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
       const regras=css.split('}').filter(r=>r.includes('html.modo-wa')&&/display\s*:\s*none/.test(r));

@@ -11,6 +11,8 @@ Palavra dele (Pipe MFO): *"deixa opção de puxar do que já tenho do CRM ou add
 - Escolher **preenche** nome/telefone/idade/profissão/origem e, se a pessoa já tem negócio, o novo nasce **vinculado** (`pessoaVincular` → mesmo `pessoaId`) e herda e-mail/nascimento/sexo/recomendante. Editou o nome depois de puxar = pessoa diferente, sem vínculo.
 - Aviso quando a pessoa **já tem negócio aberto no mesmo funil**, com "Abrir esse".
 - Gate `NOVO_SO_MEU['nn-puxar']` (só ele por enquanto). Invariante `NN-PUXAR-V1`.
+- **MODAL-NO-WA-V1:** no card completo da extensão (`?wa=1`) o ✏️ Editar atividade abria invisível (a regra do modo escondia toda `.overlay`, e o `atModal` usa essa classe) → só `#overlay` some.
+- **NAV-ORDEM-V1:** *"quero organizar o meu lateral como eu quiser… cada usuário também"* → **↕️ Organizar menu** no rodapé do menu: blocos (item, grupo com subitens, divisor, módulo 📌) em qualquer ordem (arrastar ou ↑↓), ＋ divisor, ↺ ordem original; salvo por usuário **neste aparelho** (`crmlp_nav_ordem_v1:<email>`). Item novo do app nasce perto do vizinho. O rótulo "📌 Fixados" saiu: os fixados viram blocos da ordem dele. Guardar no servidor (valer em outro aparelho) precisa de tabela/RLS → pendente de OK.
 
 ## 🟢 28/09/2026 — v8.41 no ar + extensão 2.1.0 · 70ª onda: card COMPLETO do CRM no WhatsApp (MODO-WA-V1) + busca por funil (FUNIL-BUSCA-V1)
 
