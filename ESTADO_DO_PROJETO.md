@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.39 no ar · 67ª onda: motivos de perda editáveis no encerramento (MOTIVO-PERDA-V1)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.40 no ar · 69ª onda: filtros do funil por ⚑ status e 📋 lista de TA (FILTROS-FUNIL-V1)
+
+_(67ª onda — v8.39: motivos de perda; 68ª — extensão WA 2.0.0)_
 
 **Extensão WhatsApp 2.0.0 (28/09, 68ª onda):** aba Visão LP com o MESMO cadastro do app — etapa em botões + encerrar, ⚑ status / ✖ motivo da perda, 📋 listas (✕, pôr, mover, nova), 📝 nota que vira histórico, últimos 5 registros. Gravação segura `lpc.patch` (relê fresco + dono, aplica só a ação). Estoque (`bn`) em card próprio (listas + nota nas notas), nunca vira negócio. Normalizador não força mais `nn` (VG/Prud/MFO/prospects preservados). Pra usar: chrome://extensions → ↻ Recarregar + F5 no WhatsApp.
 
@@ -49,7 +51,14 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (67ª onda) — MOTIVO-PERDA-V1 (v8.39)
+## 28/09/2026 (69ª onda) — FILTROS-FUNIL-V1 (v8.40)
+Palavra dele: *"adiciona filtros na área de funil: por status, lista de TA; depois eu adiciono outros."*
+- Toolbar de Novos Negócios, Negócios na Base e demais pipes: **⚑ Status** (só os status DAQUELE funil + "sem status") e **📋 Lista** (catálogo único + "sem lista") + **✕ limpar filtro(s)**. Filtro ativo fica azul.
+- `funAplicaLente` é a porta única (Kanban e Lista). A Lista dos Negócios na Base não filtrava — agora filtra.
+- Desktop: filtros lado a lado (210px); celular: um por linha, 16px.
+- Invariante `FILTROS-FUNIL-V1`. Próximos filtros entram no mesmo `funFiltrosSel`.
+
+ — MOTIVO-PERDA-V1 (v8.39)
 Palavra dele: *"deixa eu editar e atualizar os motivos de perda da oportunidade; às vezes ela é perdida já no TA, ex.: uma pessoa que já é cliente de outro LP."*
 - Motivo de perda = o **status da etapa de encerramento** (Não, Prop. Cancelada, Apól. Cancelada; Oportunidade perdida na Base) — mesmo cadastro de Funil & Etapas, mesmo `c.status`. Sem tabela nova.
 - Funil & Etapas: nas etapas de encerramento o campo vira **✖ motivos da perda** (placeholder com exemplos).

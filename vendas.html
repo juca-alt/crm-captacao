@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.39 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.40 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -789,6 +789,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
   .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
   .et-status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  @media (min-width:861px){ .nn-toolbar .fun-status-sel{flex:0 1 210px;width:auto;max-width:240px} }   /* FILTROS-FUNIL-V1: no desktop os filtros ficam lado a lado */
+  .fun-status-sel.on{border-color:var(--azul);background:var(--azul-claro,#eef4ff);color:var(--azul);font-weight:600}   /* FILTROS-FUNIL-V1 */
   .et-status-row select,.fun-status-sel{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--linha);border-radius:7px;background:#fff;color:var(--ink)}
   .fc-st{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);flex:1;min-width:180px}
   .fc-st input{flex:1;min-width:120px;font:inherit;font-size:11.5px;border:1px solid var(--linha);background:#fff;border-radius:6px;padding:3px 6px;color:var(--ink)}
@@ -1783,9 +1785,17 @@ function etStatusMenu(ev,id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c
     ${o.length?'':`<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Nenhum status nesta etapa ainda.</div>`}
     ${(!logado()||souAdm())?`<button onclick="taFecharMenu();irPara('config-funil')">⚙️ Criar/editar status (Funil & Etapas)</button>`:''}`); }
 function etStatusCard(id,v){ taFecharMenu(); const c=(S.contatos||[]).find(x=>x.id===id); if(etSetStatusDe(c,v)) render(); }
-let FUN_STATUS={};
-function funStatusSel(ns){ const opts=etStatusTodos(); if(!opts.length) return ''; const v=FUN_STATUS[ns]||'';
-  return `<select class="fun-status-sel" title="Filtrar pelo status dentro da etapa" onchange="FUN_STATUS['${ns}']=this.value;render()"><option value="">⚑ Status: todos</option>${opts.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select>`; }
+let FUN_STATUS={}, FUN_LISTA={};
+/* FILTROS-FUNIL-V1 (28/09): palavra dele — "adiciona filtros na área de funil: por status, lista de TA; depois eu adiciono outros".
+   ⚑ Status mostra só os status DESTE funil (cfg dele) + "sem status"; 📋 Lista usa o catálogo único + "sem lista".
+   Valem no Kanban e na Lista de Novos Negócios, Negócios na Base e demais pipes (funAplicaLente é a porta única). */
+function funStatusOptsDoFunil(ns){ const out=[]; ((FUNIL_CFG&&FUNIL_CFG[etCfgKey(ns)])||[]).forEach(e=>((e&&e.status)||[]).forEach(x=>{ const t=String(x||'').trim(); if(t&&!out.includes(t)) out.push(t); })); return out; }
+function funStatusSel(ns){ const opts=funStatusOptsDoFunil(ns); if(!opts.length&&!FUN_STATUS[ns]) return ''; const v=FUN_STATUS[ns]||'';
+  return `<select class="fun-status-sel${v?' on':''}" title="Filtrar pelo status dentro da etapa" onchange="FUN_STATUS['${ns}']=this.value;render()"><option value="">⚑ Status: todos</option><option value="__sem" ${v==='__sem'?'selected':''}>⚑ sem status</option>${opts.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>⚑ ${esc(x)}</option>`).join('')}</select>`; }
+function funListaSel(ns){ const cat=(typeof taListasCatalogo==='function')?taListasCatalogo():[]; const v=FUN_LISTA[ns]||'';
+  return `<select class="fun-status-sel${v?' on':''}" title="Filtrar pela lista de TA" onchange="FUN_LISTA['${ns}']=this.value;render()"><option value="">📋 Lista: todas</option><option value="__sem" ${v==='__sem'?'selected':''}>📋 sem lista</option>${cat.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>📋 ${esc(x)}</option>`).join('')}</select>`; }
+function funFiltrosSel(ns){ const on=(FUN_STATUS[ns]?1:0)+(FUN_LISTA[ns]?1:0);
+  return `${funStatusSel(ns)}${funListaSel(ns)}${on?`<button class="btn btn-ghost btn-mini" onclick="FUN_STATUS['${ns}']='';FUN_LISTA['${ns}']='';render()" title="Tirar os filtros">✕ limpar filtro${on>1?'s':''}</button>`:''}`; }
 const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos', BC_DELIVERY='Delivery', BC_EMITIDA='Venda ganha';
 /* BC-REDESIGN-V1 (07/09): Delivery vai pro FIM (pós-Apólice Emitida) e volta pra Clientes Ativos;
    Oportunidade Perdida deixa de ser coluna do fluxo (fica como encerramento, marcável em qualquer etapa).
@@ -3335,7 +3345,8 @@ let FUN_LENTE={nn:'',bc:''};
 function funLente(ns){ const v=FUN_LENTE[ns]||''; return FUN_LENTES[v]?v:''; }
 function funSetLente(ns,v){ FUN_LENTE[ns]=(funLente(ns)===v)?'':v; render(); }
 function funAplicaLente(lista,ns){
-  const st=FUN_STATUS[ns]||''; if(st) lista=lista.filter(c=>etStatusDe(c)===st);   /* STATUS-ETAPA-V1 */
+  const st=FUN_STATUS[ns]||''; if(st) lista=lista.filter(c=>st==='__sem'?!etStatusDe(c):etStatusDe(c)===st);   /* STATUS-ETAPA-V1 + FILTROS-FUNIL-V1 */
+  const li=FUN_LISTA[ns]||''; if(li) lista=lista.filter(c=>{ const l=Array.isArray(c.listas)?c.listas:[]; return li==='__sem'?!l.length:l.includes(li); });
   const l=funLente(ns); if(!l) return lista;
   return lista.filter(FUN_LENTES[l].teste);
 }
@@ -4497,7 +4508,7 @@ function viewNnFunil(){
   const _pos = NN_FOCUS ? null : funScrollSalvar();
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
-    <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}${funStatusSel('nn')}
+    <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}${funFiltrosSel('nn')}
     <span class="nn-dica" style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
@@ -4612,7 +4623,7 @@ function viewFunilExtra(fid){
   const PIPE=PIPES[pipeDe(fid)]||PIPES.vi;
   $('#main').innerHTML=`<h1 class="pg">${esc(meta[2])} ${esc(meta[1])}</h1>
     <div class="sub">${PIPE.ic} ${esc(PIPE.nome)} · ${esc(meta[3])}. Funil em construção — arraste o card pra mudar a etapa (no celular, toque e mude no perfil).</div>
-    <div class="nn-toolbar"><span style="font-size:12px;color:var(--muted)">${lista.length} negócio(s) neste funil</span>${funStatusSel(fid)}<span style="flex:1"></span>
+    <div class="nn-toolbar"><span style="font-size:12px;color:var(--muted)">${lista.length} negócio(s) neste funil</span>${funFiltrosSel(fid)}<span style="flex:1"></span>
       <button class="btn btn-p btn-mini" onclick="openNovoContato('${esc(fid)}')">➕ Novo negócio</button></div>
     ${body}`;
   wireNnBoard();
@@ -4642,7 +4653,7 @@ function viewBcFunil(){
   const _pos = BC_FOCUS ? null : funScrollSalvar();
   const lista=meusContatosBC();
   const toolbar=`<div class="nn-toolbar">
-    <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>${nnOrdSelect()}
+    <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>${nnOrdSelect()}${funFiltrosSel('bc')}
     <span class="nn-dica" style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
@@ -4661,7 +4672,7 @@ function viewBcFunil(){
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
   };
-  if(BC_MODE==='lista'){ body=bcLista(lista); }
+  if(BC_MODE==='lista'){ body=bcLista(funAplicaLente(lista,'bc')); }   /* FILTROS-FUNIL-V1: a Lista também filtra */
   else {
     const nEnc=lista.filter(c=>ETAPAS_BC_ENCERR.includes(c.etapa)).length;
     const focoEnc=ETAPAS_BC_ENCERR.includes(BC_FOCUS);
@@ -20726,6 +20737,16 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const h=etStatusSelHtml(c), chip=etStatusChip(c), oi=etStatusSelHtml({id:'zm2',funil:'nn',etapa:'OI/FF'});
         return etEhEnc(c) && !etEhEnc({funil:'nn',etapa:'TA'}) && vazio.includes('Motivo da perda') && vazio.includes('nenhum motivo') && h.includes('✖ Motivo da perda') && h.includes('selected>Já é cliente Zz') && chip.includes('✖ Já é cliente Zz') && !oi.includes('Motivo da perda');
       } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
+    /* FILTROS-FUNIL-V1 (28/09): status (do funil) e lista de TA filtram o funil; "sem status"/"sem lista" também */
+    ok('FILTROS-FUNIL-V1: filtro por status (só os do funil, + sem status) e por lista de TA (+ sem lista), nos 3 tipos de funil', (()=>{
+      const e=(FUNIL_CFG.lp||[]).find(x=>x&&x.id==='OI/FF'); if(!e) return false; const _st=e.status, _fs=FUN_STATUS.nn, _fl=FUN_LISTA.nn; try{ e.status=['Zz Agendado'];
+        const a={id:'f1',funil:'nn',etapa:'OI/FF',status:'Zz Agendado',status_etapa:'OI/FF',listas:['Zz L1']}, b={id:'f2',funil:'nn',etapa:'OI/FF',listas:[]}, l=[a,b];
+        FUN_STATUS.nn='Zz Agendado'; FUN_LISTA.nn=''; const s1=funAplicaLente(l,'nn'); FUN_STATUS.nn='__sem'; const s2=funAplicaLente(l,'nn');
+        FUN_STATUS.nn=''; FUN_LISTA.nn='Zz L1'; const l1=funAplicaLente(l,'nn'); FUN_LISTA.nn='__sem'; const l2=funAplicaLente(l,'nn');
+        const src=String(viewNnFunil)+String(viewBcFunil)+String(viewFunilExtra);
+        return s1.length===1&&s1[0].id==='f1' && s2.length===1&&s2[0].id==='f2' && l1.length===1&&l1[0].id==='f1' && l2.length===1&&l2[0].id==='f2'
+          && funStatusOptsDoFunil('nn').includes('Zz Agendado') && (src.match(/funFiltrosSel\(/g)||[]).length>=3 && String(viewBcFunil).includes("bcLista(funAplicaLente(");
+      } finally{ if(_st===undefined) delete e.status; else e.status=_st; FUN_STATUS.nn=_fs; FUN_LISTA.nn=_fl; } })());
     /* STATUS-ORFAO-V1 (28/09): status que saiu da cfg não some do card — aparece com ⚠ */
     ok('STATUS-ORFAO-V1: status gravado nesta etapa que saiu da lista aparece com ⚠ no card e na ficha; status de outra etapa não', (()=>{
       const e=(FUNIL_CFG.lp||[]).find(x=>x&&x.id==='OI/FF'); if(!e) return false; const _st=e.status; try{ e.status=['Novo Zz'];
