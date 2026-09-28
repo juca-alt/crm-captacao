@@ -880,6 +880,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nncol-enc-head:hover{background:#f5eaea}
   .sp-sug{background:var(--azul-claro);border:1px solid var(--azul-borda);border-radius:10px;padding:10px 14px;font-size:13px;margin:10px 0 4px}
   .res-sel{font-size:12px;max-width:175px;border:1px solid var(--linha);border-radius:8px;padding:5px 6px;background:#fff;min-height:36px}
+  .ig-err{display:block;color:var(--verm);font-size:12px;margin-top:3px} .ig-err[hidden]{display:none} input.ig-bad{border-color:var(--verm)!important}   /* INSTAGRAM-V1 */
   .ta-link{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-decoration:none;border-bottom:1px dotted var(--muted)} .ta-link:hover{color:var(--azul);border-bottom-color:var(--azul)}
   .ta-chip a{color:inherit;text-decoration:none}
   .cic-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 12px;font-size:12.5px}
@@ -5559,6 +5560,11 @@ function drwPessoaHtml(c){
         ${campo('pes_idade','Idade',c.idade,'number')}
         ${campo('pes_nasc','Nascimento',c.nascimento||c.nasc||'','date')}   <!-- NIVER-V2: é isto que põe a pessoa no card de aniversariantes -->
       </div>
+      ${novoOn('instagram')?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <div style="flex:1;min-width:200px"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Instagram</label>
+          <input id="pes_ig" type="text" data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" value="${esc(pInstagram(c)||c.instagram||'')}" placeholder="@handle ou link do perfil" autocomplete="off" autocapitalize="off" spellcheck="false" style="width:100%">
+          <div id="pes_ig_err" class="ig-err" hidden>Instagram inválido</div></div>
+      </div>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
         <div style="flex:1;min-width:200px">
           <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Recomendante (quem indicou)</label>
@@ -5585,17 +5591,21 @@ function pessoaSalvarDados(id){
   const v=i=>{ const e=$('#'+i); return e?e.value.trim():undefined; };
   const nome=v('pes_nome');
   if(nome!==undefined && !nome) return toast('O nome não pode ficar vazio');
+  const ig=igDoCampo('pes_ig'); if(ig===false) return;   /* INSTAGRAM-V1: inválido → nada é gravado */
   if(nome!==undefined) c.nome=nome;
-  const tel=v('pes_tel');   if(tel!==undefined) c.telefone=tel;
-  const mail=v('pes_mail'); if(mail!==undefined) c.email=mail;
-  const prof=v('pes_prof'); if(prof!==undefined) c.profissao=prof||'—';
-  const idade=v('pes_idade'); if(idade!==undefined) c.idade=(idade!==''&&isFinite(parseInt(idade,10)))?parseInt(idade,10):null;   /* BUGS-V5 #15 */
+  if(ig!==undefined) igAplicar(c,ig);
+  /* INSTAGRAM-V1: só grava o que MUDOU — campo vazio no form com a chave ausente no contato não cria `"":null` no jsonb */
+  const vz=y=>y==null||y===''||y==='—', put=(k,x)=>{ if(vz(c[k])&&vz(x)) return; if(c[k]!==x) c[k]=x; };
+  const tel=v('pes_tel');   if(tel!==undefined) put('telefone',tel);
+  const mail=v('pes_mail'); if(mail!==undefined) put('email',mail);
+  const prof=v('pes_prof'); if(prof!==undefined) put('profissao',prof||'—');
+  const idade=v('pes_idade'); if(idade!==undefined) put('idade',(idade!==''&&isFinite(parseInt(idade,10)))?parseInt(idade,10):null);   /* BUGS-V5 #15 */
   /* NIVER-V2: a data de nascimento do lead/negócio — o que faz ele aparecer nos aniversariantes.
      Preenchendo a data, a idade vem junto (e não sobrescreve idade digitada à mão sem data). */
   const nasc=v('pes_nasc');
-  if(nasc!==undefined){ c.nascimento=nasc||''; if(nasc){ const ia=(typeof mtIdade==='function')?mtIdade(nasc):null; if(ia!=null) c.idade=ia; } }
-  const rec=v('pes_rec'); if(rec!==undefined) c.recomendante=rec?pesCanon(rec):'';   /* PESSOA-SUGERE-V1: grafia registrada */
-  const n=pessoaPropagar(c);
+  if(nasc!==undefined){ put('nascimento',nasc||''); if(nasc){ const ia=(typeof mtIdade==='function')?mtIdade(nasc):null; if(ia!=null) c.idade=ia; } }
+  const rec=v('pes_rec'); if(rec!==undefined) put('recomendante',rec?pesCanon(rec):'');   /* PESSOA-SUGERE-V1: grafia registrada */
+  const n=pessoaPropagar(c); if(ig!==undefined) pessoaIrmaos(c).forEach(o=>igAplicar(o,ig));   /* INSTAGRAM-V1: é da pessoa, vale nas outras oportunidades dela (inclusive a remoção) */
   const lpNovo=v('pes_lp'); const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
   salvar(); renderDrawer(); render();
   toast(n?`Salvo — vale para as ${n+1} oportunidades desta pessoa`:'Salvo',true);
@@ -11834,6 +11844,21 @@ function pIdade(o){ const v=o&&o.idade; return (v!=null&&v!=='')?(Number(v)||nul
 function pNascimento(o){ return _pf(o&&o.nascimento, o&&o.nasc); }
 function pSexo(o){ return _pf(o&&o.sexo); }
 function pEmail(o){ return _pf(o&&o.email); }
+/* INSTAGRAM-V1 (28/09): fonte ÚNICA do handle — todo ponto que grava `instagram` passa aqui.
+   Aceita @Handle, handle, URL (com/sem www, barra final, ?igsh=…) e espaços; devolve
+   {ok:true,v:'@handle'} (minúsculo), {ok:true,v:null} quando vazio (remove o campo) ou
+   {ok:false} quando não é um handle válido (letras, números, . e _, até 30). */
+function normalizaInstagram(entrada){
+  let s=String(entrada==null?'':entrada).trim(); if(!s) return {ok:true,v:null};
+  const m=s.match(/^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/([^\/?#\s]*)[\/]?(?:[?#].*)?$/i);
+  if(m) s=m[1]; s=s.replace(/^@/,'').toLowerCase();
+  return /^[a-z0-9._]{1,30}$/.test(s)? {ok:true,v:'@'+s} : {ok:false,v:null}; }
+function pInstagram(o){ const r=normalizaInstagram(o&&o.instagram); return r.ok?r.v:null; }
+/* lê o campo do form: undefined = campo não está na tela; false = inválido (erro inline já mostrado); string|null = valor normalizado */
+function igDoCampo(id){ const e=document.getElementById(id); if(!e) return undefined; const r=normalizaInstagram(e.value), er=document.getElementById(id+'_err');
+  e.classList.toggle('ig-bad',!r.ok); if(er) er.hidden=r.ok; if(!r.ok){ try{ e.focus(); }catch(_){} return false; } e.value=r.v||''; return r.v; }
+function igAplicar(c,v){ if(v) c.instagram=v; else delete c.instagram; }
+function igLinkHtml(h){ return h?`<a class="ta-link" href="https://instagram.com/${esc(h.slice(1))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(h)}</a>`:''; }
 function pProfissao(o){ return _pf(o&&o.profissao, o&&o.cargo, o&&o.perfil&&o.perfil.profissao); }
 function pCidade(o){ return _pf(o&&o.cidade, o&&o.perfil&&o.perfil.cidade); }
 function pRendaPessoal(o){ return _pf(o&&o.renda_estimada, o&&o.renda, o&&o.dados&&o.dados.renda); }  /* ≠ cob.renda (cobertura) */
@@ -11855,7 +11880,7 @@ function pessoaLeadToCard(b){ return { id:'bn'+uid(), lp:escLpNovo(), funil:'nn'
   etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'', contexto:b.contexto||'',
   idade:b.idade||'', profissao:b.cargo||'', cidade:b.cidade||'', renda_estimada:b.renda_estimada||'',
   estado_civil:b.estado_civil||'', filhos:b.filhos||'', email:b.email||'', trilha:b.trilha||'',
-  notas:b.notas||'', criadoEm:hojeISO(), sitplan:null }; }
+  notas:b.notas||'', criadoEm:hojeISO(), sitplan:null, ...(pInstagram(b)?{instagram:pInstagram(b)}:{}) }; }
 
 /* ═══ FICHA-PESSOA-V1 (09/09): o MESMO bloco "quem é a pessoa" nas 3 fichas — card do funil,
    lead do estoque, cliente da carteira — lendo a camada PESSOA-CAMPOS-V1. Só leitura (nada de
@@ -11896,7 +11921,7 @@ function fichaPessoaHtml(o,tipo){
   const ult=(s.funil&&s.funil.ult)?'últ. toque '+dataBR(s.funil.ult):'';
   const h=[
     linha('👤','Identidade',[idade?idade+' anos':'', nasc?'nasc. '+dataBR(nasc):'', (sexo&&sexo!=='—')?esc(String(sexo)):'']),
-    linha('📞','Contato',tels.map(t=>esc(telBR(t))).concat([email?esc(String(email)):''])),
+    linha('📞','Contato',tels.map(t=>esc(telBR(t))).concat([email?esc(String(email)):'', novoOn('instagram')?igLinkHtml(pInstagram(o)):''])),
     linha('💼','Perfil',[prof?esc(String(prof)):'', cid?esc(String(cid)):'', fmtRenda(renda), civ?esc(String(civ)):'', fmtFil(fil)]),
     linha('🤝','Origem',[rec?'rec. '+esc(String(rec)):'rec. —', ctx?esc(String(ctx)):'', tri?esc(String(tri)):'']),
     linha('📍','Locais',(typeof locDe==='function'?locDe(o):[]).map(l=>esc((LOC_TIPOS[l.tipo]||'')+': '+(l.nome||l.end)+(locRotinas(l).length?' ('+locRotinas(l).map(locRotinaTxt).join('; ')+')':'')))),
@@ -15897,6 +15922,7 @@ const MODS={
 const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'pm-padrao':    {o:'Negócio aberto sem prêmio informado vale R$ 250/mês por padrão (mínimo base da Prudential) nos cards, somas e PA — desde TA/RCP; informar o valor na ficha substitui', desde:'2026-09-27'},
+  'instagram':    {o:'Campo Instagram na ficha do contato: @handle como link (abre o app no celular), editável no funil e no Estoque; cola URL ou @Handle que ele normaliza', desde:'2026-09-28'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
   /* 'solic-v2' — nasceu aqui em 17/09 e no MESMO DIA foi pra MODS com def:false, ligado pro Victor. Palavra dele: "ajusta já essa solicitação pro Victor poder acompanhar". */
@@ -16609,7 +16635,7 @@ function bnEditorHtml(c){
   /* `aberto` (5º arg) é ignorado desde a DOBRA-FECHADA-V1: quem decide é bneSecAberta(id) */
   const grp=(id,titulo,resumo,html,aberto)=>`<details class="bne-grp" data-sec="${id}" ${bneSecAberta(id)?'open':''} ontoggle="bneSecToggle('${id}',this.open)"><summary><span class="bne-grp-t">${titulo}</span><span class="bne-grp-r">${esc(resumo||'')}</span><span class="bne-grp-c">▾</span></summary><div class="bne-grid">${html}</div></details>`;
   const f=(lbl,inp,full)=>`<label class="bne-f${full?' bne-full':''}"><span class="bne-lbl">${lbl}</span>${inp}</label>`;
-  const contatoR=[c.telefone?String(c.telefone):'',c.email||'',c.cidade||''].filter(Boolean).join(' · ')||'sem telefone';
+  const contatoR=[c.telefone?String(c.telefone):'',c.email||'',novoOn('instagram')?pInstagram(c)||'':'',c.cidade||''].filter(Boolean).join(' · ')||'sem telefone';
   const qualR=[BN_EST_LABEL[c.estagio]||c.estagio||'',c.prioridade?'P'+c.prioridade:'',(c.recomendante||'').trim()?'rec. '+c.recomendante:''].filter(Boolean).join(' · ');
   const perfilR=[c.idade?c.idade+' anos':'',bnCivilDe(c)||'',c.renda_estimada?'R$ '+Number(c.renda_estimada).toLocaleString('pt-BR'):'',[c.empresa,c.cargo].filter(Boolean).join(' · ')].filter(Boolean).join(' · ')||'sem dados';
   return `<div class="bne">
@@ -16633,6 +16659,7 @@ function bnEditorHtml(c){
      +f('Telefone',`<input id="bne-tel" inputmode="tel" value="${esc(c.telefone||'')}">`)
      +f('Outros telefones (vírgula)',`<input id="bne-tel2" value="${esc((c.telefones_alt||[]).join(', '))}" placeholder="antigo, trabalho…">`)
      +f('E-mail',`<input id="bne-mail" inputmode="email" value="${esc(c.email||'')}">`)
+     +(novoOn('instagram')?f('Instagram',`<input id="bne-ig" type="text" value="${esc(pInstagram(c)||c.instagram||'')}" placeholder="@handle ou link do perfil" autocomplete="off" autocapitalize="off" spellcheck="false"><span id="bne-ig_err" class="ig-err" hidden>Instagram inválido</span>`):'')
      +f('Cidade/UF',`<input id="bne-cid" value="${esc(c.cidade||'')}" placeholder="Recife/PE">`),!!(c.telefone||c.email||c.cidade))}
     ${grp('p','🧭 Perfil',perfilR,
       f('Idade',`<input id="bne-idade" type="number" min="0" max="120" value="${esc(c.idade||'')}">`)
@@ -16656,6 +16683,8 @@ function bnEditar(id){ FBN.edit=FBN.edit===id?null:id;
   viewBnEstoque(); }
 function bnSalvarEdicao(id){
   const c=bnPor(id); if(!c) return;
+  const ig=igDoCampo('bne-ig'); if(ig===false){ toast('Instagram inválido'); return false; }   /* INSTAGRAM-V1: inválido → nada é gravado */
+  if(ig!==undefined) igAplicar(c,ig);
   c.nome=$('#bne-nome').value.trim()||c.nome; c.contexto=$('#bne-ctx').value.trim();
   c.telefone=$('#bne-tel').value.trim()||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=pesCanon($('#bne-rec').value.trim())||null;
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
@@ -17412,7 +17441,7 @@ function taFichaAbrir(id){ const c=bnPor(id); if(!c) return; TAV.ficha=id;
   ov.innerHTML=`<div class="ta-ficha"><div class="ta-ficha-top"><span style="color:var(--muted);font-size:12px">Ficha do contato${c._upd?' · atualizado '+esc(String(c._upd).slice(0,10)):''}</span>
       <span style="flex:1"></span><button class="btn btn-s btn-mini" style="min-height:40px;min-width:44px" onclick="taFichaFechar()" aria-label="Fechar">✕</button></div>${bnEditorHtml(c)}</div>`;
   const cancel=ov.querySelector('button[onclick*="viewBnEstoque"]'); if(cancel){ cancel.setAttribute('onclick','taFichaFechar()'); }
-  const salvar=ov.querySelector('button[onclick*="bnSalvarEdicao"]'); if(salvar){ const o=salvar.getAttribute('onclick'); salvar.setAttribute('onclick',o+';taFichaFechar()'); } }
+  const salvar=ov.querySelector('button[onclick*="bnSalvarEdicao"]'); if(salvar){ const o=salvar.getAttribute('onclick'); salvar.setAttribute('onclick','if('+o.replace(/;$/,'')+'!==false)taFichaFechar()'); } }   /* INSTAGRAM-V1: save recusado (campo inválido) não fecha a ficha */
 function taFichaFechar(){ TAV.ficha=null; const ov=document.getElementById('ta-ficha'); if(ov) ov.remove(); }
 function taRecsHtml(lista){ const map={}; lista.forEach(c=>{ const k=(c.recomendante||'').trim().toLowerCase(); if(!k) return; const o=map[k]=map[k]||{label:c.recomendante.trim(),total:0,trab:0,fone:0}; o.total++; if(c.estagio==='estoque'||c.estagio==='lista_ta') o.trab++; if(taTemFone(c)) o.fone++; });
   const arr=Object.values(map).sort((a,b)=>b.total-a.total); if(!arr.length) return '<div class="vazio" style="padding:30px">Ninguém com recomendante nesta seleção.</div>';
@@ -19304,7 +19333,7 @@ function lpSelfCheck(){
                  && soDaniel.length===2 && soDaniel.every(p=>p.lps.includes('Daniel')); })());
         ok('niver: a data de nascimento é editável na ficha da pessoa (é o que alimenta lead e negócio)',
            (()=>{ const f=String(drwPessoaHtml||'')+String(pessoaSalvarDados||'');
-             return f.includes("pes_nasc") && f.includes("c.nascimento=nasc"); })());
+             return f.includes("pes_nasc") && (f.includes("c.nascimento=nasc")||f.includes("put('nascimento',nasc")); })());   /* INSTAGRAM-V1: grava via put() (só o que mudou) */
       } finally{ CART.clientes=_c; S.contatos=_s; BN.contatos=_b; NIVER_F=_f; }
     }
     /* ═══ CONSOL-UX-V1 (16/09): Visão Consolidada depois dos prints do iPhone ═══ */
@@ -20557,6 +20586,15 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:escLpNovo(),funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* INSTAGRAM-V1 (28/09): normalizaInstagram é a fonte única do handle — tabela de aceite do ticket */
+    ok('INSTAGRAM-V1: normaliza @Handle/handle/URL/igsh/espaços, vazio remove, inválido não grava', (()=>{ const N=x=>{ const r=normalizaInstagram(x); return r.ok?r.v:'ERR'; };
+      const casos=[['@Fulano.Tal','@fulano.tal'],['fulano.tal','@fulano.tal'],['https://www.instagram.com/fulano.tal/','@fulano.tal'],['instagram.com/fulano.tal?igsh=MTZ4bXl','@fulano.tal'],
+        ['   @fulano.tal   ','@fulano.tal'],['',null],['   ',null],[null,null],['@nome com espaço','ERR'],['@'+'a'.repeat(31),'ERR'],['@'+'a'.repeat(30),'@'+'a'.repeat(30)],['https://instagram.com/Beltrano_1?utm=x#y','@beltrano_1'],['@','ERR']];
+      if(!casos.every(([i,o])=>N(i)===o)) return false;
+      const c={id:'ig1',nome:'Fulano',email:'f@x',instagram:'@fulano.tal'}; const antes=JSON.stringify(c); igAplicar(c,normalizaInstagram(c.instagram).v); if(JSON.stringify(c)!==antes) return false;   /* idempotente */
+      igAplicar(c,null); if('instagram' in c||c.email!=='f@x') return false;   /* vazio remove a chave e não toca as outras */
+      const card=pessoaLeadToCard({nome:'Fulano',instagram:'@Fulano.Tal'}), sem=pessoaLeadToCard({nome:'Beltrano'});
+      return card.instagram==='@fulano.tal' && !('instagram' in sem) && pInstagram({instagram:'x y'})===null && igLinkHtml('@fulano.tal').includes('href="https://instagram.com/fulano.tal"'); })());
     /* PESSOA-CAMPOS-V1 (08/09): acessador único lê os 3 fichários; promover lead→card é lossless; renda pessoal ≠ cobertura */
     ok('PESSOA-CAMPOS-V1: campo único lê lead/card/cliente, promover não perde dado e não funde renda pessoal com cobertura', (()=>{
       const lead={nome:'Ana Silva',cargo:'Dentista',cidade:'Recife',renda_estimada:9000,estado_civil:'casado',filhos:'2',email:'ana@x.com',telefone:'(81) 99999-0000',telefones_alt:['81 3000-1111'],recomendante:'Fulano',contexto:'clube',trilha:'seguro',idade:41};
