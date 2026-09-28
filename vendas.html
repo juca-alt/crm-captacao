@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.46 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.47 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4377,6 +4377,7 @@ function consolLista(sel){ return S.contatos.filter(c=>c&&escVisivel(c)&&sel.inc
   .so-k .lbl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em}
   .so-k .num{font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .so-kpis.so-kpis3{grid-template-columns:repeat(3,minmax(0,1fr))}   /* SO-COM-V1 */
+  .rel-sup{border:1px solid var(--linha);border-radius:10px;padding:8px 10px;font-size:13px}.rel-sup.pri{border-color:var(--verde,#16a34a);background:#f0fdf4}.rel-sup-m{font-size:12.5px;color:var(--muted);margin-top:3px}   /* REL-SUPORTADOS-V1 */
   .so-kls{display:flex;flex-direction:column;gap:3px;margin-top:6px;font-size:12.5px}.so-kl{display:flex;gap:6px;min-width:0}.so-kl-r{flex:0 0 auto;color:var(--muted);font-weight:600}.so-kl-v{min-width:0;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}   /* SO-ETAPAS-V1 */
   .so-k .sub{font-size:11px;color:var(--muted)}
   .so-k.verm{border-color:#f3c9c9;background:#fff5f5} .so-k.amar{border-color:#f3e2b0;background:#fffbeb}
@@ -9528,6 +9529,7 @@ async function exAplicarUI(){
   /* 4 · PLACED lê daqui */
   const pl=plSincronizarEmitidas();
   atClose(); render();
+  relLog('emitidas',(st.novas||0)+(st.atualizadas||0));
   toast(`Emitidas: ${st.novas} nova(s), ${st.atualizadas} atualizada(s) · ${st.desfechos} pendência(s) emitida(s) · ${st.apolices} apólice(s) na base · ${st.entregues} negócio(s) entregue(s)${pl?` · PLACED: ${pl.meses} mês(es) de ${pl.lps} LP(s)`:''}${msg}`,true);
 }
 /* resumo pra tela de Pendências (o que emiti no período) */
@@ -10245,6 +10247,45 @@ const REL_TIPOS={
   beneficios:{nome:'Aviso de sinistro / benefício'},
   aniversariantes:{nome:'Aniversariantes (Clientes, portal)'},
   semanal:{nome:'Relatório semanal do LP'} };
+/* ═══ REL-SUPORTADOS-V1 (28/09/2026) ═══ Pedido dele: "botão pra ver os relatórios suportados, com a última atualização de
+   cada um — pra eu acompanhar e o Victor saber o que subir; cada um tem um período importante pra atualizar".
+   Prioridade dele (colar texto redondo): Emitidas · Pendentes · Atraso · Aniversariantes. Os outros 6 ficam "em ajuste"
+   até ele liberar pro Victor. Última atualização = tabela rel_importacoes (quem/quando/linhas), gravada ao IMPORTAR. */
+const REL_CATALOGO=[
+  {k:'emitidas',        pri:true,  per:'toda semana',          como:'PDF ou texto colado — UW e Emissão › Apólices Emitidas no Período', dias:7},
+  {k:'pendencias',      pri:true,  per:'2x por semana',        como:'PDF ou texto colado — UW e Emissão › Propostas Pendentes', dias:4},
+  {k:'atraso',          pri:true,  per:'toda semana',          como:'PDF ou texto colado — relatório de Atraso do portal', dias:7},
+  {k:'aniversariantes', pri:true,  per:'todo mês (início)',    como:'texto colado do PDF — Clientes › Aniversariantes', dias:31},
+  {k:'semanal',         pri:false, per:'toda semana',          como:'PDF do relatório semanal do LP', dias:7},
+  {k:'carteira_clientes',pri:false,per:'todo mês',             como:'.xls do portal ou texto do PDF — Carteira de Clientes', dias:31},
+  {k:'carteira_apolices',pri:false,per:'todo mês',             como:'.xls do portal ou texto do PDF — Apólices Vigentes', dias:31},
+  {k:'statust',         pri:false, per:'toda semana (vem no semanal)', como:'seção Apólices Emitidas do semanal', dias:7},
+  {k:'persistencia',    pri:false, per:'todo mês (após o PAC, ~dia 27)', como:'texto do Extrato Consolidado de Comissão', dias:31},
+  {k:'beneficios',      pri:false, per:'quando acontecer',     como:'texto do aviso de sinistro', dias:0}];
+let REL_ULT={}, _relUltAt=0;
+async function relUltimas(forca){ if(!forca&&Date.now()-_relUltAt<60000) return REL_ULT; if(!sb||!logado()) return REL_ULT;
+  try{ const {data,error}=await sb.from('rel_importacoes').select('tipo,por,em,linhas').order('em',{ascending:false}).limit(300); if(error) throw error;
+    const m={}; (data||[]).forEach(r=>{ if(!m[r.tipo]) m[r.tipo]=r; }); REL_ULT=m; _relUltAt=Date.now(); }catch(e){ console.warn('rel_importacoes: leitura falhou',e); }
+  return REL_ULT; }
+function relLog(tipo,linhas){ try{ const por=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():'';
+  REL_ULT[tipo]={tipo,por,em:new Date().toISOString(),linhas:linhas==null?null:Number(linhas)||0};
+  if(sb&&logado()&&por) sb.from('rel_importacoes').insert({tipo,por,linhas:linhas==null?null:Number(linhas)||0}).then(({error})=>{ if(error) console.warn('rel_importacoes: não gravou',error); }); }catch(_){} }
+async function relSuportadosAbrir(){
+  const hj=new Date();
+  const pinta=()=>{ const lin=REL_CATALOGO.map(r=>{ const u=REL_ULT[r.k], d=u?Math.floor((hj-new Date(u.em))/864e5):null, atras=u&&r.dias&&d>r.dias;
+      const quem=u&&u.por?String(u.por).split('@')[0]:'';
+      return `<div class="rel-sup${r.pri?' pri':''}">
+        <div class="rel-sup-t"><b>${esc(REL_TIPOS[r.k].nome)}</b> ${r.pri?'<span class="badge b-verde" style="font-size:10.5px">✅ colar pronto</span>':'<span class="badge b-cinza" style="font-size:10.5px">🔜 em ajuste</span>'}</div>
+        <div class="rel-sup-m">📥 ${esc(r.como)}</div>
+        <div class="rel-sup-m">🔁 atualizar <b>${esc(r.per)}</b> · 🕘 última: ${u?`<b style="${atras?'color:var(--verm)':''}">${esc(dataBR(String(u.em).slice(0,10)))}</b> (${d===0?'hoje':'há '+d+'d'}${quem?' · '+esc(quem):''}${u.linhas!=null?' · '+u.linhas+' linha(s)':''})${atras?' <b style="color:var(--verm)">· atrasado</b>':''}`:'<i>sem registro ainda</i>'}</div></div>`; }).join('');
+    const box=document.getElementById('rel-sup-l'); if(box) box.innerHTML=lin; };
+  document.body.insertAdjacentHTML('beforeend',`<div class="sheet-bd mais-centro" id="rel-sup-bd" onclick="if(event.target===this)this.remove()"><div class="sheet" onclick="event.stopPropagation()" style="max-width:640px">
+    <div class="sheet-tit">📋 Relatórios suportados</div>
+    <div style="font-size:12.5px;color:var(--muted);margin:2px 0 8px">Solte o arquivo ou cole o texto no <b>Subir relatório</b> — eu identifico qual é e mando pro módulo certo. A última atualização é de quem importou, pra todo mundo ver.</div>
+    <div id="rel-sup-l" style="display:flex;flex-direction:column;gap:8px;max-height:62vh;overflow:auto"></div>
+    <button class="btn btn-ghost" style="width:100%;min-height:44px;justify-content:center;margin-top:10px" onclick="document.getElementById('rel-sup-bd').remove()">Fechar</button></div></div>`);
+  pinta(); await relUltimas(true); pinta(); }
+window.relSuportadosAbrir=relSuportadosAbrir;
 function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
   if(/<table|<tr|<td/i.test(cab)){ const h=normKey(cab.replace(/<[^>]+>/g,' '));
     if(/data de nascimento/.test(h)&&/num\.? ?apolices|apolices/.test(h)&&/cs/.test(h)) return 'carteira_clientes';
@@ -10282,16 +10323,16 @@ async function relRotear(tipo,bruto){
       if(!ehHtml&&tipo==='carteira_clientes'&&CART._pdfCli){ const p=CART._pdfCli; msg=`Carteira completada (PDF) — ${p.compl} data(s) de nascimento, ${p.cri} cliente(s) novo(s); ${CART.clientes.length} no total`; }
       else if(!ehHtml&&tipo==='carteira_apolices'&&CART._pdfAp){ const p=CART._pdfAp; msg=`Apólices completadas (PDF) — ${p.upd} atualizada(s), ${p.cri} nova(s); ${CART.apolices.length} no total`; }
       else msg=`Carteira atualizada — ${CART.clientes.length} cliente(s), ${CART.apolices.length} apólice(s)`;
-      toast(msg+suf,!(st&&st.sync==='falhou'));
+      toast(msg+suf,!(st&&st.sync==='falhou')); relLog(tipo,tipo==='carteira_clientes'?CART.clientes.length:CART.apolices.length);
       if(!/^cart-/.test(VIEW)) irPara('cart-clientes'); else render();
     }catch(e){ console.error(e); toast('Não consegui ler esse relatório — confira se é o export/PDF do portal.',false); }
     return; }
   if(tipo==='emitidas'){ exColar(); setTimeout(()=>{ const t=$('#ex_txt'); if(t){ t.value=bruto; exProcessar(); } },80); return; }
   if(tipo==='pendencias'){ emColarRelatorio(); setTimeout(()=>{ const t=$('#em_txt'); if(t){ t.value=bruto; emProcessar(); } },80); return; }
   if(tipo==='atraso'){ atColarRelatorio(); setTimeout(()=>{ const t=$('#at_txt'); if(t){ t.value=bruto; atProcessar(); } },80); return; }
-  if(tipo==='persistencia'){ const n=pxComMerge(pxComParse(bruto)); if(!/^cart-/.test(VIEW)) irPara('persistencia'); else render(); toast('Extrato lido — '+n+' seção(ões) de persistência (PAV/PANCEC) importadas',true); return; }
-  if(tipo==='beneficios'){ relAbrirBeneficio(bruto); return; }
-  if(tipo==='aniversariantes'){ const r=relAnivImportar(bruto); if(VIEW!=='lp-aniversario') irPara('lp-aniversario'); else render();
+  if(tipo==='persistencia'){ const n=pxComMerge(pxComParse(bruto)); if(!/^cart-/.test(VIEW)) irPara('persistencia'); else render(); toast('Extrato lido — '+n+' seção(ões) de persistência (PAV/PANCEC) importadas',true); relLog('persistencia',n); return; }
+  if(tipo==='beneficios'){ relAbrirBeneficio(bruto); relLog('beneficios',1); return; }
+  if(tipo==='aniversariantes'){ const r=relAnivImportar(bruto); if(r.lidos) relLog('aniversariantes',r.lidos); if(VIEW!=='lp-aniversario') irPara('lp-aniversario'); else render();
     toast(r.lidos?('Aniversariantes: '+r.lidos+' lido(s) — '+r.novos+' novo(s), '+r.atualizados+' atualizado(s)'):'Não achei nenhum aniversariante nesse texto — confira se copiou o relatório inteiro',!!r.lidos); return; }
   openLpImport(); setTimeout(()=>{ const t=$('#lp-text'); if(t){ t.value=bruto; } },80);
 }
@@ -12738,7 +12779,7 @@ async function atAplicarOficialUI(){ const p=_atPend; if(!p||p.tipo!=='oficial')
   atSalvarLocal(); let msg='';
   if(AT_REMOTE){ try{ await atUpsertRemoto(up); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('AT upsert',e); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
-  atClose(); render(); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${nNovos} nova(s)${msg}`,true);
+  atClose(); render(); relLog('atraso',p.updates.length+nNovos); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${nNovos} nova(s)${msg}`,true);
 }
 function atPreviewAssist(linhas){ const m=atMatchAssist(AT.itens,linhas); _atPend={tipo:'assist',updates:m.updates,naoAchou:m.naoAchou};
   let h=`<h2>Relatório das assistentes — tratativas</h2>`;
@@ -13266,7 +13307,7 @@ async function emAplicarUI(){ const p=_emPend; if(!p) return; const origem=atHoj
   emSalvarLocal(); let msg='';
   if(EM_REMOTE){ try{ const r1=await emUpsertRemoto(up); const fl=(r1&&r1.falhas)||[]; msg=fl.length?' · PARCIAL: '+impFalhasMsg(fl):' · sincronizado'; if(fl.length) toast('⚠️ '+impFalhasMsg(fl),false); }catch(e){ msg=' · só neste aparelho (falha no servidor: '+(e&&e.message||e)+')'; console.error('EM upsert',e); toast('⚠️ Nada subiu pro servidor: '+(e&&e.message||e),false); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
-  atClose(); render(); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${p.novos.length} nova(s), ${p.sumiram.length} sumiram${msg}`,true);
+  atClose(); render(); relLog('pendencias',p.updates.length+p.novos.length); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${p.novos.length} nova(s), ${p.sumiram.length} sumiram${msg}`,true);
 }
 /* exemplo SINTÉTICO (nomes inventados) — mesmo formato do relatório real de 02/09 */
 const EM_EXEMPLO_TXT=`Agência: Island
@@ -14863,7 +14904,7 @@ function openLpImport(){
     <div class="lp-msg" id="lp-msg"></div>
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-p" id="lp-go">Importar</button>
-      <button class="btn btn-s" onclick="lpCarregarExemplo(true)">Carregar exemplo</button>
+      <button class="btn btn-s" onclick="relSuportadosAbrir()">📋 Relatórios suportados</button>
       <button class="btn btn-ghost" id="lp-cancel" style="margin-left:auto">Fechar</button>
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:12px">Leitura local (sem IA) por padrão. Se o texto não for reconhecido, cai pra IA (Gemini, login obrigatório). PDF escaneado (sem texto) vai direto pra IA.</div>
@@ -14914,7 +14955,7 @@ function openLpImport(){
         const local=lpParseTexto(texto);
         const totalL=(local.secoes||[]).reduce((s,x)=>s+((x.linhas||[]).length),0);
         if(totalL>0 && local.confianca!=='baixa'){
-          local.__modelo='local'; lpIngest(local); ov.remove();
+          local.__modelo='local'; lpIngest(local); ov.remove(); relLog('semanal',totalL);
           let sinc=''; if(LP_REMOTE){ try{ await lpPersistRemoto(); sinc=' · sincronizado'; }catch(e){ sinc=' · só local (falha no servidor)'; console.error(e); } }
           toast(`Lido localmente, sem IA — ${totalL} registro(s) em ${(local.secoes||[]).length} quadro(s)${sinc}`,true);
           const nrev=(local.avisos||[]).length; if(nrev) toast(`${nrev} linha(s) pra revisar (segurado≠pagador ou incompletas)`,false);
@@ -14931,7 +14972,7 @@ function openLpImport(){
       const parsed=data.dados; parsed.__modelo=data.modelo;
       const total=(parsed.secoes||[]).reduce((s,x)=>s+((x.linhas||[]).length),0);
       if(!(parsed.secoes||[]).length){ $('#lp-spin').style.display='none'; go.disabled=false; setMsg('Não identifiquei seções nesse arquivo. Confira se é o relatório semanal.'); return; }
-      lpIngest(parsed); ov.remove();
+      lpIngest(parsed); ov.remove(); relLog('semanal',total);
       let sinc=''; if(LP_REMOTE){ try{ await lpPersistRemoto(); sinc=' · sincronizado'; }catch(e){ sinc=' · só local (falha no servidor)'; console.error(e); } }
       toast(`Relatório importado (IA) — ${total} registro(s) em ${(parsed.secoes||[]).length} quadro(s)${sinc}`,true);
       render();
@@ -19949,7 +19990,12 @@ function lpSelfCheck(){
         ok('solic: tempo em aberto conta até hoje se aberta, até o encerramento se fechou', soDiasAberta(s1)===10 && soDiasAberta(s3)===5);
         ok('solic: parada = sem andamento há '+SO_PARADA_DIAS+'d+; sem próximo passo escrito = muda', soParada(s1)===true && soParada(s2)===false && soMuda(s2)===true && soMuda(s1)===false);
         ok('solic: encerrada não é vencida nem parada nem muda', !soVencida(s3,hj) && !soParada(s3) && !soMuda(s3));
-        ok('SO-COM-V1 + SO-ETAPAS-V1: com quem está = Gustavo/Victor/LM/Cliente (etiqueta/filtro), Kanban pelas ETAPAS de resolução, sem prazo sugerido, legado mapeado, Em andamento conta como aberta', (()=>{
+        ok('REL-SUPORTADOS-V1: catálogo cobre os 10 tipos que o Subir relatório identifica, 4 prioritários (emitidas · pendências · atraso · aniversariantes), botão no Subir relatório e registro de importação nos pontos de aplicar', (()=>{
+      const ks=REL_CATALOGO.map(r=>r.k).sort().join(), tipos=Object.keys(REL_TIPOS).sort().join();
+      const pri=REL_CATALOGO.filter(r=>r.pri).map(r=>r.k).join()==='emitidas,pendencias,atraso,aniversariantes';
+      const log=String(exAplicarUI).includes("relLog('emitidas'")&&String(emAplicarUI).includes("relLog('pendencias'")&&String(atAplicarOficialUI).includes("relLog('atraso'")&&String(relRotear).includes("relLog('aniversariantes'");
+      return ks===tipos&&pri&&log&&String(openLpImport).includes('relSuportadosAbrir()'); })());
+    ok('SO-COM-V1 + SO-ETAPAS-V1: com quem está = Gustavo/Victor/LM/Cliente (etiqueta/filtro), Kanban pelas ETAPAS de resolução, sem prazo sugerido, legado mapeado, Em andamento conta como aberta', (()=>{
           const a=SO_COM.map(c=>c[0]).join()==='gustavo,victor,lm,prudential,cliente' && soComDe({bola_com:'area',area:'prudential_cobranca'})==='prudential' && SO_KB_COLS.map(c=>c[0]).join()==='aberta,a_fazer,em_andamento,executada';
           const b=soComDe({bola_com:'nos',aberta_por:'victor'})==='victor'&&soComDe({bola_com:'nos'})==='gustavo'&&soComDe({bola_com:'area'})==='lm'&&soComDe({bola_com:'cliente'})==='cliente'&&soComDe({bola_com:'victor'})==='victor';
           const c=soPrazoEfetivo({aberta_em:'2026-09-01',area:'lm'})===null && soPrazoEfetivo({prazo:'2026-10-01'})==='2026-10-01';
