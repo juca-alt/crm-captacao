@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.38 no ar · 66ª onda: status que sai da configuração aparece com ⚠ (STATUS-ORFAO-V1) + fila de envio sem marcas órfãs
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.39 no ar · 67ª onda: motivos de perda editáveis no encerramento (MOTIVO-PERDA-V1)
+
+_(66ª onda, mesmo dia — v8.38: status órfão com ⚠)_
 
 _(65ª onda, mesmo dia — v8.37: status | lista no card)_
 
@@ -45,7 +47,15 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (66ª onda) — STATUS-ORFAO-V1 (v8.38)
+## 28/09/2026 (67ª onda) — MOTIVO-PERDA-V1 (v8.39)
+Palavra dele: *"deixa eu editar e atualizar os motivos de perda da oportunidade; às vezes ela é perdida já no TA, ex.: uma pessoa que já é cliente de outro LP."*
+- Motivo de perda = o **status da etapa de encerramento** (Não, Prop. Cancelada, Apól. Cancelada; Oportunidade perdida na Base) — mesmo cadastro de Funil & Etapas, mesmo `c.status`. Sem tabela nova.
+- Funil & Etapas: nas etapas de encerramento o campo vira **✖ motivos da perda** (placeholder com exemplos).
+- Ficha: ao encerrar (botões ENCERRAR ou Descartar da lista de TA) o seletor **✖ Motivo da perda** aparece em destaque e com foco; sem motivo cadastrado, avisa e leva ao cadastro. Histórico: "Motivo da perda: X".
+- Card encerrado mostra **✖ motivo** (chip vermelho).
+- Invariante `MOTIVO-PERDA-V1`.
+
+ — STATUS-ORFAO-V1 (v8.38)
 Ele cadastrou os status em Funil & Etapas (TA: Não atende, Wapp · OI/FF, P/C, C2, DELIVERY: Delay X, Agendado, Realizado · N: FA, N Clean, N c/ Pend., N Futuro · EMISSÃO: Pendencia UW, Pendencia Financeira; BC idem nas etapas equivalentes) e disse "não aparecem no funil". Diagnóstico no app DELE (Chrome logado): cfg carregada certa; o que sumiu foram 3 negócios em TA com "Não atendeu" — ele renomeou pra "Não atende" e status fora da lista é ignorado → card "sem status".
 - **Dado:** os 3 trocados pra "Não atende" pelo próprio app (etSetStatusDe, histórico) — banco conferido: 4 em TA com "Não atende"; `atualizado` mudou na hora (prova do trg_toca_atualizado).
 - **Código:** `etStatusOrfao(c)` — status gravado NESTA etapa que saiu da lista aparece como **⚑ ⚠ X** (pílula tracejada âmbar) no card e no select da ficha; o menu avisa e pede o novo; dá pra limpar.
