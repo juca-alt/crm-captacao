@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.35 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.36 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -5634,7 +5634,7 @@ function drwPessoaHtml(c){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:flex-end">
         <div style="flex:1;min-width:200px">
           <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Recomendante (quem indicou)</label>
-          <input id="pes_rec" ${novoOn('pes-sugere')?pesSugAttrs():'list="pes_rec_lista" autocomplete="off"'} data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" value="${esc(c.recomendante||'')}" placeholder="Nome de quem indicou — digite e escolha na lista" style="width:100%">
+          <input id="pes_rec" type="text" ${novoOn('pes-sugere')?pesSugAttrs():'list="pes_rec_lista" autocomplete="off"'} data-so-leitura="lido no clique de Salvar (pessoaSalvarDados)" value="${esc(c.recomendante||'')}" placeholder="Nome de quem indicou — digite e escolha na lista" style="width:100%">
           ${novoOn('pes-sugere')?'':recomendanteDatalist()}
         </div>
         <div style="flex:1;min-width:160px;padding-bottom:4px">${recomendanteChip(c)||`<span style="font-size:11.5px;color:var(--muted)">Sem recomendante registrado.</span>`}</div>
@@ -16763,19 +16763,21 @@ function bnSalvarEdicao(id){
   const c=bnPor(id); if(!c) return;
   const ig=igDoCampo('bne-ig'); if(ig===false){ toast('Instagram inválido'); return false; }   /* INSTAGRAM-V1: inválido → nada é gravado */
   if(ig!==undefined) igAplicar(c,ig);
-  c.nome=$('#bne-nome').value.trim()||c.nome; c.contexto=$('#bne-ctx').value.trim();
-  c.telefone=telLimpa($('#bne-tel').value)||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=pesCanon($('#bne-rec').value.trim())||null;
-  c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
-  c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
-  c.idade=(()=>{ const n=parseInt($('#bne-idade').value,10); return isFinite(n)?n:null; })();
+  /* BN-PUT-V1 (28/09): mesma regra do pessoaSalvarDados — só grava o que MUDOU; campo vazio com chave ausente não cria `"":null` no jsonb */
+  const vz=y=>y==null||y==='', put=(k,x)=>{ if(vz(c[k])&&vz(x)) return; if(c[k]!==x) c[k]=x; };
+  put('nome',$('#bne-nome').value.trim()||c.nome); put('contexto',$('#bne-ctx').value.trim());
+  put('telefone',telLimpa($('#bne-tel').value)||null); bnTelsSet(c,($('#bne-tel2')||{}).value||''); put('recomendante',pesCanon($('#bne-rec').value.trim())||null);
+  put('trilha',$('#bne-tri').value); put('estagio',$('#bne-est').value);
+  put('prioridade',$('#bne-pri').value?Number($('#bne-pri').value):null); put('notas',$('#bne-not').value);
+  put('idade',(()=>{ const n=parseInt($('#bne-idade').value,10); return isFinite(n)?n:null; })());
   /* NIVER-V2: nascimento do lead — é o que põe ele no card de aniversariantes; a idade vem junto */
-  { const e=$('#bne-nasc'); if(e){ c.nascimento=e.value||''; if(e.value){ const ia=(typeof mtIdade==='function')?mtIdade(e.value):null; if(ia!=null) c.idade=ia; } } }
-  c.estado_civil=$('#bne-ec').value||null;
-  c.filhos=$('#bne-fi').value==='sim'?true:($('#bne-fi').value==='nao'?false:null); // boolean = formato canônico do banco (carga 04/08)
-  c.civil_cod=bnCivilRecalc(c); // mantém o código da carga em sincronia com civil/filhos editados
-  c.renda_estimada=(()=>{ const n=Number($('#bne-renda').value); return ($('#bne-renda').value!==''&&isFinite(n))?n:null; })();
-  c.cidade=$('#bne-cid').value.trim()||null; c.email=$('#bne-mail').value.trim()||null;
-  { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); c.empresa=ec[0]||null; c.cargo=ec[1]||null; }
+  { const e=$('#bne-nasc'); if(e){ put('nascimento',e.value||''); if(e.value){ const ia=(typeof mtIdade==='function')?mtIdade(e.value):null; if(ia!=null) c.idade=ia; } } }
+  put('estado_civil',$('#bne-ec').value||null);
+  put('filhos',$('#bne-fi').value==='sim'?true:($('#bne-fi').value==='nao'?false:null)); // boolean = formato canônico do banco (carga 04/08)
+  put('civil_cod',bnCivilRecalc(c)); // mantém o código da carga em sincronia com civil/filhos editados
+  put('renda_estimada',(()=>{ const n=Number($('#bne-renda').value); return ($('#bne-renda').value!==''&&isFinite(n))?n:null; })());
+  put('cidade',$('#bne-cid').value.trim()||null); put('email',$('#bne-mail').value.trim()||null);
+  { const ec=$('#bne-emp').value.split('·').map(x=>x.trim()); put('empresa',ec[0]||null); put('cargo',ec[1]||null); }
   const lpSel=$('#bne-lp'); const lpNovo=lpSel&&lpSel.value; const lpMudou=!!lpNovo&&escLpNorm(lpNovo)!==escLpNorm(escRotuloDe(c));
   FBN.edit=null; bnSalvar(); render(); toast('Salvo',true);
   if(lpMudou&&souAdm()) bnMoverDono(c,lpNovo).then(ok=>{ if(ok){ toast(String(c.nome||'').split(' ')[0]+' → base de '+lpNovo+' ✓',true); render(); } });
@@ -17698,7 +17700,13 @@ function bnTaMoverLote(){
 function bnListaApagar(nome){ if(!confirm('Apagar a lista “'+nome+'”? (os contatos continuam na base)')) return;
   const tira=c=>{ if(c&&c.listas) c.listas=c.listas.filter(n=>n!==nome); };
   BN.contatos.forEach(tira); (S.contatos||[]).forEach(tira); BNTA.novas=(BNTA.novas||[]).filter(n=>n!==nome);
+  taListasCatalogoTirar(nome);   /* LISTA-APAGA-V1: sai também do catálogo oficial (senão volta vazia) */
   BNTA.lista='hoje'; bnSalvar(); salvar(); render(); toast('Lista apagada',true); }
+/* LISTA-APAGA-V1 (28/09): o catálogo oficial (app_settings.lp_listas_ta) só é gravado pelo admin, e só quando ele apaga uma lista que está nele */
+async function taListasCatalogoTirar(nome){ const l=(DIC&&DIC.listasTa)||[]; if(!l.includes(nome)) return; DIC.listasTa=l.filter(n=>n!==nome);
+  try{ localStorage.setItem('crmlp_dic_v1',JSON.stringify(DIC)); }catch(_){}
+  if(sb&&typeof logado==='function'&&logado()&&souAdm()){ try{ const {error}=await sb.from('app_settings').upsert({chave:'lp_listas_ta',valor:DIC.listasTa,atualizado_em:new Date().toISOString()},{onConflict:'chave'}); if(error) throw error; }
+    catch(e){ console.warn('lp_listas_ta',e); toast('A lista saiu daqui, mas não consegui tirar do catálogo no servidor',false); } } }
 async function bnResultado(id,res){
   const c=bnPor(id); if(!c) return;
   // `estAntes` é o que torna o ↩︎ (desfazer) fiel: sem ele, um clique errado em
@@ -18761,6 +18769,9 @@ function funSelfCheck(){ try{ let fail=[]; for(const f of ['lp','bc']){ const ar
 function lpSelfCheck(){
   const falhas=[];
   const ok=(nome,cond)=>{ if(!cond) falhas.push(nome); };
+  /* SELFCHECK-MUDO-V1 (28/09): invariante antigo que chama o fluxo real soltava toast na tela ("Zz: Follow-up…", "Fundidos…").
+     Durante o self-check o aviso é silenciado; volta no finally. */
+  const _toast=window.toast, _toastDesf=window.toastDesfazer; window.toast=()=>{}; window.toastDesfazer=()=>{};
   try{
     /* PC-1: motor de postecipacao (fonte unica) — casos da planilha oficial + Davi */
     { const T1='2025-09-01', em1=29;
@@ -20686,6 +20697,11 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const c={id:'zu1',nome:'Zz',funil:'nn',etapa:'TA'}; taStatusUnificar(c,RES_BY_K.lig_nao_atendida); const a=etStatusDe(c)==='Não atendeu'&&c.status_etapa==='TA';
         taStatusUnificar(c,RES_BY_K.pediu_retornar); return a && !c.status;
       } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
+    /* BN-PUT-V1 + LISTA-APAGA-V1 + SELFCHECK-MUDO-V1 (28/09) */
+    ok('BN-PUT-V1: ficha do Estoque grava só o que muda (sem chave vazia); apagar lista tira do catálogo local; self-check silencia toast', (()=>{
+      const src=String(bnSalvarEdicao); const a=src.includes("put('cidade'")&&!/c\.cidade=\$/.test(src);
+      const _d=DIC.listasTa; let _lc=null; try{ _lc=localStorage.getItem('crmlp_dic_v1'); }catch(_){} try{ DIC.listasTa=['Zz Cat 1','Zz Cat 2']; taListasCatalogoTirar('Zz Cat 1'); const b=JSON.stringify(DIC.listasTa)==='["Zz Cat 2"]';
+        return a && b && String(lpSelfCheck).includes('window.toast=()=>{}') && String(drwPessoaHtml).includes('id="pes_rec" type="text"'); } finally{ DIC.listasTa=_d; try{ if(_lc===null) localStorage.removeItem('crmlp_dic_v1'); else localStorage.setItem('crmlp_dic_v1',_lc); }catch(_){} } })());   /* self-check não deixa lixo salvo */
     /* LISTAS-NA-LINHA-V1 (28/09): no Painel TA a célula Listas põe/tira/move com histórico; filtro não mexe em lista */
     ok('LISTAS-NA-LINHA-V1: célula Listas tem ✕ por lista e ＋📋; tirar/mover gravam c.listas com histórico', (()=>{
       const _s=S.contatos,_r=window.render,_sv=window.salvar,_bs=window.bnSalvar,_to=window.toast; window.render=()=>{}; window.salvar=()=>{}; window.bnSalvar=()=>{}; window.toast=()=>{};
@@ -21163,6 +21179,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
     if(_iSalvo===null) localStorage.removeItem(IMP_CHAVE); else localStorage.setItem(IMP_CHAVE,_iSalvo);   /* self-check NÃO deixa lixo salvo (Livro de Erros #17) */
   }catch(e){ falhas.push('exceção: '+e.message); }
+  finally{ window.toast=_toast; window.toastDesfazer=_toastDesf; }
   if(falhas.length) console.warn('[self-check] invariantes quebrados:',falhas);
   return falhas;
 }

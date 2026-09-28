@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.35 no ar · 63ª onda: Painel TA põe/tira/move de lista direto na linha (LISTAS-NA-LINHA-V1, chave `ficha-lista-ta`)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.36 no ar · 64ª onda: 4 erros conhecidos fechados (BN-PUT-V1, LISTA-APAGA-V1, SELFCHECK-MUDO-V1, Recomendante com padding)
+
+_(63ª onda, mesmo dia — v8.35: listas na linha do Painel TA)_
 
 _(62ª onda, mesmo dia — v8.34: Filtros × Listas)_
 
@@ -37,7 +39,14 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (63ª onda) — LISTAS-NA-LINHA-V1 (v8.35)
+## 28/09/2026 (64ª onda) — erros conhecidos (v8.36)
+- **BN-PUT-V1:** ficha do Estoque (`bnSalvarEdicao`) grava só o que muda — não cria mais `contexto:''`, `cidade:null`… em todo save (mesma regra do `pessoaSalvarDados`).
+- **LISTA-APAGA-V1:** apagar lista tira também do catálogo oficial (`taListasCatalogoTirar`): cache local sempre; `app_settings.lp_listas_ta` só quando o admin está logado.
+- **SELFCHECK-MUDO-V1:** `lpSelfCheck` silencia `toast`/`toastDesfazer` durante a execução (invariantes antigos soltavam "Zz: Follow-up…", "Fundidos…").
+- Campo Recomendante do drawer ganhou `type="text"` (padding do app).
+- Invariante `BN-PUT-V1` (restaura o cache que toca).
+
+ — LISTAS-NA-LINHA-V1 (v8.35)
 
 Palavra dele: *"preciso de agilidade — o cliente fácil de incluir, mover de lista ou retirar. Ex.: já tô em P/C, não faz sentido estar em lista de TA; quero remover, mas não travado: se ela me der um delay de P/C, eu boto na lista de delay de P/C — o filtro já sinaliza pelo status, e na lista eu boto ou não a oportunidade que quero."*
 - Célula **Listas** do Painel TA (chave `ficha-lista-ta`): ✕ em cada lista (tira com um toque, sem abrir a ficha) + **＋📋** abre as listas: marcar/desmarcar, **↪ mover** (sai das outras, fica só nesta), tirar de todas, nova lista.
