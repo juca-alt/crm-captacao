@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.37 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.38 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -784,6 +784,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .et-lista-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}   /* FICHA-LISTA-TA-V1 */
   .nc-pill{display:inline-flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-size:11px;font-weight:650;border-radius:999px;padding:2px 9px;margin:3px 4px 3px 0;cursor:pointer;color:#1e3a8a;background:#eef4ff;border:1px solid #bfd3fb}   /* CARD-TA-STATUS-V1 */
   .nc-pills{display:flex;gap:4px;flex-wrap:nowrap;min-width:0;margin:3px 0} .nc-pills .nc-pill{margin:0;min-width:0;flex:0 1 auto} .nc-mais{font-weight:700;margin-left:2px}   /* CARD-STATUS-LISTA-V2 */
+  .nc-pill.orfao{color:#92400e;background:#fef3c7;border:1px dashed #f59e0b}   /* STATUS-ORFAO-V1 */
   .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
   .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
   .et-status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
@@ -1696,6 +1697,9 @@ function etCfgKey(f){ return (!f||f==='nn')?'lp':f; }
 function etStatusOpts(c){ const arr=(FUNIL_CFG&&FUNIL_CFG[etCfgKey(c&&c.funil)])||[]; const e=arr.find(x=>x&&x.id===(c&&c.etapa)); return (e&&Array.isArray(e.status))?e.status.map(x=>String(x||'').trim()).filter(Boolean):[]; }
 function etStatusDe(c){ const s=c&&String(c.status||'').trim(); if(s&&c.status_etapa&&c.status_etapa!==c.etapa) return '';   /* BUGS-V7: status marcado em outra etapa não vale (caminhos que mudam etapa sem logEtapa) */
   return (s&&etStatusOpts(c).includes(s))?s:''; }
+/* STATUS-ORFAO-V1 (28/09): ele renomeou "Não atendeu" → "Não atende" em Funil & Etapas e 3 negócios "perderam" o status sem aviso
+   (o card mostrava "sem status"). Status gravado NESTA etapa que saiu da lista não vale (regra antiga), mas aparece com ⚠ pra ele reescolher. */
+function etStatusOrfao(c){ const s=c&&String(c.status||'').trim(); if(!s||etStatusDe(c)) return ''; if(c.status_etapa&&c.status_etapa!==c.etapa) return ''; return s; }
 function etStatusTodos(){ const out=[]; Object.keys(FUNIL_CFG||{}).forEach(f=>(FUNIL_CFG[f]||[]).forEach(e=>((e&&e.status)||[]).forEach(x=>{ const s=String(x||'').trim(); if(s&&!out.includes(s)) out.push(s); }))); return out; }
 /* ═══ DELAY-SINC-V1 (18/09/2026) ═══════════════════════════════════════════════
    Pedido dele (Agenda no iPad): "essa linguagem de tarefas precisa ter sincronia: se eu boto o
@@ -1713,9 +1717,9 @@ function negDelayMarcar(c,ate,motivo){ if(!c) return null; ate=ate||isoAddDias(h
 function negDelayLimpar(c){ if(!c||!c.delay_ate) return; delete c.delay_ate; if(/^delay/i.test(etStatusDe(c))){ delete c.status; delete c.status_etapa; } }
 function etStatusChip(c){ const s=etStatusDe(c); const d=negDelayAtivo(c)&&!/^delay/i.test(s)?`<span class="nc-status" title="Cliente pediu pra adiar — vale até ${esc(dataBR(c.delay_ate))}">⏳ Delay até ${esc(dataBR(c.delay_ate))}</span>`:'';
   return (s?`<span class="nc-status" title="Status nesta etapa">⚑ ${esc(s)}</span>`:'')+d; }
-function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; const s=etStatusDe(c);
-  return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)"><option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
-function etSetStatusDe(c,v){ if(!c) return false; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return false; const de=etStatusDe(c); if(de===v) return false;
+function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; const s=etStatusDe(c), orf=etStatusOrfao(c);
+  return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)">${orf?`<option value="" selected>⚠ ${esc(orf)} (saiu da lista — escolha o novo)</option>`:''}<option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
+function etSetStatusDe(c,v){ if(!c) return false; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return false; const de=etStatusDe(c)||etStatusOrfao(c); if(de===v) return false;   /* STATUS-ORFAO-V1: dá pra limpar o órfão */
   if(v){ c.status=v; c.status_etapa=c.etapa; } else { delete c.status; delete c.status_etapa; }
   interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); return true; }
@@ -1757,11 +1761,14 @@ function funPosTA(c){ if(!c) return false; const ids=etapasDe(c)||[], i=ids.inde
 function cardEtapaInfoHtml(c){ const j=esc(jsq(c.id)), m=ETAPAS_MAP[(c&&c.funil)||'nn'], enc=(m&&m.enc)||[];
   if(enc.includes(c.etapa)) return etStatusChip(c);
   const s=etStatusDe(c), l=c.listas||[], d=negDelayAtivo(c)&&!/^delay/i.test(s)?`<span class="nc-status" title="Cliente pediu pra adiar">⏳ Delay até ${esc(dataBR(c.delay_ate))}</span>`:'';
-  const st=`<button class="nc-pill${s?' on':' vazio'}" onclick="event.stopPropagation();etStatusMenu(event,'${j}')" title="Status nesta etapa — toque pra mudar">⚑ ${s?esc(s):'sem status'}</button>`;
+  const orf=s?'':etStatusOrfao(c);
+  const st=orf?`<button class="nc-pill orfao" onclick="event.stopPropagation();etStatusMenu(event,'${j}')" title="“${esc(orf)}” saiu da lista de status desta etapa (Funil & Etapas) — toque pra escolher o novo">⚑ ⚠ ${esc(orf)}</button>`
+    :`<button class="nc-pill${s?' on':' vazio'}" onclick="event.stopPropagation();etStatusMenu(event,'${j}')" title="Status nesta etapa — toque pra mudar">⚑ ${s?esc(s):'sem status'}</button>`;
   const li=`<button class="nc-pill${l.length?'':' vazio'}" onclick="event.stopPropagation();taListaMenuLinha(event,'${j}')" title="${l.length?'Listas de TA: '+esc(l.join(' · ')):'Sem lista de TA'} — toque pra pôr, mover ou tirar">📋 ${l.length?esc(l[0])+(l.length>1?` <b class="nc-mais">+${l.length-1}</b>`:''):'sem lista'}</button>`;
   return `<div class="nc-pills">${st}${li}</div>${d}`; }
 function etStatusMenu(ev,id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return; const o=etStatusOpts(c), s=etStatusDe(c), j=esc(jsq(id));
-  taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · status em ${esc(LBLE(c.etapa))}</div>
+  const orf=etStatusOrfao(c);
+  taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · status em ${esc(LBLE(c.etapa))}</div>${orf?`<div style="padding:4px 10px 6px;font-size:12px;color:var(--amarelo,#b45309)">⚠ “${esc(orf)}” saiu da lista desta etapa — escolha o novo:</div>`:''}
     ${o.map(x=>`<button onclick="etStatusCard('${j}','${esc(jsq(x))}')">${x===s?'✓ ':'⚑ '}${esc(x)}</button>`).join('')}
     ${s?`<button onclick="etStatusCard('${j}','')">✕ Tirar o status</button>`:''}
     ${o.length?'':`<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Nenhum status nesta etapa ainda.</div>`}
@@ -2245,6 +2252,7 @@ async function lpcPush(){
     const prevOld=_lpcPrev; _lpcPrev=atual; const desiste=[]; falhas.forEach(k=>{ if((PUSH_ERR[k]||0)>=5){ desiste.push(k); return; } if(prevOld[k]!==undefined) _lpcPrev[k]=prevOld[k]; else delete _lpcPrev[k]; });
     if(desiste.length){ toast('⚠️ '+desiste.length+' edição(ões) não puderam ser enviadas depois de 5 tentativas (dono/permissão). Ficam só neste aparelho.',false); }
     pendLimpar('lpc',rows.map(x=>String(x.id)).filter(k=>!falhas.has(k)||desiste.includes(k))); pendLimpar('lpc',mortos);
+    pendLimpar('lpc',Object.keys(PEND.lpc||{}).filter(k=>!(k in atual)));   /* PEND-ORFAO-V1 (28/09): marca de contato que nem existe mais (resto de teste interno) não fica na fila pra sempre */
     rows.forEach(x=>{ if(!falhas.has(String(x.id))) _lpcBase[String(x.id)]=atual[String(x.id)]; });   /* subiu = é a base agora */
     rows.forEach(x=>{ if(falhas.has(String(x.id))) return; const c=(S.contatos||[]).find(y=>String(y.id)===String(x.id)); if(c&&!c._dono&&x.dono){ c._dono=x.dono; _lpcPrev[String(x.id)]=JSON.stringify(c); } });   /* confirmado: agora tem dono (e o snapshot acompanha, senão sobe de novo) */
   }catch(e){ console.warn('lp_contatos: push falhou (retenta no próximo salvar)',e); }
@@ -20700,6 +20708,12 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const e=(FUNIL_CFG.lp||[]).find(x=>x&&x.id==='TA'); if(!e) return false; const _st=e.status; try{ e.status=['Não atendeu'];   /* igual ao banco (28/09) */
         const c={id:'zu1',nome:'Zz',funil:'nn',etapa:'TA'}; taStatusUnificar(c,RES_BY_K.lig_nao_atendida); const a=etStatusDe(c)==='Não atendeu'&&c.status_etapa==='TA';
         taStatusUnificar(c,RES_BY_K.pediu_retornar); return a && !c.status;
+      } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
+    /* STATUS-ORFAO-V1 (28/09): status que saiu da cfg não some do card — aparece com ⚠ */
+    ok('STATUS-ORFAO-V1: status gravado nesta etapa que saiu da lista aparece com ⚠ no card e na ficha; status de outra etapa não', (()=>{
+      const e=(FUNIL_CFG.lp||[]).find(x=>x&&x.id==='OI/FF'); if(!e) return false; const _st=e.status; try{ e.status=['Novo Zz'];
+        const c={id:'zo1',nome:'Zz',funil:'nn',etapa:'OI/FF',status:'Velho Zz',status_etapa:'OI/FF'}, d={id:'zo2',nome:'Zz',funil:'nn',etapa:'OI/FF',status:'Velho Zz',status_etapa:'TA'};
+        const h=cardEtapaInfoHtml(c); return etStatusDe(c)==='' && etStatusOrfao(c)==='Velho Zz' && h.includes('⚠ Velho Zz') && etStatusSelHtml(c).includes('⚠ Velho Zz') && etStatusOrfao(d)==='' && !cardEtapaInfoHtml(d).includes('⚠');
       } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
     /* BN-PUT-V1 + LISTA-APAGA-V1 + SELFCHECK-MUDO-V1 (28/09) */
     ok('BN-PUT-V1: ficha do Estoque grava só o que muda (sem chave vazia); apagar lista tira do catálogo local; self-check silencia toast', (()=>{
