@@ -2,7 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.41 no ar + extensão 2.1.0 · 70ª onda: card COMPLETO do CRM no WhatsApp (MODO-WA-V1) + busca por funil (FUNIL-BUSCA-V1)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.42 no ar · 71ª onda: Novo negócio puxa do CRM (NN-PUXAR-V1)
+
+_(70ª onda — v8.41 + extensão 2.1.0: card completo no WhatsApp + busca por funil)_
+## 28/09/2026 (71ª onda) — NN-PUXAR-V1 (v8.42)
+Palavra dele (Pipe MFO): *"deixa opção de puxar do que já tenho do CRM ou add um novo, vou começar a popular essa frente aqui."*
+- **Novo negócio** ganhou **🔎 Puxar do CRM | ➕ Contato novo** (padrão = Puxar nos pipes e na Base; Contato novo em Novos Negócios). Busca funil + carteira + estoque por **nome ou telefone** (≥4 dígitos), uma linha por pessoa com as origens (💼 cliente · 🎯 funil · etapa · 📦 estoque).
+- Escolher **preenche** nome/telefone/idade/profissão/origem e, se a pessoa já tem negócio, o novo nasce **vinculado** (`pessoaVincular` → mesmo `pessoaId`) e herda e-mail/nascimento/sexo/recomendante. Editou o nome depois de puxar = pessoa diferente, sem vínculo.
+- Aviso quando a pessoa **já tem negócio aberto no mesmo funil**, com "Abrir esse".
+- Gate `NOVO_SO_MEU['nn-puxar']` (só ele por enquanto). Invariante `NN-PUXAR-V1`.
+- **MODAL-NO-WA-V1:** no card completo da extensão (`?wa=1`) o ✏️ Editar atividade abria invisível (a regra do modo escondia toda `.overlay`, e o `atModal` usa essa classe) → só `#overlay` some.
+- **NAV-ORDEM-V1:** *"quero organizar o meu lateral como eu quiser… cada usuário também"* → **↕️ Organizar menu** no rodapé do menu: blocos (item, grupo com subitens, divisor, módulo 📌) em qualquer ordem (arrastar ou ↑↓), ＋ divisor, ↺ ordem original; salvo por usuário **neste aparelho** (`crmlp_nav_ordem_v1:<email>`). Item novo do app nasce perto do vizinho. O rótulo "📌 Fixados" saiu: os fixados viram blocos da ordem dele. **NAV-ORDEM-V2 (OK dele):** ordem + 📌 também no servidor — tabela `lp_user_prefs` (email pk, prefs jsonb; RLS: só a própria linha + `crm_autorizado()`; migration `supabase/migrations/lp_user_prefs.sql`, aplicada no playground). Boot logado baixa e aplica; salvar/fixar sobe; servidor vazio + aparelho com ordem → sobe a do aparelho.
+
+## 🟢 28/09/2026 — v8.41 no ar + extensão 2.1.0 · 70ª onda: card COMPLETO do CRM no WhatsApp (MODO-WA-V1) + busca por funil (FUNIL-BUSCA-V1)
 
 _(69ª onda — v8.40: filtros do funil)_
 

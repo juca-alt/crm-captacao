@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.41 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.42 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1436,7 +1436,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <!-- ===== Portão de login (Google) — para LPs (ex.: Daniel). Deslogado sem login = modo local. ===== -->
 <style>
   /* MODO-WA-V1 (28/09): vendas.html?wa=1 = só a ficha do negócio, dentro da extensão do WhatsApp */
-  html.modo-wa .sidebar,html.modo-wa .topbar,html.modo-wa .bnav,html.modo-wa #main,html.modo-wa .overlay{display:none!important}
+  /* MODAL-NO-WA-V1 (28/09): era `.overlay` — escondia TAMBÉM as janelas (atModal usa class overlay): o ✏️ Editar atividade abria invisível. Só o fundo da gaveta sai. */
+  html.modo-wa .sidebar,html.modo-wa .topbar,html.modo-wa .bnav,html.modo-wa #main,html.modo-wa #overlay{display:none!important}
   html.modo-wa .drawer{position:fixed!important;inset:0!important;width:100%!important;max-width:none!important;transform:none!important;visibility:visible!important;border-radius:0!important;box-shadow:none!important}
   html.modo-wa body{overflow:hidden}
   .wa-vazio{padding:28px 18px;color:var(--muted);font-size:14px;line-height:1.5} .wa-vazio h3{color:var(--ink);font-size:16px;margin:0 0 6px}
@@ -1582,6 +1583,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     <button class="nav-btn modulo" data-view="config" onclick="irPara('config')"><span class="ic">⚙️</span><span class="lbl">Configurações</span></button>
 
     <div class="sep"></div>
+    <button class="nav-btn" onclick="navOrdEditar()" title="Pôr o menu lateral na ordem que você quiser"><span class="ic">↕️</span><span class="lbl">Organizar menu</span></button>   <!-- NAV-ORDEM-V1 -->
     <button class="nav-cta" onclick="openLpImport()"><span>📄</span><span class="lbl">Subir relatório</span></button>
     <div class="mini">Arquivo único · localStorage · porta pro Supabase na fase 2 (mesma trilha do módulo de substituição).</div>
   </nav>
@@ -6901,12 +6903,14 @@ function openNovoContato(funil){
       </div>`;
   const lps=isMaster()? `<label style="font-size:12px">LP dono
       <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
+  const puxar=novoOn('nn-puxar'); NC_PICK=null; NC_RES=[];   /* NN-PUXAR-V1 */
   document.body.insertAdjacentHTML('beforeend',`
-  <div id="ncModal" data-funil="${esc(funil)}" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+  <div id="ncModal" data-funil="${esc(funil)}" data-modo="novo" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
     <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
       <h3 style="margin-bottom:12px">➕ Novo negócio</h3>
       ${funilPicker}
-      <div style="display:flex;flex-direction:column;gap:9px">
+      ${puxar?ncPuxarTopoHtml():''}
+      <div id="ncCampos" style="display:flex;flex-direction:column;gap:9px">
         <input id="ncNome" placeholder="Nome completo*">
         <input id="ncTel" placeholder="Telefone (com DDD)">
         <div style="display:flex;gap:8px">
@@ -6924,9 +6928,83 @@ function openNovoContato(funil){
       </div>
     </div>
   </div>`);
-  setTimeout(()=>{ const i=document.getElementById('ncNome'); if(i) i.focus(); },50);
+  if(puxar) ncModo(funil==='nn'?'novo':'puxar');   /* NN-PUXAR-V1: nos pipes e na Base o normal é puxar quem já existe */
+  setTimeout(()=>{ const i=document.getElementById(document.getElementById('ncModal').dataset.modo==='puxar'?'ncBusca':'ncNome'); if(i) i.focus(); },50);
 }
-function ncFunilTroca(){ const r=document.querySelector('input[name=ncFunil]:checked'); const bc=r&&r.value==='bc'; const m=document.getElementById('ncModal'); if(m) m.dataset.funil=bc?'bc':'nn'; const row=document.getElementById('ncSitplanRow'); if(row) row.style.display=bc?'none':''; document.querySelectorAll('input[name=ncFunil]').forEach(i=>{ const l=i.closest('label'); if(l) l.classList.toggle('on',i.checked); }); const o=document.getElementById('ncOrigem'); if(o) o.placeholder=bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'; }
+/* ═══ NN-PUXAR-V1 (28/09) ═══════════════════════════════════════════════════════════════
+   Pedido dele no Pipe MFO: "deixa opção de puxar do que já tenho do CRM ou add um novo, vou
+   começar a popular essa frente". O Novo negócio só criava pessoa do zero — cliente da carteira
+   virava card solto, sem elo com os outros negócios dele. Agora: 🔎 Puxar do CRM | ➕ Contato novo.
+   Puxar busca funil + carteira + estoque (nome OU telefone), preenche os dados da pessoa e, se ela
+   já tem negócio no funil, VINCULA (pessoaId): o novo nasce irmão, não duplicata. Editou o nome
+   depois de puxar? Aí é outra pessoa — nasce sem vínculo (silêncio é melhor que palpite). */
+let NC_PICK=null, NC_RES=[];
+function ncFontes(){
+  const m=new Map(), out=[], vz=x=>x==null||x===''||x==='—';
+  const get=nome=>{ const k=normKey(nome||''); if(!k) return null; let e=m.get(k);
+    if(!e){ e={nome:String(nome).trim(),k,tel:'',idade:null,prof:'',rec:'',ct:null,negs:[],cartRef:null,bnId:null,bnEst:''}; m.set(k,e); out.push(e); } return e; };
+  const fill=(e,tel,idade,prof,rec)=>{ if(!e.tel&&!vz(tel)) e.tel=String(tel); if(e.idade==null&&idade) e.idade=idade; if(!e.prof&&!vz(prof)) e.prof=prof; if(!e.rec&&!vz(rec)) e.rec=rec; };
+  try{ (S.contatos||[]).filter(escVisivel).forEach(c=>{ const e=get(c.nome); if(!e) return; if(!e.ct) e.ct=String(c.id); e.negs.push({id:String(c.id),f:funilDe(c),et:c.etapa}); fill(e,c.telefone,c.idade,c.profissao,c.recomendante); }); }catch(_){}
+  try{ cartVis().forEach(c=>{ const e=get(c.nome); if(!e) return; e.cartRef=c.ref; fill(e,c.celular||c.telefone,c.idade,c.profissao,''); }); }catch(_){}
+  try{ (typeof bnVivos==='function'?bnVivos():[]).forEach(x=>{ if(x.estagio==='descartado') return; const e=get(x.nome); if(!e) return; e.bnId=x.id; e.bnEst=x.estagio||''; fill(e,x.telefone,x.idade,x.profissao,x.recomendante); }); }catch(_){}
+  return out;
+}
+function ncBuscar(q,max){ const n=normKey(q||''), dig=String(q||'').replace(/\D/g,''); if(n.length<2&&dig.length<4) return [];
+  const toks=n.split(' ').filter(Boolean), soDig=dig.length>=4&&/^[\d\s()+\-.]+$/.test(String(q).trim());   /* só dígito/pontuação = busca por telefone */
+  const l=ncFontes().filter(e=>{ if(soDig) return String(e.tel||'').replace(/\D/g,'').includes(dig);
+    if(e.k.includes(n)) return true; const ws=e.k.split(' '); return toks.every(t=>ws.some(w=>w.startsWith(t))); });
+  l.sort((a,b)=>(a.k.startsWith(n)?0:1)-(b.k.startsWith(n)?0:1) || (b.cartRef?1:0)-(a.cartRef?1:0) || a.nome.localeCompare(b.nome,'pt-BR'));
+  return l.slice(0,max||12); }
+function ncTags(e){ const t=[]; if(e.cartRef) t.push('💼 cliente');
+  e.negs.slice(0,2).forEach(g=>t.push('🎯 '+funilNome(g.f)+' · '+(ET_LABEL[g.et]||g.et||''))); if(e.negs.length>2) t.push('+'+(e.negs.length-2)+' negócios');
+  if(e.bnId&&!e.negs.length) t.push('📦 estoque'); return t.join(' · '); }
+function ncPuxarTopoHtml(){ return `
+  <div style="display:flex;gap:8px;margin-bottom:10px">
+    <button type="button" id="ncModoPux" class="sheet-chip" style="flex:1;justify-content:center;min-height:44px" onclick="ncModo('puxar')">🔎 Puxar do CRM</button>
+    <button type="button" id="ncModoNovo" class="sheet-chip" style="flex:1;justify-content:center;min-height:44px" onclick="ncModo('novo')">➕ Contato novo</button>
+  </div>
+  <div id="ncPuxBox" style="display:none;margin-bottom:10px">
+    <input id="ncBusca" placeholder="Nome ou telefone de quem já está no CRM" autocomplete="off" spellcheck="false" oninput="ncBuscaRender()" style="width:100%">
+    <div id="ncRes" style="max-height:min(260px,40vh);overflow:auto;margin-top:6px;border-radius:10px"></div>
+  </div>
+  <div id="ncPick" style="display:none;margin-bottom:10px"></div>`; }
+function ncModo(m){ const md=document.getElementById('ncModal'); if(!md) return; md.dataset.modo=m;
+  const pux=m==='puxar', tem=pux&&NC_PICK;
+  const a=document.getElementById('ncModoPux'), n=document.getElementById('ncModoNovo'); if(a) a.classList.toggle('on',pux); if(n) n.classList.toggle('on',!pux);
+  const box=document.getElementById('ncPuxBox'); if(box) box.style.display=pux&&!tem?'':'none';
+  const cp=document.getElementById('ncCampos'); if(cp) cp.style.display=(!pux||tem)?'flex':'none';
+  if(!pux){ NC_PICK=null; }
+  ncPickRender();
+  if(pux&&!tem){ ncBuscaRender(); setTimeout(()=>{ const i=document.getElementById('ncBusca'); if(i) i.focus(); },30); } }
+function ncBuscaRender(){ const i=document.getElementById('ncBusca'), box=document.getElementById('ncRes'); if(!i||!box) return;
+  const q=i.value.trim(); NC_RES=ncBuscar(q);
+  if(!NC_RES.length){ box.innerHTML=`<div style="font-size:12.5px;color:var(--muted);padding:8px 2px">${(normKey(q).length<2&&q.replace(/\D/g,'').length<4)?'Digite 2 letras do nome ou 4 dígitos do telefone — busca no funil, na carteira e no estoque.'
+      :`Ninguém com “${esc(q)}” no CRM. <button type="button" class="btn btn-s btn-mini" style="min-height:36px" onclick="ncNovoCom()">➕ Criar como contato novo</button>`}</div>`; return; }
+  box.innerHTML=NC_RES.map((e,k)=>`<button type="button" onclick="ncPuxar(${k})" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:48px;padding:8px 10px;border:0;border-bottom:1px solid var(--linha,#e5e7eb);background:transparent;text-align:left;font:inherit;cursor:pointer">
+      <b style="font-size:14px">${esc(e.nome)}</b><span style="font-size:12px;color:var(--muted)">${esc([e.tel,ncTags(e)].filter(Boolean).join(' · '))}</span></button>`).join(''); }
+function ncNovoCom(){ const q=((document.getElementById('ncBusca')||{}).value||'').trim(); ncModo('novo');
+  const dig=q.replace(/\D/g,''); const alvo=document.getElementById(dig.length>=8&&/^[\d\s()+\-.]+$/.test(q)?'ncTel':'ncNome'); if(alvo&&!alvo.value){ alvo.value=q; alvo.focus(); } }
+function ncPuxar(k){ const e=NC_RES[k]; if(!e) return; NC_PICK=e;
+  const put=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v==null?'':v; };
+  put('ncNome',e.nome); put('ncTel',e.tel); put('ncIdade',e.idade||''); put('ncProf',e.prof);
+  const o=document.getElementById('ncOrigem'); if(o&&!o.value) o.value=e.rec||(e.cartRef?'Carteira':'');
+  ncModo('puxar'); }
+function ncPickRender(){ const box=document.getElementById('ncPick'); if(!box) return; const e=NC_PICK, md=document.getElementById('ncModal');
+  if(!e||!md||md.dataset.modo!=='puxar'){ box.style.display='none'; box.innerHTML=''; return; }
+  const fid=md.dataset.funil||'nn'; const aberto=e.negs.find(g=>g.f===fid&&!ETAPAS_ENCERR.includes(g.et));
+  box.style.display='';
+  box.innerHTML=`<div class="card" style="padding:9px 11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--azul-claro,#eef4ff)">
+      <div style="flex:1;min-width:0"><b>✓ ${esc(e.nome)}</b><div style="font-size:12px;color:var(--muted)">${esc(ncTags(e)||'no CRM')}${e.negs.length?' · o novo negócio fica ligado a esta pessoa':''}</div></div>
+      <button type="button" class="btn btn-s btn-mini" style="min-height:40px" onclick="NC_PICK=null;ncModo('puxar')">Trocar</button></div>
+    ${aberto?`<div style="font-size:12.5px;color:var(--verm);margin-top:6px">⚠️ Já tem negócio aberto neste funil (${esc(ET_LABEL[aberto.et]||aberto.et||'')}). <button type="button" class="btn btn-s btn-mini" style="min-height:36px" onclick="document.getElementById('ncModal').remove();abrirContato('${esc(aberto.id)}')">Abrir esse</button> ou salve pra criar outro.</div>`:''}`; }
+/* no salvar: vincula à pessoa puxada (só se o nome continua o dela) e herda o que o formulário não pergunta */
+function ncVincularPuxado(c,md){ const e=(md&&md.dataset.modo==='puxar')?NC_PICK:null; if(!e||normKey(c.nome)!==e.k) return 0;
+  const o=e.ct&&(S.contatos||[]).find(x=>String(x.id)===e.ct); if(!o) return 0;
+  const vz=x=>x==null||x===''||x==='—';
+  ['email','nascimento','sexo','recomendante','instagram'].forEach(k=>{ if(vz(c[k])&&!vz(o[k])) c[k]=o[k]; });
+  pessoaVincular([o,c]); return pessoaIrmaos(c).length; }
+window.ncModo=ncModo; window.ncBuscaRender=ncBuscaRender; window.ncPuxar=ncPuxar; window.ncNovoCom=ncNovoCom;
+function ncFunilTroca(){ const r=document.querySelector('input[name=ncFunil]:checked'); const bc=r&&r.value==='bc'; const m=document.getElementById('ncModal'); if(m) m.dataset.funil=bc?'bc':'nn'; const row=document.getElementById('ncSitplanRow'); if(row) row.style.display=bc?'none':''; document.querySelectorAll('input[name=ncFunil]').forEach(i=>{ const l=i.closest('label'); if(l) l.classList.toggle('on',i.checked); }); if(typeof ncPickRender==='function') ncPickRender(); const o=document.getElementById('ncOrigem'); if(o) o.placeholder=bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'; }
 function salvarNovoContato(){
   const v=id=>{ const el=document.getElementById(id); return el? el.value.trim() : ''; };
   const nome=v('ncNome');
@@ -6941,9 +7019,9 @@ function salvarNovoContato(){
     origem:pesCanon(v('ncOrigem'))||'—', trilha:'seguro', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
     sitplan: (fid==='nn' && sp && sp.checked)? hojeISO() : null };
-  S.contatos.push(c); salvar();
-  document.getElementById('ncModal').remove();
-  toast(`${nome.split(' ')[0]} criado${c.sitplan?' — já na lista de hoje':''}${bc?' no funil Base de Clientes':extra?' no funil '+fxMeta(fid)[1]:''}`,true);
+  S.contatos.push(c); const nIrm=ncVincularPuxado(c,md); salvar();   /* NN-PUXAR-V1 */
+  document.getElementById('ncModal').remove(); NC_PICK=null;
+  toast(`${nome.split(' ')[0]} criado${nIrm?` — ligado aos outros ${nIrm} negócio${nIrm>1?'s':''} dele`:''}${c.sitplan?' — já na lista de hoje':''}${bc?' no funil Base de Clientes':extra?' no funil '+fxMeta(fid)[1]:''}`,true);
   render(); abrirContato(c.id);
 }
 
@@ -14274,17 +14352,131 @@ function modFixItens(){ const todos=HUB_SECOES.flatMap(s=>s.itens).filter(i=>(!i
   return modFixados().map(k=>todos.find(i=>modFixKey(i)===k)).filter(Boolean); }
 function modFixToggle(k){ const a=modFixados(); const ix=a.indexOf(k); if(ix>=0) a.splice(ix,1); else a.push(k);
   try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){}
+  if(logado()) navPrefsSubir();   /* NAV-ORDEM-V2: o 📌 também vale nos outros aparelhos */
   const it=HUB_SECOES.flatMap(s=>s.itens).find(i=>modFixKey(i)===k);
   toast((ix>=0?'Saiu do menu: ':'No menu lateral: ')+(it?it.titulo:k),true); navFixRender(); if(VIEW==='modulos') viewModulos(); }
 function navFixRender(){ const box=document.getElementById('nav-fix'); if(!box) return;
-  const l=modFixItens(); if(!l.length){ box.innerHTML=''; return; }
-  box.innerHTML=`<div class="sep"></div><div class="nav-btn nav-fix-lbl" aria-hidden="true"><span class="lbl">📌 Fixados</span></div>`+l.map(i=>{ const n=i.cnt?(()=>{ try{ return i.cnt(); }catch(_){ return 0; } })():0;
+  document.querySelectorAll('#nav-ordem [data-fixk]').forEach(e=>e.remove());   /* NAV-ORDEM-V1: os da rodada anterior saem; os novos entram na ordem dele */
+  const l=modFixItens(); if(!l.length){ box.innerHTML=''; navOrdAplicar(); return; }
+  box.innerHTML=l.map(i=>{ const n=i.cnt?(()=>{ try{ return i.cnt(); }catch(_){ return 0; } })():0;
     const go=i.href?`location.href='${i.href}'`:`irPara('${i.view}')`;
-    return `<button class="nav-btn${i.view&&i.view===VIEW?' ativo':''}"${i.view?` data-view="${esc(i.view)}"`:''} data-fix="1" onclick="${go}" title="${esc(i.desc||'')}"><span class="ic">${i.ic}</span><span class="lbl">${esc(i.titulo)}</span>${n?`<span class="cnt">${n}</span>`:''}</button>`; }).join(''); }
+    return `<button class="nav-btn${i.view&&i.view===VIEW?' ativo':''}"${i.view?` data-view="${esc(i.view)}"`:''} data-fix="1" data-fixk="${esc(modFixKey(i))}" onclick="${go}" title="${esc(i.desc||'')}"><span class="ic">${i.ic}</span><span class="lbl">${esc(i.titulo)}</span>${n?`<span class="cnt">${n}</span>`:''}</button>`; }).join('');
+  navOrdAplicar(); }
+/* ═══ NAV-ORDEM-V1 (28/09/2026) ══════════════════════════════════════════════════════════
+   Pedido dele: "trouxe pro menu conforme selecionei, mas não é pra ficar fixo — quero organizar o meu lateral como
+   eu quiser: organizo todos os módulos e boto na ordem que quero; cada usuário também pode assim."
+   O menu vira uma lista de BLOCOS (item solto, grupo com seus subitens, divisor, módulo fixado pelo 📌) que cada
+   usuário põe na ordem dele em ↕️ Organizar menu. Os blocos são lidos do próprio HTML no boot (nada de reescrever o
+   menu à mão); a ordem salva por usuário e aparelho. Item novo que o app ganhar entra perto de onde nasceu. */
+const NAV_ORD_CHAVE='crmlp_nav_ordem_v1';
+let NAV_BLOCOS=null, NAV_PADRAO=[], NAV_SEPS={};
+function navOrdKey(){ const e=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():'local'; return NAV_ORD_CHAVE+':'+e; }
+function navOrdLer(){ try{ const o=JSON.parse(localStorage.getItem(navOrdKey())||'null'); return (o&&Array.isArray(o.ordem))?{ordem:o.ordem.map(String),fora:Array.isArray(o.fora)?o.fora.map(String):[]}:null; }catch(_){ return null; } }
+function navOrdGravar(o){ try{ if(o) localStorage.setItem(navOrdKey(),JSON.stringify(o)); else localStorage.removeItem(navOrdKey()); }catch(_){} }
+function navOrdCapturar(){
+  if(NAV_BLOCOS) return true; const sb=document.querySelector('nav.sidebar'); if(!sb) return false;
+  const ini=sb.querySelector(':scope > .nav-btn[data-view="inicio"]'), fim=sb.querySelector(':scope > .nav-btn[data-view="config"]'); if(!ini||!fim) return false;
+  const nodes=[]; for(let el=ini; el; el=el.nextElementSibling){ nodes.push(el); if(el===fim) break; }
+  const box=document.createElement('div'); box.id='nav-ordem'; sb.insertBefore(box,ini);
+  NAV_BLOCOS={}; NAV_PADRAO=[]; let n=0, grp=null;
+  nodes.forEach(x=>{
+    if(x.id==='nav-fix'){ NAV_PADRAO.push('@fix'); return; }                                   /* lugar de nascença dos fixados */
+    if(x.classList.contains('sep')){ const id='s:'+(++n); NAV_BLOCOS[id]=[x]; NAV_PADRAO.push(id); grp=null; return; }
+    if(x.classList.contains('nav-grp-wrap')){ if(grp) NAV_BLOCOS[grp].push(x); grp=null; return; }
+    if(!x.querySelector('.lbl')||!x.classList.contains('nav-btn')&&!x.classList.contains('nav-grp')) return;   /* nós ocultos de contador (sem rótulo) ficam onde estão */
+    const ehGrp=x.classList.contains('nav-grp-btn'), id=(ehGrp?'g:':'v:')+(x.id||x.dataset.view||('n'+(++n)));
+    NAV_BLOCOS[id]=[x]; NAV_PADRAO.push(id); grp=ehGrp?id:null;
+  });
+  NAV_PADRAO.forEach(id=>(NAV_BLOCOS[id]||[]).forEach(x=>box.appendChild(x)));
+  return true; }
+function navOrdPins(){ return [...document.querySelectorAll('#nav-fix [data-fixk], #nav-ordem [data-fixk]')]; }
+function navOrdBlocos(){ const bl=Object.assign({},NAV_BLOCOS||{}); navOrdPins().forEach(p=>{ bl['fix:'+p.dataset.fixk]=[p]; }); return bl; }
+function navOrdPadrao(){ const pins=navOrdPins().map(p=>'fix:'+p.dataset.fixk); return NAV_PADRAO.flatMap(id=>id==='@fix'?pins:[id]); }
+/* ordem salva + o que nasceu depois (entra logo após o vizinho de nascença), sem o que ele tirou */
+function navOrdResolver(salvo,padrao,existe){
+  if(!salvo) return padrao.filter(existe);
+  const fora=new Set(salvo.fora||[]), r=[];
+  (salvo.ordem||[]).forEach(id=>{ if(existe(id)&&!fora.has(id)&&!r.includes(id)) r.push(id); });
+  padrao.forEach((id,i)=>{ if(!existe(id)||fora.has(id)||r.includes(id)) return;
+    let j=i-1; while(j>=0&&!r.includes(padrao[j])) j--; r.splice(j<0?0:r.indexOf(padrao[j])+1,0,id); });
+  return r; }
+function navOrdSep(id){ if(NAV_BLOCOS&&NAV_BLOCOS[id]) return NAV_BLOCOS[id][0]; if(!NAV_SEPS[id]){ const d=document.createElement('div'); d.className='sep'; NAV_SEPS[id]=d; } return NAV_SEPS[id]; }
+function navOrdAtual(){ const bl=navOrdBlocos(); return navOrdResolver(navOrdLer(),navOrdPadrao(),id=>!!bl[id]||/^s:/.test(id)); }
+/* NAV-ORDEM-V2 (28/09): a ordem (e os 📌 do menu) também vão pro servidor — tabela lp_user_prefs, uma linha por
+   usuário, RLS: cada um lê/grava só a própria. Abriu em outro aparelho → baixa e aplica. Servidor vazio e aparelho
+   com ordem → sobe a do aparelho (quem já tinha arrumado não perde). Sem login/offline → segue só no aparelho. */
+let NAV_SRV_EM='';   /* troca de conta = busca de novo */
+let NAV_SRV=0;   /* 0 = não buscou · 1 = buscando · 2 = feito */
+function navPrefsEmail(){ return (typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():''; }
+async function navPrefsSubir(){ const em=navPrefsEmail(); if(!em||!sb) return false;
+  try{ const {error}=await sb.from('lp_user_prefs').upsert({email:em,prefs:{nav_ordem:navOrdLer(),mod_fixados:modFixados()},atualizado:new Date().toISOString()},{onConflict:'email'});
+    if(error) throw error; return true; }catch(e){ console.warn('lp_user_prefs: não subiu (fica no aparelho)',e); return false; } }
+async function navPrefsBaixar(){
+  if(NAV_SRV||!sb||!logado()||!navPrefsEmail()) return; NAV_SRV=1; NAV_SRV_EM=navPrefsEmail();
+  try{ const {data,error}=await sb.from('lp_user_prefs').select('prefs').eq('email',navPrefsEmail()).maybeSingle(); if(error) throw error;
+    const pr=(data&&data.prefs)||null;
+    if(pr&&(pr.nav_ordem||Array.isArray(pr.mod_fixados))){
+      if(pr.nav_ordem&&Array.isArray(pr.nav_ordem.ordem)) navOrdGravar(pr.nav_ordem);
+      if(Array.isArray(pr.mod_fixados)){ try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(pr.mod_fixados.map(String))); }catch(_){} }
+      NAV_SRV=2; navFixRender(); }
+    else { NAV_SRV=2; if(navOrdLer()||modFixados().length) navPrefsSubir(); }
+  }catch(e){ NAV_SRV=0; console.warn('lp_user_prefs: não baixou (segue no aparelho)',e); } }
+function navOrdAplicar(){
+  if(NAV_SRV===2&&NAV_SRV_EM!==navPrefsEmail()) NAV_SRV=0;
+  if(!NAV_SRV) navPrefsBaixar();
+  if(!navOrdCapturar()) return; const box=document.getElementById('nav-ordem'); if(!box) return;
+  const bl=navOrdBlocos(), ordem=navOrdAtual(), vivos=new Set();
+  ordem.forEach(id=>{ const ns=/^s:/.test(id)?[navOrdSep(id)]:(bl[id]||[]); ns.forEach(x=>{ box.appendChild(x); vivos.add(x); }); });
+  [...box.children].forEach(x=>{ if(!vivos.has(x)){ if(x.classList.contains('sep')) x.remove(); else x.hidden=true; } });   /* divisor tirado some; nada de item sumir sem ele pedir */
+}
+/* ── editor ── */
+let NAV_ED=null;
+function navOrdRotulo(id){ if(/^s:/.test(id)) return '<span style="color:var(--muted)">── divisor ──</span>';
+  const bl=navOrdBlocos(), x=(bl[id]||[])[0]; if(!x) return esc(id);
+  const ic=(x.querySelector('.ic')||{}).textContent||'', lb=((x.querySelector('.lbl')||{}).textContent||x.textContent||'').trim();
+  return `${esc(ic)} ${esc(lb)}${/^g:/.test(id)?' <span style="color:var(--muted);font-size:12px">· grupo</span>':''}${/^fix:/.test(id)?' <span style="color:var(--muted);font-size:12px">· 📌 módulo</span>':''}`; }
+function navOrdEditar(){ if(!navOrdCapturar()) return; NAV_ED={ordem:navOrdAtual(),fora:((navOrdLer()||{}).fora||[]).slice()}; navOrdEdRender(); }
+function navOrdEdRender(){
+  const l=NAV_ED.ordem, btn='class="btn btn-s btn-mini" style="min-width:44px;min-height:44px"';
+  atModal(`<h2>↕️ Organizar menu</h2><div class="sub">Ponha o menu lateral na ordem que você quiser — arraste a linha (no computador) ou use ↑ ↓. Grupos (Pipe, SitPlan, Estoque) andam com os subitens. Vale pra você, em todos os seus aparelhos.</div>
+    <div id="nav-ed-l" style="display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:min(60vh,520px);overflow:auto">${l.map((id,i)=>`
+      <div class="nav-ed-row" draggable="true" data-i="${i}" style="display:flex;align-items:center;gap:6px;border:1px solid var(--linha);border-radius:10px;padding:4px 6px;background:var(--card,#fff);cursor:grab">
+        <span style="flex:1;min-width:0;font-size:14px">${navOrdRotulo(id)}</span>
+        <button ${btn} onclick="navOrdMover(${i},-1)" ${i?'':'disabled'} aria-label="Subir">↑</button>
+        <button ${btn} onclick="navOrdMover(${i},1)" ${i<l.length-1?'':'disabled'} aria-label="Descer">↓</button>
+        ${/^s:/.test(id)?`<button ${btn} onclick="navOrdTirar(${i})" title="Tirar divisor" aria-label="Tirar divisor">✕</button>`:/^fix:/.test(id)?`<button ${btn} onclick="navOrdTirar(${i})" title="Tirar do menu (volta a ficar só em Módulos)" aria-label="Tirar do menu">📌</button>`:''}
+      </div>`).join('')}</div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-s" onclick="navOrdSepNovo()">＋ divisor</button>
+      <button class="btn btn-s" onclick="navOrdPadraoVolta()">↺ ordem original</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-s" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" onclick="navOrdSalvar()">Salvar</button></div>`);
+  const box=document.getElementById('nav-ed-l'); if(!box) return; let de=null;
+  box.querySelectorAll('.nav-ed-row').forEach(r=>{
+    r.addEventListener('dragstart',e=>{ de=+r.dataset.i; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',String(de)); }catch(_){} r.style.opacity='.5'; });
+    r.addEventListener('dragend',()=>{ r.style.opacity=''; });
+    r.addEventListener('dragover',e=>{ e.preventDefault(); r.style.boxShadow='0 -3px 0 var(--azul,#2563eb) inset'; });
+    r.addEventListener('dragleave',()=>{ r.style.boxShadow=''; });
+    r.addEventListener('drop',e=>{ e.preventDefault(); r.style.boxShadow=''; const para=+r.dataset.i; if(de==null||de===para) return;
+      const [x]=NAV_ED.ordem.splice(de,1); NAV_ED.ordem.splice(para,0,x); navOrdEdRender(); });
+  }); }
+function navOrdMover(i,d){ const l=NAV_ED.ordem, j=i+d; if(j<0||j>=l.length) return; [l[i],l[j]]=[l[j],l[i]]; navOrdEdRender(); }
+function navOrdTirar(i){ const id=NAV_ED.ordem[i]; if(!id) return;
+  if(/^fix:/.test(id)){ NAV_ED.ordem.splice(i,1); NAV_ED.tirarPin=(NAV_ED.tirarPin||[]).concat(id.slice(4)); navOrdEdRender(); return; }
+  NAV_ED.ordem.splice(i,1); if(NAV_BLOCOS&&NAV_BLOCOS[id]&&!NAV_ED.fora.includes(id)) NAV_ED.fora.push(id); navOrdEdRender(); }
+function navOrdSepNovo(){ NAV_ED.ordem.push('s:u'+Date.now().toString(36)); navOrdEdRender(); setTimeout(()=>{ const b=document.getElementById('nav-ed-l'); if(b) b.scrollTop=b.scrollHeight; },0); }
+function navOrdPadraoVolta(){ NAV_ED={ordem:navOrdPadrao(),fora:[]}; navOrdEdRender(); }
+function navOrdSalvar(){ const pins=NAV_ED.tirarPin||[];
+  navOrdGravar({ordem:NAV_ED.ordem.slice(),fora:NAV_ED.fora.slice()});
+  if(pins.length){ try{ const a=modFixados().filter(k=>!pins.includes(k)); localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){} }
+  atClose(); NAV_ED=null; navFixRender();
+  if(logado()) navPrefsSubir().then(ok=>toast(ok?'Menu organizado — vale em todos os seus aparelhos':'Menu organizado neste aparelho (não consegui salvar no servidor agora)',true)); else toast('Menu organizado',true); }
+window.navOrdEditar=navOrdEditar; window.navOrdMover=navOrdMover; window.navOrdTirar=navOrdTirar; window.navOrdSepNovo=navOrdSepNovo; window.navOrdPadraoVolta=navOrdPadraoVolta; window.navOrdSalvar=navOrdSalvar;
 window.modFixToggle=modFixToggle; window.navFixRender=navFixRender;
 function viewModulos(){
   const secs=hubSecoesHtml(HUB_SECOES,i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)),'● módulo','mod');   /* PLANO-V1: card com `novo` só aparece pra quem a chave libera */
-  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card. O <b>📌</b> do card põe (ou tira) o módulo do menu lateral.</div>${hubBotoesHtml()}${secs}`;
+  $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card. O <b>📌</b> do card põe (ou tira) o módulo do menu lateral — e em <b>↕️ Organizar menu</b> você põe tudo na ordem que quiser.</div>${hubBotoesHtml()}${secs}`;
 }
 
 /* ════ VIEW: CONFIGURAÇÕES (o mesmo hub de cards dos Módulos) ════
@@ -16060,6 +16252,7 @@ const NOVO_SO_MEU={
   'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
+  'nn-puxar':     {o:'Novo negócio com 🔎 Puxar do CRM | ➕ Contato novo: busca a pessoa no funil, carteira e estoque (nome ou telefone), preenche os dados e, se ela já tem negócio, vincula como a mesma pessoa em vez de duplicar', desde:'2026-09-28'},
   'pes-sugere':   {o:'Campo de pessoa (Recomendante na ficha, no Novo contato e no Estoque) autocompleta com quem já está na base — funil, carteira e estoque — e grava a grafia registrada', desde:'2026-09-18'},
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
@@ -19351,7 +19544,7 @@ function lpSelfCheck(){
     ok('MOD-FIXAR-V1: 📌 no card de Módulos põe/tira do menu lateral (todos os módulos; Configurações não)', (()=>{ const bk=localStorage.getItem(MOD_FIX_CHAVE); try{ localStorage.setItem(MOD_FIX_CHAVE,'[]');
       const alvo=HUB_SECOES.flatMap(s=>s.itens).find(i=>i.view&&(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo))); if(!alvo) return true; const k=modFixKey(alvo);
       const temPin=hubSecoesHtml(HUB_SECOES,()=>true,'x','mod').includes('hub-pin')&&!hubSecoesHtml(CFG_SECOES,()=>true,'x','cfg').includes('hub-pin');
-      const _t=window.toast; window.toast=()=>{}; modFixToggle(k); const noMenu=!!document.querySelector('#nav-fix .nav-btn[data-view="'+alvo.view+'"]'); modFixToggle(k); const saiu=!document.querySelector('#nav-fix .nav-btn'); window.toast=_t;
+      const _t=window.toast; window.toast=()=>{}; modFixToggle(k); const noMenu=!!document.querySelector('nav.sidebar [data-fixk][data-view="'+alvo.view+'"]'); modFixToggle(k); const saiu=!document.querySelector('nav.sidebar [data-fixk]'); window.toast=_t;
       return temPin&&noMenu&&saiu&&HUB_SECOES.flatMap(s=>s.itens).every(i=>!!modFixKey(i)||!!i.acao); } finally{ if(bk==null) localStorage.removeItem(MOD_FIX_CHAVE); else localStorage.setItem(MOD_FIX_CHAVE,bk); navFixRender(); } })());
     ok('AGENDA-NOVA-V2 + SALVAR-DATA-V1: ＋ Novo nas seções Hoje/Amanhã/Próximas; folha com hora/duração/pessoa; data da linha só vale no 💾 Salvar; par Evento antes de Tarefa', (()=>{
       const h=agBloco('hoje','📌 Hoje','r','c'), a=agBloco('amanha','→ Amanhã','r','c'), o=agBloco('reun','x','r','c');
@@ -20666,6 +20859,39 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c=pesCanon('fábio zenório')==='Fábio Zenório' && pesCanon('Zé Ninguém')==='Zé Ninguém' && pesCanon('')==='';
       const d=/pesSugInput/.test(pesSugAttrs()) && String(drwPessoaHtml).includes("pesSugAttrs()") && String(openNovoContato).includes('pesSugAttrs()') && String(bnEditorHtml).includes('pesSugAttrs()');
       return a&&b&&c&&d; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; } })());
+    ok('NAV-ORDEM-V1: menu lateral na ordem do usuário — grupo anda com os subitens, item novo nasce perto do vizinho, divisor tirado não volta, ordem por usuário', (()=>{
+      const r1=navOrdResolver({ordem:['c','a','b'],fora:[]},['a','b','c','d'],id=>id!=='x');          /* d nasceu depois de c no padrão */
+      const r2=navOrdResolver({ordem:['b','a'],fora:['s:1']},['a','s:1','b','n'],()=>true);            /* divisor tirado fica fora; n entra após b */
+      const r3=navOrdResolver(null,['a','b'],id=>id==='b');
+      const a=JSON.stringify(r1)==='["c","d","a","b"]' && JSON.stringify(r2)==='["b","n","a"]' && JSON.stringify(r3)==='["b"]';
+      if(!navOrdCapturar()) return false;
+      const g=Object.keys(NAV_BLOCOS).find(id=>/^g:/.test(id)&&NAV_BLOCOS[id].length===2);
+      const b=!!g && NAV_BLOCOS[g][1].classList.contains('nav-grp-wrap') && !!document.getElementById('nav-ordem') && NAV_PADRAO.includes('@fix');
+      const k0=navOrdKey(), bk=localStorage.getItem(k0);
+      try{ const pad=navOrdPadrao(), inv=pad.slice().reverse(); navOrdGravar({ordem:inv,fora:[]}); navOrdAplicar();
+        const box=document.getElementById('nav-ordem'), prim=box.firstElementChild, ult=(NAV_BLOCOS[inv[0]]||[])[0]||null;
+        const c=!!ult && (prim===ult || (/^s:/.test(inv[0])&&prim.classList.contains('sep')));
+        const d=navOrdKey().startsWith(NAV_ORD_CHAVE+':');
+        return a&&b&&c&&d; }
+      finally{ if(bk==null) localStorage.removeItem(k0); else localStorage.setItem(k0,bk); navOrdAplicar(); } })());
+    ok('NAV-ORDEM-V2: ordem do menu e 📌 sobem pro servidor (lp_user_prefs, por usuário) ao salvar/fixar e descem no boot logado', (()=>{
+      const s1=String(navOrdSalvar), s2=String(modFixToggle), s3=String(navOrdAplicar), s4=String(navPrefsBaixar);
+      return s1.includes('navPrefsSubir()')&&s2.includes('navPrefsSubir()')&&s3.includes('navPrefsBaixar()')&&s4.includes("from('lp_user_prefs')")&&s4.includes('navOrdGravar(')&&String(navPrefsSubir).includes("onConflict:'email'"); })());
+    ok('MODAL-NO-WA-V1: no modo WhatsApp (?wa=1) só o fundo da gaveta (#overlay) some — janela de editar atividade (atModal, class overlay) continua visível', (()=>{
+      const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
+      const regras=css.split('}').filter(r=>r.includes('html.modo-wa')&&/display\s*:\s*none/.test(r));
+      return regras.length>0 && !regras.some(r=>/html\.modo-wa\s+\.overlay\b/.test(r)) && regras.some(r=>r.includes('html.modo-wa #overlay')); })());
+    ok('NN-PUXAR-V1: Novo negócio puxa do CRM por nome OU telefone (funil+carteira+estoque, sem repetir) e o negócio novo nasce VINCULADO à pessoa; nome editado depois de puxar = sem vínculo', (()=>{ const _c=S.contatos,_b=BN.contatos,_p=PERFIL,_k=NC_PICK; try{ PERFIL=null;
+      S.contatos=[{id:'np1',nome:'Zz Puxa Teste',telefone:'(85) 90000-1234',profissao:'Médico',email:'zz@x.test',funil:'nn',etapa:'C2',lp:S.activeUser,eventos:[],recs:[]}];
+      BN.contatos=[{id:'npb1',nome:'zz puxa teste',estagio:'estoque',lp:S.activeUser,listas:[]},{id:'npb2',nome:'Zz Outro Nome',telefone:'85 90000-9999',estagio:'estoque',lp:S.activeUser,listas:[]}];
+      const r=ncBuscar('zz pux'); const a=r.length===1&&r[0].ct==='np1'&&r[0].bnId==='npb1'&&r[0].prof==='Médico';
+      const t=ncBuscar('0000-9999'); const b=t.length===1&&t[0].nome==='Zz Outro Nome' && ncBuscar('z').length===0;
+      const md={dataset:{modo:'puxar'}}; NC_PICK=r[0];
+      const c1={id:'np2',nome:'Zz Puxa Teste',funil:'mfo',etapa:'Oportunidade',lp:S.activeUser}; S.contatos.push(c1);
+      const c=ncVincularPuxado(c1,md)===1 && pessoaDe(c1) && pessoaDe(c1)===pessoaDe(S.contatos[0]) && c1.email==='zz@x.test';
+      const c2={id:'np3',nome:'Zz Puxa Diferente',funil:'mfo',lp:S.activeUser}; const d=ncVincularPuxado(c2,md)===0&&!pessoaDe(c2) && ncVincularPuxado({nome:'Zz Puxa Teste'},{dataset:{modo:'novo'}})===0;
+      const e=String(salvarNovoContato).includes('ncVincularPuxado(c,md)') && String(openNovoContato).includes('ncPuxarTopoHtml()');
+      return a&&b&&c&&d&&e; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; NC_PICK=_k; } })());
     ok('REVISÃO-SEGURANÇA-V1: link de fora só entra num href se for http(s) — javascript:/data:/vazio viram "#"; Agenda (cartão ⋯ e linha) passa pelo urlSegura',
        urlSegura('javascript:alert(1)')==='#' && urlSegura('data:text/html,x')==='#' && urlSegura('')==='#' && urlSegura(null)==='#' && urlSegura(' https://calendar.google.com/calendar/event?eid=abc ')==='https://calendar.google.com/calendar/event?eid=abc' && urlSegura('HTTP://x.y/z')==='HTTP://x.y/z'
        && String(gcalMais).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.hangoutLink)') && !/href="\$\{esc\(e\.(htmlLink|hangoutLink)/.test(String(gcalMais)+String(gcalLinhaEv)));
