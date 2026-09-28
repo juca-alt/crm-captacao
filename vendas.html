@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.31 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.32 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -778,6 +778,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nncol-head{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#3c4657}
   .nncol-head .qt{font-size:10.5px;font-weight:700;background:#e2e8f0;color:var(--muted);padding:2px 8px;border-radius:20px}
   .nncard{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;box-shadow:var(--sombra);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .et-lista-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}   /* FICHA-LISTA-TA-V1 */
   .nc-pill{display:inline-flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-size:11px;font-weight:650;border-radius:999px;padding:2px 9px;margin:3px 4px 3px 0;cursor:pointer;color:#1e3a8a;background:#eef4ff;border:1px solid #bfd3fb}   /* CARD-TA-STATUS-V1 */
   .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
   .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
@@ -1713,6 +1714,26 @@ function etSetStatusDe(c,v){ if(!c) return false; v=String(v||'').trim(); if(v&&
   if(v){ c.status=v; c.status_etapa=c.etapa; } else { delete c.status; delete c.status_etapa; }
   interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); return true; }
+/* FICHA-LISTA-TA-V1 (28/09): na etapa TA a ficha escolhe a lista de TA no mesmo card da etapa — trocar, tirar ou descartar
+   com um toque, tudo no histórico. Escolher uma lista TROCA (sai das outras); estar em várias continua pelo 📋 do card. */
+function drwListaTaHtml(c){ if(!c||!novoOn('ficha-lista-ta')||!funEhTA(c)) return ''; const l=c.listas||[], cat=[...new Set([...taListasCatalogo(),...l])];
+  const sel=l.length===1?l[0]:(l.length>1?'__varias':'');
+  return `<div class="et-status-row et-lista-row"><label>📋 Lista de TA</label><select id="drwListaTa" onchange="drwListaEscolher(this.value)"><option value="" ${sel?'':'selected'}>— sem lista —</option>${l.length>1?`<option value="__varias" selected>${esc(l.join(' + '))}</option>`:''}${cat.map(n=>`<option value="${esc(n)}" ${n===sel?'selected':''}>${esc(n)}</option>`).join('')}<option value="__nova">＋ Nova lista…</option></select></div>
+    <div class="et-lista-acts">${l.length?`<button class="btn btn-ghost btn-mini" onclick="drwListaEscolher('')">Tirar da lista</button>`:''}<button class="btn btn-ghost btn-mini" style="color:var(--verm)" onclick="drwListaDescartar()" title="Encerra o negócio (${esc(LBLE(drwEtapaDescarte(c)||'Não'))}) e tira das listas de TA">Descartar</button></div>`; }
+function drwEtapaDescarte(c){ const m=ETAPAS_MAP[(c&&c.funil)||'nn']; return (m&&m.enc&&m.enc[0])||null; }
+function drwListaEscolher(v){ const c=ct(); if(!c) return; if(v==='__varias') return;
+  if(v==='__nova'){ let n=prompt('Nome da nova lista de TA:'); n=n&&n.trim(); if(!n){ renderDrawer(); return; } v=n; }
+  const p=String(c.nome||'').split(' ')[0];
+  if(taListaDefinir(c,v?[v]:[])){ salvar(); toast(v?`${p} → “${v}”`:`${p} saiu da lista de TA`,true); }
+  renderDrawer(); setTimeout(()=>{ try{ render(); }catch(_){} },0); }
+function drwListaDescartar(){ const c=ct(); if(!c) return; const e=drwEtapaDescarte(c); if(!e) return toast('Este funil não tem etapa de encerramento',false);
+  const antes={etapa:c.etapa,listas:(c.listas||[]).slice(),status:c.status,status_etapa:c.status_etapa,ord:c.ord}, n0=interacoesDe(c).length, de=c.etapa;
+  taListaDefinir(c,[]); c.etapa=e; logEtapa(c,de,e); try{ funOrdemInserir(c,e,null); }catch(_){}
+  const marcas=interacoesDe(c).slice(n0).map(x=>x.id); salvar(); renderDrawer(); setTimeout(()=>{ try{ render(); }catch(_){} },0);
+  toastDesfazer(`${String(c.nome||'').split(' ')[0]}: descartado → ${LBLE(e)}`,()=>{ const v=(S.contatos||[]).find(x=>x.id===c.id); if(!v) return;
+    v.etapa=antes.etapa; v.listas=antes.listas; if(antes.status!=null){ v.status=antes.status; v.status_etapa=antes.status_etapa; } if(antes.ord!=null) v.ord=antes.ord;
+    const li=interacoesDe(v); for(let i=li.length-1;i>=0;i--) if(marcas.includes(li[i].id)) li.splice(i,1);
+    salvar(); if(CONTATO===v.id) renderDrawer(); render(); toast('Desfeito',true); }); }
 function etSetStatus(v){ if(etSetStatusDe(ct(),v)) renderDrawer(); }
 /* ═══ CARD-TA-STATUS-V1 (28/09): o card do funil mostra o que ele precisa pra trabalhar a etapa sem abrir a ficha.
    Palavra dele: "oportunidades que estão na etapa TA devem dizer a lista de TA no card, assim como o status deve
@@ -4669,6 +4690,9 @@ let JORNADA_TUDO=false;
 function jornadaAddNota(){ const c=S.contatos.find(x=>x.id===CONTATO); if(!c) return; const el=document.getElementById('jornadaNota'); const t=el?(el.value||'').trim():''; if(!t){ if(el) el.focus(); return; }
   interacoesDe(c).push({id:uid(),k:'nota',l:t,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); salvar(); renderDrawer(); toast('Status registrado na jornada',true); }
 window.jornadaAddNota=jornadaAddNota;
+function taStatusUnificar(c,r){ if(!c||!r) return; const re=/^n[aã]o atend/i, opt=etStatusOpts(c).find(x=>re.test(x)), cur=etStatusDe(c);
+  if(r.ta==='Não respondeu'){ if(opt&&cur!==opt){ c.status=opt; c.status_etapa=c.etapa; } }
+  else if(r.atend&&re.test(cur)){ delete c.status; delete c.status_etapa; } }
 function registrarResultado(id,k,dia){
   const c=S.contatos.find(x=>String(x.id)===String(id)); const r=RES_BY_K[k]; if(!c||!r) return;
   const it={id:uid(),k,l:r.l,dia:dia||hojeISO(),ts:new Date().toISOString(),por:quemFez()};
@@ -4680,6 +4704,9 @@ function registrarResultado(id,k,dia){
   const alvo0 = c.funil==='bc' ? ({'OI/FF':'Agendada Revisita','P/C':'Agendada Revisita','C2':'Agendada Revisita','Não':'Venda perdida'}[r.etapa]||null) : r.etapa;
   const alvo = (alvo0&&etapasDe(c).includes(alvo0)) ? alvo0 : null;   /* BUGS-V5 #4: etapa que não existe no funil do contato (VG/Prud/MFO) não é aplicada */
   if(alvo && c.etapa!==alvo){ const de=c.etapa; c.etapa=alvo; it.de=de; it.para=alvo; extra=` · etapa ${de} → ${alvo}`; try{ funOrdemInserir(c,alvo,null); }catch(_){} }
+  /* FICHA-LISTA-TA-V1 (achado do #5): a ligação gravava só taStatus e a ficha/Painel lêem status → "sem status" e fora do "não atendeu → Zap".
+     Não atendeu marca o status "Não atendeu" da etapa (se existir na cfg); atender tira. */
+  if(novoOn('ficha-lista-ta')) taStatusUnificar(c,r);
   salvar();
   toast(`${c.nome.split(' ')[0]}: ${r.l}${extra}`,true);
   render();
@@ -5818,6 +5845,7 @@ function renderDrawer(){
           </select></h3>
         <div id="drwFunilBox"></div>
         ${drwStepperHtml(c)}
+        ${drwListaTaHtml(c)}
         ${etStatusSelHtml(c)}
         <div style="font-size:11px;color:var(--muted);margin-top:8px">Toque pra mover · fica registrado na hora.</div>
       </div>
@@ -6321,7 +6349,7 @@ function spSelAplicar(sel){ const v=sel.value; sel.value=''; const ids=[...SP_SE
     if(spEhFunil(c)) f=true; else b=true; });
   if(f) salvar(); if(b) bnSalvar(); SP_SEL.clear();
   toast(n+(v==='__dia'?' na lista de '+dataBR(D):' → “'+nome+'”'),true); render(); }
-function spSelBarra(vis,opts){ opts=opts||{}; const nSel=vis.filter(c=>SP_SEL.has(c.id)).length; const listas=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR')); const D=spData(), hoje=hojeISO();
+function spSelBarra(vis,opts){ opts=opts||{}; const nSel=vis.filter(c=>SP_SEL.has(c.id)).length; const listas=taListasCatalogo(); const D=spData(), hoje=hojeISO();
   const todos=vis.length&&vis.every(c=>SP_SEL.has(c.id)); const j=JSON.stringify(vis.map(c=>c.id)).replace(/"/g,'&quot;');
   return `<div class="ta-selbar" style="margin:8px 0 6px;flex-wrap:wrap;gap:6px">
     <label style="display:flex;align-items:center;gap:6px;min-height:44px;font-size:12.5px"><input type="checkbox" ${todos?'checked':''} onchange="spSelTodos(${j},this.checked)" style="width:20px;height:20px"> todos (${vis.length})</label>
@@ -6335,15 +6363,20 @@ function spNoDia(c,D){ return !!c && ((spEhFunil(c)?c.sitplan:c.ta_dia)===D); }
 function spListasChips(c,D){ const l=((c&&c.listas)||[]).map(n=>`<span class="ta-lchip">📋 ${esc(n)}</span>`); if(D&&spNoDia(c,D)) l.unshift(`<span class="ta-lchip" style="border-color:var(--azul-borda);background:var(--azul-claro,#eef4ff)">📅 ${D===hojeISO()?'hoje':esc(dataBR(D))}</span>`); return l.length? `<div style="margin-top:2px">${l.join(' ')}</div>`:''; }
 function spAbrirFicha(c){ if(spEhFunil(c)) abrirContato(c.id); else taFichaAbrir(c.id); }
 function spListaBtn(c){ return novoOn('sp-listas')? `<button class="btn btn-s btn-mini" title="Listas de TA" onclick="spListaMenu(event,'${esc(jsq(c.id))}')">📋</button>`:''; }
-function spListaMenu(ev,id){ ev.stopPropagation(); const c=spPorId(id); if(!c) return; const listas=bnListasTodas(), D=spData(), j=esc(jsq(id));
+function spListaMenu(ev,id){ ev.stopPropagation(); const c=spPorId(id); if(!c) return; const listas=taListasCatalogo(), D=spData(), j=esc(jsq(id));
   taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} → listas de TA</div>
     <button onclick="spListaTgl('${j}','__dia')">${spNoDia(c,D)?'✓ Tirar da lista de '+esc(dataBR(D)):'📅 Pôr na lista de '+esc(dataBR(D))}</button>
     ${listas.map(n=>`<button onclick="spListaTgl('${j}','${esc(jsq(n))}')">${(c.listas||[]).includes(n)?'✓ ':'📋 '}${esc(n)}</button>`).join('')}
     <button onclick="spListaNova('${j}')">＋ Nova lista…</button>`); }
 function spListaTgl(id,nome){ taFecharMenu(); const c=spPorId(id); if(!c) return; const D=spData(), p=String(c.nome||'').split(' ')[0];
   if(nome==='__dia'){ const tinha=spNoDia(c,D); if(tinha) spTirarDoDia(id,D); else spPorNoDia(id,D); toast(p+(tinha?' saiu da lista de ':' na lista de ')+dataBR(D),true); render(); return; }
-  const tem=(c.listas||[]).includes(nome); c.listas=tem?(c.listas||[]).filter(x=>x!==nome):[...new Set([...(c.listas||[]),nome])]; spSalvarDe(c);
+  const tem=(c.listas||[]).includes(nome); taListaDefinir(c,tem?(c.listas||[]).filter(x=>x!==nome):[...new Set([...(c.listas||[]),nome])]); spSalvarDe(c);
   toast(p+(tem?' saiu de “':' → “')+nome+'”',true); render(); }
+/* FICHA-LISTA-TA-V1: muda as listas de TA de um negócio e registra no histórico {k:'lista'} (lead do Estoque não tem histórico de negócio) */
+function taListaDefinir(c,novas){ if(!c) return false; const antes=(c.listas||[]).slice(), dep=[...new Set((novas||[]).map(x=>String(x||'').trim()).filter(Boolean))];
+  if(antes.length===dep.length&&antes.every(x=>dep.includes(x))) return false; c.listas=dep;
+  if(spEhFunil(c)) interacoesDe(c).push({id:uid(),k:'lista',l:`Lista TA: ${antes.join(', ')||'—'} → ${dep.join(', ')||'—'}`,de:antes,para:dep,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
+  return true; }
 function spListaNova(id){ taFecharMenu(); let n=prompt('Nome da nova lista de TA:'); if(!n) return; n=n.trim(); if(!n) return;
   if(id){ spListaTgl(id,n); return; }
   if(bnListasTodas().includes(n)){ toast('Já existe uma lista com esse nome',false); return; }
@@ -6395,7 +6428,7 @@ function spNomesTabela(l,D,opts){ opts=opts||{}; const hoje=hojeISO(); const cha
   return cabec+`<div style="overflow:auto;border:1px solid var(--linha);border-radius:10px"><table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead><tr style="background:var(--azul-claro,#eef4ff);text-align:left"><th style="padding:7px 9px">Marcar</th><th style="padding:7px 9px">Nome</th><th style="padding:7px 9px">Onde está</th><th style="padding:7px 9px">Contato</th><th style="padding:7px 9px;text-align:right">Ação</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${l.length>(opts.max||60)?`<div style="font-size:11px;color:var(--muted);margin-top:6px">Mostrando ${opts.max||60} de ${l.length} — afine a busca ou abra no Painel TA.</div>`:''}`; }
-function spListasTaHtml(D){ const hoje=hojeISO(); const nomes=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+function spListasTaHtml(D){ const hoje=hojeISO(); const nomes=taListasCatalogo();
   const acoes=`<div class="toolbar" style="gap:6px;flex-wrap:wrap;margin-bottom:6px"><button class="btn btn-s btn-mini" style="min-height:44px" onclick="spListaNova()">＋ Nova lista</button><button class="btn btn-s btn-mini" style="min-height:44px" title="Todo mundo que está na lista deste dia vira uma lista de TA com nome" onclick="spDiaVirarLista()">💾 Salvar o dia como lista</button></div>`;
   const corpo=nomes.length? nomes.map(n=>{ const m=taListaMembros(n), noDia=m.filter(c=>spNoDia(c,D)).length, ab=!!SP_LISTA_AB[n], jn=esc(jsq(n));
     return `<div style="border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:6px">
@@ -15639,15 +15672,16 @@ const BN_EST_LABEL={estoque:'Estoque',lista_ta:'Lista de TA',oi_agendado:'OI age
 /* ── dicionários de exibição (app_settings do banco; cache local pra offline/
    deslogado). Regra do dicionario_civil_cod: por extenso onde couber; o código
    ("C/CF") só em espaço curto — por isso badge curto + tooltip por extenso. ── */
-let DIC={civil:null,temp:null};
+let DIC={civil:null,temp:null,listasTa:[]};
 function dicCacheLer(){ try{ const r=localStorage.getItem('crmlp_dic_v1'); if(r) DIC=Object.assign(DIC,JSON.parse(r)); }catch(_){} }
 async function dicCarregar(){
   if(!sb) return; try{
     const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return;
-    const {data,error}=await sb.from('app_settings').select('chave,valor').in('chave',['dicionario_civil_cod','dicionario_temperatura','lp_funil_cfg']);
+    const {data,error}=await sb.from('app_settings').select('chave,valor').in('chave',['dicionario_civil_cod','dicionario_temperatura','lp_funil_cfg','lp_listas_ta']);
     if(error) throw error;
     (data||[]).forEach(r=>{ const v=typeof r.valor==='string'?JSON.parse(r.valor):r.valor;
       if(r.chave==='dicionario_civil_cod') DIC.civil=v; else if(r.chave==='dicionario_temperatura') DIC.temp=v;
+      else if(r.chave==='lp_listas_ta') DIC.listasTa=Array.isArray(v)?v.map(x=>String(x||'').trim()).filter(Boolean):[];   /* FICHA-LISTA-TA-V1: catálogo oficial das listas de TA */
       else if(r.chave==='lp_funil_cfg'){ if(typeof _funCfgPend!=='undefined'&&_funCfgPend){ funCfgSalvarAgora(); } else if(typeof funCfgValida==='function'&&funCfgValida(v)){ FUNIL_CFG=Object.assign(funFabMat(),v); /* PIPES-V1: funil de fábrica ausente na cfg salva entra da fábrica (o salvo ganha) */ try{localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG));}catch(_){}; rebuildFunilLp(); /* rebuildFunilLp aplica as migrações (bcRedesign/etapa extinta); se mudou, sobe */ try{ if(JSON.stringify(FUNIL_CFG)!==JSON.stringify(v)) funCfgSalvar(); }catch(_){} if(typeof VIEW!=='undefined'&&(VIEW==='config-funil'||VIEW==='nn-funil'||VIEW==='bc-funil')) render(); } } });
     localStorage.setItem('crmlp_dic_v1',JSON.stringify(DIC));
   }catch(e){ console.warn('dicionarios: app_settings indisponível → cache local',e); }
@@ -15950,6 +15984,7 @@ const MODS={
 const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'pm-padrao':    {o:'Negócio aberto sem prêmio informado vale R$ 250/mês por padrão (mínimo base da Prudential) nos cards, somas e PA — desde TA/RCP; informar o valor na ficha substitui', desde:'2026-09-27'},
+  'ficha-lista-ta':{o:'Ficha do negócio na etapa TA: escolher/trocar a lista de TA, tirar da lista ou Descartar (encerra e tira das listas) no card da etapa, tudo no histórico; catálogo único de listas (lp_listas_ta + em uso)', desde:'2026-09-28'},
   'card-ta-status':{o:'Card do funil: na etapa TA mostra a lista de TA (📋, toque troca a lista); de OI em diante mostra SEMPRE o status da etapa (⚑, toque muda — status vêm de Funil & Etapas)', desde:'2026-09-28'},
   'instagram':    {o:'Campo Instagram na ficha do contato: @handle como link (abre o app no celular), editável no funil e no Estoque; cola URL ou @Handle que ele normaliza', desde:'2026-09-28'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
@@ -16758,6 +16793,8 @@ function bnLote(acao){
 /* SP-LISTAS-V1 (21/09): lista nomeada de TA atravessa Estoque E funil — o SitPlan organiza os dois numa lista só */
 function spListaPool(){ return [...bnVivos(), ...meusContatos()]; }
 function taListaMembros(n){ return n? spListaPool().filter(c=>(c.listas||[]).includes(n)) : []; }
+/* FICHA-LISTA-TA-V1 (28/09): UMA fonte das listas de TA — catálogo oficial (app_settings.lp_listas_ta) + as em uso (c.listas) + as recém-criadas na sessão */
+function taListasCatalogo(){ return [...new Set([...((DIC&&DIC.listasTa)||[]),...bnListasTodas(),...((typeof BNTA!=='undefined'&&BNTA.novas)||[])])].filter(Boolean).sort((a,b)=>a.localeCompare(b,'pt-BR')); }
 function bnListasTodas(){ const set=new Set(); spListaPool().forEach(c=>(c.listas||[]).forEach(n=>set.add(n))); return [...set].sort((a,b)=>a.localeCompare(b,'pt-BR')); }
 /* TA acionável = lista de HOJE ∪ listas nomeadas (união distinta) — é o que o
    card do Início e o badge do menu contam (achado #2 da varredura 04/08) */
@@ -17501,7 +17538,7 @@ function viewBnTa(){
   taCanalSync(); const wa=taCanal()==='wa';   /* WA-PAINEL-V1: mesma tela, canal trocado */
   const taMob=novoOn('ta-mob'), pesOn=novoOn('pes-sugere');   /* TA-MOB-V2 */
   const hoje=hojeISO();
-  const nomes=[...new Set([...bnListasTodas(),...(BNTA.novas||[])])].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  const nomes=taListasCatalogo();
   if(BNTA.lista!=='hoje'&&!(taSmartKey()&&taSmartDef(taSmartKey()))&&!nomes.includes(BNTA.lista)) BNTA.lista=wa?'sm:emfluxo':'sm:comfone';
   const vivos=bnVivos(), emHoje=vivos.filter(c=>c.ta_dia===hoje);
   const base=taDaLista(), lista=taFiltrados();
@@ -20616,6 +20653,25 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:escLpNovo(),funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    ok('FICHA-LISTA-TA-V1: ligação não atendida marca o status "Não atendeu" da etapa (fonte que a ficha lê) e atender tira', (()=>{
+      const e=(FUNIL_CFG.lp||[]).find(x=>x&&x.id==='TA'); if(!e) return false; const _st=e.status; try{ e.status=['Não atendeu'];   /* igual ao banco (28/09) */
+        const c={id:'zu1',nome:'Zz',funil:'nn',etapa:'TA'}; taStatusUnificar(c,RES_BY_K.lig_nao_atendida); const a=etStatusDe(c)==='Não atendeu'&&c.status_etapa==='TA';
+        taStatusUnificar(c,RES_BY_K.pediu_retornar); return a && !c.status;
+      } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
+    /* FICHA-LISTA-TA-V1 (28/09): lista de TA na ficha — só em TA; trocar/tirar/descartar gravam c.listas + histórico; catálogo único */
+    ok('FICHA-LISTA-TA-V1: ficha em TA escolhe/troca/tira a lista (histórico k:lista), Descartar encerra e tira das listas, catálogo inclui lp_listas_ta', (()=>{
+      const _s=S.contatos,_ct=CONTATO,_d=DIC.listasTa; try{
+        DIC.listasTa=['Lista Oficial Zz']; const a={id:'zl1',nome:'Zz Lista',funil:'nn',etapa:'TA',listas:['Lista Velha Zz']}, b={id:'zl2',nome:'Zz OI',funil:'nn',etapa:'OI/FF'};
+        S.contatos=[a,b]; CONTATO='zl1';
+        const h=drwListaTaHtml(a), hOI=drwListaTaHtml(b), cat=taListasCatalogo();
+        if(!h.includes('Lista de TA')||!h.includes('Lista Oficial Zz')||hOI!==''||!cat.includes('Lista Oficial Zz')||!cat.includes('Lista Velha Zz')) return false;
+        const _r=window.renderDrawer,_rn=window.render,_sv=window.salvar,_to=window.toast,_td=window.toastDesfazer; window.renderDrawer=()=>{}; window.render=()=>{}; window.salvar=()=>{}; window.toast=()=>{}; window.toastDesfazer=()=>{}; try{   /* nada do teste vai pro banco nem pra tela */
+          drwListaEscolher('Lista Oficial Zz'); const t1=JSON.stringify(a.listas)==='["Lista Oficial Zz"]' && interacoesDe(a).slice(-1)[0].l==='Lista TA: Lista Velha Zz → Lista Oficial Zz';
+          drwListaEscolher(''); const t2=a.listas.length===0 && a.etapa==='TA';
+          a.listas=['Lista Oficial Zz']; drwListaDescartar(); const t3=a.etapa===drwEtapaDescarte(a) && a.listas.length===0 && interacoesDe(a).some(x=>x.k==='etapa'&&x.para===a.etapa);
+          return t1&&t2&&t3;
+        } finally{ window.renderDrawer=_r; window.render=_rn; window.salvar=_sv; window.toast=_to; window.toastDesfazer=_td; }
+      } finally{ S.contatos=_s; CONTATO=_ct; DIC.listasTa=_d; } })());
     /* CARD-TA-STATUS-V1 (28/09): TA mostra a lista; de OI em diante o status aparece SEMPRE; antes da TA e encerrado não mudam */
     ok('CARD-TA-STATUS-V1: card em TA mostra a lista de TA; depois da TA mostra o status (ou "sem status"); SitPlan/encerrado sem pílula', (()=>{
       const mk=(id,funil,etapa,x)=>Object.assign({id,nome:'Zz '+id,funil,etapa},x||{});

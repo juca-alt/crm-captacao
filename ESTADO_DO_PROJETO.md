@@ -2,9 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.31 no ar · 59ª onda: lista de TA e status no card do funil (CARD-TA-STATUS-V1, só na base dele)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.32 no ar · 60ª onda: lista de TA dentro da ficha + status da ligação unificado (FICHA-LISTA-TA-V1, só na base dele)
 
-**Chaves novas só na base dele:** `card-ta-status` · `instagram` (+ as 8 abaixo e `pm-padrao`).
+**Chaves novas só na base dele:** `ficha-lista-ta` · `card-ta-status` · `instagram`
+
+_(59ª onda, mesmo dia — v8.31: lista de TA e status no card)_ (+ as 8 abaixo e `pm-padrao`).
 
 _(58ª onda, mesmo dia — v8.30: campo Instagram na ficha, INSTAGRAM-V1)_
 
@@ -27,7 +29,22 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (59ª onda) — CARD-TA-STATUS-V1: lista de TA e status no card do funil — só na base dele (v8.31)
+## 28/09/2026 (60ª onda) — FICHA-LISTA-TA-V1: lista de TA dentro da ficha — só na base dele (v8.32)
+
+Backlog de Melhorias #5. Ele operando bloco de TA na ficha: a lista só era gerenciada pela coluna "Listas de TA"; dentro da ficha não aparecia.
+
+### O que mudou (chave `ficha-lista-ta`)
+- **Ficha › Etapa de comercialização, etapa TA** (NN `TA`; BC TA/RCP): select **📋 Lista de TA** no padrão do "⚑ Status nesta etapa". Escolher TROCA a lista (sai das outras); "— sem lista —"/**Tirar da lista** limpa; **＋ Nova lista…**; **Descartar** = 1ª etapa de encerramento do funil (`Não` no NN) + sai de todas as listas, com desfazer. Estar em várias listas continua pelo 📋 do card. Fora da TA não aparece.
+- Toda mudança de lista (ficha E menu 📋 do card) grava interação `{k:'lista', l:'Lista TA: A → B'}` via `taListaDefinir` (lead do Estoque não tem histórico de negócio).
+- **Catálogo único** `taListasCatalogo()` = `app_settings.lp_listas_ta` (o app passou a LER, em `dicCarregar`) ∪ listas em uso ∪ recém-criadas — usado na ficha, no menu do card, no "Colocar em…", no SitPlan e no Painel TA.
+- **Achado unificado:** ligação não atendida (`registrarResultado`) grava também `status`/`status_etapa` = "Não atendeu" quando a etapa tem esse status; atender tira. A ficha e o "TA não atendeu → Zap" passam a enxergar.
+- Invariantes `FICHA-LISTA-TA-V1` (2) — isolados (stub de salvar/toast), não deixam rastro no boot.
+
+### Sobrou
+- Apagar uma lista que está em `lp_listas_ta` não a tira do catálogo do banco (volta a aparecer vazia). Escrever `lp_listas_ta` pelo app fica pra quando ele pedir.
+- Ao rodar `lpSelfCheck()` à mão, invariantes ANTIGOS soltam toasts ("Zz: Follow-up…", "Fundidos…") — pré-existente.
+
+ — CARD-TA-STATUS-V1: lista de TA e status no card do funil — só na base dele (v8.31)
 
 Palavra dele (print do Negócios na Base): *"oportunidades que estão na etapa TA devem dizer a lista de TA no card, assim como o status deve aparecer no card pra todos… o TA tá sempre atrelado a alguma lista de TA; de OI em diante preciso dos status fácil. Inclusive vou incluir novos status nas configurações."*
 
