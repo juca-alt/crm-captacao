@@ -2,9 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.30 no ar · 58ª onda: campo Instagram na ficha do contato (INSTAGRAM-V1, só na base dele)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.31 no ar · 59ª onda: lista de TA e status no card do funil (CARD-TA-STATUS-V1, só na base dele)
 
-**Chave nova só na base dele:** `instagram` (+ as 8 abaixo e `pm-padrao`).
+**Chaves novas só na base dele:** `card-ta-status` · `instagram` (+ as 8 abaixo e `pm-padrao`).
+
+_(58ª onda, mesmo dia — v8.30: campo Instagram na ficha, INSTAGRAM-V1)_
 
 _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês desde TA)_
 
@@ -25,7 +27,22 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (58ª onda) — INSTAGRAM-V1: campo Instagram no contato — só na base dele (v8.30)
+## 28/09/2026 (59ª onda) — CARD-TA-STATUS-V1: lista de TA e status no card do funil — só na base dele (v8.31)
+
+Palavra dele (print do Negócios na Base): *"oportunidades que estão na etapa TA devem dizer a lista de TA no card, assim como o status deve aparecer no card pra todos… o TA tá sempre atrelado a alguma lista de TA; de OI em diante preciso dos status fácil. Inclusive vou incluir novos status nas configurações."*
+
+### O que mudou (chave `card-ta-status`)
+- **Card em TA** (id `TA` no NN; no BC a 2ª etapa `Contato Agenda/Revisita` = rótulo TA/RCP; ou qualquer rótulo que comece com "TA"): pílula **📋 lista** (ou "📋 sem lista" tracejada). Toque abre o menu de listas do SitPlan (`spListaMenu`, fonte única `c.listas`) — sem abrir a ficha.
+- **Card de OI em diante** (etapas abertas depois da TA): pílula **⚑ status SEMPRE visível** ("⚑ sem status" tracejada). Toque abre os status da etapa (Funil & Etapas) + atalho ⚙️ pra criar status. Grava pelo mesmo núcleo da ficha (`etSetStatusDe`, histórico "Status: X").
+- Antes da TA (SitPlan / Clientes Ativos) e encerradas: igual a antes.
+- Celular: pílula com alvo 44px e raio 10px; desktop compacta.
+- Invariante `CARD-TA-STATUS-V1`. Portão verde.
+
+### Atenção
+- **No BC nenhuma etapa tem status configurado** (banco, 28/09) — as pílulas vão mostrar "sem status" até ele criar os status em Configurações › Funil & Etapas.
+- O menu de listas mostra as listas em uso na base (`bnListasTodas`), não `app_settings.lp_listas_ta` — é o item #5 do Backlog (lista de TA DENTRO da ficha + unificar fontes).
+
+ — INSTAGRAM-V1: campo Instagram no contato — só na base dele (v8.30)
 
 Backlog de Melhorias (Notion) item #4. A assistente comercial já gravava `lp_contatos.dados.instagram` (`@handle`); faltava a UI.
 
