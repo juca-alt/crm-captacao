@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.41 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.42 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6901,12 +6901,14 @@ function openNovoContato(funil){
       </div>`;
   const lps=isMaster()? `<label style="font-size:12px">LP dono
       <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
+  const puxar=novoOn('nn-puxar'); NC_PICK=null; NC_RES=[];   /* NN-PUXAR-V1 */
   document.body.insertAdjacentHTML('beforeend',`
-  <div id="ncModal" data-funil="${esc(funil)}" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+  <div id="ncModal" data-funil="${esc(funil)}" data-modo="novo" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
     <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
       <h3 style="margin-bottom:12px">➕ Novo negócio</h3>
       ${funilPicker}
-      <div style="display:flex;flex-direction:column;gap:9px">
+      ${puxar?ncPuxarTopoHtml():''}
+      <div id="ncCampos" style="display:flex;flex-direction:column;gap:9px">
         <input id="ncNome" placeholder="Nome completo*">
         <input id="ncTel" placeholder="Telefone (com DDD)">
         <div style="display:flex;gap:8px">
@@ -6924,9 +6926,83 @@ function openNovoContato(funil){
       </div>
     </div>
   </div>`);
-  setTimeout(()=>{ const i=document.getElementById('ncNome'); if(i) i.focus(); },50);
+  if(puxar) ncModo(funil==='nn'?'novo':'puxar');   /* NN-PUXAR-V1: nos pipes e na Base o normal é puxar quem já existe */
+  setTimeout(()=>{ const i=document.getElementById(document.getElementById('ncModal').dataset.modo==='puxar'?'ncBusca':'ncNome'); if(i) i.focus(); },50);
 }
-function ncFunilTroca(){ const r=document.querySelector('input[name=ncFunil]:checked'); const bc=r&&r.value==='bc'; const m=document.getElementById('ncModal'); if(m) m.dataset.funil=bc?'bc':'nn'; const row=document.getElementById('ncSitplanRow'); if(row) row.style.display=bc?'none':''; document.querySelectorAll('input[name=ncFunil]').forEach(i=>{ const l=i.closest('label'); if(l) l.classList.toggle('on',i.checked); }); const o=document.getElementById('ncOrigem'); if(o) o.placeholder=bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'; }
+/* ═══ NN-PUXAR-V1 (28/09) ═══════════════════════════════════════════════════════════════
+   Pedido dele no Pipe MFO: "deixa opção de puxar do que já tenho do CRM ou add um novo, vou
+   começar a popular essa frente". O Novo negócio só criava pessoa do zero — cliente da carteira
+   virava card solto, sem elo com os outros negócios dele. Agora: 🔎 Puxar do CRM | ➕ Contato novo.
+   Puxar busca funil + carteira + estoque (nome OU telefone), preenche os dados da pessoa e, se ela
+   já tem negócio no funil, VINCULA (pessoaId): o novo nasce irmão, não duplicata. Editou o nome
+   depois de puxar? Aí é outra pessoa — nasce sem vínculo (silêncio é melhor que palpite). */
+let NC_PICK=null, NC_RES=[];
+function ncFontes(){
+  const m=new Map(), out=[], vz=x=>x==null||x===''||x==='—';
+  const get=nome=>{ const k=normKey(nome||''); if(!k) return null; let e=m.get(k);
+    if(!e){ e={nome:String(nome).trim(),k,tel:'',idade:null,prof:'',rec:'',ct:null,negs:[],cartRef:null,bnId:null,bnEst:''}; m.set(k,e); out.push(e); } return e; };
+  const fill=(e,tel,idade,prof,rec)=>{ if(!e.tel&&!vz(tel)) e.tel=String(tel); if(e.idade==null&&idade) e.idade=idade; if(!e.prof&&!vz(prof)) e.prof=prof; if(!e.rec&&!vz(rec)) e.rec=rec; };
+  try{ (S.contatos||[]).filter(escVisivel).forEach(c=>{ const e=get(c.nome); if(!e) return; if(!e.ct) e.ct=String(c.id); e.negs.push({id:String(c.id),f:funilDe(c),et:c.etapa}); fill(e,c.telefone,c.idade,c.profissao,c.recomendante); }); }catch(_){}
+  try{ cartVis().forEach(c=>{ const e=get(c.nome); if(!e) return; e.cartRef=c.ref; fill(e,c.celular||c.telefone,c.idade,c.profissao,''); }); }catch(_){}
+  try{ (typeof bnVivos==='function'?bnVivos():[]).forEach(x=>{ if(x.estagio==='descartado') return; const e=get(x.nome); if(!e) return; e.bnId=x.id; e.bnEst=x.estagio||''; fill(e,x.telefone,x.idade,x.profissao,x.recomendante); }); }catch(_){}
+  return out;
+}
+function ncBuscar(q,max){ const n=normKey(q||''), dig=String(q||'').replace(/\D/g,''); if(n.length<2&&dig.length<4) return [];
+  const toks=n.split(' ').filter(Boolean), soDig=dig.length>=4&&/^[\d\s()+\-.]+$/.test(String(q).trim());   /* só dígito/pontuação = busca por telefone */
+  const l=ncFontes().filter(e=>{ if(soDig) return String(e.tel||'').replace(/\D/g,'').includes(dig);
+    if(e.k.includes(n)) return true; const ws=e.k.split(' '); return toks.every(t=>ws.some(w=>w.startsWith(t))); });
+  l.sort((a,b)=>(a.k.startsWith(n)?0:1)-(b.k.startsWith(n)?0:1) || (b.cartRef?1:0)-(a.cartRef?1:0) || a.nome.localeCompare(b.nome,'pt-BR'));
+  return l.slice(0,max||12); }
+function ncTags(e){ const t=[]; if(e.cartRef) t.push('💼 cliente');
+  e.negs.slice(0,2).forEach(g=>t.push('🎯 '+funilNome(g.f)+' · '+(ET_LABEL[g.et]||g.et||''))); if(e.negs.length>2) t.push('+'+(e.negs.length-2)+' negócios');
+  if(e.bnId&&!e.negs.length) t.push('📦 estoque'); return t.join(' · '); }
+function ncPuxarTopoHtml(){ return `
+  <div style="display:flex;gap:8px;margin-bottom:10px">
+    <button type="button" id="ncModoPux" class="sheet-chip" style="flex:1;justify-content:center;min-height:44px" onclick="ncModo('puxar')">🔎 Puxar do CRM</button>
+    <button type="button" id="ncModoNovo" class="sheet-chip" style="flex:1;justify-content:center;min-height:44px" onclick="ncModo('novo')">➕ Contato novo</button>
+  </div>
+  <div id="ncPuxBox" style="display:none;margin-bottom:10px">
+    <input id="ncBusca" placeholder="Nome ou telefone de quem já está no CRM" autocomplete="off" spellcheck="false" oninput="ncBuscaRender()" style="width:100%">
+    <div id="ncRes" style="max-height:min(260px,40vh);overflow:auto;margin-top:6px;border-radius:10px"></div>
+  </div>
+  <div id="ncPick" style="display:none;margin-bottom:10px"></div>`; }
+function ncModo(m){ const md=document.getElementById('ncModal'); if(!md) return; md.dataset.modo=m;
+  const pux=m==='puxar', tem=pux&&NC_PICK;
+  const a=document.getElementById('ncModoPux'), n=document.getElementById('ncModoNovo'); if(a) a.classList.toggle('on',pux); if(n) n.classList.toggle('on',!pux);
+  const box=document.getElementById('ncPuxBox'); if(box) box.style.display=pux&&!tem?'':'none';
+  const cp=document.getElementById('ncCampos'); if(cp) cp.style.display=(!pux||tem)?'flex':'none';
+  if(!pux){ NC_PICK=null; }
+  ncPickRender();
+  if(pux&&!tem){ ncBuscaRender(); setTimeout(()=>{ const i=document.getElementById('ncBusca'); if(i) i.focus(); },30); } }
+function ncBuscaRender(){ const i=document.getElementById('ncBusca'), box=document.getElementById('ncRes'); if(!i||!box) return;
+  const q=i.value.trim(); NC_RES=ncBuscar(q);
+  if(!NC_RES.length){ box.innerHTML=`<div style="font-size:12.5px;color:var(--muted);padding:8px 2px">${(normKey(q).length<2&&q.replace(/\D/g,'').length<4)?'Digite 2 letras do nome ou 4 dígitos do telefone — busca no funil, na carteira e no estoque.'
+      :`Ninguém com “${esc(q)}” no CRM. <button type="button" class="btn btn-s btn-mini" style="min-height:36px" onclick="ncNovoCom()">➕ Criar como contato novo</button>`}</div>`; return; }
+  box.innerHTML=NC_RES.map((e,k)=>`<button type="button" onclick="ncPuxar(${k})" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:48px;padding:8px 10px;border:0;border-bottom:1px solid var(--linha,#e5e7eb);background:transparent;text-align:left;font:inherit;cursor:pointer">
+      <b style="font-size:14px">${esc(e.nome)}</b><span style="font-size:12px;color:var(--muted)">${esc([e.tel,ncTags(e)].filter(Boolean).join(' · '))}</span></button>`).join(''); }
+function ncNovoCom(){ const q=((document.getElementById('ncBusca')||{}).value||'').trim(); ncModo('novo');
+  const dig=q.replace(/\D/g,''); const alvo=document.getElementById(dig.length>=8&&/^[\d\s()+\-.]+$/.test(q)?'ncTel':'ncNome'); if(alvo&&!alvo.value){ alvo.value=q; alvo.focus(); } }
+function ncPuxar(k){ const e=NC_RES[k]; if(!e) return; NC_PICK=e;
+  const put=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v==null?'':v; };
+  put('ncNome',e.nome); put('ncTel',e.tel); put('ncIdade',e.idade||''); put('ncProf',e.prof);
+  const o=document.getElementById('ncOrigem'); if(o&&!o.value) o.value=e.rec||(e.cartRef?'Carteira':'');
+  ncModo('puxar'); }
+function ncPickRender(){ const box=document.getElementById('ncPick'); if(!box) return; const e=NC_PICK, md=document.getElementById('ncModal');
+  if(!e||!md||md.dataset.modo!=='puxar'){ box.style.display='none'; box.innerHTML=''; return; }
+  const fid=md.dataset.funil||'nn'; const aberto=e.negs.find(g=>g.f===fid&&!ETAPAS_ENCERR.includes(g.et));
+  box.style.display='';
+  box.innerHTML=`<div class="card" style="padding:9px 11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--azul-claro,#eef4ff)">
+      <div style="flex:1;min-width:0"><b>✓ ${esc(e.nome)}</b><div style="font-size:12px;color:var(--muted)">${esc(ncTags(e)||'no CRM')}${e.negs.length?' · o novo negócio fica ligado a esta pessoa':''}</div></div>
+      <button type="button" class="btn btn-s btn-mini" style="min-height:40px" onclick="NC_PICK=null;ncModo('puxar')">Trocar</button></div>
+    ${aberto?`<div style="font-size:12.5px;color:var(--verm);margin-top:6px">⚠️ Já tem negócio aberto neste funil (${esc(ET_LABEL[aberto.et]||aberto.et||'')}). <button type="button" class="btn btn-s btn-mini" style="min-height:36px" onclick="document.getElementById('ncModal').remove();abrirContato('${esc(aberto.id)}')">Abrir esse</button> ou salve pra criar outro.</div>`:''}`; }
+/* no salvar: vincula à pessoa puxada (só se o nome continua o dela) e herda o que o formulário não pergunta */
+function ncVincularPuxado(c,md){ const e=(md&&md.dataset.modo==='puxar')?NC_PICK:null; if(!e||normKey(c.nome)!==e.k) return 0;
+  const o=e.ct&&(S.contatos||[]).find(x=>String(x.id)===e.ct); if(!o) return 0;
+  const vz=x=>x==null||x===''||x==='—';
+  ['email','nascimento','sexo','recomendante','instagram'].forEach(k=>{ if(vz(c[k])&&!vz(o[k])) c[k]=o[k]; });
+  pessoaVincular([o,c]); return pessoaIrmaos(c).length; }
+window.ncModo=ncModo; window.ncBuscaRender=ncBuscaRender; window.ncPuxar=ncPuxar; window.ncNovoCom=ncNovoCom;
+function ncFunilTroca(){ const r=document.querySelector('input[name=ncFunil]:checked'); const bc=r&&r.value==='bc'; const m=document.getElementById('ncModal'); if(m) m.dataset.funil=bc?'bc':'nn'; const row=document.getElementById('ncSitplanRow'); if(row) row.style.display=bc?'none':''; document.querySelectorAll('input[name=ncFunil]').forEach(i=>{ const l=i.closest('label'); if(l) l.classList.toggle('on',i.checked); }); if(typeof ncPickRender==='function') ncPickRender(); const o=document.getElementById('ncOrigem'); if(o) o.placeholder=bc?'Origem (carteira / apólice / indicação…)':'Origem / recomendante (quem indicou?)'; }
 function salvarNovoContato(){
   const v=id=>{ const el=document.getElementById(id); return el? el.value.trim() : ''; };
   const nome=v('ncNome');
@@ -6941,9 +7017,9 @@ function salvarNovoContato(){
     origem:pesCanon(v('ncOrigem'))||'—', trilha:'seguro', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
     sitplan: (fid==='nn' && sp && sp.checked)? hojeISO() : null };
-  S.contatos.push(c); salvar();
-  document.getElementById('ncModal').remove();
-  toast(`${nome.split(' ')[0]} criado${c.sitplan?' — já na lista de hoje':''}${bc?' no funil Base de Clientes':extra?' no funil '+fxMeta(fid)[1]:''}`,true);
+  S.contatos.push(c); const nIrm=ncVincularPuxado(c,md); salvar();   /* NN-PUXAR-V1 */
+  document.getElementById('ncModal').remove(); NC_PICK=null;
+  toast(`${nome.split(' ')[0]} criado${nIrm?` — ligado aos outros ${nIrm} negócio${nIrm>1?'s':''} dele`:''}${c.sitplan?' — já na lista de hoje':''}${bc?' no funil Base de Clientes':extra?' no funil '+fxMeta(fid)[1]:''}`,true);
   render(); abrirContato(c.id);
 }
 
@@ -16060,6 +16136,7 @@ const NOVO_SO_MEU={
   'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
+  'nn-puxar':     {o:'Novo negócio com 🔎 Puxar do CRM | ➕ Contato novo: busca a pessoa no funil, carteira e estoque (nome ou telefone), preenche os dados e, se ela já tem negócio, vincula como a mesma pessoa em vez de duplicar', desde:'2026-09-28'},
   'pes-sugere':   {o:'Campo de pessoa (Recomendante na ficha, no Novo contato e no Estoque) autocompleta com quem já está na base — funil, carteira e estoque — e grava a grafia registrada', desde:'2026-09-18'},
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
@@ -20666,6 +20743,17 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c=pesCanon('fábio zenório')==='Fábio Zenório' && pesCanon('Zé Ninguém')==='Zé Ninguém' && pesCanon('')==='';
       const d=/pesSugInput/.test(pesSugAttrs()) && String(drwPessoaHtml).includes("pesSugAttrs()") && String(openNovoContato).includes('pesSugAttrs()') && String(bnEditorHtml).includes('pesSugAttrs()');
       return a&&b&&c&&d; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; } })());
+    ok('NN-PUXAR-V1: Novo negócio puxa do CRM por nome OU telefone (funil+carteira+estoque, sem repetir) e o negócio novo nasce VINCULADO à pessoa; nome editado depois de puxar = sem vínculo', (()=>{ const _c=S.contatos,_b=BN.contatos,_p=PERFIL,_k=NC_PICK; try{ PERFIL=null;
+      S.contatos=[{id:'np1',nome:'Zz Puxa Teste',telefone:'(85) 90000-1234',profissao:'Médico',email:'zz@x.test',funil:'nn',etapa:'C2',lp:S.activeUser,eventos:[],recs:[]}];
+      BN.contatos=[{id:'npb1',nome:'zz puxa teste',estagio:'estoque',lp:S.activeUser,listas:[]},{id:'npb2',nome:'Zz Outro Nome',telefone:'85 90000-9999',estagio:'estoque',lp:S.activeUser,listas:[]}];
+      const r=ncBuscar('zz pux'); const a=r.length===1&&r[0].ct==='np1'&&r[0].bnId==='npb1'&&r[0].prof==='Médico';
+      const t=ncBuscar('0000-9999'); const b=t.length===1&&t[0].nome==='Zz Outro Nome' && ncBuscar('z').length===0;
+      const md={dataset:{modo:'puxar'}}; NC_PICK=r[0];
+      const c1={id:'np2',nome:'Zz Puxa Teste',funil:'mfo',etapa:'Oportunidade',lp:S.activeUser}; S.contatos.push(c1);
+      const c=ncVincularPuxado(c1,md)===1 && pessoaDe(c1) && pessoaDe(c1)===pessoaDe(S.contatos[0]) && c1.email==='zz@x.test';
+      const c2={id:'np3',nome:'Zz Puxa Diferente',funil:'mfo',lp:S.activeUser}; const d=ncVincularPuxado(c2,md)===0&&!pessoaDe(c2) && ncVincularPuxado({nome:'Zz Puxa Teste'},{dataset:{modo:'novo'}})===0;
+      const e=String(salvarNovoContato).includes('ncVincularPuxado(c,md)') && String(openNovoContato).includes('ncPuxarTopoHtml()');
+      return a&&b&&c&&d&&e; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; NC_PICK=_k; } })());
     ok('REVISÃO-SEGURANÇA-V1: link de fora só entra num href se for http(s) — javascript:/data:/vazio viram "#"; Agenda (cartão ⋯ e linha) passa pelo urlSegura',
        urlSegura('javascript:alert(1)')==='#' && urlSegura('data:text/html,x')==='#' && urlSegura('')==='#' && urlSegura(null)==='#' && urlSegura(' https://calendar.google.com/calendar/event?eid=abc ')==='https://calendar.google.com/calendar/event?eid=abc' && urlSegura('HTTP://x.y/z')==='HTTP://x.y/z'
        && String(gcalMais).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.hangoutLink)') && !/href="\$\{esc\(e\.(htmlLink|hangoutLink)/.test(String(gcalMais)+String(gcalLinhaEv)));
