@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.30 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.31 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -778,6 +778,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nncol-head{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#3c4657}
   .nncol-head .qt{font-size:10.5px;font-weight:700;background:#e2e8f0;color:var(--muted);padding:2px 8px;border-radius:20px}
   .nncard{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;box-shadow:var(--sombra);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .nc-pill{display:inline-flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-size:11px;font-weight:650;border-radius:999px;padding:2px 9px;margin:3px 4px 3px 0;cursor:pointer;color:#1e3a8a;background:#eef4ff;border:1px solid #bfd3fb}   /* CARD-TA-STATUS-V1 */
+  .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
   .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
   .et-status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
   .et-status-row select,.fun-status-sel{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--linha);border-radius:7px;background:#fff;color:var(--ink)}
@@ -1058,7 +1060,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     /* ALVOS-44-V1 (05/09): o portão listava 83 alvos <44px a 375 (cabeçalho dos tópicos do Início,
        chips de filtro, etapas do funil, estados do contato, stepper do PLACED). Tudo vira ≥44 aqui. */
     .ini-h{min-height:44px}
-    .fun-et,.nc-avancar,.ct-est{min-height:44px}
+    .fun-et,.nc-avancar,.ct-est,.nc-pill{min-height:44px}
+    .nc-pill{border-radius:10px;font-size:12px}   /* CARD-TA-STATUS-V1: alvo de 44px sem virar ovo */
     .sheet-chip{min-height:44px;display:inline-flex;align-items:center}
     .pl .stp button{width:44px;height:44px}
     .toolbar{gap:8px}
@@ -1706,10 +1709,35 @@ function etStatusChip(c){ const s=etStatusDe(c); const d=negDelayAtivo(c)&&!/^de
   return (s?`<span class="nc-status" title="Status nesta etapa">⚑ ${esc(s)}</span>`:'')+d; }
 function etStatusSelHtml(c){ const o=etStatusOpts(c); if(!o.length) return ''; const s=etStatusDe(c);
   return `<div class="et-status-row"><label>⚑ Status nesta etapa</label><select onchange="etSetStatus(this.value)"><option value="">— sem status —</option>${o.map(x=>`<option value="${esc(x)}" ${x===s?'selected':''}>${esc(x)}</option>`).join('')}</select></div>`; }
-function etSetStatus(v){ const c=ct(); if(!c) return; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return; const de=etStatusDe(c); if(de===v) return;
+function etSetStatusDe(c,v){ if(!c) return false; v=String(v||'').trim(); if(v&&!etStatusOpts(c).includes(v)) return false; const de=etStatusDe(c); if(de===v) return false;
   if(v){ c.status=v; c.status_etapa=c.etapa; } else { delete c.status; delete c.status_etapa; }
   interacoesDe(c).push({id:uid(),k:'etstatus',l:v?`Status: ${v}`:`Status removido${de?' ('+de+')':''}`,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
-  salvar(); renderDrawer(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); }
+  salvar(); toast(v?`${String(c.nome||'').split(' ')[0]}: ${v}`:'Status removido',true); return true; }
+function etSetStatus(v){ if(etSetStatusDe(ct(),v)) renderDrawer(); }
+/* ═══ CARD-TA-STATUS-V1 (28/09): o card do funil mostra o que ele precisa pra trabalhar a etapa sem abrir a ficha.
+   Palavra dele: "oportunidades que estão na etapa TA devem dizer a lista de TA no card, assim como o status deve
+   aparecer no card pra todos… o TA tá sempre atrelado a alguma lista de TA; de OI em diante preciso dos status fácil".
+   • etapa TA (id 'TA' no NN, ou rótulo que começa com "TA" — o "TA/RCP" da Base): pílula 📋 lista (ou "sem lista"),
+     toque abre o mesmo menu de listas do SitPlan (spListaMenu), fonte única c.listas.
+   • etapas ABERTAS depois da TA: pílula ⚑ status SEMPRE visível ("sem status" quando vazio); toque abre os status
+     configurados da etapa (Funil & Etapas) — grava pelo mesmo núcleo da ficha (etSetStatusDe). */
+function funTaIdx(c){ const ids=etapasDe(c)||[]; return ids.findIndex(e=>e==='TA'||e==='Contato Agenda/Revisita'||/^TA\b/i.test(String(LBLE(e)||'').trim())); }   /* BC: a 2ª etapa É o TA dele (rótulo TA/RCP) */
+function funEhTA(c){ const i=funTaIdx(c); return i>=0&&(etapasDe(c)||[])[i]===(c&&c.etapa); }
+function funPosTA(c){ if(!c) return false; const ids=etapasDe(c)||[], i=ids.indexOf(c.etapa), t=funTaIdx(c); const m=ETAPAS_MAP[c.funil||'nn']; const enc=(m&&m.enc)||[];
+  return i>=0 && i>(t>=0?t:0) && !enc.includes(c.etapa); }
+function cardEtapaInfoHtml(c){ const j=esc(jsq(c.id));
+  if(funEhTA(c)){ const l=(c.listas||[]);
+    return `<button class="nc-pill${l.length?'':' vazio'}" onclick="event.stopPropagation();spListaMenu(event,'${j}')" title="Lista de TA — toque pra trocar">📋 ${l.length?esc(l.join(' · ')):'sem lista'}</button>${etStatusChip(c)}`; }
+  if(funPosTA(c)){ const s=etStatusDe(c), d=negDelayAtivo(c)&&!/^delay/i.test(s)?`<span class="nc-status" title="Cliente pediu pra adiar">⏳ Delay até ${esc(dataBR(c.delay_ate))}</span>`:'';
+    return `<button class="nc-pill${s?' on':' vazio'}" onclick="event.stopPropagation();etStatusMenu(event,'${j}')" title="Status nesta etapa — toque pra mudar">⚑ ${s?esc(s):'sem status'}</button>${d}`; }
+  return etStatusChip(c); }
+function etStatusMenu(ev,id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return; const o=etStatusOpts(c), s=etStatusDe(c), j=esc(jsq(id));
+  taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · status em ${esc(LBLE(c.etapa))}</div>
+    ${o.map(x=>`<button onclick="etStatusCard('${j}','${esc(jsq(x))}')">${x===s?'✓ ':'⚑ '}${esc(x)}</button>`).join('')}
+    ${s?`<button onclick="etStatusCard('${j}','')">✕ Tirar o status</button>`:''}
+    ${o.length?'':`<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Nenhum status nesta etapa ainda.</div>`}
+    ${(!logado()||souAdm())?`<button onclick="taFecharMenu();irPara('config-funil')">⚙️ Criar/editar status (Funil & Etapas)</button>`:''}`); }
+function etStatusCard(id,v){ taFecharMenu(); const c=(S.contatos||[]).find(x=>x.id===id); if(etSetStatusDe(c,v)) render(); }
 let FUN_STATUS={};
 function funStatusSel(ns){ const opts=etStatusTodos(); if(!opts.length) return ''; const v=FUN_STATUS[ns]||'';
   return `<select class="fun-status-sel" title="Filtrar pelo status dentro da etapa" onchange="FUN_STATUS['${ns}']=this.value;render()"><option value="">⚑ Status: todos</option>${opts.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select>`; }
@@ -4040,7 +4068,7 @@ function nnCard(c){
     ${(()=>{ const t=negTitulo(c); return t?`<div class="nc-oq" title="O que se vende neste negócio (${esc(negTituloFonte(c))})">${esc(t)}</div>`:''; })()}
     <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(telBR(c.telefone))}</div>
-    ${etStatusChip(c)}
+    ${novoOn('card-ta-status')?cardEtapaInfoHtml(c):etStatusChip(c)}
     ${cliChipsHtml(clienteDe(c,{semNegocios:true}))}
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
@@ -15922,6 +15950,7 @@ const MODS={
 const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'pm-padrao':    {o:'Negócio aberto sem prêmio informado vale R$ 250/mês por padrão (mínimo base da Prudential) nos cards, somas e PA — desde TA/RCP; informar o valor na ficha substitui', desde:'2026-09-27'},
+  'card-ta-status':{o:'Card do funil: na etapa TA mostra a lista de TA (📋, toque troca a lista); de OI em diante mostra SEMPRE o status da etapa (⚑, toque muda — status vêm de Funil & Etapas)', desde:'2026-09-28'},
   'instagram':    {o:'Campo Instagram na ficha do contato: @handle como link (abre o app no celular), editável no funil e no Estoque; cola URL ou @Handle que ele normaliza', desde:'2026-09-28'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
@@ -20587,6 +20616,16 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('Metas v7.7: período trimestre + emissão (apólices/PA) conta do funil sozinho', (()=>{ const _p=MT_PER,_c=S.contatos; try{ S.contatos=[{id:'m1',lp:escLpNovo(),funil:'bc',etapa:'Delivery',interacoes:[{k:'etapa',para:'Venda ganha',dia:hojeISO()}]}]; MT_PER='mes'; const r=mtRealizado(); MT_PER='tri'; const t=mtNoPeriodo(hojeISO())&&!mtNoPeriodo(isoAddDias(hojeISO(),200)); return MT_GANHO.bc==='Venda ganha'&&r.emit>=1&&t; } finally{ MT_PER=_p; S.contatos=_c; } })());
     /* GC-10 (08/09): status do recomendante na base, prioridade cliente > funil > estoque */
     ok('GC-10: recomendante mostra status na base (cliente vence funil/estoque)', (()=>{ const _c=S.contatos,_k=(typeof CART!=='undefined'?CART.clientes:null); try{ S.contatos=[{id:'r1',nome:'Dup Teste',etapa:'N',funil:'nn'}]; if(typeof CART!=='undefined') CART.clientes=[cartNormCliente({nome:'Dup Teste',ref:'dup teste',cob:{pm:1}})]; const idx=recStatusIndex(); const st=idx.get('dup teste'); return typeof recStatusIndex==='function'&&st&&st.txt==='já é cliente'; } finally{ S.contatos=_c; if(typeof CART!=='undefined') CART.clientes=_k; } })());
+    /* CARD-TA-STATUS-V1 (28/09): TA mostra a lista; de OI em diante o status aparece SEMPRE; antes da TA e encerrado não mudam */
+    ok('CARD-TA-STATUS-V1: card em TA mostra a lista de TA; depois da TA mostra o status (ou "sem status"); SitPlan/encerrado sem pílula', (()=>{
+      const mk=(id,funil,etapa,x)=>Object.assign({id,nome:'Zz '+id,funil,etapa},x||{});
+      const ta=cardEtapaInfoHtml(mk('a','nn','TA',{listas:['Lista Fulano']})), taV=cardEtapaInfoHtml(mk('b','nn','TA'));
+      const oi=cardEtapaInfoHtml(mk('c','nn','OI/FF')), sp=cardEtapaInfoHtml(mk('d','nn','SitPlan')), nao=cardEtapaInfoHtml(mk('e','nn','Não'));
+      const bcTA=etapasDe({funil:'bc'})[funTaIdx({funil:'bc'})], bcDepois=etapasDe({funil:'bc'})[funTaIdx({funil:'bc'})+1];
+      const b1=bcTA?cardEtapaInfoHtml(mk('f','bc',bcTA,{listas:['L2']})):'📋 L2', b2=bcDepois?cardEtapaInfoHtml(mk('g','bc',bcDepois)):'⚑ sem status';
+      const opt=etStatusOpts(mk('h','nn','OI/FF'))[0]; const oiS=opt?cardEtapaInfoHtml(mk('h','nn','OI/FF',{status:opt,status_etapa:'OI/FF'})):'';
+      return ta.includes('📋 Lista Fulano') && taV.includes('sem lista') && oi.includes('⚑ sem status') && !oi.includes('📋')
+        && !sp.includes('nc-pill') && !nao.includes('nc-pill') && b1.includes('📋 L2') && b2.includes('⚑ sem status') && (!opt||oiS.includes('⚑ '+esc(opt))); })());
     /* INSTAGRAM-V1 (28/09): normalizaInstagram é a fonte única do handle — tabela de aceite do ticket */
     ok('INSTAGRAM-V1: normaliza @Handle/handle/URL/igsh/espaços, vazio remove, inválido não grava', (()=>{ const N=x=>{ const r=normalizaInstagram(x); return r.ok?r.v:'ERR'; };
       const casos=[['@Fulano.Tal','@fulano.tal'],['fulano.tal','@fulano.tal'],['https://www.instagram.com/fulano.tal/','@fulano.tal'],['instagram.com/fulano.tal?igsh=MTZ4bXl','@fulano.tal'],
