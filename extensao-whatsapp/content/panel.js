@@ -456,8 +456,8 @@ function renderLpPicker(list){
 // `Cross-Origin-Embedder-Policy: require-corp`, o iframe da extensão herda, e o vendas.html do GitHub Pages não
 // tem cabeçalho COEP/CORP. O painel lateral é da extensão, fora da árvore do WhatsApp — ver content/embed.js.
 // sidePanel.open() exige o gesto do usuário: abrirLateral() é chamada DIRETO no clique, sem await antes.
-function abrirLateral(){
-  return send('sidepanel.open').then(r=>{
+function abrirLateral(){   /* 2.2.2: abre a JANELA do CRM ao lado (o painel lateral fica só no ícone da barra) */
+  return send('janela.open').then(r=>{
     if(r.ok) return true;
     if(r.code==='ctx'){ setOpen(true); renderCtxLost(); return false; }
     setOpen(true); renderCompleto(r.error); return false;
@@ -467,9 +467,9 @@ function avisaConversa(c){ send('wa.chat',{tel:(c&&c.phoneRaw)||'',nome:(c&&c.na
 function renderCompleto(erro){
   CUR=null;
   panel.innerHTML=headerHTML()+`<div class="pb">${tabsHTML()}<div id="wa-pend"></div>
-    ${erro?`<div class="warn">Não consegui abrir o painel lateral: ${esc(erro)}</div>`:''}
+    ${erro?`<div class="warn">Não consegui abrir a janela do CRM: ${esc(erro)}</div>`:''}
     <div class="card"><h2 style="margin-bottom:6px">🗂 Card completo</h2>
-      <p class="muted" style="margin-bottom:10px">A ficha do negócio do CRM abre no <b>painel lateral do Chrome</b>, à direita, e acompanha a conversa aberta aqui.</p>
+      <p class="muted" style="margin-bottom:10px">A ficha do negócio do CRM abre numa <b>janela do CRM ao lado</b> e acompanha a conversa aberta aqui.</p>
       <button class="btn primary" id="wa-lateral">Abrir o card completo</button>
       <p class="muted" style="margin-top:8px;font-size:11px">Se não abrir: clique no ícone da extensão na barra do Chrome (fixe-o no 🧩).</p></div>
     <div class="toast" id="wa-toast"></div></div>`;

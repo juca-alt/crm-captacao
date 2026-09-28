@@ -23,8 +23,39 @@ const HANDLERS={
   'lpc.patch':  (m)=>lpcPatch(m.id,m.acoes),        // v2.0: relê fresco, aplica a ação, grava só a linha
   // 2.2: card completo no PAINEL LATERAL do Chrome (fora da página do WhatsApp — ver content/embed.js)
   'sidepanel.open': (m,sender)=>abrirLateral(sender),
-  'wa.chat':    (m)=>chrome.storage.session.set({wa_chat_ult:{tel:String(m.tel||''),nome:String(m.nome||''),grupo:!!m.grupo,ts:Date.now()}}).then(()=>true),
+  'janela.open': (m,sender)=>abrirJanela(sender),   // 2.2.2: card completo numa JANELA do CRM ao lado (não depende do painel lateral)
+  'wa.chat':    (m)=>{ const u={tel:String(m.tel||''),nome:String(m.nome||''),grupo:!!m.grupo,ts:Date.now()};
+                       return chrome.storage.session.set({wa_chat_ult:u}).then(()=>janelaAvisa(u)).then(()=>true); },
 };
+
+/* ===== 2.2.2: CARD COMPLETO NUMA JANELA DO CRM =====
+   O painel lateral dependia do "gesto" atravessar content script → SW, e o iframe dentro dele é terceiro (login à parte).
+   A janela é o próprio vendas.html?wa=1 como página de verdade: nada a barrar, o login do CRM no Chrome já vale, e
+   trocar de conversa chama waAbrir() direto na página (executeScript no mundo da página), sem recarregar. */
+const CRM_WA='https://juca-alt.github.io/crm-captacao/vendas.html?wa=1';
+async function janelaViva(){
+  const o=await chrome.storage.session.get('wa_janela'); const j=o&&o.wa_janela; if(!j) return null;
+  try{ const t=await chrome.tabs.get(j.tab); if(t&&t.windowId===j.win) return j; }catch(_){}
+  await chrome.storage.session.remove('wa_janela'); return null;
+}
+async function abrirJanela(sender){
+  const o=await chrome.storage.session.get('wa_chat_ult'); const u=(o&&o.wa_chat_ult)||{};
+  const viva=await janelaViva();
+  if(viva){ await chrome.windows.update(viva.win,{focused:true}); await janelaAvisa(u); return true; }
+  let left, top, height=900; const W=480;
+  try{ const w=sender&&sender.tab?await chrome.windows.get(sender.tab.windowId):null;
+       if(w){ left=Math.max(0,w.left+w.width-W); top=w.top; height=w.height; } }catch(_){}
+  const hash=(u.tel||u.nome)&&!u.grupo?'#tel='+encodeURIComponent(u.tel||'')+'&nome='+encodeURIComponent(u.nome||''):'';
+  const w=await chrome.windows.create({url:CRM_WA+hash,type:'popup',width:W,height,left,top,focused:true});
+  await chrome.storage.session.set({wa_janela:{win:w.id,tab:w.tabs[0].id}});
+  return true;
+}
+async function janelaAvisa(u){
+  const j=await janelaViva(); if(!j||!u) return;
+  const tel=u.grupo?'':String(u.tel||''), nome=u.grupo?'':String(u.nome||'');
+  try{ await chrome.scripting.executeScript({target:{tabId:j.tab},world:'MAIN',args:[tel,nome],
+    func:(t,n)=>{ if(typeof waAbrir==='function') waAbrir({tipo:'wa-abrir',tel:t,nome:n}); }}); }catch(_){}
+}
 
 /* sidePanel.open() só vale DENTRO do gesto do usuário: é a 1ª coisa chamada, sem await antes (o clique no botão do
    painel do WhatsApp chega aqui pelo sendMessage e o gesto vem junto). */
