@@ -9,9 +9,9 @@
 create or replace function public.lp_tel_limpa(t text) returns text language sql immutable as $$
   select nullif(btrim(regexp_replace(regexp_replace(regexp_replace(
     coalesce(t,''),
-    E'[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2069\\uFEFF]', '', 'g'),
-    E'[\\u2010-\\u2015\\u2212]', '-', 'g'),
-    E'[\\u00A0\\s]+', ' ', 'g')), '')
+    '[' || chr(8203) || '-' || chr(8207) || chr(8234) || '-' || chr(8238) || chr(8288) || '-' || chr(8297) || chr(65279) || ']', '', 'g'),
+    '[' || chr(8208) || '-' || chr(8213) || chr(8722) || ']', '-', 'g'),
+    '[' || chr(160) || '[:space:]]+', ' ', 'g')), '')
 $$;
 
 create or replace function public.lp_norm_estagio()
@@ -29,9 +29,9 @@ begin
       when f = 'bn' then 'estoque'
       when e = 'SitPlan' then 'estoque'
       when e = 'TA' then 'lista_ta'
-      when e in ('OI/FF','P/C','C2','N','FA',U&'EMISS\00C3O','EMISSAO') then 'oi_agendado'
-      when e in ('DELIVERY',U&'Ap\00F3lice Emitida','Venda ganha') then 'cliente'
-      when e in (U&'N\00E3o','Nao','Prop. Cancelada',U&'Ap\00F3l. Cancelada','Apol. Cancelada','Venda perdida') then 'descartado'
+      when e in ('OI/FF','P/C','C2','N','FA','EMISS' || chr(195) || 'O','EMISSAO') then 'oi_agendado'
+      when e in ('DELIVERY','Ap' || chr(243) || 'lice Emitida','Venda ganha') then 'cliente'
+      when e in ('N' || chr(227) || 'o','Nao','Prop. Cancelada','Ap' || chr(243) || 'l. Cancelada','Apol. Cancelada','Venda perdida') then 'descartado'
       else 'estoque' end;
     d := d || jsonb_build_object('estagio', est);
   end if;
@@ -66,8 +66,10 @@ begin
   return NEW;
 end $function$;
 
--- Backfill (so quem esta fora da forma; o proprio trigger normaliza no UPDATE)
-update public.lp_contatos set dados = dados
+-- Backup antes (JA criado em 28/09, 372 linhas): _bkp_20260928_contato_porta (RLS on, sem acesso anon/authenticated)
+-- Backfill (so quem esta fora da forma; o proprio trigger normaliza no UPDATE).
+-- atualizado = now(): o app puxa por atualizado > ultima sincronizacao; sem isso os aparelhos nao recebem a correcao.
+update public.lp_contatos set dados = dados, atualizado = now()
  where coalesce(dados->>'trilha','') = ''
     or (dados->>'lp') is distinct from lower(dados->>'lp')
     or (jsonb_typeof(dados->'telefone') = 'string' and dados->>'telefone' is distinct from public.lp_tel_limpa(dados->>'telefone'));
