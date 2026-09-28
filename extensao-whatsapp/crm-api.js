@@ -316,13 +316,42 @@ async function lpSearch(q){
 // ---------- Visão LP · Contatos/Funil (lp_contatos — sync do vendas.html v0.4.1+) ----------
 // 1 linha por contato (dados jsonb = contato inteiro), RLS por dono. O vendas.html
 // faz merge por `_upd` (maior vence) — toda escrita daqui carimba dados._upd.
-let _lpcCache=null, _lpcAt=0;
+/* 2.2 (28/09): CACHE-GERACAO-V1. Antes, uma leitura que SAÍA antes de uma gravação e CHEGAVA depois dela (o GET
+   de toda a tabela leva segundos: ~5 mil linhas com o Estoque) regravava o cache com a foto VELHA por 2 min — voltar
+   à conversa mostrava o card sem a mudança ("não salvou"). Agora: toda gravação sobe a geração e troca a linha no
+   cache na hora; leitura de geração velha não entra no cache; leituras simultâneas viram uma só. */
+let _lpcCache=null, _lpcAt=0, _lpcGen=0, _lpcVoo=null;
 async function lpcAll(force){
   if(!force && _lpcCache && Date.now()-_lpcAt<2*60*1000) return _lpcCache;
-  try{ _lpcCache=await sbJson('/rest/v1/lp_contatos?select=id,dados,atualizado'); }
-  catch(e){ if(e.code==='auth') throw e; _lpcCache=[]; /* tabela ainda não criada → trata como vazia */ }
-  _lpcAt=Date.now();
-  return _lpcCache;
+  if(!force && _lpcVoo) return _lpcVoo;
+  const gen=_lpcGen;
+  const voo=(async()=>{
+    let rows;
+    try{ rows=await sbJson('/rest/v1/lp_contatos?select=id,dados,atualizado')||[]; }
+    catch(e){ if(e.code==='auth') throw e; rows=[]; /* tabela ainda não criada → trata como vazia */ }
+    if(gen===_lpcGen){ _lpcCache=rows; _lpcAt=Date.now(); }
+    return rows;
+  })();
+  _lpcVoo=voo;
+  try{ return await voo; } finally{ if(_lpcVoo===voo) _lpcVoo=null; }
+}
+/* gravou → a linha nova entra no cache já (sem baixar a tabela de novo) e qualquer leitura em voo vira velha */
+function lpcCacheGravou(row){
+  _lpcGen++; _lpcVoo=null;
+  if(!_lpcCache||!row||row.id==null) return;
+  const out={id:row.id,dados:row.dados,atualizado:row.atualizado};
+  const i=_lpcCache.findIndex(r=>String(r.id)===String(row.id));
+  if(i>=0) _lpcCache[i]=out; else _lpcCache.push(out);
+}
+/* o card mostra a linha FRESCA do banco, nunca só a do cache (o app/outro aparelho pode ter mudado nesse meio-tempo) */
+async function lpcFrescos(lista){
+  const ids=[...new Set((lista||[]).filter(Boolean).map(r=>String(r.id)))];
+  if(!ids.length) return lista;
+  let rows=[];
+  try{ rows=await sbJson(`/rest/v1/lp_contatos?id=in.(${ids.map(i=>'"'+i.replace(/"/g,'')+'"').map(encodeURIComponent).join(',')})&select=id,dados,atualizado`)||[]; }
+  catch(e){ if(e.code==='auth') throw e; return lista; }
+  const por={}; rows.forEach(r=>{ por[String(r.id)]=r; });
+  return lista.map(r=>{ const f=r&&por[String(r.id)]; if(!f) return r; if(_lpcCache){ const i=_lpcCache.findIndex(x=>String(x.id)===String(f.id)); if(i>=0) _lpcCache[i]=_lpcOut(f); } return Object.assign({},r,_lpcOut(f)); });
 }
 function _lpcOut(r){ return {id:r.id,dados:r.dados,atualizado:r.atualizado}; }
 /* v2.0: o Estoque (funil 'bn') mora na mesma tabela — separado do funil pra um nome do Estoque nunca virar negócio ao salvar */
@@ -352,8 +381,9 @@ async function lpcSave(id,dados){
   dados._upd=new Date().toISOString();
   const rows=await sbJson(`/rest/v1/lp_contatos?on_conflict=dono,id&select=id,dados,atualizado`,
     {method:'POST',body:{id:String(id),dados},headers:{Prefer:'resolution=merge-duplicates,return=representation'}});
-  _lpcCache=null;
-  return rows&&rows[0]?_lpcOut(rows[0]):{id:String(id),dados};
+  const saiu=rows&&rows[0]?_lpcOut(rows[0]):{id:String(id),dados};
+  lpcCacheGravou(saiu);
+  return saiu;
 }
 async function lpcFindByName(nameRaw){
   const toks=nameTokens(nameRaw);
@@ -375,6 +405,11 @@ async function lpLookup(rawPhone,chatName){
   const [contatos,carteira,estoque]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone),lpcEstoqueByPhone(rawPhone)]);
   let byName=null;
   if(!contatos.length&&chatName){ byName=await lpcFindByName(chatName); }
+  /* só as linhas que VÃO pro card são relidas (1 GET pequeno) — o cache serve pra achar, não pra mostrar */
+  const alvo=[...contatos,...estoque,...(byName&&byName.strong?[byName.strong]:[])];
+  if(alvo.length){ const f=await lpcFrescos(alvo); const m={}; f.forEach(r=>{ m[String(r.id)]=r; });
+    const troca=r=>(r&&m[String(r.id)])||r;
+    return {contatos:contatos.map(troca),carteira,byName:byName?Object.assign({},byName,{strong:troca(byName.strong)}):byName,estoque:estoque.map(troca)}; }
   return {contatos,carteira,byName,estoque};
 }
 
@@ -403,8 +438,9 @@ async function lpcPatch(id,acoes){
   dados._upd=new Date().toISOString();
   const out=await sbJson(`/rest/v1/lp_contatos?on_conflict=dono,id&select=id,dono,dados,atualizado`,
     {method:'POST',body:{id:String(row.id),dono:row.dono,dados},headers:{Prefer:'resolution=merge-duplicates,return=representation'}});
-  _lpcCache=null; _lpCfgAt=0;
-  return out&&out[0]?{id:out[0].id,dono:out[0].dono,dados:out[0].dados,atualizado:out[0].atualizado}:{id:row.id,dono:row.dono,dados};
+  const saiu=out&&out[0]?{id:out[0].id,dono:out[0].dono,dados:out[0].dados,atualizado:out[0].atualizado}:{id:row.id,dono:row.dono,dados};
+  lpcCacheGravou(saiu); _lpCfgAt=0;   /* cache já traz a linha nova: o catálogo de listas relê sem baixar a tabela */
+  return saiu;
 }
 async function lpSearchAll(q){
   const [contatos,carteira]=await Promise.all([lpcSearch(q),lpSearch(q)]);

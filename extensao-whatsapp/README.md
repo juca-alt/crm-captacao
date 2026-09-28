@@ -1,4 +1,27 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.1.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.2.0
+
+## 2.2 (28/09/2026) — card completo no PAINEL LATERAL do Chrome + card rápido com 💾 Salvar
+- **Por que o card completo mostrava o ícone cinza de página quebrada (2.1):** o `web.whatsapp.com` responde com
+  `Cross-Origin-Embedder-Policy: require-corp`. O iframe da extensão (`content/embed.html`) posto DENTRO da página herda
+  essa política, e o `vendas.html` do GitHub Pages não manda cabeçalho COEP/CORP → o Chrome barra o CRM (em todo load,
+  e de novo sempre que o painel era redesenhado e o iframe remontado, ex.: ao passar por um grupo).
+- **Agora:** o card completo abre no **painel lateral do Chrome** (`side_panel` → `content/embed.html`), que é página da
+  extensão FORA da árvore do WhatsApp: sem COEP herdado, o CRM carrega, o login fica guardado e o iframe fica vivo.
+  Trocar de conversa: o content script avisa o service worker (`wa.chat` → `chrome.storage.session`) e o painel lateral
+  manda `{tipo:'wa-abrir',tel,nome}` por postMessage — não recarrega o CRM. Enquanto carrega: esqueleto; sem resposta em
+  25 s: "O CRM não respondeu" com ↻ Tentar de novo / Abrir numa aba.
+  Abrir: botão **CRM** do WhatsApp (modo Card completo), aba 🗂 Card completo, ou o ícone da extensão na barra do Chrome.
+  No painel lateral, **⚡ Rápido** volta pro card dentro do WhatsApp.
+- **Card rápido: nada grava sozinho.** Etapa, status, listas, nota, telefone e observação viram rascunho (● não salvo) e
+  só o **💾 Salvar** grava: "Salvando…" → "✓ Salvo no CRM às HH:MM" conferido contra o que o banco devolveu, ou erro que
+  fica na tela com ↻ Tentar de novo. Trocou de conversa com rascunho? Ele fica guardado e um aviso no topo permite
+  💾 Salvar agora ou Descartar de qualquer conversa.
+- **Por que "não tinha salvo" ao voltar à conversa:** o cache do service worker (`lpcAll`, 2 min) podia ser regravado por
+  uma leitura que saiu ANTES da gravação e chegou DEPOIS (a tabela inteira leva segundos). Agora o cache tem geração,
+  a gravação troca a linha no cache na hora, e o card sempre relê do banco as linhas que vai mostrar (`lpcFrescos`).
+  Resposta de conversa antiga não pinta mais por cima da conversa nova (`LOOKSEQ`).
+- Permissão nova: `sidePanel` (Chrome 116+).
+
 
 ## 2.1 (28/09/2026) — o card COMPLETO do CRM na conversa
 - **🗂 Card completo** (padrão): a MESMA ficha do negócio do CRM — etapa, status, listas, tarefas, agenda, jornada, valor,
