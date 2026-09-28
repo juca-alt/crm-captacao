@@ -73,7 +73,7 @@ let OPEN=false;
 let BUSY=false;
 let LPCFG={funil:null,listas:[]};   // v2.0: Funil & Etapas + listas de TA do app (lpcfg.get)
 let VIEW='lp';                      // 2.1: Captação saiu (palavra dele: "não faço mais nada de Captação")
-let MODO='completo';                // 'completo' (ficha do CRM no PAINEL LATERAL do Chrome) | 'rapido' (card nativo)
+let MODO='rapido';   /* 2.2.1: o botão CRM SEMPRE abre algo na página (card rápido); o completo vai pela aba 🗂 / ícone da barra */                // 'completo' (ficha do CRM no PAINEL LATERAL do Chrome) | 'rapido' (card nativo)
 let DOB={};                         // tópicos do card rápido: aberto/fechado lembrado
 // 2.2 — card rápido com SALVAR explícito (palavra dele: mudou etapa/status/lista, saiu da conversa, voltou e não
 // tinha salvo). Cada mudança vira RASCUNHO por contato (id → {etapa,status,listas,nota,tel,notas,nome}); só o botão
@@ -790,7 +790,7 @@ try{ chrome.runtime.onMessage.addListener(m=>{ if(m&&m.type==='wa.modo'&&m.modo=
 handle.onclick=()=>setOpen(false);
 
 // boot
-try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); if(o&&o.wa_crm_modo==='rapido') MODO='rapido'; if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
+try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); /* 2.2.1: não herda mais 'completo' salvo — abrir o painel lateral depende do gesto e, se falhar, o botão parecia morto */ if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
 const st=await send('auth.status');
 if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); loadLpCfg(); }
 refreshFab();
