@@ -3,4 +3,4 @@
 // 03/08/2026: banco próprio do Gustavo (crm-playground) — o kbiinf… é do Guto desde 29/07.
 const SB_URL = "https://cjieobmdpqcupzdpckef.supabase.co";
 const SB_KEY = "sb_publishable_B1yApF8NUHh0BRpKzoIWIQ_ukZFs9kR";
-const EXT_VERSION = "v2.2.2 · card completo em janela ao lado";
+const EXT_VERSION = "v2.2.3 · card completo em janela ao lado";

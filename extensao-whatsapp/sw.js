@@ -47,14 +47,44 @@ async function abrirJanela(sender){
        if(w){ left=Math.max(0,w.left+w.width-W); top=w.top; height=w.height; } }catch(_){}
   const hash=(u.tel||u.nome)&&!u.grupo?'#tel='+encodeURIComponent(u.tel||'')+'&nome='+encodeURIComponent(u.nome||''):'';
   const w=await chrome.windows.create({url:CRM_WA+hash,type:'popup',width:W,height,left,top,focused:true});
-  await chrome.storage.session.set({wa_janela:{win:w.id,tab:w.tabs[0].id}});
+  const tabId=w.tabs[0].id;
+  await chrome.storage.session.set({wa_janela:{win:w.id,tab:tabId}});
+  /* espera a página carregar e manda o negócio já achado pela extensão (telefone OU nome com as etiquetas do WhatsApp) */
+  await new Promise(res=>{ const fim=setTimeout(()=>{ chrome.tabs.onUpdated.removeListener(ou); res(); },20000);
+    function ou(id,info){ if(id===tabId&&info.status==='complete'){ clearTimeout(fim); chrome.tabs.onUpdated.removeListener(ou); res(); } }
+    chrome.tabs.onUpdated.addListener(ou); });
+  await janelaAvisa(u);
   return true;
 }
+/* 2.2.3: quem ACHA o negócio é a extensão (mesma busca do card rápido: telefone → nome tolerante às etiquetas
+   "Fulano Rec Ciclano Med…"). O CRM só abre a ficha pelo id — antes ele procurava só pelo telefone e, com o nome
+   cheio de etiquetas, dizia "nenhum negócio" pra cliente que está no CRM. */
 async function janelaAvisa(u){
   const j=await janelaViva(); if(!j||!u) return;
   const tel=u.grupo?'':String(u.tel||''), nome=u.grupo?'':String(u.nome||'');
-  try{ await chrome.scripting.executeScript({target:{tabId:j.tab},world:'MAIN',args:[tel,nome],
-    func:(t,n)=>{ if(typeof waAbrir==='function') waAbrir({tipo:'wa-abrir',tel:t,nome:n}); }}); }catch(_){}
+  let alvo=null;
+  if(tel||nome){ try{ const r=await lpLookup(tel,nome);
+    const c=(r.contatos&&r.contatos[0])||(r.byName&&r.byName.strong)||null;
+    if(c) alvo={tipo:'fun',ids:[String(c.id),String((c.dados&&c.dados.id)||'')]};
+    else if(r.estoque&&r.estoque.length===1){ const b=r.estoque[0]; alvo={tipo:'bn',ids:[String(b.id),String((b.dados&&b.dados.id)||'')]}; }
+  }catch(_){} }
+  try{ await chrome.scripting.executeScript({target:{tabId:j.tab},world:'MAIN',args:[tel,nome,alvo],
+    func:(t,n,a)=>{
+      const cai=()=>{ if(typeof waAbrir==='function') waAbrir({tipo:'wa-abrir',tel:t,nome:n}); };
+      if(!a){ cai(); return; }
+      let k=0;
+      const vai=()=>{
+        try{ clearTimeout(_waTimer); _waTent=0; }catch(_){}
+        let lista=[]; try{ lista=a.tipo==='bn'?((typeof bnVivos==='function')?bnVivos():[]):(S.contatos||[]); }catch(_){}
+        const achou=lista.find(c=>a.ids.includes(String(c.id)));
+        if(achou){ try{ WA_ULT={tel:t,nome:n}; }catch(_){}
+          if(a.tipo==='bn'){ try{ fecharDrawerSo(); }catch(_){} taFichaAbrir(achou.id); }
+          else { const ta=document.getElementById('ta-ficha'); if(ta) ta.remove(); abrirContato(achou.id); }
+          return; }
+        if(k++<25) setTimeout(vai,700); else cai();   /* base ainda chegando do servidor */
+      };
+      vai();
+    }}); }catch(_){}
 }
 
 /* sidePanel.open() só vale DENTRO do gesto do usuário: é a 1ª coisa chamada, sem await antes (o clique no botão do
