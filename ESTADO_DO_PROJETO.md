@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.32 no ar · 60ª onda: lista de TA dentro da ficha + status da ligação unificado (FICHA-LISTA-TA-V1, só na base dele)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.33 no ar · 61ª onda: contato sai na forma canônica pela porta do app (CONTATO-PORTA-V1, Backlog #3) · ⏳ SQL do banco (`supabase/contato_porta_v1.sql`) aguardando OK dele
+
+_(60ª onda, mesmo dia — v8.32: lista de TA dentro da ficha)_
 
 **Chaves novas só na base dele:** `ficha-lista-ta` · `card-ta-status` · `instagram`
 
@@ -29,7 +31,27 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (60ª onda) — FICHA-LISTA-TA-V1: lista de TA dentro da ficha — só na base dele (v8.32)
+## 28/09/2026 (61ª onda) — CONTATO-PORTA-V1: contato sai na forma canônica (v8.33) — Backlog #3
+
+Os 5 contatos da recomendante G. M. S. (21/09) nasceram com `lp` em outra caixa, telefone com marcas invisíveis do WhatsApp e `trilha` nula (corrigidos à mão em 21/09).
+
+### Diagnóstico (banco, 28/09)
+- `lp`: a forma canônica é **minúscula** (`lp_rotulo_dono`: gustavo/rebeca/daniel; 123 minúsculos × 26 "Gustavo" no funil dele). O filtro LOGADO já compara normalizado (`escRegOkDe`); só o **offline** (`c.lp===S.activeUser`) diferenciava maiúscula.
+- telefone: **0** registros sujos hoje (a limpeza manual pegou tudo).
+- trilha: o trigger `lp_norm_estagio` só dava `seguro` ao Estoque → **355 negócios de funil com trilha vazia** (139 dele, 215 do Daniel, 1 do Victor). A tela Recomendações já trata negócio sem trilha como seguro (`recFunilComoBn`).
+- Portas de escrita: app (`lpcRowOut`), **crm-mcp** (criar/atualizar, avulso e lote) e SQL da assistente — só o trigger cobre as três.
+
+### O que mudou no app (conserto, sem chave)
+- `telLimpa()` = fonte única (tira U+200B-200F/202A-202E/2060-2069/FEFF, U+2010-2015/2212 → '-', NBSP). Usada na porta, no Novo contato, na ficha (drawer e Estoque) e na carga (`normContato`).
+- `lpcRowOut` (todo upsert): `lp` minúsculo, telefone/telefones_alt limpos, `trilha` vazia → 'seguro' (preenchida não muda).
+- Novo contato e promover lead→card nascem com `trilha:'seguro'`.
+- `escVisivel` offline compara com `escLpNorm`.
+- Invariante `CONTATO-PORTA-V1`.
+
+### ⏳ Banco — aguardando OK dele (NÃO rodado)
+`supabase/contato_porta_v1.sql`: `lp_tel_limpa()` + trigger `lp_norm_estagio` dá trilha em qualquer funil e limpa telefone + `lp_norm_lp_rotulo` grava minúsculo + backfill de ~372 linhas (trilha vazia 355, lp maiúsculo 38; dele 149, Daniel 222, Victor 1). Expressão validada por SELECT.
+
+ — FICHA-LISTA-TA-V1: lista de TA dentro da ficha — só na base dele (v8.32)
 
 Backlog de Melhorias #5. Ele operando bloco de TA na ficha: a lista só era gerenciada pela coluna "Listas de TA"; dentro da ficha não aparecia.
 

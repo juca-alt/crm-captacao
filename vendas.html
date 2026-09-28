@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.32 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.33 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1957,6 +1957,7 @@ function normContato(c){
   if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
   if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
   if(c.notas==null) c.notas='';
+  if(typeof c.telefone==='string'&&c.telefone){ const t=telLimpa(c.telefone); if(t!==c.telefone) c.telefone=t; }   /* CONTATO-PORTA-V1 */
   /* `criadoEm` já era gravado nos 2 caminhos de cadastro, mas num em ISO curto
      e no outro em timestamp completo — e ninguém lia. Normaliza pra data pura,
      que é a granularidade que interessa (entrada no funil). */
@@ -2109,6 +2110,12 @@ function escLpNovo(){ try{ if(typeof logado==='function'&&logado()){ const o=esc
 function escLpParaDono(dono, lp){ const rs=((typeof ESC!=='undefined'&&ESC&&ESC.rotulos)||[]).filter(r=>r.dono_email===dono).map(r=>escLpNorm(r.rotulo)).filter(Boolean).sort(); if(!rs.length) return lp; const v=escLpNorm(lp); return (v&&rs.includes(v))?lp:rs[0]; }
 function lpcRowOut(k,d,extra){ const dados={...d,...(extra||{})}; const dono=dados._dono||(typeof delegAtivo==='function'?delegAtivo():null); delete dados._dono;
   const donoEf=dono||(typeof escEu==='function'?escEu():null); if(donoEf){ const nlp=escLpParaDono(donoEf,dados.lp); if(nlp!==dados.lp) dados.lp=nlp; }
+  /* CONTATO-PORTA-V1 (Backlog #3): todo upsert sai na forma canônica — rótulo minúsculo (como lp_rotulo_dono), telefone sem
+     caractere invisível, trilha nunca vazia ('seguro', o mesmo default do trigger pro Estoque). */
+  if(typeof dados.lp==='string'&&dados.lp) dados.lp=escLpNorm(dados.lp);
+  if(dados.telefone) dados.telefone=telLimpa(dados.telefone);
+  if(Array.isArray(dados.telefones_alt)) dados.telefones_alt=dados.telefones_alt.map(telLimpa).filter(Boolean);
+  if(!dados.trilha) dados.trilha='seguro';
   const row={id:k,dados}; if(dono) row.dono=dono; else if(donoEf) row.dono=donoEf; return row; }
 /* ═══ SYNC-PUXA-V1 (21/09/2026) ═══════════════════════════════════════════════
    Antes o outro aparelho só via a mudança no boot, no 🔄 ou ao reconectar. Agora o app puxa
@@ -2271,7 +2278,7 @@ function isMaster(){ if(logado()) return PERFIL.papel==='admin'; return user().p
 /* Logado: mostra tudo que carregou (a RLS já trouxe só o do dono). Deslogado: filtro demo por LP. */
 /* ESCOPO-TUDO-V1 (11/09): 'tarefas de leads do Daniel no meu perfil' — Agenda/Início/Metas/busca/funis extras liam
    S.contatos com 'master ou logado' (= todo mundo). UMA porta: escVisivel(c). Nada se mistura. */
-function escVisivel(c){ if(!c) return false; return logado()? escRegOk(c) : (isMaster()||c.lp===S.activeUser); }
+function escVisivel(c){ if(!c) return false; return logado()? escRegOk(c) : (isMaster()||escLpNorm(c.lp)===escLpNorm(S.activeUser)); }   /* CONTATO-PORTA-V1: 'Gustavo' = 'gustavo' */
 function meusContatos(){ return S.contatos.filter(c=>(!c.funil||c.funil==='nn') && escVisivel(c)); }
 function meusContatosBC(){ return S.contatos.filter(c=>c.funil==='bc' && escVisivel(c)); }
 function etapasDe(c){ const f=c&&c.funil; if(f&&ETAPAS_MAP[f]) return ETAPAS_MAP[f].ids; return f==='bc'?ETAPAS_BC:ETAPAS; }
@@ -5651,7 +5658,7 @@ function pessoaSalvarDados(id){
   if(ig!==undefined) igAplicar(c,ig);
   /* INSTAGRAM-V1: só grava o que MUDOU — campo vazio no form com a chave ausente no contato não cria `"":null` no jsonb */
   const vz=y=>y==null||y===''||y==='—', put=(k,x)=>{ if(vz(c[k])&&vz(x)) return; if(c[k]!==x) c[k]=x; };
-  const tel=v('pes_tel');   if(tel!==undefined) put('telefone',tel);
+  const tel=v('pes_tel');   if(tel!==undefined) put('telefone',telLimpa(tel));
   const mail=v('pes_mail'); if(mail!==undefined) put('email',mail);
   const prof=v('pes_prof'); if(prof!==undefined) put('profissao',prof||'—');
   const idade=v('pes_idade'); if(idade!==undefined) put('idade',(idade!==''&&isFinite(parseInt(idade,10)))?parseInt(idade,10):null);   /* BUGS-V5 #15 */
@@ -6875,8 +6882,8 @@ function salvarNovoContato(){
   const sp=document.getElementById('ncSitplan');
   const et0 = fid==='bc'?'Clientes Ativos' : fid==='nn'?'SitPlan' : ((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade');
   const c={ id:uid(), lp: lpSel? lpSel.value : escLpNovo(), nome, sexo:'—', idade:+v('ncIdade')||null,
-    profissao:v('ncProf')||'—', telefone:v('ncTel'), estrelas:0, ance:null, etapa: et0, funil: fid,
-    origem:pesCanon(v('ncOrigem'))||'—', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
+    profissao:v('ncProf')||'—', telefone:telLimpa(v('ncTel')), estrelas:0, ance:null, etapa: et0, funil: fid,
+    origem:pesCanon(v('ncOrigem'))||'—', trilha:'seguro', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
     sitplan: (fid==='nn' && sp && sp.checked)? hojeISO() : null };
   S.contatos.push(c); salvar();
@@ -11871,6 +11878,9 @@ function normKey(s){ return (s==null?'':String(s)).trim().toLowerCase().normaliz
      um cadastro antigo (10 dígitos) casar com o novo (11).
    Sem DDD devolve vazio: casar por 8 dígitos soltos juntaria gente de estados
    diferentes, e um falso positivo aqui é pior que um encontro perdido. */
+/* CONTATO-PORTA-V1 (28/09, Backlog #3): telefone colado do WhatsApp vinha com marcas invisíveis de direção
+   (U+202A/U+202C…) e hífen não-padrão (U+2011) — busca por número não achava. Fonte única da limpeza. */
+function telLimpa(v){ if(v==null) return v; return String(v).replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]/g,'').replace(/[\u2010-\u2015\u2212]/g,'-').replace(/\u00A0/g,' ').replace(/\s+/g,' ').trim(); }
 function telKey(v){
   let d=String(v==null?'':v).replace(/\D/g,'');
   if(!d) return '';
@@ -11940,7 +11950,7 @@ function pessoaLeadToCard(b){ return { id:'bn'+uid(), lp:escLpNovo(), funil:'nn'
   telefone:b.telefone||'', telefones_alt:Array.isArray(b.telefones_alt)?b.telefones_alt.slice():[],
   etapa:'SitPlan', origem:'Base de Nomes', recomendante:b.recomendante||'', contexto:b.contexto||'',
   idade:b.idade||'', profissao:b.cargo||'', cidade:b.cidade||'', renda_estimada:b.renda_estimada||'',
-  estado_civil:b.estado_civil||'', filhos:b.filhos||'', email:b.email||'', trilha:b.trilha||'',
+  estado_civil:b.estado_civil||'', filhos:b.filhos||'', email:b.email||'', trilha:b.trilha||'seguro',
   notas:b.notas||'', criadoEm:hojeISO(), sitplan:null, ...(pInstagram(b)?{instagram:pInstagram(b)}:{}) }; }
 
 /* ═══ FICHA-PESSOA-V1 (09/09): o MESMO bloco "quem é a pessoa" nas 3 fichas — card do funil,
@@ -16750,7 +16760,7 @@ function bnSalvarEdicao(id){
   const ig=igDoCampo('bne-ig'); if(ig===false){ toast('Instagram inválido'); return false; }   /* INSTAGRAM-V1: inválido → nada é gravado */
   if(ig!==undefined) igAplicar(c,ig);
   c.nome=$('#bne-nome').value.trim()||c.nome; c.contexto=$('#bne-ctx').value.trim();
-  c.telefone=$('#bne-tel').value.trim()||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=pesCanon($('#bne-rec').value.trim())||null;
+  c.telefone=telLimpa($('#bne-tel').value)||null; bnTelsSet(c,($('#bne-tel2')||{}).value||''); c.recomendante=pesCanon($('#bne-rec').value.trim())||null;
   c.trilha=$('#bne-tri').value; c.estagio=$('#bne-est').value;
   c.prioridade=$('#bne-pri').value?Number($('#bne-pri').value):null; c.notas=$('#bne-not').value;
   c.idade=(()=>{ const n=parseInt($('#bne-idade').value,10); return isFinite(n)?n:null; })();
@@ -20682,6 +20692,13 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const opt=etStatusOpts(mk('h','nn','OI/FF'))[0]; const oiS=opt?cardEtapaInfoHtml(mk('h','nn','OI/FF',{status:opt,status_etapa:'OI/FF'})):'';
       return ta.includes('📋 Lista Fulano') && taV.includes('sem lista') && oi.includes('⚑ sem status') && !oi.includes('📋')
         && !sp.includes('nc-pill') && !nao.includes('nc-pill') && b1.includes('📋 L2') && b2.includes('⚑ sem status') && (!opt||oiS.includes('⚑ '+esc(opt))); })());
+    /* CONTATO-PORTA-V1 (28/09, Backlog #3): a porta de saída normaliza lp/telefone/trilha e o filtro offline não diferencia maiúscula */
+    ok('CONTATO-PORTA-V1: telefone colado do WhatsApp sai limpo, lp minúsculo, trilha nunca vazia; filtro offline aceita "Gustavo"', (()=>{
+      const sujo='‪+55 81 99985‑7278‬'; if(telLimpa(sujo)!=='+55 81 99985-7278') return false;
+      const r=lpcRowOut('p1',{nome:'Zz',funil:'nn',lp:'Gustavo',telefone:sujo,telefones_alt:['‎81 3000–1111'],_dono:'x@x'}).dados;
+      const ok1=r.telefone==='+55 81 99985-7278' && r.telefones_alt[0]==='81 3000-1111' && r.lp===r.lp.toLowerCase() && r.trilha==='seguro';
+      const r2=lpcRowOut('p2',{nome:'Zz',funil:'nn',trilha:'recrutamento',_dono:'x@x'}).dados;   /* trilha preenchida não é sobrescrita */
+      return ok1 && r2.trilha==='recrutamento' && escLpNorm('Gustavo')===escLpNorm('gustavo'); })());
     /* INSTAGRAM-V1 (28/09): normalizaInstagram é a fonte única do handle — tabela de aceite do ticket */
     ok('INSTAGRAM-V1: normaliza @Handle/handle/URL/igsh/espaços, vazio remove, inválido não grava', (()=>{ const N=x=>{ const r=normalizaInstagram(x); return r.ok?r.v:'ERR'; };
       const casos=[['@Fulano.Tal','@fulano.tal'],['fulano.tal','@fulano.tal'],['https://www.instagram.com/fulano.tal/','@fulano.tal'],['instagram.com/fulano.tal?igsh=MTZ4bXl','@fulano.tal'],
