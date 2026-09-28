@@ -14352,6 +14352,7 @@ function modFixItens(){ const todos=HUB_SECOES.flatMap(s=>s.itens).filter(i=>(!i
   return modFixados().map(k=>todos.find(i=>modFixKey(i)===k)).filter(Boolean); }
 function modFixToggle(k){ const a=modFixados(); const ix=a.indexOf(k); if(ix>=0) a.splice(ix,1); else a.push(k);
   try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){}
+  if(logado()) navPrefsSubir();   /* NAV-ORDEM-V2: o 📌 também vale nos outros aparelhos */
   const it=HUB_SECOES.flatMap(s=>s.itens).find(i=>modFixKey(i)===k);
   toast((ix>=0?'Saiu do menu: ':'No menu lateral: ')+(it?it.titulo:k),true); navFixRender(); if(VIEW==='modulos') viewModulos(); }
 function navFixRender(){ const box=document.getElementById('nav-fix'); if(!box) return;
@@ -14401,7 +14402,28 @@ function navOrdResolver(salvo,padrao,existe){
   return r; }
 function navOrdSep(id){ if(NAV_BLOCOS&&NAV_BLOCOS[id]) return NAV_BLOCOS[id][0]; if(!NAV_SEPS[id]){ const d=document.createElement('div'); d.className='sep'; NAV_SEPS[id]=d; } return NAV_SEPS[id]; }
 function navOrdAtual(){ const bl=navOrdBlocos(); return navOrdResolver(navOrdLer(),navOrdPadrao(),id=>!!bl[id]||/^s:/.test(id)); }
+/* NAV-ORDEM-V2 (28/09): a ordem (e os 📌 do menu) também vão pro servidor — tabela lp_user_prefs, uma linha por
+   usuário, RLS: cada um lê/grava só a própria. Abriu em outro aparelho → baixa e aplica. Servidor vazio e aparelho
+   com ordem → sobe a do aparelho (quem já tinha arrumado não perde). Sem login/offline → segue só no aparelho. */
+let NAV_SRV_EM='';   /* troca de conta = busca de novo */
+let NAV_SRV=0;   /* 0 = não buscou · 1 = buscando · 2 = feito */
+function navPrefsEmail(){ return (typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():''; }
+async function navPrefsSubir(){ const em=navPrefsEmail(); if(!em||!sb) return false;
+  try{ const {error}=await sb.from('lp_user_prefs').upsert({email:em,prefs:{nav_ordem:navOrdLer(),mod_fixados:modFixados()},atualizado:new Date().toISOString()},{onConflict:'email'});
+    if(error) throw error; return true; }catch(e){ console.warn('lp_user_prefs: não subiu (fica no aparelho)',e); return false; } }
+async function navPrefsBaixar(){
+  if(NAV_SRV||!sb||!logado()||!navPrefsEmail()) return; NAV_SRV=1; NAV_SRV_EM=navPrefsEmail();
+  try{ const {data,error}=await sb.from('lp_user_prefs').select('prefs').eq('email',navPrefsEmail()).maybeSingle(); if(error) throw error;
+    const pr=(data&&data.prefs)||null;
+    if(pr&&(pr.nav_ordem||Array.isArray(pr.mod_fixados))){
+      if(pr.nav_ordem&&Array.isArray(pr.nav_ordem.ordem)) navOrdGravar(pr.nav_ordem);
+      if(Array.isArray(pr.mod_fixados)){ try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(pr.mod_fixados.map(String))); }catch(_){} }
+      NAV_SRV=2; navFixRender(); }
+    else { NAV_SRV=2; if(navOrdLer()||modFixados().length) navPrefsSubir(); }
+  }catch(e){ NAV_SRV=0; console.warn('lp_user_prefs: não baixou (segue no aparelho)',e); } }
 function navOrdAplicar(){
+  if(NAV_SRV===2&&NAV_SRV_EM!==navPrefsEmail()) NAV_SRV=0;
+  if(!NAV_SRV) navPrefsBaixar();
   if(!navOrdCapturar()) return; const box=document.getElementById('nav-ordem'); if(!box) return;
   const bl=navOrdBlocos(), ordem=navOrdAtual(), vivos=new Set();
   ordem.forEach(id=>{ const ns=/^s:/.test(id)?[navOrdSep(id)]:(bl[id]||[]); ns.forEach(x=>{ box.appendChild(x); vivos.add(x); }); });
@@ -14416,7 +14438,7 @@ function navOrdRotulo(id){ if(/^s:/.test(id)) return '<span style="color:var(--m
 function navOrdEditar(){ if(!navOrdCapturar()) return; NAV_ED={ordem:navOrdAtual(),fora:((navOrdLer()||{}).fora||[]).slice()}; navOrdEdRender(); }
 function navOrdEdRender(){
   const l=NAV_ED.ordem, btn='class="btn btn-s btn-mini" style="min-width:44px;min-height:44px"';
-  atModal(`<h2>↕️ Organizar menu</h2><div class="sub">Ponha o menu lateral na ordem que você quiser — arraste a linha (no computador) ou use ↑ ↓. Grupos (Pipe, SitPlan, Estoque) andam com os subitens. Vale pra você neste aparelho.</div>
+  atModal(`<h2>↕️ Organizar menu</h2><div class="sub">Ponha o menu lateral na ordem que você quiser — arraste a linha (no computador) ou use ↑ ↓. Grupos (Pipe, SitPlan, Estoque) andam com os subitens. Vale pra você, em todos os seus aparelhos.</div>
     <div id="nav-ed-l" style="display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:min(60vh,520px);overflow:auto">${l.map((id,i)=>`
       <div class="nav-ed-row" draggable="true" data-i="${i}" style="display:flex;align-items:center;gap:6px;border:1px solid var(--linha);border-radius:10px;padding:4px 6px;background:var(--card,#fff);cursor:grab">
         <span style="flex:1;min-width:0;font-size:14px">${navOrdRotulo(id)}</span>
@@ -14448,7 +14470,8 @@ function navOrdPadraoVolta(){ NAV_ED={ordem:navOrdPadrao(),fora:[]}; navOrdEdRen
 function navOrdSalvar(){ const pins=NAV_ED.tirarPin||[];
   navOrdGravar({ordem:NAV_ED.ordem.slice(),fora:NAV_ED.fora.slice()});
   if(pins.length){ try{ const a=modFixados().filter(k=>!pins.includes(k)); localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){} }
-  atClose(); NAV_ED=null; navFixRender(); toast('Menu organizado',true); }
+  atClose(); NAV_ED=null; navFixRender();
+  if(logado()) navPrefsSubir().then(ok=>toast(ok?'Menu organizado — vale em todos os seus aparelhos':'Menu organizado neste aparelho (não consegui salvar no servidor agora)',true)); else toast('Menu organizado',true); }
 window.navOrdEditar=navOrdEditar; window.navOrdMover=navOrdMover; window.navOrdTirar=navOrdTirar; window.navOrdSepNovo=navOrdSepNovo; window.navOrdPadraoVolta=navOrdPadraoVolta; window.navOrdSalvar=navOrdSalvar;
 window.modFixToggle=modFixToggle; window.navFixRender=navFixRender;
 function viewModulos(){
@@ -20851,6 +20874,9 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const d=navOrdKey().startsWith(NAV_ORD_CHAVE+':');
         return a&&b&&c&&d; }
       finally{ if(bk==null) localStorage.removeItem(k0); else localStorage.setItem(k0,bk); navOrdAplicar(); } })());
+    ok('NAV-ORDEM-V2: ordem do menu e 📌 sobem pro servidor (lp_user_prefs, por usuário) ao salvar/fixar e descem no boot logado', (()=>{
+      const s1=String(navOrdSalvar), s2=String(modFixToggle), s3=String(navOrdAplicar), s4=String(navPrefsBaixar);
+      return s1.includes('navPrefsSubir()')&&s2.includes('navPrefsSubir()')&&s3.includes('navPrefsBaixar()')&&s4.includes("from('lp_user_prefs')")&&s4.includes('navOrdGravar(')&&String(navPrefsSubir).includes("onConflict:'email'"); })());
     ok('MODAL-NO-WA-V1: no modo WhatsApp (?wa=1) só o fundo da gaveta (#overlay) some — janela de editar atividade (atModal, class overlay) continua visível', (()=>{
       const css=[...document.querySelectorAll('style')].map(s=>s.textContent).join('\n');
       const regras=css.split('}').filter(r=>r.includes('html.modo-wa')&&/display\s*:\s*none/.test(r));
