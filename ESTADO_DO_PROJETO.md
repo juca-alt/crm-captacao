@@ -2,7 +2,28 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.42 no ar · 71ª onda: Novo negócio puxa do CRM (NN-PUXAR-V1)
+## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.47 no ar + extensão WhatsApp 2.5.0
+
+**No ar:** vendas.html **v8.47** (Pages conferido por hash) · extensão **2.5.0** no main (PR #265). Branch canônico: origin/main.
+Pasta que o Chrome dele carrega: `~/Teste Claude Code/crm-wt-insta/extensao-whatsapp` (worktree detached em origin/main).
+
+**Entregue nesta sessão (PRs #259–#265):**
+- v8.42 — NN-PUXAR-V1 (Novo negócio: 🔎 Puxar do CRM | ➕ Contato novo, vincula pessoaId) · MODAL-NO-WA-V1 (✏️ Editar atividade no card do WhatsApp) · NAV-ORDEM-V1/V2 (↕️ Organizar menu por usuário, salvo em `lp_user_prefs`).
+- v8.43→v8.46 — Solicitações reorganizadas pra reunião com o Victor: "Com quem está" = Gustavo · Victor · LM · Prudential · Cliente (etiqueta + filtro); prazo só digitado (régua por área saiu); Kanban pelas ETAPAS = Solicitação aberta · A fazer · Em andamento · Finalizada; ⏳ Aguardando = situação (coluna `solicitacoes.aguardando`) com filtro; filtro por pipe via negócio vinculado; card mostra status · prazo · próxima · última; ficha com 3 cards (abertura · aberta há · último andamento), Contexto recolhido, rodapé 📅 Evento | ☑️ Tarefa; 🎯 vincular abre por cima (`.sheet-bd` z98).
+- v8.47 — REL-SUPORTADOS-V1: 📋 Relatórios suportados no Subir relatório (10 tipos, período, última atualização via tabela `rel_importacoes`).
+- Extensão 2.2→2.5 — card completo DENTRO do painel (rules.json COEP/CORP), ⚡ Rápido com 💾 Salvar explícito, conversa ↔ negócio (tel/lid/nome; local + `dados.wa_chats`).
+
+**Banco (playground, aplicado nesta sessão, migrations no repo):** `lp_user_prefs.sql` · `solicitacoes_status_em_andamento.sql` · `solicitacoes_status_etapas.sql` (a_fazer, aguardando + coluna aguardando) · `rel_importacoes.sql`.
+
+**Fila pra amanhã (ordem dele):**
+1. **MULTI-NEGÓCIOS** — ficha (CRM e card completo) com bloco "💼 Negócios desta pessoa" sempre visível (pipe · etapa, trocar num toque) + "＋ Novo negócio" escolhendo o pipe e já ligado à pessoa (reusar NN-PUXAR: `NC_PICK` + `ncVincularPuxado`); hoje só existe `drwIrmaosHtml`. Depois: ⚡ Rápido da extensão mostrar os negócios da pessoa.
+2. **Relatórios** — confirmar com ele os PERÍODOS do catálogo (são sugestão); Lista de Atraso sem invariante de leitura (pedir 1 texto real → anonimizar → fixture); deixar "colar" redondo nos outros 6 (semanal, carteira clientes, apólices vigentes, Status T, comissão, sinistro) e liberar pro Victor.
+3. Texto velho embaixo do botão Subir relatório ("Arquivo único · localStorage…") — oferecido trocar, sem resposta.
+4. Depois da fila: pasta de arquivos por oportunidade/cliente espelhada Drive + iCloud (canônico só como mapa).
+
+**Lições da sessão (não repetir):** iframe dentro do WhatsApp herda COEP require-corp → CRM só entra com COEP/CORP injetados por declarativeNetRequest · WhatsApp novo esconde telefone (`@lid`) → identidade da conversa = vínculo gravado, não busca · regra CSS de modo (`html.modo-wa .overlay`) escondeu modal que reusa a classe → esconder por id · folha (`.sheet-bd`) abaixo do modal (z85<95) → vincular abria atrás · merge via `gh` pode ser barrado pelo classificador do auto mode sem OK explícito dele na conversa.
+
+## 🟢 28/09/2026 — 28/09/2026 — v8.42 no ar · 71ª onda: Novo negócio puxa do CRM (NN-PUXAR-V1)
 
 _(70ª onda — v8.41 + extensão 2.1.0: card completo no WhatsApp + busca por funil)_
 ## 28/09/2026 (71ª onda) — NN-PUXAR-V1 (v8.42)
