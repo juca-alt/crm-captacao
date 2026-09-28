@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.40 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.41 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -789,6 +789,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
   .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
   .et-status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .fun-busca{display:inline-flex;align-items:center;gap:6px;flex:1 1 240px;min-width:0;max-width:380px;border:1px solid var(--linha);border-radius:9px;background:#fff;padding:0 8px} .fun-busca input{border:0;outline:0;background:transparent;flex:1;min-width:0;padding:7px 0;font:inherit} .fun-busca:focus-within{border-color:var(--azul)}   /* FUNIL-BUSCA-V1 */
+  @media (max-width:860px){ .fun-busca{max-width:none;flex-basis:100%} .fun-busca input{font-size:16px} }
   @media (min-width:861px){ .nn-toolbar .fun-status-sel{flex:0 1 210px;width:auto;max-width:240px} }   /* FILTROS-FUNIL-V1: no desktop os filtros ficam lado a lado */
   .fun-status-sel.on{border-color:var(--azul);background:var(--azul-claro,#eef4ff);color:var(--azul);font-weight:600}   /* FILTROS-FUNIL-V1 */
   .et-status-row select,.fun-status-sel{font:inherit;font-size:12.5px;padding:4px 8px;border:1px solid var(--linha);border-radius:7px;background:#fff;color:var(--ink)}
@@ -1433,6 +1435,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 
 <!-- ===== Portão de login (Google) — para LPs (ex.: Daniel). Deslogado sem login = modo local. ===== -->
 <style>
+  /* MODO-WA-V1 (28/09): vendas.html?wa=1 = só a ficha do negócio, dentro da extensão do WhatsApp */
+  html.modo-wa .sidebar,html.modo-wa .topbar,html.modo-wa .bnav,html.modo-wa #main,html.modo-wa .overlay{display:none!important}
+  html.modo-wa .drawer{position:fixed!important;inset:0!important;width:100%!important;max-width:none!important;transform:none!important;visibility:visible!important;border-radius:0!important;box-shadow:none!important}
+  html.modo-wa body{overflow:hidden}
+  .wa-vazio{padding:28px 18px;color:var(--muted);font-size:14px;line-height:1.5} .wa-vazio h3{color:var(--ink);font-size:16px;margin:0 0 6px}
+  .wa-vazio .wa-sug{display:flex;flex-direction:column;gap:6px;margin:12px 0}
   #lp-login{position:fixed;inset:0;z-index:100000;display:none;align-items:center;justify-content:center;
     background:radial-gradient(120% 120% at 50% 0%, #17324d 0%, #0b1626 60%, #070f19 100%);padding:24px}
   #lp-login .lg-card{width:100%;max-width:380px;background:#fff;border-radius:18px;padding:30px 26px 24px;
@@ -1794,6 +1802,16 @@ function funStatusSel(ns){ const opts=funStatusOptsDoFunil(ns); if(!opts.length&
   return `<select class="fun-status-sel${v?' on':''}" title="Filtrar pelo status dentro da etapa" onchange="FUN_STATUS['${ns}']=this.value;render()"><option value="">⚑ Status: todos</option><option value="__sem" ${v==='__sem'?'selected':''}>⚑ sem status</option>${opts.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>⚑ ${esc(x)}</option>`).join('')}</select>`; }
 function funListaSel(ns){ const cat=(typeof taListasCatalogo==='function')?taListasCatalogo():[]; const v=FUN_LISTA[ns]||'';
   return `<select class="fun-status-sel${v?' on':''}" title="Filtrar pela lista de TA" onchange="FUN_LISTA['${ns}']=this.value;render()"><option value="">📋 Lista: todas</option><option value="__sem" ${v==='__sem'?'selected':''}>📋 sem lista</option>${cat.map(x=>`<option value="${esc(x)}" ${x===v?'selected':''}>📋 ${esc(x)}</option>`).join('')}</select>`; }
+/* FUNIL-BUSCA-V1 (28/09): palavra dele — "onde tem o texto '119 cliente(s) no funil — arraste…', tira e bota uma barra de buscar só
+   deste funil; a busca geral do menu superior mantém". Filtra nome, telefone, profissão, recomendante, origem e notas; o contador
+   mostra quantos sobraram. Entra pela funAplicaLente (Kanban e Lista). */
+let FUN_BUSCA={}, _funBuscaT=null;
+function funBuscaHtml(ns,total){ const v=FUN_BUSCA[ns]||'';
+  return `<span class="fun-busca"><span aria-hidden="true">🔎</span><input type="search" id="fun-q-${esc(ns)}" value="${esc(v)}" placeholder="Buscar neste funil (${total})…" autocomplete="off" oninput="funBuscaSet('${esc(jsq(ns))}',this.value)">${v?`<button class="btn btn-ghost btn-mini" onclick="funBuscaSet('${esc(jsq(ns))}','',true)" aria-label="Limpar busca">✕</button>`:''}</span>`; }
+function funBuscaSet(ns,v,ja){ FUN_BUSCA[ns]=v; clearTimeout(_funBuscaT); _funBuscaT=setTimeout(()=>{ render(); const el=document.getElementById('fun-q-'+ns); if(el&&!ja){ el.focus(); try{ const n=el.value.length; el.setSelectionRange(n,n); }catch(_){} } },ja?0:220); }
+function funBuscaBate(c,q){ const n=normKey(q); if(!n) return true; const d=n.replace(/\D/g,'');
+  if(d.length>=4&&pTels(c).some(t=>String(t).replace(/\D/g,'').includes(d))) return true;
+  return [c.nome,c.profissao,c.recomendante,c.origem,c.notas,c.contexto].some(x=>x&&normKey(String(x)).includes(n)); }
 function funFiltrosSel(ns){ const on=(FUN_STATUS[ns]?1:0)+(FUN_LISTA[ns]?1:0);
   return `${funStatusSel(ns)}${funListaSel(ns)}${on?`<button class="btn btn-ghost btn-mini" onclick="FUN_STATUS['${ns}']='';FUN_LISTA['${ns}']='';render()" title="Tirar os filtros">✕ limpar filtro${on>1?'s':''}</button>`:''}`; }
 const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos', BC_DELIVERY='Delivery', BC_EMITIDA='Venda ganha';
@@ -3346,6 +3364,7 @@ function funLente(ns){ const v=FUN_LENTE[ns]||''; return FUN_LENTES[v]?v:''; }
 function funSetLente(ns,v){ FUN_LENTE[ns]=(funLente(ns)===v)?'':v; render(); }
 function funAplicaLente(lista,ns){
   const st=FUN_STATUS[ns]||''; if(st) lista=lista.filter(c=>st==='__sem'?!etStatusDe(c):etStatusDe(c)===st);   /* STATUS-ETAPA-V1 + FILTROS-FUNIL-V1 */
+  const bq=(FUN_BUSCA[ns]||'').trim(); if(bq) lista=lista.filter(c=>funBuscaBate(c,bq));   /* FUNIL-BUSCA-V1 */
   const li=FUN_LISTA[ns]||''; if(li) lista=lista.filter(c=>{ const l=Array.isArray(c.listas)?c.listas:[]; return li==='__sem'?!l.length:l.includes(li); });
   const l=funLente(ns); if(!l) return lista;
   return lista.filter(FUN_LENTES[l].teste);
@@ -4509,7 +4528,7 @@ function viewNnFunil(){
   const lista=meusContatos();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${NN_MODE==='kanban'?'on':''}" onclick="NN_MODE='kanban';viewNnFunil()">▦ Kanban</button><button class="${NN_MODE==='lista'?'on':''}" onclick="NN_MODE='lista';viewNnFunil()">☰ Lista</button></div>${nnOrdSelect()}${funFiltrosSel('nn')}
-    <span class="nn-dica" style="font-size:12px;color:var(--muted)">${lista.length} contato(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    ${funBuscaHtml('nn',lista.length)}
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato()">➕ Novo contato</button>
   </div>`;
@@ -4623,7 +4642,7 @@ function viewFunilExtra(fid){
   const PIPE=PIPES[pipeDe(fid)]||PIPES.vi;
   $('#main').innerHTML=`<h1 class="pg">${esc(meta[2])} ${esc(meta[1])}</h1>
     <div class="sub">${PIPE.ic} ${esc(PIPE.nome)} · ${esc(meta[3])}. Funil em construção — arraste o card pra mudar a etapa (no celular, toque e mude no perfil).</div>
-    <div class="nn-toolbar"><span style="font-size:12px;color:var(--muted)">${lista.length} negócio(s) neste funil</span>${funFiltrosSel(fid)}<span style="flex:1"></span>
+    <div class="nn-toolbar">${funBuscaHtml(fid,lista.length)}${funFiltrosSel(fid)}<span style="flex:1"></span>
       <button class="btn btn-p btn-mini" onclick="openNovoContato('${esc(fid)}')">➕ Novo negócio</button></div>
     ${body}`;
   wireNnBoard();
@@ -4654,7 +4673,7 @@ function viewBcFunil(){
   const lista=meusContatosBC();
   const toolbar=`<div class="nn-toolbar">
     <div class="seg"><button class="${BC_MODE==='kanban'?'on':''}" onclick="BC_MODE='kanban';viewBcFunil()">▦ Kanban</button><button class="${BC_MODE==='lista'?'on':''}" onclick="BC_MODE='lista';viewBcFunil()">☰ Lista</button></div>${nnOrdSelect()}${funFiltrosSel('bc')}
-    <span class="nn-dica" style="font-size:12px;color:var(--muted)">${lista.length} cliente(s) no funil — arraste o card pra avançar a etapa (no celular: toque no card e mude a etapa no perfil).</span>
+    ${funBuscaHtml('bc',lista.length)}
     <span style="flex:1"></span>
     <button class="btn btn-p btn-mini" onclick="openNovoContato('bc')">➕ Novo negócio</button>
   </div>`;
@@ -5071,7 +5090,7 @@ function viewContatos(){
 /* ═══════════════════ DRAWER: PERFIL DO CONTATO ═══════════════════ */
 let CONTATO=null;
 function abrirContato(id){ CONTATO=id; renderDrawer(); $('#overlay').classList.add('aberto'); $('#drawer').classList.add('aberto'); }
-function fecharDrawer(){ $('#overlay').classList.remove('aberto'); $('#drawer').classList.remove('aberto'); CONTATO=null; }
+function fecharDrawer(){ $('#overlay').classList.remove('aberto'); $('#drawer').classList.remove('aberto'); CONTATO=null; if(typeof MODO_WA!=='undefined'&&MODO_WA) setTimeout(waPlaceholder,0); }   /* MODO-WA-V1 */
 function ct(){ return S.contatos.find(c=>c.id===CONTATO); }
 
 /* bloco de tarefas da ficha: lista das abertas, atalhos de remarcar, o que já
@@ -20737,6 +20756,22 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const h=etStatusSelHtml(c), chip=etStatusChip(c), oi=etStatusSelHtml({id:'zm2',funil:'nn',etapa:'OI/FF'});
         return etEhEnc(c) && !etEhEnc({funil:'nn',etapa:'TA'}) && vazio.includes('Motivo da perda') && vazio.includes('nenhum motivo') && h.includes('✖ Motivo da perda') && h.includes('selected>Já é cliente Zz') && chip.includes('✖ Já é cliente Zz') && !oi.includes('Motivo da perda');
       } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
+    /* FUNIL-BUSCA-V1 (28/09): busca por funil (nome, telefone, recomendante…) no lugar do texto do "arraste" */
+    ok('FUNIL-BUSCA-V1: a busca do funil filtra por nome/telefone/recomendante e só naquele funil; o texto do arraste saiu', (()=>{
+      const _b=FUN_BUSCA.nn, _c=FUN_BUSCA.bc; try{ const l=[{id:'q1',nome:'Fulana Zz',telefone:'(81) 99999-1234',recomendante:'Beltrano'},{id:'q2',nome:'Ciclana',telefone:'81 3000-0000'}];
+        FUN_BUSCA.nn='fulana'; const a=funAplicaLente(l,'nn'); FUN_BUSCA.nn='99999-12'; const b=funAplicaLente(l,'nn'); FUN_BUSCA.nn='beltr'; const c=funAplicaLente(l,'nn'); FUN_BUSCA.nn=''; FUN_BUSCA.bc='fulana'; const d=funAplicaLente(l,'nn');
+        const src=String(viewNnFunil)+String(viewBcFunil)+String(viewFunilExtra);
+        return a.length===1&&a[0].id==='q1' && b.length===1&&b[0].id==='q1' && c.length===1 && d.length===2 && !src.includes('arraste o card pra avançar a etapa') && (src.match(/funBuscaHtml\(/g)||[]).length>=3;
+      } finally{ FUN_BUSCA.nn=_b; FUN_BUSCA.bc=_c; } })());
+    /* MODO-WA-V1 (28/09): a extensão abre ESTA ficha; casa pelo telefone (aberto e mais recente primeiro), Estoque depois */
+    ok('MODO-WA-V1: casa o negócio pelo telefone (aberto antes de encerrado), Estoque separado; só aceita mensagem de extensão', (()=>{
+      const _s=S.contatos,_b=BN.contatos; try{
+        S.contatos=[{id:'w1',nome:'Zz',funil:'nn',etapa:'Não',telefone:'81 99999-0101',_upd:'2099'},{id:'w2',nome:'Zz',funil:'nn',etapa:'TA',telefone:'(81) 99999-0101',_upd:'2000'}];
+        BN.contatos=[{id:'w3',nome:'Zz Bn',funil:'bn',estagio:'estoque',telefone:'+55 81 98888-0202'}];
+        const a=waMatchTel('+55 81 99999-0101'), b=waMatchTel('5581988880202'), c=waMatchTel('');
+        const vis=escVisivel(S.contatos[0]);
+        return (!vis||(a.fun.length===2&&a.fun[0].id==='w2')) && (b.bn.length===1||typeof bnVivos!=='function') && c.fun.length===0 && typeof waAbrir==='function';
+      } finally{ S.contatos=_s; BN.contatos=_b; } })());
     /* FILTROS-FUNIL-V1 (28/09): status (do funil) e lista de TA filtram o funil; "sem status"/"sem lista" também */
     ok('FILTROS-FUNIL-V1: filtro por status (só os do funil, + sem status) e por lista de TA (+ sem lista), nos 3 tipos de funil', (()=>{
       const e=(FUNIL_CFG.lp||[]).find(x=>x&&x.id==='OI/FF'); if(!e) return false; const _st=e.status, _fs=FUN_STATUS.nn, _fl=FUN_LISTA.nn; try{ e.status=['Zz Agendado'];
@@ -21696,6 +21731,45 @@ function abrirAjustesVisual(){
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','plano','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado'];
+/* ═══ MODO-WA-V1 (28/09/2026) ════════════════════════════════════════════════════════
+   Palavra dele (extensão do WhatsApp): "abre algo como o próprio card da oportunidade que abro no CRM — ali tem tudo,
+   inclusive tarefas, agendamentos… esse mesmo card". Em vez de reescrever a ficha na extensão (e ela ficar sempre
+   atrás do app), a extensão abre ESTE app em vendas.html?wa=1: só a ficha, tela cheia. A conversa aberta chega por
+   postMessage {tipo:'wa-abrir', tel, nome} (ou #tel=&nome= no 1º load): acha o negócio pelo telefone (mesma chave
+   telKey do app; aberto e mais recente primeiro) → ficha do funil; senão, nome do Estoque → ficha do Estoque; senão,
+   sugestões pelo nome + criar negócio já preenchido. Só aceita mensagem de página de extensão do Chrome. */
+const MODO_WA=(()=>{ try{ return new URLSearchParams(location.search).get('wa')==='1'; }catch(_){ return false; } })();
+if(MODO_WA) document.documentElement.classList.add('modo-wa');
+let WA_ULT=null, _waTent=0, _waTimer=null;
+function waTela(html){ const d=$('#drawer'); if(!d) return; CONTATO=null; d.innerHTML=`<div class="wa-vazio">${html}</div>`; d.classList.add('aberto'); }
+function waPlaceholder(){ waTela(`<h3>💬 Abra uma conversa no WhatsApp</h3>A ficha do negócio aparece aqui — a mesma do CRM, com etapa, status, listas, tarefas, agenda e jornada.`); }
+function waMatchTel(tel){ const k=telKey(tel); if(!k) return {fun:[],bn:[]};
+  const bate=c=>pTels(c).some(t=>telKey(t)===k);
+  const enc=c=>{ const m=ETAPAS_MAP[c.funil||'nn']; return !!(m&&m.enc&&m.enc.includes(c.etapa)); };
+  const fun=(S.contatos||[]).filter(c=>escVisivel(c)&&bate(c)).sort((a,b)=>(enc(a)-enc(b))||String(b._upd||'').localeCompare(String(a._upd||'')));
+  const bn=(typeof bnVivos==='function'?bnVivos():[]).filter(bate);
+  return {fun,bn}; }
+function waAbrir(msg){ WA_ULT=msg||WA_ULT; const m=WA_ULT||{}; clearTimeout(_waTimer);
+  if(!m.tel&&!m.nome){ waPlaceholder(); return; }
+  const r=waMatchTel(m.tel||'');
+  if(r.fun.length){ _waTent=0; const ta=document.getElementById('ta-ficha'); if(ta) ta.remove(); abrirContato(r.fun[0].id); if(r.fun.length>1) toast(`Esta pessoa tem ${r.fun.length} negócios — abri o mais recente em aberto`,true); return; }
+  if(r.bn.length){ _waTent=0; fecharDrawerSo(); taFichaAbrir(r.bn[0].id); return; }
+  if(_waTent<12){ _waTent++; waTela(`<h3>⏳ Procurando ${esc(m.nome||'')}…</h3>carregando sua base`); _waTimer=setTimeout(()=>waAbrir(),800); return; }   /* base ainda chegando do servidor */
+  _waTent=0;
+  const sug=m.nome?lpkMatches(m.nome).slice(0,6):[];
+  waTela(`<h3>Nenhum negócio com ${esc(telBR(m.tel||'')||'esse telefone')}</h3>${esc(m.nome||'')}
+    ${sug.length?`<div style="margin-top:10px;font-weight:600;color:var(--ink)">Parecidos pelo nome:</div><div class="wa-sug">${sug.map((x,i)=>`<button class="btn btn-s" style="text-align:left" onclick="waAbrirSug(${i})">${esc(x.nome)} <span style="color:var(--muted);font-size:12px">· ${esc(x.tag)}</span></button>`).join('')}</div>`:''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-p" onclick="waCriar('nn')">➕ Novo negócio</button><button class="btn btn-s" onclick="waCriar('bc')">➕ Negócio na Base</button></div>`);
+  window._waSug=sug; }
+function waAbrirSug(i){ const x=(window._waSug||[])[i]; if(!x) return; LPK_RES=window._waSug; lpkGo(String(i)); }
+function fecharDrawerSo(){ $('#overlay').classList.remove('aberto'); $('#drawer').classList.remove('aberto'); CONTATO=null; }
+function waCriar(funil){ openNovoContato(funil); setTimeout(()=>{ const m=WA_ULT||{}; const n=document.getElementById('ncNome'), t=document.getElementById('ncTel');
+  if(n&&m.nome&&!n.value) n.value=String(m.nome).replace(/\s+(rec|indic)\b.*$/i,'').trim(); if(t&&m.tel&&!t.value) t.value=telBR(m.tel)||m.tel; },60); }
+if(MODO_WA){
+  window.addEventListener('message',e=>{ const o=String(e.origin||''); if(!/^chrome-extension:\/\//.test(o)) return; const d=e.data||{}; if(d.tipo==='wa-abrir') waAbrir({tel:String(d.tel||''),nome:String(d.nome||'')}); });
+  setTimeout(()=>{ try{ const h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const tel=h.get('tel')||'', nome=h.get('nome')||''; if(tel||nome) waAbrir({tel,nome}); else waPlaceholder(); }catch(_){ waPlaceholder(); } },0);
+}
+
 /* PAINEL-TA-NATIVO-V1: vendas.html#view=bn-ta&q=Nome abre direto a tela (é o que o
    painel-lp.html, agora só um redirect, manda). O hash é consumido e limpo. */
 (function(){ try{

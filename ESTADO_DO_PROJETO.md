@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.40 no ar · 69ª onda: filtros do funil por ⚑ status e 📋 lista de TA (FILTROS-FUNIL-V1)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.41 no ar + extensão 2.1.0 · 70ª onda: card COMPLETO do CRM no WhatsApp (MODO-WA-V1) + busca por funil (FUNIL-BUSCA-V1)
+
+_(69ª onda — v8.40: filtros do funil)_
 
 _(67ª onda — v8.39: motivos de perda; 68ª — extensão WA 2.0.0)_
 
@@ -51,7 +53,14 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (69ª onda) — FILTROS-FUNIL-V1 (v8.40)
+## 28/09/2026 (70ª onda) — MODO-WA-V1 + FUNIL-BUSCA-V1 (v8.41) · extensão 2.1.0
+Palavra dele (WhatsApp): *"tira essa parte de Captação; permite encolher/expandir cada tópico; abre algo como o próprio card da oportunidade que abro no CRM — tarefas, agendamentos, tudo — esse mesmo card."* E no funil: *"onde tem o texto '119 cliente(s) no funil — arraste…', tira e bota uma barra de buscar só deste funil; a busca geral mantém."*
+- **MODO-WA-V1:** `vendas.html?wa=1` esconde menu/topo/telas e mostra só a ficha em tela cheia; `waAbrir({tel,nome})` (postMessage só de `chrome-extension://`, ou `#tel=&nome=` no 1º load) acha pelo telefone (`telKey`, aberto e mais recente primeiro) → ficha do Estoque → "não achei" com parecidos pelo nome + criar negócio já preenchido. Fechar a ficha volta pro aviso. Reentrega por 10 s enquanto a base carrega.
+- **Extensão 2.1.0:** sem a aba Captação; modos **🗂 Card completo** (painel 460px, `content/embed.html` → iframe do CRM; o WhatsApp bloqueia iframe de fora) e **⚡ Rápido** (card 2.0 com tópicos dobráveis lembrados). Trocar de conversa não recarrega o CRM.
+- **FUNIL-BUSCA-V1:** nos 3 tipos de funil o texto do "arraste" virou 🔎 **Buscar neste funil (N)** — nome, telefone (≥4 dígitos), profissão, recomendante, origem, notas; foco mantido ao digitar; independente por funil; entra pela `funAplicaLente`.
+- Invariantes `MODO-WA-V1` e `FUNIL-BUSCA-V1`.
+
+ — FILTROS-FUNIL-V1 (v8.40)
 Palavra dele: *"adiciona filtros na área de funil: por status, lista de TA; depois eu adiciono outros."*
 - Toolbar de Novos Negócios, Negócios na Base e demais pipes: **⚑ Status** (só os status DAQUELE funil + "sem status") e **📋 Lista** (catálogo único + "sem lista") + **✕ limpar filtro(s)**. Filtro ativo fica azul.
 - `funAplicaLente` é a porta única (Kanban e Lista). A Lista dos Negócios na Base não filtrava — agora filtra.
