@@ -463,7 +463,16 @@ function abrirLateral(){   /* 2.2.2: abre a JANELA do CRM ao lado (o painel late
     setOpen(true); renderCompleto(r.error); return false;
   });
 }
-function avisaConversa(c){ send('wa.chat',{tel:(c&&c.phoneRaw)||'',nome:(c&&c.name)||'',grupo:!!(c&&c.isGroup)}); }
+function avisaConversa(c){ send('wa.chat',{tel:(c&&c.phoneRaw)||'',nome:(c&&c.name)||'',grupo:!!(c&&c.isGroup),keys:chatKeys(c)}); }
+/* 2.4: chaves desta conversa pro vínculo com o negócio (tel · lid fixo do WhatsApp · nome do chat) */
+function chatKeys(c){ if(!c||c.isGroup) return [];
+  const nn=String(c.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  const dg=String(c.phoneRaw||'').replace(/\D/g,'');
+  return [dg.length>=10?'tel:'+dg.slice(-11):'', c.lid?'lid:'+c.lid:'', nn?'nome:'+nn:''].filter(Boolean); }
+let VINC=false;   /* o card na tela veio do vínculo gravado */
+function vincular(row){ if(!row||!CHAT) return; const k=chatKeys(CHAT); if(!k.length) return;
+  send('wa.vincular',{keys:k,id:row.id,nome:(row.dados&&row.dados.nome)||''}).then(r=>{ if(r&&r.ok){ VINC=true; toast('📌 Conversa ligada a '+((row.dados&&row.dados.nome)||'este negócio')+' — da próxima vez abre direto'); avisaConversa(CHAT); if(CUR===String(row.id)) renderLpContato(CUR_ROW,CUR_CART); } }); }
+function desvincular(){ if(!CHAT) return; send('wa.desvincular',{keys:chatKeys(CHAT)}).then(()=>{ VINC=false; toast('Vínculo desfeito'); avisaConversa(CHAT); lookup(); }); }
 /* 2.3.0: o card completo volta pra DENTRO do painel. O que barrava (ícone cinza) era o COEP require-corp do
    WhatsApp: o vendas.html do GitHub Pages não tem COEP/CORP. Agora a regra do declarativeNetRequest (rules.json)
    põe COEP: credentialless + CORP: cross-origin só na resposta do CRM quando ele é carregado como FRAME — o Chrome
@@ -583,6 +592,7 @@ function renderLpContato(row,cartHit){
       <h2>${esc(c.nome||'—')}</h2>
       <span class="badge" style="background:${LPC_COR[(atual&&atual.cor)||'cinza']||'#5b6770'}"><span class="dot"></span>${esc(funNome)} · ${esc((atual&&atual.label)||c.etapa||'—')}</span>
       <div class="muted">${esc(c0.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div>
+      <div class="muted" style="margin-top:4px">${VINC?`📌 ligado a esta conversa · <a href="#" id="lp2-desv">não é esta pessoa</a>`:`<a href="#" id="lp2-vinc">📌 ligar esta conversa a este negócio</a>`}</div>
       ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
     </div>
     <details class="card dob" data-k="etapa" ${dobAberto('etapa')?'open':''}>
@@ -610,6 +620,8 @@ function renderLpContato(row,cartHit){
     <div class="salvabar" id="lp2-barra"></div>
   </div>`,id);
   wireMsgCard(c); wireDob(); pintaBarra();
+  { const a=$('#lp2-vinc'); if(a) a.onclick=e=>{ e.preventDefault(); vincular(row); };
+    const b=$('#lp2-desv'); if(b) b.onclick=e=>{ e.preventDefault(); desvincular(); }; }
   const redesenha=()=>{ if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; renderLpContato(CUR_ROW,CUR_CART); };
   const limpaIgual=()=>{ /* voltou ao que está no banco? então não é mudança */
     if('etapa' in D&&D.etapa===c0.etapa){ delete D.etapa; }
@@ -658,7 +670,7 @@ function renderLpContatoPicker(list){
     list.map((r,i)=>{ const c=r.dados||{}; const e=lpcEtapaDe(LPCFG.funil,c);
       return `<div class="pick" data-i="${i}"><b>${esc(c.nome||'—')}</b><br>
       <span class="muted">${esc((e&&e.label)||c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
-  panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpContato(list[+el.dataset.i]); });
+  panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>{ const x=list[+el.dataset.i]; renderLpContato(x); vincular(x); }; });
 }
 function renderLpCreate(sugestoes){
   const chatPhone=CHAT&&CHAT.phoneRaw?normPhone(CHAT.phoneRaw):null;
@@ -679,7 +691,7 @@ function renderLpCreate(sugestoes){
     <div class="note">Ou, se for recrutamento (candidato a LP):</div>
     <button class="btn" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>
   `);
-  panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>renderLpContato(sugestoes[+el.dataset.lpsug]); });
+  panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>{ const x=sugestoes[+el.dataset.lpsug]; renderLpContato(x); vincular(x); }; });
   $('#wa-lp-to-cap').onclick=()=>{ VIEW='captacao'; saveView(); LEAD=null; lookup(); };
   $('#wa-lpn-save').onclick=async()=>{
     const nome=$('#wa-lpn-nome').value.trim();
@@ -692,7 +704,7 @@ function renderLpCreate(sugestoes){
     const r=await send('lpc.save',{id:dados.id,dados});
     BUSY=false;
     if(!handleAuthFail(r)) return;
-    if(r.ok){ renderLpContato(r.data); toast('✓ Contato criado na Visão LP'); }
+    if(r.ok){ renderLpContato(r.data); vincular(r.data); toast('✓ Contato criado na Visão LP'); }
     else { $('#wa-lpn-save').disabled=false; toast('Erro: '+(r.error||'falha ao criar')); }
   };
 }
@@ -713,7 +725,7 @@ function wireSearch(){
     if(!handleAuthFail(r)) return;
     if(VIEW==='lp'){
       const d=(r.ok&&r.data)||{}, cs=d.contatos||[], ct=d.carteira||[];
-      if(cs.length===1) renderLpContato(cs[0],ct[0]||null);
+      if(cs.length===1){ renderLpContato(cs[0],ct[0]||null); vincular(cs[0]); }
       else if(cs.length>1) renderLpContatoPicker(cs);
       else if(ct.length===1) renderLpCliente(ct[0]);
       else if(ct.length>1) renderLpPicker(ct);
@@ -755,7 +767,8 @@ async function lookup(){
   renderLoading();
   if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Estoque → Carteira → criar
     let contatos=[],carteira=[],byName=null,estoque=[];
-    const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||''}),loadLpCfg()]);
+    const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||'',keys:chatKeys(c)}),loadLpCfg()]);
+    VINC=!!(r&&r.ok&&r.data&&r.data.vinculo);
     if(seq!==LOOKSEQ) return;                    /* já trocou de conversa: esta resposta é de outra pessoa */
     if(!handleAuthFail(r)) return;
     if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; byName=r.data.byName; estoque=r.data.estoque||[]; }

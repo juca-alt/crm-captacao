@@ -16,7 +16,9 @@ const HANDLERS={
   'leads.create':(m)=>waInsertLead(m.rec),
   'leads.update':(m)=>waUpdateLead(m.id,m.patch,m.before),
   'task.set':    (m)=>setTask(m.id,m.dateISO,m.texto,m.before),
-  'lp.lookup':  (m)=>lpLookup(m.phone,m.name),
+  'lp.lookup':  (m)=>lpLookup(m.phone,m.name,m.keys),
+  'wa.vincular':(m)=>vincGravar(m.keys,m.id,m.nome),     // 2.4: conversa ↔ negócio
+  'wa.desvincular':(m)=>vincTirar(m.keys),
   'lp.search':  (m)=>lpSearchAll(m.q),
   'lpc.save':   (m)=>lpcSave(m.id,m.dados),
   'lpcfg.get':  (m)=>lpCfgGet(!!m.force),          // v2.0: Funil & Etapas + listas do app
@@ -27,7 +29,7 @@ const HANDLERS={
   // 2.3: o frame do CRM dentro do painel pede a ficha da conversa atual (no load e a cada troca)
   'wa.frame':    async (m,sender)=>{ const o=await chrome.storage.session.get('wa_chat_ult');
                    if(sender&&sender.tab) await injetaCrm({tabId:sender.tab.id,allFrames:true},(o&&o.wa_chat_ult)||null); return true; },   // 2.2.2: card completo numa JANELA do CRM ao lado (não depende do painel lateral)
-  'wa.chat':    (m)=>{ const u={tel:String(m.tel||''),nome:String(m.nome||''),grupo:!!m.grupo,ts:Date.now()};
+  'wa.chat':    (m)=>{ const u={tel:String(m.tel||''),nome:String(m.nome||''),grupo:!!m.grupo,keys:Array.isArray(m.keys)?m.keys:[],ts:Date.now()};
                        return chrome.storage.session.set({wa_chat_ult:u}).then(()=>janelaAvisa(u)).then(()=>true); },
 };
 
@@ -63,9 +65,9 @@ async function abrirJanela(sender){
    "Fulano Rec Ciclano Med…"). O CRM só abre a ficha pelo id — antes ele procurava só pelo telefone e, com o nome
    cheio de etiquetas, dizia "nenhum negócio" pra cliente que está no CRM. */
 /* acha o negócio (telefone → nome tolerante às etiquetas), mesma busca do card rápido */
-async function alvoDe(tel,nome){
-  if(!tel&&!nome) return null;
-  try{ const r=await lpLookup(tel,nome);
+async function alvoDe(tel,nome,keys){
+  if(!tel&&!nome&&!(keys&&keys.length)) return null;
+  try{ const r=await lpLookup(tel,nome,keys);
     const c=(r.contatos&&r.contatos[0])||(r.byName&&r.byName.strong)||null;
     if(c) return {tipo:'fun',ids:[String(c.id),String((c.dados&&c.dados.id)||'')]};
     if(r.estoque&&r.estoque.length===1){ const b=r.estoque[0]; return {tipo:'bn',ids:[String(b.id),String((b.dados&&b.dados.id)||'')]}; }
@@ -93,7 +95,7 @@ function ABRIR_NO_CRM(t,n,a){
 }
 async function injetaCrm(target,u){
   const tel=(!u||u.grupo)?'':String(u.tel||''), nome=(!u||u.grupo)?'':String(u.nome||'');
-  const a=await alvoDe(tel,nome);
+  const a=await alvoDe(tel,nome,(u&&!u.grupo&&u.keys)||[]);
   try{ await chrome.scripting.executeScript({target,world:'MAIN',args:[tel,nome,a],func:ABRIR_NO_CRM}); }catch(_){}
 }
 async function janelaAvisa(u){ const j=await janelaViva(); if(!j||!u) return; await injetaCrm({tabId:j.tab},u); }

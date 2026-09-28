@@ -26,7 +26,7 @@ function carregar(){
 function msgDe(u){ return (!u||u.grupo)?{tipo:'wa-abrir',tel:'',nome:''}:{tipo:'wa-abrir',tel:String(u.tel||''),nome:String(u.nome||'')}; }
 function entrega(){
   if(!pronto||!fr.contentWindow) return;
-  const m=msgDe(ultima), k=m.tel+'|'+m.nome;
+  const m=msgDe(ultima), k=m.tel+'|'+m.nome+'|'+((ultima&&ultima.ts)||'');   /* 2.4: ts entra — ligar a conversa reenvia a mesma */
   if(k===entregue) return;                  // mesma conversa: não reabre a ficha à toa
   entregue=k;
   /* 2.3: quem acha o negócio é a extensão (telefone → nome com as etiquetas do WhatsApp) e abre a ficha pelo id;

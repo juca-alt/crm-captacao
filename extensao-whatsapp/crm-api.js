@@ -401,7 +401,22 @@ async function lpcFindByName(nameRaw){
 
 // visão combinada da LP: contatos do funil (prioridade) + Carteira; sem telefone
 // (ou sem match por telefone), tenta o match forte por nome nos contatos
-async function lpLookup(rawPhone,chatName){
+/* ===== 2.4: VÍNCULO conversa do WhatsApp ↔ negócio do CRM =====
+   Pedido dele: "quando eu atrelar uma conversa do WhatsApp ao caso do CRM, ele reconhecer mais fácil — algum código id".
+   O WhatsApp novo esconde o telefone (@lid) e o nome vem com etiquetas, então a busca às vezes erra. Ao ESCOLHER o
+   negócio no card (ou criar), a extensão grava chave-da-conversa → id do negócio. Chaves: tel:<dígitos> · lid:<id fixo
+   do WhatsApp> · nome:<nome do chat normalizado>. Na próxima vez o vínculo vence qualquer busca. */
+function waNormNome(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
+async function vincTodos(){ try{ const o=await chrome.storage.local.get('wa_vinc'); return (o&&o.wa_vinc)||{}; }catch(_){ return {}; } }
+async function vincDe(keys){ const v=await vincTodos(); for(const k of (keys||[])){ if(k&&v[k]) return v[k]; } return null; }
+async function vincGravar(keys,id,nome){ const v=await vincTodos(); const x={id:String(id),nome:String(nome||''),ts:Date.now()};
+  (keys||[]).filter(Boolean).forEach(k=>{ v[k]=x; }); await chrome.storage.local.set({wa_vinc:v}); return true; }
+async function vincTirar(keys){ const v=await vincTodos(); (keys||[]).forEach(k=>{ delete v[k]; }); await chrome.storage.local.set({wa_vinc:v}); return true; }
+async function lpLookup(rawPhone,chatName,keys){
+  if(keys&&keys.length){ const vv=await vincDe(keys);
+    if(vv){ const f=await lpcFrescos([{id:vv.id}]); const row=f&&f[0];
+      if(row&&row.dados){ let carteira=[]; try{ carteira=await lpFindByPhone(rawPhone); }catch(_){}
+        return _lpcEhBn(row)?{contatos:[],carteira,byName:null,estoque:[row],vinculo:true}:{contatos:[row],carteira,byName:null,estoque:[],vinculo:true}; } } }
   const [contatos,carteira,estoque]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone),lpcEstoqueByPhone(rawPhone)]);
   let byName=null;
   if(!contatos.length&&chatName){ byName=await lpcFindByName(chatName); }
