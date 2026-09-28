@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.36 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.37 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -783,6 +783,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .ta-menu-lrow{display:flex;gap:4px;align-items:stretch} .ta-menu-lrow>button:first-child{flex:1} .ta-menu-mv{flex:0 0 auto;font-size:11.5px!important;color:var(--azul)!important}   /* LISTAS-NA-LINHA-V1 */
   .et-lista-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}   /* FICHA-LISTA-TA-V1 */
   .nc-pill{display:inline-flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-size:11px;font-weight:650;border-radius:999px;padding:2px 9px;margin:3px 4px 3px 0;cursor:pointer;color:#1e3a8a;background:#eef4ff;border:1px solid #bfd3fb}   /* CARD-TA-STATUS-V1 */
+  .nc-pills{display:flex;gap:4px;flex-wrap:nowrap;min-width:0;margin:3px 0} .nc-pills .nc-pill{margin:0;min-width:0;flex:0 1 auto} .nc-mais{font-weight:700;margin-left:2px}   /* CARD-STATUS-LISTA-V2 */
   .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
   .nc-status{display:inline-block;font-size:10.5px;font-weight:650;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:1px 7px;margin:3px 0}
   .et-status-row{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
@@ -1738,7 +1739,7 @@ function drwListaDescartar(){ const c=ct(); if(!c) return; const e=drwEtapaDesca
     v.etapa=antes.etapa; v.listas=antes.listas; if(antes.status!=null){ v.status=antes.status; v.status_etapa=antes.status_etapa; } if(antes.ord!=null) v.ord=antes.ord;
     const li=interacoesDe(v); for(let i=li.length-1;i>=0;i--) if(marcas.includes(li[i].id)) li.splice(i,1);
     salvar(); if(CONTATO===v.id) renderDrawer(); render(); toast('Desfeito',true); }); }
-function etSetStatus(v){ if(etSetStatusDe(ct(),v)) renderDrawer(); }
+function etSetStatus(v){ if(etSetStatusDe(ct(),v)){ renderDrawer(); setTimeout(()=>{ try{ render(); }catch(_){} },0); } }   /* CARD-STATUS-LISTA-V2: o card atrás acompanha (antes só a ficha mudava) */
 /* ═══ CARD-TA-STATUS-V1 (28/09): o card do funil mostra o que ele precisa pra trabalhar a etapa sem abrir a ficha.
    Palavra dele: "oportunidades que estão na etapa TA devem dizer a lista de TA no card, assim como o status deve
    aparecer no card pra todos… o TA tá sempre atrelado a alguma lista de TA; de OI em diante preciso dos status fácil".
@@ -1750,12 +1751,15 @@ function funTaIdx(c){ const ids=etapasDe(c)||[]; return ids.findIndex(e=>e==='TA
 function funEhTA(c){ const i=funTaIdx(c); return i>=0&&(etapasDe(c)||[])[i]===(c&&c.etapa); }
 function funPosTA(c){ if(!c) return false; const ids=etapasDe(c)||[], i=ids.indexOf(c.etapa), t=funTaIdx(c); const m=ETAPAS_MAP[c.funil||'nn']; const enc=(m&&m.enc)||[];
   return i>=0 && i>(t>=0?t:0) && !enc.includes(c.etapa); }
-function cardEtapaInfoHtml(c){ const j=esc(jsq(c.id));
-  if(funEhTA(c)){ const l=(c.listas||[]);
-    return `<button class="nc-pill${l.length?'':' vazio'}" onclick="event.stopPropagation();spListaMenu(event,'${j}')" title="Lista de TA — toque pra trocar">📋 ${l.length?esc(l.join(' · ')):'sem lista'}</button>${etStatusChip(c)}`; }
-  if(funPosTA(c)){ const s=etStatusDe(c), d=negDelayAtivo(c)&&!/^delay/i.test(s)?`<span class="nc-status" title="Cliente pediu pra adiar">⏳ Delay até ${esc(dataBR(c.delay_ate))}</span>`:'';
-    return `<button class="nc-pill${s?' on':' vazio'}" onclick="event.stopPropagation();etStatusMenu(event,'${j}')" title="Status nesta etapa — toque pra mudar">⚑ ${s?esc(s):'sem status'}</button>${d}`; }
-  return etStatusChip(c); }
+/* CARD-STATUS-LISTA-V2 (28/09): palavra dele — "deixa eu alterar status direto do card; na ordem status · lista, um ao lado do
+   outro, pra todas as etapas mesmo após TA; se tem mais de uma lista fica o nome de uma e o símbolo +". Toda etapa ABERTA mostra as
+   duas pílulas; encerrada fica só com o chip de antes. */
+function cardEtapaInfoHtml(c){ const j=esc(jsq(c.id)), m=ETAPAS_MAP[(c&&c.funil)||'nn'], enc=(m&&m.enc)||[];
+  if(enc.includes(c.etapa)) return etStatusChip(c);
+  const s=etStatusDe(c), l=c.listas||[], d=negDelayAtivo(c)&&!/^delay/i.test(s)?`<span class="nc-status" title="Cliente pediu pra adiar">⏳ Delay até ${esc(dataBR(c.delay_ate))}</span>`:'';
+  const st=`<button class="nc-pill${s?' on':' vazio'}" onclick="event.stopPropagation();etStatusMenu(event,'${j}')" title="Status nesta etapa — toque pra mudar">⚑ ${s?esc(s):'sem status'}</button>`;
+  const li=`<button class="nc-pill${l.length?'':' vazio'}" onclick="event.stopPropagation();taListaMenuLinha(event,'${j}')" title="${l.length?'Listas de TA: '+esc(l.join(' · ')):'Sem lista de TA'} — toque pra pôr, mover ou tirar">📋 ${l.length?esc(l[0])+(l.length>1?` <b class="nc-mais">+${l.length-1}</b>`:''):'sem lista'}</button>`;
+  return `<div class="nc-pills">${st}${li}</div>${d}`; }
 function etStatusMenu(ev,id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return; const o=etStatusOpts(c), s=etStatusDe(c), j=esc(jsq(id));
   taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · status em ${esc(LBLE(c.etapa))}</div>
     ${o.map(x=>`<button onclick="etStatusCard('${j}','${esc(jsq(x))}')">${x===s?'✓ ':'⚑ '}${esc(x)}</button>`).join('')}
@@ -15999,7 +16003,7 @@ const NOVO_SO_MEU={
   'aviso-versao': {o:'Aviso de versão nova do app (faixa com um botão Atualizar)', desde:'2026-09-16'},
   'pm-padrao':    {o:'Negócio aberto sem prêmio informado vale R$ 250/mês por padrão (mínimo base da Prudential) nos cards, somas e PA — desde TA/RCP; informar o valor na ficha substitui', desde:'2026-09-27'},
   'ficha-lista-ta':{o:'Ficha do negócio na etapa TA: escolher/trocar a lista de TA, tirar da lista ou Descartar (encerra e tira das listas) no card da etapa, tudo no histórico; catálogo único de listas (lp_listas_ta + em uso)', desde:'2026-09-28'},
-  'card-ta-status':{o:'Card do funil: na etapa TA mostra a lista de TA (📋, toque troca a lista); de OI em diante mostra SEMPRE o status da etapa (⚑, toque muda — status vêm de Funil & Etapas)', desde:'2026-09-28'},
+  'card-ta-status':{o:'Card do funil: ⚑ status e 📋 lista de TA lado a lado em toda etapa aberta, os dois mudam com um toque no card (várias listas = 1ª + N; status vêm de Funil & Etapas)', desde:'2026-09-28'},
   'instagram':    {o:'Campo Instagram na ficha do contato: @handle como link (abre o app no celular), editável no funil e no Estoque; cola URL ou @Handle que ele normaliza', desde:'2026-09-28'},
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
@@ -17143,7 +17147,7 @@ function taListasChipsEdit(c){ const j=esc(jsq(c.id)), hoje=hojeISO(), noDia=(sp
   const chips=(noDia?[`<span class="ta-lchip">📅 Hoje<button class="ta-lx" title="Tirar de Hoje" onclick="event.stopPropagation();taListasAplicar(['${j}'],'hoje',false)">✕</button></span>`]:[])
     .concat((c.listas||[]).map(n=>`<span class="ta-lchip">📋 ${esc(n)}<button class="ta-lx" title="Tirar de “${esc(n)}”" onclick="event.stopPropagation();taListasAplicar(['${j}'],'${esc(jsq(n))}',false)">✕</button></span>`));
   return `<span class="ta-lcell">${chips.join(' ')}<button class="ta-ladd" title="Pôr, mover ou tirar de lista" onclick="event.stopPropagation();taListaMenuLinha(event,'${j}')">＋📋</button></span>`; }
-function taListaMenuLinha(ev,id){ const c=spPorId(id); if(!c) return; const j=esc(jsq(id)), l=c.listas||[], cat=taListasCatalogo();
+function taListaMenuLinha(ev,id){ const c=spPorId(id); if(!c) return; const j=esc(jsq(id)), l=c.listas||[], cat=[...l,...taListasCatalogo().filter(n=>!l.includes(n))];   /* CARD-STATUS-LISTA-V2: as dele primeiro */
   taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · listas de TA</div>
     ${cat.map(n=>{ const tem=l.includes(n), q=esc(jsq(n)); return `<div class="ta-menu-lrow"><button onclick="taListasAplicar(['${j}'],'${q}',${tem?'false':'true'})">${tem?'✓ ':'📋 '}${esc(n)}</button>${(!tem&&l.length)?`<button class="ta-menu-mv" title="Sai das outras e fica só nesta" onclick="taListasAplicar(['${j}'],'${q}','mover')">↪ mover</button>`:''}</div>`; }).join('')}
     ${l.length?`<button onclick="taListasTirarTodas('${j}')">✕ Tirar de todas as listas</button>`:''}
@@ -19335,7 +19339,7 @@ function lpSelfCheck(){
         return a&&b&&c&&d&&e&&f; } finally{ ESC.rotulos=bk; } })());
     ok('STATUS-ETAPA-V1: status vem da cfg da etapa; inválido é ignorado; mudar etapa limpa; card mostra chip; "Delay X" vira tipo de Delay no Painel TA; filtra o funil', (()=>{ const arr=FUNIL_CFG.lp; if(!arr||!arr.length) return false; const e=arr[0], bk=e.status; e.status=['Delay OI','Remarcou']; const c={id:'zz-st',nome:'Zz St',telefone:'',funil:'nn',etapa:e.id,status:'Delay OI',interacoes:[],recs:[],hist:[]}; S.contatos.push(c);
       try{ const okOpts=etStatusOpts(c).length===2&&etStatusDe(c)==='Delay OI'; const okInv=etStatusDe({funil:'nn',etapa:e.id,status:'Xyz'})==='';
-        let okChip=false; try{ okChip=nnCard(c).includes('nc-status'); }catch(_){ okChip=false; }
+        let okChip=false; try{ okChip=/nc-status|nc-pill on/.test(nnCard(c));   /* CARD-STATUS-LISTA-V2: status virou pílula tocável */ }catch(_){ okChip=false; }
         const okDelay=taDelayTipo(c)==='Delay OI'&&taDelayTipos().includes('Delay OI');
         const bkF=FUN_STATUS.nn; FUN_STATUS.nn='Remarcou'; const okFiltro=funAplicaLente([{funil:'nn',etapa:e.id,status:'Remarcou'},{funil:'nn',etapa:e.id}],'nn').length===1; FUN_STATUS.nn=bkF||'';
         logEtapa(c,e.id,'__x'); const okLimpa=!c.status;
@@ -20733,8 +20737,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const bcTA=etapasDe({funil:'bc'})[funTaIdx({funil:'bc'})], bcDepois=etapasDe({funil:'bc'})[funTaIdx({funil:'bc'})+1];
       const b1=bcTA?cardEtapaInfoHtml(mk('f','bc',bcTA,{listas:['L2']})):'📋 L2', b2=bcDepois?cardEtapaInfoHtml(mk('g','bc',bcDepois)):'⚑ sem status';
       const opt=etStatusOpts(mk('h','nn','OI/FF'))[0]; const oiS=opt?cardEtapaInfoHtml(mk('h','nn','OI/FF',{status:opt,status_etapa:'OI/FF'})):'';
-      return ta.includes('📋 Lista Fulano') && taV.includes('sem lista') && oi.includes('⚑ sem status') && !oi.includes('📋')
-        && !sp.includes('nc-pill') && !nao.includes('nc-pill') && b1.includes('📋 L2') && b2.includes('⚑ sem status') && (!opt||oiS.includes('⚑ '+esc(opt))); })());
+      const multi=cardEtapaInfoHtml(mk('m','nn','P/C',{listas:['A Zz','B Zz','C Zz']}));   /* V2: status | lista em toda etapa aberta; várias listas = 1ª + N */
+      return ta.includes('📋 Lista Fulano') && ta.indexOf('⚑')<ta.indexOf('📋') && taV.includes('sem lista') && oi.includes('⚑ sem status') && oi.includes('📋 sem lista')
+        && sp.includes('nc-pill') && !nao.includes('nc-pill') && b1.includes('📋 L2') && b2.includes('⚑ sem status') && (!opt||oiS.includes('⚑ '+esc(opt)))
+        && multi.includes('📋 A Zz') && multi.includes('+2') && !multi.includes('B Zz</button>'); })());
     /* CONTATO-PORTA-V1 (28/09, Backlog #3): a porta de saída normaliza lp/telefone/trilha e o filtro offline não diferencia maiúscula */
     ok('CONTATO-PORTA-V1: telefone colado do WhatsApp sai limpo, lp minúsculo, trilha nunca vazia; filtro offline aceita "Gustavo"', (()=>{
       const sujo='‪+55 81 99985‑7278‬'; if(telLimpa(sujo)!=='+55 81 99985-7278') return false;
