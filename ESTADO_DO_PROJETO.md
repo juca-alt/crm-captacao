@@ -4,6 +4,8 @@
 
 ## 🟢 RETOMAR AQUI — 28/09/2026 — v8.39 no ar · 67ª onda: motivos de perda editáveis no encerramento (MOTIVO-PERDA-V1)
 
+**Extensão WhatsApp 2.0.0 (28/09, 68ª onda):** aba Visão LP com o MESMO cadastro do app — etapa em botões + encerrar, ⚑ status / ✖ motivo da perda, 📋 listas (✕, pôr, mover, nova), 📝 nota que vira histórico, últimos 5 registros. Gravação segura `lpc.patch` (relê fresco + dono, aplica só a ação). Estoque (`bn`) em card próprio (listas + nota nas notas), nunca vira negócio. Normalizador não força mais `nn` (VG/Prud/MFO/prospects preservados). Pra usar: chrome://extensions → ↻ Recarregar + F5 no WhatsApp.
+
 _(66ª onda, mesmo dia — v8.38: status órfão com ⚠)_
 
 _(65ª onda, mesmo dia — v8.37: status | lista no card)_

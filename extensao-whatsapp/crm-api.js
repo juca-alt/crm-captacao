@@ -325,16 +325,23 @@ async function lpcAll(force){
   return _lpcCache;
 }
 function _lpcOut(r){ return {id:r.id,dados:r.dados,atualizado:r.atualizado}; }
+/* v2.0: o Estoque (funil 'bn') mora na mesma tabela — separado do funil pra um nome do Estoque nunca virar negócio ao salvar */
+function _lpcEhBn(r){ return !!(r&&r.dados&&r.dados.funil==='bn'); }
+function _lpcTelHit(r,vars){ const d=r.dados||{}; const ph=phonesFromJson([d.telefone||''].concat(Array.isArray(d.telefones_alt)?d.telefones_alt:[]).join(' ')); return [...vars].some(v=>ph.has(v)); }
 async function lpcFindByPhone(rawPhone){
   const vars=new Set(phoneE164Variants(rawPhone));
   if(!vars.size) return [];
   const rows=await lpcAll();
-  return rows.filter(r=>{ const ph=phonesFromJson(r.dados&&r.dados.telefone||''); return [...vars].some(v=>ph.has(v)); }).map(_lpcOut).slice(0,5);
+  return rows.filter(r=>!_lpcEhBn(r)&&_lpcTelHit(r,vars)).map(_lpcOut).slice(0,5);
+}
+async function lpcEstoqueByPhone(rawPhone){
+  const vars=new Set(phoneE164Variants(rawPhone)); if(!vars.size) return [];
+  const rows=await lpcAll(); return rows.filter(r=>_lpcEhBn(r)&&_lpcTelHit(r,vars)).map(_lpcOut).slice(0,3);
 }
 async function lpcSearch(q){
   q=normName(q||''); if(!q) return [];
   const rows=await lpcAll();
-  return rows.filter(r=>normName((r.dados&&r.dados.nome)||'').includes(q)).map(_lpcOut).slice(0,10);
+  return rows.filter(r=>!_lpcEhBn(r)&&normName((r.dados&&r.dados.nome)||'').includes(q)).map(_lpcOut).slice(0,10);
 }
 async function lpcSave(id,dados){
   // shape canônico ANTES de gravar (lpcNormContato, normalize.js). O app tem o
@@ -352,7 +359,7 @@ async function lpcFindByName(nameRaw){
   const toks=nameTokens(nameRaw);
   if(!toks.length) return {strong:null,sugestoes:[]};
   const set=new Set(toks);
-  const rows=await lpcAll();
+  const rows=(await lpcAll()).filter(r=>!_lpcEhBn(r));
   const scored=rows.map(r=>{
     const n=(r.dados&&r.dados.nome)||'';
     const lt=nameTokens(n); const hit=lt.filter(t=>set.has(t)).length;
@@ -365,10 +372,39 @@ async function lpcFindByName(nameRaw){
 // visão combinada da LP: contatos do funil (prioridade) + Carteira; sem telefone
 // (ou sem match por telefone), tenta o match forte por nome nos contatos
 async function lpLookup(rawPhone,chatName){
-  const [contatos,carteira]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone)]);
+  const [contatos,carteira,estoque]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone),lpcEstoqueByPhone(rawPhone)]);
   let byName=null;
   if(!contatos.length&&chatName){ byName=await lpcFindByName(chatName); }
-  return {contatos,carteira,byName};
+  return {contatos,carteira,byName,estoque};
+}
+
+// ---------- v2.0: configuração do funil do app + gravação segura por AÇÃO ----------
+let _lpCfg=null, _lpCfgAt=0;
+async function lpCfgGet(force){
+  if(!force&&_lpCfg&&Date.now()-_lpCfgAt<60*1000) return _lpCfg;
+  const rows=await sbJson(`/rest/v1/app_settings?select=chave,valor&chave=in.(lp_funil_cfg,lp_listas_ta)`);
+  const m={}; (rows||[]).forEach(r=>{ let v=r.valor; if(typeof v==='string'){ try{ v=JSON.parse(v); }catch(_){} } m[r.chave]=v; });
+  let listasUso=[]; try{ listasUso=await lpcAll(); }catch(e){ if(e.code==='auth') throw e; }
+  _lpCfg={funil:(m.lp_funil_cfg&&typeof m.lp_funil_cfg==='object')?m.lp_funil_cfg:null, listas:lpcListasCatalogo(Array.isArray(m.lp_listas_ta)?m.lp_listas_ta:[],listasUso)};
+  _lpCfgAt=Date.now(); return _lpCfg;
+}
+/* Relê a linha FRESCA (com o dono), aplica as ações sobre ela e grava só essa linha. Nunca manda uma cópia velha
+   inteira: o que o app mudou nesse intervalo fica. O dono vai junto (Victor editando a base do Gustavo não cria cópia). */
+async function lpcPatch(id,acoes){
+  const s=await getSession(); const por=(s&&s.user_email)||'';
+  const cfg=(await lpCfgGet()).funil;
+  const rows=await sbJson(`/rest/v1/lp_contatos?id=eq.${encodeURIComponent(String(id))}&select=id,dono,dados,atualizado&limit=2`);
+  if(!rows||!rows.length){ const e=new Error('Contato não encontrado (ou sem permissão)'); throw e; }
+  if(rows.length>1){ const e=new Error('Mais de um contato com esse id — abra no CRM'); throw e; }
+  const row=rows[0]; let dados=row.dados||{}, mudou=false;
+  for(const a of (acoes||[])){ const r=lpcAplicar(cfg,dados,a,por); if(r.mudou){ dados=r.dados; mudou=true; } }
+  if(!mudou) return {id:row.id,dono:row.dono,dados:row.dados,atualizado:row.atualizado,semMudanca:true};
+  if(dados.funil!=='bn') dados=lpcNormContato(dados);
+  dados._upd=new Date().toISOString();
+  const out=await sbJson(`/rest/v1/lp_contatos?on_conflict=dono,id&select=id,dono,dados,atualizado`,
+    {method:'POST',body:{id:String(row.id),dono:row.dono,dados},headers:{Prefer:'resolution=merge-duplicates,return=representation'}});
+  _lpcCache=null; _lpCfgAt=0;
+  return out&&out[0]?{id:out[0].id,dono:out[0].dono,dados:out[0].dados,atualizado:out[0].atualizado}:{id:row.id,dono:row.dono,dados};
 }
 async function lpSearchAll(q){
   const [contatos,carteira]=await Promise.all([lpcSearch(q),lpSearch(q)]);

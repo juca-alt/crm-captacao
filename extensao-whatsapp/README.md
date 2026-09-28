@@ -1,4 +1,19 @@
-# Extensão Chrome — Captação · WhatsApp → CRM (v0.1.0)
+# Extensão Chrome — CRM · WhatsApp (Captação + Visão LP) — v2.0.0
+
+## 2.0 (28/09/2026) — a oportunidade da Visão LP dentro da conversa
+Aba **Visão LP** do painel, com o MESMO cadastro do CRM (lê `app_settings.lp_funil_cfg` e `lp_listas_ta`):
+- **Etapa** em botões (rótulos, ordem e cores de Funil & Etapas) + **Encerrar** (Não / Prop. Cancelada / Apól. Cancelada…).
+- **⚑ Status nesta etapa** / **✖ Motivo da perda** (etapa de encerramento) — as mesmas opções do app.
+- **📋 Listas de TA**: ✕ tira, "＋ pôr numa lista", "↪ só em X" (mover), nova lista.
+- **📝 Registrar nota**: vira registro no histórico da oportunidade (não sobrescreve o campo Notas); últimos 5 registros no card.
+- **Gravação segura** (`lpc.patch`): o service worker relê a linha FRESCA do banco (com o dono), aplica só a ação e grava
+  — nunca uma cópia velha inteira por cima do que o app mudou. Histórico no formato do vendas.html (`Etapa: A → B`,
+  `Status: X`, `Motivo da perda: X`, `Lista TA: A → B`).
+- **Estoque separado**: nome do Estoque (`funil:'bn'`) abre card próprio (listas + nota), nunca vira negócio ao salvar.
+- **Funil preservado**: o normalizador não força mais `nn` (VG/Prud/MFO/prospects ficam no funil deles).
+
+Atualizar: `chrome://extensions` → no card da extensão, **↻ Recarregar**; depois F5 no WhatsApp Web.
+
 
 Card do lead do **CRM Captação** ao lado da conversa aberta no WhatsApp Web (estilo HubSpot/Atendare).
 Captura e atualização de leads sem sair do WhatsApp. **Somente leitura do DOM** — a extensão nunca

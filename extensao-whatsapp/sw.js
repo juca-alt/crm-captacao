@@ -19,6 +19,8 @@ const HANDLERS={
   'lp.lookup':  (m)=>lpLookup(m.phone,m.name),
   'lp.search':  (m)=>lpSearchAll(m.q),
   'lpc.save':   (m)=>lpcSave(m.id,m.dados),
+  'lpcfg.get':  (m)=>lpCfgGet(!!m.force),          // v2.0: Funil & Etapas + listas do app
+  'lpc.patch':  (m)=>lpcPatch(m.id,m.acoes),        // v2.0: relê fresco, aplica a ação, grava só a linha
 };
 
 // Extensão recarregada/atualizada → reinjeta o painel nas abas do WhatsApp já
