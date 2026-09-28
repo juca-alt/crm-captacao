@@ -4,6 +4,8 @@
 
 ## 🟢 RETOMAR AQUI — 28/09/2026 — v8.37 no ar · 65ª onda: card do funil com ⚑ status | 📋 lista lado a lado em toda etapa aberta (CARD-STATUS-LISTA-V2)
 
+**Banco 28/09 (rodados por ele no SQL Editor, colados pelo Claude):** ✅ `supabase/contato_porta_v1.sql` (Backlog #3 FEITO — trilha vazia 0, lp maiúsculo 0; backup `_bkp_20260928_contato_porta`). ⏳/✅ `supabase/sync_atualizado_v1.sql` — **bug de sync achado na conferência:** o upsert do app (e o PATCH do crm-mcp) não mandam `atualizado`, então edição não mudava a data e o SYNC-PUXA (delta por `atualizado`) não levava a mudança pro outro aparelho. Trigger `trg_toca_atualizado` marca `now()` em todo UPDATE de dados/dono.
+
 _(64ª onda, mesmo dia — v8.36: erros conhecidos)_
 
 _(63ª onda, mesmo dia — v8.35: listas na linha do Painel TA)_
