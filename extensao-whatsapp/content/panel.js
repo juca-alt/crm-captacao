@@ -471,8 +471,8 @@ function chatKeys(c){ if(!c||c.isGroup) return [];
   return [dg.length>=10?'tel:'+dg.slice(-11):'', c.lid?'lid:'+c.lid:'', nn?'nome:'+nn:''].filter(Boolean); }
 let VINC=false;   /* o card na tela veio do vínculo gravado */
 function vincular(row){ if(!row||!CHAT) return; const k=chatKeys(CHAT); if(!k.length) return;
-  send('wa.vincular',{keys:k,id:row.id,nome:(row.dados&&row.dados.nome)||''}).then(r=>{ if(r&&r.ok){ VINC=true; toast('📌 Conversa ligada a '+((row.dados&&row.dados.nome)||'este negócio')+' — da próxima vez abre direto'); avisaConversa(CHAT); if(CUR===String(row.id)) renderLpContato(CUR_ROW,CUR_CART); } }); }
-function desvincular(){ if(!CHAT) return; send('wa.desvincular',{keys:chatKeys(CHAT)}).then(()=>{ VINC=false; toast('Vínculo desfeito'); avisaConversa(CHAT); lookup(); }); }
+  send('wa.vincular',{keys:k,id:row.id,nome:(row.dados&&row.dados.nome)||''}).then(r=>{ if(r&&!r.ok) toast('Não gravou o vínculo: '+(r.error||'falha')); if(r&&r.ok){ VINC=true; toast('📌 Conversa ligada a '+((row.dados&&row.dados.nome)||'este negócio')+' — gravado no CRM, vale em qualquer aparelho'); avisaConversa(CHAT); if(CUR===String(row.id)) renderLpContato(CUR_ROW,CUR_CART); } }); }
+function desvincular(){ if(!CHAT) return; send('wa.desvincular',{keys:chatKeys(CHAT),id:CUR}).then(()=>{ VINC=false; toast('Vínculo desfeito'); avisaConversa(CHAT); lookup(); }); }
 /* 2.3.0: o card completo volta pra DENTRO do painel. O que barrava (ícone cinza) era o COEP require-corp do
    WhatsApp: o vendas.html do GitHub Pages não tem COEP/CORP. Agora a regra do declarativeNetRequest (rules.json)
    põe COEP: credentialless + CORP: cross-origin só na resposta do CRM quando ele é carregado como FRAME — o Chrome

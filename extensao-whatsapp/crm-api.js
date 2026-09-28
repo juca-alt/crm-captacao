@@ -409,14 +409,39 @@ async function lpcFindByName(nameRaw){
 function waNormNome(s){ return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
 async function vincTodos(){ try{ const o=await chrome.storage.local.get('wa_vinc'); return (o&&o.wa_vinc)||{}; }catch(_){ return {}; } }
 async function vincDe(keys){ const v=await vincTodos(); for(const k of (keys||[])){ if(k&&v[k]) return v[k]; } return null; }
-async function vincGravar(keys,id,nome){ const v=await vincTodos(); const x={id:String(id),nome:String(nome||''),ts:Date.now()};
-  (keys||[]).filter(Boolean).forEach(k=>{ v[k]=x; }); await chrome.storage.local.set({wa_vinc:v}); return true; }
-async function vincTirar(keys){ const v=await vincTodos(); (keys||[]).forEach(k=>{ delete v[k]; }); await chrome.storage.local.set({wa_vinc:v}); return true; }
+async function vincLocal(keys,id,nome){ const v=await vincTodos(); const x={id:String(id),nome:String(nome||''),ts:Date.now()};
+  (keys||[]).filter(Boolean).forEach(k=>{ v[k]=x; }); await chrome.storage.local.set({wa_vinc:v}); }
+/* 2.5: o vínculo também vai pro CADASTRO do negócio (dados.wa_chats) → vale em outro aparelho. Uma conversa = um
+   negócio: se outro negócio tinha essas chaves, elas saem de lá. */
+function _vincDonos(rows,keys,exceto){ const ks=new Set((keys||[]).map(String));
+  return (rows||[]).filter(r=>String(r.id)!==String(exceto||'')&&Array.isArray(r.dados&&r.dados.wa_chats)&&r.dados.wa_chats.some(k=>ks.has(String(k)))); }
+async function vincGravar(keys,id,nome){
+  keys=(keys||[]).filter(Boolean); if(!keys.length||!id) return false;
+  await vincLocal(keys,id,nome);
+  await lpcPatch(id,[{tipo:'wa_vinc',add:keys}]);
+  try{ const outros=_vincDonos(await lpcAll(),keys,id); for(const o of outros) await lpcPatch(o.id,[{tipo:'wa_desv',keys}]); }catch(_){}
+  return true; }
+async function vincTirar(keys,id){
+  keys=(keys||[]).filter(Boolean); const v=await vincTodos(); keys.forEach(k=>{ delete v[k]; }); await chrome.storage.local.set({wa_vinc:v});
+  try{ const alvo=new Set(id?[String(id)]:[]); _vincDonos(await lpcAll(),keys).forEach(r=>alvo.add(String(r.id)));
+    for(const x of alvo) await lpcPatch(x,[{tipo:'wa_desv',keys}]); }catch(_){}
+  return true; }
+/* acha o negócio ligado: 1º o atalho local deste Chrome, depois o cadastro (dados.wa_chats) — outro aparelho */
+async function vincAchar(keys){
+  const vv=await vincDe(keys);
+  if(vv){ const f=await lpcFrescos([{id:vv.id}]); const row=f&&f[0];
+    if(row&&row.dados&&!Array.isArray(row.dados.wa_chats)){ lpcPatch(row.id,[{tipo:'wa_vinc',add:keys}]).catch(()=>{}); return row; }   /* vínculo da 2.4 (só local) sobe pro CRM */
+    if(row&&row.dados&&row.dados.wa_chats.some(k=>keys.includes(String(k)))) return row; }
+  const donos=_vincDonos(await lpcAll(),keys);
+  if(!donos.length) return null;
+  donos.sort((a,b)=>String((b.dados&&b.dados._upd)||'').localeCompare(String((a.dados&&a.dados._upd)||'')));
+  const f=await lpcFrescos([donos[0]]); const row=(f&&f[0])||donos[0];
+  try{ await vincLocal(keys,row.id,row.dados&&row.dados.nome); }catch(_){}
+  return row; }
 async function lpLookup(rawPhone,chatName,keys){
-  if(keys&&keys.length){ const vv=await vincDe(keys);
-    if(vv){ const f=await lpcFrescos([{id:vv.id}]); const row=f&&f[0];
-      if(row&&row.dados){ let carteira=[]; try{ carteira=await lpFindByPhone(rawPhone); }catch(_){}
-        return _lpcEhBn(row)?{contatos:[],carteira,byName:null,estoque:[row],vinculo:true}:{contatos:[row],carteira,byName:null,estoque:[],vinculo:true}; } } }
+  if(keys&&keys.length){ let row=null; try{ row=await vincAchar(keys); }catch(e){ if(e.code==='auth') throw e; }
+    if(row&&row.dados){ let carteira=[]; try{ carteira=await lpFindByPhone(rawPhone); }catch(_){}
+      return _lpcEhBn(row)?{contatos:[],carteira,byName:null,estoque:[row],vinculo:true}:{contatos:[row],carteira,byName:null,estoque:[],vinculo:true}; } }
   const [contatos,carteira,estoque]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone),lpcEstoqueByPhone(rawPhone)]);
   let byName=null;
   if(!contatos.length&&chatName){ byName=await lpcFindByName(chatName); }
