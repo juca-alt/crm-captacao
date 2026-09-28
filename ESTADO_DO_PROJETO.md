@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.37 no ar · 65ª onda: card do funil com ⚑ status | 📋 lista lado a lado em toda etapa aberta (CARD-STATUS-LISTA-V2)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.38 no ar · 66ª onda: status que sai da configuração aparece com ⚠ (STATUS-ORFAO-V1) + fila de envio sem marcas órfãs
+
+_(65ª onda, mesmo dia — v8.37: status | lista no card)_
 
 **Banco 28/09 (rodados por ele no SQL Editor, colados pelo Claude):** ✅ `supabase/contato_porta_v1.sql` (Backlog #3 FEITO — trilha vazia 0, lp maiúsculo 0; backup `_bkp_20260928_contato_porta`). ⏳/✅ `supabase/sync_atualizado_v1.sql` — **bug de sync achado na conferência:** o upsert do app (e o PATCH do crm-mcp) não mandam `atualizado`, então edição não mudava a data e o SYNC-PUXA (delta por `atualizado`) não levava a mudança pro outro aparelho. Trigger `trg_toca_atualizado` marca `now()` em todo UPDATE de dados/dono.
 
@@ -43,7 +45,14 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (65ª onda) — CARD-STATUS-LISTA-V2 (v8.37)
+## 28/09/2026 (66ª onda) — STATUS-ORFAO-V1 (v8.38)
+Ele cadastrou os status em Funil & Etapas (TA: Não atende, Wapp · OI/FF, P/C, C2, DELIVERY: Delay X, Agendado, Realizado · N: FA, N Clean, N c/ Pend., N Futuro · EMISSÃO: Pendencia UW, Pendencia Financeira; BC idem nas etapas equivalentes) e disse "não aparecem no funil". Diagnóstico no app DELE (Chrome logado): cfg carregada certa; o que sumiu foram 3 negócios em TA com "Não atendeu" — ele renomeou pra "Não atende" e status fora da lista é ignorado → card "sem status".
+- **Dado:** os 3 trocados pra "Não atende" pelo próprio app (etSetStatusDe, histórico) — banco conferido: 4 em TA com "Não atende"; `atualizado` mudou na hora (prova do trg_toca_atualizado).
+- **Código:** `etStatusOrfao(c)` — status gravado NESTA etapa que saiu da lista aparece como **⚑ ⚠ X** (pílula tracejada âmbar) no card e no select da ficha; o menu avisa e pede o novo; dá pra limpar.
+- **PEND-ORFAO-V1:** a fila de envio (`PEND.lpc`) acumulava ids de contatos que nem existem (restos de invariante, 2 por boot — 18 no aparelho dele). `lpcPush` limpa marcas de id fora do snapshot.
+- Invariante `STATUS-ORFAO-V1`.
+
+ — CARD-STATUS-LISTA-V2 (v8.37)
 Print dele: mudou o status de uma cliente (C. A.) pela ficha e o card não acompanhou. Palavra dele: *"deixa eu alterar status direto do card; na ordem status · lista, um ao lado do outro, pra todas as etapas mesmo após TA; se tem mais de uma lista fica o nome de uma e o +, e ao clicar abre as listas em que ele está primeiro e as demais."*
 - **Bug:** `etSetStatus` (ficha) só redesenhava a ficha → agora redesenha o quadro também.
 - Card (chave `card-ta-status`): **⚑ status | 📋 lista** lado a lado em TODA etapa aberta (encerrada fica só com o chip); toque no ⚑ muda o status, toque no 📋 abre as listas (as dele primeiro, depois as demais; mover/tirar/nova). Várias listas = "1ª lista +N".
