@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.36 no ar · 64ª onda: 4 erros conhecidos fechados (BN-PUT-V1, LISTA-APAGA-V1, SELFCHECK-MUDO-V1, Recomendante com padding)
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.37 no ar · 65ª onda: card do funil com ⚑ status | 📋 lista lado a lado em toda etapa aberta (CARD-STATUS-LISTA-V2)
+
+_(64ª onda, mesmo dia — v8.36: erros conhecidos)_
 
 _(63ª onda, mesmo dia — v8.35: listas na linha do Painel TA)_
 
@@ -39,7 +41,13 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (64ª onda) — erros conhecidos (v8.36)
+## 28/09/2026 (65ª onda) — CARD-STATUS-LISTA-V2 (v8.37)
+Print dele: mudou o status da Camila A. pela ficha e o card não acompanhou. Palavra dele: *"deixa eu alterar status direto do card; na ordem status · lista, um ao lado do outro, pra todas as etapas mesmo após TA; se tem mais de uma lista fica o nome de uma e o +, e ao clicar abre as listas em que ele está primeiro e as demais."*
+- **Bug:** `etSetStatus` (ficha) só redesenhava a ficha → agora redesenha o quadro também.
+- Card (chave `card-ta-status`): **⚑ status | 📋 lista** lado a lado em TODA etapa aberta (encerrada fica só com o chip); toque no ⚑ muda o status, toque no 📋 abre as listas (as dele primeiro, depois as demais; mover/tirar/nova). Várias listas = "1ª lista +N".
+- Ele criou os status da TA no Funil & Etapas: "Não atende" e "Wapp" (config do banco).
+
+ — erros conhecidos (v8.36)
 - **BN-PUT-V1:** ficha do Estoque (`bnSalvarEdicao`) grava só o que muda — não cria mais `contexto:''`, `cidade:null`… em todo save (mesma regra do `pessoaSalvarDados`).
 - **LISTA-APAGA-V1:** apagar lista tira também do catálogo oficial (`taListasCatalogoTirar`): cache local sempre; `app_settings.lp_listas_ta` só quando o admin está logado.
 - **SELFCHECK-MUDO-V1:** `lpSelfCheck` silencia `toast`/`toastDesfazer` durante a execução (invariantes antigos soltavam "Zz: Follow-up…", "Fundidos…").
