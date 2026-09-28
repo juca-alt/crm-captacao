@@ -51,7 +51,7 @@ $('rapido').onclick=async()=>{
   try{
     const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
     await chrome.tabs.sendMessage(tab.id,{type:'wa.modo',modo:'rapido'});
-    window.close();
+    if(window.top===window) window.close();   /* 2.3: dentro do painel do WhatsApp não fecha nada */
   }catch(_){ alert('Abra a aba do WhatsApp Web pra usar o card rápido.'); }
 };
 

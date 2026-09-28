@@ -112,8 +112,8 @@ function wireTabs(){
   panel.querySelectorAll('.tab[data-modo]').forEach(b=>b.onclick=()=>{
     if(MODO===b.dataset.modo) return;
     MODO=b.dataset.modo; try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){}
-    if(MODO==='completo'){ abrirLateral().then(ok=>{ if(ok) setOpen(false); }); return; }   /* no gesto do clique */
-    lookup();
+    if(MODO==='completo'){ renderCompleto(); avisaConversa(CHAT); return; }   /* 2.3: dentro do painel */
+    sairCompleto(); lookup();
   });
 }
 function badgeHTML(l){
@@ -464,18 +464,28 @@ function abrirLateral(){   /* 2.2.2: abre a JANELA do CRM ao lado (o painel late
   });
 }
 function avisaConversa(c){ send('wa.chat',{tel:(c&&c.phoneRaw)||'',nome:(c&&c.name)||'',grupo:!!(c&&c.isGroup)}); }
+/* 2.3.0: o card completo volta pra DENTRO do painel. O que barrava (ícone cinza) era o COEP require-corp do
+   WhatsApp: o vendas.html do GitHub Pages não tem COEP/CORP. Agora a regra do declarativeNetRequest (rules.json)
+   põe COEP: credentialless + CORP: cross-origin só na resposta do CRM quando ele é carregado como FRAME — o Chrome
+   deixa embutir. O iframe é criado UMA vez e nunca muda de lugar no DOM (mover iframe = recarregar o CRM): trocar
+   de conversa só avisa o embed.js pelo storage.session, que manda {tipo:'wa-abrir'} pro CRM. */
+let FRAME=null;
 function renderCompleto(erro){
   CUR=null;
-  panel.innerHTML=headerHTML()+`<div class="pb">${tabsHTML()}<div id="wa-pend"></div>
-    ${erro?`<div class="warn">Não consegui abrir a janela do CRM: ${esc(erro)}</div>`:''}
-    <div class="card"><h2 style="margin-bottom:6px">🗂 Card completo</h2>
-      <p class="muted" style="margin-bottom:10px">A ficha do negócio do CRM abre numa <b>janela do CRM ao lado</b> e acompanha a conversa aberta aqui.</p>
-      <button class="btn primary" id="wa-lateral">Abrir o card completo</button>
-      <p class="muted" style="margin-top:8px;font-size:11px">Se não abrir: clique no ícone da extensão na barra do Chrome (fixe-o no 🧩).</p></div>
-    <div class="toast" id="wa-toast"></div></div>`;
-  wireHeader(); wireTabs(); pintaPend();
-  $('#wa-lateral').onclick=()=>{ abrirLateral().then(ok=>{ if(ok) setOpen(false); }); };
+  panel.classList.add('largo'); handle.classList.add('largo');
+  if(!FRAME){ FRAME=document.createElement('iframe'); FRAME.className='full-frame'; FRAME.title='Ficha do negócio no CRM';
+    FRAME.setAttribute('allow','clipboard-write'); FRAME.src=chrome.runtime.getURL('content/embed.html'); }
+  if(!panel.querySelector('.full-wrap')||FRAME.parentNode!==panel.querySelector('.full-wrap')){
+    panel.innerHTML=headerHTML()+`<div class="pb pb-full">${tabsHTML()}<div id="wa-pend"></div>
+      ${erro?`<div class="warn">${esc(erro)}</div>`:''}
+      <div class="full-wrap"></div>
+      <div style="text-align:right;margin-top:4px"><button class="btn ghost" id="wa-janela" style="width:auto;font-size:11px">↗ abrir em janela separada</button></div>
+      <div class="toast" id="wa-toast"></div></div>`;
+    panel.querySelector('.full-wrap').appendChild(FRAME); wireHeader(); wireTabs(); pintaPend();
+    $('#wa-janela').onclick=()=>{ send('janela.open'); };
+  }
 }
+function sairCompleto(){ panel.classList.remove('largo'); handle.classList.remove('largo'); }
 
 // ---------- Visão LP · contato do FUNIL — v2.0 (28/09/2026) ----------
 // O MESMO cadastro do app (Funil & Etapas, status por etapa, motivos de perda, listas de TA). Cada toque vira uma
@@ -738,7 +748,7 @@ async function loadFunil(){
 async function lookup(){
   if(!OPEN) return;
   const c=CHAT, seq=++LOOKSEQ;
-  if(MODO==='completo'){ renderCompleto(); return; }   /* 2.2: o card completo vive no painel lateral do Chrome */
+  if(MODO==='completo'){ if(!panel.querySelector('.full-wrap')) renderCompleto(); return; }   /* 2.3: iframe vivo; a troca de conversa vai pelo wa.chat */
   if(!AUTH.logged){ renderLogin(); return; }
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
@@ -783,14 +793,14 @@ async function lookup(){
 }
 
 fab.onclick=()=>{
-  if(MODO==='completo'){ abrirLateral(); avisaConversa(CHAT); return; }   /* no gesto do clique: abre o painel lateral */
+  if(MODO==='completo'){ setOpen(true); renderCompleto(); avisaConversa(CHAT); return; }   /* 2.3: dentro do painel */
   setOpen(true); lookup(); };
 // painel lateral → "⚡ Rápido": volta pro card dentro do WhatsApp
-try{ chrome.runtime.onMessage.addListener(m=>{ if(m&&m.type==='wa.modo'&&m.modo==='rapido'){ MODO='rapido'; try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){} setOpen(true); lookup(); } }); }catch(_){}
+try{ chrome.runtime.onMessage.addListener(m=>{ if(m&&m.type==='wa.modo'&&m.modo==='rapido'){ MODO='rapido'; sairCompleto(); try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){} setOpen(true); lookup(); } }); }catch(_){}
 handle.onclick=()=>setOpen(false);
 
 // boot
-try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); /* 2.2.1: não herda mais 'completo' salvo — abrir o painel lateral depende do gesto e, se falhar, o botão parecia morto */ if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
+try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); if(o&&o.wa_crm_modo==='completo') MODO='completo';   /* 2.3: o completo abre dentro do painel, sem depender de gesto */ if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
 const st=await send('auth.status');
 if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); loadLpCfg(); }
 refreshFab();
