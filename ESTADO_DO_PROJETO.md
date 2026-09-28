@@ -2,7 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.33 no ar · 61ª onda: contato sai na forma canônica pela porta do app (CONTATO-PORTA-V1, Backlog #3) · ⏳ SQL do banco (`supabase/contato_porta_v1.sql`) aguardando OK dele
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.34 no ar · 62ª onda: Painel TA separa 🎯 Filtros (automáticos) × 📋 Listas de TA (suas) × 🔧 Refinar
+
+**⏳ SQL `supabase/contato_porta_v1.sql` (Backlog #3): ele DEU OK no chat, mas a permissão do Claude Code bloqueou a migração em produção.** Backup `_bkp_20260928_contato_porta` (372 linhas) JÁ criado. Rodar pelo SQL Editor (ele) ou liberar a permissão.
+
+_(61ª onda, mesmo dia — v8.33: CONTATO-PORTA-V1 no app)_
 
 _(60ª onda, mesmo dia — v8.32: lista de TA dentro da ficha)_
 
@@ -31,7 +35,15 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (61ª onda) — CONTATO-PORTA-V1: contato sai na forma canônica (v8.33) — Backlog #3
+## 28/09/2026 (62ª onda) — FILTROS-LISTAS-V1: Filtros × Listas no Painel TA (v8.34)
+
+Palavra dele (prints do Painel TA): *"o card que tá escrito listas — toda a base e outros — isso na verdade é filtros; listas são as criadas abaixo. Filtros puxam de acordo com a regra de cada filtro, automático conforme atualizamos etapas, status; listas o usuário cria e vai colocando ou retirando."*
+- Painel TA: "Listas" → **🎯 Filtros · automáticos**; "Listas de TA" → **📋 Listas de TA · suas**; o bloco de refinos "Filtros" → **🔧 Refinar**. "▶ Foco neste filtro" quando é filtro.
+- Celular (folha) e SitPlan: "🎯 Recortes (da base)" → **🎯 Filtros**.
+- Só rótulos (funções e testes intactos).
+- Caso que motivou: uma pessoa do Estoque em "OI agendado" aparecia em "TA Delay P/C" — não é o FILTRO Delay (ele não a lista), é uma LISTA manual criada no app em 19/09 (junto com "TA OI/FF" e "Delay OI/FF"; o log do crm-mcp não tem nada). Lista manual não acompanha etapa. Limpar/apagar essas 3 listas é decisão dele.
+
+ — CONTATO-PORTA-V1: contato sai na forma canônica (v8.33) — Backlog #3
 
 Os 5 contatos da recomendante G. M. S. (21/09) nasceram com `lp` em outra caixa, telefone com marcas invisíveis do WhatsApp e `trilha` nula (corrigidos à mão em 21/09).
 
