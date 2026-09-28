@@ -188,6 +188,13 @@ function lpcAplicar(cfg,dados,acao,por){
   if(t==='nota'){ const txt=String(acao.texto||'').trim(); if(!txt) return {dados,mudou:false};
     if(bn){ c.notas=(c.notas?String(c.notas)+'\n':'')+lpcHojeISO().split('-').reverse().join('/')+' · '+txt; return {dados:c,mudou:true}; }   /* Estoque não tem histórico: vai pras notas */
     c.interacoes.push(lpcInteracao('nota',txt,por,{via:'whatsapp'})); return {dados:c,mudou:true}; }
+  /* 2.5: vínculo conversa do WhatsApp ↔ negócio, no próprio cadastro (vale em qualquer aparelho) */
+  if(t==='wa_vinc'){ const antes=Array.isArray(c.wa_chats)?c.wa_chats.map(String):[]; const add=(acao.add||[]).map(String).filter(Boolean);
+    const dep=[...new Set([...antes,...add])]; if(dep.length===antes.length) return {dados,mudou:false};
+    c.wa_chats=dep; if(!bn&&!antes.length) c.interacoes.push(lpcInteracao('wa','📌 Conversa do WhatsApp ligada a este negócio',por)); return {dados:c,mudou:true}; }
+  if(t==='wa_desv'){ const antes=Array.isArray(c.wa_chats)?c.wa_chats.map(String):[]; const tira=new Set((acao.keys||[]).map(String));
+    const dep=antes.filter(k=>!tira.has(k)); if(dep.length===antes.length) return {dados,mudou:false};
+    if(dep.length) c.wa_chats=dep; else delete c.wa_chats; return {dados:c,mudou:true}; }
   if(t==='campos'){ const set=acao.set||{}; let m=false; ['telefone','notas'].forEach(k=>{ if(k in set){ const v=set[k]==null?'':String(set[k]); if(String(c[k]==null?'':c[k])!==v){ c[k]=v||(k==='telefone'?null:''); m=true; } } }); return {dados:c,mudou:m}; }
   return {dados,mudou:false};
 }

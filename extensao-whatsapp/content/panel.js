@@ -73,10 +73,17 @@ let OPEN=false;
 let BUSY=false;
 let LPCFG={funil:null,listas:[]};   // v2.0: Funil & Etapas + listas de TA do app (lpcfg.get)
 let VIEW='lp';                      // 2.1: Captação saiu (palavra dele: "não faço mais nada de Captação")
-let MODO='completo';                // 'completo' (ficha do CRM embutida) | 'rapido' (card nativo 2.0)
-let FRAME=null;                     // iframe persistente do card completo (recriar = recarregar o CRM)
+let MODO='rapido';   /* 2.2.1: o botão CRM SEMPRE abre algo na página (card rápido); o completo vai pela aba 🗂 / ícone da barra */                // 'completo' (ficha do CRM no PAINEL LATERAL do Chrome) | 'rapido' (card nativo)
 let DOB={};                         // tópicos do card rápido: aberto/fechado lembrado
-                // 'captacao' (leads) | 'lp' (Carteira) — persiste no chrome.storage
+// 2.2 — card rápido com SALVAR explícito (palavra dele: mudou etapa/status/lista, saiu da conversa, voltou e não
+// tinha salvo). Cada mudança vira RASCUNHO por contato (id → {etapa,status,listas,nota,tel,notas,nome}); só o botão
+// 💾 Salvar grava, com "Salvando…" → "✓ Salvo às HH:MM" conferido contra o que o banco devolveu, ou erro que FICA
+// na tela. Trocar de conversa com rascunho não perde nada: ele fica guardado e um aviso mostra onde salvar.
+let DRAFTS={};                      // rascunhos por id de contato (sobrevivem à troca de conversa)
+let SAVE_ST={};                     // id → {st:'salvando'|'ok'|'erro', msg, at}
+let CUR=null;                       // id do contato na tela agora (null = outra tela)
+let CUR_ROW=null, CUR_CART=null;    // linha exibida (base do rascunho) e o hit da Carteira
+let LOOKSEQ=0;                      // cada troca de conversa vira uma "geração": resposta velha não pinta por cima
 function saveView(){ try{ chrome.storage.local.set({wa_crm_view:VIEW}); }catch(_){} }
 
 function toast(msg){
@@ -104,7 +111,9 @@ function tabsHTML(){   /* 2.1: as abas agora são o MODO do card (a aba Captaç�
 function wireTabs(){
   panel.querySelectorAll('.tab[data-modo]').forEach(b=>b.onclick=()=>{
     if(MODO===b.dataset.modo) return;
-    MODO=b.dataset.modo; try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){} lookup();
+    MODO=b.dataset.modo; try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){}
+    if(MODO==='completo'){ renderCompleto(); avisaConversa(CHAT); return; }   /* 2.3: dentro do painel */
+    sairCompleto(); lookup();
   });
 }
 function badgeHTML(l){
@@ -260,9 +269,10 @@ function renderCtxLost(){
   $('#wa-reload').onclick=()=>location.reload();
 }
 
-function renderShell(innerHTML){
-  panel.innerHTML=headerHTML()+`<div class="pb">${tabsHTML()}${searchHTML()}${innerHTML}<div class="toast" id="wa-toast"></div></div>`;
-  wireHeader(); wireSearch(); wireTabs();
+function renderShell(innerHTML,curId){
+  CUR=curId!=null?String(curId):null;   /* só o card rápido de um contato "é" o CUR; qualquer outra tela zera */
+  panel.innerHTML=headerHTML()+`<div class="pb">${tabsHTML()}<div id="wa-pend"></div>${searchHTML()}${innerHTML}<div class="toast" id="wa-toast"></div></div>`;
+  wireHeader(); wireSearch(); wireTabs(); pintaPend();
 }
 
 function renderNoChat(){
@@ -441,18 +451,48 @@ function renderLpPicker(list){
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpCliente(list[+el.dataset.i]); });
 }
 
-// ---------- 2.1: CARD COMPLETO — a ficha do próprio CRM embutida (content/embed.html → vendas.html?wa=1) ----------
-function extOrigin(){ try{ return new URL(chrome.runtime.getURL('')).origin; }catch(_){ return '*'; } }
-function waMsg(c){ return {tipo:'wa-abrir',tel:(c&&c.phoneRaw)||'',nome:(c&&c.name)||''}; }
-function renderCompleto(c){
+// ---------- 2.2: CARD COMPLETO no PAINEL LATERAL do Chrome (content/embed.html → vendas.html?wa=1) ----------
+// Na 2.1 o CRM ia num iframe DENTRO do WhatsApp e o Chrome o barrava (ícone cinza): o web.whatsapp.com manda
+// `Cross-Origin-Embedder-Policy: require-corp`, o iframe da extensão herda, e o vendas.html do GitHub Pages não
+// tem cabeçalho COEP/CORP. O painel lateral é da extensão, fora da árvore do WhatsApp — ver content/embed.js.
+// sidePanel.open() exige o gesto do usuário: abrirLateral() é chamada DIRETO no clique, sem await antes.
+function abrirLateral(){   /* 2.2.2: abre a JANELA do CRM ao lado (o painel lateral fica só no ícone da barra) */
+  return send('janela.open').then(r=>{
+    if(r.ok) return true;
+    if(r.code==='ctx'){ setOpen(true); renderCtxLost(); return false; }
+    setOpen(true); renderCompleto(r.error); return false;
+  });
+}
+function avisaConversa(c){ send('wa.chat',{tel:(c&&c.phoneRaw)||'',nome:(c&&c.name)||'',grupo:!!(c&&c.isGroup),keys:chatKeys(c)}); }
+/* 2.4: chaves desta conversa pro vínculo com o negócio (tel · lid fixo do WhatsApp · nome do chat) */
+function chatKeys(c){ if(!c||c.isGroup) return [];
+  const nn=String(c.name||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+  const dg=String(c.phoneRaw||'').replace(/\D/g,'');
+  return [dg.length>=10?'tel:'+dg.slice(-11):'', c.lid?'lid:'+c.lid:'', nn?'nome:'+nn:''].filter(Boolean); }
+let VINC=false;   /* o card na tela veio do vínculo gravado */
+function vincular(row){ if(!row||!CHAT) return; const k=chatKeys(CHAT); if(!k.length) return;
+  send('wa.vincular',{keys:k,id:row.id,nome:(row.dados&&row.dados.nome)||''}).then(r=>{ if(r&&!r.ok) toast('Não gravou o vínculo: '+(r.error||'falha')); if(r&&r.ok){ VINC=true; toast('📌 Conversa ligada a '+((row.dados&&row.dados.nome)||'este negócio')+' — gravado no CRM, vale em qualquer aparelho'); avisaConversa(CHAT); if(CUR===String(row.id)) renderLpContato(CUR_ROW,CUR_CART); } }); }
+function desvincular(){ if(!CHAT) return; send('wa.desvincular',{keys:chatKeys(CHAT),id:CUR}).then(()=>{ VINC=false; toast('Vínculo desfeito'); avisaConversa(CHAT); lookup(); }); }
+/* 2.3.0: o card completo volta pra DENTRO do painel. O que barrava (ícone cinza) era o COEP require-corp do
+   WhatsApp: o vendas.html do GitHub Pages não tem COEP/CORP. Agora a regra do declarativeNetRequest (rules.json)
+   põe COEP: credentialless + CORP: cross-origin só na resposta do CRM quando ele é carregado como FRAME — o Chrome
+   deixa embutir. O iframe é criado UMA vez e nunca muda de lugar no DOM (mover iframe = recarregar o CRM): trocar
+   de conversa só avisa o embed.js pelo storage.session, que manda {tipo:'wa-abrir'} pro CRM. */
+let FRAME=null;
+function renderCompleto(erro){
+  CUR=null;
   panel.classList.add('largo'); handle.classList.add('largo');
-  if(!FRAME){ FRAME=document.createElement('iframe'); FRAME.className='full-frame'; FRAME.title='Ficha do negócio no CRM'; FRAME.setAttribute('allow','clipboard-write');
-    const h=new URLSearchParams(); if(c&&c.phoneRaw) h.set('tel',c.phoneRaw); if(c&&c.name) h.set('nome',c.name);
-    FRAME.src=chrome.runtime.getURL('content/embed.html')+'#'+h.toString(); }
-  if(!panel.querySelector('.full-wrap')){   /* monta 1 vez; trocar de conversa só avisa o CRM (não recarrega) */
-    panel.innerHTML=headerHTML()+`<div class="pb pb-full">${tabsHTML()}<div class="full-wrap"></div><div class="toast" id="wa-toast"></div></div>`;
-    panel.querySelector('.full-wrap').appendChild(FRAME); wireHeader(); wireTabs(); }
-  try{ FRAME.contentWindow&&FRAME.contentWindow.postMessage(waMsg(c),extOrigin()); }catch(_){}
+  if(!FRAME){ FRAME=document.createElement('iframe'); FRAME.className='full-frame'; FRAME.title='Ficha do negócio no CRM';
+    FRAME.setAttribute('allow','clipboard-write'); FRAME.src=chrome.runtime.getURL('content/embed.html'); }
+  if(!panel.querySelector('.full-wrap')||FRAME.parentNode!==panel.querySelector('.full-wrap')){
+    panel.innerHTML=headerHTML()+`<div class="pb pb-full">${tabsHTML()}<div id="wa-pend"></div>
+      ${erro?`<div class="warn">${esc(erro)}</div>`:''}
+      <div class="full-wrap"></div>
+      <div style="text-align:right;margin-top:4px"><button class="btn ghost" id="wa-janela" style="width:auto;font-size:11px">↗ abrir em janela separada</button></div>
+      <div class="toast" id="wa-toast"></div></div>`;
+    panel.querySelector('.full-wrap').appendChild(FRAME); wireHeader(); wireTabs(); pintaPend();
+    $('#wa-janela').onclick=()=>{ send('janela.open'); };
+  }
 }
 function sairCompleto(){ panel.classList.remove('largo'); handle.classList.remove('largo'); }
 
@@ -461,66 +501,146 @@ function sairCompleto(){ panel.classList.remove('largo'); handle.classList.remov
 // AÇÃO que o SW aplica sobre a versão fresca do banco (lpc.patch) — nunca uma cópia velha inteira por cima.
 const LPC_COR={cinza:'#5b6770',azul:'#2563eb',amarelo:'#d97706',roxo:'#7c3aed',verde:'#16a34a',verm:'#dc2626'};
 async function loadLpCfg(force){ const r=await send('lpcfg.get',{force:!!force}); if(r&&r.ok&&r.data) LPCFG=r.data; return r; }
-async function lpcAcao(row,acoes,okMsg,cartHit){
-  if(BUSY) return; BUSY=true; panel.querySelectorAll('.lp2 button,.lp2 select').forEach(b=>b.disabled=true);
-  const r=await send('lpc.patch',{id:row.id,acoes}); BUSY=false;
-  if(!handleAuthFail(r)) return;
-  if(r.ok){ if(r.data&&r.data.semMudanca){ toast('Nada mudou.'); renderLpContato(r.data,cartHit); return; } await loadLpCfg(); renderLpContato(r.data,cartHit); toast(okMsg||'✓ Salvo no CRM'); }
-  else { renderLpContato(row,cartHit); toast('Erro: '+(r.error||'falha ao salvar')); }
+/* ---- rascunho do card rápido (2.2) ---- */
+const RASC_K=['etapa','status','listas','nota','tel','notas'];
+function sujo(d){ return !!d&&RASC_K.some(k=>k in d); }
+function nMud(d){ return d?RASC_K.filter(k=>k in d).length:0; }
+function acoesDe(d){ const a=[];
+  if('etapa' in d) a.push({tipo:'etapa',para:d.etapa});
+  if('status' in d) a.push({tipo:'status',v:d.status});
+  if('listas' in d) a.push({tipo:'listas',para:d.listas});
+  if('nota' in d) a.push({tipo:'nota',texto:d.nota});
+  const set={}; if('tel' in d) set.telefone=d.tel.trim(); if('notas' in d) set.notas=d.notas; if(Object.keys(set).length) a.push({tipo:'campos',set});
+  return a; }
+/* a PRÉVIA é o mesmo lpcAplicar que o service worker roda no banco — o que a tela mostra é o que vai ser gravado */
+function previa(c,d,sem){ let v=c; if(!d) return v; for(const a of acoesDe(d)){ if(sem&&a.tipo===sem) continue; v=lpcAplicar(LPCFG.funil,v,a,'').dados; } return v; }
+function mesmoSet(a,b){ a=a||[]; b=b||[]; return a.length===b.length&&a.every(x=>b.includes(x)); }
+/* o que o banco devolveu bate com o que ele pediu? (nada de "✓ salvo" otimista) */
+function conferir(d,dd){ const f=[];
+  if('etapa' in d&&dd.etapa!==d.etapa) f.push('etapa');
+  if('status' in d&&lpcStatusDe(LPCFG.funil,dd)!==d.status) f.push('status');
+  if('listas' in d&&!mesmoSet(Array.isArray(dd.listas)?dd.listas:[],d.listas)) f.push('listas');
+  if('nota' in d&&!lpcUltimos(dd,20).some(x=>String(x.l||'')===d.nota.trim())) f.push('nota');
+  if('tel' in d&&String(dd.telefone||'')!==d.tel.trim()) f.push('telefone');
+  if('notas' in d&&String(dd.notas||'')!==String(d.notas||'')) f.push('observação');
+  return f; }
+function hhmm(t){ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+async function salvarRascunho(id){
+  const d=DRAFTS[id]; if(!sujo(d)||(SAVE_ST[id]&&SAVE_ST[id].st==='salvando')) return;
+  const nome=d.nome||'contato';
+  SAVE_ST[id]={st:'salvando'}; if(CUR===id) pintaBarra(); pintaPend();
+  const r=await send('lpc.patch',{id,acoes:acoesDe(d)});
+  if(!r.ok){
+    SAVE_ST[id]={st:'erro',msg:r.error||'falha ao salvar'};
+    if(r.code==='ctx'||r.code==='auth'){ handleAuthFail(r); return; }   /* rascunho fica guardado */
+    if(CUR===id) pintaBarra(); else toast('✖ Não salvou '+nome+': '+(r.error||'erro'));
+    pintaPend(); return;
+  }
+  const dd=(r.data&&r.data.dados)||{}, falta=conferir(d,dd);
+  if(falta.length){ SAVE_ST[id]={st:'erro',msg:'o CRM não aceitou: '+falta.join(', ')+' (confira no Funil & Etapas)'}; }
+  else { delete DRAFTS[id]; SAVE_ST[id]={st:'ok',at:Date.now(),igual:!!(r.data&&r.data.semMudanca)}; }
+  if(CUR===id){ loadLpCfg().then(()=>{ if(CUR===id) renderLpContato(r.data,CUR_CART); }); renderLpContato(r.data,CUR_CART); }
+  else toast(falta.length?'✖ '+nome+': '+SAVE_ST[id].msg:'✓ Salvo no CRM: '+nome);
+  pintaPend();
+}
+function descartar(id){ delete DRAFTS[id]; delete SAVE_ST[id]; }
+/* aviso de rascunho de OUTRA conversa: salva dali mesmo, sem precisar voltar */
+function pintaPend(){
+  const box=$('#wa-pend'); if(!box) return;
+  const ids=Object.keys(DRAFTS).filter(id=>id!==CUR&&sujo(DRAFTS[id]));
+  box.innerHTML=ids.map(id=>{ const st=SAVE_ST[id]||{}, sv=st.st==='salvando';
+    return `<div class="warn pend">⚠ <b>${esc(DRAFTS[id].nome||'Contato')}</b>: ${nMud(DRAFTS[id])} alteração(ões) <b>não salvas</b>${st.st==='erro'?` — ${esc(st.msg||'')}`:''}
+      <div class="pend-b"><button class="btn primary" data-pend-salva="${esc(id)}" ${sv?'disabled':''}>${sv?'Salvando…':'💾 Salvar agora'}</button>
+      <button class="btn" data-pend-desc="${esc(id)}" ${sv?'disabled':''}>Descartar</button></div></div>`; }).join('');
+  box.querySelectorAll('[data-pend-salva]').forEach(b=>b.onclick=()=>salvarRascunho(b.dataset.pendSalva));
+  box.querySelectorAll('[data-pend-desc]').forEach(b=>b.onclick=()=>{ const id=b.dataset.pendDesc; if(!confirm('Descartar as alterações não salvas de '+(DRAFTS[id]&&DRAFTS[id].nome||'este contato')+'?')) return; descartar(id); pintaPend(); });
+}
+/* barra fixa do card: estado do rascunho + Salvar/Descartar */
+function pintaBarra(){
+  const bar=$('#lp2-barra'); if(!bar||CUR==null) return;
+  const d=DRAFTS[CUR], st=SAVE_ST[CUR]||{}, n=nMud(d), sv=st.st==='salvando';
+  let txt, cls;
+  if(sv){ txt='⏳ Salvando no CRM…'; cls='sv'; }
+  else if(st.st==='erro'&&n){ txt='✖ Não salvou — '+esc(st.msg||'erro')+'. Suas alterações continuam aqui.'; cls='er'; }
+  else if(n){ txt='● '+n+' alteração(ões) não salvas'; cls='su'; }
+  else if(st.st==='ok'){ txt=st.igual?'✓ Já estava assim no CRM':'✓ Salvo no CRM às '+hhmm(st.at); cls='ok'; }
+  else { txt='Sem alterações'; cls=''; }
+  bar.className='salvabar '+cls;
+  bar.innerHTML=`<span class="sb-t">${txt}</span>${n?`<button class="btn" id="lp2-desc" ${sv?'disabled':''}>Descartar</button><button class="btn primary" id="lp2-salvar" ${sv?'disabled':''}>${sv?'Salvando…':st.st==='erro'?'↻ Tentar de novo':'💾 Salvar'}</button>`:''}`;
+  const b=$('#lp2-salvar'); if(b) b.onclick=()=>salvarRascunho(CUR);
+  const x=$('#lp2-desc'); if(x) x.onclick=()=>{ descartar(CUR); renderLpContato(CUR_ROW,CUR_CART); };
+  panel.querySelectorAll('.lp2 .edit').forEach(e=>{ e.disabled=sv; });
 }
 /* 2.1: cada tópico do card rápido encolhe/estende (palavra dele); a escolha fica lembrada neste Chrome */
 function dobAberto(k){ return DOB[k]!==false; }
 function wireDob(){ panel.querySelectorAll('details.dob').forEach(d=>d.addEventListener('toggle',()=>{ DOB[d.dataset.k]=d.open; try{ chrome.storage.local.set({wa_crm_dob:DOB}); }catch(_){} })); }
 function renderLpContato(row,cartHit){
-  const c=row.dados||{}, cfg=LPCFG.funil, etapas=lpcEtapasDe(cfg,c), atual=lpcEtapaDe(cfg,c);
+  const id=String(row.id);
+  CUR_ROW=row; CUR_CART=cartHit||null;
+  const c0=row.dados||{}, cfg=LPCFG.funil;
+  const D=DRAFTS[id]||(DRAFTS[id]={nome:c0.nome||''});
+  const c=previa(c0,D);                                  /* o que a tela mostra = banco + rascunho */
+  const etapas=lpcEtapasDe(cfg,c), atual=lpcEtapaDe(cfg,c);
   const fluxo=etapas.filter(e=>!e.enc), enc=etapas.filter(e=>e.enc), ehEnc=!!(atual&&atual.enc);
   const st=lpcStatusDe(cfg,c), opts=lpcStatusOpts(cfg,c), orf=(!st&&c.status&&(!c.status_etapa||c.status_etapa===c.etapa))?String(c.status):'';
   const listas=Array.isArray(c.listas)?c.listas:[], cat=[...listas,...LPCFG.listas.filter(n=>!listas.includes(n))];
   const funNome={nn:'Novos Negócios',bc:'Base de Clientes',vg:'Vida em Grupo',prud:'Prud. Demais',mfo:'MFO','vg-bc':'Vida em Grupo · Base','prud-bc':'Prud. Demais · Base','mfo-bc':'MFO · Base'}[c.funil||'nn']||String(c.funil||'Funil');
-  const ult=lpcUltimos(c,5);
+  const ult=lpcUltimos(c0,5);
+  const mud=k=>(k in D)?' mud':'';
   renderShell(`<div class="lp2">
     <div class="card">
       <h2>${esc(c.nome||'—')}</h2>
       <span class="badge" style="background:${LPC_COR[(atual&&atual.cor)||'cinza']||'#5b6770'}"><span class="dot"></span>${esc(funNome)} · ${esc((atual&&atual.label)||c.etapa||'—')}</span>
-      <div class="muted">${esc(c.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div>
+      <div class="muted">${esc(c0.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div>
+      <div class="muted" style="margin-top:4px">${VINC?`📌 ligado a esta conversa · <a href="#" id="lp2-desv">não é esta pessoa</a>`:`<a href="#" id="lp2-vinc">📌 ligar esta conversa a este negócio</a>`}</div>
       ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
     </div>
     <details class="card dob" data-k="etapa" ${dobAberto('etapa')?'open':''}>
       <summary class="sec-t">Etapa · status · listas <span class="dob-r">${esc((atual&&atual.label)||c.etapa||'')}${st?' · '+esc(st):''}${listas.length?' · 📋 '+listas.length:''}</span></summary>
-      <div class="chips">${fluxo.map(e=>`<button class="chip${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
-      ${enc.length?`<div class="enc-l">Encerrar: ${enc.map(e=>`<button class="chip enc${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}">${esc(e.label)}</button>`).join('')}</div>`:''}
-      <div class="field" style="margin-top:8px"><label>${ehEnc?'✖ Motivo da perda':'⚑ Status nesta etapa'}</label>
-        ${opts.length?`<select id="lp2-status" class="${ehEnc&&!st?'destaque':''}">${orf?`<option value="" selected>⚠ ${esc(orf)} (saiu da lista)</option>`:''}<option value="">${ehEnc?'— escolha o motivo —':'— sem status —'}</option>${opts.map(o=>`<option ${o===st?'selected':''}>${esc(o)}</option>`).join('')}</select>`
+      <div class="chips${mud('etapa')}">${fluxo.map(e=>`<button class="chip edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
+      ${enc.length?`<div class="enc-l">Encerrar: ${enc.map(e=>`<button class="chip enc edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}">${esc(e.label)}</button>`).join('')}</div>`:''}
+      <div class="field${mud('status')}" style="margin-top:8px"><label>${ehEnc?'✖ Motivo da perda':'⚑ Status nesta etapa'}</label>
+        ${opts.length?`<select id="lp2-status" class="edit ${ehEnc&&!st?'destaque':''}">${orf?`<option value="" selected>⚠ ${esc(orf)} (saiu da lista)</option>`:''}<option value="">${ehEnc?'— escolha o motivo —':'— sem status —'}</option>${opts.map(o=>`<option ${o===st?'selected':''}>${esc(o)}</option>`).join('')}</select>`
           :`<div class="muted">${ehEnc?'nenhum motivo cadastrado':'esta etapa não tem status'} — cadastre em Funil &amp; Etapas no CRM</div>`}</div>
-      <div class="field"><label>📋 Listas de TA</label>
-        <div class="chips">${listas.map(n=>`<span class="lchip">${esc(n)}<button class="lx" data-tira="${esc(n)}" title="Tirar desta lista">✕</button></span>`).join('')||'<span class="muted">sem lista</span>'}</div>
-        <select id="lp2-lista" style="margin-top:6px"><option value="">＋ pôr numa lista…</option>${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}${listas.length?`<optgroup label="Mover (sai das outras)">${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="mv:${esc(n)}">↪ só em ${esc(n)}</option>`).join('')}</optgroup>`:''}<option value="__nova">＋ Nova lista…</option></select></div>
+      <div class="field${mud('listas')}"><label>📋 Listas de TA</label>
+        <div class="chips">${listas.map(n=>`<span class="lchip">${esc(n)}<button class="lx edit" data-tira="${esc(n)}" title="Tirar desta lista">✕</button></span>`).join('')||'<span class="muted">sem lista</span>'}</div>
+        <select id="lp2-lista" class="edit" style="margin-top:6px"><option value="">＋ pôr numa lista…</option>${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}${listas.length?`<optgroup label="Mover (sai das outras)">${cat.filter(n=>!listas.includes(n)).map(n=>`<option value="mv:${esc(n)}">↪ só em ${esc(n)}</option>`).join('')}</optgroup>`:''}<option value="__nova">＋ Nova lista…</option></select></div>
     </details>
-    <details class="card dob" data-k="nota" ${dobAberto('nota')?'open':''}>
-      <summary class="sec-t">📝 Registrar na oportunidade <span class="dob-r">${ult.length?ult.length+' registros':''}</span></summary>
-      <textarea id="lp2-nota" placeholder="o que rolou nesta conversa (vai pro histórico da oportunidade)"></textarea>
-      <button class="btn primary" id="lp2-nota-ok" style="margin-top:6px">Registrar nota</button>
+    <details class="card dob" data-k="nota" ${dobAberto('nota')||('nota' in D)?'open':''}>
+      <summary class="sec-t">📝 Registrar na oportunidade <span class="dob-r">${('nota' in D)?'nota não salva':ult.length?ult.length+' registros':''}</span></summary>
+      <textarea id="lp2-nota" class="edit${mud('nota')}" placeholder="o que rolou nesta conversa (vai pro histórico da oportunidade quando você Salvar)">${esc(D.nota||'')}</textarea>
       ${ult.length?`<div class="hist">${ult.map(x=>`<div class="hi"><span class="hd">${esc(String(x.dia||'').split('-').reverse().join('/'))}</span> ${esc(x.l||'')}</div>`).join('')}</div>`:''}
     </details>
-    <details class="card dob" data-k="campos" ${DOB.campos===true?'open':''}><summary class="sec-t">Telefone e observação fixa</summary>
-      ${fieldHTML('lp2-tel','Telefone',c.telefone)}
-      <div class="field"><label>Observação fixa (campo Notas)</label><textarea id="lp2-notas">${esc(c.notas||'')}</textarea></div>
-      <button class="btn" id="lp2-campos">💾 Salvar telefone/observação</button>
+    <details class="card dob" data-k="campos" ${DOB.campos===true||('tel' in D)||('notas' in D)?'open':''}><summary class="sec-t">Telefone e observação fixa</summary>
+      <div class="field${mud('tel')}"><label>Telefone</label><input id="lp2-tel" class="edit" value="${esc(('tel' in D)?D.tel:(c0.telefone||''))}"></div>
+      <div class="field${mud('notas')}"><label>Observação fixa (campo Notas)</label><textarea id="lp2-notas" class="edit">${esc(('notas' in D)?D.notas:(c0.notas||''))}</textarea></div>
     </details>
     ${msgCardHTML()}
-    <div class="note">Mesmo cadastro do CRM (Funil &amp; Etapas, listas de TA). Cada toque grava na hora e fica no histórico.</div>
-  </div>`);
-  wireMsgCard(c); wireDob();
+    <div class="note">Mesmo cadastro do CRM (Funil &amp; Etapas, listas de TA). Mude o que precisar e toque em <b>💾 Salvar</b> — nada vai pro CRM antes disso.</div>
+    <div class="salvabar" id="lp2-barra"></div>
+  </div>`,id);
+  wireMsgCard(c); wireDob(); pintaBarra();
+  { const a=$('#lp2-vinc'); if(a) a.onclick=e=>{ e.preventDefault(); vincular(row); };
+    const b=$('#lp2-desv'); if(b) b.onclick=e=>{ e.preventDefault(); desvincular(); }; }
+  const redesenha=()=>{ if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; renderLpContato(CUR_ROW,CUR_CART); };
+  const limpaIgual=()=>{ /* voltou ao que está no banco? então não é mudança */
+    if('etapa' in D&&D.etapa===c0.etapa){ delete D.etapa; }
+    if('status' in D&&lpcStatusDe(cfg,previa(c0,D,'status'))===D.status) delete D.status;
+    if('listas' in D&&mesmoSet(D.listas,Array.isArray(previa(c0,D,'listas').listas)?previa(c0,D,'listas').listas:[])) delete D.listas; };
   panel.querySelectorAll('[data-etapa]').forEach(b=>b.onclick=()=>{ const para=b.dataset.etapa; if(para===c.etapa) return; const e=etapas.find(x=>x.id===para);
-    lpcAcao(row,[{tipo:'etapa',para}].concat(e&&e.enc?[{tipo:'listas',para:[]}]:[]),`✓ ${e?e.label:para}${e&&e.enc?' — escolha o motivo':''}`,cartHit); });
-  const ss=$('#lp2-status'); if(ss) ss.onchange=()=>lpcAcao(row,[{tipo:'status',v:ss.value}],ss.value?`✓ ${ss.value}`:'✓ Status removido',cartHit);
-  panel.querySelectorAll('[data-tira]').forEach(b=>b.onclick=()=>{ const n=b.dataset.tira; lpcAcao(row,[{tipo:'listas',para:listas.filter(x=>x!==n)}],`✓ Saiu de “${n}”`,cartHit); });
+    D.etapa=para; delete D.status;                            /* mudar etapa limpa o status (regra do app) */
+    if(e&&e.enc){ D.listas=[]; D._encL=true; } else if(D._encL){ delete D.listas; delete D._encL; }
+    limpaIgual(); redesenha(); });
+  const ss=$('#lp2-status'); if(ss) ss.onchange=()=>{ D.status=ss.value; limpaIgual(); redesenha(); };
+  panel.querySelectorAll('[data-tira]').forEach(b=>b.onclick=()=>{ const n=b.dataset.tira; D.listas=listas.filter(x=>x!==n); delete D._encL; limpaIgual(); redesenha(); });
   const sl=$('#lp2-lista'); if(sl) sl.onchange=()=>{ let v=sl.value; if(!v) return;
     if(v==='__nova'){ const n=(window.prompt('Nome da nova lista de TA:')||'').trim(); if(!n){ sl.value=''; return; } v=n; }
-    if(v.startsWith('mv:')){ const n=v.slice(3); lpcAcao(row,[{tipo:'listas',para:[n]}],`✓ Movido pra “${n}”`,cartHit); return; }
-    lpcAcao(row,[{tipo:'listas',para:[...listas,v]}],`✓ Em “${v}”`,cartHit); };
-  $('#lp2-nota-ok').onclick=()=>{ const t=$('#lp2-nota').value.trim(); if(!t){ toast('Escreva a nota primeiro.'); return; } lpcAcao(row,[{tipo:'nota',texto:t}],'✓ Nota registrada',cartHit); };
-  $('#lp2-campos').onclick=()=>lpcAcao(row,[{tipo:'campos',set:{telefone:$('#lp2-tel').value.trim(),notas:$('#lp2-notas').value}}],'✓ Salvo',cartHit);
+    D.listas=v.startsWith('mv:')?[v.slice(3)]:[...listas,v]; delete D._encL; limpaIgual(); redesenha(); };
+  const tx=(sel,k,base)=>{ const el=$(sel); if(!el) return; el.addEventListener('input',()=>{ const v=el.value;
+    if(k==='nota'?!v.trim():v===base) delete D[k]; else D[k]=v;
+    el.closest('.field')?.classList.toggle('mud',k in D); if(k==='nota') el.classList.toggle('mud',k in D);
+    if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; pintaBarra(); }); };
+  tx('#lp2-nota','nota',''); tx('#lp2-tel','tel',String(c0.telefone||'')); tx('#lp2-notas','notas',String(c0.notas||''));
   if(ehEnc&&ss&&!st) try{ ss.focus(); }catch(_){}
 }
 // Estoque (funil 'bn'): nome ainda não é negócio — card enxuto: listas de TA + nota (vai pras notas do Estoque)
@@ -541,14 +661,16 @@ function renderLpEstoque(row){
   const sl=$('#lp2-lista'); if(sl) sl.onchange=()=>{ const v=sl.value; if(v) lpcAcaoBn(row,[{tipo:'listas',para:[...listas,v]}],`✓ Em “${v}”`); };
   $('#lp2-nota-ok').onclick=()=>{ const t=$('#lp2-nota').value.trim(); if(!t){ toast('Escreva a nota primeiro.'); return; } lpcAcaoBn(row,[{tipo:'nota',texto:t}],'✓ Nota registrada'); };
 }
-async function lpcAcaoBn(row,acoes,okMsg){ if(BUSY) return; BUSY=true; const r=await send('lpc.patch',{id:row.id,acoes}); BUSY=false;
-  if(!handleAuthFail(r)) return; if(r.ok){ renderLpEstoque(r.data); toast(okMsg); } else toast('Erro: '+(r.error||'falha ao salvar')); }
+async function lpcAcaoBn(row,acoes,okMsg){ if(BUSY) return; BUSY=true; const seq=LOOKSEQ; const r=await send('lpc.patch',{id:row.id,acoes}); BUSY=false;
+  if(!handleAuthFail(r)) return;
+  if(seq!==LOOKSEQ){ toast(r.ok?'✓ Salvo: '+((row.dados&&row.dados.nome)||'nome do Estoque'):'✖ Não salvou: '+(r.error||'erro')); return; }   /* trocou de conversa: não pinta o card velho por cima */
+  if(r.ok){ renderLpEstoque(r.data); toast(okMsg); } else toast('Erro: '+(r.error||'falha ao salvar')); }
 function renderLpContatoPicker(list){
   renderShell(`<div class="note">${list.length} contatos parecidos no funil LP — escolha:</div>`+
     list.map((r,i)=>{ const c=r.dados||{}; const e=lpcEtapaDe(LPCFG.funil,c);
       return `<div class="pick" data-i="${i}"><b>${esc(c.nome||'—')}</b><br>
       <span class="muted">${esc((e&&e.label)||c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
-  panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>renderLpContato(list[+el.dataset.i]); });
+  panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>{ const x=list[+el.dataset.i]; renderLpContato(x); vincular(x); }; });
 }
 function renderLpCreate(sugestoes){
   const chatPhone=CHAT&&CHAT.phoneRaw?normPhone(CHAT.phoneRaw):null;
@@ -569,7 +691,7 @@ function renderLpCreate(sugestoes){
     <div class="note">Ou, se for recrutamento (candidato a LP):</div>
     <button class="btn" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>
   `);
-  panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>renderLpContato(sugestoes[+el.dataset.lpsug]); });
+  panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>{ const x=sugestoes[+el.dataset.lpsug]; renderLpContato(x); vincular(x); }; });
   $('#wa-lp-to-cap').onclick=()=>{ VIEW='captacao'; saveView(); LEAD=null; lookup(); };
   $('#wa-lpn-save').onclick=async()=>{
     const nome=$('#wa-lpn-nome').value.trim();
@@ -582,7 +704,7 @@ function renderLpCreate(sugestoes){
     const r=await send('lpc.save',{id:dados.id,dados});
     BUSY=false;
     if(!handleAuthFail(r)) return;
-    if(r.ok){ renderLpContato(r.data); toast('✓ Contato criado na Visão LP'); }
+    if(r.ok){ renderLpContato(r.data); vincular(r.data); toast('✓ Contato criado na Visão LP'); }
     else { $('#wa-lpn-save').disabled=false; toast('Erro: '+(r.error||'falha ao criar')); }
   };
 }
@@ -596,12 +718,14 @@ function wireHeader(){
 function wireSearch(){
   const go=async()=>{
     const q=$('#wa-q').value.trim(); if(!q) return;
+    const seq=++LOOKSEQ;
     renderLoading();
     const r=await send(VIEW==='lp'?'lp.search':'leads.searchByName',{q});
+    if(seq!==LOOKSEQ) return;
     if(!handleAuthFail(r)) return;
     if(VIEW==='lp'){
       const d=(r.ok&&r.data)||{}, cs=d.contatos||[], ct=d.carteira||[];
-      if(cs.length===1) renderLpContato(cs[0],ct[0]||null);
+      if(cs.length===1){ renderLpContato(cs[0],ct[0]||null); vincular(cs[0]); }
       else if(cs.length>1) renderLpContatoPicker(cs);
       else if(ct.length===1) renderLpCliente(ct[0]);
       else if(ct.length>1) renderLpPicker(ct);
@@ -635,16 +759,17 @@ async function loadFunil(){
 
 async function lookup(){
   if(!OPEN) return;
-  const c=CHAT;
-  if(MODO==='completo'&&!(c&&c.isGroup)){ renderCompleto(c); return; }   /* 2.1: o CRM embutido cuida do login e da busca */
-  sairCompleto();
+  const c=CHAT, seq=++LOOKSEQ;
+  if(MODO==='completo'){ if(!panel.querySelector('.full-wrap')) renderCompleto(); return; }   /* 2.3: iframe vivo; a troca de conversa vai pelo wa.chat */
   if(!AUTH.logged){ renderLogin(); return; }
   if(!c){ renderNoChat(); return; }
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
   if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Estoque → Carteira → criar
     let contatos=[],carteira=[],byName=null,estoque=[];
-    const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||''}),loadLpCfg()]);
+    const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||'',keys:chatKeys(c)}),loadLpCfg()]);
+    VINC=!!(r&&r.ok&&r.data&&r.data.vinculo);
+    if(seq!==LOOKSEQ) return;                    /* já trocou de conversa: esta resposta é de outra pessoa */
     if(!handleAuthFail(r)) return;
     if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; byName=r.data.byName; estoque=r.data.estoque||[]; }
     if(!contatos.length&&!(byName&&byName.strong)&&estoque.length===1){ renderLpEstoque(estoque[0]); return; }
@@ -659,6 +784,7 @@ async function lookup(){
   let matches=[];
   if(c.phoneRaw){
     const r=await send('leads.findByPhone',{phone:c.phoneRaw});
+    if(seq!==LOOKSEQ) return;
     if(!handleAuthFail(r)) return;
     matches=(r.ok&&r.data)||[];
   }
@@ -670,6 +796,7 @@ async function lookup(){
   let sugestoes=[];
   if(c.name){
     const r=await send('leads.findByName',{name:c.name});
+    if(seq!==LOOKSEQ) return;
     if(!handleAuthFail(r)) return;
     const d=(r.ok&&r.data)||{};
     if(d.strong){ LEAD=d.strong; renderLead(); toast('Casado pelo NOME do contato — confira se é a pessoa certa'); return; }
@@ -678,13 +805,17 @@ async function lookup(){
   renderCreate(sugestoes);
 }
 
-fab.onclick=()=>{ setOpen(true); lookup(); };
+fab.onclick=()=>{
+  if(MODO==='completo'){ setOpen(true); renderCompleto(); avisaConversa(CHAT); return; }   /* 2.3: dentro do painel */
+  setOpen(true); lookup(); };
+// painel lateral → "⚡ Rápido": volta pro card dentro do WhatsApp
+try{ chrome.runtime.onMessage.addListener(m=>{ if(m&&m.type==='wa.modo'&&m.modo==='rapido'){ MODO='rapido'; sairCompleto(); try{ chrome.storage.local.set({wa_crm_modo:MODO}); }catch(_){} setOpen(true); lookup(); } }); }catch(_){}
 handle.onclick=()=>setOpen(false);
 
 // boot
-try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); if(o&&o.wa_crm_modo==='rapido') MODO='rapido'; if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
+try{ const o=await chrome.storage.local.get(['wa_crm_modo','wa_crm_dob']); if(o&&o.wa_crm_modo==='completo') MODO='completo';   /* 2.3: o completo abre dentro do painel, sem depender de gesto */ if(o&&o.wa_crm_dob&&typeof o.wa_crm_dob==='object') DOB=o.wa_crm_dob; }catch(_){}
 const st=await send('auth.status');
 if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); loadLpCfg(); }
 refreshFab();
-WA_DOM.observe(c=>{ CHAT=c; LEAD=null; lookup(); });
+WA_DOM.observe(c=>{ CHAT=c; LEAD=null; avisaConversa(c); lookup(); });   /* avisa o painel lateral e o card rápido */
 })();

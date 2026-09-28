@@ -11,12 +11,15 @@ const WA_DOM=(()=>{
   // "@g.us" = grupo; "@lid" = privacidade de número (sem telefone visível) → cai
   // pras camadas seguintes.
   function jidFromMessages(main){
-    const nodes=main.querySelectorAll('[data-id*="@c.us"],[data-id*="@g.us"]');
+    const nodes=main.querySelectorAll('[data-id*="@c.us"],[data-id*="@g.us"],[data-id*="@lid"]');
+    let lid=null;
     for(let i=nodes.length-1;i>=0;i--){
-      const m=/(?:true|false)_(\d+)@(c\.us|g\.us)/.exec(nodes[i].getAttribute('data-id')||'');
-      if(m) return {digits:m[1],isGroup:m[2]==='g.us'};
+      const m=/(?:true|false)_(\d+)@(c\.us|g\.us|lid)/.exec(nodes[i].getAttribute('data-id')||'');
+      if(!m) continue;
+      if(m[2]==='lid'){ if(!lid) lid=m[1]; continue; }   /* 2.4: @lid não é telefone, mas é um ID FIXO da conversa */
+      return {digits:m[1],isGroup:m[2]==='g.us'};
     }
-    return null;
+    return lid?{lid}:null;
   }
 
   // Camada 2/3 — header do chat: título é o nome do contato salvo, ou o próprio
@@ -56,12 +59,13 @@ const WA_DOM=(()=>{
     if(!main) return null;
     const {name,phoneFromTitle}=headerInfo(main);
     const jid=jidFromMessages(main);
+    const lid=jid&&jid.lid?jid.lid:null;
     if(jid&&jid.isGroup) return {isGroup:true,name:name||'Grupo',phoneRaw:null,source:'jid'};
-    if(jid) return {isGroup:false,phoneRaw:jid.digits,name,source:'jid'};
-    if(phoneFromTitle) return {isGroup:false,phoneRaw:phoneFromTitle,name:null,source:'header'};
+    if(jid&&jid.digits) return {isGroup:false,phoneRaw:jid.digits,name,lid,source:'jid'};
+    if(phoneFromTitle) return {isGroup:false,phoneRaw:phoneFromTitle,name:null,lid,source:'header'};
     const det=phoneFromDetailsPanel(main);
-    if(det) return {isGroup:false,phoneRaw:det,name,source:'painel'};
-    if(name) return {isGroup:false,phoneRaw:null,name,source:'nome'};
+    if(det) return {isGroup:false,phoneRaw:det,name,lid,source:'painel'};
+    if(name||lid) return {isGroup:false,phoneRaw:null,name,lid,source:'nome'};
     return null;
   }
 
@@ -72,7 +76,7 @@ const WA_DOM=(()=>{
     const check=()=>{
       timer=null;
       const c=getOpenChat();
-      const sig=c?`${c.isGroup?'g':'c'}|${c.phoneRaw||''}|${c.name||''}`:'';
+      const sig=c?`${c.isGroup?'g':'c'}|${c.phoneRaw||''}|${c.name||''}|${c.lid||''}`:'';
       if(sig!==last){ last=sig; try{ cb(c); }catch(_){} }
     };
     const mo=new MutationObserver(()=>{ if(!timer) timer=setTimeout(check,300); });
