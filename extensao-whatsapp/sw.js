@@ -23,7 +23,10 @@ const HANDLERS={
   'lpc.patch':  (m)=>lpcPatch(m.id,m.acoes),        // v2.0: relê fresco, aplica a ação, grava só a linha
   // 2.2: card completo no PAINEL LATERAL do Chrome (fora da página do WhatsApp — ver content/embed.js)
   'sidepanel.open': (m,sender)=>abrirLateral(sender),
-  'janela.open': (m,sender)=>abrirJanela(sender),   // 2.2.2: card completo numa JANELA do CRM ao lado (não depende do painel lateral)
+  'janela.open': (m,sender)=>abrirJanela(sender),
+  // 2.3: o frame do CRM dentro do painel pede a ficha da conversa atual (no load e a cada troca)
+  'wa.frame':    async (m,sender)=>{ const o=await chrome.storage.session.get('wa_chat_ult');
+                   if(sender&&sender.tab) await injetaCrm({tabId:sender.tab.id,allFrames:true},(o&&o.wa_chat_ult)||null); return true; },   // 2.2.2: card completo numa JANELA do CRM ao lado (não depende do painel lateral)
   'wa.chat':    (m)=>{ const u={tel:String(m.tel||''),nome:String(m.nome||''),grupo:!!m.grupo,ts:Date.now()};
                        return chrome.storage.session.set({wa_chat_ult:u}).then(()=>janelaAvisa(u)).then(()=>true); },
 };
@@ -59,33 +62,41 @@ async function abrirJanela(sender){
 /* 2.2.3: quem ACHA o negócio é a extensão (mesma busca do card rápido: telefone → nome tolerante às etiquetas
    "Fulano Rec Ciclano Med…"). O CRM só abre a ficha pelo id — antes ele procurava só pelo telefone e, com o nome
    cheio de etiquetas, dizia "nenhum negócio" pra cliente que está no CRM. */
-async function janelaAvisa(u){
-  const j=await janelaViva(); if(!j||!u) return;
-  const tel=u.grupo?'':String(u.tel||''), nome=u.grupo?'':String(u.nome||'');
-  let alvo=null;
-  if(tel||nome){ try{ const r=await lpLookup(tel,nome);
+/* acha o negócio (telefone → nome tolerante às etiquetas), mesma busca do card rápido */
+async function alvoDe(tel,nome){
+  if(!tel&&!nome) return null;
+  try{ const r=await lpLookup(tel,nome);
     const c=(r.contatos&&r.contatos[0])||(r.byName&&r.byName.strong)||null;
-    if(c) alvo={tipo:'fun',ids:[String(c.id),String((c.dados&&c.dados.id)||'')]};
-    else if(r.estoque&&r.estoque.length===1){ const b=r.estoque[0]; alvo={tipo:'bn',ids:[String(b.id),String((b.dados&&b.dados.id)||'')]}; }
-  }catch(_){} }
-  try{ await chrome.scripting.executeScript({target:{tabId:j.tab},world:'MAIN',args:[tel,nome,alvo],
-    func:(t,n,a)=>{
-      const cai=()=>{ if(typeof waAbrir==='function') waAbrir({tipo:'wa-abrir',tel:t,nome:n}); };
-      if(!a){ cai(); return; }
-      let k=0;
-      const vai=()=>{
-        try{ clearTimeout(_waTimer); _waTent=0; }catch(_){}
-        let lista=[]; try{ lista=a.tipo==='bn'?((typeof bnVivos==='function')?bnVivos():[]):(S.contatos||[]); }catch(_){}
-        const achou=lista.find(c=>a.ids.includes(String(c.id)));
-        if(achou){ try{ WA_ULT={tel:t,nome:n}; }catch(_){}
-          if(a.tipo==='bn'){ try{ fecharDrawerSo(); }catch(_){} taFichaAbrir(achou.id); }
-          else { const ta=document.getElementById('ta-ficha'); if(ta) ta.remove(); abrirContato(achou.id); }
-          return; }
-        if(k++<25) setTimeout(vai,700); else cai();   /* base ainda chegando do servidor */
-      };
-      vai();
-    }}); }catch(_){}
+    if(c) return {tipo:'fun',ids:[String(c.id),String((c.dados&&c.dados.id)||'')]};
+    if(r.estoque&&r.estoque.length===1){ const b=r.estoque[0]; return {tipo:'bn',ids:[String(b.id),String((b.dados&&b.dados.id)||'')]}; }
+  }catch(_){}
+  return null;
 }
+/* roda DENTRO do vendas.html (mundo da página): abre a ficha pelo id; sem alvo, cai no waAbrir do próprio CRM */
+function ABRIR_NO_CRM(t,n,a){
+  if(location.hostname!=='juca-alt.github.io') return;   /* allFrames: só o frame do CRM */
+  const cai=()=>{ if(typeof waAbrir==='function') waAbrir({tipo:'wa-abrir',tel:t,nome:n}); };
+  let k=0;
+  const vai=()=>{
+    if(typeof abrirContato!=='function'){ if(k++<40) setTimeout(vai,500); return; }   /* app ainda subindo */
+    if(!a){ cai(); return; }
+    try{ clearTimeout(_waTimer); _waTent=0; }catch(_){}
+    let lista=[]; try{ lista=a.tipo==='bn'?((typeof bnVivos==='function')?bnVivos():[]):(S.contatos||[]); }catch(_){}
+    const achou=lista.find(c=>a.ids.includes(String(c.id)));
+    if(achou){ try{ WA_ULT={tel:t,nome:n}; }catch(_){}
+      if(a.tipo==='bn'){ try{ fecharDrawerSo(); }catch(_){} taFichaAbrir(achou.id); }
+      else { const ta=document.getElementById('ta-ficha'); if(ta) ta.remove(); abrirContato(achou.id); }
+      return; }
+    if(k++<25) setTimeout(vai,700); else cai();   /* base ainda chegando do servidor */
+  };
+  vai();
+}
+async function injetaCrm(target,u){
+  const tel=(!u||u.grupo)?'':String(u.tel||''), nome=(!u||u.grupo)?'':String(u.nome||'');
+  const a=await alvoDe(tel,nome);
+  try{ await chrome.scripting.executeScript({target,world:'MAIN',args:[tel,nome,a],func:ABRIR_NO_CRM}); }catch(_){}
+}
+async function janelaAvisa(u){ const j=await janelaViva(); if(!j||!u) return; await injetaCrm({tabId:j.tab},u); }
 
 /* sidePanel.open() só vale DENTRO do gesto do usuário: é a 1ª coisa chamada, sem await antes (o clique no botão do
    painel do WhatsApp chega aqui pelo sendMessage e o gesto vem junto). */

@@ -28,7 +28,11 @@ function entrega(){
   if(!pronto||!fr.contentWindow) return;
   const m=msgDe(ultima), k=m.tel+'|'+m.nome;
   if(k===entregue) return;                  // mesma conversa: não reabre a ficha à toa
-  entregue=k; fr.contentWindow.postMessage(m,CRM_ORIGIN);
+  entregue=k;
+  /* 2.3: quem acha o negócio é a extensão (telefone → nome com as etiquetas do WhatsApp) e abre a ficha pelo id;
+     o postMessage só com tel/nome dizia "nenhum negócio" pra cliente que está no CRM */
+  try{ chrome.runtime.sendMessage({type:'wa.frame'},()=>void chrome.runtime.lastError); }
+  catch(_){ fr.contentWindow.postMessage(m,CRM_ORIGIN); }
 }
 fr.addEventListener('load',()=>{
   if(!fr.src||fr.src==='about:blank') return;
@@ -58,4 +62,4 @@ $('rapido').onclick=async()=>{
 // 1º load: sem cache-buster (o Chrome reaproveita o vendas.html do cache HTTP, max-age 10 min do Pages)
 mostra('carregando');
 _limite=setTimeout(()=>{ if(!pronto){ mostra('falhou'); $('falhou-q').textContent=navigator.onLine?'Pode ser a internet lenta ou o site fora do ar.':'Parece que você está sem internet.'; } },LIMITE_MS);
-fr.src=CRM_URL;
+fr.src=CRM_URL+'&_='+Date.now().toString(36);   /* 2.3: sem reaproveitar cópia do cache que veio sem o cabeçalho do rules.json */
