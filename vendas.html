@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.34 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.35 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -778,6 +778,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .nncol-head{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 8px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#3c4657}
   .nncol-head .qt{font-size:10.5px;font-weight:700;background:#e2e8f0;color:var(--muted);padding:2px 8px;border-radius:20px}
   .nncard{background:#fff;border:1px solid var(--linha);border-radius:10px;padding:10px;margin-bottom:8px;cursor:grab;box-shadow:var(--sombra);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  .ta-lcell{display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center} .ta-lx{font:inherit;font-size:11px;line-height:1;margin-left:4px;padding:1px 3px;border:0;background:none;color:var(--muted);cursor:pointer} .ta-lx:hover{color:var(--verm)}
+  .ta-ladd{font:inherit;font-size:11.5px;padding:2px 8px;border:1px dashed var(--linha);border-radius:999px;background:none;color:var(--azul);cursor:pointer} .ta-ladd:hover{border-color:var(--azul)}
+  .ta-menu-lrow{display:flex;gap:4px;align-items:stretch} .ta-menu-lrow>button:first-child{flex:1} .ta-menu-mv{flex:0 0 auto;font-size:11.5px!important;color:var(--azul)!important}   /* LISTAS-NA-LINHA-V1 */
   .et-lista-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}   /* FICHA-LISTA-TA-V1 */
   .nc-pill{display:inline-flex;align-items:center;gap:3px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:inherit;font-size:11px;font-weight:650;border-radius:999px;padding:2px 9px;margin:3px 4px 3px 0;cursor:pointer;color:#1e3a8a;background:#eef4ff;border:1px solid #bfd3fb}   /* CARD-TA-STATUS-V1 */
   .nc-pill.on{color:#7c2d12;background:#ffedd5;border-color:#fdba74} .nc-pill.vazio{color:var(--muted);background:transparent;border:1px dashed var(--linha)} .nc-pill:hover{border-color:var(--azul)}
@@ -1061,7 +1064,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     /* ALVOS-44-V1 (05/09): o portão listava 83 alvos <44px a 375 (cabeçalho dos tópicos do Início,
        chips de filtro, etapas do funil, estados do contato, stepper do PLACED). Tudo vira ≥44 aqui. */
     .ini-h{min-height:44px}
-    .fun-et,.nc-avancar,.ct-est,.nc-pill{min-height:44px}
+    .fun-et,.nc-avancar,.ct-est,.nc-pill,.ta-ladd{min-height:44px}
+    .ta-lx{min-width:36px;min-height:36px;font-size:14px}   /* LISTAS-NA-LINHA-V1: ✕ tocável no dedo */
     .nc-pill{border-radius:10px;font-size:12px}   /* CARD-TA-STATUS-V1: alvo de 44px sem virar ovo */
     .sheet-chip{min-height:44px;display:inline-flex;align-items:center}
     .pl .stp button{width:44px;height:44px}
@@ -17129,7 +17133,20 @@ const TA_FUNIL_SIGLA={nn:'NN',bc:'BC',vg:'VG',prud:'PRUD',mfo:'MFO','vg-bc':'VG�
 function taListasDe(c){ const hoje=hojeISO(); if(!c) return [];
   const dia=spEhFunil(c)?c.sitplan:c.ta_dia;
   return (dia===hoje?['📅 Hoje']:[]).concat((c.listas||[]).map(n=>'📋 '+n)); }
-function taListasChips(c){ const l=taListasDe(c); return l.length?l.map(x=>`<span class="ta-lchip">${esc(x)}</span>`).join(' '):'<span class="ta-sub">—</span>'; }
+function taListasChips(c){ if(novoOn('ficha-lista-ta')&&c) return taListasChipsEdit(c); const l=taListasDe(c); return l.length?l.map(x=>`<span class="ta-lchip">${esc(x)}</span>`).join(' '):'<span class="ta-sub">—</span>'; }
+/* LISTAS-NA-LINHA-V1 (28/09): palavra dele — "preciso de agilidade: o cliente fácil de incluir, mover de lista ou retirar". A célula
+   Listas do Painel TA vira editável: ✕ em cada lista tira com um toque; ＋📋 abre as listas (marcar/desmarcar ou MOVER = só esta).
+   Lista é manual — filtro (etapa, status, delay) nunca põe nem tira ninguém de lista. */
+function taListasChipsEdit(c){ const j=esc(jsq(c.id)), hoje=hojeISO(), noDia=(spEhFunil(c)?c.sitplan:c.ta_dia)===hoje;
+  const chips=(noDia?[`<span class="ta-lchip">📅 Hoje<button class="ta-lx" title="Tirar de Hoje" onclick="event.stopPropagation();taListasAplicar(['${j}'],'hoje',false)">✕</button></span>`]:[])
+    .concat((c.listas||[]).map(n=>`<span class="ta-lchip">📋 ${esc(n)}<button class="ta-lx" title="Tirar de “${esc(n)}”" onclick="event.stopPropagation();taListasAplicar(['${j}'],'${esc(jsq(n))}',false)">✕</button></span>`));
+  return `<span class="ta-lcell">${chips.join(' ')}<button class="ta-ladd" title="Pôr, mover ou tirar de lista" onclick="event.stopPropagation();taListaMenuLinha(event,'${j}')">＋📋</button></span>`; }
+function taListaMenuLinha(ev,id){ const c=spPorId(id); if(!c) return; const j=esc(jsq(id)), l=c.listas||[], cat=taListasCatalogo();
+  taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · listas de TA</div>
+    ${cat.map(n=>{ const tem=l.includes(n), q=esc(jsq(n)); return `<div class="ta-menu-lrow"><button onclick="taListasAplicar(['${j}'],'${q}',${tem?'false':'true'})">${tem?'✓ ':'📋 '}${esc(n)}</button>${(!tem&&l.length)?`<button class="ta-menu-mv" title="Sai das outras e fica só nesta" onclick="taListasAplicar(['${j}'],'${q}','mover')">↪ mover</button>`:''}</div>`; }).join('')}
+    ${l.length?`<button onclick="taListasTirarTodas('${j}')">✕ Tirar de todas as listas</button>`:''}
+    <button onclick="taListasNova(['${j}'])">＋ Nova lista…</button>`); }
+function taListasTirarTodas(id){ taFecharMenu(); const c=spPorId(id); if(!c) return; if(taListaDefinir(c,[])){ spSalvarDe(c); render(); toast(String(c.nome||'').split(' ')[0]+' saiu das listas de TA',true); } }
 function taEtapaBadge(c){ if(!spEhFunil(c)) return `<span class="badge b-${esc(c.estagio||'estoque')}">${esc(BN_EST_LABEL[c.estagio]||c.estagio||'')}</span>`;
   const f=funilDe(c); return `<span class="ta-sub" title="${esc((FUNIS.find(x=>x[0]===f)||[])[1]||f)}">${esc(TA_FUNIL_SIGLA[f]||String(f).toUpperCase())}</span> ${badgeEtapa(c.etapa)}`; }
 function taSmartMapa(){ return taCanal()==='wa'?WA_SMART:TA_SMART; }
@@ -17341,20 +17358,21 @@ function taFecharMenu(){ document.querySelectorAll('.ta-menu').forEach(m=>m.remo
 document.addEventListener('click',taFecharMenu);
 function taMenuAt(ev,html){ ev.stopPropagation(); taFecharMenu(); const m=document.createElement('div'); m.className='ta-menu'; m.innerHTML=html;
   document.body.appendChild(m); const r=m.getBoundingClientRect(); m.style.left=Math.max(8,Math.min(ev.clientX,innerWidth-r.width-8))+'px'; m.style.top=Math.min(ev.clientY,innerHeight-r.height-8)+'px'; m.onclick=e=>e.stopPropagation(); }
-function taRowMenu(ev,id){ const c=spPorId(id); if(!c) return; const listas=bnListasTodas(); const fun=spEhFunil(c), noDia=(fun?c.sitplan:c.ta_dia)===hojeISO();
+function taRowMenu(ev,id){ const c=spPorId(id); if(!c) return; const listas=taListasCatalogo(); const fun=spEhFunil(c), noDia=(fun?c.sitplan:c.ta_dia)===hojeISO();
   taMenuAt(ev,`${fun?'':`<div class="ta-menu-h">Mover estágio</div>${BN_ESTAGIOS.map(e=>`<button ${c.estagio===e?'disabled':''} onclick="taMoverEstagio(['${esc(jsq(id))}'],'${e}')">${esc(BN_EST_LABEL[e])}</button>`).join('')}`}
     <div class="ta-menu-h">Listas de TA</div><button onclick="taListasAplicar(['${esc(jsq(id))}'],'hoje',${noDia?'false':'true'})">${noDia?'✓ Tirar de Hoje':'📅 Pôr em Hoje'}</button>
     ${listas.map(n=>`<button onclick="taListasAplicar(['${esc(jsq(id))}'],'${esc(jsq(n))}',${(c.listas||[]).includes(n)?'false':'true'})">${(c.listas||[]).includes(n)?'✓ ':'📋 '}${esc(n)}</button>`).join('')}
     <button onclick="taListasNova(['${esc(jsq(id))}'])">＋ Nova lista…</button>`); }
-function taBulkMenu(ev){ const ids=taSelVisivel(); if(!ids.length) return; const listas=bnListasTodas(); const j=JSON.stringify(ids).replace(/"/g,'&quot;');
+function taBulkMenu(ev){ const ids=taSelVisivel(); if(!ids.length) return; const listas=taListasCatalogo(); const j=JSON.stringify(ids).replace(/"/g,'&quot;');
   taMenuAt(ev,`<div class="ta-menu-h">${ids.length} selecionado${ids.length>1?'s':''} → estágio</div>${BN_ESTAGIOS.map(e=>`<button onclick="taMoverEstagio(${j},'${e}')">${esc(BN_EST_LABEL[e])}</button>`).join('')}
     <div class="ta-menu-h">Adicionar à lista</div><button onclick="taListasAplicar(${j},'hoje',true)">📅 Hoje</button>${listas.map(n=>`<button onclick="taListasAplicar(${j},'${esc(jsq(n))}',true)">📋 ${esc(n)}</button>`).join('')}
     <button onclick="taListasNova(${j})">＋ Nova lista…</button>`); }
 function taMoverEstagio(ids,e){ taFecharMenu(); let n=0; ids.forEach(id=>{ const c=bnPor(id); if(!c||c.estagio===e) return; (c.hist=c.hist||[]).push({tipo:'estagio',de:c.estagio,para:e,dia:hojeISO(),ts:new Date().toISOString()}); c.estagio=e; n++; });
   FTA.sel.clear(); bnSalvar(); render(); toast(n+' → '+BN_EST_LABEL[e],true); }
 function taListasAplicar(ids,nome,add){ taFecharMenu(); let fun=false,bn=false; ids.forEach(id=>{ const c=spPorId(id); if(!c) return; const f=spEhFunil(c); if(f) fun=true; else bn=true;
-    if(nome==='hoje'){ if(f) c.sitplan=add?hojeISO():null; else c.ta_dia=add?hojeISO():null; } else c.listas=add?[...new Set([...(c.listas||[]),nome])]:(c.listas||[]).filter(x=>x!==nome); });
-  FTA.sel.clear(); if(bn) bnSalvar(); if(fun) salvar(); render(); toast(ids.length+(add?' → “':' saiu de “')+(nome==='hoje'?'Hoje':nome)+'”',true); }
+    if(nome==='hoje'){ if(f) c.sitplan=add?hojeISO():null; else c.ta_dia=add?hojeISO():null; }
+    else taListaDefinir(c, add==='mover'?[nome] : add?[...new Set([...(c.listas||[]),nome])]:(c.listas||[]).filter(x=>x!==nome)); });   /* LISTAS-NA-LINHA-V1: histórico + mover */
+  FTA.sel.clear(); if(bn) bnSalvar(); if(fun) salvar(); render(); toast(ids.length+(add==='mover'?' movido pra “':add?' → “':' saiu de “')+(nome==='hoje'?'Hoje':nome)+'”',true); }
 function taListasNova(ids){ taFecharMenu(); let n=prompt('Nome da nova lista:'); if(!n) return; n=n.trim(); if(!n) return; taListasAplicar(ids,n,true); }
 /* ═══ REPERTORIO-V1 (16/09/2026) ═══════════════════════════════════════════════
    Pedido dele (handoff): "dentro do painel do lead, dar ao LP o SCRIPT certo pra cada
@@ -20668,6 +20686,15 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const c={id:'zu1',nome:'Zz',funil:'nn',etapa:'TA'}; taStatusUnificar(c,RES_BY_K.lig_nao_atendida); const a=etStatusDe(c)==='Não atendeu'&&c.status_etapa==='TA';
         taStatusUnificar(c,RES_BY_K.pediu_retornar); return a && !c.status;
       } finally{ if(_st===undefined) delete e.status; else e.status=_st; } })());
+    /* LISTAS-NA-LINHA-V1 (28/09): no Painel TA a célula Listas põe/tira/move com histórico; filtro não mexe em lista */
+    ok('LISTAS-NA-LINHA-V1: célula Listas tem ✕ por lista e ＋📋; tirar/mover gravam c.listas com histórico', (()=>{
+      const _s=S.contatos,_r=window.render,_sv=window.salvar,_bs=window.bnSalvar,_to=window.toast; window.render=()=>{}; window.salvar=()=>{}; window.bnSalvar=()=>{}; window.toast=()=>{};
+      try{ const c={id:'zr1',nome:'Zz Linha',funil:'nn',etapa:'P/C',listas:['L1 Zz','L2 Zz']}; S.contatos=[c];
+        const h=taListasChipsEdit(c); if(!(h.includes('ta-lx')&&h.includes('taListaMenuLinha')&&h.includes('L1 Zz'))) return false;
+        taListasAplicar(['zr1'],'L1 Zz',false); const a=JSON.stringify(c.listas)==='["L2 Zz"]' && interacoesDe(c).slice(-1)[0].k==='lista';
+        taListasAplicar(['zr1'],'L3 Zz','mover'); const b=JSON.stringify(c.listas)==='["L3 Zz"]';
+        taListasTirarTodas('zr1'); return a && b && c.listas.length===0 && c.etapa==='P/C';
+      } finally{ S.contatos=_s; window.render=_r; window.salvar=_sv; window.bnSalvar=_bs; window.toast=_to; } })());
     /* FICHA-LISTA-TA-V1 (28/09): lista de TA na ficha — só em TA; trocar/tirar/descartar gravam c.listas + histórico; catálogo único */
     ok('FICHA-LISTA-TA-V1: ficha em TA escolhe/troca/tira a lista (histórico k:lista), Descartar encerra e tira das listas, catálogo inclui lp_listas_ta', (()=>{
       const _s=S.contatos,_ct=CONTATO,_d=DIC.listasTa; try{

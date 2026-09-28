@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 — v8.34 no ar · 62ª onda: Painel TA separa 🎯 Filtros (automáticos) × 📋 Listas de TA (suas) × 🔧 Refinar
+## 🟢 RETOMAR AQUI — 28/09/2026 — v8.35 no ar · 63ª onda: Painel TA põe/tira/move de lista direto na linha (LISTAS-NA-LINHA-V1, chave `ficha-lista-ta`)
+
+_(62ª onda, mesmo dia — v8.34: Filtros × Listas)_
 
 **⏳ SQL `supabase/contato_porta_v1.sql` (Backlog #3): ele DEU OK no chat, mas a permissão do Claude Code bloqueou a migração em produção.** Backup `_bkp_20260928_contato_porta` (372 linhas) JÁ criado. Rodar pelo SQL Editor (ele) ou liberar a permissão.
 
@@ -35,7 +37,16 @@ _(snapshot anterior, 27/09 — v8.29 · 57ª onda: prêmio padrão R$ 250/mês d
 
 ---
 
-## 28/09/2026 (62ª onda) — FILTROS-LISTAS-V1: Filtros × Listas no Painel TA (v8.34)
+## 28/09/2026 (63ª onda) — LISTAS-NA-LINHA-V1 (v8.35)
+
+Palavra dele: *"preciso de agilidade — o cliente fácil de incluir, mover de lista ou retirar. Ex.: já tô em P/C, não faz sentido estar em lista de TA; quero remover, mas não travado: se ela me der um delay de P/C, eu boto na lista de delay de P/C — o filtro já sinaliza pelo status, e na lista eu boto ou não a oportunidade que quero."*
+- Célula **Listas** do Painel TA (chave `ficha-lista-ta`): ✕ em cada lista (tira com um toque, sem abrir a ficha) + **＋📋** abre as listas: marcar/desmarcar, **↪ mover** (sai das outras, fica só nesta), tirar de todas, nova lista.
+- `taListasAplicar` (linha, lote e menu) passa pelo `taListaDefinir` → histórico `Lista TA: A → B`; aceita modo 'mover'.
+- Menus da linha e do lote passam a usar o catálogo único (`taListasCatalogo`).
+- Lista continua 100% manual: filtro/etapa/status nunca põem nem tiram ninguém de lista.
+- Invariante `LISTAS-NA-LINHA-V1`.
+
+ — FILTROS-LISTAS-V1: Filtros × Listas no Painel TA (v8.34)
 
 Palavra dele (prints do Painel TA): *"o card que tá escrito listas — toda a base e outros — isso na verdade é filtros; listas são as criadas abaixo. Filtros puxam de acordo com a regra de cada filtro, automático conforme atualizamos etapas, status; listas o usuário cria e vai colocando ou retirando."*
 - Painel TA: "Listas" → **🎯 Filtros · automáticos**; "Listas de TA" → **📋 Listas de TA · suas**; o bloco de refinos "Filtros" → **🔧 Refinar**. "▶ Foco neste filtro" quando é filtro.
