@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.50 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.51 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -13748,7 +13748,7 @@ async function soEvento(s,tipo,texto){
   const ev={ id:'loc_'+uid(), solicitacao_id:s.id, ocorrido_em:new Date().toISOString(), autor:soQuemSou(), tipo:tipo||'nota', texto };
   (SO_EV[String(s.id)]=SO_EV[String(s.id)]||[]).push(ev);
   s.ultimo_toque_em=ev.ocorrido_em;
-  if(SO_REMOTE&&sb&&!String(s.id).startsWith('loc_')){ try{ const {data,error}=await sb.from('solicitacao_eventos').upsert([{solicitacao_id:s.id,lp_email:s.lp_email||SO_EMAIL||undefined,ocorrido_em:ev.ocorrido_em,autor:ev.autor,tipo:ev.tipo,texto:ev.texto}]).select('id'); if(error) throw error; if(data&&data[0]) ev.id=data[0].id; }
+  if(SO_REMOTE&&sb&&!String(s.id).startsWith('loc_')){ try{ const {data,error}=await sb.from('solicitacao_eventos').upsert([{solicitacao_id:s.id,lp_email:s.lp_email||soRow(s).lp_email||undefined,ocorrido_em:ev.ocorrido_em,autor:ev.autor,tipo:ev.tipo,texto:ev.texto}]).select('id'); if(error) throw error; if(data&&data[0]) ev.id=data[0].id; }
     catch(e){ console.warn('solicitacao_eventos gravar',e); toast('Andamento salvo só neste aparelho (falha no servidor)',false); } }
   return ev;
 }
@@ -13763,12 +13763,19 @@ async function soCarregar(){
   try{ const raw=localStorage.getItem(SO_CHAVE); if(raw){ const o=JSON.parse(raw); SO.itens=Array.isArray(o.itens)?o.itens:[]; } }catch(e){}
 }
 function soSalvarLocal(){ try{ localStorage.setItem(SO_CHAVE,JSON.stringify(SO)); }catch(e){} }
-function soRow(s){ const row={}; (SO_TEM_CONTATO?['contato_id']:[]).concat(['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status','area','prazo_area_dias','proxima_acao','proxima_acao_prazo','bola_com','ultimo_toque_em','encerrada_em','aguardando']).forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 */
+function soRow(s){ const row={}; (SO_TEM_CONTATO?['contato_id']:[]).concat(['frente','ref_atraso_id','ref_emissao_id','segurado','apolice','base_lp','acao','tipo','contexto','prazo','contato_com','aberta_por','aberta_em','respondida_em','resultado','protocolo','status','area','prazo_area_dias','proxima_acao','proxima_acao_prazo','bola_com','ultimo_toque_em','encerrada_em','aguardando']).forEach(k=>{ row[k]=(s[k]===''||s[k]===undefined)?null:s[k]; }); row.lp_email=s.lp_email||escEmailDoLp(s.base_lp, SO_EMAIL)||SO_EMAIL; if(s.id&&!String(s.id).startsWith('loc_')) row.id=s.id; return row; }   /* BUGS-V6 #10 · SOLIC-VICTOR-V1: editar NUNCA troca o dono (lp_email) — só registro novo calcula */
 async function soGravar(s){ const i=SO.itens.findIndex(x=>x.id===s.id); if(i>=0) SO.itens[i]=s; else SO.itens.unshift(s); soSalvarLocal();
-  if(SO_REMOTE&&sb){ try{ const {data,error}=await sb.from(SO_TABLE).upsert([soRow(s)]).select('id'); if(error) throw error; if(data&&data[0]&&String(s.id).startsWith('loc_')){ s.id=data[0].id; soSalvarLocal(); } return true; }catch(e){ console.error('SO gravar',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
+  if(SO_REMOTE&&sb){ try{ const {data,error}=await sb.from(SO_TABLE).upsert([soRow(s)]).select('id,lp_email'); if(error) throw error; if(data&&data[0]){ if(data[0].lp_email) s.lp_email=data[0].lp_email; if(String(s.id).startsWith('loc_')) s.id=data[0].id; soSalvarLocal(); } return true; }catch(e){ console.error('SO gravar',e); toast('Salvo só neste aparelho (falha no servidor)',false); return false; } }
   return true; }
 /* quem abre: o e-mail logado decide o default; a pessoa pode trocar */
-function soQuemSou(){ const e=(SO_EMAIL||AT_EMAIL||'').toLowerCase(); return e.indexOf('victor')>=0?'victor':'gustavo'; }
+/* SOLIC-VICTOR-V1 (29/09): quem FEZ = quem está LOGADO — não o dono da base que ele opera (no modo
+   delegado SO_EMAIL é o do Gustavo, e o e-mail do Victor nem contém "victor": tudo saía como "gustavo").
+   admin → gustavo · dono de base LP (tem rótulo em lp_rotulo_dono) → o rótulo · sem rótulo = backoffice → victor. */
+function soQuemSou(){ if(typeof souAdm==='function'&&souAdm()) return 'gustavo';
+  const eu=String((typeof escEu==='function'&&escEu())||'').toLowerCase();
+  if(!eu){ const e=(SO_EMAIL||AT_EMAIL||'').toLowerCase(); return e.indexOf('victor')>=0?'victor':'gustavo'; }   /* deslogado: comportamento antigo */
+  const r=(ESC.rotulos||[]).find(x=>String(x.dono_email||'').toLowerCase()===eu);
+  return r&&r.rotulo? normKey(r.rotulo) : 'victor'; }
 function soDiasSemRetorno(s,hoje){ if(s.status!=='aberta'||!s.aberta_em) return 0; return Math.max(0,Math.round(((hoje||atHojeLocal())-atParseISO(String(s.aberta_em).slice(0,10)))/864e5)); }
 /* ITEM 4 — formato obrigatório. Sem improviso. */
 function soTexto(s){
@@ -13811,7 +13818,7 @@ async function soConfNova(refs){ refs=refs||{};
     acao, tipo:v('so_tipo')||'outro', contexto:v('so_ctx')||null, prazo:v('so_prazo')||null, contato_com:v('so_ct')||null, aberta_por:v('so_por')||soQuemSou(), aberta_em:new Date().toISOString(), respondida_em:null, resultado:null, protocolo:null, status:'aberta' };
   if(novoOn('solic-v2')){ s.bola_com=v('so_com')||'lm'; s.area=s.bola_com==='lm'?'lm':'outro'; s.prazo_area_dias=null; s.proxima_acao=v('so_prox')||null; s.ultimo_toque_em=s.aberta_em; }
   if(refs.contato_id&&novoOn('solic-negocio')) s.contato_id=String(refs.contato_id);   /* SOLIC-NEGOCIO-V1 */
-  if(novoOn('solic-negocio')&&v('so_neg')){ const nk=normKey(v('so_neg')); const c=(S.contatos||[]).find(x=>x&&escVisivel(x)&&normKey(x.nome||'')===nk); if(c) s.contato_id=String(c.id); }
+  if(novoOn('solic-negocio')&&v('so_neg')){ const nk=normKey(v('so_neg')); const dono=s.lp_email||soRow(s).lp_email; const c=(S.contatos||[]).find(x=>x&&escVisivel(x)&&normKey(x.nome||'')===nk&&(!dono||!x._dono||x._dono===dono)); if(c) s.contato_id=String(c.id); }   /* SOLIC-VICTOR-V1: negócio do MESMO dono da solicitação */
   if(novoOn('solic-negocio')&&!s.contato_id){ try{ const c=soContatoDe(s); if(c) s.contato_id=String(c.id); }catch(_){} }   /* segurado bate com um negócio do funil → já nasce ligada */
   await soGravar(s);
   if(novoOn('solic-v2')&&!String(s.id).startsWith('loc_')) await soEvento(s,'abertura','Aberta por '+(s.aberta_por||'—')+' · '+soTipoRot(s.tipo)+' · com '+soComRot(s)+(s.contexto?' — '+s.contexto:''));
@@ -16502,6 +16509,12 @@ const MODS={
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
   'solic-v2':{label:'Solicitações · acompanhamento v2 (área, prazo, próximo passo, linha do tempo)', def:false, views:[]},   /* 17/09: saiu do "só na minha base"; liga por usuário (Victor ligado) */
+  'ini-acomp':{label:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o Victor na onda das tratativas', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'solic-tarefas':{label:'Solicitações viram tarefas em andamento na Agenda & Tarefas (o card sai do Início): lista estilo Google Tarefas — ○ conclui, título e próximo passo editáveis na linha, campo "＋ Adicionar" que aceita várias em sequência — e cada solicitação aberta vira uma Tarefa do Google (conclui lá, conclui aqui)', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'solic-agenda':{label:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'solic-negocio':{label:'Solicitação vinculada ao cliente/oportunidade do funil (🎯): chip na Agenda, no Kanban e na ficha da solicitação; sugestão automática pelo nome do segurado; a ficha do negócio ganha o bloco 📨 Solicitações (o que está destravando a emissão dele). Precisa da migration solicitacoes_v3_contato.sql (coluna contato_id)', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'solic-kanban':{label:'Solicitações: visão Kanban (colunas por "com quem está a bola": Nós · A área · O cliente · Concluídas 30d · Canceladas), arrasto no desktop e seletor "mover →" no celular; troca com a Lista pelo botão ▦/☰', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'anexos-drive':{label:'📎 Anexos em solicitações e atividades: arquivo ou Ctrl+V (print/imagem) vai pro Google Drive em Pipe X / CRM Life Planner / Histórico de Clientes / <cliente> com nome datado; o link fica na linha do tempo da solicitação e na atividade; contador 📎 na Agenda e no Kanban. Pede o escopo Drive na conexão Google (reconectar 1×)', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
   beneficios:{label:'Benefícios (sinistro)',               def:true,  views:['beneficios']},
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']},
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']}
@@ -16531,9 +16544,9 @@ const NOVO_SO_MEU={
   'repertorio':   {o:'Repertório na ficha do lead: o script certo da recomendação, com nome e recomendante já no lugar', desde:'2026-09-16'},
   /* 'niver-feito' — nasceu aqui em 17/09 e foi LIBERADO no mesmo dia, palavra dele: "pode liberar pro Daniel". */
   /* 'solic-v2' — nasceu aqui em 17/09 e no MESMO DIA foi pra MODS com def:false, ligado pro Victor. Palavra dele: "ajusta já essa solicitação pro Victor poder acompanhar". */
-  'ini-acomp':    {o:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o Victor na onda das tratativas', desde:'2026-09-17'},
-  'solic-tarefas':{o:'Solicitações viram tarefas em andamento na Agenda & Tarefas (o card sai do Início): lista estilo Google Tarefas — ○ conclui, título e próximo passo editáveis na linha, campo "＋ Adicionar" que aceita várias em sequência — e cada solicitação aberta vira uma Tarefa do Google (conclui lá, conclui aqui)', desde:'2026-09-21'},
-  'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
+  /* 'ini-acomp' — saiu daqui em 29/09 pra MODS (def:false), liberado pro Victor. Palavra dele: "quero liberar esse módulo para o Victor, já tive reunião com ele". */
+  /* 'solic-tarefas' — saiu daqui em 29/09 pra MODS (def:false), liberado pro Victor. Palavra dele: "quero liberar esse módulo para o Victor, já tive reunião com ele". */
+  /* 'solic-agenda' — saiu daqui em 29/09 pra MODS (def:false), liberado pro Victor. Palavra dele: "quero liberar esse módulo para o Victor, já tive reunião com ele". */
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
   'multi-neg':    {o:'Ficha do negócio: faixa fixa "💼 Negócios desta pessoa" (pipe · etapa de cada negócio dela, inclusive empresas do VG onde é contato; troca com um toque) + "＋ Novo negócio" que escolhe pipe/funil e já nasce ligado a ela', desde:'2026-09-29'},
@@ -16543,9 +16556,9 @@ const NOVO_SO_MEU={
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
   'plano':        {o:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', desde:'2026-09-18'},
   'agenda-semana':{o:'Agenda: vista Semana em grade de horas no estilo do Google (7 colunas × horas, dia todo no topo, linha do agora, toque no vazio cria, arrasto muda hora e dia)', desde:'2026-09-18'},
-  'anexos-drive': {o:'📎 Anexos em solicitações e atividades: arquivo ou Ctrl+V (print/imagem) vai pro Google Drive em Pipe X / CRM Life Planner / Histórico de Clientes / <cliente> com nome datado; o link fica na linha do tempo da solicitação e na atividade; contador 📎 na Agenda e no Kanban. Pede o escopo Drive na conexão Google (reconectar 1×)', desde:'2026-09-23'},
-  'solic-negocio':{o:'Solicitação vinculada ao cliente/oportunidade do funil (🎯): chip na Agenda, no Kanban e na ficha da solicitação; sugestão automática pelo nome do segurado; a ficha do negócio ganha o bloco 📨 Solicitações (o que está destravando a emissão dele). Precisa da migration solicitacoes_v3_contato.sql (coluna contato_id)', desde:'2026-09-23'},
-  'solic-kanban': {o:'Solicitações: visão Kanban (colunas por "com quem está a bola": Nós · A área · O cliente · Concluídas 30d · Canceladas), arrasto no desktop e seletor "mover →" no celular; troca com a Lista pelo botão ▦/☰', desde:'2026-09-23'},
+  /* 'anexos-drive' — saiu daqui em 29/09 pra MODS (def:false), liberado pro Victor. Palavra dele: "quero liberar esse módulo para o Victor, já tive reunião com ele". */
+  /* 'solic-negocio' — saiu daqui em 29/09 pra MODS (def:false), liberado pro Victor. Palavra dele: "quero liberar esse módulo para o Victor, já tive reunião com ele". */
+  /* 'solic-kanban' — saiu daqui em 29/09 pra MODS (def:false), liberado pro Victor. Palavra dele: "quero liberar esse módulo para o Victor, já tive reunião com ele". */
   'cards-funil':  {o:'Cards do funil em sincronia com o funil e com o ciclo escolhido: "Previsto fechar/emitir" seguem o ciclo (Mensal ou Compensação), e "PA emitido" nasce do FUNIL (negócios que viraram ganho no ciclo, pelo prêmio que ele digita) com o relatório UW como referência ao lado — v2: validar pelo relatório', desde:'2026-09-23'},
   'agenda-ativ':  {o:'Compromisso da Agenda Google ligado a um negócio (vínculo manual ou nome/telefone batendo) vira atividade na ficha do lead — Tarefas & Atividades deixa de dizer "sem próxima atividade"; ✓ feito no Google conclui a atividade', desde:'2026-09-21'},
   'rec-funil':    {o:'Recomendações lê também o FUNIL (não só o Estoque): quem indicou um lead do funil (campo recomendante, ou a origem quando é um nome de pessoa) aparece como recomendante com os nomes dele; o recorte Recomendações do Painel TA e o contador do menu acompanham', desde:'2026-09-21'},
@@ -20224,14 +20237,14 @@ function lpSelfCheck(){
         ok('solic: a ficha tem próximo passo, registrar andamento e linha do tempo — todos dobráveis e fechados (regra de 16/09)', /Próximo passo/.test(f) && /Registrar andamento/.test(f) && /Linha do tempo/.test(f) && !/<details[^>]*\sopen[\s>]/.test(f));
         ok('solic: o Agora lista solicitações em acompanhamento com urgência 1 quando há prazo estourado', (()=>{ const l=inicioAgora(); const it=l.find(x=>x.k==='solic'); return !!it && it.n===2 && it.urg===1 && /prazo estourado/.test(it.sub); })());
         /* INI-ACOMP-V1 + liberação por módulo */
-        ok('ini-acomp: cards de solicitações e benefícios nascem só na base dele, o cabeçalho leva o número e só entra o que está aberto', (()=>{ if(!NOVO_SO_MEU['ini-acomp']) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10)+'T09:00:00Z'; };
+        ok('ini-acomp: cards de solicitações e benefícios nascem só na base dele, o cabeçalho leva o número e só entra o que está aberto', (()=>{ if(!(NOVO_SO_MEU['ini-acomp']||MODS['ini-acomp'])) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10)+'T09:00:00Z'; };
             const h=iniSolicBloco([{id:'zz1',segurado:'Fulano Teste',status:'aberta',tipo:'boleto',area:'lm',prazo_area_dias:3,prazo:d(7).slice(0,10),aberta_em:d(10),ultimo_toque_em:d(0)},{id:'zz2',segurado:'Beltrana Teste',status:'executada',aberta_em:d(3)}]);
             const b=iniBenefBloco([{id:'zb1',segurado:'Sicrano Teste',situacao:'em_exigencia',tipo_evento:'outro',data_abertura:d(20).slice(0,10),data_aviso:d(20).slice(0,10),exigencias:[],documentos:[],eventos:[]},{id:'zb2',segurado:'Pago Teste',situacao:'pago',tipo_evento:'outro',exigencias:[],documentos:[],eventos:[]}]);
             return /<b>1<\/b> em aberto/.test(h) && /prazo passou/.test(h) && /Fulano Teste/.test(h) && !/Beltrana/.test(h) && /data-ini="solic"/.test(h) && /<b>1<\/b> em regulação/.test(b) && /Sicrano Teste/.test(b) && !/Pago Teste/.test(b) && /data-ini="benef"/.test(b); })());
         ok('ini-acomp: os dois cards estão no Início logo depois do Agora, com nome no painel e chave de dobra', /\['solic',iniSolicBloco\(\)\],\['benef',iniBenefBloco\(\)\]/.test(String(viewInicio)) && !!PORD_NOMES.solic && !!PORD_NOMES.benef && ('solic' in INI_PADRAO) && ('benef' in INI_PADRAO));
         ok('acesso: chave que saiu do "só na minha base" e virou módulo em MODS obedece ao mapa de módulos do usuário (pessoa a pessoa)', (()=>{ const bak=PERFIL; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{'solic-v2':true}}; _escMemo=null; const a=novoOn('solic-v2'); PERFIL={email:'zz@teste',papel:'lp',modulos:{}}; _escMemo=null; const b=novoOn('solic-v2'); return a===true && b===false && !NOVO_SO_MEU['solic-v2'] && !!MODS['solic-v2'] && MODS['solic-v2'].def===false; } finally{ PERFIL=bak; _escMemo=null; } })());
         /* SOLIC-AGENDA-V1 */
-        ok('solic-agenda: agendar da solicitação acha o negócio do segurado (nome escrito diferente), e sem negócio cai pro evento direto', (()=>{ if(!NOVO_SO_MEU['solic-agenda']) return false; const bak=S.contatos; try{
+        ok('solic-agenda: agendar da solicitação acha o negócio do segurado (nome escrito diferente), e sem negócio cai pro evento direto', (()=>{ if(!(NOVO_SO_MEU['solic-agenda']||MODS['solic-agenda'])) return false; const bak=S.contatos; try{
             S.contatos=[normContato({id:'zzag1',nome:'Fulano Agenda Teste',funil:'bc',etapa:'PC',telefone:'81900000001'})];
             const s1={id:'zzs1',segurado:'FULANO AGENDA TESTE',tipo:'boleto',area:'lm',aberta_em:'2026-09-01T09:00:00Z',status:'aberta'};
             const s2={id:'zzs2',segurado:'Ninguem Assim Existe',tipo:'boleto',area:'lm',aberta_em:'2026-09-01T09:00:00Z',status:'aberta'};
@@ -20255,20 +20268,20 @@ function lpSelfCheck(){
         ok('painel WA: "em fluxo" = negócio aberto com telefone; ganho, entrega, ativos e sem telefone saem sozinhos', (()=>{ const mk=(et,f,tel)=>normContato({id:'zzf'+et+(f||''),nome:'Zz Fluxo',funil:f||'nn',etapa:et,telefone:tel===undefined?'81999990009':tel}); const bak=S.contatos; try{ const a=mk('OI/FF'), b=mk('DELIVERY'), c=mk('OI/FF','nn',''), d=mk(BC_ATIVOS,'bc'), e=mk('PC','bc'); S.contatos=[a,b,c,d,e]; return waEmFluxo(a) && !waEmFluxo(b) && !waEmFluxo(c) && !waEmFluxo(d) && waEmFluxo(e); } finally{ S.contatos=bak; } })());
         ok('painel WA: pra quem não tem a chave, o item do menu some e a tela cai no Painel TA', (()=>{ const bak=PERFIL, v=VIEW; try{ PERFIL={email:'zz@teste',papel:'lp',modulos:{bn:true}}; _escMemo=null; aplicarGates(); const b=document.querySelector('.nav-btn[data-view="bn-wa"]'); return !!b && b.style.display==='none' && novoOn('painel-wa')===false; } finally{ PERFIL=bak; _escMemo=null; VIEW=v; aplicarGates(); } })());
         ok('BLOCO-CURTO: bloco de menos de 45 min na grade do dia vira uma linha (hora + nome) com reticências, e o CSS existe', String(gcalDiaHTML.toString()).includes("h<54?' curto':''")&&!!document.getElementById('gcal-fluida-css')&&/\.gcal-ev\.curto\{flex-direction:row/.test(document.getElementById('gcal-fluida-css').textContent));
-        ok('ANEXOS-DRIVE: escopo drive na conexão Google; anexo da solicitação = evento anexo (📎 nome — url) lido de volta; nome de arquivo datado na pasta do cliente; botão 📎 na atividade; chip na Agenda/Kanban', (()=>{ if(!NOVO_SO_MEU['anexos-drive']) return false; const bak=SO_EV; try{
+        ok('ANEXOS-DRIVE: escopo drive na conexão Google; anexo da solicitação = evento anexo (📎 nome — url) lido de volta; nome de arquivo datado na pasta do cliente; botão 📎 na atividade; chip na Agenda/Kanban', (()=>{ if(!(NOVO_SO_MEU['anexos-drive']||MODS['anexos-drive'])) return false; const bak=SO_EV; try{
           SO_EV={'zax1':[{tipo:'anexo',texto:'📎 2026-09-23_1015_solicitacao_boleto.pdf — https://drive.google.com/file/d/abc/view',ocorrido_em:'2026-09-23T10:15:00Z'},{tipo:'nota',texto:'x'}]};
           const s={id:'zax1',segurado:'Fulano'}; const l=soAnexos(s); const nm=drvNomeArq('solicitacao','boleto.pdf');
           return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/>📎 boleto\.pdf</.test(anxLinkHtml(l[0]))
             &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
         } finally{ SO_EV=bak; } })());
         ok('SOLIC-REGISTRAR: Nova solicitação tem "Registrar" (sem texto) além de "Registrar e gerar texto", e o campo 🎯 Negócio com autocompletar liga o contato', String(soNova.toString()).includes('semTexto:true')&&String(soNova.toString()).includes('id="so_neg"')&&String(soConfNova.toString()).includes('refs.semTexto')&&String(soConfNova.toString()).includes("v('so_neg')"));
-        ok('SOLIC-NEGOCIO: solicitação liga ao negócio (contato_id), sugere pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 na ficha do negócio, e a coluna só sobe quando o servidor a tem', (()=>{ if(!NOVO_SO_MEU['solic-negocio']) return false; const bakS=S.contatos, bakSO=SO.itens, bakT=SO_TEM_CONTATO; try{
+        ok('SOLIC-NEGOCIO: solicitação liga ao negócio (contato_id), sugere pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 na ficha do negócio, e a coluna só sobe quando o servidor a tem', (()=>{ if(!(NOVO_SO_MEU['solic-negocio']||MODS['solic-negocio'])) return false; const bakS=S.contatos, bakSO=SO.itens, bakT=SO_TEM_CONTATO; try{
           S.contatos=[normContato({id:'zzsn1',nome:'Marcus Tulio Teste',lp:S.activeUser,funil:'bc',etapa:'RC/OI',telefone:'81999990051'})]; negIndexLimpar();
           SO.itens=[{id:'zso1',segurado:'Marcus Tulio Teste',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString()},{id:'zso2',segurado:'Outro Nome',status:'aberta',tipo:'outro',area:'lm',aberta_em:new Date().toISOString(),contato_id:'zzsn1'}];
           const sug=soSugereContato(SO.itens[0]); const chip=soNegChip(SO.itens[1]); const bl=soDrawerBloco(S.contatos[0]); SO_TEM_CONTATO=false; const r0=soRow(SO.itens[1]); SO_TEM_CONTATO=true; const r1=soRow(SO.itens[1]);
           return !!sug&&sug.id==='zzsn1'&&/neg-selo/.test(chip)&&/soVincular\('zso2',null\)/.test(chip)&&/soVincular\('zso1','zzsn1'\)/.test(soNegChip(SO.itens[0]))&&/1 em aberto/.test(bl)&&!('contato_id' in r0)&&r1.contato_id==='zzsn1'&&String(agSolicBloco.toString()).includes('soNegChip(s)')&&String(soKanbanHtml.toString()).includes('soNegChip(s,')&&String(viewSolicitacoesV2.toString()).includes('soNegChip(s,{mini:true})')&&[...document.scripts].some(x=>x.textContent.includes('${soDrawerBloco(c)}'));
         } finally{ S.contatos=bakS; SO.itens=bakSO; SO_TEM_CONTATO=bakT; negIndexLimpar(); } })());
-        ok('SOLIC-KANBAN: colunas pelas etapas de resolução (solicitação aberta · a fazer · em andamento · finalizada 30d, SO-4ETAPAS-V1); concluída antiga fica de fora; card tem arrasto e seletor mover', (()=>{ if(!NOVO_SO_MEU['solic-kanban']) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString(); };
+        ok('SOLIC-KANBAN: colunas pelas etapas de resolução (solicitação aberta · a fazer · em andamento · finalizada 30d, SO-4ETAPAS-V1); concluída antiga fica de fora; card tem arrasto e seletor mover', (()=>{ if(!(NOVO_SO_MEU['solic-kanban']||MODS['solic-kanban'])) return false; const hj=atHojeLocal(); const d=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString(); };
           const it=[{id:'k1',segurado:'A Teste',status:'aberta',bola_com:'nos',aberta_em:d(2),tipo:'outro',area:'lm'},{id:'k2',segurado:'B Teste',status:'aberta',aberta_em:d(5),tipo:'outro',area:'lm'},{id:'k3',segurado:'C Teste',status:'executada',aberta_em:d(40),encerrada_em:d(35)},{id:'k4',segurado:'D Teste',status:'executada',aberta_em:d(9),encerrada_em:d(3)}];
           const h=soKanbanHtml(it); return soKbColDe(it[0])==='aberta'&&soKbColDe(it[1])==='aberta'&&soKbColDe({status:'sem_retorno'})==='em_andamento'&&soKbColDe({status:'respondida'})==='em_andamento'&&soKbColDe({status:'aguardando'})==='em_andamento'&&soKbColDe({status:'a_fazer'})==='a_fazer'&&soAberta({status:'a_fazer'})&&soAguardando({status:'em_andamento',aguardando:true})&&soAguardando({status:'sem_retorno'})&&!soAguardando({status:'em_andamento'})&&String(soRow).includes("'aguardando'")&&String(viewSolicitacoesV2).includes('FSO.ag')&&String(viewSolicitacoesV2).includes('FSO.pipe')&&soPipeDe({})===''&&soKbColDe(it[2])==='executada'&&!/C Teste/.test(h)&&/D Teste/.test(h)&&(h.match(/class="so-kcol"/g)||[]).length===4&&/draggable="true"/.test(h)&&/soKbMover\('k1'/.test(h)&&String(viewSolicitacoesV2.toString()).includes("soVisSet('kanban')"); })());
         ok('CARDS-FUNIL: previsto fechar/emitir segue o ciclo escolhido; PA emitido nasce do funil (ganho datado pelo log de etapa, no ciclo) com o relatório UW como referência', (()=>{ if(!NOVO_SO_MEU['cards-funil']) return false; const bakS=S.contatos, bakC={...CIC}; try{
@@ -20299,7 +20312,7 @@ function lpSelfCheck(){
         } finally{ S.contatos=bak; } })());
         /* SOLIC-TAREFAS-V1 */
         ok('SOLIC-TAREFAS: seção 📨 na Agenda (○ conclui, título e próximo passo na linha, ＋ Adicionar em sequência), card sai do Início, ponte com Google Tarefas pela marca #crmlp-so-, tudo atrás de solic-tarefas', (()=>{
-          if(!NOVO_SO_MEU['solic-tarefas']) return false; const bak=SO.itens, hj=atHojeLocal(); try{
+          if(!(NOVO_SO_MEU['solic-tarefas']||MODS['solic-tarefas'])) return false; const bak=SO.itens, hj=atHojeLocal(); try{
             SO.itens=[{id:'zzso1',segurado:'Fulano Teste',tipo:'outro',area:'lm',status:'aberta',aberta_em:new Date(hj-864e5*10).toISOString(),prazo:new Date(hj-864e5*3).toISOString().slice(0,10),proxima_acao:'LM confirmar'}];   /* SO-COM-V1: prazo agora é só o digitado */
             const b=agSolicBloco(); const h=b&&b[1]||''; const c=soGtCorpo(SO.itens[0]);
             const rap=String(soRapida.toString()), agv=String(viewAgenda.toString());
@@ -21195,6 +21208,15 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c2={id:'np3',nome:'Zz Puxa Diferente',funil:'mfo',lp:S.activeUser}; const d=ncVincularPuxado(c2,md)===0&&!pessoaDe(c2) && ncVincularPuxado({nome:'Zz Puxa Teste'},{dataset:{modo:'novo'}})===0;
       const e=String(salvarNovoContato).includes('ncVincularPuxado(c,md)') && String(openNovoContato).includes('ncPuxarTopoHtml()');
       return a&&b&&c&&d&&e; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; NC_PICK=_k; } })());
+    ok('SOLIC-VICTOR-V1: autor = quem está LOGADO (Victor operando a base do Gustavo grava "victor"); editar não troca o dono (lp_email); evento vai com o dono da solicitação; as 6 chaves do módulo viraram MODS def:false (liga por pessoa)', (()=>{ const P=PERFIL, SE=SO_EMAIL, D={...DELEG}; try{
+      const RB=ESC.rotulos; ESC.rotulos=[{rotulo:'gustavo',dono_email:'g@x'},{rotulo:'daniel',dono_email:'d@x'}]; PERFIL={email:'v@x',papel:'lp',modulos:{}}; DELEG.eu='v@x'; SO_EMAIL='g@x';
+      const a=soQuemSou()==='victor'; DELEG.eu='d@x'; const a3=soQuemSou()==='daniel'; ESC.rotulos=RB;
+      PERFIL={email:'g@x',papel:'admin',modulos:{}}; DELEG.eu='g@x'; const a2=soQuemSou()==='gustavo';
+      SO_EMAIL='v@x'; const r=soRow({id:'123',segurado:'Zz',lp_email:'g@x',base_lp:null}); const b=r.lp_email==='g@x';
+      const r2=soRow({id:'loc_1',segurado:'Zz',base_lp:null}); const b2=r2.lp_email==='v@x';
+      const c=String(soEvento).includes('s.lp_email||soRow(s).lp_email')&&String(soGravar).includes("select('id,lp_email')");
+      const k=['ini-acomp','solic-tarefas','solic-agenda','solic-negocio','solic-kanban','anexos-drive'].every(x=>!NOVO_SO_MEU[x]&&MODS[x]&&MODS[x].def===false);
+      return a&&a2&&a3&&b&&b2&&c&&k; } finally{ PERFIL=P; SO_EMAIL=SE; DELEG.eu=D.eu; } })());
     ok('MULTI-NEG-V1: a faixa "Negócios desta pessoa" junta o próprio negócio + irmãos (pessoaId) + empresas do VG onde ela é contato, em ordem de pipe; não aparece na ficha da empresa; o ＋ Novo liga ao negócio certo', (()=>{ const _c=S.contatos,_p=PERFIL; try{ PERFIL=null;
       const a1={id:'mn1',nome:'Zz Multi',telefone:'81 90000-5555',funil:'mfo',etapa:'Oportunidade',pessoaId:'pzz',lp:S.activeUser,eventos:[],recs:[]};
       const a2={id:'mn2',nome:'Zz Multi',telefone:'81 90000-5555',funil:'nn',etapa:'C2',pessoaId:'pzz',lp:S.activeUser,eventos:[],recs:[]};
