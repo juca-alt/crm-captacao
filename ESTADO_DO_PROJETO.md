@@ -4,6 +4,8 @@
 
 ## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.48 no ar + extensão WhatsApp 2.5.0
 
+**29/09 (sessão do Code, madrugada→noite):** v8.55 no ar — 72ª onda NIVER-TAP-V1: ✓ do aniversariante voltou a funcionar no celular e no desktop (o fundo do arrasto engolia o toque) + erro de boot do `ncModal` (desde a v8.42) corrigido. Antes, nesta mesma sessão: v8.20 📅 na ficha do lead (56ª) e v8.29 prêmio padrão R$ 250 (57ª).
+
 **Depois do fechamento (28/09 noite):** v8.48 (PR #267) — AG-TIPO-INLINE-V1: tipo da atividade troca na própria linha da Agenda. Canônico duplicado de 05/09 ARQUIVADO. Períodos do catálogo de relatórios CONFIRMADOS por ele. **1º item de 29/09: guiar a criação do 2º perfil do Chrome (WhatsApp pessoal + extensão).**
 
 
@@ -25,6 +27,25 @@ Pasta que o Chrome dele carrega: `~/Teste Claude Code/crm-wt-insta/extensao-what
 4. Depois da fila: pasta de arquivos por oportunidade/cliente espelhada Drive + iCloud (canônico só como mapa).
 
 **Lições da sessão (não repetir):** iframe dentro do WhatsApp herda COEP require-corp → CRM só entra com COEP/CORP injetados por declarativeNetRequest · WhatsApp novo esconde telefone (`@lid`) → identidade da conversa = vínculo gravado, não busca · regra CSS de modo (`html.modo-wa .overlay`) escondeu modal que reusa a classe → esconder por id · folha (`.sheet-bd`) abaixo do modal (z85<95) → vincular abria atrás · merge via `gh` pode ser barrado pelo classificador do auto mode sem OK explícito dele na conversa.
+
+## 29/09/2026 (72ª onda) — NIVER-TAP-V1: o ✓ do aniversariante não funcionava no celular (nem no desktop) + erro de boot do ncModal (v8.55)
+
+Print dele do card Aniversariantes no iPhone: *"quando vai clicar no botão ele não funciona — o Davi já foi parabenizado mas não baixou"*.
+
+### Causa
+- O fundo verde do arrasto ("✓ parabenizei", `.niv-fundo`, `position:absolute; inset:0`) é **posicionado** e por isso pintava **por cima** da linha inteira, mesmo com opacidade 0. Todo toque no ✓ e no 💬 caía nele. O Playwright acusou na letra: *"<div class="niv-fundo"> intercepts pointer events"*. Valia no desktop também — o clique só "funcionava" nos testes antigos porque eles chamavam a função direto.
+- De carona: **erro em toda abertura do app** desde a NN-PUXAR-V1 (v8.42): `openNovoContato` agenda um `setTimeout` que lê `ncModal.dataset` 50 ms depois, mas o self-check do boot abre e fecha o modal antes → *"Cannot read properties of null (reading 'dataset')"* duas vezes por carga.
+
+### O que mudou
+- `.niv-fundo{pointer-events:none;z-index:0}` e `.niv-in{position:relative;z-index:1}` — o dedo chega no botão; o arrasto lateral continua igual.
+- `openNovoContato`: o timer checa se o modal ainda existe antes de ler `dataset`.
+- Invariante `NIVER-TAP-V1` (CSS) no `lpSelfCheck`. Nada gateado — é correção.
+
+### Prova
+- `teste-niver-tap.mjs` **8/8**: toque REAL no ✓ a 390 (e clique a 1280) marca feito, a pessoa some da lista e entra no chip "✓ 1 feito"; o 💬 recebe o ponteiro (hover de teste do Playwright sem interceptação); console limpo (o erro de boot sumiu: `pageerrors 0`).
+- Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto. Testes de scratchpad defasados seguem como antes (não é regressão).
+
+---
 
 ## 🟢 28/09/2026 — 28/09/2026 — v8.42 no ar · 71ª onda: Novo negócio puxa do CRM (NN-PUXAR-V1)
 
