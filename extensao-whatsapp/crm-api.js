@@ -438,6 +438,22 @@ async function vincAchar(keys){
   const f=await lpcFrescos([donos[0]]); const row=(f&&f[0])||donos[0];
   try{ await vincLocal(keys,row.id,row.dados&&row.dados.nome); }catch(_){}
   return row; }
+/* 2.6.0 MULTI-NEG: os negócios da MESMA pessoa (pessoaId) + as empresas do Vida em Grupo onde ela é contato
+   (dados.pjContatos[].ct — VG-EMPRESA-V1 do CRM). Lê do cache (lpcAll); o card de cada um é relido ao abrir. */
+async function lpNegocios(id){
+  const rows=(await lpcAll()).filter(r=>r&&r.dados&&!_lpcEhBn(r));
+  const eu=rows.find(r=>String(r.id)===String(id)); if(!eu) return [];
+  const pid=eu.dados.pessoaId;
+  const irmaos=pid?rows.filter(r=>r.dados.pessoaId===pid):[eu];
+  const ids=new Set(irmaos.map(r=>String(r.id)));
+  const out=irmaos.map(r=>({id:String(r.id),funil:r.dados.funil||'nn',etapa:r.dados.etapa||'',nome:r.dados.nome||'',papel:null}));
+  rows.forEach(r=>{ const d=r.dados; if(!(d.funil==='vg'||d.funil==='vg-bc')||ids.has(String(r.id))) return;
+    const x=(Array.isArray(d.pjContatos)?d.pjContatos:[]).find(p=>p&&p.ct&&ids.has(String(p.ct)));
+    if(x) out.push({id:String(r.id),funil:d.funil,etapa:d.etapa||'',nome:d.nome||'',papel:x.papel||'outro',principal:!!x.principal}); });
+  if(!out.some(o=>o.id===String(id))) out.unshift({id:String(id),funil:eu.dados.funil||'nn',etapa:eu.dados.etapa||'',nome:eu.dados.nome||'',papel:null});
+  return out;
+}
+async function lpcUm(id){ const f=await lpcFrescos([{id}]); if(f&&f[0]&&f[0].dados) return f[0]; return (await lpcAll()).find(r=>String(r.id)===String(id))||null; }
 async function lpLookup(rawPhone,chatName,keys){
   if(keys&&keys.length){ let row=null; try{ row=await vincAchar(keys); }catch(e){ if(e.code==='auth') throw e; }
     if(row&&row.dados){ let carteira=[]; try{ carteira=await lpFindByPhone(rawPhone); }catch(_){}
