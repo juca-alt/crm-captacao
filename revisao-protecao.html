@@ -1300,6 +1300,7 @@ body.modo-apresenta .so-consultor.mesmo-cliente{display:none!important}
           <label for="cx_c_vit">♾️ Outro vitalício<input class="cx-num" id="cx_c_vit" inputmode="numeric" value="0"></label>
           <label for="cx_c_pr">🛡️ Investimento /mês<input class="cx-num" id="cx_c_pr" inputmode="numeric" value="1.200"></label>
         </div>
+        <small class="cx-pm" id="cx_teto" role="status" hidden></small>
         <div class="cx-mini"><span>🦴 % pago pela fratura</span><input type="range" id="cx_frp" min="5" max="100" step="5" value="25"><b id="cx_v_frp"></b></div>
       </form>
       <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
@@ -2086,6 +2087,7 @@ function selfTest(){
     chk2('T9 Médico 60 mil → líquido 33.000; cônjuge 10 mil, padrão 40 mil → buraco 30.000', Math.round(m9.liq) === 33000 && Math.round(m9.gap) === 30000 && CX_PRESETS.saude.fam === true);
     const m10 = cxMotor(q({prof:'saude', ded:[15,10,5,15], fam:true, rm:10000, cv:40000, edu:300000, anosP:18}));
     chk2('T10 Se faltar precisa ~4,3 mi, cobre 1 mi, selo 🔴', m10.needM > 4.25e6 && m10.needM < 4.35e6 && m10.covM === 1000000 && cxSt(m10.covM/m10.needM)[0] === 'cx-bad');
+    chk2('T6 tetos: ossos 500 mil → 300 mil; diária 5 mil → 3 mil; autonomia 3 mi → 2 mi; abaixo do teto fica', cxTeto('c_brb',500000) === 300000 && cxTeto('c_hc',5000) === 3000 && cxTeto('c_pa',3e6) === 2e6 && cxTeto('c_brb',200000) === 200000 && cxTeto('c_inv',9e6) === 9e6);
     chk2('T2 CLT não tem "Impostos" (chips de regime somem)', !CX_PRESETS.clt.d.some(d => /Impostos/.test(d[1])));
   }
   return {ok, total, bad};
@@ -6590,6 +6592,10 @@ const CX_PRESETS = {
   empresario:{nome:'💼 Só empresário', bruto:'Pró-labore bruto /mês', d:[['🏛️','INSS',11],['🧾','Imposto de renda',15]], emp:true}
 };
 const CX_REGIMES = [['mei','🟢 MEI',5],['simples','🔵 Simples',10],['presumido','🟣 Presumido',15],['real','🟠 Lucro Real',18],['pf','🧑 Pessoa física',27.5]];
+/* T3 · TETOS (29/09): o que a Prudential não aceita acima disso não pode aparecer na conversa — a UI trava no
+   teto e avisa em uma linha. (Cirurgia ampliada também tem teto de 300 mil, mas não tem campo na calculadora.) */
+const CX_TETOS = {c_brb:[300000,'🦴 Quebra de ossos'], c_hc:[3000,'🛏️ Diária internado'], c_pa:[2000000,'🤝 Perda de autonomia']};
+function cxTeto(k, v){ const t = CX_TETOS[k]; return t && v > t[0] ? t[0] : v; }
 const cxBrl = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
 const cxCap = v => v >= 1e6 ? 'R$ ' + (v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1}) + ' mi' : v >= 1e4 ? 'R$ ' + Math.round(v/1e3).toLocaleString('pt-BR') + ' mil' : cxBrl(v);
 const cxMensal = t => Math.pow(1+t,1/12)-1;
@@ -6676,7 +6682,7 @@ function cxLer(){
   return {prof, sexo:cx$('sexo').value, idade:Math.round(cxN('idade')), bruto:cxN('bc'), ded:P.d.map((d,k)=>cxN('d'+k)),
     emp:cx$('temEmp').checked, bs:cxN('bs'), mg:cxN('mg'), pc:cxN('pc'), fam:cx$('temFam').checked, rm:cxN('rm'), edu:cxN('edu'), anosP:cxN('anosP'),
     cv:cxN('cv'), pt:cxN('pt'), tx:cxN('tx'), mdg:cxN('mdg'), dfr:cxN('dfr'), frp:cxN('frp'),
-    c:{morte:cxN('c_morte'), fam:cxN('c_fam'), inv:cxN('c_inv'), pa:cxN('c_pa'), dg:cxN('c_dg'), brb:cxN('c_brb'), hc:cxN('c_hc'), vs:cxN('c_vs'), vit:cxN('c_vit'), pr:cxN('c_pr')}};
+    c:{morte:cxN('c_morte'), fam:cxN('c_fam'), inv:cxN('c_inv'), pa:cxTeto('c_pa',cxN('c_pa')), dg:cxN('c_dg'), brb:cxTeto('c_brb',cxN('c_brb')), hc:cxTeto('c_hc',cxN('c_hc')), vs:cxN('c_vs'), vit:cxN('c_vit'), pr:cxN('c_pr')}};
 }
 function cxBuildRegime(){
   const P = CX_PRESETS[cx$('prof').value], idx = P.d.findIndex(d => /Impostos/.test(d[1]));
@@ -6712,7 +6718,11 @@ function cxRender(){
   const G = (t, cards) => cards.join('') ? `<div class="cx-grp-h">${t}</div><div class="cx-risks">${cards.join('')}</div>` : '';
   cx$('out').innerHTML = G('👶 Se faltar', [R.morte||'', R.vit]) + G('🦽 Se não puder trabalhar', [R.inv, R.pa, R.dg]) + G('🛏️ Dia a dia', [R.fr, R.hc]);
 }
-function cxFmtNum(el){ const v = cxN(el.id.slice(3)); el.value = v ? Math.round(v).toLocaleString('pt-BR') : '0'; }
+function cxFmtNum(el){ const k = el.id.slice(3), bruto = cxN(k), v = cxTeto(k, bruto); el.value = v ? Math.round(v).toLocaleString('pt-BR') : '0';
+  const av = cx$('teto'); if (!av) return;
+  if (v < bruto){ av.textContent = `⚠️ ${CX_TETOS[k][1]}: o máximo é ${cxBrl(CX_TETOS[k][0])} — ajustei para o teto.`; av.hidden = false; }
+  else if (av.dataset.k === k || !av.dataset.k) av.hidden = true;
+  if (v < bruto) av.dataset.k = k; }
 function cxIniciar(){
   if (cxPronto || !document.getElementById('cxRoot')) return;
   const sel = cx$('prof'); Object.entries(CX_PRESETS).forEach(([k,p]) => { const o = document.createElement('option'); o.value = k; o.textContent = p.nome; sel.appendChild(o); });
