@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.58 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.59 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2059,6 +2059,7 @@ function salvar(opts){ if(window.CONTA_TROCANDO) return;
   const _now=new Date().toISOString(), _doServidor=!!(opts&&opts.doServidor);   /* BUGS-V7: a foto inicial é tirada em carregar(); 'primeira foto' aqui engolia a 1ª edição em cache vazio */
   (S.contatos||[]).forEach(c=>{
     if(!c||c.id==null) return;
+    if(!_doServidor) recCarimbar(c);             /* REC-TIMING-V1: rec nova ganha a data de hoje (só se vazia) */
     const k=String(c.id), j=JSON.stringify(c);
     if(_lpcLast[k]===j) return;                 // não mudou
     if(_doServidor) return;                       // v7.43.4: merge do servidor nunca marca nem recarimba
@@ -4242,6 +4243,7 @@ function nnCard(c){
     ${ehEmpresa(c)?pjCardHtml(c):`<div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
     <div class="nc-sub">${esc(telBR(c.telefone))}</div>`}
     ${novoOn('card-ta-status')?cardEtapaInfoHtml(c):etStatusChip(c)}
+    ${cicloChipHtml(c)}
     ${ehEmpresa(c)?'':cliChipsHtml(clienteDe(c,{semNegocios:true}))}
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
@@ -4840,6 +4842,45 @@ function bcMoveEtapa(id,etapa,cardEl,colEl,antesId){
   requestAnimationFrame(()=>setTimeout(render,0));
 }
 /* ═══════════════ MOTOR: RESULTADO DE CONTATO (funil por ação) ═══════════════ */
+/* ═══ REC-TIMING-V1 · T2 (29/09) ═══════════════════════════════════════════════════════════
+   Pedido dele: "recomendação nova é mais quente; o card não mostra QUANDO a rec chegou, então não dá pra medir
+   o tempo até o 1º contato". Campo dados.rec_recebida_em (AAAA-MM-DD), só no FUNIL (Estoque fica de fora).
+   Carimbo automático no ponto único de salvar: negócio CRIADO HOJE (criadoEm) que veio de recomendação
+   (recDoFunil = recomendante, ou origem que é nome de pessoa) e está sem data → hoje. Nunca carimba negócio
+   antigo nem sobrescreve data preenchida (idempotente). Editável na ficha. */
+function recCarimbar(c){
+  if(!c||c.rec_recebida_em||c.funil==='bn') return false;
+  if(String(c.criadoEm||'').slice(0,10)!==hojeISO()) return false;
+  if(typeof recDoFunil!=='function'||!recDoFunil(c)) return false;
+  c.rec_recebida_em=hojeISO(); return true; }
+function recDataHtml(c){ if(!c||c.funil==='bn') return '';
+  const tem=!!c.rec_recebida_em, rec=typeof recDoFunil==='function'?recDoFunil(c):'';
+  if(!tem&&!rec) return '';
+  return `<div class="sec" id="recDataBox"><div class="linha-form" style="align-items:center;gap:8px;flex-wrap:wrap">
+      <label style="font-size:12.5px;color:var(--muted)">📅 Recomendação recebida em
+        <input id="drwRecEm" type="date" value="${esc(c.rec_recebida_em||'')}" onchange="recDataSalvar(this.value)" style="margin-left:5px"></label>
+      ${rec?`<span style="font-size:12px;color:var(--muted)">🙌 ${esc(rec)}</span>`:''}
+      ${tem?'':'<span style="font-size:11.5px;color:var(--muted)">sem data — informe quando a rec chegou</span>'}</div></div>`; }
+function recDataSalvar(v){ const c=ct(); if(!c) return; v=String(v||'').trim();
+  if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v)){ toast('Data inválida',false); return; }
+  const antes=c.rec_recebida_em||''; if(v===antes) return;
+  if(v) c.rec_recebida_em=v; else delete c.rec_recebida_em;
+  interacoesDe(c).push({id:uid(),k:'nota',l:'📅 Recomendação recebida em: '+(v?dataBR(v):'(apagada)'),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
+  salvar(); renderDrawer(); render(); }
+window.recDataSalvar=recDataSalvar;
+/* ═══ CICLO-ETAPA-V1 (29/09) · tempo na etapa ════════════════════════════════════════════════
+   Pedido dele: "bota nos cards das oportunidades do funil o cycle time — quanto tempo a oportunidade está
+   naquela etapa; aí vamos medindo o ciclo de venda". Entrada na etapa = a última mudança de etapa registrada
+   (logEtapa, interação k:'etapa' com para=etapa atual); sem registro → data de entrada no funil. */
+function cicloEntradaEtapa(c){ if(!c) return null;
+  const mv=(c.interacoes||[]).filter(x=>x&&x.k==='etapa'&&x.para===c.etapa&&x.dia).map(x=>x.dia).sort();
+  if(mv.length) return {iso:mv[mv.length-1],fonte:'movimento'};
+  const e=entradaFunil(c); return e&&e.iso?{iso:e.iso,fonte:e.fonte}:null; }
+function cicloDiasNaEtapa(c,hoje){ const e=cicloEntradaEtapa(c); if(!e) return null;
+  const d=Math.round((new Date((hoje||hojeISO())+'T12:00:00')-new Date(e.iso+'T12:00:00'))/864e5); return d<0?0:d; }
+function cicloChipHtml(c){ if(!c||etEhEnc(c)) return ''; const d=cicloDiasNaEtapa(c); if(d==null) return '';
+  const e=cicloEntradaEtapa(c), cor=d>=30?'var(--verm,#dc2626)':d>=14?'#b45309':'var(--muted)';
+  return `<div class="nc-ciclo" style="font-size:10.5px;margin-top:4px;color:${cor}" title="Na etapa ${esc(ET_LABEL[c.etapa]||c.etapa||'')} desde ${dataBR(e.iso)}${e.fonte==='movimento'?'':' (sem registro de movimento: conta da entrada no funil)'}">⏱️ ${d===0?'entrou hoje':d+'d'} em ${esc(ET_LABEL[c.etapa]||c.etapa||'')}</div>`; }
 function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }
 /* GC-08 (07/09): registrar um toque/status manual na jornada da rec/contato */
 let JORNADA_TUDO=false;
@@ -6175,6 +6216,7 @@ function renderDrawer(){
       ${novoOn('multi-neg')?'':drwIrmaosHtml(c)+pjNaPessoaHtml(c)}
       ${drwCarteiraHtml(c)}
       ${drwPessoaHtml(c)}`}
+      ${recDataHtml(c)}
       <div class="sec">
         <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Etapa de comercialização</span>
           <select id="drwFunil" class="drw-funil-sel" title="Esteira em que este contato é trabalhado" style="font-size:12px;font-weight:400;max-width:230px;margin-left:auto" onchange="drwPedirFunil(this.value)">
@@ -21337,6 +21379,18 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const a=soBuscaBate(s,'fulana')&&soBuscaBate(s,'zz bus')&&soBuscaBate(s,'234567')&&soBuscaBate(s,'98765')&&soBuscaBate(s,'ligar')&&soBuscaBate(s,'reaj')&&!soBuscaBate(s,'ciclano')&&soBuscaBate(s,'');
       const src=String(viewSolicitacoesV2); const b=src.includes('class="so-bar1"')&&src.indexOf('id="so-q"')<src.indexOf('soNova()')&&(src.match(/soBuscaBate\(s,FSO\.q\)/g)||[]).length>=2;
       return a&&b; })());
+    ok('REC-TIMING-V1 T2: rec nova criada hoje ganha rec_recebida_em=hoje (recomendante ou origem-pessoa); sem rec, antiga, Estoque ou já preenchida → não mexe (idempotente)', (()=>{ const h=hojeISO();
+      const a={id:'rt1',nome:'Zz A',funil:'nn',criadoEm:h,recomendante:'Beltrano'}, b={id:'rt2',nome:'Zz B',funil:'nn',criadoEm:h}, o={id:'rt3',nome:'Zz O',funil:'nn',criadoEm:'2026-01-10',recomendante:'Beltrano'},
+            e={id:'rt4',nome:'Zz E',funil:'bn',criadoEm:h,recomendante:'Beltrano'}, f={id:'rt5',nome:'Zz F',funil:'nn',criadoEm:h,recomendante:'Beltrano',rec_recebida_em:'2026-09-01'}, g={id:'rt6',nome:'Zz G',funil:'nn',criadoEm:h,origem:'Fulano de Tal'};
+      const r1=recCarimbar(a)&&a.rec_recebida_em===h&&!recCarimbar(a)&&a.rec_recebida_em===h;
+      const r2=!recCarimbar(b)&&!b.rec_recebida_em&&!recCarimbar(o)&&!o.rec_recebida_em&&!recCarimbar(e)&&!e.rec_recebida_em&&!recCarimbar(f)&&f.rec_recebida_em==='2026-09-01'&&recCarimbar(g)&&g.rec_recebida_em===h;
+      const src=[...document.scripts].map(x=>x.textContent).join('\n'); const r3=src.includes('if(!_doServidor) recCarimbar(c);')&&src.includes('${recDataHtml(c)}')&&recDataHtml(b)===''&&/drwRecEm/.test(recDataHtml(a));
+      return r1&&r2&&r3; })());
+    ok('CICLO-ETAPA-V1: card mostra há quantos dias está na etapa (última mudança pra ela; sem registro → entrada no funil); encerrado não mostra', (()=>{ const h=hojeISO();
+      const c={id:'ce1',nome:'Zz',funil:'nn',etapa:'TA',criadoEm:isoAddDias(h,-20),interacoes:[{k:'etapa',para:'TA',dia:isoAddDias(h,-12)},{k:'etapa',para:'C2',dia:isoAddDias(h,-5)},{k:'nota',dia:h}]};
+      const c2={id:'ce2',nome:'Zz2',funil:'nn',etapa:'TA',criadoEm:isoAddDias(h,-3),interacoes:[]};
+      const enc={id:'ce3',nome:'Zz3',funil:'nn',etapa:(ETAPAS_ENCERR[0]||'Não'),criadoEm:isoAddDias(h,-3),interacoes:[]};
+      return cicloDiasNaEtapa(c)===12&&cicloDiasNaEtapa(c2)===3&&cicloChipHtml(enc)===''&&/12d em/.test(cicloChipHtml(c))&&nnCard(c).includes('nc-ciclo'); })());
     ok('SOLIC-VICTOR-V1: autor = quem está LOGADO (Victor operando a base do Gustavo grava "victor"); editar não troca o dono (lp_email); evento vai com o dono da solicitação; as 6 chaves do módulo viraram MODS def:false (liga por pessoa)', (()=>{ const P=PERFIL, SE=SO_EMAIL, D={...DELEG}; try{
       const RB=ESC.rotulos; ESC.rotulos=[{rotulo:'gustavo',dono_email:'g@x'},{rotulo:'daniel',dono_email:'d@x'}]; PERFIL={email:'v@x',papel:'lp',modulos:{}}; DELEG.eu='v@x'; SO_EMAIL='g@x';
       const a=soQuemSou()==='victor'; DELEG.eu='d@x'; const a3=soQuemSou()==='daniel'; ESC.rotulos=RB;
