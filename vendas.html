@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.48 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.49 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1813,6 +1813,7 @@ function funBuscaHtml(ns,total){ const v=FUN_BUSCA[ns]||'';
 function funBuscaSet(ns,v,ja){ FUN_BUSCA[ns]=v; clearTimeout(_funBuscaT); _funBuscaT=setTimeout(()=>{ render(); const el=document.getElementById('fun-q-'+ns); if(el&&!ja){ el.focus(); try{ const n=el.value.length; el.setSelectionRange(n,n); }catch(_){} } },ja?0:220); }
 function funBuscaBate(c,q){ const n=normKey(q); if(!n) return true; const d=n.replace(/\D/g,'');
   if(d.length>=4&&pTels(c).some(t=>String(t).replace(/\D/g,'').includes(d))) return true;
+  if(Array.isArray(c.pjContatos)&&c.pjContatos.some(x=>normKey(x.nome||'').includes(n)||(d.length>=4&&String(x.tel||'').replace(/\D/g,'').includes(d)))) return true;   /* VG-EMPRESA-V1 */
   return [c.nome,c.profissao,c.recomendante,c.origem,c.notas,c.contexto].some(x=>x&&normKey(String(x)).includes(n)); }
 function funFiltrosSel(ns){ const on=(FUN_STATUS[ns]?1:0)+(FUN_LISTA[ns]?1:0);
   return `${funStatusSel(ns)}${funListaSel(ns)}${on?`<button class="btn btn-ghost btn-mini" onclick="FUN_STATUS['${ns}']='';FUN_LISTA['${ns}']='';render()" title="Tirar os filtros">✕ limpar filtro${on>1?'s':''}</button>`:''}`; }
@@ -4160,12 +4161,12 @@ function nnCard(c){
   const _tar=tarChipCard(c);
   const _recBadge=(_rp||_rc)?`<span class="nnrec" title="Recomendações pedidas / coletadas">🤝 ${_rc}/${_rp||_rc}</span>`:'';
   return `<div class="nncard" draggable="true" data-id="${esc(c.id)}" onclick="abrirContato('${esc(c.id)}')">
-    <div class="nc-nome">${esc(c.nome)}</div>
+    <div class="nc-nome">${ehEmpresa(c)?'🏢 ':''}${esc(c.nome)}</div>
     ${(()=>{ const t=negTitulo(c); return t?`<div class="nc-oq" title="O que se vende neste negócio (${esc(negTituloFonte(c))})">${esc(t)}</div>`:''; })()}
-    <div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
-    <div class="nc-sub">${esc(telBR(c.telefone))}</div>
+    ${ehEmpresa(c)?pjCardHtml(c):`<div class="nc-sub">${esc(c.profissao||'—')}${c.idade?(' · '+esc(c.idade)+'a'):''}</div>
+    <div class="nc-sub">${esc(telBR(c.telefone))}</div>`}
     ${novoOn('card-ta-status')?cardEtapaInfoHtml(c):etStatusChip(c)}
-    ${cliChipsHtml(clienteDe(c,{semNegocios:true}))}
+    ${ehEmpresa(c)?'':cliChipsHtml(clienteDe(c,{semNegocios:true}))}
     ${valorTag(c)||`<span class="vneg" style="opacity:.6;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Informar o prêmio mensal deste negócio">R$ definir prêmio</span>`}
     ${pmDe(c)?`<span class="vneg" style="margin-left:4px;background:transparent;border:1px solid var(--linha);color:${probCor(probDe(c))}" title="Probabilidade de virar apólice${probManual(c)==null?' (padrão da etapa '+esc(c.etapa)+')':' (definida por você)'}">${probDe(c)}%${probManual(c)==null?'':' ✓'}</span>`:''}
     ${(prevDe(c,'fech')||prevDe(c,'emis'))?`<div style="font-size:10.5px;margin-top:4px;color:${prevVencida(prevDe(c,'fech'))?'var(--verm)':'var(--muted)'}" title="Previsão de fechamento · emissão">${prevDe(c,'fech')?'🎯 '+dataBR(prevDe(c,'fech')):''}${prevDe(c,'fech')&&prevDe(c,'emis')?' · ':''}${prevDe(c,'emis')?'📄 '+dataBR(prevDe(c,'emis')):''}</div>`:''}
@@ -5769,6 +5770,147 @@ function drwIrmaosHtml(c){
   </div>`;
 }
 
+/* ═══ VG-EMPRESA-V1 (29/09) ════════════════════════════════════════════════════
+   Palavra dele olhando o Pipe Vida em Grupo: "aqui o cliente é uma empresa… a Amanda é
+   minha cliente de Vida Individual, e também do Vida em Grupo, mas no caso a empresa dela
+   (Império Vidros). Ela é o contato da empresa, assim como outros contatos lá com quem
+   acabamos tendo tratativas — seriam cadastrados dentro da empresa."
+   Modelo: no pipe VG (vg e vg-bc) o NEGÓCIO é a empresa. c.nome = nome da empresa;
+   c.pj = {cnpj, ramo, cidade, vidas, seguradora, renovacao}; c.pjContatos = [{id, nome, tel,
+   papel, principal, ct}] — ct = id do negócio da pessoa no CRM, quando ela foi puxada de lá
+   (liga sem duplicar). O telefone do negócio = o do contato ⭐ principal (Ligar, WhatsApp e a
+   extensão acham a empresa por ele). O negócio da empresa NUNCA leva pessoaId: pessoaPropagar
+   copiaria nome/telefone da pessoa por cima do nome da empresa. Prêmio mensal = o do
+   "Valor do negócio" (não duplica). Gate NOVO_SO_MEU['vg-empresa']. */
+const VG_FUNIS=['vg','vg-bc'];
+const PJ_PAPEIS=[['decisor','Decisor'],['rh','RH'],['fin','Financeiro'],['socio','Sócio'],['outro','Outro']];
+const PJ_CAMPOS=[['cnpj','CNPJ','text'],['ramo','Ramo','text'],['cidade','Cidade','text'],['vidas','Nº de vidas','number'],['seguradora','Seguradora','text'],['renovacao','Renovação','date']];
+function ehEmpresa(c){ return !!(c&&VG_FUNIS.includes(c.funil)&&novoOn('vg-empresa')); }
+function pjDe(c){ if(!c.pj||typeof c.pj!=='object') c.pj={}; return c.pj; }
+function pjContatos(c){ return Array.isArray(c&&c.pjContatos)?c.pjContatos:[]; }
+function pjPrincipal(c){ const l=pjContatos(c); return l.find(x=>x.principal)||l[0]||null; }
+function pjPapel(k){ const p=PJ_PAPEIS.find(x=>x[0]===k); return p?p[1]:'Contato'; }
+/* uma regra só: 1 principal, e o telefone do negócio é o dele */
+function pjNormalizar(c){ const l=pjContatos(c); if(!l.length) return c;
+  let p=l.find(x=>x.principal); if(!p){ p=l[0]; }
+  l.forEach(x=>{ x.principal=(x===p); });
+  if(p.tel) c.telefone=telLimpa(p.tel);
+  return c; }
+/* empresas onde esta pessoa é contato (ficha da pessoa → "🏢 Contato de empresa") */
+function pjEmpresasDaPessoa(c,todos){ if(!c) return [];
+  const ids=new Set([String(c.id)].concat(pessoaIrmaos(c,todos).map(o=>String(o.id))));
+  const tk=telKey(c.telefone), nk=normKey(c.nome||'');
+  return (todos||S.contatos||[]).filter(e=>e!==c&&VG_FUNIS.includes(e.funil)&&escVisivel(e)&&pjContatos(e).some(x=>
+    (x.ct&&ids.has(String(x.ct))) || (!x.ct&&((tk&&telKey(x.tel)===tk)||(nk&&normKey(x.nome||'')===nk))) ))
+    .map(e=>({e, x:pjContatos(e).find(x=>(x.ct&&ids.has(String(x.ct)))||(!x.ct&&((tk&&telKey(x.tel)===tk)||(nk&&normKey(x.nome||'')===nk))))})); }
+function pjNaPessoaHtml(c){ if(!novoOn('vg-empresa')||ehEmpresa(c)) return '';
+  const l=pjEmpresasDaPessoa(c); if(!l.length) return '';
+  return `<div class="sec"><h3>🏢 Contato de empresa <span class="badge b-azul">${l.length}</span></h3>
+    <div style="display:flex;flex-direction:column;gap:5px">${l.map(({e,x})=>`<button class="btn btn-ghost btn-mini" style="text-align:left;display:block;width:100%;min-height:44px" onclick="abrirContato('${esc(e.id)}')">
+      <b>${esc(e.nome)}</b> <span style="color:var(--muted)">· ${esc(pjPapel(x.papel))}${x.principal?' ⭐':''} · ${esc(funilNome(e.funil))}</span> ${badgeEtapa(e.etapa)}</button>`).join('')}</div></div>`; }
+function pjCardHtml(c){ const p=pjPrincipal(c), pj=pjDe(c), n=pjContatos(c).length;
+  const info=[pj.vidas?pj.vidas+' vidas':'',pj.seguradora||'',pj.renovacao?'renova '+dataBR(pj.renovacao):''].filter(Boolean).join(' · ');
+  return `<div class="nc-sub">${p?`👤 ${esc(p.nome)} · ${esc(pjPapel(p.papel))}`:'<span style="color:var(--verm)">sem contato</span>'}${n>1?` <span style="color:var(--muted)">+${n-1}</span>`:''}</div>
+    <div class="nc-sub">${esc(telBR(c.telefone))}</div>${info?`<div class="nc-sub">${esc(info)}</div>`:''}`; }
+function pjDrawerHtml(c){ const pj=pjDe(c), l=pjContatos(c), p=pjPrincipal(c);
+  const campo=(k,rot,tipo)=>`<div style="flex:1 1 140px;min-width:130px"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">${rot}</label>
+    <input id="pj_${k}" type="${tipo}" ${tipo==='number'?'inputmode="numeric" min="0"':''} value="${esc(pj[k]==null?'':pj[k])}" style="width:100%" onchange="pjSalvarCampo('${k}',this.value)"></div>`;
+  const resumo=[pj.cnpj?'CNPJ '+pj.cnpj:'',pj.vidas?pj.vidas+' vidas':'',pj.seguradora||''].filter(Boolean).join(' · ');
+  const linha=x=>{ const tel=telBR(x.tel), wa=waHref(x.tel);
+    return `<div class="card" style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-mini" style="min-height:44px;min-width:44px" onclick="pjPrincipalSet('${esc(x.id)}')" title="${x.principal?'Contato principal — aparece no card e é o telefone do negócio':'Tornar o contato principal'}">${x.principal?'⭐':'☆'}</button>
+        <div style="flex:1;min-width:120px"><b>${esc(x.nome)}</b><div style="font-size:12px;color:var(--muted)">${esc(tel||'sem telefone')}</div></div>
+        <select style="min-height:44px" onchange="pjPapelSet('${esc(x.id)}',this.value)" title="Papel na empresa">${PJ_PAPEIS.map(r=>`<option value="${r[0]}" ${x.papel===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none;min-height:40px" href="${esc(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
+        ${telHref(x.tel)?`<a class="btn btn-s btn-mini" style="text-decoration:none;min-height:40px" href="${esc(telHref(x.tel))}">📞 Ligar</a>`:''}
+        ${x.ct&&S.contatos.some(o=>String(o.id)===String(x.ct))?`<button class="btn btn-s btn-mini" style="min-height:40px" onclick="abrirContato('${esc(x.ct)}')" title="Abrir o negócio desta pessoa">👤 Ficha dela</button>`:''}
+        <button class="btn btn-ghost btn-mini" style="min-height:40px;margin-left:auto" onclick="pjRemover('${esc(x.id)}')" title="Tirar da empresa (a pessoa continua no CRM)">✕ tirar</button>
+      </div></div>`; };
+  return `<div class="sec"><details>
+      <summary style="cursor:pointer;font-weight:700;font-size:14px">🏢 Empresa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(resumo)}</span></summary>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <div style="flex:1 1 100%"><label style="display:block;font-size:11px;color:var(--muted);margin-bottom:3px">Nome da empresa</label>
+          <input id="pj_nome" value="${esc(c.nome)}" style="width:100%" onchange="pjSalvarCampo('nome',this.value)"></div>
+        ${PJ_CAMPOS.map(f=>campo(f[0],f[1],f[2])).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">O prêmio mensal da apólice fica em Valor do negócio. Cada campo salva ao sair dele.</div>
+    </details></div>
+    <div class="sec"><h3>👥 Contatos da empresa <span class="badge b-azul">${l.length}</span></h3>
+      <div style="display:flex;flex-direction:column;gap:6px">${l.map(linha).join('')||'<div style="font-size:12.5px;color:var(--verm)">Nenhum contato ainda — adicione quem fala pela empresa.</div>'}</div>
+      <div id="pjAddBox" style="margin-top:8px"><button class="btn btn-p btn-mini" style="min-height:44px" onclick="pjAddAbrir()">＋ Contato</button></div>
+      ${p?`<div style="font-size:11px;color:var(--muted);margin-top:6px">⭐ ${esc(p.nome)} é o principal: aparece no card e o telefone dele é o do negócio (Ligar, WhatsApp, extensão).</div>`:''}
+    </div>`; }
+function pjSalvarCampo(k,v){ const c=ct(); if(!c) return; v=String(v==null?'':v).trim();
+  if(k==='nome'){ if(!v){ toast('A empresa precisa de nome'); renderDrawer(); return; } c.nome=v; }
+  else { const pj=pjDe(c); if(k==='vidas') v=v?Math.max(0,parseInt(v,10)||0):''; if(v===''||v==null) delete pj[k]; else pj[k]=v; }
+  salvar(); renderDrawer(); render(); }
+function pjAtual(id){ const c=ct(); return c?[c,pjContatos(c).find(x=>x.id===id)]:[null,null]; }
+function pjPrincipalSet(id){ const [c,x]=pjAtual(id); if(!x) return; pjContatos(c).forEach(o=>{ o.principal=(o===x); }); pjNormalizar(c); salvar(); renderDrawer(); render(); toast(`⭐ ${x.nome.split(' ')[0]} é o contato principal`,true); }
+function pjPapelSet(id,v){ const [c,x]=pjAtual(id); if(!x) return; x.papel=v; salvar(); render(); }
+function pjRemover(id){ const [c,x]=pjAtual(id); if(!x) return; const antes=c.pjContatos.slice(), telAntes=c.telefone;
+  c.pjContatos=c.pjContatos.filter(o=>o!==x); pjNormalizar(c); salvar(); renderDrawer(); render();
+  toastDesfazer(`${x.nome.split(' ')[0]} saiu da empresa`,()=>{ c.pjContatos=antes; c.telefone=telAntes; salvar(); renderDrawer(); render(); }); }
+/* ＋ Contato: puxa do CRM (mesma busca do Novo negócio: funil + carteira + estoque) ou cria só nome/telefone */
+let PJ_RES=[];
+function pjAddAbrir(){ const box=document.getElementById('pjAddBox'); if(!box) return;
+  box.innerHTML=`<div class="card" style="padding:10px;display:flex;flex-direction:column;gap:8px">
+    <input id="pjBusca" placeholder="Nome ou telefone de quem já está no CRM" autocomplete="off" spellcheck="false" oninput="pjBuscaRender()" style="width:100%">
+    <div id="pjRes" style="max-height:min(240px,40vh);overflow:auto"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <select id="pjPapelNovo" style="min-height:44px">${PJ_PAPEIS.map(r=>`<option value="${r[0]}">${r[1]}</option>`).join('')}</select>
+      <span style="flex:1"></span><button class="btn btn-s btn-mini" style="min-height:44px" onclick="renderDrawer()">Cancelar</button></div></div>`;
+  pjBuscaRender(); setTimeout(()=>{ const i=document.getElementById('pjBusca'); if(i) i.focus(); },30); }
+function pjBuscaRender(){ const i=document.getElementById('pjBusca'), box=document.getElementById('pjRes'); if(!i||!box) return;
+  const q=i.value.trim(); PJ_RES=ncBuscar(q,8).filter(e=>!(ct()&&normKey(ct().nome)===e.k));
+  const dig=q.replace(/\D/g,''), soTel=dig.length>=8&&/^[\d\s()+\-.]+$/.test(q);
+  const novo=q?`<button type="button" class="btn btn-s btn-mini" style="min-height:44px;margin-top:6px" onclick="pjAddNovo()">➕ Criar “${esc(q)}” como contato novo${soTel?'':' (telefone depois)'}</button>`:'';
+  box.innerHTML=(PJ_RES.map((e,k)=>`<button type="button" onclick="pjAddPuxar(${k})" style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:48px;padding:8px 10px;border:0;border-bottom:1px solid var(--linha,#e5e7eb);background:transparent;text-align:left;font:inherit;cursor:pointer">
+      <b style="font-size:14px">${esc(e.nome)}</b><span style="font-size:12px;color:var(--muted)">${esc([e.tel,ncTags(e)].filter(Boolean).join(' · '))}</span></button>`).join('')
+    ||`<div style="font-size:12.5px;color:var(--muted);padding:4px 2px">${q?'Ninguém com esse nome ou telefone no CRM.':'Digite 2 letras do nome ou 4 dígitos do telefone.'}</div>`)+novo; }
+function pjAddCom(x){ const c=ct(); if(!c) return; if(!Array.isArray(c.pjContatos)) c.pjContatos=[];
+  const pp=document.getElementById('pjPapelNovo'); x.papel=(pp&&pp.value)||'outro'; x.id='pj'+uid(); x.principal=!c.pjContatos.length;
+  c.pjContatos.push(x); pjNormalizar(c); salvar(); renderDrawer(); render(); toast(`${x.nome.split(' ')[0]} entrou em ${c.nome}`,true); }
+function pjAddPuxar(k){ const e=PJ_RES[k]; if(!e) return; pjAddCom({nome:e.nome,tel:e.tel?telLimpa(e.tel):'',ct:e.ct||null}); }
+function pjAddNovo(){ const q=((document.getElementById('pjBusca')||{}).value||'').trim(); if(!q) return;
+  const dig=q.replace(/\D/g,''), soTel=dig.length>=8&&/^[\d\s()+\-.]+$/.test(q);
+  let nome=q, tel=''; if(soTel){ nome=(prompt('Nome do contato:')||'').trim(); if(!nome) return; tel=telLimpa(q); }
+  else { tel=telLimpa((prompt('Telefone de '+nome.split(' ')[0]+' (com DDD) — pode deixar em branco:')||'').trim()); }
+  pjAddCom({nome,tel,ct:null}); }
+function pjMetaPartes(c){ const pj=pjDe(c), p=pjPrincipal(c);
+  return [pj.cnpj?'CNPJ '+pj.cnpj:'', pj.ramo||'', pj.cidade||'', p?'👤 '+p.nome+' ('+pjPapel(p.papel)+')':'sem contato', c.telefone?telBR(c.telefone):''].filter(Boolean); }
+/* Novo negócio no VG = nova EMPRESA: nome* + CNPJ + vidas; ao salvar abre a ficha já no ＋ Contato */
+function pjNovaEmpresa(funil){ const fxm=fxMeta(funil); const antigo=document.getElementById('ncModal'); if(antigo) antigo.remove();
+  const lps=isMaster()? `<label style="font-size:12px">LP dono
+      <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
+  document.body.insertAdjacentHTML('beforeend',`
+  <div id="ncModal" data-funil="${esc(funil)}" data-modo="empresa" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+    <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
+      <h3 style="margin-bottom:12px">🏢 Nova empresa</h3>
+      <div class="sheet-chip on" style="margin-bottom:10px;justify-content:center;min-height:44px">${fxm[2]} ${esc(fxm[1])}</div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <input id="pjnNome" placeholder="Nome da empresa*">
+        <div style="display:flex;gap:8px"><input id="pjnCnpj" placeholder="CNPJ" style="flex:1"><input id="pjnVidas" type="number" inputmode="numeric" min="0" placeholder="Vidas" style="max-width:100px"></div>
+        ${lps}
+        <div style="font-size:12px;color:var(--muted)">Depois de salvar você adiciona os contatos (quem fala pela empresa) — puxando do CRM ou novos.</div>
+        <div class="msg-erro" id="ncErro" style="display:none;color:var(--verm);font-size:12px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+          <button class="btn btn-s" onclick="document.getElementById('ncModal').remove()">Cancelar</button>
+          <button class="btn btn-p" onclick="pjSalvarNovaEmpresa()">Salvar empresa</button>
+        </div></div></div></div>`);
+  setTimeout(()=>{ const i=document.getElementById('pjnNome'); if(i) i.focus(); },50); }
+function pjSalvarNovaEmpresa(){ const md=document.getElementById('ncModal'); if(!md) return; const v=id=>((document.getElementById(id)||{}).value||'').trim();
+  const nome=v('pjnNome'); if(!nome){ const e=document.getElementById('ncErro'); e.textContent='Falta o nome da empresa.'; e.style.display='block'; return; }
+  const fid=md.dataset.funil, lpSel=document.getElementById('ncLp'); const pj={}; if(v('pjnCnpj')) pj.cnpj=v('pjnCnpj'); if(v('pjnVidas')) pj.vidas=Math.max(0,parseInt(v('pjnVidas'),10)||0);
+  const c={ id:uid(), lp: lpSel? lpSel.value : escLpNovo(), nome, sexo:'—', idade:null, profissao:'—', telefone:'', estrelas:0, ance:null,
+    etapa:(ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade', funil:fid, origem:'—', trilha:'seguro', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
+    infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[], sitplan:null, pj, pjContatos:[] };
+  S.contatos.push(c); salvar(); md.remove(); toast(`🏢 ${nome} criada no ${fxMeta(fid)[1]} — agora os contatos`,true);
+  render(); abrirContato(c.id); setTimeout(pjAddAbrir,60); }
+Object.assign(window,{pjSalvarCampo,pjSalvarNovaEmpresa,pjNovaEmpresa,pjPrincipalSet,pjPapelSet,pjRemover,pjAddAbrir,pjBuscaRender,pjAddPuxar,pjAddNovo});
+
 /* ═══ FICHA RECOLHÍVEL V1 (31/08) ══════════════════════════════════════════
    Pedido dele olhando a ficha: "todo esse card quero poder encolher os tópicos
    ou expandir". A ficha do negócio tem 14 seções empilhadas — etapa, tarefas,
@@ -5895,8 +6037,8 @@ function renderDrawer(){
   $('#drawer').innerHTML=`
     <div class="drawer-head">
       <button class="fechar" onclick="fecharDrawer()">✕</button>
-      <div class="nome">${esc(c.nome)}</div>
-      <div class="meta">${esc(drwMetaPartes(c).concat(isMaster()?['LP: '+lpNome(c.lp)]:[]).join(' · '))}</div>
+      <div class="nome">${ehEmpresa(c)?'🏢 ':''}${esc(c.nome)}</div>
+      <div class="meta">${esc((ehEmpresa(c)?pjMetaPartes(c):drwMetaPartes(c)).concat(isMaster()?['LP: '+lpNome(c.lp)]:[]).join(' · '))}</div>
       <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${(()=>{const e=CT_EST_BY_K[ctEstado(c)];return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`;})()} ${badgeEtapa(c.etapa)}${quenteChip(c)} ${recomendanteChip(c,true)}
         ${telHref(c.telefone)? `<a class="btn btn-s btn-mini drw-acao" style="text-decoration:none" href="${esc(telHref(c.telefone))}">📞 Ligar</a>`:''}
         ${waHref(c.telefone)? `<a class="btn btn-s btn-mini drw-acao" style="text-decoration:none" href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
@@ -5910,13 +6052,14 @@ function renderDrawer(){
         <button class="btn btn-ghost btn-mini" id="drw-nada" onclick="drwSecsTodas(false)" title="Recolhe todos os tópicos desta ficha">⌃ Recolher tudo</button>
         <button class="btn ${DRW_ORG?'btn-p':'btn-ghost'} btn-mini" id="drw-org" onclick="drwOrgModo(${DRW_ORG?'false':'true'})" title="Mudar a ordem dos tópicos e esconder o que você não usa nesta ficha">⋮⋮ ${DRW_ORG?'pronto':'organizar'}</button>
       </div>
-      <div class="sec"><details>
+      ${ehEmpresa(c)?pjDrawerHtml(c):`<div class="sec"><details>
         <summary style="cursor:pointer;font-weight:700;font-size:14px">👤 Quem é a pessoa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(fichaPessoaResumo(c,'card'))}</span></summary>
         <div style="margin-top:8px">${fichaPessoaHtml(c,'card')}</div>
       </details></div>
       ${drwIrmaosHtml(c)}
+      ${pjNaPessoaHtml(c)}
       ${drwCarteiraHtml(c)}
-      ${drwPessoaHtml(c)}
+      ${drwPessoaHtml(c)}`}
       <div class="sec">
         <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span>Etapa de comercialização</span>
           <select id="drwFunil" class="drw-funil-sel" title="Esteira em que este contato é trabalhado" style="font-size:12px;font-weight:400;max-width:230px;margin-left:auto" onchange="drwPedirFunil(this.value)">
@@ -6908,6 +7051,7 @@ function openNovoContato(funil){
   /* FUNIL-PERGUNTA-V1 (04/09): "eu tô no funil da Base, crio oportunidade e ele joga pros Novos".
      O modal sempre pergunta o funil, já marcado pelo contexto (tela da Base → Base). */
   if(!funil) funil=(VIEW==='bc-funil'||VIEW==='cart-clientes'||VIEW==='cart-visao'||VIEW==='cart-oportunidades')?'bc':'nn';
+  if(ehEmpresa({funil})) return pjNovaEmpresa(funil);   /* VG-EMPRESA-V1: no Vida em Grupo o negócio é a empresa */
   const bc=funil==='bc'; const extra=!['nn','bc'].includes(funil); const fxm=extra?fxMeta(funil):null; // extra = funil novo (vg/prud/mfo)
   const antigo=document.getElementById('ncModal'); if(antigo) antigo.remove();
   const funilPicker=extra
@@ -16342,6 +16486,7 @@ const NOVO_SO_MEU={
   'solic-agenda': {o:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', desde:'2026-09-17'},
   'painel-wa':    {o:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', desde:'2026-09-18'},
   'pipes':        {o:'Pipes Vida em Grupo · Prud. Demais · MFO no menu, cada um com Visão Consolidada, Novos Negócios e Negócios na Base (Daniel não vê)', desde:'2026-09-18'},
+  'vg-empresa':   {o:'Pipe Vida em Grupo: o negócio é a EMPRESA (nome, CNPJ, ramo, cidade, vidas, seguradora, renovação) com 👥 Contatos da empresa por papel (Decisor · RH · Financeiro · Sócio · Outro), ⭐ principal = telefone do negócio; contato puxado do CRM fica ligado e a ficha da pessoa mostra 🏢 Contato de empresa', desde:'2026-09-29'},
   'nn-puxar':     {o:'Novo negócio com 🔎 Puxar do CRM | ➕ Contato novo: busca a pessoa no funil, carteira e estoque (nome ou telefone), preenche os dados e, se ela já tem negócio, vincula como a mesma pessoa em vez de duplicar', desde:'2026-09-28'},
   'pes-sugere':   {o:'Campo de pessoa (Recomendante na ficha, no Novo contato e no Estoque) autocompleta com quem já está na base — funil, carteira e estoque — e grava a grafia registrada', desde:'2026-09-18'},
   'ta-mob':       {o:'Painel TA/WA no celular: faixa só com as listas dele (Hoje + nomeadas), recortes da base numa folha 🎯, campo Adicionar com o autocompletar do CRM, filtros de perfil (renda ≤, quanto o cliente paga, CS) e sem botão CSV', desde:'2026-09-19'},
@@ -20999,6 +21144,19 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c2={id:'np3',nome:'Zz Puxa Diferente',funil:'mfo',lp:S.activeUser}; const d=ncVincularPuxado(c2,md)===0&&!pessoaDe(c2) && ncVincularPuxado({nome:'Zz Puxa Teste'},{dataset:{modo:'novo'}})===0;
       const e=String(salvarNovoContato).includes('ncVincularPuxado(c,md)') && String(openNovoContato).includes('ncPuxarTopoHtml()');
       return a&&b&&c&&d&&e; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; NC_PICK=_k; } })());
+    ok('VG-EMPRESA-V1: no Vida em Grupo o negócio é a EMPRESA — ⭐ principal dá o telefone do negócio, a pessoa ligada (ct ou telefone) vê a empresa na ficha, a busca do funil acha pelo contato e o card mostra a empresa sem as apólices da pessoa', (()=>{ const _c=S.contatos,_p=PERFIL; try{ PERFIL=null;
+      const pes={id:'vgp1',nome:'Zz Pessoa Vg',telefone:'81 90000-1111',funil:'bc',etapa:'Clientes Ativos',lp:S.activeUser,eventos:[],recs:[]};
+      const out={id:'vgp2',nome:'Zz Sem Link',telefone:'81 90000-2222',funil:'nn',etapa:'C2',lp:S.activeUser,eventos:[],recs:[]};
+      const emp={id:'vge1',nome:'Zz Vidros Ltda',funil:'vg-bc',etapa:'Clientes Ativos',lp:S.activeUser,eventos:[],recs:[],pj:{vidas:12},
+        pjContatos:[{id:'x1',nome:'Zz Pessoa Vg',tel:'81 90000-1111',papel:'socio',principal:false,ct:'vgp1'},{id:'x2',nome:'Zz Rh Novo',tel:'81 90000-3333',papel:'rh',principal:true,ct:null},{id:'x3',nome:'Zz Sem Link',tel:'81 90000-2222',papel:'outro',ct:null}]};
+      S.contatos=[pes,out,emp]; pjNormalizar(emp);
+      const a=ehEmpresa(emp)&&!ehEmpresa(pes)&&pjPrincipal(emp).id==='x2'&&emp.telefone==='81 90000-3333'&&pjContatos(emp).filter(x=>x.principal).length===1;
+      const e1=pjEmpresasDaPessoa(pes), e2=pjEmpresasDaPessoa(out);
+      const b=e1.length===1&&e1[0].e===emp&&e1[0].x.papel==='socio'&&e2.length===1&&pjEmpresasDaPessoa(emp).length===0;
+      const c=funBuscaBate(emp,'zz rh')&&funBuscaBate(emp,'0000-3333')&&!funBuscaBate(emp,'ninguem aqui');
+      const h=nnCard(emp); const d=h.includes('🏢')&&h.includes('Zz Rh Novo')&&h.includes('12 vidas')&&!pessoaDe(emp);
+      const f=String(openNovoContato).includes('pjNovaEmpresa(funil)')&&(()=>{ const src=[...document.scripts].map(x=>x.textContent).join('\n'); return src.includes('ehEmpresa(c)?pjDrawerHtml(c)')&&src.includes('${pjNaPessoaHtml(c)}'); })();   /* renderDrawer é embrulhado (estab) — confere no fonte */
+      return a&&b&&c&&d&&f; } finally{ S.contatos=_c; PERFIL=_p; } })());
     ok('REVISÃO-SEGURANÇA-V1: link de fora só entra num href se for http(s) — javascript:/data:/vazio viram "#"; Agenda (cartão ⋯ e linha) passa pelo urlSegura',
        urlSegura('javascript:alert(1)')==='#' && urlSegura('data:text/html,x')==='#' && urlSegura('')==='#' && urlSegura(null)==='#' && urlSegura(' https://calendar.google.com/calendar/event?eid=abc ')==='https://calendar.google.com/calendar/event?eid=abc' && urlSegura('HTTP://x.y/z')==='HTTP://x.y/z'
        && String(gcalMais).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.htmlLink)') && String(gcalLinhaEv).includes('urlSegura(e.hangoutLink)') && !/href="\$\{esc\(e\.(htmlLink|hangoutLink)/.test(String(gcalMais)+String(gcalLinhaEv)));
