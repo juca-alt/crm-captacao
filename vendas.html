@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.55 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.56 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -408,6 +408,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .fc-r.no{color:var(--verm);border-color:#f0c9c6}
 .fc-r.cli{background:#fff7e6;border-color:#f3d28a;color:#8a5a00;font-weight:700}   /* RES-DANIEL-V1: já é cliente */
 .vneg.vneg-pad{border:1px dashed currentColor;opacity:.85} .vneg i{font-style:normal;opacity:.7;font-size:.9em}   /* PM-PADRAO-V1 */
+.carga-linha{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:2px 0 8px}   /* CARGA-V1: data da última carga de cada fonte */
+.carga-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;line-height:1.2;padding:4px 9px;border-radius:999px;border:1px solid var(--linha);background:var(--card,#fff);color:var(--muted);white-space:nowrap;cursor:default}
+.carga-chip.carga-velha{background:#fff7e6;border-color:#f3d28a;color:#8a5a00;font-weight:600}
+.carga-chip.carga-sem{border-style:dashed;opacity:.8}
   .fc-pe{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:4px;padding-bottom:8px}
   .fc-fim{text-align:center;padding:44px 16px}
   .fc-fim-ic{width:64px;height:64px;border-radius:50%;background:#eaf6f0;color:#0f7a52;
@@ -3029,7 +3033,8 @@ function viewInicio(){
         ${feitos.length?`<button class="cs-chip${NIVER_VER_FEITOS?' on':''}" onclick="event.stopPropagation();niverVerFeitos(${NIVER_VER_FEITOS?'false':'true'})" style="font-size:11.5px" title="${NIVER_VER_FEITOS?'Esconder quem já foi parabenizado':'Mostrar quem já foi parabenizado (dá pra desfazer)'}">✓ ${feitos.length} feito${feitos.length>1?'s':''}</button>`:''}
         ${lps.length>1?`<select onchange="niverSetF('lp',this.value)" style="max-width:150px;min-height:34px;font-size:12px"><option value="">Todas as carteiras</option>${lps.map(x=>`<option value="${esc(x)}"${escLpNorm(NIVER_F.lp)===escLpNorm(x)?' selected':''}>👤 ${esc(x)}</option>`).join('')}</select>`:''}
       </div>`;
-    const corpo=filtros+((nHoje.length||nPass.length||nSem.length||nMes.length)
+    const carga=cargaLinha([['carteira',CART.importadoEm],...((LP.aniversario||[]).some(r=>r._fonte!=='carteira')?[['relatório de aniversário',LP.importadoEm]]:[])]);   /* CARGA-V1 */
+    const corpo=carga+filtros+((nHoje.length||nPass.length||nSem.length||nMes.length)
       ? grp('🎉 Hoje',nHoje)+grp('Passou há pouco — ainda dá pra ligar',nPass)+grp('Próximos 7 dias',nSem)+grp('Ainda neste mês',nMes)
         +`<div style="margin-top:8px"><button class="btn btn-s btn-mini" onclick="irPara('lp-aniversario')">ver todos os aniversariantes</button></div>`
       : `<div class="vazio" style="padding:14px">${feitos.length&&!NIVER_VER_FEITOS?'Todos parabenizados ✓ — ':''}Nenhum aniversário nos próximos 31 dias${NIVER_F.tipo||NIVER_F.lp?' com esse filtro':''}. As datas dos clientes vêm da carteira (Subir relatório → Carteira de Clientes); as de lead e negócio, da data de nascimento na ficha da pessoa.</div>`);
@@ -3533,6 +3538,24 @@ function tarQuandoTxt(t){
 function diasEntreISO(a,b){
   const pa=String(a).split('-').map(Number), pb=String(b).split('-').map(Number);
   return Math.round((new Date(pb[0],pb[1]-1,pb[2]) - new Date(pa[0],pa[1]-1,pa[2]))/86400000);
+}
+/* CARGA-V1 (29/09): data da ÚLTIMA CARGA de cada fonte que o Victor alimenta, na tela que lê essa fonte. Palavra dele
+   (print do Início › Aniversariantes): "deixa identificado quando foi feita essa última carga… qual a data dessa visão
+   da informação… pode passar um cliente ou outro se não atualizou entre um dia, dois, três." A data vem do SERVIDOR
+   (origem_relatorio / atualizado), então é a mesma em todo aparelho — diferente da impFaixa, que é "colado NESTE
+   aparelho". 7+ dias fica em âmbar; sem carga diz "sem carga". Só na base dele (chave carga). */
+const CARGA_VELHA_DIAS=7;
+function cargaChip(iso,rot){
+  const d=iso?String(iso).slice(0,10):'';
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return `<span class="carga-chip carga-sem" title="Nenhuma carga de ${esc(rot)} registrada ainda — a tela pode estar vazia ou desatualizada">📥 ${esc(rot)} · sem carga</span>`;
+  const dias=diasEntreISO(d,hojeISO()), velha=dias>=CARGA_VELHA_DIAS;
+  const quando=dias<=0?'hoje':dias===1?'ontem':'há '+dias+' dias';
+  return `<span class="carga-chip${velha?' carga-velha':''}" title="Última carga de ${esc(rot)}: ${esc(dataBR(d))} — a informação desta tela é dessa data${velha?' (mais de '+CARGA_VELHA_DIAS+' dias: pode ter cliente que já mudou)':''}">${velha?'⚠️':'📥'} ${esc(rot)} ${esc(dataBR(d).slice(0,5))} · ${quando}</span>`;
+}
+function cargaLinha(pares){
+  if(!novoOn('carga')) return '';
+  const l=(pares||[]).filter(p=>p&&p[0]); if(!l.length) return '';
+  return `<div class="carga-linha" onclick="event.stopPropagation()">${l.map(([rot,iso])=>cargaChip(iso,rot)).join('')}</div>`;
 }
 /* todos os contatos do LP (os DOIS funis: a agenda é uma só) */
 function contatosDoLp(){ return (S.contatos||[]).filter(escVisivel); }
@@ -9901,6 +9924,7 @@ function viewEmissaoDiaria(){
   const kpi=(l,v,sub,dest)=>`<div class="kpi" style="min-width:104px;flex:1${dest?';border:1.5px solid var(--azul,#2563eb)':''}"><div class="lbl">${l}</div><div class="num" style="font-size:19px">${v}</div>${sub?`<div style="font-size:11px;color:var(--muted)">${sub}</div>`:''}</div>`;
   const semDados=!exVis().length;
   $('#main').innerHTML=`<h1 class="pg">Emissão Diária <span style="font-size:12px;font-weight:500;color:var(--muted)">· ${pxRotulo()}</span></h1>
+    ${cargaLinha([['emitidas',EX.carregadoEm]])}
     <div class="sub">Os números do painel do BI, com o que está no app: emitidas (relatório UW e Emissão) + pendentes ativas. Atualizado em <b>${EX.carregadoEm?atFmtBR(EX.carregadoEm):'—'}</b> · <span style="color:var(--muted)">informação não oficial</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <select onchange="edSetMes(this.value)" style="min-height:44px;width:auto;min-width:120px">${meses.map(m=>`<option value="${m}"${m===d.mes?' selected':''}>${edMesLbl(m)}</option>`).join('')}</select>
@@ -10270,6 +10294,7 @@ function viewApolicesDetalhado(){
   const sel=(k,ops,ph)=>`<select onchange="adSet('${k}',this.value)" style="min-height:44px;width:auto;min-width:110px"><option value="">${ph}</option>${ops.map(([v,t])=>`<option value="${v}"${AD[k]===v?' selected':''}>${t}</option>`).join('')}</select>`;
   const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'].map((m,i)=>[String(i+1).padStart(2,'0'),m]);
   $('#main').innerHTML=`<h1 class="pg">Detalhado por Apólice <span style="font-size:12px;font-weight:500;color:var(--muted)">· ${typeof pxRotulo==='function'?esc(pxRotulo()):''}</span></h1>
+    ${cargaLinha([['emitidas',EX.carregadoEm],['carteira',CART.importadoEm]])}
     <div class="sub">Uma linha por apólice viva, no formato do BI da MFB. PA vem das <b>emitidas</b> quando a apólice está lá; senão do prêmio da carteira (mensal × 12). CS só quando o cliente tem uma apólice viva — o relatório dá o capital por cliente, não por apólice.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       ${sel('ano',anos.map(a=>[a,a]),'Ano (emissão)')}${sel('mes',meses,'Mês')}${sel('ev',[['Emissão','Emissão'],['Ativa','Ativa (sem data)']],'Evento')}
@@ -13075,7 +13100,7 @@ function atExemplo(){ atClose();
 /* ════ VIEW: LISTA DE ATRASO ════ */
 function viewLpAtrasos(){
   const hoje=atHojeLocal();
-  if(!AT.itens.length){ $('#main').innerHTML=`<h1 class="pg">Lista de Atraso</h1><div class="sub">Apólices com prêmio em atraso (relatório oficial Prudential). Grava no Supabase; os dias recalculam sozinhos pela data de hoje.</div>
+  if(!AT.itens.length){ $('#main').innerHTML=`<h1 class="pg">Lista de Atraso</h1>${cargaLinha([['relatório de atraso',AT.carregadoEm]])}<div class="sub">Apólices com prêmio em atraso (relatório oficial Prudential). Grava no Supabase; os dias recalculam sozinhos pela data de hoje.</div>
     <div class="card" style="text-align:center;padding:34px">Nenhuma apólice ainda. Cole o relatório oficial pra montar a lista.<br><br>
       <button class="btn btn-p" onclick="atColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s" onclick="atNovo()" style="margin-left:8px">＋ Adicionar</button>
@@ -13115,7 +13140,7 @@ function viewLpAtrasos(){
       <div class="lbl">${l}</div><div class="num">${n}</div>
       <div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estas':sb}</div></button>`;
   const chip=(v,l)=>`<button class="sheet-chip${FAT.faixa===v?' on':''}" onclick="FAT.faixa='${v}';viewLpAtrasos()">${l}</button>`;
-  $('#main').innerHTML=`<h1 class="pg">Lista de Atraso</h1>
+  $('#main').innerHTML=`<h1 class="pg">Lista de Atraso</h1>${cargaLinha([['relatório de atraso',AT.carregadoEm]])}
     <div class="sub">${AT.carregadoEm?'Último relatório: '+atFmtBR(AT.carregadoEm)+' · ':''}${AT_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias recalculam pela data de hoje.</div>
     ${delegFaixa()}${impFaixa('atraso','relatório de atraso')}
     <div class="kpis" style="margin-top:10px">
@@ -13628,7 +13653,7 @@ function emExportar(){ const l=emFiltrados(); if(!l.length){ toast('Nada para ex
 /* ════ VIEW: PENDÊNCIAS DE EMISSÃO (assume a view lp-pendencias, como o at* assumiu lp-atrasos) ════ */
 function viewLpPendencias(){
   const hoje=atHojeLocal();
-  if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1><div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; o Victor mantém o estado de cada caso.</div>
+  if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${cargaLinha([['pendências',EM.carregadoEm]])}<div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; o Victor mantém o estado de cada caso.</div>
     <div class="card" style="text-align:center;padding:34px">Nenhuma proposta ainda. Cole o relatório de Propostas Pendentes pra montar a lista.<br><br>
       <button class="btn btn-p" onclick="emColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s" onclick="exColar()" style="margin-left:8px">✅ Colar emitidas</button>
@@ -13654,6 +13679,7 @@ function viewLpPendencias(){
   const chip=(v,l)=>`<button class="sheet-chip${FEM.faixa===v?' on':''}" onclick="FEM.faixa='${v}';viewLpPendencias()">${l}</button>`;
   const sel=(k,opts,cur)=>`<select onchange="FEM.${k}=this.value;viewLpPendencias()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">${opts.map(o=>`<option value="${esc(o[0])}"${cur===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
   $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>
+    ${cargaLinha([['pendências',EM.carregadoEm]])}
     <div class="sub">${EM.carregadoEm?'Último relatório: '+atFmtBR(EM.carregadoEm)+' · ':''}${EM_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias envelhecem pela data do relatório.</div>
     ${delegFaixa()}${impFaixa('emissao','relatório de propostas pendentes')}
     <div class="kpis" style="margin-top:10px">
@@ -14850,7 +14876,7 @@ function viewConfig(){
 function viewLpPendenciasRelatorio(){
   if(!LP.pendencias.length){ $('#main').innerHTML=semDados('Pendências de Emissão','BackOffice — propostas com pendência pra emitir a apólice.'); return; }
   const l=lpFiltra('pendencias');
-  $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1><div class="sub">${l.length} proposta(s) com pendência.</div>
+  $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${cargaLinha([['relatório da semana',LP.importadoEm]])}<div class="sub">${l.length} proposta(s) com pendência.</div>
     ${lpFiltroBar('pendencias')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Proposta</th><th>Apólice</th><th>Cliente</th><th>Assinatura CCB</th><th>Pendência</th><th>Follow-up</th>
@@ -14870,7 +14896,7 @@ function viewLpPendenciasRelatorio(){
 function viewLpStatusT(){
   if(!LP.statust.length){ $('#main').innerHTML=semDados('Status T — Apólices Emitidas','BackOffice — janela dos 30 dias / 2º prêmio. Crítico primeiro.'); return; }
   const l=lpFiltra('statust').map(r=>({r,f:lpFaixa(r)})).sort((a,b)=>(FAIXA_ORDEM[a.f.faixa]-FAIXA_ORDEM[b.f.faixa])||((a.f.dias??1e9)-(b.f.dias??1e9)));
-  $('#main').innerHTML=`<h1 class="pg">Status T — Apólices Emitidas</h1><div class="sub">${l.length} apólice(s) — ordenadas por urgência. Prazo = 2º prêmio ou 30 dias da emissão, o que vier antes.</div>
+  $('#main').innerHTML=`<h1 class="pg">Status T — Apólices Emitidas</h1>${cargaLinha([['relatório da semana',LP.importadoEm]])}<div class="sub">${l.length} apólice(s) — ordenadas por urgência. Prazo = 2º prêmio ou 30 dias da emissão, o que vier antes.</div>
     ${lpFiltroBar('statust')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Faixa</th><th>Apólice</th><th>Segurado / Pagador</th><th>Emissão</th><th>30 dias</th><th>2º prêmio</th><th>Follow-up</th>
@@ -14892,7 +14918,7 @@ function viewLpAniversario(){
   try{ lpDerivar(); }catch(_){}
   if(!LP.aniversario.length){ $('#main').innerHTML=semDados('Aniversariantes','Nasce da data de nascimento da carteira (Clientes → Importar) e do relatório da semana. Ainda não há nenhum dos dois.'); return; }
   const l=lpFiltra('aniversario').map(r=>({r,d:lpDiasAte(r.data_nasc)})).sort((a,b)=>(a.d??1e9)-(b.d??1e9));
-  $('#main').innerHTML=`<h1 class="pg">Aniversariantes</h1><div class="sub">${l.length} cliente(s) — ordenados por proximidade. Linha destacada = dentro da janela (${JANELA_DIAS}d). Fonte: nascimento da carteira${LP.aniversario.some(r=>r._fonte!=='carteira')?' + relatório':''}. Pra atualizar: <b>Subir relatório</b> → cole o relatório <b>Aniversariantes</b> do portal (Clientes).</div>
+  $('#main').innerHTML=`<h1 class="pg">Aniversariantes</h1>${cargaLinha([['carteira',CART.importadoEm],...(LP.aniversario.some(r=>r._fonte!=='carteira')?[['relatório da semana',LP.importadoEm]]:[])])}<div class="sub">${l.length} cliente(s) — ordenados por proximidade. Linha destacada = dentro da janela (${JANELA_DIAS}d). Fonte: nascimento da carteira${LP.aniversario.some(r=>r._fonte!=='carteira')?' + relatório':''}. Pra atualizar: <b>Subir relatório</b> → cole o relatório <b>Aniversariantes</b> do portal (Clientes).</div>
     ${lpFiltroBar('aniversario')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Quando</th><th>Cliente</th><th>Nascimento</th><th>Telefone</th><th>Contato</th>
@@ -14912,7 +14938,7 @@ function viewLpDatas(){
   try{ lpDerivar(); }catch(_){}
   if(!LP.datas.length){ $('#main').innerHTML=semDados('Aniversário de Apólice','Nasce da data de emissão das emitidas coladas (Pendências → Colar emitidas) e do relatório da semana. A carteira não traz a data de emissão — por isso ainda está vazio.'); return; }
   const l=lpFiltra('datas').map(r=>({r,d:lpDiasAte(r.data_emissao? String(r.data_emissao).slice(5):r.data_emissao)})).sort((a,b)=>(a.d??1e9)-(b.d??1e9));
-  $('#main').innerHTML=`<h1 class="pg">Aniversário de Apólice</h1><div class="sub">${l.length} apólice(s) — aniversário do contrato, ordenado por proximidade. Fonte: emitidas coladas${LP.datas.some(r=>r._fonte!=='emitidas')?' + relatório da semana':''}. A carteira não traz data de emissão; as apólices antigas entram quando vier um relatório com a data.</div>
+  $('#main').innerHTML=`<h1 class="pg">Aniversário de Apólice</h1>${cargaLinha([['emitidas',EX.carregadoEm],...(LP.datas.some(r=>r._fonte!=='emitidas')?[['relatório da semana',LP.importadoEm]]:[])])}<div class="sub">${l.length} apólice(s) — aniversário do contrato, ordenado por proximidade. Fonte: emitidas coladas${LP.datas.some(r=>r._fonte!=='emitidas')?' + relatório da semana':''}. A carteira não traz data de emissão; as apólices antigas entram quando vier um relatório com a data.</div>
     ${lpFiltroBar('datas')}
     <div class="card" style="padding:6px 10px"><table><thead><tr>
       <th>Quando</th><th>Cliente</th><th>Apólice</th><th>Emissão</th><th>Tempo</th><th>Telefone</th><th>Contato</th>
@@ -16586,6 +16612,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
+  'carga': {o:'Data da última carga (📥 carteira / emitidas / relatório da semana / atraso / pendências · há N dias) nos módulos que o Victor alimenta — Início › Aniversariantes, Emissão Diária, Detalhado, Status T, Aniversariantes, Aniversário de Apólice, Atrasos, Pendências', desde:'2026-09-29'},
   /* 'aviso-versao' — LIBERADO pra todos em 29/09 (melhoria em algo que o Daniel já usa — regra dele: "evolução do que ele já tem acesso já deve ser estendida a ele"). */
   /* 'pm-padrao' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor; o Daniel espera a validação dele. */
   /* 'ficha-lista-ta' — LIBERADO pra todos em 29/09 (melhoria em algo que o Daniel já usa — regra dele: "evolução do que ele já tem acesso já deve ser estendida a ele"). */
@@ -21320,6 +21347,13 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
               return p.records.length===1&&p.records[0].proposta==='000000001E'&&p.records[0].apolice==='000000002'&&p.records[0].segurado==='FULANO DE TAL'&&p.records[0].afyc_projetado===2360.41; })()
        && (()=>{ const l=exDedupeProposta([{proposta:'P1',apolice:null,segurado:'x'},{proposta:'P1',apolice:'A1'},{apolice:'A2'},{proposta:'P2'}]); return l.length===3&&l.some(r=>r.proposta==='P1'&&r.apolice==='A1')&&!l.some(r=>r.proposta==='P1'&&!r.apolice); })()
        && /emRisco=ativos\.filter\(r=>r\.status!==AT_STATUS\.SUMIU\)/.test(String(viewLpAtrasos)) && /Total em atraso',emRisco\.length/.test(String(viewLpAtrasos)));
+    ok('CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias) — 7+ dias em âmbar, sem data diz "sem carga", chave só na base dele; Início › Aniversariantes, Emissão Diária, Detalhado, Status T, Aniversariantes, Aniversário de Apólice, Atrasos e Pendências passam por cargaLinha',
+       (()=>{ const _p=PERFIL; try{ PERFIL=null; const h=hojeISO(); const d=new Date(); d.setDate(d.getDate()-9); const v=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+              const a=cargaChip(h,'carteira'), b=cargaChip(v+'T10:00:00Z','relatório'), c=cargaChip(null,'emitidas');
+              const okAdm=/carteira/.test(a)&&/hoje/.test(a)&&!/carga-velha/.test(a)&&/há 9 dias/.test(b)&&/carga-velha/.test(b)&&/sem carga/.test(c)&&/carga-sem/.test(c)&&cargaLinha([['x',h]]).includes('carga-linha')&&cargaLinha([])==='';
+              PERFIL={papel:'lp',modulos:{},email:'x@x'}; const okLp=cargaLinha([['x',h]])==='';
+              const fontes=[viewEmissaoDiaria,viewApolicesDetalhado,viewLpStatusT,viewLpAniversario,viewLpDatas,viewLpAtrasos,viewLpPendencias].every(f=>/cargaLinha\(/.test(String(f)));
+              return okAdm&&okLp&&fontes&&!!NOVO_SO_MEU['carga']&&/const carga=cargaLinha\(/.test(String(viewInicio)); } finally{ PERFIL=_p; } })());
     ok('NIVER-TAP-V1: o fundo "✓ parabenizei" da linha do aniversariante não pega toque (pointer-events none) e a linha fica por cima (z-index) — senão o ✓ e o 💬 não funcionam no celular nem no desktop',
        (()=>{ const css=[...document.querySelectorAll('style')].map(x=>x.textContent).join(''); return /\.niv-fundo\{[^}]*pointer-events:none/.test(css) && /\.niv-in\{position:relative;z-index:1\}/.test(css); })());
     ok('PM-PADRAO-V1: negócio aberto sem prêmio vale R$ 250/mês (só na base dele); informado substitui; encerrado não recebe padrão; card marca "padrão" e continua clicável; ficha compara com o informado',

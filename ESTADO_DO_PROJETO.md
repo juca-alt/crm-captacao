@@ -4,7 +4,7 @@
 
 ## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.48 no ar + extensão WhatsApp 2.5.0
 
-**29/09 (sessão do Code, madrugada→noite):** v8.55 no ar — 72ª onda NIVER-TAP-V1: ✓ do aniversariante voltou a funcionar no celular e no desktop (o fundo do arrasto engolia o toque) + erro de boot do `ncModal` (desde a v8.42) corrigido. Antes, nesta mesma sessão: v8.20 📅 na ficha do lead (56ª) e v8.29 prêmio padrão R$ 250 (57ª).
+**29/09 (sessão do Code, madrugada→noite):** v8.56 no ar — 73ª onda CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias, âmbar com 7+ dias) nos módulos que o Victor alimenta, só na base dele (chave `carga`). v8.55 — 72ª onda NIVER-TAP-V1: ✓ do aniversariante voltou a funcionar no celular e no desktop (o fundo do arrasto engolia o toque) + erro de boot do `ncModal` (desde a v8.42) corrigido. Antes, nesta mesma sessão: v8.20 📅 na ficha do lead (56ª) e v8.29 prêmio padrão R$ 250 (57ª).
 
 **Depois do fechamento (28/09 noite):** v8.48 (PR #267) — AG-TIPO-INLINE-V1: tipo da atividade troca na própria linha da Agenda. Canônico duplicado de 05/09 ARQUIVADO. Períodos do catálogo de relatórios CONFIRMADOS por ele. **1º item de 29/09: guiar a criação do 2º perfil do Chrome (WhatsApp pessoal + extensão).**
 
@@ -27,6 +27,25 @@ Pasta que o Chrome dele carrega: `~/Teste Claude Code/crm-wt-insta/extensao-what
 4. Depois da fila: pasta de arquivos por oportunidade/cliente espelhada Drive + iCloud (canônico só como mapa).
 
 **Lições da sessão (não repetir):** iframe dentro do WhatsApp herda COEP require-corp → CRM só entra com COEP/CORP injetados por declarativeNetRequest · WhatsApp novo esconde telefone (`@lid`) → identidade da conversa = vínculo gravado, não busca · regra CSS de modo (`html.modo-wa .overlay`) escondeu modal que reusa a classe → esconder por id · folha (`.sheet-bd`) abaixo do modal (z85<95) → vincular abria atrás · merge via `gh` pode ser barrado pelo classificador do auto mode sem OK explícito dele na conversa.
+
+## 29/09/2026 (73ª onda) — CARGA-V1: data da última carga nos módulos que o Victor alimenta — só na base dele (v8.56)
+
+Print dele do Início › Aniversariantes: *"tanto nesse módulo como nos outros relacionados aos relatórios que o Victor importa, deixa identificado quando foi feita essa última atualização, essa última carga… qual a data dessa visão da informação… pode passar um cliente ou outro se não atualizou entre um dia, dois dias, três dias."*
+
+### O que mudou (chave `carga`, só na base dele)
+- **`cargaChip(iso,rot)` / `cargaLinha(pares)`**: um chip por fonte — "📥 carteira 26/09 · há 3 dias". **7+ dias vira âmbar com ⚠️** (`CARGA_VELHA_DIAS=7`); sem data diz "sem carga". A data vem do **servidor** (`origem_relatorio` / `atualizado` — `CART.importadoEm`, `EX/AT/EM.carregadoEm`, `LP.importadoEm`), então é a mesma em todo aparelho. Diferente da `impFaixa`, que é "colado NESTE aparelho".
+- **Onde aparece:** Início › Aniversariantes (carteira + relatório de aniversário quando ele entra na lista), Emissão Diária (emitidas), Detalhado por Apólice (emitidas + carteira), Status T (relatório da semana), Aniversariantes (carteira + relatório), Aniversário de Apólice (emitidas + relatório), Lista de Atraso (relatório de atraso, nos 2 ramos), Pendências de Emissão (pendências, nos 2 ramos; o legado do relatório semanal lê o relatório da semana).
+- Daniel/Victor: sem a chave, tela igual à de antes.
+- Invariante `CARGA-V1`.
+
+### Prova
+- `teste-carga.mjs` **20/20** em 390 e 1280: 2 chips no card do Início (carteira há 3 dias normal, relatório há 10 dias em âmbar), chip certo em cada uma das 7 telas, "sem carga" quando nunca houve, Daniel sem chips, console limpo, zero estouro.
+- `selfcheck` 0 falhas · 0 pageerrors. Duas rodadas completas no mesmo sha: auditoria 0 · guard OK · portão aberto.
+
+### Pra ele decidir
+- Liberar `carga` pro Victor (é ele quem carrega — vê na hora se a carga pegou) e pro Daniel.
+
+---
 
 ## 29/09/2026 (72ª onda) — NIVER-TAP-V1: o ✓ do aniversariante não funcionava no celular (nem no desktop) + erro de boot do ncModal (v8.55)
 
