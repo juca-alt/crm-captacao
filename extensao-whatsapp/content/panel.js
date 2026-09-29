@@ -574,6 +574,20 @@ function pintaBarra(){
 /* 2.1: cada tópico do card rápido encolhe/estende (palavra dele); a escolha fica lembrada neste Chrome */
 function dobAberto(k){ return DOB[k]!==false; }
 function wireDob(){ panel.querySelectorAll('details.dob').forEach(d=>d.addEventListener('toggle',()=>{ DOB[d.dataset.k]=d.open; try{ chrome.storage.local.set({wa_crm_dob:DOB}); }catch(_){} })); }
+/* 2.6.0 MULTI-NEG: faixa "💼 Negócios desta pessoa" no Rápido (mesma do CRM v8.50) — toque troca o card */
+const NEG_PIPE={nn:['📈','Vida Individual'],bc:['📈','Vida Individual · Base'],vg:['👥','Vida em Grupo'],'vg-bc':['👥','Vida em Grupo · Base'],prud:['🧩','Prud. Demais'],'prud-bc':['🧩','Prud. Demais · Base'],mfo:['🏦','MFO'],'mfo-bc':['🏦','MFO · Base']};
+const NEG_ORD=['nn','bc','vg','vg-bc','prud','prud-bc','mfo','mfo-bc'];
+const NEG_PAPEL={decisor:'Decisor',rh:'RH',fin:'Financeiro',socio:'Sócio',outro:'Contato'};
+async function pintaNegocios(id){ const box=$('#lp2-negs'); if(!box) return; const seq=LOOKSEQ;
+  const r=await send('lp.negocios',{id}); if(seq!==LOOKSEQ||!$('#lp2-negs')||String(CUR_ROW&&CUR_ROW.id)!==String(id)) return;
+  const l=(r&&r.ok&&Array.isArray(r.data))?r.data.slice().sort((a,b)=>NEG_ORD.indexOf(a.funil)-NEG_ORD.indexOf(b.funil)):[];
+  if(l.length<=1){ box.innerHTML='<div class="muted">💼 só este negócio desta pessoa</div>'; return; }
+  box.innerHTML=`<div class="sec-t" style="margin:0 0 6px">💼 Negócios desta pessoa <span class="dob-r">${l.length}</span></div><div class="chips">${l.map(n=>{ const p=NEG_PIPE[n.funil]||['📈',n.funil], eu=n.id===String(id);
+    const et=lpcEtapaDe(LPCFG.funil,{funil:n.funil,etapa:n.etapa});
+    return `<button class="chip neg${eu?' on':''}" ${eu?'disabled':''} data-neg="${esc(n.id)}" title="${esc(n.nome)}">${p[0]} ${esc(p[1])}${n.papel?` · 🏢 ${esc(n.nome)} (${esc(NEG_PAPEL[n.papel]||'Contato')})`:''}<br><small>${esc((et&&et.label)||n.etapa||'—')}</small></button>`; }).join('')}</div>`;
+  box.querySelectorAll('[data-neg]').forEach(b=>b.onclick=async()=>{ if(sujo(DRAFTS[String(id)])&&!window.confirm('Tem mudança não salva neste negócio. Trocar mesmo assim? (o rascunho fica guardado)')) return;
+    b.disabled=true; const seq2=LOOKSEQ; const rr=await send('lpc.um',{id:b.dataset.neg}); if(seq2!==LOOKSEQ) return;
+    if(rr&&rr.ok&&rr.data) renderLpContato(rr.data,CUR_CART); else { b.disabled=false; toast('Não consegui abrir esse negócio'); } }); }
 function renderLpContato(row,cartHit){
   const id=String(row.id);
   CUR_ROW=row; CUR_CART=cartHit||null;
@@ -595,6 +609,7 @@ function renderLpContato(row,cartHit){
       <div class="muted" style="margin-top:4px">${VINC?`📌 ligado a esta conversa · <a href="#" id="lp2-desv">não é esta pessoa</a>`:`<a href="#" id="lp2-vinc">📌 ligar esta conversa a este negócio</a>`}</div>
       ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
     </div>
+    <div class="card negs" id="lp2-negs"><div class="muted">💼 negócios desta pessoa…</div></div>
     <details class="card dob" data-k="etapa" ${dobAberto('etapa')?'open':''}>
       <summary class="sec-t">Etapa · status · listas <span class="dob-r">${esc((atual&&atual.label)||c.etapa||'')}${st?' · '+esc(st):''}${listas.length?' · 📋 '+listas.length:''}</span></summary>
       <div class="chips${mud('etapa')}">${fluxo.map(e=>`<button class="chip edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
@@ -619,7 +634,7 @@ function renderLpContato(row,cartHit){
     <div class="note">Mesmo cadastro do CRM (Funil &amp; Etapas, listas de TA). Mude o que precisar e toque em <b>💾 Salvar</b> — nada vai pro CRM antes disso.</div>
     <div class="salvabar" id="lp2-barra"></div>
   </div>`,id);
-  wireMsgCard(c); wireDob(); pintaBarra();
+  wireMsgCard(c); wireDob(); pintaBarra(); pintaNegocios(id);
   { const a=$('#lp2-vinc'); if(a) a.onclick=e=>{ e.preventDefault(); vincular(row); };
     const b=$('#lp2-desv'); if(b) b.onclick=e=>{ e.preventDefault(); desvincular(); }; }
   const redesenha=()=>{ if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; renderLpContato(CUR_ROW,CUR_CART); };
