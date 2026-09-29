@@ -26,6 +26,10 @@ App single-file HTML + vanilla JS, backend **Supabase**, deploy **GitHub Pages**
   - **Liberar é decisão dele, no chat, nunca minha.** Ao entregar algo novo, terminar perguntando se libera. Liberar pra todo mundo = tirar a chave de `NOVO_SO_MEU`. Liberar pessoa a pessoa = tirar daqui e registrar em `MODS` com `def:false`, que ele liga por usuário no Painel Master · Acessos.
   - **Não retroagir:** o que já estava no ar em 16/09/2026 fica como está. A lista nasceu vazia de propósito.
   - Ele revisa a lista em **Painel Master · Acessos → "🧪 Ainda só na sua base"**.
+  - **REFINO 29/09/2026 (palavra dele):** *"evoluções de campos e ferramentas que ele [Daniel] já tem acesso — a melhoria já deve ser estendida a ele. O ponto de travar são módulos que ele ainda não tem acesso, que deixo validando antes de liberar total."* Então:
+    - **Melhoria em algo que os usuários JÁ usam** (campo novo, botão, tela melhor dentro de módulo liberado) → nasce **liberada pra todos** (sem `NOVO_SO_MEU`), com portão verde.
+    - **Módulo/tela NOVA que o usuário não tem** → `MODS` com `def:false` (liga por usuário). O **Victor** (backoffice) recebe ligado; o **Daniel** só quando ele disser.
+    - **Regra de negócio que muda número** (ex.: `pm-padrao`, R$ 250 padrão) não é "melhoria": segue por usuário até ele liberar.
 - **BLOCO DOBRÁVEL NASCE FECHADO (regra permanente, 16/09/2026).** Palavra dele: *"toda vez que abro o card ele já vem expandido… pra consultar algo tenho que ir recolhendo cada um. Assume essa regra para todos os itens expansíveis ou retráteis, os de agora e os do futuro: ao abrir a tela, vir já encolhido. O usuário que vai abrindo cada tópico que quiser."*
   - **Todo `<details>`, seção da gaveta, bloco do Início, grupo da ficha, filtro dobrável — nasce fechado.** Aberto só por escolha dele, lembrada por aparelho onde o sistema lembra (`dobraAberta(chave, estado)` é a fonte única no `vendas.html`; na Revisão de Proteção, `blkFechado()`/`secMSFechada()`).
   - **`<details open>` literal no código é proibido** — um invariante varre os scripts e fecha o portão. Abrir é sempre `${aberta?'open':''}` lido da escolha gravada.
