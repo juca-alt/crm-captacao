@@ -4,7 +4,7 @@
 
 ## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.48 no ar + extensão WhatsApp 2.5.0
 
-**29/09 (sessão do Code, madrugada→noite):** v8.56 no ar — 73ª onda CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias, âmbar com 7+ dias) nos módulos que o Victor alimenta, só na base dele (chave `carga`). v8.55 — 72ª onda NIVER-TAP-V1: ✓ do aniversariante voltou a funcionar no celular e no desktop (o fundo do arrasto engolia o toque) + erro de boot do `ncModal` (desde a v8.42) corrigido. Antes, nesta mesma sessão: v8.20 📅 na ficha do lead (56ª) e v8.29 prêmio padrão R$ 250 (57ª).
+**29/09 (sessão do Code, madrugada→noite):** v8.57 no ar — 74ª onda SYNC-BOOT-V1 + SYNC-APAGA-V1: duplicata sanada num aparelho voltava nos outros (vínculo automático do boot marcava pendente e ressuscitava a cópia velha; exclusão agora vira fila persistida e o outro aparelho confere os ids do servidor) — pra todos. v8.56 — 73ª onda CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias, âmbar com 7+ dias) nos módulos que o Victor alimenta, só na base dele (chave `carga`). v8.55 — 72ª onda NIVER-TAP-V1: ✓ do aniversariante voltou a funcionar no celular e no desktop (o fundo do arrasto engolia o toque) + erro de boot do `ncModal` (desde a v8.42) corrigido. Antes, nesta mesma sessão: v8.20 📅 na ficha do lead (56ª) e v8.29 prêmio padrão R$ 250 (57ª).
 
 **Depois do fechamento (28/09 noite):** v8.48 (PR #267) — AG-TIPO-INLINE-V1: tipo da atividade troca na própria linha da Agenda. Canônico duplicado de 05/09 ARQUIVADO. Períodos do catálogo de relatórios CONFIRMADOS por ele. **1º item de 29/09: guiar a criação do 2º perfil do Chrome (WhatsApp pessoal + extensão).**
 
@@ -27,6 +27,30 @@ Pasta que o Chrome dele carrega: `~/Teste Claude Code/crm-wt-insta/extensao-what
 4. Depois da fila: pasta de arquivos por oportunidade/cliente espelhada Drive + iCloud (canônico só como mapa).
 
 **Lições da sessão (não repetir):** iframe dentro do WhatsApp herda COEP require-corp → CRM só entra com COEP/CORP injetados por declarativeNetRequest · WhatsApp novo esconde telefone (`@lid`) → identidade da conversa = vínculo gravado, não busca · regra CSS de modo (`html.modo-wa .overlay`) escondeu modal que reusa a classe → esconder por id · folha (`.sheet-bd`) abaixo do modal (z85<95) → vincular abria atrás · merge via `gh` pode ser barrado pelo classificador do auto mode sem OK explícito dele na conversa.
+
+## 29/09/2026 (74ª onda) — SYNC-BOOT-V1 + SYNC-APAGA-V1: duplicata sanada no desktop voltava no celular (v8.57) — pra todo mundo
+
+Print dele do modal "Possíveis duplicadas no funil" no iPhone: *"esse caso já era uma duplicada que tinha sido sanada ontem no desktop. Hoje, abrindo no mobile, ele aparece — e o app está atualizado. Dá uma varredura nessa sincronização entre os devices."*
+
+### Diagnóstico (no banco, não por hipótese)
+- As duas linhas do caso (E. U. T. M. C.) estavam **intactas no servidor**, ambas com o **mesmo `_upd`** (28/09 21:33:10 UTC) e com `pessoaId` recém-posto, e **nada escreveu nelas depois** (`atualizado` bate; o trigger `lp_toca_atualizado` carimba toda mudança). Ou seja: a resolução do desktop nunca chegou ao servidor **ou** foi desfeita por outro aparelho no mesmo segundo em que o vínculo automático rodou.
+- **Causa-raiz encontrada no código:** o boot rodava `pessoasBackfill()` (liga cards com mesmo nome + telefone) **no cache local, antes do servidor falar**, e gravava com `salvar()` normal → marcava os dois cards como **pendentes** → no merge da carga "pendente vence" → a cópia velha DESTE aparelho voltava pro servidor, **inclusive a que outro aparelho já tinha unido/apagado**. Qualquer aparelho com cache defasado ressuscitava a duplicata em todos os outros.
+- Duas fragilidades de projeto que agravam: (1) **exclusão vivia só na memória** (`_lpcPrev`) até o push de 1,5 s depois — recarregar, trocar de aba no celular ou perder a sessão antes disso perdia a exclusão pra sempre; (2) a **puxada incremental** (60 s, `atualizado >`) **não enxerga linha apagada** — o outro aparelho só sabia da exclusão num reload completo.
+
+### O que mudou (sem gate — é conserto de sincronia, vale pra Daniel e Victor também)
+- **SYNC-BOOT-V1:** `pessoasBackfillBoot()` grava só local (`doServidor`); o vínculo automático de verdade roda **depois do merge completo** em `_lpcMergeFunis`, sobre a verdade do servidor — aí sim vira edição legítima.
+- **SYNC-APAGA-V1:** `PEND.del = {id: dono}` persistido no aparelho: `salvar()` põe na fila o id que sumiu (unir duplicatas, excluir negócio); desfazer tira; `_lpcMergeFunis` não deixa o merge devolver o que está na fila; `lpcPush` apaga pela fila (mesmo teto `LPC_DEL_MAX=20`; bloqueio em massa zera a fila) e só limpa quando o DELETE passou. **`syncConferirApagados()`** (ao voltar pra aba e a cada 5 min): pede só a lista de ids do servidor e tira daqui o que lá não existe mais — nunca o pendente, nunca mais que 20, nunca com resposta com erro ou cortada em 1000.
+- 2 invariantes novos (`SYNC-BOOT-V1`, `SYNC-APAGA-V1`); o `SYNC-PUXA` antigo continua passando.
+
+### Prova
+- `teste-sync-apaga.mjs` **16/16** em 390 e 1280: boot com cache velho vincula sem marcar pendente → merge completo fica só com o card do servidor; toque/clique em "🔗 É duplicata — unir" → id na fila (memória + localStorage) → **recarregar mantém a fila e o card não volta** → merge que traz o id de volta não entra → push manda o DELETE certo e zera a fila; conferência de ids tira o apagado lá, poupa o pendente, ignora erro/resposta cortada.
+- `selfcheck` 0 · 0 pageerrors. Duas rodadas no mesmo sha: auditoria 0 · guard OK · portão aberto.
+
+### O que ele precisa fazer
+- **Refazer a resolução do caso** (uma vez, em qualquer aparelho): os dois cards voltaram a ser as cópias de 28/09 18:33 — o que foi decidido ontem não existe mais no servidor. Daqui em diante fica.
+- Fora do escopo, anotado: o **Estoque (`bnPush`) não apaga no servidor** — nome tirado do Estoque só some no aparelho.
+
+---
 
 ## 29/09/2026 (73ª onda) — CARGA-V1: data da última carga nos módulos que o Victor alimenta — só na base dele (v8.56)
 

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.56 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.57 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2065,6 +2065,13 @@ function salvar(opts){ if(window.CONTA_TROCANDO) return;
     c._upd=_now; PEND.lpc[k]=1;                   /* FUNDAÇÃO V1: editado aqui → pendente até o push confirmar */
     if(!c._dono&&typeof logado==='function'&&logado()){ const d=(typeof delegAtivo==='function'&&delegAtivo())||escEu(); if(d) c._dono=d; }   /* DONO-NA-EDIÇÃO-V1: o dono é o do escopo de AGORA, não o do push */
   });
+  /* SYNC-APAGA-V1 (29/09): exclusão feita AQUI (unir duplicatas, excluir negócio) entra na fila PERSISTIDA. Antes vivia
+     só na memória (_lpcPrev) até o push de 1,5 s depois: recarregar, trocar de aba no celular ou perder a sessão antes
+     disso perdia a exclusão pra sempre — e o servidor devolvia o card em todo aparelho. Desfazer (o card volta) sai da fila. */
+  PEND.del=PEND.del||{};
+  { const vivos=new Set((S.contatos||[]).filter(c=>c&&c.id!=null).map(c=>String(c.id)));
+    vivos.forEach(k=>{ if(PEND.del[k]!=null) delete PEND.del[k]; });
+    if(!_doServidor) Object.keys(_lpcLast).forEach(k=>{ if(vivos.has(k)) return; let d=null; try{ d=JSON.parse(_lpcLast[k])._dono||null; }catch(_){} PEND.del[k]=d||(typeof escEu==='function'&&escEu())||''; delete PEND.lpc[k]; }); }
   pendSalvar();
   _lpcLast={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null) _lpcLast[String(c.id)]=JSON.stringify(c); });
   try{ localStorage.setItem(CHAVE, JSON.stringify(S)); }catch(e){ if(typeof lsQuotaAviso==='function') lsQuotaAviso(e); }
@@ -2093,12 +2100,12 @@ function _lpcSnap(){ const m={}; (S.contatos||[]).forEach(c=>{ if(c&&c.id!=null)
      · a fila persiste no aparelho e retenta ao voltar a conexão e a cada minuto.
    `fundMerge` é PURA e tem invariantes. */
 const PEND_CHAVE='crmlp_pend_v1';
-let PEND={bn:{},lpc:{}};
-try{ const o=JSON.parse(localStorage.getItem(PEND_CHAVE)||'null'); if(o&&typeof o==='object'){ PEND.bn=o.bn||{}; PEND.lpc=o.lpc||{}; } }catch(_){}
+let PEND={bn:{},lpc:{},del:{}};   /* SYNC-APAGA-V1: del = {id: dono} das exclusões que ainda não subiram */
+try{ const o=JSON.parse(localStorage.getItem(PEND_CHAVE)||'null'); if(o&&typeof o==='object'){ PEND.bn=o.bn||{}; PEND.lpc=o.lpc||{}; PEND.del=o.del||{}; } }catch(_){}
 function pendSalvar(){ if(window.CONTA_TROCANDO) return; try{ localStorage.setItem(PEND_CHAVE,JSON.stringify(PEND)); }catch(_){} }
 function pendMarcar(fila,ids){ (ids||[]).forEach(id=>{ PEND[fila][String(id)]=1; }); pendSalvar(); }
 function pendLimpar(fila,ids){ (ids||[]).forEach(id=>{ delete PEND[fila][String(id)]; }); pendSalvar(); }
-function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).length; }
+function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).length+Object.keys(PEND.del||{}).length; }
 /* ═══ SYNC-3VIAS-V1 (21/09/2026) ═══════════════════════════════════════════════
    Pedido dele: "vario muito de devices e não posso perder informações". Antes, o registro
    inteiro vencia: se o iPad pôs o nome numa lista e o Mac (sem ter puxado) mudou a etapa
@@ -2165,11 +2172,13 @@ function _lpcMergeBn(remotosBn,completo){
   _bnRemoteLoaded=true; // BN: só agora o push pode comparar com uma baseline real (fix 04/08)
 }
 function _lpcMergeFunis(remotos,completo){
+  remotos=(remotos||[]).filter(c=>!(c&&PEND.del&&PEND.del[String(c.id)]));   /* SYNC-APAGA-V1: o que EU apaguei e ainda não subiu não volta pela porta do merge */
   if(remotos.length||completo){
     S.contatos=fundMerge(S.contatos,remotos,PEND.lpc,completo!==false,_lpcBase);   /* FUNDAÇÃO V1: servidor manda; pendente vence (3 vias se os dois mexeram) */
     fundBaseAnotar(_lpcBase,remotos);
     normBase();          // o que vem do banco (ex.: extensão de WhatsApp) também chega incompleto
     salvar({doServidor:true});
+    if(completo!==false && typeof pessoasBackfill==='function' && pessoasBackfill()>0) salvar();   /* SYNC-BOOT-V1: vínculo automático só DEPOIS do servidor falar — aí sim é edição legítima */
   }
   _lpcPrev=_lpcSnap();
   lpcAgendarPush(); // sobe o resultado do merge (e o 1º sync de uma base só-local)
@@ -2222,10 +2231,29 @@ async function syncPuxar(motivo){
 }
 function syncOcupado(){ const a=document.activeElement; return !!document.querySelector('.overlay.aberto, #at-ov, .cmdk-bd, .ta-ficha, .ta-menu, .sheet-bd')||(!!a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName||'')); }
 function syncRepintar(){ if(syncOcupado()){ _syncRenderPend=true; return; } _syncRenderPend=false; if(typeof agendarRender==='function') agendarRender(); }
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden) syncPuxar('voltou pra aba'); });
+/* SYNC-APAGA-V1 (29/09): exclusão feita em OUTRO aparelho não chega pela puxada incremental (linha apagada não tem
+   `atualizado`). De 5 em 5 min com a aba visível, e ao voltar pra aba, confere a lista de ids do servidor e tira daqui
+   o que lá não existe mais — nunca o pendente, nunca mais que LPC_DEL_MAX de uma vez, nunca com resposta suspeita
+   (erro ou cortada em 1000). Pura no que decide: syncApagadosLocal(ids). */
+let _syncIdsEm=0;
+function syncApagadosLocal(idsServidor){ const ids=new Set((idsServidor||[]).map(x=>String(x)));
+  const fora=(S.contatos||[]).filter(c=>c&&c.id!=null&&c.funil!=='bn'&&!ids.has(String(c.id))&&!(PEND.lpc&&PEND.lpc[String(c.id)]));
+  if(!fora.length||fora.length>LPC_DEL_MAX) return []; return fora.map(c=>String(c.id)); }
+async function syncConferirApagados(forca){
+  if(!LPC_REMOTE||!sb||window.CONTA_TROCANDO||navigator.onLine===false) return false; if(typeof _syncRodando!=='undefined'&&_syncRodando) return false;
+  if(!forca && Date.now()-_syncIdsEm<5*60000) return false; _syncIdsEm=Date.now();
+  let r; try{ r=await sb.from(LPC_T).select('id').or('dados->>funil.is.null,dados->>funil.neq.bn'); }catch(e){ return false; }
+  if(!r||r.error||!Array.isArray(r.data)||r.data.length>=1000) return false;
+  const tirar=syncApagadosLocal(r.data.map(x=>x.id)); if(!tirar.length) return false;
+  const set=new Set(tirar); S.contatos=S.contatos.filter(c=>!(c&&c.id!=null&&set.has(String(c.id))));
+  set.forEach(k=>{ delete _lpcPrev[k]; delete _lpcBase[k]; if(PEND.del) delete PEND.del[k]; });
+  salvar({doServidor:true}); pendSalvar(); syncRepintar(); return true;
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ syncPuxar('voltou pra aba'); syncConferirApagados(false); } });
 window.addEventListener('online',()=>setTimeout(()=>syncPuxar('reconectou'),2500));
 window.addEventListener('focusout',()=>{ if(_syncRenderPend) setTimeout(()=>{ if(_syncRenderPend&&!syncOcupado()) syncRepintar(); },300); });
 setInterval(()=>{ if(!document.hidden) syncPuxar('60s'); },60000);
+setInterval(()=>{ if(!document.hidden) syncConferirApagados(false); },60000);   /* SYNC-APAGA-V1 (a conferência se limita a 1× a cada 5 min) */
 async function lpcCarregar(){
   LPC_REMOTE=await lpcRemoteOn();
   if(!LPC_REMOTE) return;
@@ -2310,12 +2338,14 @@ async function lpcPush(){
     Object.keys(atual).forEach(k=>{ if(atual[k]!==_lpcPrev[k]||PEND.lpc[k]) rows.push(lpcRowOut(k,JSON.parse(atual[k]))); });
     if(JSON.stringify(atual)!==JSON.stringify(pre)) salvar({doServidor:true});
     Object.keys(_lpcPrev).forEach(k=>{ if(!(k in atual)) mortos.push(k); });
+    Object.keys(PEND.del||{}).forEach(k=>{ if(!(k in atual)&&!mortos.includes(k)) mortos.push(k); });   /* SYNC-APAGA-V1: a fila persistida entra no mesmo delete */
     const falhas=await pushResiliente(rows);
     /* SEGURANÇA-V1: delete só por (dono,id) da linha que ESTE aparelho conhecia, e nunca em massa —
        acima de LPC_DEL_MAX numa rodada é sintoma (cache zerado, bug), não intenção: registra e NÃO apaga. */
-    if(mortos.length>LPC_DEL_MAX){ console.warn('lp_contatos: '+mortos.length+' exclusões numa rodada — bloqueado por segurança (máx '+LPC_DEL_MAX+')'); toast('⚠️ Bloqueei uma exclusão em massa ('+mortos.length+'). Nada foi apagado no servidor.',false); mortos.length=0; }
-    if(mortos.length){ const porDono={}; mortos.forEach(k=>{ let d=null; try{ d=JSON.parse(_lpcPrev[k])._dono||null; }catch(_){} d=d||escEu()||''; (porDono[d]=porDono[d]||[]).push(k); });
-      for(const d of Object.keys(porDono)){ const r=await sb.from(LPC_T).delete().eq('dono',d).in('id',porDono[d]); if(r.error) throw r.error; } }
+    if(mortos.length>LPC_DEL_MAX){ console.warn('lp_contatos: '+mortos.length+' exclusões numa rodada — bloqueado por segurança (máx '+LPC_DEL_MAX+')'); toast('⚠️ Bloqueei uma exclusão em massa ('+mortos.length+'). Nada foi apagado no servidor.',false); mortos.length=0; PEND.del={}; pendSalvar(); }
+    if(mortos.length){ const porDono={}; mortos.forEach(k=>{ let d=(PEND.del&&PEND.del[k])||null; if(!d){ try{ d=JSON.parse(_lpcPrev[k])._dono||null; }catch(_){} } d=d||escEu()||''; (porDono[d]=porDono[d]||[]).push(k); });
+      for(const d of Object.keys(porDono)){ const r=await sb.from(LPC_T).delete().eq('dono',d).in('id',porDono[d]); if(r.error) throw r.error; }
+      mortos.forEach(k=>{ if(PEND.del) delete PEND.del[k]; }); pendSalvar(); }   /* SYNC-APAGA-V1: apagou lá → sai da fila (se falhar, o throw acima mantém e retenta) */
     const prevOld=_lpcPrev; _lpcPrev=atual; const desiste=[]; falhas.forEach(k=>{ if((PUSH_ERR[k]||0)>=5){ desiste.push(k); return; } if(prevOld[k]!==undefined) _lpcPrev[k]=prevOld[k]; else delete _lpcPrev[k]; });
     if(desiste.length){ toast('⚠️ '+desiste.length+' edição(ões) não puderam ser enviadas depois de 5 tentativas (dono/permissão). Ficam só neste aparelho.',false); }
     pendLimpar('lpc',rows.map(x=>String(x.id)).filter(k=>!falhas.has(k)||desiste.includes(k))); pendLimpar('lpc',mortos);
@@ -19163,7 +19193,13 @@ document.addEventListener('keydown',e=>{
 carregar(); bnCarregarLocal(); bnPrefLer(); taPrefLer(); recPrefLer(); ctPrefLer(); dicCacheLer();
 /* PESSOA↔OPORTUNIDADES V1: liga o que é indiscutível (mesmo nome E mesmo
    telefone) uma vez só. Só grava se mudou algo — boot não escreve à toa. */
-if(pessoasBackfill()>0) salvar();
+/* SYNC-BOOT-V1 (29/09): este vínculo roda no CACHE LOCAL, antes do servidor falar. Gravava com salvar() normal →
+   marcava os dois nomes como PENDENTES → no merge "pendente vence" → a cópia velha DESTE aparelho voltava pro
+   servidor, inclusive a que outro aparelho já tinha unido/apagado (28/09: duplicata sanada no desktop voltou no
+   celular; as duas linhas no servidor com o mesmo _upd e o pessoaId recém-posto). Agora o boot grava só local e o
+   vínculo de verdade roda DEPOIS do merge completo (_lpcMergeFunis), sobre a verdade do servidor. */
+function pessoasBackfillBoot(){ if(pessoasBackfill()>0) salvar({doServidor:true}); }
+pessoasBackfillBoot();
 document.addEventListener('click',e=>{ let fechou=false;   // popover B1: clique fora fecha
   document.querySelectorAll('details.bn-multi[open]').forEach(d=>{ if(!d.contains(e.target)){ d.removeAttribute('open'); fechou=true; } });
   if(fechou) FBN.pop=''; });
@@ -19671,7 +19707,7 @@ function lpSelfCheck(){
         _lpcMergeFunis([{id:'__t1',nome:'remoto',_upd:'2026-01-01T00:00:00Z',funil:'nn',_dono:'x'},{id:'__t2',nome:'remoto',_upd:'2026-01-01T00:00:00Z',funil:'nn',_dono:'x'}],true);
         const a=S.contatos.find(c=>c.id==='__t1'), b=S.contatos.find(c=>c.id==='__t2');
         return a&&a.nome==='remoto' && b&&b.nome==='local pend';
-      } finally{ S.contatos=guardaS; _lpcPrev=guardaPrev; PEND=guardaPend; pendSalvar(); salvar(); } })());
+      } finally{ S.contatos=guardaS; _lpcPrev=guardaPrev; PEND=guardaPend; pendSalvar(); salvar({doServidor:true}); } })());   /* SYNC-APAGA-V1: restaurar não é edição — senão os ids de teste entravam na fila de exclusão */
     /* o esqueleto é HTML estático dentro do #main; quem o remove é o innerHTML
        do 1º render. O que o invariante pode afirmar em qualquer momento é que
        ele nunca sobra JUNTO com o conteúdo pintado. */
@@ -21347,6 +21383,27 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
               return p.records.length===1&&p.records[0].proposta==='000000001E'&&p.records[0].apolice==='000000002'&&p.records[0].segurado==='FULANO DE TAL'&&p.records[0].afyc_projetado===2360.41; })()
        && (()=>{ const l=exDedupeProposta([{proposta:'P1',apolice:null,segurado:'x'},{proposta:'P1',apolice:'A1'},{apolice:'A2'},{proposta:'P2'}]); return l.length===3&&l.some(r=>r.proposta==='P1'&&r.apolice==='A1')&&!l.some(r=>r.proposta==='P1'&&!r.apolice); })()
        && /emRisco=ativos\.filter\(r=>r\.status!==AT_STATUS\.SUMIU\)/.test(String(viewLpAtrasos)) && /Total em atraso',emRisco\.length/.test(String(viewLpAtrasos)));
+    ok('SYNC-BOOT-V1: o vínculo automático do boot NÃO marca pendente (senão a cópia velha deste aparelho ressuscita no servidor o card que outro aparelho uniu/apagou); ele roda de novo depois do merge completo',
+       (()=>{ const gS=S.contatos, gL={..._lpcLast}, gP=JSON.parse(JSON.stringify(PEND)), gPrev=_lpcPrev, gB={..._lpcBase};
+              try{ const A={id:'__sbA',nome:'Fulano Sync',telefone:'81999990071',funil:'bc',etapa:'x',_dono:'x@x'}, B={id:'__sbB',nome:'Fulano Sync',telefone:'81999990071',funil:'bc',etapa:'x',_dono:'x@x'};
+                   S.contatos=[A,B]; salvar({doServidor:true}); PEND.lpc={}; PEND.del={};
+                   pessoasBackfillBoot(); const semPend=!PEND.lpc['__sbA']&&!PEND.lpc['__sbB']&&!!A.pessoaId&&A.pessoaId===B.pessoaId;
+                   _lpcPrev=_lpcSnap(); _lpcMergeFunis([{id:'__sbA',nome:'Fulano Sync',telefone:'81999990071',funil:'bc',etapa:'x',_dono:'x@x'}],true);
+                   const soA=S.contatos.length===1&&S.contatos[0].id==='__sbA';
+                   return semPend&&soA&&/doServidor:true/.test(String(pessoasBackfillBoot))&&/pessoasBackfill\(\)/.test(String(_lpcMergeFunis)); }
+              finally{ S.contatos=gS; _lpcLast=gL; PEND=gP; _lpcPrev=gPrev; _lpcBase=gB; pendSalvar(); salvar({doServidor:true}); } })());
+    ok('SYNC-APAGA-V1: exclusão feita aqui entra na fila persistida (PEND.del, com dono), desfazer tira da fila, o merge não devolve o que está na fila, o push apaga pela fila, e a conferência de ids do servidor tira daqui o apagado lá (nunca o pendente, nunca em massa)',
+       (()=>{ const gS=S.contatos, gL={..._lpcLast}, gP=JSON.parse(JSON.stringify(PEND)), gPrev=_lpcPrev, gB={..._lpcBase};
+              try{ const X={id:'__sdX',nome:'Fulano Del',funil:'nn',etapa:'x',_dono:'x@x'};
+                   S.contatos=[X]; salvar({doServidor:true}); PEND.lpc={}; PEND.del={};
+                   S.contatos=[]; salvar(); const naFila=PEND.del['__sdX']==='x@x'&&!PEND.lpc['__sdX'];
+                   _lpcPrev={}; _lpcMergeFunis([{id:'__sdX',nome:'Fulano Del',funil:'nn',etapa:'x',_dono:'x@x'}],false); const naoVolta=!S.contatos.some(c=>c.id==='__sdX');
+                   S.contatos=[X]; salvar(); const desfez=PEND.del['__sdX']==null;
+                   PEND.lpc={}; S.contatos=[{id:'__sdP',nome:'Pendente',funil:'nn',_dono:'x@x'},{id:'__sdQ',nome:'Apagado lá',funil:'nn',_dono:'x@x'},{id:'__sdR',nome:'Vivo',funil:'nn',_dono:'x@x'}]; PEND.lpc={'__sdP':1};
+                   const tirar=syncApagadosLocal(['__sdR']); const conf=tirar.length===1&&tirar[0]==='__sdQ';
+                   const muitos=Array.from({length:LPC_DEL_MAX+1},(_,i)=>({id:'__sdM'+i,nome:'m',funil:'nn'})); S.contatos=muitos; PEND.lpc={}; const massa=syncApagadosLocal([]).length===0;
+                   return naFila&&naoVolta&&desfez&&conf&&massa&&/PEND\.del/.test(String(lpcPush)); }
+              finally{ S.contatos=gS; _lpcLast=gL; PEND=gP; _lpcPrev=gPrev; _lpcBase=gB; pendSalvar(); salvar({doServidor:true}); } })());
     ok('CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias) — 7+ dias em âmbar, sem data diz "sem carga", chave só na base dele; Início › Aniversariantes, Emissão Diária, Detalhado, Status T, Aniversariantes, Aniversário de Apólice, Atrasos e Pendências passam por cargaLinha',
        (()=>{ const _p=PERFIL; try{ PERFIL=null; const h=hojeISO(); const d=new Date(); d.setDate(d.getDate()-9); const v=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
               const a=cargaChip(h,'carteira'), b=cargaChip(v+'T10:00:00Z','relatório'), c=cargaChip(null,'emitidas');
