@@ -2,7 +2,10 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.47 no ar + extensão WhatsApp 2.5.0
+## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.48 no ar + extensão WhatsApp 2.5.0
+
+**Depois do fechamento (28/09 noite):** v8.48 (PR #267) — AG-TIPO-INLINE-V1: tipo da atividade troca na própria linha da Agenda. Canônico duplicado de 05/09 ARQUIVADO. Períodos do catálogo de relatórios CONFIRMADOS por ele. **1º item de 29/09: guiar a criação do 2º perfil do Chrome (WhatsApp pessoal + extensão).**
+
 
 **No ar:** vendas.html **v8.47** (Pages conferido por hash) · extensão **2.5.0** no main (PR #265). Branch canônico: origin/main.
 Pasta que o Chrome dele carrega: `~/Teste Claude Code/crm-wt-insta/extensao-whatsapp` (worktree detached em origin/main).
