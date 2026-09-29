@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.52 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.53 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2025,6 +2025,11 @@ function normContato(c){
   try{ recAplicarDoNome(c); }catch(_){}
   if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
   ['recs','eventos','planos','interacoes','tarefas'].forEach(k=>{ if(!Array.isArray(c[k])) c[k]=[]; });
+  /* TAR-DEDUP-V1 (29/09): a mesma atividade (mesmo id) aparecia 2× na Agenda — em 5 negócios o array
+     tinha a cópia gravada 2× (caso da Larissa). Na porta: uma por id; se só uma foi concluída, fica ela. */
+  if(c.tarefas.length>1){ const m=new Map(); let dup=0; c.tarefas.forEach((t,i)=>{ const k=(t&&t.id!=null)?'i:'+t.id:'x:'+i; const a=m.get(k);
+      if(!a){ m.set(k,t); return; } dup++; if(!(a.feito&&!t.feito)) m.set(k,t); });
+    if(dup) c.tarefas=[...m.values()]; }
   ['sexo','profissao','origem','taStatus'].forEach(k=>{ if(c[k]==null||c[k]==='') c[k]='—'; });
   if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
   if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
@@ -11870,15 +11875,24 @@ function negSeloHTML(c,op){ if(!c) return '';
   .neg-sug{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow:auto;margin-top:6px}
   .neg-sug button{text-align:left;border:1px solid var(--linha);background:var(--fundo,#fff);border-radius:8px;padding:8px 10px;font-size:12.5px;cursor:pointer}
   .neg-sug button:hover{border-color:var(--azul,#2563eb)}
-  @media (max-width:980px){ .neg-linha{padding:10px} .neg-sug button{min-height:44px} }`; document.head.appendChild(s); })();
+  .neg-ok{flex-wrap:nowrap}
+  .neg-q{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .neg-q span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .neg-x{min-width:40px;min-height:40px;flex:0 0 auto}
+  .neg-criar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--linha);font-size:12px;color:var(--muted)}
+  .ev-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:10px}
+  .ev-grid label{min-width:0}
+  .ev-grid input{min-width:0;max-width:100%;box-sizing:border-box}
+  @media (max-width:560px){ .ev-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)} .ev-grid label:first-child{grid-column:1 / -1} }
+  @media (max-width:980px){ .neg-linha{padding:10px} .neg-sug button,.neg-criar .btn{min-height:44px} }`; document.head.appendChild(s); })();
 /* ── vincular à mão, quando o nome do evento não bate com nenhum negócio ── */
 let _GCAL_NEG=null;
 function gcalEdNegHTML(){
   const c=_GCAL_NEG?tarContato(_GCAL_NEG):null;
-  if(c) return `<div class="neg-linha"><span>🎯</span><b>${esc(c.nome||'')}</b>
-    <span style="font-size:12px;color:var(--muted)">${esc(negEtiqueta(c))}</span><span style="flex:1"></span>
+  if(c) return `<div class="neg-linha neg-ok"><span>🎯</span><div class="neg-q"><b>${esc(c.nome||'')}</b>
+    <span>${esc(negEtiqueta(c))}</span></div>
     <button type="button" class="btn btn-s btn-mini" onclick="abrirContato('${esc(jsq(c.id))}')">Abrir ficha</button>
-    <button type="button" class="btn btn-ghost btn-mini" onclick="gcalEdDesvincular()" title="Tirar o vínculo com este negócio">✕</button></div>`;
+    <button type="button" class="btn btn-ghost btn-mini neg-x" onclick="gcalEdDesvincular()" title="Tirar o vínculo com este negócio" aria-label="Tirar o vínculo">✕</button></div>`;   /* EV-MODAL-V2: ✕ na mesma linha (no iPad caía embaixo) */
   return `<div class="neg-linha" style="background:var(--fundo);border-style:dashed">
     <span>🎯</span><span style="font-size:12.5px;color:var(--muted)">Sem negócio vinculado</span>
     <input id="ev-neg" placeholder="ligar a um negócio — digite o nome" oninput="gcalEdNegBuscar()" style="flex:1;min-width:150px;padding:8px;border:1px solid var(--linha);border-radius:8px">
@@ -11889,10 +11903,23 @@ function gcalEdNegBuscar(){
   const i=document.getElementById('ev-neg'), cx=document.getElementById('ev-neg-sug'); if(!i||!cx) return;
   const q=normKey(i.value||''); if(q.length<2){ cx.innerHTML=''; return; }
   const achados=(S.contatos||[]).filter(c=>c&&escVisivel(c)&&normKey(c.nome||'').includes(q)).slice(0,8);
-  cx.innerHTML=achados.length?achados.map(c=>`<button type="button" onclick="gcalEdVincular('${esc(jsq(c.id))}')">
+  cx.innerHTML=(achados.length?achados.map(c=>`<button type="button" onclick="gcalEdVincular('${esc(jsq(c.id))}')">
     <b>${esc(c.nome||'')}</b> <span style="color:var(--muted)">· ${esc(negEtiqueta(c))}</span></button>`).join('')
-    :'<div style="font-size:12px;color:var(--muted);padding:4px 2px">Nenhum negócio com esse nome.</div>';
+    :'<div style="font-size:12px;color:var(--muted);padding:4px 2px">Nenhum negócio com esse nome.</div>')
+    +`<div class="neg-criar"><span>＋ Criar negócio “${esc(i.value.trim())}” em:</span>${Object.keys(PIPES).map(p=>`<button type="button" class="btn btn-s btn-mini" onclick="gcalEdNegCriar('${PIPES[p].funis[0]}')">${PIPES[p].ic} ${esc(PIPES[p].curto)}</button>`).join('')}</div>`;
 }
+/* EV-NEG-CRIAR-V1 (29/09): "caso não ache o negócio, já deixar adicionar um novo" (evento do Bruno Palácio, VG).
+   Cria o negócio mínimo no funil de Novos Negócios do pipe escolhido e já vincula ao evento; no Vida em Grupo
+   nasce a EMPRESA (VG-EMPRESA-V1). O resto (telefone, contatos) completa na ficha depois. */
+function gcalEdNegCriar(fid){ const i=document.getElementById('ev-neg'); const nome=((i&&i.value)||'').trim(); if(nome.length<2){ toast('Digite o nome',false); return; }
+  const emp=typeof ehEmpresa==='function'&&ehEmpresa({funil:fid});
+  const c={ id:uid(), lp:escLpNovo(), nome, sexo:'—', idade:null, profissao:'—', telefone:'', estrelas:0, ance:null,
+    etapa:fid==='nn'?'SitPlan':((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade'), funil:fid, origem:'Agenda', trilha:'seguro', criadoEm:hojeISO(),
+    taStatus:'—', taTentativas:0, notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[], sitplan:null };
+  if(emp){ c.pj={}; c.pjContatos=[]; }
+  S.contatos.push(c); salvar(); _GCAL_NEG=String(c.id); gcalEdNegPintar();
+  toast(`${emp?'🏢 Empresa':'Negócio'} “${nome}” criado em ${funilNome(fid)} e vinculado — salve o evento`,true); }
+window.gcalEdNegCriar=gcalEdNegCriar;
 function gcalEdVincular(id){ _GCAL_NEG=String(id); gcalEdNegPintar(); toast('Vinculado — salve o evento pra gravar',true); }
 function gcalEdDesvincular(){ _GCAL_NEG=null; gcalEdNegPintar(); }
 window.gcalEdNegBuscar=gcalEdNegBuscar; window.gcalEdVincular=gcalEdVincular; window.gcalEdDesvincular=gcalEdDesvincular;
@@ -11910,7 +11937,7 @@ function gcalModalEvento(m){
       <span onclick="gcalFecharModal()" style="cursor:pointer;font-size:20px;color:var(--muted)">✕</span></div>
     <div id="ev-neg-linha">${gcalEdNegHTML()}</div>
     <label style="font-size:12px;font-weight:600">Título<input id="ev-tit" value="${esc(m.summary)}" placeholder="Ex.: OI com João" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
-    <div style="display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;margin-top:10px">
+    <div class="ev-grid">
       <label style="font-size:12px;font-weight:600">Dia<input id="ev-dia" type="date" value="${esc(m.dia)}" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
       <label style="font-size:12px;font-weight:600">Início<input id="ev-ini" type="time" value="${esc(m.ini)}" oninput="gcalFimSegueInicio()" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
       <label style="font-size:12px;font-weight:600">Fim<input id="ev-fim" type="time" value="${esc(m.fim)}" oninput="gcalDurAnotar()" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
@@ -11924,7 +11951,7 @@ function gcalModalEvento(m){
     </div>
     <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Local<input id="ev-loc" value="${esc(m.local)}" placeholder="endereço, sala, ou vazio" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
     <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Convidado (e-mail do cliente)<input id="ev-conv" value="${esc(m.convidado)}" placeholder="cliente@email.com — recebe o convite" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px"></label>
-    <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Anotação<textarea id="ev-desc" rows="2" placeholder="detalhes do compromisso" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;resize:vertical">${esc(m.description)}</textarea></label>
+    <label style="font-size:12px;font-weight:600;display:block;margin-top:10px">Anotação<textarea id="ev-desc" rows="${Math.min(10,Math.max(3,String(m.description||'').split('\n').length+1))}" placeholder="detalhes do compromisso" style="width:100%;padding:9px;margin-top:3px;border:1px solid var(--linha);border-radius:9px;resize:vertical">${esc(m.description)}</textarea></label>
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer"><input type="checkbox" id="ev-meet" ${m.meet?'checked':''}> Criar link do Google Meet</label>
     <div id="ev-err" style="color:var(--verm,#dc2626);font-size:12.5px;min-height:1em;margin-top:8px"></div>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
@@ -12026,6 +12053,7 @@ function viewAgenda(){
         <span class="ag-grp">${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
           ${agSalvarHtml(c,t)}</span>
         ${tarGoogleParHTML(c,t)}
+        <button class="btn btn-ghost btn-mini ag-edit" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar a atividade (tipo, dia, hora, título)">✏️ editar</button>
       </span></div>`;
   };
   const linhaReun=x=>{ const dias=reunDiasParada(x.t), wa=waHref(x.c.telefone);
@@ -12036,37 +12064,40 @@ function viewAgenda(){
         <div style="font-size:11px;color:var(--muted)">${badgeEtapa(x.c.etapa)} ${etStatusChip(x.c)} ${esc(telBR(x.c.telefone))}</div></span>
       <span class="qd tar-atrasada" style="background:transparent;padding:0">${dataBR(x.t.quando)}${dias>0?` · ${dias}d sem desfecho`:''}</span>
       <span class="ac"><button class="btn btn-p btn-mini" onclick="reunFinalizar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Registrar o desfecho da reunião">Finalizar</button>
+        <button class="btn btn-s btn-mini ag-edit" onclick="tarEditar('${esc(jsq(x.c.id))}','${esc(jsq(x.t.id))}')" title="Não foi reunião? Mude o tipo, o dia ou a hora">✏️ editar</button>
         ${agAcaoSel(x.c,x.t,true)}
         ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:''}</span>
     </div>`; };
   const linhaSem=c=>`<div class="tarlin">
-        <span class="tt"><b class="clicavel" style="cursor:pointer" onclick="abrirContatoTarefa('${esc(c.id)}')">${esc(c.nome)}</b>
+        <span class="tt"><b class="clicavel" role="button" tabindex="0" style="cursor:pointer;text-decoration:underline dotted" onclick="abrirContato('${esc(jsq(c.id))}')" title="Abrir a ficha do negócio">${esc(c.nome)}</b>
           <div style="font-size:11px;color:var(--muted)">${badgeEtapa(c.etapa)} ${etStatusChip(c)} ${esc(telBR(c.telefone))}</div></span>
         <span class="ac">
-          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',0,'ligar')">📞 hoje</button>
-          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',1,'whats')">💬 amanhã</button>
-          <button class="btn btn-s btn-mini" onclick="tarAtalho('${esc(c.id)}',7,'follow')">🔁 7d</button>
-        </span></div>`;
+          <button class="btn btn-p btn-mini" onclick="agNovaAtividade('${esc(jsq(c.id))}',hojeISO(),'Próxima atividade · ${esc(jsq(String(c.nome||'').split(' ')[0]))}')" title="Marcar a próxima atividade (tipo, dia, hora) — evento ou tarefa">＋ próxima atividade</button>
+        </span></div>`;   /* AGENDA-DIA-V1: "tira o ligar hoje, mensagem amanhã, 7d — não está ajudando" */
   const pecas=[];
   { const ps=agSolicBloco(); if(ps) pecas.push(ps); }   /* SOLIC-TAREFAS-V1 */
-  if(pend.length) pecas.push(['reun', agBloco('reun','🤝 Reuniões a finalizar',`<b>${pend.length}</b> · aconteceram e ninguém registrou o que saiu delas`,`<div class="card" style="padding:6px 14px">${pend.map(linhaReun).join('')}</div>`)]);
-  /* AGENDA-EVT-TAR-V1 (25/09): pedido dele — "tá misturando tarefas com eventos; melhor um tópico de
-     Tarefas com subtópicos hoje, amanhã, próxima semana, próximas semanas — mesma lógica pros eventos
-     (reuniões etc.)". O lado de cada atividade é o destino dela no Google (gtDestino). O tópico de
-     Tarefas também traz o que foi criado DIRETO no Google Tarefas (GT.avulsas), com ✓ e 💾. */
-  ['evt','tar'].forEach(kind=>{
-    const ehT=kind==='tar';
-    const l=itens.filter(x=>!reunPendente(x.t)&&((gtDestino(x.t)==='tarefa')===ehT));
-    const av=ehT?agAvulsas():[];
-    const subs=AG_FAIXAS.map(f=>{ const li=l.filter(x=>agFaixa(x.t.quando)===f[0]), ai=av.filter(g=>agFaixa(gtDataDaTarefa(g))===f[0]);
-      const n=li.length+ai.length; if(!n&&!(f[0] in AG_NOVO_DIA)) return '';
-      const nomes=li.slice(0,3).map(x=>x.c.nome.split(' ')[0]).concat(ai.slice(0,Math.max(0,3-li.length)).map(g=>String(g.title||'').split(' ')[0])).join(' · ');
-      return agBloco(kind+'-'+f[0],f[1],`<b>${n}</b>${nomes?' · '+esc(nomes)+(n>3?' …':''):''}`,
-        `<div class="card" style="padding:6px 14px">${n?li.map(linha).join('')+ai.map(agAvulsaLinha).join(''):'<div style="padding:10px 0;font-size:12.5px;color:var(--muted)">Nada marcado — toque em <b>＋ Novo</b> aqui em cima.</div>'}</div>`); }).join('');
-    const tot=l.length+av.length, hj=l.filter(x=>agFaixa(x.t.quando)==='hoje').length+av.filter(g=>agFaixa(gtDataDaTarefa(g))==='hoje').length, atr=l.filter(x=>agFaixa(x.t.quando)==='atrasada').length+av.filter(g=>agFaixa(gtDataDaTarefa(g))==='atrasada').length;
-    pecas.push([kind, agBloco(kind,ehT?'☑️ Tarefas':'📅 Eventos',`<b>${tot}</b>${hj?' · '+hj+' hoje':''}${atr?' · <span style="color:var(--verm,#dc2626)">'+atr+' atrasada'+(atr>1?'s':'')+'</span>':''} · ${ehT?'afazeres (Google Tarefas)':'compromissos e reuniões (Agenda)'}`,`<div class="ag-subs">${subs}</div>`)]);
+  /* AGENDA-DIA-V1 (29/09): pedido dele no iPad — "tudo que for tarefa, evento… agrupa: a agenda de hoje, a de
+     amanhã, a da próxima semana; e dentro, os subtópicos: o que é evento, o que é tarefa". O DIA manda; dentro
+     dele 📅 Eventos e ☑️ Tarefas em ordem de horário. As reuniões a finalizar deixam de ser bloco à parte
+     (duplicava) e entram nos Eventos do dia delas, com Finalizar + ✏️ editar. (Substitui AGENDA-EVT-TAR-V1.) */
+  const agOrdHora=(a,b)=>String(a.t.quando||'9999').localeCompare(String(b.t.quando||'9999'))||String(a.t.hora||'99:99').localeCompare(String(b.t.hora||'99:99'));
+  const avTodas=agAvulsas(), agVazio='<div style="padding:10px 0;font-size:12.5px;color:var(--muted)">Nada marcado.</div>';
+  const agNomes=(l,n)=>{ const t=l.slice(0,3).join(' · '); return t?' · '+esc(t)+(n>3?' …':''):''; };
+  AG_FAIXAS.forEach(f=>{
+    const pr=pend.filter(x=>agFaixa(x.t.quando)===f[0]).sort(agOrdHora);
+    const li=itens.filter(x=>!reunPendente(x.t)&&agFaixa(x.t.quando)===f[0]).sort(agOrdHora);
+    const ev=li.filter(x=>gtDestino(x.t)!=='tarefa'), ta=li.filter(x=>gtDestino(x.t)==='tarefa');
+    const av=avTodas.filter(g=>agFaixa(gtDataDaTarefa(g))===f[0]);
+    const nEv=pr.length+ev.length, nTa=ta.length+av.length, n=nEv+nTa;
+    if(!n&&!(f[0] in AG_NOVO_DIA)) return;
+    const nomesEv=pr.concat(ev).map(x=>x.c.nome.split(' ')[0]), nomesTa=ta.map(x=>x.c.nome.split(' ')[0]).concat(av.map(g=>String(g.title||'').split(' ')[0]));
+    const subEv=agBloco(f[0]+'-evt','📅 Eventos',`<b>${nEv}</b>${pr.length?' · <span style="color:var(--verm,#dc2626)">'+pr.length+' a finalizar</span>':''}${agNomes(nomesEv,nEv)}`,
+      `<div class="card" style="padding:6px 14px">${nEv?pr.map(linhaReun).join('')+ev.map(linha).join(''):agVazio}</div>`);
+    const subTa=agBloco(f[0]+'-tar','☑️ Tarefas',`<b>${nTa}</b>${agNomes(nomesTa,nTa)}`,
+      `<div class="card" style="padding:6px 14px">${nTa?ta.map(linha).join('')+av.map(agAvulsaLinha).join(''):agVazio}</div>`);
+    pecas.push([f[0], agBloco(f[0],f[1],`<b>${n}</b> · 📅 ${nEv} · ☑️ ${nTa}${pr.length?' · <span style="color:var(--verm,#dc2626)">🤝 '+pr.length+' a finalizar</span>':''}`,`<div class="ag-subs">${subEv}${subTa}</div>`)]);
   });
-  { const pa=agAnivBloco(); if(pa){ const ih=pecas.findIndex(p=>p[0]==='tar'); const is=pecas.findIndex(p=>p[0]==='solic'); pecas.splice(ih>=0?ih+1:(is>=0?is+1:0),0,pa); } }   /* AGENDA-ANIV-V1 */
+  { const pa=agAnivBloco(); if(pa){ let ih=-1; pecas.forEach((p,i)=>{ if(AG_FAIXAS.some(f=>f[0]===p[0])) ih=i; }); const is=pecas.findIndex(p=>p[0]==='solic'); pecas.splice(ih>=0?ih+1:(is>=0?is+1:0),0,pa); } }   /* AGENDA-ANIV-V1 */
   if(semAtiv.length) pecas.push(['semativ', agBloco('semativ','💤 Sem próxima atividade',`<b>${semAtiv.length}</b> · negócio parado é o que mais custa`,`<div class="card" style="padding:6px 14px">${semAtiv.slice(0,40).map(linhaSem).join('')}
         ${semAtiv.length>40?`<div style="font-size:12px;color:var(--muted);padding:8px 0">…e mais ${semAtiv.length-40}. Os 40 mais recentes aparecem aqui.</div>`:''}</div>`)]);
   const corpo=true? agOrdRender(pecas) : `<div class="card" style="padding:26px;text-align:center;color:var(--muted)">
@@ -12086,7 +12117,7 @@ function viewAgenda(){
 }
 /* ── AGENDA-V2: seções dobráveis (nascem fechadas) + organizar, por aparelho ── */
 const AG_SEC_CHAVE='crmlp_agenda_secs_v1', AG_ORD_CHAVE='crmlp_agenda_ordem_v1';
-const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',evt:'📅 Eventos',tar:'☑️ Tarefas',hoje:'📌 Hoje',aniv:'🎂 Aniversariantes',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
+const AG_NOMES={solic:'📨 Solicitações em acompanhamento',reun:'🤝 Reuniões a finalizar',atrasada:'⚠️ Atrasadas',evt:'📅 Eventos',tar:'☑️ Tarefas',hoje:'📌 Hoje',semana:'🗓️ Próxima semana',semanas:'📆 Próximas semanas',aniv:'🎂 Aniversariantes',amanha:'→ Amanhã',futuro:'🗓️ Próximas','sem-data':'• Sem data',semativ:'💤 Sem próxima atividade'};
 let AG_ORD={modo:false,ch:[]};
 function agSecsLer(){ try{ return JSON.parse(localStorage.getItem(AG_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function agAberta(k){ return dobraAberta(k, agSecsLer()); }
@@ -19866,14 +19897,26 @@ function lpSelfCheck(){
         &&String(agNovaAtividade).includes('tn-hora')&&String(agNovaAtividade).includes('tn-dur')&&String(agNovaAtividade).includes('tn-pessoa')
         &&!String(agDataHtml).includes('onchange="tarSetData')&&String(agSalvarData).includes('tarSetData')&&String(viewAgenda).includes('agSalvarHtml')
         &&par.indexOf("'evento'")<par.indexOf("'tarefa'")&&row.indexOf("'evento'")<row.indexOf("'tarefa'")&&!row.includes('ag-glbl'); })());
-    ok('AGENDA-EVT-TAR-V1: Agenda separa 📅 Eventos e ☑️ Tarefas, cada um com Hoje/Amanhã/Próxima semana/Próximas semanas (+ ＋ Novo) e as tarefas só do Google', (()=>{ const _c=S.contatos, _a=GT.avulsas, _m=$('#main').innerHTML, _v=VIEW; try{ const h=hojeISO();
-      S.contatos=[{id:'ze',nome:'Zz Evt',etapa:'OI/FF',funil:'nn',interacoes:[],eventos:[],tarefas:[{id:'e1',tipo:'reuniao',tit:'R',quando:isoAddDias(h,3),hora:'10:00',feito:null},{id:'t1',tipo:'follow',tit:'T',quando:isoAddDias(h,20),destino:'tarefa',feito:null}]}];
+    ok('AGENDA-DIA-V1: Agenda por DIA (Atrasadas/Hoje/Amanhã/Próxima semana/Próximas semanas) com 📅 Eventos e ☑️ Tarefas dentro, em ordem de hora; reunião a finalizar entra nos Eventos do dia (sem bloco à parte); ✏️ editar em cada linha; Sem próxima atividade abre a ficha', (()=>{ const _c=S.contatos, _a=GT.avulsas, _m=$('#main').innerHTML, _v=VIEW; try{ const h=hojeISO();
+      S.contatos=[{id:'ze',nome:'Zz Evt',etapa:'OI/FF',funil:'nn',lp:S.activeUser,interacoes:[],eventos:[],tarefas:[{id:'e1',tipo:'reuniao',tit:'R',quando:isoAddDias(h,3),hora:'10:00',feito:null},{id:'e0',tipo:'reuniao',tit:'Cedo',quando:isoAddDias(h,3),hora:'08:00',feito:null},{id:'t1',tipo:'follow',tit:'T',quando:isoAddDias(h,20),destino:'tarefa',feito:null},{id:'rp',tipo:'reuniao',tit:'Passou',quando:isoAddDias(h,-2),hora:'09:00',feito:null}]}];
       GT.avulsas=[{id:'gv1',title:'Avulsa Zz',due:h+'T00:00:00.000Z',status:'needsAction'}];
-      VIEW='agenda'; viewAgenda(); const m=document.getElementById('main');
-      const ev=m.querySelector('.ini-bl[data-ag="evt-semana"]'), tr=m.querySelector('.ini-bl[data-ag="tar-semanas"]'), av=m.querySelector('.ini-bl[data-ag="tar-hoje"]');
-      return !!m.querySelector('.ini-bl[data-ag="evt"]')&&!!m.querySelector('.ini-bl[data-ag="tar"]')&&!!ev&&ev.textContent.includes('Zz Evt')&&!!tr&&tr.textContent.includes('Zz Evt')&&!!av&&av.textContent.includes('Avulsa Zz')
-        &&['evt-hoje','evt-amanha','tar-hoje','tar-amanha','tar-semana'].every(k=>{ const b=m.querySelector('.ini-bl[data-ag="'+k+'"]'); return b&&b.querySelector('.ag-novo'); })
-        &&agFaixa(isoAddDias(h,7))==='semana'&&agFaixa(isoAddDias(h,8))==='semanas'&&String(gsyncPuxarTarefas).includes('GT.avulsas'); } finally{ S.contatos=_c; GT.avulsas=_a; VIEW=_v; $('#main').innerHTML=_m; } })());
+      VIEW='agenda'; viewAgenda(); const m=document.getElementById('main'); const q=k=>m.querySelector('.ini-bl[data-ag="'+k+'"]');
+      const a=!q('evt')&&!q('tar')&&!q('reun')&&!!q('hoje')&&!!q('semana')&&!!q('semanas')&&!!q('atrasada');
+      const b=!!q('semana-evt')&&q('semana-evt').textContent.includes('Zz Evt')&&!!q('semanas-tar')&&q('semanas-tar').textContent.includes('Zz Evt')&&!!q('hoje-tar')&&q('hoje-tar').textContent.includes('Avulsa Zz');
+      const c=!!q('atrasada-evt')&&q('atrasada-evt').textContent.includes('Finalizar')&&!!q('atrasada-evt').querySelector('.ag-edit');
+      const ls=[...q('semana-evt').querySelectorAll('.tarlin')]; const d=ls.length===2&&ls[0].textContent.includes('Cedo');
+      const e=['hoje','amanha','semana','semanas'].every(k=>q(k)&&q(k).querySelector(':scope > .ini-h .ag-novo'))&&!q('hoje-evt').querySelector(':scope > .ini-h .ag-novo');
+      const src=[...document.scripts].map(x=>x.textContent).join('\n'); const f=src.includes("abrirContato('${esc(jsq(c.id))}')\" title=\"Abrir a ficha do negócio")&&!String(viewAgenda).includes("tarAtalho('${esc(c.id)}',7,'follow')");
+      return a&&b&&c&&d&&e&&f&&agFaixa(isoAddDias(h,7))==='semana'&&agFaixa(isoAddDias(h,8))==='semanas'; } finally{ S.contatos=_c; GT.avulsas=_a; VIEW=_v; $('#main').innerHTML=_m; } })());
+    ok('TAR-DEDUP-V1: a mesma atividade (mesmo id) gravada 2× vira 1 na porta; se só uma foi concluída, fica a concluída', (()=>{ const c=normContato({id:'zd',nome:'Zz',tarefas:[{id:'x1',tit:'A',feito:null},{id:'x1',tit:'A',feito:null},{id:'x2',feito:'2026-01-01'},{id:'x2',feito:null},{tit:'sem id'},{tit:'sem id'}]});
+      return c.tarefas.length===4&&c.tarefas.filter(t=>t.id==='x1').length===1&&c.tarefas.find(t=>t.id==='x2').feito==='2026-01-01'; })());
+    ok('EV-MODAL-V2: modal de evento — vínculo com ✕ na mesma linha, horários em grade que não vaza, anotação cresce com o texto, e ＋ Criar negócio quando a busca não acha', (()=>{ const _n=_GCAL_NEG, _c=S.contatos; try{ S.contatos=[{id:'zm1',nome:'Zz Modal',funil:'nn',etapa:'C2',lp:S.activeUser}]; _GCAL_NEG='zm1';
+      const h=gcalEdNegHTML(); const a=h.includes('neg-ok')&&h.includes('neg-x'); _GCAL_NEG=null;
+      gcalModalEvento({id:null,summary:'x',description:'a\nb\nc\nd\ne',dia:hojeISO(),ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false});
+      const ta=document.getElementById('ev-desc'), g=document.querySelector('#ev-ov .ev-grid'); const b=!!g&&ta&&+ta.getAttribute('rows')>=6;
+      const i=document.getElementById('ev-neg'); i.value='Empresa Nova Zz'; gcalEdNegBuscar(); const c=!!document.querySelector('#ev-neg-sug .neg-criar');
+      gcalEdNegCriar('mfo'); const nv=S.contatos.find(x=>x.nome==='Empresa Nova Zz'); const d=!!nv&&nv.funil==='mfo'&&_GCAL_NEG===String(nv.id);
+      gcalFecharModal(); return a&&b&&c&&d; } finally{ _GCAL_NEG=_n; S.contatos=_c; try{ gcalFecharModal(); }catch(_){} } })());
     ok('AGENDA-GOOGLE-2BOT-V1: linha da Agenda tem ☑️ Tarefa e 📅 Evento, acende o que vale e o clique fixa o destino', (()=>{ const c={id:'c2b',nome:'Zz'}; const h=tarGoogleParHTML(c,{id:'t1',tipo:'ligar',quando:'2026-10-01',gtaskId:'g1',destino:'tarefa'}); const h2=tarGoogleParHTML(c,{id:'t2',tipo:'ligar',quando:'2026-10-01',gcalId:'e1',destino:'evento'}); const t={}; gtDestinoAplicar(t,'evento'); return h.includes("'tarefa'")&&h.includes("'evento'")&&/btn-p btn-mini[^>]*'tarefa'/.test(h)&&/btn-p btn-mini[^>]*'evento'/.test(h2)&&gtDestino(t)==='evento'&&String(tarMandarGoogle).includes('gcalCriarEventoDaTarefa')&&String(agBloco).includes('agNovaAtividade'); })());
     ok('GCAL-SEM-TELA-V1: atividade com data sempre ganha o botão da API (sem depender de GCAL.conectado); link só sem data', (()=>{ const bk=GCAL.conectado; GCAL.conectado=false; try{ const h=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t1',tipo:'ligar',quando:'2026-09-15',hora:'14:00'}); const h2=tarGcalAcaoHTML({id:'c1',nome:'Zz'},{id:'t2',tipo:'ligar'}); return h.includes('gcalCriarEventoDaTarefa')&&!h.includes('calendar/render')&&!h2.includes('calendar/render'); } finally{ GCAL.conectado=bk; } })());
     ok('ESCOPO-TUDO-V1 carteira: cliente de outro dono (_dono) não aparece em cartVis no escopo Meu', (()=>{ const P=PERFIL,E=ESC,D=DELEG,C=CART.clientes; try{ PERFIL={email:'j@x',papel:'admin',nome:'Ju'}; DELEG={eu:'j@x',donos:['d@x']}; ESC={sel:'meu',rotulos:[{rotulo:'gustavo',dono_email:'j@x'},{rotulo:'daniel',dono_email:'d@x'}],perfis:{}}; CART.clientes=[{ref:'a',nome:'A',lp:'Gustavo'},{ref:'b',nome:'B',lp:'Gustavo',_dono:'d@x'}]; return cartVis().map(c=>c.ref).join()==='a'; } finally{ PERFIL=P; ESC=E; DELEG=D; CART.clientes=C; } })());
