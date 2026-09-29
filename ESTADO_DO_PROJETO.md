@@ -2,6 +2,26 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 29/09/2026 (fechamento, sessão Code) — vendas.html v8.58 + Revisão com 🧮 Calculadora (T2+T3) + extensão 2.6.0
+
+**No ar (Pages conferido por hash a cada versão):** v8.49 VG-EMPRESA (Vida em Grupo = card de EMPRESA com contatos por papel; Amanda → Império Vidros no banco, backup `_bkp_20260929_vg_amanda`) · v8.50 MULTI-NEG (faixa 💼 Negócios desta pessoa + ＋ Novo negócio por pipe) · v8.51 SOLIC-VICTOR (autor = quem está logado; editar não troca dono; 6 chaves de Solicitações → MODS) · v8.52 SO-BUSCA (busca ao lado de Nova solicitação) · v8.53 AGENDA-DIA (Agenda por dia com 📅 Eventos/☑️ Tarefas, reuniões a finalizar dentro do dia, ✏️ editar, modal de evento firme + ＋ Criar negócio, TAR-DEDUP) · v8.54 LIBERA-VICTOR (melhorias liberadas pra todos; módulos novos por usuário) · v8.55–v8.57 (outra sessão: NIVER-TAP, CARGA, SYNC-BOOT/SYNC-APAGA) · v8.58 `carga` → MODS. **NOVO_SO_MEU vazio.** Extensão WhatsApp **2.6.0** (⚡ Rápido mostra os negócios da pessoa; `crm-wt-insta` em origin/main).
+**Revisão de Proteção:** aba **🧮 Calculadora** (CALC-NEC-V2, PR #277 + T3): visual aprovado (`design/ref/CALCULADORA_NECESSIDADE_2026-09-29.html`), motor puro `cxMotor`, resgate lido da tabela `RESGATE` (WV10), classes `cx-`/ids `cx_`, tetos (ossos ≤ 300 mil, diária ≤ 3 mil, autonomia ≤ 2 mi). Convive com a aba Necessidade (decisão dele). selfTest 53/53.
+
+**Banco (29/09):** `lp_auditoria` + `criado_por_email`/`autor_email` + evento com dono do pai + dono de solicitação fixo (migration `supabase/migrations/lp_auditoria.sql`, rodada POR ELE no SQL Editor, conferida). `lp_perfis`: Victor com TODOS os módulos (inclui funis_extra, painel-wa, plano, pm-padrao, planos, revisao, carga, solic-*); Daniel ganhou Solicitações v2 completas (sem pipes, painel-wa, plano, pm-padrao, revisao, carga).
+
+**Regra nova (CLAUDE.md, 29/09):** melhoria no que o usuário já usa = liberada pra todos; só MÓDULO novo trava (MODS def:false, Victor ligado; Daniel quando ele disser); regra que muda número segue por usuário.
+
+**Fila (ordem):**
+1. Calculadora: **T3b** (frase de premissa curta em TODA entrada) → **T4** (puxar idade/sexo/coberturas do cliente da Revisão; sem tabela nova). Refs reais Diego/Beatriz ficam FORA do repo (público) → Drive + Acervo Notion (pendente).
+2. Relatórios: fixture de leitura da Lista de Atraso a partir de texto real anonimizado (ele cola o texto) → "colar texto" redondo nos outros 6 → liberar pro Victor. Texto velho embaixo de Subir relatório.
+3. Estoque não apaga no servidor (mesma família do SYNC-APAGA) — onda própria.
+4. Pasta de arquivos por cliente espelhada Drive + iCloud (canônico só mapa).
+5. Agregador de WhatsApp (sessão 19/09, só análise): ele escolhe A (extensão varre o dia, risco anti-ban) ou B (importar .txt exportado) — antes, usar o Painel WA em campo.
+
+**Pendências dele:** conferir no iPad a Agenda nova + modal · recarregar extensão 2.6.0 e ver o Rápido com a Amanda · perfil 2 do Chrome (WhatsApp pessoal, parou no passo 1/6) · refazer 1× a resolução da duplicata do Erlei · conferir v8.28 (Sandra/Adeline) · Victor reimportar 3 relatórios de emitidas + .txt das pendências 16/09 · repo privado + redeploy da Edge Function de importação.
+
+**Lições:** estilo de módulo embutido numa página grande → prefixar classes (`.hero/.bar/.pill` da Revisão vazavam) · atividade duplicada no array (mesmo id) = dedupe na porta (TAR-DEDUP) · migration em produção e merge sem OK explícito são barrados pelo classificador → ele roda no SQL Editor em modo guiado / dá o OK no chat.
+
 ## 🟢 RETOMAR AQUI — 28/09/2026 (fechamento) — v8.48 no ar + extensão WhatsApp 2.5.0
 
 **29/09 (sessão do Code, madrugada→noite):** v8.57 no ar — 74ª onda SYNC-BOOT-V1 + SYNC-APAGA-V1: duplicata sanada num aparelho voltava nos outros (vínculo automático do boot marcava pendente e ressuscitava a cópia velha; exclusão agora vira fila persistida e o outro aparelho confere os ids do servidor) — pra todos. v8.56 — 73ª onda CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias, âmbar com 7+ dias) nos módulos que o Victor alimenta, só na base dele (chave `carga`). v8.55 — 72ª onda NIVER-TAP-V1: ✓ do aniversariante voltou a funcionar no celular e no desktop (o fundo do arrasto engolia o toque) + erro de boot do `ncModal` (desde a v8.42) corrigido. Antes, nesta mesma sessão: v8.20 📅 na ficha do lead (56ª) e v8.29 prêmio padrão R$ 250 (57ª).
