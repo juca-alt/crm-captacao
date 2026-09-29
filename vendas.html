@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.51 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.52 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -615,6 +615,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .b-verm{background:var(--verm-bg);color:#b91c1c}
 
   .toolbar{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .so-bar1{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 8px}
+  .so-busca{flex:1 1 260px;min-width:0;display:flex;align-items:center;gap:6px;height:44px;padding:0 6px 0 12px;border:1px solid var(--linha);border-radius:10px;background:#fff}
+  .so-busca input{flex:1;min-width:0;border:0;outline:none;background:transparent;font-size:16px;height:100%}
+  .so-busca:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+  .so-bar1 .btn,.so-bar1 .seg button{min-height:44px}
+  @media(min-width:981px){ #main .toolbar.so-filtros{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px} #main .toolbar.so-filtros>select{width:100%;min-width:0;min-height:44px} }   /* celular: filtros moram no Buscar e filtrar */
   .toolbar input[type=search],.toolbar input[type=number],.toolbar select{height:38px;padding:0 12px;border:1px solid var(--linha);border-radius:9px;background:#fff;font-size:13px;font-weight:500;color:var(--ink);transition:border-color .12s,box-shadow .12s}
   .toolbar input[type=search]{flex:1;min-width:200px}
   .toolbar input[type=number]{max-width:110px} /* v2 item 6: number cru quebrava o padrão dos selects */
@@ -13771,6 +13777,12 @@ async function soGravar(s){ const i=SO.itens.findIndex(x=>x.id===s.id); if(i>=0)
 /* SOLIC-VICTOR-V1 (29/09): quem FEZ = quem está LOGADO — não o dono da base que ele opera (no modo
    delegado SO_EMAIL é o do Gustavo, e o e-mail do Victor nem contém "victor": tudo saía como "gustavo").
    admin → gustavo · dono de base LP (tem rótulo em lp_rotulo_dono) → o rótulo · sem rótulo = backoffice → victor. */
+/* SO-BUSCA-V1 (29/09): "um campo de busca ao lado de Nova solicitação, pra buscar só os nomes dentro desse
+   módulo". Casa segurado, negócio vinculado, apólice (dígitos), protocolo, contexto e próximo passo. */
+function soBuscaBate(s,q){ const n=normKey(q||''); if(!n) return true; const d=String(q).replace(/\D/g,'');
+  if(d.length>=3&&(String(s.apolice||'').replace(/\D/g,'').includes(d)||String(s.protocolo||'').replace(/\D/g,'').includes(d))) return true;
+  let neg=''; try{ const c=s.contato_id&&tarContato(s.contato_id); neg=c?c.nome:''; }catch(_){}
+  return [s.segurado,neg,s.proxima_acao,s.contexto,s.protocolo,s.apolice].some(x=>x&&normKey(String(x)).includes(n)); }
 function soQuemSou(){ if(typeof souAdm==='function'&&souAdm()) return 'gustavo';
   const eu=String((typeof escEu==='function'&&escEu())||'').toLowerCase();
   if(!eu){ const e=(SO_EMAIL||AT_EMAIL||'').toLowerCase(); return e.indexOf('victor')>=0?'victor':'gustavo'; }   /* deslogado: comportamento antigo */
@@ -14166,7 +14178,7 @@ function viewSolicitacoesV2(){
     if(FSO.status==='muda') return soMuda(s);
     if(FSO.status==='todas') return true;
     return s.status===FSO.status; })
-    .filter(s=>{ if(FSO.area&&soComDe(s)!==FSO.area) return false; if(FSO.ag==='sim'&&!soAguardando(s)) return false; if(FSO.ag==='nao'&&soAguardando(s)) return false; if(FSO.pipe&&(FSO.pipe==='sem'?soPipeDe(s)!=='':soPipeDe(s)!==FSO.pipe)) return false; if(FSO.q){ const q=normKey(FSO.q); if(normKey(s.segurado).indexOf(q)<0&&String(s.apolice||'').indexOf(FSO.q.replace(/\D/g,'')||'§')<0&&normKey(s.proxima_acao||'').indexOf(q)<0) return false; } return true; })
+    .filter(s=>{ if(FSO.area&&soComDe(s)!==FSO.area) return false; if(FSO.ag==='sim'&&!soAguardando(s)) return false; if(FSO.ag==='nao'&&soAguardando(s)) return false; if(FSO.pipe&&(FSO.pipe==='sem'?soPipeDe(s)!=='':soPipeDe(s)!==FSO.pipe)) return false; if(FSO.q&&!soBuscaBate(s,FSO.q)) return false; return true; })
     .sort((a,b)=>{ const va=soVencida(a,hj)?0:1, vb=soVencida(b,hj)?0:1; if(va!==vb) return va-vb; const pa=soPrazoEfetivo(a)||'9999', pb=soPrazoEfetivo(b)||'9999'; return pa.localeCompare(pb)||String(b.aberta_em).localeCompare(String(a.aberta_em)); });
   const areasVivas=[...new Set(abertas.map(s=>s.area||'outro'))];
   const linha=s=>{ const p=soPrazoEfetivo(s), v=soVencida(s,hj), d=soDiasAberta(s,hoje), st=soDiasSemToque(s,hoje), par=soParada(s,hoje);
@@ -14183,16 +14195,18 @@ function viewSolicitacoesV2(){
       ${kpiLente('parada','🔇 Paradas',paradas.length,'sem andamento há '+SO_PARADA_DIAS+'d+')}
       ${kpiLente('muda','➡️ Sem próximo passo',mudas.length,'ninguém disse o que falta')}
     </div>
-    <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-      <input id="so-q" placeholder="Buscar segurado, apólice ou próximo passo…" value="${esc(FSO.q)}" oninput="FSO.q=this.value;viewSolicitacoes();atFocus('so-q')" style="flex:1;min-width:180px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
+    <div class="so-bar1">
+      <div class="so-busca"><span aria-hidden="true">🔎</span><input id="so-q" type="search" placeholder="Buscar nome, apólice, protocolo ou próximo passo…" value="${esc(FSO.q)}" oninput="FSO.q=this.value;viewSolicitacoes();atFocus('so-q')" autocomplete="off" spellcheck="false">${FSO.q?`<button class="btn btn-ghost btn-mini" onclick="FSO.q='';viewSolicitacoes()" title="Limpar a busca">✕</button>`:''}</div>
+      ${novoOn('solic-kanban')?`<div class="seg"><button class="${FSO.vis==='kanban'?'on':''}" onclick="soVisSet('kanban')">▦ Kanban</button><button class="${FSO.vis!=='kanban'?'on':''}" onclick="soVisSet('lista')">☰ Lista</button></div>`:''}
+      <button class="btn btn-p btn-mini" onclick="soNova()">📨 Nova solicitação</button>
+    </div>
+    <div class="toolbar so-filtros" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <select onchange="FSO.pipe=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px"><option value="">Todos os pipes</option>${Object.keys(PIPES).map(k=>`<option value="${k}"${FSO.pipe===k?' selected':''}>${PIPES[k].ic} ${esc(PIPES[k].curto)}</option>`).join('')}<option value="sem"${FSO.pipe==='sem'?' selected':''}>Sem negócio vinculado</option></select>
       <select onchange="FSO.ag=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">${[['','Qualquer situação'],['sim','⏳ Aguardando'],['nao','Não aguardando']].map(o=>`<option value="${o[0]}"${FSO.ag===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select>
       <select onchange="FSO.area=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px"><option value="">Com qualquer um</option>${SO_COM.map(a=>`<option value="${a[0]}"${FSO.area===a[0]?' selected':''}>${esc(a[1])}</option>`).join('')}</select>
       <select onchange="FSO.status=this.value;viewSolicitacoes()" style="padding:8px;border:1px solid var(--linha);border-radius:9px">${[['aberta','Em aberto'],['todas','Todas']].concat(SO_STATUS.filter(s=>s[0]!=='aberta')).map(o=>`<option value="${o[0]}"${FSO.status===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>
-      ${novoOn('solic-kanban')?`<div class="seg"><button class="${FSO.vis==='kanban'?'on':''}" onclick="soVisSet('kanban')">▦ Kanban</button><button class="${FSO.vis!=='kanban'?'on':''}" onclick="soVisSet('lista')">☰ Lista</button></div>`:''}
-      <button class="btn btn-p btn-mini" onclick="soNova()">📨 Nova solicitação</button>
     </div>
-    ${novoOn('solic-kanban')&&FSO.vis==='kanban'? soKanbanHtml(SOV.filter(s=>{ if(FSO.area&&soComDe(s)!==FSO.area) return false; if(FSO.ag==='sim'&&!soAguardando(s)) return false; if(FSO.ag==='nao'&&soAguardando(s)) return false; if(FSO.pipe&&(FSO.pipe==='sem'?soPipeDe(s)!=='':soPipeDe(s)!==FSO.pipe)) return false; if(FSO.q){ const q=normKey(FSO.q); if(normKey(s.segurado).indexOf(q)<0&&normKey(s.proxima_acao||'').indexOf(q)<0) return false; } return true; })) :
+    ${novoOn('solic-kanban')&&FSO.vis==='kanban'? soKanbanHtml(SOV.filter(s=>{ if(FSO.area&&soComDe(s)!==FSO.area) return false; if(FSO.ag==='sim'&&!soAguardando(s)) return false; if(FSO.ag==='nao'&&soAguardando(s)) return false; if(FSO.pipe&&(FSO.pipe==='sem'?soPipeDe(s)!=='':soPipeDe(s)!==FSO.pipe)) return false; if(FSO.q&&!soBuscaBate(s,FSO.q)) return false; return true; })) :
     `<div class="card" style="padding:4px 14px">${lista.length?lista.map(linha).join(''):`<div style="padding:16px;text-align:center;color:var(--muted)">Nenhuma solicitação ${FSO.status==='aberta'?'em aberto':'com esse filtro'}. <a href="#" onclick="soNova();return false">Abrir a primeira</a>.</div>`}</div>`}
     `;
 }
@@ -21208,6 +21222,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c2={id:'np3',nome:'Zz Puxa Diferente',funil:'mfo',lp:S.activeUser}; const d=ncVincularPuxado(c2,md)===0&&!pessoaDe(c2) && ncVincularPuxado({nome:'Zz Puxa Teste'},{dataset:{modo:'novo'}})===0;
       const e=String(salvarNovoContato).includes('ncVincularPuxado(c,md)') && String(openNovoContato).includes('ncPuxarTopoHtml()');
       return a&&b&&c&&d&&e; } finally{ S.contatos=_c; BN.contatos=_b; PERFIL=_p; NC_PICK=_k; } })());
+    ok('SO-BUSCA-V1: busca das Solicitações fica ao lado de Nova solicitação e acha por nome do segurado, negócio vinculado, apólice, protocolo e próximo passo', (()=>{ const s={segurado:'Fulana Zz Busca',apolice:'001-234-567',protocolo:'PR 98765',proxima_acao:'Ligar pra área',contexto:'reajuste'};
+      const a=soBuscaBate(s,'fulana')&&soBuscaBate(s,'zz bus')&&soBuscaBate(s,'234567')&&soBuscaBate(s,'98765')&&soBuscaBate(s,'ligar')&&soBuscaBate(s,'reaj')&&!soBuscaBate(s,'ciclano')&&soBuscaBate(s,'');
+      const src=String(viewSolicitacoesV2); const b=src.includes('class="so-bar1"')&&src.indexOf('id="so-q"')<src.indexOf('soNova()')&&(src.match(/soBuscaBate\(s,FSO\.q\)/g)||[]).length>=2;
+      return a&&b; })());
     ok('SOLIC-VICTOR-V1: autor = quem está LOGADO (Victor operando a base do Gustavo grava "victor"); editar não troca o dono (lp_email); evento vai com o dono da solicitação; as 6 chaves do módulo viraram MODS def:false (liga por pessoa)', (()=>{ const P=PERFIL, SE=SO_EMAIL, D={...DELEG}; try{
       const RB=ESC.rotulos; ESC.rotulos=[{rotulo:'gustavo',dono_email:'g@x'},{rotulo:'daniel',dono_email:'d@x'}]; PERFIL={email:'v@x',papel:'lp',modulos:{}}; DELEG.eu='v@x'; SO_EMAIL='g@x';
       const a=soQuemSou()==='victor'; DELEG.eu='d@x'; const a3=soQuemSou()==='daniel'; ESC.rotulos=RB;
