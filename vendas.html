@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.60 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.61 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -2030,10 +2030,12 @@ function normContato(c){
   try{ recAplicarDoNome(c); }catch(_){}
   if(!c.infoclient||typeof c.infoclient!=='object') c.infoclient={pessoais:false,familiar:false,financeiro:false,saude:false};
   ['recs','eventos','planos','interacoes','tarefas'].forEach(k=>{ if(!Array.isArray(c[k])) c[k]=[]; });
-  /* TAR-DEDUP-V1 (29/09): a mesma atividade (mesmo id) aparecia 2× na Agenda — em 5 negócios o array
-     tinha a cópia gravada 2× (caso L. S. A.). Na porta: uma por id; se só uma foi concluída, fica ela. */
+  /* TAR-DEDUP-V1 (29/09) · AUDIT-29-09 A2 (30/09): a mesma atividade (mesmo id) gravada 2× (caso L. S. A.) — vinha do
+     merge por conteúdo (ver fund3ArrId). Na porta fica UMA por id: a ÚLTIMA cópia (no merge antigo a versão do aparelho,
+     a edição mais nova, entrava depois), sem perder o vínculo com o Google (gcalId/gtaskId/gcalLink) que só a outra tinha.
+     Antes ficava "a concluída", o que ressuscitava a versão velha de uma tarefa reaberta. */
   if(c.tarefas.length>1){ const m=new Map(); let dup=0; c.tarefas.forEach((t,i)=>{ const k=(t&&t.id!=null)?'i:'+t.id:'x:'+i; const a=m.get(k);
-      if(!a){ m.set(k,t); return; } dup++; if(!(a.feito&&!t.feito)) m.set(k,t); });
+      if(!a){ m.set(k,t); return; } dup++; const v=Object.assign({},t); ['gcalId','gtaskId','gcalLink','gcalEvId','gtaskUpd','gcalUpd'].forEach(q=>{ if(v[q]==null&&a[q]!=null) v[q]=a[q]; }); m.set(k,v); });
     if(dup) c.tarefas=[...m.values()]; }
   ['sexo','profissao','origem','taStatus'].forEach(k=>{ if(c[k]==null||c[k]==='') c[k]='—'; });
   if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
@@ -2059,7 +2061,6 @@ function salvar(opts){ if(window.CONTA_TROCANDO) return;
   const _now=new Date().toISOString(), _doServidor=!!(opts&&opts.doServidor);   /* BUGS-V7: a foto inicial é tirada em carregar(); 'primeira foto' aqui engolia a 1ª edição em cache vazio */
   (S.contatos||[]).forEach(c=>{
     if(!c||c.id==null) return;
-    if(!_doServidor) recCarimbar(c);             /* REC-TIMING-V1: rec nova ganha a data de hoje (só se vazia) */
     const k=String(c.id), j=JSON.stringify(c);
     if(_lpcLast[k]===j) return;                 // não mudou
     if(_doServidor) return;                       // v7.43.4: merge do servidor nunca marca nem recarimba
@@ -2115,11 +2116,25 @@ function pendTotal(){ return Object.keys(PEND.bn).length+Object.keys(PEND.lpc).l
    vence no meu campo; o que o OUTRO mudou fica no campo dele; array (listas, interações,
    histórico) recebe os dois lados. A base vive em _lpcBase/_bnBase (id → JSON do servidor). */
 let _lpcBase={}, _bnBase={};
+/* AUDIT-29-09 A1 (30/09): ORIGEM das atividades duplicadas. O merge de array comparava o OBJETO INTEIRO: a mesma tarefa
+   editada nos dois aparelhos virava duas (mesmo id, conteúdos diferentes). Lista de objetos com id junta POR ID, com a
+   mesma regra dos escalares: quem mexeu vence; os dois mexeram → a edição que está na mão dele agora (local). */
+function fund3TemIds(a){ return a.length>0&&a.every(x=>x&&typeof x==='object'&&x.id!=null); }
+function fund3ArrId(base,local,remoto){ const J=v=>JSON.stringify(v===undefined?null:v), K=x=>String(x.id);
+  const B=new Map(base.filter(x=>x&&x.id!=null).map(x=>[K(x),x])), L=new Map(local.map(x=>[K(x),x])), R=new Map(remoto.map(x=>[K(x),x]));
+  const out=[], vistos=new Set();
+  remoto.forEach(r=>{ const k=K(r); if(vistos.has(k)) return; vistos.add(k); const b=B.get(k), l=L.get(k);
+    if(!l){ if(!b) out.push(r); return; }                 /* só no servidor: novo de lá entra; se estava na base, eu tirei → sai */
+    if(b&&J(l)===J(b)){ out.push(r); return; }            /* não mexi → o do servidor */
+    out.push(l); });                                      /* só eu mexi, ou os dois → o meu (regra dos escalares) */
+  local.forEach(l=>{ const k=K(l); if(vistos.has(k)) return; vistos.add(k); if(B.has(k)) return; out.push(l); });   /* novo meu entra; o que o outro tirou (estava na base) sai */
+  return out; }
 function fund3(base,local,remoto){ base=base||{}; local=local||{}; remoto=remoto||{}; const out={...remoto}; const J=v=>JSON.stringify(v===undefined?null:v);
   new Set([...Object.keys(base),...Object.keys(local),...Object.keys(remoto)]).forEach(k=>{ if(k==='_upd'||k==='_dono') return;
     const bl=J(base[k]), ll=J(local[k]), rl=J(remoto[k]);
     if(ll===bl) return;                                   /* não mexi aqui → fica o do servidor */
     if(rl===bl||rl===ll){ out[k]=local[k]; return; }      /* só eu mexi → o meu */
+    if(Array.isArray(local[k])&&Array.isArray(remoto[k])&&fund3TemIds(local[k])&&fund3TemIds(remoto[k])){ out[k]=fund3ArrId(Array.isArray(base[k])?base[k]:[],local[k],remoto[k]); return; }   /* AUDIT-29-09 A1: por id */
     if(Array.isArray(local[k])&&Array.isArray(remoto[k])){ /* os dois mexeram num array: tira o que eu tirei, soma o que cada um pôs */
       const b=Array.isArray(base[k])?base[k]:[], bs=new Set(b.map(J)), ls=new Set(local[k].map(J)), tirei=new Set(b.filter(x=>!ls.has(J(x))).map(J));
       const arr=remoto[k].filter(x=>!tirei.has(J(x))), rs=new Set(arr.map(J)); local[k].forEach(x=>{ if(!bs.has(J(x))&&!rs.has(J(x))) arr.push(x); }); out[k]=arr; return; }
@@ -3578,7 +3593,7 @@ function diasEntreISO(a,b){
    aparelho". 7+ dias fica em âmbar; sem carga diz "sem carga". Só na base dele (chave carga). */
 const CARGA_VELHA_DIAS=7;
 function cargaChip(iso,rot){
-  const d=iso?String(iso).slice(0,10):'';
+  const d=iso?(/T\d/.test(String(iso))?recDiaLocal(iso):String(iso).slice(0,10)):'';   /* AUDIT A11: carimbo com hora → dia LOCAL (carga depois das 21h não pula pro dia seguinte) */
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return `<span class="carga-chip carga-sem" title="Nenhuma carga de ${esc(rot)} registrada ainda — a tela pode estar vazia ou desatualizada">📥 ${esc(rot)} · sem carga</span>`;
   const dias=diasEntreISO(d,hojeISO()), velha=dias>=CARGA_VELHA_DIAS;
   const quando=dias<=0?'hoje':dias===1?'ontem':'há '+dias+' dias';
@@ -4851,7 +4866,7 @@ function bcMoveEtapa(id,etapa,cardEl,colEl,antesId){
    (recDoFunil = recomendante, ou origem que é nome de pessoa) e está sem data → hoje. Nunca carimba negócio
    antigo nem sobrescreve data preenchida (idempotente). Editável na ficha. */
 function recCarimbar(c){
-  if(!c||c.rec_recebida_em||c.funil==='bn') return false;
+  if(!c||c.rec_recebida_em!==undefined&&c.rec_recebida_em!==null&&c.rec_recebida_em!==''||c.rec_sem_data||c.funil==='bn') return false;
   if(String(c.criadoEm||'').slice(0,10)!==hojeISO()) return false;
   if(typeof recDoFunil!=='function'||!recDoFunil(c)) return false;
   c.rec_recebida_em=hojeISO(); return true; }
@@ -4866,7 +4881,7 @@ function recDataHtml(c){ if(!c||c.funil==='bn') return '';
 function recDataSalvar(v){ const c=ct(); if(!c) return; v=String(v||'').trim();
   if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v)){ toast('Data inválida',false); return; }
   const antes=c.rec_recebida_em||''; if(v===antes) return;
-  if(v) c.rec_recebida_em=v; else delete c.rec_recebida_em;
+  if(v){ c.rec_recebida_em=v; delete c.rec_sem_data; } else { delete c.rec_recebida_em; c.rec_sem_data=true; }   /* AUDIT A3: apagar é escolha dele — não volta sozinho */
   interacoesDe(c).push({id:uid(),k:'nota',l:'📅 Recomendação recebida em: '+(v?dataBR(v):'(apagada)'),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar(); renderDrawer(); render(); }
 window.recDataSalvar=recDataSalvar;
@@ -4896,7 +4911,7 @@ function recSeloHtml(c,mini){ const s=recSelo(c); if(!s) return '';
    naquela etapa; aí vamos medindo o ciclo de venda". Entrada na etapa = a última mudança de etapa registrada
    (logEtapa, interação k:'etapa' com para=etapa atual); sem registro → data de entrada no funil. */
 function cicloEntradaEtapa(c){ if(!c) return null;
-  const mv=(c.interacoes||[]).filter(x=>x&&x.k==='etapa'&&x.para===c.etapa&&x.dia).map(x=>x.dia).sort();
+  const mv=(c.interacoes||[]).filter(x=>x&&x.para===c.etapa&&x.dia).map(x=>x.dia).sort();   /* AUDIT A6: etapa, funil ou resultado que moveu */
   if(mv.length) return {iso:mv[mv.length-1],fonte:'movimento'};
   const e=entradaFunil(c); return e&&e.iso?{iso:e.iso,fonte:e.fonte}:null; }
 function cicloDiasNaEtapa(c,hoje){ const e=cicloEntradaEtapa(c); if(!e) return null;
@@ -5898,7 +5913,7 @@ async function ctMoverDono(c,rotulo){ const r=escRotulosTodos().find(x=>escLpNor
 function drwIrmaosHtml(c){
   const irmaos=pessoaIrmaos(c); if(!irmaos.length) return '';
   const linha=o=>`<button class="btn btn-ghost btn-mini" style="text-align:left;display:block;width:100%"
-      onclick="abrirContato('${esc(o.id)}')" title="Abrir esta oportunidade">
+      onclick="abrirContato('${esc(jsq(o.id))}')" title="Abrir esta oportunidade">
       ${badgeEtapa(o.etapa)} <b>${pmDe(o)?brl(pmDe(o))+'/mês':'sem prêmio'}</b>
       <span style="color:var(--muted)">· entrou ${o.criadoEm?dataBR(o.criadoEm):'—'}</span></button>`;
   return `<div class="sec">
@@ -5931,10 +5946,10 @@ function pjContatos(c){ return Array.isArray(c&&c.pjContatos)?c.pjContatos:[]; }
 function pjPrincipal(c){ const l=pjContatos(c); return l.find(x=>x.principal)||l[0]||null; }
 function pjPapel(k){ const p=PJ_PAPEIS.find(x=>x[0]===k); return p?p[1]:'Contato'; }
 /* uma regra só: 1 principal, e o telefone do negócio é o dele */
-function pjNormalizar(c){ const l=pjContatos(c); if(!l.length) return c;
+function pjNormalizar(c){ const l=pjContatos(c); if(!l.length){ if(Array.isArray(c.pjContatos)) c.telefone=''; return c; }
   let p=l.find(x=>x.principal); if(!p){ p=l[0]; }
   l.forEach(x=>{ x.principal=(x===p); });
-  if(p.tel) c.telefone=telLimpa(p.tel);
+  c.telefone=p&&p.tel?telLimpa(p.tel):'';   /* AUDIT A5: sem telefone no principal → negócio sem telefone (nunca o de quem saiu) */
   return c; }
 /* empresas onde esta pessoa é contato (ficha da pessoa → "🏢 Contato de empresa") */
 function pjEmpresasDaPessoa(c,todos){ if(!c) return [];
@@ -5946,7 +5961,7 @@ function pjEmpresasDaPessoa(c,todos){ if(!c) return [];
 function pjNaPessoaHtml(c){ if(!novoOn('vg-empresa')||ehEmpresa(c)) return '';
   const l=pjEmpresasDaPessoa(c); if(!l.length) return '';
   return `<div class="sec"><h3>🏢 Contato de empresa <span class="badge b-azul">${l.length}</span></h3>
-    <div style="display:flex;flex-direction:column;gap:5px">${l.map(({e,x})=>`<button class="btn btn-ghost btn-mini" style="text-align:left;display:block;width:100%;min-height:44px" onclick="abrirContato('${esc(e.id)}')">
+    <div style="display:flex;flex-direction:column;gap:5px">${l.map(({e,x})=>`<button class="btn btn-ghost btn-mini" style="text-align:left;display:block;width:100%;min-height:44px" onclick="abrirContato('${esc(jsq(e.id))}')">
       <b>${esc(e.nome)}</b> <span style="color:var(--muted)">· ${esc(pjPapel(x.papel))}${x.principal?' ⭐':''} · ${esc(funilNome(e.funil))}</span> ${badgeEtapa(e.etapa)}</button>`).join('')}</div></div>`; }
 function pjCardHtml(c){ const p=pjPrincipal(c), pj=pjDe(c), n=pjContatos(c).length;
   const info=[pj.vidas?pj.vidas+' vidas':'',pj.seguradora||'',pj.renovacao?'renova '+dataBR(pj.renovacao):''].filter(Boolean).join(' · ');
@@ -5959,15 +5974,15 @@ function pjDrawerHtml(c){ const pj=pjDe(c), l=pjContatos(c), p=pjPrincipal(c);
   const linha=x=>{ const tel=telBR(x.tel), wa=waHref(x.tel);
     return `<div class="card" style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-mini" style="min-height:44px;min-width:44px" onclick="pjPrincipalSet('${esc(x.id)}')" title="${x.principal?'Contato principal — aparece no card e é o telefone do negócio':'Tornar o contato principal'}">${x.principal?'⭐':'☆'}</button>
+        <button class="btn btn-ghost btn-mini" style="min-height:44px;min-width:44px" onclick="pjPrincipalSet('${esc(jsq(x.id))}')" title="${x.principal?'Contato principal — aparece no card e é o telefone do negócio':'Tornar o contato principal'}">${x.principal?'⭐':'☆'}</button>
         <div style="flex:1;min-width:120px"><b>${esc(x.nome)}</b><div style="font-size:12px;color:var(--muted)">${esc(tel||'sem telefone')}</div></div>
-        <select style="min-height:44px" onchange="pjPapelSet('${esc(x.id)}',this.value)" title="Papel na empresa">${PJ_PAPEIS.map(r=>`<option value="${r[0]}" ${x.papel===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select>
+        <select style="min-height:44px" onchange="pjPapelSet('${esc(jsq(x.id))}',this.value)" title="Papel na empresa">${PJ_PAPEIS.map(r=>`<option value="${r[0]}" ${x.papel===r[0]?'selected':''}>${r[1]}</option>`).join('')}</select>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none;min-height:40px" href="${esc(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
-        ${telHref(x.tel)?`<a class="btn btn-s btn-mini" style="text-decoration:none;min-height:40px" href="${esc(telHref(x.tel))}">📞 Ligar</a>`:''}
-        ${x.ct&&S.contatos.some(o=>String(o.id)===String(x.ct))?`<button class="btn btn-s btn-mini" style="min-height:40px" onclick="abrirContato('${esc(x.ct)}')" title="Abrir o negócio desta pessoa">👤 Ficha dela</button>`:''}
-        <button class="btn btn-ghost btn-mini" style="min-height:40px;margin-left:auto" onclick="pjRemover('${esc(x.id)}')" title="Tirar da empresa (a pessoa continua no CRM)">✕ tirar</button>
+        ${wa?`<a class="btn btn-s btn-mini" style="text-decoration:none;min-height:44px" href="${esc(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
+        ${telHref(x.tel)?`<a class="btn btn-s btn-mini" style="text-decoration:none;min-height:44px" href="${esc(telHref(x.tel))}">📞 Ligar</a>`:''}
+        ${x.ct&&S.contatos.some(o=>String(o.id)===String(x.ct))?`<button class="btn btn-s btn-mini" style="min-height:44px" onclick="abrirContato('${esc(jsq(x.ct))}')" title="Abrir o negócio desta pessoa">👤 Ficha dela</button>`:''}
+        <button class="btn btn-ghost btn-mini" style="min-height:44px;margin-left:auto" onclick="pjRemover('${esc(jsq(x.id))}')" title="Tirar da empresa (a pessoa continua no CRM)">✕ tirar</button>
       </div></div>`; };
   return `<div class="sec"><details>
       <summary style="cursor:pointer;font-weight:700;font-size:14px">🏢 Empresa <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(resumo)}</span></summary>
@@ -6026,7 +6041,7 @@ function pjNovaEmpresa(funil,pessoaCt){ const fxm=fxMeta(funil); const antigo=do
   const lps=isMaster()? `<label style="font-size:12px">LP dono
       <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
   document.body.insertAdjacentHTML('beforeend',`
-  <div id="ncModal" data-funil="${esc(funil)}" data-modo="empresa" data-pessoa="${esc(pessoaCt||'')}" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+  <div id="ncModal" data-funil="${esc(funil)}" data-modo="empresa" data-pessoa="${esc(pessoaCt||'')}" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:97;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
     <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
       <h3 style="margin-bottom:12px">🏢 Nova empresa</h3>
       <div class="sheet-chip on" style="margin-bottom:10px;justify-content:center;min-height:44px">${fxm[2]} ${esc(fxm[1])}</div>
@@ -6071,7 +6086,7 @@ function mnNegocios(c){ if(!c) return [];
 function mnFaixaHtml(c){ if(!novoOn('multi-neg')||(typeof ehEmpresa==='function'&&ehEmpresa(c))) return '';
   const l=mnNegocios(c);
   const chip=({o,papel})=>{ const P=PIPES[pipeDe(o.funil)]||PIPES.vi, eu=o===c, base=/-bc$|^bc$/.test(o.funil||'');
-    return `<button class="mn-chip${eu?' on':''}" ${eu?'aria-current="true" disabled':`onclick="abrirContato('${esc(o.id)}')"`} title="${esc(funilNome(o.funil))}${papel?' · '+esc(o.nome):''}">
+    return `<button class="mn-chip${eu?' on':''}" ${eu?'aria-current="true" disabled':`onclick="abrirContato('${esc(jsq(o.id))}')"`} title="${esc(funilNome(o.funil))}${papel?' · '+esc(o.nome):''}">
       <span class="mn-p">${P.ic} ${esc(P.curto)}${base?' · Base':''}${papel?` · 🏢 ${esc(o.nome)}`:''}</span>${badgeEtapa(o.etapa)}</button>`; };
   return `<div class="mn-faixa" id="mnFaixa"><div class="mn-tit">💼 Negócios desta pessoa <span class="badge b-azul">${l.length}</span></div>
     <div class="mn-l">${l.map(chip).join('')}<button class="mn-chip mn-novo" onclick="mnNovoAbrir()">＋ Novo negócio</button></div>
@@ -6088,7 +6103,8 @@ function mnNovoEm(fid){ const c=ct(); if(!c) return;
   if(!document.getElementById('ncModoPux')) return;   /* sem o puxar (gate nn-puxar desligado): segue como contato novo */
   const e=ncFontes().find(x=>x.ct===String(c.id))||ncFontes().find(x=>x.k===normKey(c.nome));
   if(!e) return;
-  NC_RES=[Object.assign({},e,{ct:String(c.id)})]; ncPuxar(0); }   /* liga a ESTE negócio, não ao 1º homônimo */
+  const vz=x=>x==null||x===''||x==='—';   /* AUDIT A4: dados do PRÓPRIO negócio, nunca do 1º homônimo */
+  NC_RES=[Object.assign({},e,{ct:String(c.id),nome:c.nome,tel:vz(c.telefone)?'':String(c.telefone),idade:c.idade||null,prof:vz(c.profissao)?'':c.profissao,rec:vz(c.recomendante)?'':c.recomendante})]; ncPuxar(0); }   /* liga a ESTE negócio */
 Object.assign(window,{mnNovoAbrir,mnNovoEm});
 
 /* ═══ FICHA RECOLHÍVEL V1 (31/08) ══════════════════════════════════════════
@@ -7244,7 +7260,7 @@ function openNovoContato(funil){
       <select id="ncLp">${S.users.map(u=>`<option value="${esc(u.id)}" ${u.id===S.activeUser?'selected':''}>${esc(u.nome.split(' ')[0])}</option>`).join('')}</select></label>`:'';
   const puxar=novoOn('nn-puxar'); NC_PICK=null; NC_RES=[];   /* NN-PUXAR-V1 */
   document.body.insertAdjacentHTML('beforeend',`
-  <div id="ncModal" data-funil="${esc(funil)}" data-modo="novo" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:60;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
+  <div id="ncModal" data-funil="${esc(funil)}" data-modo="novo" style="position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:97;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">
     <div class="card" style="width:min(430px,92vw);padding:20px" onclick="event.stopPropagation()">
       <h3 style="margin-bottom:12px">➕ Novo negócio</h3>
       ${funilPicker}
@@ -7359,7 +7375,7 @@ function salvarNovoContato(){
     origem:pesCanon(v('ncOrigem'))||'—', trilha:'seguro', criadoEm:hojeISO(), taStatus:'—', taTentativas:0, notas:'',
     infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[],
     sitplan: (fid==='nn' && sp && sp.checked)? hojeISO() : null };
-  S.contatos.push(c); const nIrm=ncVincularPuxado(c,md); salvar();   /* NN-PUXAR-V1 */
+  S.contatos.push(c); const nIrm=ncVincularPuxado(c,md); if(!nIrm&&!(md&&md.dataset.modo==='puxar')) recCarimbar(c); salvar();   /* NN-PUXAR-V1 · REC-TIMING-V1/AUDIT A3: só rec NOVA, digitada agora, ganha a data */
   document.getElementById('ncModal').remove(); NC_PICK=null;
   toast(`${nome.split(' ')[0]} criado${nIrm?` — ligado aos outros ${nIrm} negócio${nIrm>1?'s':''} dele`:''}${c.sitplan?' — já na lista de hoje':''}${bc?' no funil Base de Clientes':extra?' no funil '+fxMeta(fid)[1]:''}`,true);
   render(); abrirContato(c.id);
@@ -12000,7 +12016,7 @@ function negSeloHTML(c,op){ if(!c) return '';
   .neg-ok{flex-wrap:nowrap}
   .neg-q{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
   .neg-q span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .neg-x{min-width:40px;min-height:40px;flex:0 0 auto}
+  .neg-x{min-width:44px;min-height:44px;flex:0 0 auto}
   .neg-criar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;padding-top:6px;border-top:1px dashed var(--linha);font-size:12px;color:var(--muted)}
   .ev-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:10px}
   .ev-grid label{min-width:0}
@@ -12036,7 +12052,7 @@ function gcalEdNegBuscar(){
 function gcalEdNegCriar(fid){ const i=document.getElementById('ev-neg'); const nome=((i&&i.value)||'').trim(); if(nome.length<2){ toast('Digite o nome',false); return; }
   const emp=typeof ehEmpresa==='function'&&ehEmpresa({funil:fid});
   const c={ id:uid(), lp:escLpNovo(), nome, sexo:'—', idade:null, profissao:'—', telefone:'', estrelas:0, ance:null,
-    etapa:fid==='nn'?'SitPlan':((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade'), funil:fid, origem:'Agenda', trilha:'seguro', criadoEm:hojeISO(),
+    etapa:fid==='nn'?'SitPlan':((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade'), funil:fid, origem:'—', origemCadastro:'agenda', trilha:'seguro', criadoEm:hojeISO(),
     taStatus:'—', taTentativas:0, notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[], sitplan:null };
   if(emp){ c.pj={}; c.pjContatos=[]; }
   S.contatos.push(c); salvar(); _GCAL_NEG=String(c.id); gcalEdNegPintar();
@@ -13937,6 +13953,7 @@ function soBuscaBate(s,q){ const n=normKey(q||''); if(!n) return true; const d=S
   if(d.length>=3&&(String(s.apolice||'').replace(/\D/g,'').includes(d)||String(s.protocolo||'').replace(/\D/g,'').includes(d))) return true;
   let neg=''; try{ const c=s.contato_id&&tarContato(s.contato_id); neg=c?c.nome:''; }catch(_){}
   return [s.segurado,neg,s.proxima_acao,s.contexto,s.protocolo,s.apolice].some(x=>x&&normKey(String(x)).includes(n)); }
+function soPorOpcoes(){ const o=[['victor','Victor'],['gustavo','Gustavo']], q=soQuemSou(); if(q&&!o.some(x=>x[0]===q)) o.push([q,q[0].toUpperCase()+q.slice(1)]); return o; }   /* AUDIT A7 */
 function soQuemSou(){ if(typeof souAdm==='function'&&souAdm()) return 'gustavo';
   const eu=String((typeof escEu==='function'&&escEu())||'').toLowerCase();
   if(!eu){ const e=(SO_EMAIL||AT_EMAIL||'').toLowerCase(); return e.indexOf('victor')>=0?'victor':'gustavo'; }   /* deslogado: comportamento antigo */
@@ -13969,7 +13986,7 @@ function soNova(pre){ pre=pre||{}; atClose();
    ${lbl('Contexto (dias de atraso, motivo, o que o cliente já disse)')}<textarea id="so_ctx" rows="2" ${boSelectVivo()} style="width:100%;margin-top:3px">${esc(pre.contexto||'')}</textarea>
    <div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:140px">${lbl('Prazo')}<input id="so_prazo" type="date" ${boSelectVivo()} style="width:100%;margin-top:3px"></div>
      <div style="flex:1;min-width:140px">${lbl('Contato')}${boSel('so_ct',SO_CONTATO,'lm',boSelectVivo())}</div>
-     <div style="flex:1;min-width:140px">${lbl('Aberta por')}${boSel('so_por',[['victor','Victor'],['gustavo','Gustavo']],soQuemSou(),boSelectVivo())}</div></div>
+     <div style="flex:1;min-width:140px">${lbl('Aberta por')}${boSel('so_por',soPorOpcoes(),soQuemSou(),boSelectVivo())}</div></div>
    <div id="so_err" style="color:var(--verm);font-size:12px;margin-top:6px"></div>
    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="atClose()">Cancelar</button><span style="flex:1"></span><button class="btn btn-s" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null,contato_id:pre.contato_id||null,semTexto:true})).replace(/"/g,'&quot;')})" title="Só cria a solicitação (sem o texto do WhatsApp)">✓ Registrar</button><button class="btn btn-p" onclick="soConfNova(${esc(JSON.stringify({ref_atraso_id:pre.ref_atraso_id||null,ref_emissao_id:pre.ref_emissao_id||null,contato_id:pre.contato_id||null})).replace(/"/g,'&quot;')})">Registrar e gerar texto</button></div>`);
   setTimeout(()=>{ const e=$('#so_seg'); if(e&&!e.value) e.focus(); },50);
@@ -18554,7 +18571,7 @@ function recStatusIndex(){ const m=new Map();
 /* ═══ REC-FUNIL-V1 (21/09/2026) ═══ "Cadê a Glysse recomendante? E os nomes atrelados a ela — tudo deve tá linkado."
    A Glysse indicou leads que estão no FUNIL (Adeline, Beatriz, Camila…), e Recomendações só lia o Estoque. Agora o funil
    entra: `recomendante` do lead, ou `origem` quando é nome de pessoa (não "Indicação", "Base de Nomes", "LinkedIn"…). */
-const REC_ORIGEM_GENERICA=/^(indica[cç][aã]o|indicado|base de nomes|carteira|cliente|linkedin|instagram|whatsapp|evento|site|frio|cold|importa[cç][aã]o|capta[cç][aã]o|pipex|pipe x|recomenda[cç][aã]o|rec|ta|sitplan|estoque|—|-|\?|n\/a|na|nenhum|nenhuma|sem|outro|outros)$/i;
+const REC_ORIGEM_GENERICA=/^(agenda|indica[cç][aã]o|indicado|base de nomes|carteira|cliente|linkedin|instagram|whatsapp|evento|site|frio|cold|importa[cç][aã]o|capta[cç][aã]o|pipex|pipe x|recomenda[cç][aã]o|rec|ta|sitplan|estoque|—|-|\?|n\/a|na|nenhum|nenhuma|sem|outro|outros)$/i;
 function recDoFunil(c){ if(!c) return ''; const r=String(c.recomendante||'').trim(); if(r) return r; const o=String(c.origem||'').trim(); if(!o||REC_ORIGEM_GENERICA.test(o)||/\d{4,}|https?:|@/.test(o)) return ''; return o; }
 function recFunilComoBn(){ if(!novoOn('rec-funil')) return []; return (S.contatos||[]).filter(escVisivel).map(c=>{ const r=recDoFunil(c); if(!r) return null; const b={...c,_fun:true,recomendante:r,trilha:'seguro',estagio:c.estagio||null}; return b; }).filter(Boolean); }
 /* DIGITA-V1 (22/09): "só deixa eu colocar uma letra e sai da busca" — o oninput re-renderizava a tela inteira a cada
@@ -20034,6 +20051,22 @@ function lpSelfCheck(){
         &&String(agNovaAtividade).includes('tn-hora')&&String(agNovaAtividade).includes('tn-dur')&&String(agNovaAtividade).includes('tn-pessoa')
         &&!String(agDataHtml).includes('onchange="tarSetData')&&String(agSalvarData).includes('tarSetData')&&String(viewAgenda).includes('agSalvarHtml')
         &&par.indexOf("'evento'")<par.indexOf("'tarefa'")&&row.indexOf("'evento'")<row.indexOf("'tarefa'")&&!row.includes('ag-glbl'); })());
+    ok('AUDIT-29-09: merge de lista por ID (a mesma tarefa editada nos 2 aparelhos não duplica), dedupe fica a última cópia sem perder o vínculo Google, carimbo de rec só na criação (apagar não volta), Agenda não é recomendante, 1 principal/telefone certo, tempo na etapa por qualquer movimento, Aberta por com quem abriu', (()=>{
+      const b={id:'m1',tarefas:[{id:'t1',tit:'A',feito:null},{id:'t2',tit:'B'}]};
+      const l={id:'m1',tarefas:[{id:'t1',tit:'A editada no iPad',feito:null},{id:'t2',tit:'B'},{id:'t3',tit:'nova minha'}]};
+      const r={id:'m1',tarefas:[{id:'t1',tit:'A',feito:'2026-09-30T10:00:00Z'},{id:'t4',tit:'nova de lá'}]};   /* servidor: concluiu t1 e tirou t2 */
+      const m=fund3(b,l,r), ids=m.tarefas.map(x=>x.id);
+      const a=ids.filter(x=>x==='t1').length===1&&ids.includes('t3')&&ids.includes('t4')&&!ids.includes('t2')&&m.tarefas.find(x=>x.id==='t1').tit==='A editada no iPad';
+      const c=normContato({id:'zd2',nome:'Zz',tarefas:[{id:'x1',tit:'velha',feito:'2026-09-01',gcalId:'g1'},{id:'x1',tit:'reaberta',feito:null}]});
+      const bb=c.tarefas.length===1&&c.tarefas[0].tit==='reaberta'&&c.tarefas[0].gcalId==='g1';
+      const h=hojeISO(), n={id:'zr9',nome:'Zz Nova',funil:'nn',criadoEm:h,recomendante:'Beltrano'}; recCarimbar(n); const _ct=CONTATO; S.contatos.push(n); CONTATO='zr9';
+      let cc; try{ const _r=renderDrawer; window.renderDrawer=()=>{}; const _rd=render; window.render=()=>{}; try{ recDataSalvar(''); } finally{ window.renderDrawer=_r; window.render=_rd; } cc=!n.rec_recebida_em&&!recCarimbar(n); } finally{ S.contatos=S.contatos.filter(x=>x.id!=='zr9'); CONTATO=_ct; }
+      const d=!recCarimbar({id:'zg',nome:'Zz Ag',funil:'nn',criadoEm:h,origem:'Agenda'});
+      const e={id:'ze',funil:'vg',pjContatos:[{id:'k1',nome:'A',tel:'81 90000-1111',principal:true},{id:'k2',nome:'B',tel:''}],telefone:''}; pjNormalizar(e); e.pjContatos[0].principal=false; e.pjContatos[1].principal=true; pjNormalizar(e);
+      const f=e.telefone===''&&e.pjContatos.filter(x=>x.principal).length===1;
+      const g=cicloDiasNaEtapa({etapa:'OI/FF',criadoEm:isoAddDias(h,-20),interacoes:[{k:'lig_atendida',para:'OI/FF',dia:isoAddDias(h,-4)}]})===4;
+      const P=PERFIL, D=DELEG.eu, RB=ESC.rotulos; let hh; try{ PERFIL={email:'d@x',papel:'lp',modulos:{}}; DELEG.eu='d@x'; ESC.rotulos=[{rotulo:'daniel',dono_email:'d@x'}]; hh=soPorOpcoes().some(o=>o[0]==='daniel'); } finally{ PERFIL=P; DELEG.eu=D; ESC.rotulos=RB; }
+      return a&&bb&&cc&&d&&f&&g&&hh; })());
     ok('AGENDA-DIA-V1: Agenda por DIA (Atrasadas/Hoje/Amanhã/Próxima semana/Próximas semanas) com 📅 Eventos e ☑️ Tarefas dentro, em ordem de hora; reunião a finalizar entra nos Eventos do dia (sem bloco à parte); ✏️ editar em cada linha; Sem próxima atividade abre a ficha', (()=>{ const _c=S.contatos, _a=GT.avulsas, _m=$('#main').innerHTML, _v=VIEW; try{ const h=hojeISO();
       S.contatos=[{id:'ze',nome:'Zz Evt',etapa:'OI/FF',funil:'nn',lp:S.activeUser,interacoes:[],eventos:[],tarefas:[{id:'e1',tipo:'reuniao',tit:'R',quando:isoAddDias(h,3),hora:'10:00',feito:null},{id:'e0',tipo:'reuniao',tit:'Cedo',quando:isoAddDias(h,3),hora:'08:00',feito:null},{id:'t1',tipo:'follow',tit:'T',quando:isoAddDias(h,20),destino:'tarefa',feito:null},{id:'rp',tipo:'reuniao',tit:'Passou',quando:isoAddDias(h,-2),hora:'09:00',feito:null}]}];
       GT.avulsas=[{id:'gv1',title:'Avulsa Zz',due:h+'T00:00:00.000Z',status:'needsAction'}];
@@ -20045,8 +20078,8 @@ function lpSelfCheck(){
       const e=['hoje','amanha','semana','semanas'].every(k=>q(k)&&q(k).querySelector(':scope > .ini-h .ag-novo'))&&!q('hoje-evt').querySelector(':scope > .ini-h .ag-novo');
       const src=[...document.scripts].map(x=>x.textContent).join('\n'); const f=src.includes("abrirContato('${esc(jsq(c.id))}')\" title=\"Abrir a ficha do negócio")&&!String(viewAgenda).includes("tarAtalho('${esc(c.id)}',7,'follow')");
       return a&&b&&c&&d&&e&&f&&agFaixa(isoAddDias(h,7))==='semana'&&agFaixa(isoAddDias(h,8))==='semanas'; } finally{ S.contatos=_c; GT.avulsas=_a; VIEW=_v; $('#main').innerHTML=_m; } })());
-    ok('TAR-DEDUP-V1: a mesma atividade (mesmo id) gravada 2× vira 1 na porta; se só uma foi concluída, fica a concluída', (()=>{ const c=normContato({id:'zd',nome:'Zz',tarefas:[{id:'x1',tit:'A',feito:null},{id:'x1',tit:'A',feito:null},{id:'x2',feito:'2026-01-01'},{id:'x2',feito:null},{tit:'sem id'},{tit:'sem id'}]});
-      return c.tarefas.length===4&&c.tarefas.filter(t=>t.id==='x1').length===1&&c.tarefas.find(t=>t.id==='x2').feito==='2026-01-01'; })());
+    ok('TAR-DEDUP-V1 (+AUDIT A2): a mesma atividade (mesmo id) gravada 2× vira 1 na porta; fica a ÚLTIMA cópia (a edição mais nova) sem perder o vínculo Google da outra', (()=>{ const c=normContato({id:'zd',nome:'Zz',tarefas:[{id:'x1',tit:'A',feito:null},{id:'x1',tit:'A',feito:null},{id:'x2',feito:'2026-01-01',gtaskId:'gt9'},{id:'x2',feito:null},{tit:'sem id'},{tit:'sem id'}]});
+      const x2=c.tarefas.find(t=>t.id==='x2'); return c.tarefas.length===4&&c.tarefas.filter(t=>t.id==='x1').length===1&&x2.feito===null&&x2.gtaskId==='gt9'; })());
     ok('EV-MODAL-V2: modal de evento — vínculo com ✕ na mesma linha, horários em grade que não vaza, anotação cresce com o texto, e ＋ Criar negócio quando a busca não acha', (()=>{ const _n=_GCAL_NEG, _c=S.contatos; try{ S.contatos=[{id:'zm1',nome:'Zz Modal',funil:'nn',etapa:'C2',lp:S.activeUser}]; _GCAL_NEG='zm1';
       const h=gcalEdNegHTML(); const a=h.includes('neg-ok')&&h.includes('neg-x'); _GCAL_NEG=null;
       gcalModalEvento({id:null,summary:'x',description:'a\nb\nc\nd\ne',dia:hojeISO(),ini:'09:00',fim:'10:00',local:'',convidado:'',meet:false});
@@ -21410,7 +21443,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
             e={id:'rt4',nome:'Zz E',funil:'bn',criadoEm:h,recomendante:'Beltrano'}, f={id:'rt5',nome:'Zz F',funil:'nn',criadoEm:h,recomendante:'Beltrano',rec_recebida_em:'2026-09-01'}, g={id:'rt6',nome:'Zz G',funil:'nn',criadoEm:h,origem:'Fulano de Tal'};
       const r1=recCarimbar(a)&&a.rec_recebida_em===h&&!recCarimbar(a)&&a.rec_recebida_em===h;
       const r2=!recCarimbar(b)&&!b.rec_recebida_em&&!recCarimbar(o)&&!o.rec_recebida_em&&!recCarimbar(e)&&!e.rec_recebida_em&&!recCarimbar(f)&&f.rec_recebida_em==='2026-09-01'&&recCarimbar(g)&&g.rec_recebida_em===h;
-      const src=[...document.scripts].map(x=>x.textContent).join('\n'); const r3=src.includes('if(!_doServidor) recCarimbar(c);')&&src.includes('${recDataHtml(c)}')&&recDataHtml(b)===''&&/drwRecEm/.test(recDataHtml(a));
+      const src=[...document.scripts].map(x=>x.textContent).join('\n'); const r3=src.includes("if(!nIrm&&!(md&&md.dataset.modo==='puxar')) recCarimbar(c);")&&!src.includes('if(!_doServidor) '+'recCarimbar(c);')&&src.includes('${recDataHtml(c)}')&&recDataHtml(b)===''&&/drwRecEm/.test(recDataHtml(a));
       return r1&&r2&&r3; })());
     ok('REC-TIMING-V1 T3: selo 🔥 nova 0–2d · 🟡 morna 3–7 · 🧊 esfriando 8+; ligar concluída ou resultado registrado = ✅ Contatada em X dias; mudança de etapa não conta; sem data/Estoque = sem selo; ordena recs mais novas', (()=>{
       const j={id:'rj',nome:'Zz Rec',funil:'nn',etapa:'TA',rec_recebida_em:'2026-09-29',interacoes:[{k:'etapa',para:'TA',dia:'2026-09-29'}],tarefas:[{id:'t1',tipo:'ligar',feito:null,quando:'2026-09-30'}]};

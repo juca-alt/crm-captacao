@@ -586,8 +586,9 @@ async function pintaNegocios(id){ const box=$('#lp2-negs'); if(!box) return; con
     const et=lpcEtapaDe(LPCFG.funil,{funil:n.funil,etapa:n.etapa});
     return `<button class="chip neg${eu?' on':''}" ${eu?'disabled':''} data-neg="${esc(n.id)}" title="${esc(n.nome)}">${p[0]} ${esc(p[1])}${n.papel?` · 🏢 ${esc(n.nome)} (${esc(NEG_PAPEL[n.papel]||'Contato')})`:''}<br><small>${esc((et&&et.label)||n.etapa||'—')}</small></button>`; }).join('')}</div>`;
   box.querySelectorAll('[data-neg]').forEach(b=>b.onclick=async()=>{ if(sujo(DRAFTS[String(id)])&&!window.confirm('Tem mudança não salva neste negócio. Trocar mesmo assim? (o rascunho fica guardado)')) return;
-    b.disabled=true; const seq2=LOOKSEQ; const rr=await send('lpc.um',{id:b.dataset.neg}); if(seq2!==LOOKSEQ) return;
-    if(rr&&rr.ok&&rr.data) renderLpContato(rr.data,CUR_CART); else { b.disabled=false; toast('Não consegui abrir esse negócio'); } }); }
+    b.disabled=true; const seq2=LOOKSEQ; const rr=await send('lpc.um',{id:b.dataset.neg}); if(seq2!==LOOKSEQ||MODO!=='rapido') return;   /* AUDIT E4: foi pro Card completo no meio → não sobrescreve */
+    if(rr&&rr.ok&&rr.data){ const ks=chatKeys(CHAT), wc=rr.data.dados&&rr.data.dados.wa_chats; VINC=Array.isArray(wc)&&wc.some(k=>ks.includes(String(k)));   /* AUDIT E1: o 📌 é DESTE negócio, não do anterior */
+      renderLpContato(rr.data,CUR_CART); } else { b.disabled=false; toast('Não consegui abrir esse negócio'); } }); }
 function renderLpContato(row,cartHit){
   const id=String(row.id);
   CUR_ROW=row; CUR_CART=cartHit||null;
