@@ -10,17 +10,17 @@ const lineOf = (src, i) => src.slice(0, i).split('\n').length;
 let falhas = 0;
 
 // index.html: inserts só entre a definição de insertLead e o fim de insertLeadsBatch
-const idx = readFileSync('index.html', 'utf8');
+const idx = readFileSync('arquivo/captacao/index.html', 'utf8');   // 30/09/2026: Captação arquivada (ver arquivo/captacao/LEIA-ME.md)
 const ini = idx.indexOf('async function insertLead(');
 const fim = idx.indexOf('// ===== FILTERING');
 if (ini < 0 || fim < 0 || fim < ini) {
-  console.error('guard: marcadores do choke point não encontrados no index.html — se as funções foram movidas/renomeadas, atualize este guard junto.');
+  console.error('guard: marcadores do choke point não encontrados no arquivo/captacao/index.html — se as funções foram movidas/renomeadas, atualize este guard junto.');
   process.exit(1);
 }
 const hits = [...idx.matchAll(RE)];
 for (const m of hits) {
   if (m.index < ini || m.index > fim) {
-    console.error(`guard: insert em leads FORA do choke point — index.html:${lineOf(idx, m.index)}. Use insertLead()/insertLeadsBatch().`);
+    console.error(`guard: insert em leads FORA do choke point — arquivo/captacao/index.html:${lineOf(idx, m.index)}. Use insertLead()/insertLeadsBatch().`);
     falhas++;
   }
 }
