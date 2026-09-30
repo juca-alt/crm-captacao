@@ -2034,9 +2034,7 @@ function normContato(c){
      merge por conteúdo (ver fund3ArrId). Na porta fica UMA por id: a ÚLTIMA cópia (no merge antigo a versão do aparelho,
      a edição mais nova, entrava depois), sem perder o vínculo com o Google (gcalId/gtaskId/gcalLink) que só a outra tinha.
      Antes ficava "a concluída", o que ressuscitava a versão velha de uma tarefa reaberta. */
-  if(c.tarefas.length>1){ const m=new Map(); let dup=0; c.tarefas.forEach((t,i)=>{ const k=(t&&t.id!=null)?'i:'+t.id:'x:'+i; const a=m.get(k);
-      if(!a){ m.set(k,t); return; } dup++; const v=Object.assign({},t); ['gcalId','gtaskId','gcalLink','gcalEvId','gtaskUpd','gcalUpd'].forEach(q=>{ if(v[q]==null&&a[q]!=null) v[q]=a[q]; }); m.set(k,v); });
-    if(dup) c.tarefas=[...m.values()]; }
+  if(c.tarefas.length>1){ const d=tarDedupArr(c.tarefas); if(d!==c.tarefas) c.tarefas=d; }   /* mesma regra do merge (tarDedupArr) */
   ['sexo','profissao','origem','taStatus'].forEach(k=>{ if(c[k]==null||c[k]==='') c[k]='—'; });
   if(typeof c.taTentativas!=='number') c.taTentativas=Number(c.taTentativas)||0;
   if(typeof c.estrelas!=='number') c.estrelas=Number(c.estrelas)||0;
@@ -2120,13 +2118,20 @@ let _lpcBase={}, _bnBase={};
    editada nos dois aparelhos virava duas (mesmo id, conteúdos diferentes). Lista de objetos com id junta POR ID, com a
    mesma regra dos escalares: quem mexeu vence; os dois mexeram → a edição que está na mão dele agora (local). */
 function fund3TemIds(a){ return a.length>0&&a.every(x=>x&&typeof x==='object'&&x.id!=null); }
+/* regra única de dedupe (porta e merge): uma por id, fica a ÚLTIMA cópia, com o vínculo Google que só a outra tinha */
+const TAR_GCAMPOS=['gcalId','gtaskId','gcalLink','gcalEvId','gtaskUpd','gcalUpd'];
+function tarDedupArr(arr){ const m=new Map(); let dup=0; (arr||[]).forEach((t,i)=>{ const k=(t&&t.id!=null)?'i:'+t.id:'x:'+i; const a=m.get(k);
+    if(!a){ m.set(k,t); return; } dup++; const v=Object.assign({},t); TAR_GCAMPOS.forEach(q=>{ if(v[q]==null&&a[q]!=null) v[q]=a[q]; }); m.set(k,v); });
+  return dup?[...m.values()]:arr; }
 function fund3ArrId(base,local,remoto){ const J=v=>JSON.stringify(v===undefined?null:v), K=x=>String(x.id);
-  const B=new Map(base.filter(x=>x&&x.id!=null).map(x=>[K(x),x])), L=new Map(local.map(x=>[K(x),x])), R=new Map(remoto.map(x=>[K(x),x]));
+  base=tarDedupArr(base); local=tarDedupArr(local); remoto=tarDedupArr(remoto);   /* AUDIT B1: cópia duplicada não pode parecer edição */
+  const B=new Map(base.filter(x=>x&&x.id!=null).map(x=>[K(x),x])), L=new Map(local.map(x=>[K(x),x]));
   const out=[], vistos=new Set();
   remoto.forEach(r=>{ const k=K(r); if(vistos.has(k)) return; vistos.add(k); const b=B.get(k), l=L.get(k);
     if(!l){ if(!b) out.push(r); return; }                 /* só no servidor: novo de lá entra; se estava na base, eu tirei → sai */
     if(b&&J(l)===J(b)){ out.push(r); return; }            /* não mexi → o do servidor */
-    out.push(l); });                                      /* só eu mexi, ou os dois → o meu (regra dos escalares) */
+    if(b&&J(r)===J(b)){ out.push(l); return; }            /* só eu mexi → o meu */
+    out.push(b?fund3(b,l,r):l); });                       /* os dois mexeram → funde CAMPO A CAMPO (a conclusão de um e a data do outro sobrevivem) */
   local.forEach(l=>{ const k=K(l); if(vistos.has(k)) return; vistos.add(k); if(B.has(k)) return; out.push(l); });   /* novo meu entra; o que o outro tirou (estava na base) sai */
   return out; }
 function fund3(base,local,remoto){ base=base||{}; local=local||{}; remoto=remoto||{}; const out={...remoto}; const J=v=>JSON.stringify(v===undefined?null:v);
@@ -2147,7 +2152,7 @@ async function fund3Servidor(ids,acharLocal,mapaBase,extraRow){ if(!ids.length||
   for(let i=0;i<ids.length;i+=200){ const lote=ids.slice(i,i+200); let r; try{ r=await sb.from(LPC_T).select('id,dono,dados').in('id',lote); }catch(e){ return; } if(!r||r.error) return;
     (r.data||[]).forEach(x=>{ const srv=lpcComDono(x); if(!srv) return; const k=String(srv.id), loc=acharLocal(k); if(!loc) return; const b=mapaBase[k]?JSON.parse(mapaBase[k]):null;
       if(!b||sc(b)===sc(srv)||sc(b)===sc(loc)) return;          /* ninguém mexeu lá (ou eu não mexi) → nada a fundir */
-      const m=fund3(b,loc,srv); Object.keys(loc).forEach(q=>{ delete loc[q]; }); Object.assign(loc,m); mapaBase[k]=JSON.stringify(srv); }); } }
+      const m=fund3(b,loc,srv); if(Array.isArray(m.tarefas)) m.tarefas=tarDedupArr(m.tarefas); Object.keys(loc).forEach(q=>{ delete loc[q]; }); Object.assign(loc,m); mapaBase[k]=JSON.stringify(srv); }); } }   /* AUDIT B1 */
 function fundMerge(locais, remotos, pend, completo, base){
   const out=new Map((remotos||[]).map(c=>[String(c.id),c]));       /* servidor manda */
   /* v7.43.1: pendente cujo conteúdo (sem carimbos) é IGUAL ao do servidor não deve nada → deixa de ser pendente */
@@ -2346,7 +2351,11 @@ async function pushResiliente(rows){ const falhas=new Set(); if(!rows.length) re
     let parou=false; for(const x of lote){ const r1=await sb.from(LPC_T).upsert([x],{onConflict:'dono,id'}); if(!r1.error){ delete PUSH_ERR[x.id]; continue; } falhas.add(String(x.id)); if(transitorio(r1.error)){ envia.slice(i).forEach(y=>falhas.add(String(y.id))); parou=true; break; } PUSH_ERR[x.id]=(PUSH_ERR[x.id]||0)+1; console.warn('push: linha recusada',x.id,r1.error.message); }
     if(parou) break; }
   return falhas; }
-async function lpcPush(){
+/* AUDIT B2 (30/09): dois pushes em paralelo chegavam fora de ordem e deixavam a base velha → um de cada vez; o que chegar no meio reagenda */
+let _lpcPushVoo=false, _lpcPushDeNovo=false;
+async function lpcPush(){ if(_lpcPushVoo){ _lpcPushDeNovo=true; return; } _lpcPushVoo=true;
+  try{ await lpcPushCorpo(); } finally{ _lpcPushVoo=false; if(_lpcPushDeNovo){ _lpcPushDeNovo=false; lpcAgendarPush(); } } }
+async function lpcPushCorpo(){
   if(!LPC_REMOTE||!sb) return;
   try{
     const pre=_lpcSnap(); await fund3Servidor(Object.keys(pre).filter(k=>pre[k]!==_lpcPrev[k]||PEND.lpc[k]),k=>(S.contatos||[]).find(y=>String(y.id)===k),_lpcBase);   /* SYNC-3VIAS-V1 */
@@ -6005,7 +6014,7 @@ function pjSalvarCampo(k,v){ const c=ct(); if(!c) return; v=String(v==null?'':v)
 function pjAtual(id){ const c=ct(); return c?[c,pjContatos(c).find(x=>x.id===id)]:[null,null]; }
 function pjPrincipalSet(id){ const [c,x]=pjAtual(id); if(!x) return; pjContatos(c).forEach(o=>{ o.principal=(o===x); }); pjNormalizar(c); salvar(); renderDrawer(); render(); toast(`⭐ ${x.nome.split(' ')[0]} é o contato principal`,true); }
 function pjPapelSet(id,v){ const [c,x]=pjAtual(id); if(!x) return; x.papel=v; salvar(); render(); }
-function pjRemover(id){ const [c,x]=pjAtual(id); if(!x) return; const antes=c.pjContatos.slice(), telAntes=c.telefone;
+function pjRemover(id){ const [c,x]=pjAtual(id); if(!x) return; const antes=JSON.parse(JSON.stringify(c.pjContatos)), telAntes=c.telefone;   /* AUDIT B4: cópia profunda */
   c.pjContatos=c.pjContatos.filter(o=>o!==x); pjNormalizar(c); salvar(); renderDrawer(); render();
   toastDesfazer(`${x.nome.split(' ')[0]} saiu da empresa`,()=>{ c.pjContatos=antes; c.telefone=telAntes; salvar(); renderDrawer(); render(); }); }
 /* ＋ Contato: puxa do CRM (mesma busca do Novo negócio: funil + carteira + estoque) ou cria só nome/telefone */
@@ -6104,7 +6113,8 @@ function mnNovoEm(fid){ const c=ct(); if(!c) return;
   const e=ncFontes().find(x=>x.ct===String(c.id))||ncFontes().find(x=>x.k===normKey(c.nome));
   if(!e) return;
   const vz=x=>x==null||x===''||x==='—';   /* AUDIT A4: dados do PRÓPRIO negócio, nunca do 1º homônimo */
-  NC_RES=[Object.assign({},e,{ct:String(c.id),nome:c.nome,tel:vz(c.telefone)?'':String(c.telefone),idade:c.idade||null,prof:vz(c.profissao)?'':c.profissao,rec:vz(c.recomendante)?'':c.recomendante})]; ncPuxar(0); }   /* liga a ESTE negócio */
+  NC_RES=[Object.assign({},e,{ct:String(c.id),nome:c.nome,tel:vz(c.telefone)?'':String(c.telefone),idade:c.idade||null,prof:vz(c.profissao)?'':c.profissao,rec:vz(c.recomendante)?'':c.recomendante,
+    negs:[c].concat(pessoaIrmaos(c)).map(o=>({id:String(o.id),f:funilDe(o),et:o.etapa})), cartRef:null, bnId:null})]; ncPuxar(0); }   /* AUDIT B3: aviso de negócio aberto e origem 'Carteira' só com dado DESTA pessoa */
 Object.assign(window,{mnNovoAbrir,mnNovoEm});
 
 /* ═══ FICHA RECOLHÍVEL V1 (31/08) ══════════════════════════════════════════
@@ -13439,7 +13449,7 @@ function stLegendaHtml(){ return `<details style="margin-top:8px"><summary style
 /* vocabulários compartilhados (atraso + emissão + solicitações) */
 const BOLA_OPTS=[['','—'],['cliente','Cliente'],['prudential','Prudential'],['lm','Assessoria (LM)'],['nos','Nós']];
 const AUTZ_OPTS=[['','—'],['lm_pode','LM pode contatar'],['gustavo_trata','Gustavo trata'],['nao_contatar','🚫 Não contatar']];
-function boRot(opts,v){ const o=opts.find(x=>x[0]===(v||'')); return o?o[1]:(v||'—'); }
+function boRot(opts,v){ const o=opts.find(x=>x[0]===(v||'')); return o?o[1]:(v?String(v).charAt(0).toUpperCase()+String(v).slice(1):'—'); }
 function boSel(id,opts,val,extra){ return `<select id="${id}" ${extra||''} style="width:100%;margin-top:3px">${opts.map(o=>`<option value="${esc(o[0])}"${(val||'')===o[0]?' selected':''}>${esc(o[1])}</option>`).join('')}</select>`; }
 /* caso MUDO = ninguém disse o que foi feito nem o que vem depois. O fechamento
    do dia do Victor é "nenhuma linha muda". */
@@ -13898,7 +13908,7 @@ const SO_BOLA=[['nos','Nós (Gustavo/Victor)'],['area','A área'],['cliente','O 
 const SO_COM=[['gustavo','Gustavo'],['victor','Victor'],['lm','LM (Assessoria)'],['prudential','Prudential'],['cliente','Cliente']];   /* Prudential: pedido dele 28/09 — "alterações que estamos aguardando a Prudential atualizar no sistema" */
 const SO_COM_IC={gustavo:'🙋',victor:'🧑‍💼',lm:'🏢',prudential:'🏛️',cliente:'🙍'};
 function soComDe(s){ const b=s&&s.bola_com; if(SO_COM.some(c=>c[0]===b)) return b;
-  if(b==='cliente') return 'cliente'; if(b==='nos') return s.aberta_por==='victor'?'victor':'gustavo'; if(/^prudential/.test(String(s&&s.area||''))) return 'prudential'; return 'lm'; }
+  if(b==='cliente') return 'cliente'; if(b==='nos') return s.aberta_por==='victor'?'victor':(s.aberta_por&&s.aberta_por!=='gustavo'?String(s.aberta_por):'gustavo');   /* AUDIT B6 */ if(/^prudential/.test(String(s&&s.area||''))) return 'prudential'; return 'lm'; }
 function soComRot(s){ return boRot(SO_COM,soComDe(s)); }
 const SO_EV_TIPOS=[['anexo','📎 Anexo'],['contato','Contato / cobrança'],['retorno','Retorno da área'],['protocolo','Protocolo'],['prazo','Prazo'],['status','Status'],['nota','Nota']];
 const SO_PARADA_DIAS=3;    /* sem andamento há N dias = "parada" */
@@ -15471,7 +15481,7 @@ async function cartCarregar(){
     CART.clientes=cartNormLista(rc.data,'ref',cartNormCliente);
     CART.apolices=cartNormLista(ra.data,'chave',cartNormApolice);
     const max=[...(rc.data||[]),...(ra.data||[])].reduce((m,r)=>((r.atualizado||'')>m?r.atualizado:m),'');
-    CART.importadoEm=max?max.slice(0,10):null;
+    CART.importadoEm=max?recDiaLocal(max):null;   /* AUDIT B7: timestamptz → dia local */
     try{ const rp=await sb.from(CART_TPERF).select('ref,dados'); if(!rp.error){ CART.perfis={}; (rp.data||[]).forEach(r=>{ if(r&&r.ref) CART.perfis[r.ref]=r.dados||{}; }); } }catch(e){ console.warn('perfil da carteira: load falhou',e); }
     cartSalvar();                         // espelha no cache local
     return;
@@ -15729,7 +15739,7 @@ async function cartIngest(a){ if(a.clientesHTML!=null) CART.clientes=cartNormLis
      não substitui). cartIngestPdf devolve quantos completou/criou pra o toast. */
   if(a.clientesTXT!=null) cartMergeClientesPdf(cartParsePdfClientes(a.clientesTXT));
   if(a.apolicesTXT!=null) cartMergeApolicesPdf(cartParsePdfApolices(a.apolicesTXT,new Set((CART.clientes||[]).map(c=>c.ref))));
-  CART.importadoEm=nowISO(); cartSalvar();
+  CART.importadoEm=hojeISO(); cartSalvar();   /* AUDIT B7: dia local (nowISO é UTC) */
   if(!CART_REMOTE) return {sync:'local'};
   try{ await cartPersistRemoto({completo:true}); return {sync:'remoto'}; }
   catch(e){ console.error('CART sync remoto falhou',e); return {sync:'falhou'}; } }
@@ -17528,7 +17538,7 @@ function bnPromover(id){
 function bnLevarProFunil(b,etapa){ try{
   let c=b.funil_contato_id? (S.contatos||[]).find(x=>x.id===b.funil_contato_id) : null;
   if(!c){ c=pessoaLeadToCard(b); S.contatos.unshift(c); normContato(c); b.funil_contato_id=c.id; }
-  if(etapa&&c.etapa!==etapa&&!ETAPAS_ENCERR.includes(c.etapa)&&etapasDe(c).includes(etapa)){ c.etapa=etapa; try{ funOrdemInserir(c,etapa,null); }catch(_){} }   /* BUGS-V5 #9: lead no BC/extra não ganha etapa do NN */
+  if(etapa&&c.etapa!==etapa&&!ETAPAS_ENCERR.includes(c.etapa)&&etapasDe(c).includes(etapa)){ const _de=c.etapa; c.etapa=etapa; try{ logEtapa(c,_de,etapa); }catch(_){} try{ funOrdemInserir(c,etapa,null); }catch(_){} }   /* BUGS-V5 #9 · AUDIT B5: registra a mudança (tempo na etapa) */
   salvar(); try{ pendMarcar('bn',[b.id]); bnSalvar(); }catch(_){} toast(String(b.nome||'').split(' ')[0]+' → funil em '+(c.etapa||etapa)+' ✓',true); return c;
 }catch(e){ console.warn('bnLevarProFunil',e); return null; } }
 function bnLote(acao){
@@ -19839,7 +19849,7 @@ function lpSelfCheck(){
         S.contatos=[{id:'a',nome:'Meu',funil:'nn',etapa:'C2',_dono:'j@x',lp:'gustavo'},{id:'b',nome:'Dele',funil:'nn',etapa:'C2',_dono:'d@x',lp:'daniel'},{id:'c',nome:'Vg dele',funil:'vg',etapa:'x',_dono:'d@x',lp:'daniel'}];
         const ok1=contatosDoLp().map(c=>c.id).join()==='a', ok2=meusContatos().map(c=>c.id).join()==='a', ok3=fxLista('vg').length===0; const src=[...document.scripts].map(x=>x.textContent).join('\n'); const ok4=src.indexOf('isMaster()||'+'logado()')<0; return ok1&&ok2&&ok3&&ok4; } finally{ PERFIL=P; ESC=E; DELEG=D; S.contatos=C; } })());
     ok('V10.1: com CONTA_TROCANDO, localStorage.setItem ignora chaves por pessoa (portão único)', (()=>{ const k='crmlp_pend_v1'; const bk=localStorage.getItem(k); try{ window.CONTA_TROCANDO=true; localStorage.setItem(k,'__teste__'); const a=localStorage.getItem(k)!=='__teste__'; window.CONTA_TROCANDO=false; localStorage.setItem('crmlp_zz_teste','1'); const b=localStorage.getItem('crmlp_zz_teste')==='1'; localStorage.removeItem('crmlp_zz_teste'); return a&&b; } finally{ window.CONTA_TROCANDO=false; if(bk==null) localStorage.removeItem(k); else localStorage.setItem(k,bk); } })());
-    ok('V10: pushResiliente único (funil+Estoque), 401/JWT transitório, sucesso zera PUSH_ERR, contaConferir nos 3 pontos, cart_perfis limpa', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); return typeof pushResiliente==='function'&&String(lpcPush).includes('pushResiliente(')&&String(bnPush).includes('pushResiliente(')&&String(pushResiliente).includes('jwt|expired|401')&&String(pushResiliente).includes('delete PUSH_ERR[x.id]')&&typeof contaConferir==='function'&&String(perfilCarregar).includes('contaConferir(')&&String(sincronizarDados).includes('contaConferir(')&&src.includes('if(contaConferir()) return;')&&CONTA_CHAVES.includes('crmlp_cart_perfis_v1')&&String(contaLimparCache).includes('CONTA_TROCANDO=true'); })());
+    ok('V10: pushResiliente único (funil+Estoque), 401/JWT transitório, sucesso zera PUSH_ERR, contaConferir nos 3 pontos, cart_perfis limpa', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); return typeof pushResiliente==='function'&&(String(lpcPush)+String(lpcPushCorpo)).includes('pushResiliente(')&&String(bnPush).includes('pushResiliente(')&&String(pushResiliente).includes('jwt|expired|401')&&String(pushResiliente).includes('delete PUSH_ERR[x.id]')&&typeof contaConferir==='function'&&String(perfilCarregar).includes('contaConferir(')&&String(sincronizarDados).includes('contaConferir(')&&src.includes('if(contaConferir()) return;')&&CONTA_CHAVES.includes('crmlp_cart_perfis_v1')&&String(contaLimparCache).includes('CONTA_TROCANDO=true'); })());
     ok('V9 (regressão V8): conta-trocou no boot antes dos loaders + trava de escrita; fora da delegação desiste já; erro de rede não conta; offline não sincroniza; persist/assinatura limpam', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join(''); return src.includes('CONTA-TROCOU-V2')&&src.includes('function salvar(opts){ if(window.CONTA_TROCANDO) return;')&&String(pendSalvar).includes('CONTA_TROCANDO')&&String(pushResiliente).includes('PUSH_ERR[x.id]=5')&&String(pushResiliente).includes('transitório')&&String(pendRetentar).includes('navigator.onLine===false')&&CONTA_CHAVES.includes('crmlp_persist_v1')&&!String(perfilCarregar).includes('crmlp_dono_v1'); })());
     ok('MULTIUSUÁRIO-V8: troca de conta limpa cache; Sair existe; dono carimbado na edição; push resiliente (1 a 1, fora da delegação não sobe, teto 5); offline volta sozinho; boot espera delegações; sync enfileira; escAtual memo; prefs com try', (()=>{ const a=typeof contaLimparCache==='function'&&typeof sairDaConta==='function'&&CONTA_CHAVES.includes('crmlp_pend_v1')&&[...document.scripts].map(x=>x.textContent).join('').includes('crmlp_dono_v1'); const _src=[...document.scripts].map(x=>x.textContent).join(''); const b=_src.includes('DONO-NA-EDI'+'ÇÃO-V1')&&_src.split('c._dono=d; }').length>=3; const c=String(pushResiliente).includes('linha a linha')&&String(pushResiliente).includes('vis.has(x.dono)'); const d=String(pendRetentar).includes('lpcRemoteOn'); const e=[...document.scripts].map(x=>x.textContent).join('').includes('BOOT-DELEG-V1'); const f=String(sincronizarDados).includes('_syncPedido'); const g=typeof escAtualCalc==='function'&&String(escSet).includes('_escMemo=null'); const h=[funPrefSalvar,ctPrefSalvar,bnPrefSalvar,taPrefSalvar,recPrefSalvar].every(x=>String(x).includes('try{')); return a&&b&&c&&d&&e&&f&&g&&h; })());
     ok('BUGS-V7: salvar()/bnSalvar() marcam pendente mesmo com cache vazio (só doServidor não marca); status lembra a etapa; recursão do gcal com await; leaflet remove script em erro', (()=>{ const a=!String(salvar).includes('_primeiraFoto')&&!String(bnSalvar).includes('primeiraFoto'); const c={id:'zs7',etapa:'TA',status:'X',status_etapa:'OI/FF'}; const b=etStatusDe(c)===''; const d=String(gsyncAplicarItem).includes('gsyncSumiu(e)) throw e;')&&String(gsyncAplicarItem).includes('criou=true'); const e=String(mapaLeaflet).includes('sc.remove()'); return a&&b&&d&&e; })());
@@ -20051,6 +20061,13 @@ function lpSelfCheck(){
         &&String(agNovaAtividade).includes('tn-hora')&&String(agNovaAtividade).includes('tn-dur')&&String(agNovaAtividade).includes('tn-pessoa')
         &&!String(agDataHtml).includes('onchange="tarSetData')&&String(agSalvarData).includes('tarSetData')&&String(viewAgenda).includes('agSalvarHtml')
         &&par.indexOf("'evento'")<par.indexOf("'tarefa'")&&row.indexOf("'evento'")<row.indexOf("'tarefa'")&&!row.includes('ag-glbl'); })());
+    ok('AUDIT B1: tarefa mexida nos 2 aparelhos funde campo a campo (conclusão de um + data do outro); cópia duplicada da base não vira edição; push serializado', (()=>{
+      const b={id:'m2',tarefas:[{id:'t1',tit:'A',quando:'2026-10-01',feito:null}]};
+      const l={id:'m2',tarefas:[{id:'t1',tit:'A',quando:'2026-10-05',feito:null}]}, r={id:'m2',tarefas:[{id:'t1',tit:'A',quando:'2026-10-01',feito:'2026-09-30T12:00:00Z'}]};
+      const t1=fund3(b,l,r).tarefas; const a=t1.length===1&&t1[0].feito==='2026-09-30T12:00:00Z'&&t1[0].quando==='2026-10-05';
+      const bd={id:'m3',tarefas:[{id:'x',tit:'o',gtaskId:null},{id:'x',tit:'o',gtaskId:'g1'}]}, ld={id:'m3',tarefas:[{id:'x',tit:'o',gtaskId:'g1'}]}, rd={id:'m3',tarefas:[{id:'x',tit:'o',gtaskId:null},{id:'x',tit:'o',gtaskId:'g1'},{id:'y',tit:'novo'}]};
+      const t2=fund3(bd,ld,rd).tarefas; const c=t2.length===2&&t2.find(q=>q.id==='x').gtaskId==='g1'&&t2.some(q=>q.id==='y');
+      return a&&c&&String(lpcPush).includes('_lpcPushVoo')&&typeof lpcPushCorpo==='function'; })());
     ok('AUDIT-29-09: merge de lista por ID (a mesma tarefa editada nos 2 aparelhos não duplica), dedupe fica a última cópia sem perder o vínculo Google, carimbo de rec só na criação (apagar não volta), Agenda não é recomendante, 1 principal/telefone certo, tempo na etapa por qualquer movimento, Aberta por com quem abriu', (()=>{
       const b={id:'m1',tarefas:[{id:'t1',tit:'A',feito:null},{id:'t2',tit:'B'}]};
       const l={id:'m1',tarefas:[{id:'t1',tit:'A editada no iPad',feito:null},{id:'t2',tit:'B'},{id:'t3',tit:'nova minha'}]};
@@ -20563,7 +20580,7 @@ function lpSelfCheck(){
         })());
         ok('SYNC-PUXA: puxada incremental por `atualizado` ligada ao voltar pra aba, ao reconectar e a cada 60 s; push leva os pendentes e funde antes de subir', (()=>{ const src=[...document.scripts].map(x=>x.textContent).join('');
           return typeof syncPuxar==='function'&&String(syncPuxar.toString()).includes(".gt('atualizado',SYNC_DESDE)")&&/visibilitychange[^\n]*syncPuxar/.test(src)&&/'online'[^\n]*syncPuxar/.test(src)&&/setInterval\(\(\)=>\{ if\(!document\.hidden\) syncPuxar/.test(src)
-            &&String(lpcPush.toString()).includes('fund3Servidor')&&String(bnPush.toString()).includes('fund3Servidor')&&String(lpcPush.toString()).includes('||PEND.lpc[k]')&&String(bnPush.toString()).includes('||PEND.bn[k]'); })());
+            &&String((String(lpcPush)+String(lpcPushCorpo))).includes('fund3Servidor')&&String(bnPush.toString()).includes('fund3Servidor')&&String((String(lpcPush)+String(lpcPushCorpo))).includes('||PEND.lpc[k]')&&String(bnPush.toString()).includes('||PEND.bn[k]'); })());
         /* SP-LISTAS-V1 */
         ok('SP-LISTAS: lista nomeada de TA atravessa funil + Estoque; o SitPlan tem os tópicos Listas de TA e Recortes (o MESMO TA_SMART do Painel TA), botão 📋 por linha, dois botões abrir/recolher tudo, e nasce atrás de sp-listas', (()=>{ const bakS=S.contatos, bakB=BN.contatos; try{
           S.contatos=[normContato({id:'zzsl1',nome:'Zz Fun',lp:S.activeUser,telefone:'81999990012',etapa:'SitPlan',listas:['SP Teste']})]; BN.contatos=[{id:'zzsl2',nome:'Zz Bn',estagio:'lista_ta',lp:S.activeUser,listas:['SP Teste'],hist:[],telefone:'81999990013'}];
@@ -21525,7 +21542,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
                    PEND.lpc={}; S.contatos=[{id:'__sdP',nome:'Pendente',funil:'nn',_dono:'x@x'},{id:'__sdQ',nome:'Apagado lá',funil:'nn',_dono:'x@x'},{id:'__sdR',nome:'Vivo',funil:'nn',_dono:'x@x'}]; PEND.lpc={'__sdP':1};
                    const tirar=syncApagadosLocal(['__sdR']); const conf=tirar.length===1&&tirar[0]==='__sdQ';
                    const muitos=Array.from({length:LPC_DEL_MAX+1},(_,i)=>({id:'__sdM'+i,nome:'m',funil:'nn'})); S.contatos=muitos; PEND.lpc={}; const massa=syncApagadosLocal([]).length===0;
-                   return naFila&&naoVolta&&desfez&&conf&&massa&&/PEND\.del/.test(String(lpcPush)); }
+                   return naFila&&naoVolta&&desfez&&conf&&massa&&/PEND\.del/.test((String(lpcPush)+String(lpcPushCorpo))); }
               finally{ S.contatos=gS; _lpcLast=gL; PEND=gP; _lpcPrev=gPrev; _lpcBase=gB; pendSalvar(); salvar({doServidor:true}); } })());
     ok('CARGA-V1: data da última carga (📥 fonte dd/mm · há N dias) — 7+ dias em âmbar, sem data diz "sem carga", chave só na base dele; Início › Aniversariantes, Emissão Diária, Detalhado, Status T, Aniversariantes, Aniversário de Apólice, Atrasos e Pendências passam por cargaLinha',
        (()=>{ const _p=PERFIL; try{ PERFIL=null; const h=hojeISO(); const d=new Date(); d.setDate(d.getDate()-9); const v=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
