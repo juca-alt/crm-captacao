@@ -101,7 +101,7 @@ function headerHTML(){
 function searchHTML(){
   const ph=VIEW==='lp'?'Buscar cliente da Carteira por nome…':'Buscar lead por nome ou telefone…';
   return `<div class="search"><input id="wa-q" placeholder="${ph}">
-    <button class="btn" id="wa-q-go" style="width:auto">🔍</button></div>`;
+    <button class="btn" id="wa-q-go" style="width:auto">🔍</button>${VIEW==='lp'?`<button class="btn" id="wa-novo" style="width:auto" title="Criar contato novo no CRM (outra pessoa)">＋ Novo</button>`:''}</div>`;
 }
 function tabsHTML(){   /* 2.1: as abas agora são o MODO do card (a aba Captação saiu) */
   return `<div class="tabs">
@@ -470,6 +470,7 @@ function chatKeys(c){ if(!c||c.isGroup) return [];
   const dg=String(c.phoneRaw||'').replace(/\D/g,'');
   return [dg.length>=10?'tel:'+dg.slice(-11):'', c.lid?'lid:'+c.lid:'', nn?'nome:'+nn:''].filter(Boolean); }
 let VINC=false;   /* o card na tela veio do vínculo gravado */
+let PELO_NOME=null;   /* 2.7.0: id do negócio achado SÓ pelo nome da conversa (pode ser a pessoa errada) */
 function vincular(row){ if(!row||!CHAT) return; const k=chatKeys(CHAT); if(!k.length) return;
   send('wa.vincular',{keys:k,id:row.id,nome:(row.dados&&row.dados.nome)||''}).then(r=>{ if(r&&!r.ok) toast('Não gravou o vínculo: '+(r.error||'falha')); if(r&&r.ok){ VINC=true; toast('📌 Conversa ligada a '+((row.dados&&row.dados.nome)||'este negócio')+' — gravado no CRM, vale em qualquer aparelho'); avisaConversa(CHAT); if(CUR===String(row.id)) renderLpContato(CUR_ROW,CUR_CART); } }); }
 function desvincular(){ if(!CHAT) return; send('wa.desvincular',{keys:chatKeys(CHAT),id:CUR}).then(()=>{ VINC=false; toast('Vínculo desfeito'); avisaConversa(CHAT); lookup(); }); }
@@ -581,11 +582,17 @@ const NEG_PAPEL={decisor:'Decisor',rh:'RH',fin:'Financeiro',socio:'Sócio',outro
 async function pintaNegocios(id){ const box=$('#lp2-negs'); if(!box) return; const seq=LOOKSEQ;
   const r=await send('lp.negocios',{id}); if(seq!==LOOKSEQ||!$('#lp2-negs')||String(CUR_ROW&&CUR_ROW.id)!==String(id)) return;
   const l=(r&&r.ok&&Array.isArray(r.data))?r.data.slice().sort((a,b)=>NEG_ORD.indexOf(a.funil)-NEG_ORD.indexOf(b.funil)):[];
-  if(l.length<=1){ const emp=/^vg(-bc)?$/.test(String(CUR_ROW&&CUR_ROW.dados&&CUR_ROW.dados.funil||''))&&Array.isArray(CUR_ROW.dados.pjContatos); box.innerHTML=`<div class="muted">${emp?'🏢 nenhum contato desta empresa com negócio no CRM':'💼 só este negócio desta pessoa'}</div>`; return; }   /* AUDIT G6 */
   const ehEmpresa=/^vg(-bc)?$/.test(String(CUR_ROW&&CUR_ROW.dados&&CUR_ROW.dados.funil||''))&&Array.isArray(CUR_ROW.dados.pjContatos);   /* 2.6.1 (AUDIT B8) */
+  /* 2.7.0: ＋ Novo negócio da MESMA pessoa (na ficha da empresa não: lá o negócio é a empresa) */
+  const novo=ehEmpresa?'':`<button class="chip neg-novo" id="lp2-negnovo" title="Outro negócio da MESMA pessoa (outro pipe/funil)">＋ Novo negócio</button>`;
+  const wireNovo=()=>{ const b=$('#lp2-negnovo'); if(b) b.onclick=()=>{ const row=CUR_ROW; if(!row) return;
+    if(sujo(DRAFTS[String(row.id)])&&!window.confirm('Tem mudança não salva neste negócio. Continuar? (o rascunho fica guardado)')) return;
+    LOOKSEQ++; renderLpCreate([],row); }; };
+  if(l.length<=1){ box.innerHTML=`<div class="muted" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${ehEmpresa?'🏢 nenhum contato desta empresa com negócio no CRM':'💼 só este negócio desta pessoa'} ${novo}</div>`; wireNovo(); return; }   /* AUDIT G6 */
   box.innerHTML=`<div class="sec-t" style="margin:0 0 6px">💼 ${ehEmpresa?'Empresa e negócios dos contatos':'Negócios desta pessoa'} <span class="dob-r">${l.length}</span></div><div class="chips">${l.map(n=>{ const p=NEG_PIPE[n.funil]||['📈',n.funil], eu=n.id===String(id);
     const et=lpcEtapaDe(LPCFG.funil,{funil:n.funil,etapa:n.etapa});
-    return `<button class="chip neg${eu?' on':''}" ${eu?'disabled':''} data-neg="${esc(n.id)}" title="${esc(n.nome)}">${p[0]} ${esc(p[1])}${n.papel?` · 🏢 ${esc(n.nome)} (${esc(NEG_PAPEL[n.papel]||'Contato')})`:''}${n.pessoa?` · 👤 ${esc(n.pessoa)}`:''}<br><small>${esc((et&&et.label)||n.etapa||'—')}</small></button>`; }).join('')}</div>`;
+    return `<button class="chip neg${eu?' on':''}" ${eu?'disabled':''} data-neg="${esc(n.id)}" title="${esc(n.nome)}">${p[0]} ${esc(p[1])}${n.papel?` · 🏢 ${esc(n.nome)} (${esc(NEG_PAPEL[n.papel]||'Contato')})`:''}${n.pessoa?` · 👤 ${esc(n.pessoa)}`:''}<br><small>${esc((et&&et.label)||n.etapa||'—')}</small></button>`; }).join('')}${novo}</div>`;
+  wireNovo();
   box.querySelectorAll('[data-neg]').forEach(b=>b.onclick=async()=>{ if(sujo(DRAFTS[String(id)])&&!window.confirm('Tem mudança não salva neste negócio. Trocar mesmo assim? (o rascunho fica guardado)')) return;
     b.disabled=true; const seq2=LOOKSEQ; const rr=await send('lpc.um',{id:b.dataset.neg}); if(seq2!==LOOKSEQ||MODO!=='rapido') return;   /* AUDIT E4: foi pro Card completo no meio → não sobrescreve */
     if(rr&&rr.ok&&rr.data){ const ks=chatKeys(CHAT), wc=rr.data.dados&&rr.data.dados.wa_chats; VINC=Array.isArray(wc)&&wc.some(k=>ks.includes(String(k)));   /* AUDIT E1: o 📌 é DESTE negócio, não do anterior */
@@ -608,7 +615,8 @@ function renderLpContato(row,cartHit){
       <h2>${esc(c.nome||'—')}</h2>
       <span class="badge" style="background:${LPC_COR[(atual&&atual.cor)||'cinza']||'#5b6770'}"><span class="dot"></span>${esc(funNome)} · ${esc((atual&&atual.label)||c.etapa||'—')}</span>
       <div class="muted">${esc(c0.telefone||'sem telefone')}${c.recomendante?' · rec. '+esc(c.recomendante):''}</div>
-      <div class="muted" style="margin-top:4px">${VINC?`📌 ligado a esta conversa · <a href="#" id="lp2-desv">não é esta pessoa</a>`:`<a href="#" id="lp2-vinc">📌 ligar esta conversa a este negócio</a>`}</div>
+      <div class="muted" style="margin-top:4px">${VINC?`📌 ligado a esta conversa · <a href="#" id="lp2-desv">não é esta pessoa</a>`:`<a href="#" id="lp2-vinc">📌 ligar esta conversa a este negócio</a>`} · <a href="#" id="lp2-outro">＋ é outra pessoa</a></div>
+      ${!VINC&&PELO_NOME===id?`<div class="warn" style="margin-top:6px">Achado só pelo <b>nome</b> da conversa — confira. Se for outra pessoa: <button class="btn primary" id="lp2-outro2" style="width:auto;margin-top:6px">＋ Criar contato novo</button></div>`:''}
       ${cartHit?`<div class="muted" style="margin-top:4px">📁 também na Carteira${cartHit.apolices&&cartHit.apolices.length?' · '+cartHit.apolices.length+' apólice(s)':''}</div>`:''}
     </div>
     <div class="card negs" id="lp2-negs"><div class="muted">💼 negócios desta pessoa…</div></div>
@@ -638,7 +646,9 @@ function renderLpContato(row,cartHit){
   </div>`,id);
   wireMsgCard(c); wireDob(); pintaBarra(); pintaNegocios(id);
   { const a=$('#lp2-vinc'); if(a) a.onclick=e=>{ e.preventDefault(); vincular(row); };
-    const b=$('#lp2-desv'); if(b) b.onclick=e=>{ e.preventDefault(); desvincular(); }; }
+    const b=$('#lp2-desv'); if(b) b.onclick=e=>{ e.preventDefault(); desvincular(); };
+    const outro=e=>{ if(e) e.preventDefault(); LOOKSEQ++; renderLpCreate([]); };
+    const o1=$('#lp2-outro'); if(o1) o1.onclick=outro; const o2=$('#lp2-outro2'); if(o2) o2.onclick=()=>outro(); }
   const redesenha=()=>{ if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; renderLpContato(CUR_ROW,CUR_CART); };
   const limpaIgual=()=>{ /* voltou ao que está no banco? então não é mudança */
     if('etapa' in D&&D.etapa===c0.etapa){ delete D.etapa; }
@@ -689,40 +699,67 @@ function renderLpContatoPicker(list){
       <span class="muted">${esc((e&&e.label)||c.etapa||'—')} · ${esc(c.telefone||'sem telefone')}</span></div>`; }).join(''));
   panel.querySelectorAll('.pick').forEach(el=>{ el.onclick=()=>{ const x=list[+el.dataset.i]; renderLpContato(x); vincular(x); }; });
 }
-function renderLpCreate(sugestoes){
+/* 2.7.0 CRIAR-NOVO (pedido dele 01/10: indicado com "Rec <quem indicou>" no nome da conversa): criar direto da extensão, em 2 sabores —
+   · CONTATO NOVO (outra pessoa): nome e recomendante saem do nome da conversa ("Fulano Rec Beltrana" → Fulano · rec. Beltrana),
+     telefone do chat, escolhe o pipe/funil; a conversa fica ligada ao negócio novo.
+   · NOVO NEGÓCIO da MESMA pessoa (irmao = negócio aberto): outro pipe/funil, nasce com o mesmo pessoaId (MULTI-NEG do app);
+     se o negócio de origem ainda não tinha pessoaId, ganha um antes (ação 'pessoa', nunca troca um existente).
+   Vida em Grupo fica de fora: lá o negócio é a EMPRESA (VG-EMPRESA do app) — cria-se no CRM. */
+const NOVO_FUNIS=[['nn','📈 Vida Individual · Novos Negócios'],['bc','📈 Vida Individual · Base de Clientes'],['prud','🧩 Prud. Demais · Novos Negócios'],['prud-bc','🧩 Prud. Demais · Base'],['mfo','🏦 MFO · Novos Negócios'],['mfo-bc','🏦 MFO · Base']];
+function etapa0(funil){ const arr=LPCFG.funil&&LPCFG.funil[lpcCfgKey({funil})];
+  const e=Array.isArray(arr)?arr.find(x=>x&&x.id&&!x.enc):null; return (e&&e.id)||LPC_ETAPA0[funil]||'SitPlan'; }
+function renderLpCreate(sugestoes,irmao){
   const chatPhone=CHAT&&CHAT.phoneRaw?normPhone(CHAT.phoneRaw):null;
+  const d0=irmao?(irmao.dados||{}):null;
+  const doChat=recDoNome(CHAT&&CHAT.name)||{nome:(CHAT&&CHAT.name)||'',recomendante:''};
+  const nome0=d0?(d0.nome||''):doChat.nome, tel0=d0?(d0.telefone||''):(chatPhone?chatPhone.telefone:''), rec0=d0?(d0.recomendante||''):doChat.recomendante;
+  const funAtual=d0&&(d0.funil||'nn');
+  const fun0=d0?((NOVO_FUNIS.find(x=>x[0]!==funAtual)||['nn'])[0]):'nn';   /* novo negócio: já sugere um funil diferente do atual */
   renderShell(`
     ${sugestoes&&sugestoes.length?`<div class="note"><b>Parecidos no funil LP</b> — confira antes de criar:</div>`+
       sugestoes.map((r,i)=>{ const cc=r.dados||{}; return `<div class="pick" data-lpsug="${i}"><b>${esc(cc.nome||'—')}</b><br>
         <span class="muted">${esc(LPC_FUNIS[lpcFunilDe(cc)].label)} · ${esc(cc.etapa||'—')} · ${esc(cc.telefone||'sem telefone')}</span></div>`; }).join(''):''}
     <div class="card">
-      <h2 style="margin-bottom:8px">+ Novo contato na Visão LP</h2>
-      ${fieldHTML('wa-lpn-nome','Nome',CHAT&&CHAT.name||'')}
-      ${fieldHTML('wa-lpn-tel','Telefone',chatPhone?chatPhone.telefone:'')}
-      <div class="field"><label>Funil</label><select id="wa-lpn-funil">
-        <option value="nn">Novos Negócios (nasce em SitPlan)</option>
-        <option value="bc">Base de Clientes (nasce em Clientes Ativos)</option></select></div>
+      <h2 style="margin-bottom:8px">${d0?'＋ Novo negócio de '+esc(firstName(nome0)||'—'):'＋ Novo contato na Visão LP'}</h2>
+      ${d0?`<p class="muted" style="margin-bottom:8px">Mesma pessoa, outro pipe — o negócio novo fica ligado a ${esc(nome0)} (aparece em 💼 Negócios desta pessoa).</p>`:''}
+      ${fieldHTML('wa-lpn-nome','Nome',nome0)}
+      ${fieldHTML('wa-lpn-tel','Telefone',tel0)}
+      ${fieldHTML('wa-lpn-rec','Recomendante (quem indicou)',rec0,'opcional')}
+      <div class="field"><label>Pipe · funil</label><select id="wa-lpn-funil">${NOVO_FUNIS.map(([f,l])=>`<option value="${f}" ${f===fun0?'selected':''}>${esc(l)}${f===funAtual?' (já é este)':''}</option>`).join('')}</select></div>
       <div class="field"><label>Notas</label><textarea id="wa-lpn-notas"></textarea></div>
-      <button class="btn primary" id="wa-lpn-save">＋ Criar na Visão LP</button>
+      <button class="btn primary" id="wa-lpn-save">＋ Criar no CRM</button>
+      <p class="muted" style="margin-top:6px;font-size:11px">Vida em Grupo é card da empresa — crie no CRM.</p>
     </div>
-    <div class="note">Ou, se for recrutamento (candidato a LP):</div>
-    <button class="btn" id="wa-lp-to-cap">➕ Criar como lead de Captação</button>
+    ${d0?`<button class="btn" id="wa-lpn-volta">← voltar pro card de ${esc(firstName(nome0))}</button>`:''}
   `);
   panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>{ const x=sugestoes[+el.dataset.lpsug]; renderLpContato(x); vincular(x); }; });
-  $('#wa-lp-to-cap').onclick=()=>{ VIEW='captacao'; saveView(); LEAD=null; lookup(); };
+  const volta=$('#wa-lpn-volta'); if(volta) volta.onclick=()=>renderLpContato(irmao,CUR_CART);
   $('#wa-lpn-save').onclick=async()=>{
-    const nome=$('#wa-lpn-nome').value.trim();
+    const nome=$('#wa-lpn-nome').value.trim(), funil=$('#wa-lpn-funil').value, rec=$('#wa-lpn-rec').value.trim();
     if(!nome){ toast('Nome é obrigatório.'); return; }
     if(BUSY) return; BUSY=true; $('#wa-lpn-save').disabled=true;
-    // shape completo do vendas.html vem do lpcNovoContato (normalize.js) — aqui
-    // só o que a UI coletou; nada de subconjunto (era o que quebrava o drawer).
-    const dados=lpcNovoContato({ nome, telefone:$('#wa-lpn-tel').value.trim()||null,
-      funil:$('#wa-lpn-funil').value, notas:$('#wa-lpn-notas').value });
+    const seq=LOOKSEQ;
+    const fim=(msg)=>{ BUSY=false; const b=$('#wa-lpn-save'); if(b) b.disabled=false; if(msg) toast(msg); };
+    let pid=null;
+    if(d0){ pid=d0.pessoaId||('p-'+lpcUid().slice(1));
+      if(!d0.pessoaId){ const rp=await send('lpc.patch',{id:irmao.id,acoes:[{tipo:'pessoa',id:pid}]});
+        if(!handleAuthFail(rp)){ BUSY=false; return; }
+        if(!rp.ok){ fim('Erro ao ligar à pessoa: '+(rp.error||'falha')); return; }
+        pid=(rp.data&&rp.data.dados&&rp.data.dados.pessoaId)||pid; } }
+    // shape completo do vendas.html vem do lpcNovoContato (normalize.js) — aqui só o que a UI coletou.
+    const campos={ nome, telefone:$('#wa-lpn-tel').value.trim()||null, funil, etapa:etapa0(funil), notas:$('#wa-lpn-notas').value };
+    if(rec){ campos.recomendante=rec; if(!d0||rec!==String(d0.recomendante||'')) campos.rec_recebida_em=lpcHojeISO(); }   /* REC-TIMING do app: rec nova ganha a data de hoje */
+    if(d0){ campos.pessoaId=pid; ['email','nascimento','sexo','idade','profissao','instagram'].forEach(k=>{ const v=d0[k]; if(v!=null&&v!==''&&v!=='—') campos[k]=v; }); }
+    const dados=lpcNovoContato(campos);
     const r=await send('lpc.save',{id:dados.id,dados});
     BUSY=false;
     if(!handleAuthFail(r)) return;
-    if(r.ok){ renderLpContato(r.data); vincular(r.data); toast('✓ Contato criado na Visão LP'); }
-    else { $('#wa-lpn-save').disabled=false; toast('Erro: '+(r.error||'falha ao criar')); }
+    if(!r.ok){ fim('Erro: '+(r.error||'falha ao criar')); return; }
+    if(seq!==LOOKSEQ){ toast('✓ Criado no CRM: '+nome); return; }   /* trocou de conversa no meio: não pinta por cima */
+    PELO_NOME=null;
+    renderLpContato(r.data);
+    if(d0) toast('✓ Novo negócio de '+firstName(nome)+' — ligado aos outros dele');
+    else { vincular(r.data); toast('✓ '+firstName(nome)+' criado na Visão LP'); }
   };
 }
 
@@ -756,6 +793,7 @@ function wireSearch(){
   };
   const btn=$('#wa-q-go'), inp=$('#wa-q');
   if(btn) btn.onclick=go;
+  const nv=$('#wa-novo'); if(nv) nv.onclick=()=>{ LOOKSEQ++; renderLpCreate([]); };   /* 2.7.0: criar sempre à mão, de qualquer tela */
   if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
 }
 function handleAuthFail(r){
@@ -783,7 +821,7 @@ async function lookup(){
   if(c.isGroup){ renderGroup(); return; }
   renderLoading();
   if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Estoque → Carteira → criar
-    let contatos=[],carteira=[],byName=null,estoque=[];
+    let contatos=[],carteira=[],byName=null,estoque=[]; PELO_NOME=null;
     const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||'',keys:chatKeys(c)}),loadLpCfg()]);
     VINC=!!(r&&r.ok&&r.data&&r.data.vinculo);
     if(seq!==LOOKSEQ) return;                    /* já trocou de conversa: esta resposta é de outra pessoa */
@@ -792,7 +830,7 @@ async function lookup(){
     if(!contatos.length&&!(byName&&byName.strong)&&estoque.length===1){ renderLpEstoque(estoque[0]); return; }
     if(contatos.length===1) renderLpContato(contatos[0],carteira[0]||null);
     else if(contatos.length>1) renderLpContatoPicker(contatos);
-    else if(byName&&byName.strong){ renderLpContato(byName.strong,carteira[0]||null); toast('Casado pelo NOME do contato — confira se é a pessoa certa'); }
+    else if(byName&&byName.strong){ PELO_NOME=String(byName.strong.id); renderLpContato(byName.strong,carteira[0]||null); }
     else if(carteira.length===1) renderLpCliente(carteira[0]);
     else if(carteira.length>1) renderLpPicker(carteira);
     else renderLpCreate((byName&&byName.sugestoes)||[]);
