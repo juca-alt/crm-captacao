@@ -581,7 +581,7 @@ const NEG_PAPEL={decisor:'Decisor',rh:'RH',fin:'Financeiro',socio:'Sócio',outro
 async function pintaNegocios(id){ const box=$('#lp2-negs'); if(!box) return; const seq=LOOKSEQ;
   const r=await send('lp.negocios',{id}); if(seq!==LOOKSEQ||!$('#lp2-negs')||String(CUR_ROW&&CUR_ROW.id)!==String(id)) return;
   const l=(r&&r.ok&&Array.isArray(r.data))?r.data.slice().sort((a,b)=>NEG_ORD.indexOf(a.funil)-NEG_ORD.indexOf(b.funil)):[];
-  if(l.length<=1){ box.innerHTML='<div class="muted">💼 só este negócio desta pessoa</div>'; return; }
+  if(l.length<=1){ const emp=/^vg(-bc)?$/.test(String(CUR_ROW&&CUR_ROW.dados&&CUR_ROW.dados.funil||''))&&Array.isArray(CUR_ROW.dados.pjContatos); box.innerHTML=`<div class="muted">${emp?'🏢 nenhum contato desta empresa com negócio no CRM':'💼 só este negócio desta pessoa'}</div>`; return; }   /* AUDIT G6 */
   const ehEmpresa=/^vg(-bc)?$/.test(String(CUR_ROW&&CUR_ROW.dados&&CUR_ROW.dados.funil||''))&&Array.isArray(CUR_ROW.dados.pjContatos);   /* 2.6.1 (AUDIT B8) */
   box.innerHTML=`<div class="sec-t" style="margin:0 0 6px">💼 ${ehEmpresa?'Empresa e negócios dos contatos':'Negócios desta pessoa'} <span class="dob-r">${l.length}</span></div><div class="chips">${l.map(n=>{ const p=NEG_PIPE[n.funil]||['📈',n.funil], eu=n.id===String(id);
     const et=lpcEtapaDe(LPCFG.funil,{funil:n.funil,etapa:n.etapa});

@@ -2354,8 +2354,8 @@ async function pushResiliente(rows){ const falhas=new Set(); if(!rows.length) re
     if(parou) break; }
   return falhas; }
 /* AUDIT B2 (30/09): dois pushes em paralelo chegavam fora de ordem e deixavam a base velha → um de cada vez; o que chegar no meio reagenda */
-let _lpcPushVoo=false, _lpcPushDeNovo=false;
-async function lpcPush(){ if(_lpcPushVoo){ _lpcPushDeNovo=true; return; } _lpcPushVoo=true;
+let _lpcPushVoo=false, _lpcPushDeNovo=false, _lpcPushVooEm=0;
+async function lpcPush(){ if(_lpcPushVoo&&Date.now()-_lpcPushVooEm<90000){ _lpcPushDeNovo=true; return; } _lpcPushVoo=true; _lpcPushVooEm=Date.now();   /* AUDIT G2: trava com prazo — rede travada não segura os envios até recarregar */
   try{ await lpcPushCorpo(); } finally{ _lpcPushVoo=false; if(_lpcPushDeNovo){ _lpcPushDeNovo=false; lpcAgendarPush(); } } }
 async function lpcPushCorpo(){
   if(!LPC_REMOTE||!sb) return;
@@ -5959,10 +5959,12 @@ function pjContatos(c){ return Array.isArray(c&&c.pjContatos)?c.pjContatos:[]; }
 function pjPrincipal(c){ const l=pjContatos(c); return l.find(x=>x.principal)||l[0]||null; }
 function pjPapel(k){ const p=PJ_PAPEIS.find(x=>x[0]===k); return p?p[1]:'Contato'; }
 /* uma regra só: 1 principal, e o telefone do negócio é o dele */
-function pjNormalizar(c,op){ const l=pjContatos(c); if(!l.length){ if(Array.isArray(c.pjContatos)&&!(op&&op.manterTel)) c.telefone=''; return c; }
-  let p=l.find(x=>x.principal); if(!p){ p=l[0]; }
-  l.forEach(x=>{ x.principal=(x===p); });
-  if(p&&p.tel) c.telefone=telLimpa(p.tel); else if(!(op&&op.manterTel)) c.telefone='';   /* AUDIT A5/D1: tirar/trocar principal limpa; ADICIONAR contato sem telefone mantém o telefone que o negócio já tinha */
+function pjNormalizar(c){ const l=pjContatos(c);
+  /* AUDIT G1 (01/10): o telefone do negócio de empresa é o do ⭐ principal; quando ele foi COPIADO de um contato (pjTelDe),
+     sai junto com esse contato (tirado ou sem ⭐). Telefone próprio do negócio (sem pjTelDe) nunca é apagado aqui. */
+  const p=l.find(x=>x.principal)||l[0]||null; l.forEach(x=>{ x.principal=(x===p); });
+  if(p&&p.tel){ c.telefone=telLimpa(p.tel); c.pjTelDe=String(p.id); return c; }
+  if(c.pjTelDe&&(!p||String(p.id)!==String(c.pjTelDe))){ c.telefone=''; delete c.pjTelDe; }
   return c; }
 /* empresas onde esta pessoa é contato (ficha da pessoa → "🏢 Contato de empresa") */
 function pjEmpresasDaPessoa(c,todos){ if(!c) return [];
@@ -6018,9 +6020,9 @@ function pjSalvarCampo(k,v){ const c=ct(); if(!c) return; v=String(v==null?'':v)
 function pjAtual(id){ const c=ct(); return c?[c,pjContatos(c).find(x=>x.id===id)]:[null,null]; }
 function pjPrincipalSet(id){ const [c,x]=pjAtual(id); if(!x) return; pjContatos(c).forEach(o=>{ o.principal=(o===x); }); pjNormalizar(c); salvar(); renderDrawer(); render(); toast(`⭐ ${x.nome.split(' ')[0]} é o contato principal`,true); }
 function pjPapelSet(id,v){ const [c,x]=pjAtual(id); if(!x) return; x.papel=v; salvar(); render(); }
-function pjRemover(id){ const [c,x]=pjAtual(id); if(!x) return; const antes=JSON.parse(JSON.stringify(c.pjContatos)), telAntes=c.telefone;   /* AUDIT B4: cópia profunda */
+function pjRemover(id){ const [c,x]=pjAtual(id); if(!x) return; const antes=JSON.parse(JSON.stringify(c.pjContatos)), telAntes=c.telefone, telDeAntes=c.pjTelDe;   /* AUDIT B4: cópia profunda */
   c.pjContatos=c.pjContatos.filter(o=>o!==x); pjNormalizar(c); salvar(); renderDrawer(); render();
-  toastDesfazer(`${x.nome.split(' ')[0]} saiu da empresa`,()=>{ c.pjContatos=antes; c.telefone=telAntes; salvar(); renderDrawer(); render(); }); }
+  toastDesfazer(`${x.nome.split(' ')[0]} saiu da empresa`,()=>{ c.pjContatos=antes; c.telefone=telAntes; if(telDeAntes) c.pjTelDe=telDeAntes; else delete c.pjTelDe; salvar(); renderDrawer(); render(); }); }
 /* ＋ Contato: puxa do CRM (mesma busca do Novo negócio: funil + carteira + estoque) ou cria só nome/telefone */
 let PJ_RES=[];
 function pjAddAbrir(){ const box=document.getElementById('pjAddBox'); if(!box) return;
@@ -6040,7 +6042,7 @@ function pjBuscaRender(){ const i=document.getElementById('pjBusca'), box=docume
     ||`<div style="font-size:12.5px;color:var(--muted);padding:4px 2px">${q?'Ninguém com esse nome ou telefone no CRM.':'Digite 2 letras do nome ou 4 dígitos do telefone.'}</div>`)+novo; }
 function pjAddCom(x){ const c=ct(); if(!c) return; if(!Array.isArray(c.pjContatos)) c.pjContatos=[];
   const pp=document.getElementById('pjPapelNovo'); x.papel=(pp&&pp.value)||'outro'; x.id='pj'+uid(); x.principal=!c.pjContatos.length;
-  c.pjContatos.push(x); pjNormalizar(c,{manterTel:true}); salvar(); renderDrawer(); render(); toast(`${x.nome.split(' ')[0]} entrou em ${c.nome}`,true); }
+  c.pjContatos.push(x); pjNormalizar(c); salvar(); renderDrawer(); render(); toast(`${x.nome.split(' ')[0]} entrou em ${c.nome}`,true); }
 function pjAddPuxar(k){ const e=PJ_RES[k]; if(!e) return; pjAddCom({nome:e.nome,tel:e.tel?telLimpa(e.tel):'',ct:e.ct||null}); }
 function pjAddNovo(){ const q=((document.getElementById('pjBusca')||{}).value||'').trim(); if(!q) return;
   const dig=q.replace(/\D/g,''), soTel=dig.length>=8&&/^[\d\s()+\-.]+$/.test(q);
@@ -12066,7 +12068,7 @@ function gcalEdNegBuscar(){
 function gcalEdNegCriar(fid){ const i=document.getElementById('ev-neg'); const nome=((i&&i.value)||'').trim(); if(nome.length<2){ toast('Digite o nome',false); return; }
   const emp=typeof ehEmpresa==='function'&&ehEmpresa({funil:fid});
   const c={ id:uid(), lp:escLpNovo(), nome, sexo:'—', idade:null, profissao:'—', telefone:'', estrelas:0, ance:null,
-    etapa:fid==='nn'?'SitPlan':((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade'), funil:fid, origem:'—', origemCadastro:'agenda', trilha:'seguro', criadoEm:hojeISO(),
+    etapa:fid==='nn'?'SitPlan':((ETAPAS_MAP[fid]&&ETAPAS_MAP[fid].fluxo[0])||'Oportunidade'), funil:fid, origem:'Agenda', origemCadastro:'agenda', trilha:'seguro', criadoEm:hojeISO(),
     taStatus:'—', taTentativas:0, notas:'', infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false}, recs:[], eventos:[], planos:[], interacoes:[], sitplan:null };
   if(emp){ c.pj={}; c.pjContatos=[]; }
   S.contatos.push(c); salvar(); _GCAL_NEG=String(c.id); gcalEdNegPintar();
@@ -13913,7 +13915,8 @@ const SO_BOLA=[['nos','Nós (Gustavo/Victor)'],['area','A área'],['cliente','O 
 const SO_COM=[['gustavo','Gustavo'],['victor','Victor'],['lm','LM (Assessoria)'],['prudential','Prudential'],['cliente','Cliente']];   /* Prudential: pedido dele 28/09 — "alterações que estamos aguardando a Prudential atualizar no sistema" */
 const SO_COM_IC={gustavo:'🙋',victor:'🧑‍💼',lm:'🏢',prudential:'🏛️',cliente:'🙍'};
 function soComDe(s){ const b=s&&s.bola_com; if(SO_COM.some(c=>c[0]===b)) return b;
-  if(b==='cliente') return 'cliente'; if(b==='nos') return s.aberta_por==='victor'?'victor':(s.aberta_por&&s.aberta_por!=='gustavo'?String(s.aberta_por):'gustavo');   /* AUDIT B6 */ if(/^prudential/.test(String(s&&s.area||''))) return 'prudential'; return 'lm'; }
+  if(b&&b!=='nos'&&b!=='area') return String(b).toLowerCase();   /* AUDIT G3: 'daniel' (ou outro rótulo) gravado volta igual — antes caía em LM */
+  if(b==='cliente') return 'cliente'; if(b==='nos'){ const ap=String(s.aberta_por||'').toLowerCase(); return ap==='victor'?'victor':(ap&&ap!=='gustavo'?ap:'gustavo'); }   /* AUDIT B6/G3 */ if(/^prudential/.test(String(s&&s.area||''))) return 'prudential'; return 'lm'; }
 function soComRot(s){ return boRot(SO_COM,soComDe(s)); }
 const SO_EV_TIPOS=[['anexo','📎 Anexo'],['contato','Contato / cobrança'],['retorno','Retorno da área'],['protocolo','Protocolo'],['prazo','Prazo'],['status','Status'],['nota','Nota']];
 const SO_PARADA_DIAS=3;    /* sem andamento há N dias = "parada" */
@@ -20067,8 +20070,15 @@ function lpSelfCheck(){
         &&String(agNovaAtividade).includes('tn-hora')&&String(agNovaAtividade).includes('tn-dur')&&String(agNovaAtividade).includes('tn-pessoa')
         &&!String(agDataHtml).includes('onchange="tarSetData')&&String(agSalvarData).includes('tarSetData')&&String(viewAgenda).includes('agSalvarHtml')
         &&par.indexOf("'evento'")<par.indexOf("'tarefa'")&&row.indexOf("'evento'")<row.indexOf("'tarefa'")&&!row.includes('ag-glbl'); })());
+    ok('AUDIT G1-G5: telefone próprio da empresa fica ao tirar contato (só o copiado de contato sai); Com quem está "daniel" volta igual; trava do push com prazo; origem Agenda visível e não é recomendante', (()=>{
+      const e={id:'zg1',funil:'vg',telefone:'81 3333-0000',pjContatos:[{id:'a',nome:'A',tel:''}]}; pjNormalizar(e); e.pjContatos.push({id:'b',nome:'B',tel:''}); pjNormalizar(e); e.pjContatos=e.pjContatos.filter(x=>x.id!=='b'); pjNormalizar(e);
+      const a=e.telefone==='81 3333-0000';
+      const f={id:'zg2',funil:'vg',telefone:'',pjContatos:[{id:'k1',nome:'K',tel:'81 90000-1111',principal:true}]}; pjNormalizar(f); f.pjContatos=[]; pjNormalizar(f); const b=f.telefone===''&&!f.pjTelDe;
+      const c=soComDe({bola_com:'daniel'})==='daniel'&&soComDe({bola_com:'nos',aberta_por:'Daniel'})==='daniel'&&soComDe({bola_com:'area'})==='lm'&&soComDe({bola_com:'cliente'})==='cliente';
+      const d=String(lpcPush).includes('_lpcPushVooEm<90000')&&!recDoFunil({origem:'Agenda',nome:'Zz'});
+      return a&&b&&c&&d; })());
     ok('AUDIT D1-D4: adicionar contato sem telefone mantém o telefone; Com quem está tem Daniel; Rec no nome e lead do Estoque com data; Último relatório em dia local', (()=>{
-      const e={id:'zd1',funil:'vg',telefone:'81 90000-7777',pjContatos:[]}; e.pjContatos.push({id:'k',nome:'RH',tel:'',principal:true}); pjNormalizar(e,{manterTel:true}); const a=e.telefone==='81 90000-7777';
+      const e={id:'zd1',funil:'vg',telefone:'81 90000-7777',pjContatos:[]}; e.pjContatos.push({id:'k',nome:'RH',tel:'',principal:true}); pjNormalizar(e); const a=e.telefone==='81 90000-7777';
       const b=soComOpcoes(['daniel']).some(o=>o[0]==='daniel')&&soComOpcoes(['gustavo']).length===SO_COM.length;
       const card=pessoaLeadToCard({id:'b1',nome:'Zz Est',recomendante:'Beltrano',criado:'2026-09-10'}); const sem=pessoaLeadToCard({id:'b2',nome:'Zz Sem'});
       const c=card.rec_recebida_em==='2026-09-10'&&!('rec_recebida_em' in sem)&&String(salvarNovoContato).includes('normContato(c); if(!nIrm');

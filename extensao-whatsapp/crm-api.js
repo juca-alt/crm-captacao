@@ -456,14 +456,15 @@ async function lpNegocios(id){
       else {   /* AUDIT D5: sem ct → TODOS os negócios com o telefone dele; nome só quando há UM negócio com esse nome (homônimo não entra) */
         const tv=new Set(phoneE164Variants(p.tel||'')), nk=waNormNome(p.nome||'');
         alvo=tv.size?rows.filter(r=>!ehEmp(r)&&phoneE164Variants(r.dados.telefone||'').some(v=>tv.has(v))):[];
-        if(!alvo.length&&nk){ const pn=rows.filter(r=>!ehEmp(r)&&waNormNome(r.dados.nome||'')===nk); if(pn.length===1) alvo=pn; } }
+        if(!alvo.length&&nk&&!tv.size){ const pn=rows.filter(r=>!ehEmp(r)&&waNormNome(r.dados.nome||'')===nk); if(new Set(pn.map(r=>r.dados.pessoaId||r.id)).size===1) alvo=pn; } }   /* AUDIT G6: UMA pessoa (pode ter vários negócios) */
       alvo.forEach(a=>irmaosDe(a).forEach(r=>add(r,null,r.dados.nome||p.nome||''))); });
     return out; }
+  const pessoasComNome=n=>{ const k=waNormNome(n||''); return new Set(rows.filter(r=>!ehEmp(r)&&waNormNome(r.dados.nome||'')===k).map(r=>r.dados.pessoaId||r.id)).size; };
   const irmaos=irmaosDe(eu), ids=new Set(irmaos.map(r=>String(r.id)));
   irmaos.forEach(r=>add(r,null));
   const tels=new Set(irmaos.flatMap(r=>phoneE164Variants(r.dados.telefone||''))), nks=new Set(irmaos.map(r=>waNormNome(r.dados.nome||'')).filter(Boolean));   /* telefone/nome de QUALQUER negócio da pessoa */
   rows.forEach(r=>{ if(!ehEmp(r)||ids.has(String(r.id))) return;
-    const x=r.dados.pjContatos.find(p=>p&&(p.ct?ids.has(String(p.ct)):((p.tel&&phoneE164Variants(p.tel).some(v=>tels.has(v)))||nks.has(waNormNome(p.nome||'')))));   /* AUDIT E3: sem ct → telefone/nome, como no CRM */
+    const x=r.dados.pjContatos.find(p=>p&&(p.ct?ids.has(String(p.ct)):(p.tel?phoneE164Variants(p.tel).some(v=>tels.has(v)):(nks.has(waNormNome(p.nome||''))&&pessoasComNome(p.nome)===1))));   /* AUDIT E3/G4: telefone; nome só sem telefone e de UMA pessoa */
     if(x) add(r,x.papel||'outro'); });
   if(!vistos.has(String(id))) out.unshift(item(eu,null));
   return out;
