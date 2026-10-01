@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 01/10/2026 (sessão Code) — v8.61 PARCEIROS-V1 em branch (aguarda OK pra merge)
+## 🟢 RETOMAR AQUI — 01/10/2026 (sessão Code) — v8.62 PARCEIROS-V1 em branch (aguarda OK pra merge; renumerada — a v8.61 foi a auditoria de outra sessão)
 
 **Branch `claude/parceiros-v1` (NÃO mergeada):** módulo **🤝 Parceiros** em Módulos (MODS `parceiros` def:false — Victor ligado no banco; Daniel desligado). Primeiro parceiro = Daniel (LP, CPD do parceiro no banco), acordo Pipe X.
 - **Banco (aplicado no playground via MCP, migration `supabase/migrations/parceiros_v1.sql`, idempotente — rodada 2×, mesmo estado):** `parceiros`, `parceria_acordos` (% por apólice com vigência desde/ate + `ult_*` base da projeção), `parceria_extratos`, `parceria_linhas` (formato da comp_linhas; dedup por competência+apólice+cobertura+parcela+dt geração+seq), `parceria_fechamentos` (fotografia), `parceria_pagamentos`. RLS: admin + delegado de BackOffice do parceiro (Victor) leem; só admin grava; extrato entra só pela RPC `parceria_importar_extrato` (valida linhas E total contra o gravado — não bateu, nada grava; competência fechada + mesmo arquivo = "já importado").
@@ -11,6 +11,34 @@
 - **Aceites conferidos:** Set/26 comissão 2.579,61 → bruto 1.171,07 → Simples 70,27 → parte 1.100,80; linhas-chave (V. S. G. 374,58 · G. P. 140,08 · L. T. S. 139,97 · P. N. L. S. 29,77 · S. E. X. P. 0,00); 7 não compensaram; projeção a partir de Out/26: a gerar 38.774 · Gustavo 14.054 · parceiro 24.720 · Out/26 1.243,33; RPC 2× sem duplicar; Victor importa e não edita %; Daniel não vê nada; carteira do Gustavo 146/238 intacta. Portão verde (48 telas × 6) + autoteste com fixture anônima.
 - **Telas:** lista (devido × pago × saldo) · Acordo (% por cliente, editar % vale da próxima competência) · Apuração (fechar competência = admin; não compensaram; fora do acordo com ＋ incluir) · Histórico (grade cliente × mês + pagamentos) · Prestação de contas (imprimir/PDF) · Projeção (acordo atual / tudo a X% / cheio). Selo "🤝 Parceria · %" na ficha do cliente da carteira. Subir relatório reconhece o Extrato Detalhado (.xls).
 - **Pendências dele:** (1) validar no preview e dar OK pro merge; (2) liberar ou não pro Daniel (hoje desligado); (3) refs visuais `REF_*` de 29/09 e o seed JSON do Jucá3.7 não estavam no Drive — layout seguiu o padrão do CRM; (4) Central Financeira continua com o `pipex_state` antigo (01/09): decidir se passa a ler do CRM.
+## 🟢 RETOMAR AQUI — 01/10/2026 (fechamento, sessão Code) — v8.61 auditoria + extensão 2.7.0 + segurança do banco + Captação ARQUIVADA
+
+**No ar (Pages conferido por hash):** vendas.html **v8.61** (PR #283) · Revisão (selfTest 55/55) · extensão **2.7.0** no main (#284, sessão da extensão, rebaseada sobre a 2.6.1 deste PR) · raiz `index.html` → `vendas.html` (#285). Pasta do Chrome (`crm-wt-insta`) = origin/main.
+
+**Entregue 29/09 → 01/10 (depois do bloco de 29/09 abaixo):**
+- v8.59/v8.60 — REC-TIMING T2/T3 (data da recomendação + selos Rec nova/morna/esfriando/Contatada, só funil) + CICLO-ETAPA (⏱️ dias na etapa no card) (#279/#280) · #281 privacidade (nomes de clientes → iniciais no repo).
+- **v8.61 — Auditoria** (4 rodadas de busca + conferência adversarial, invariantes AUDIT-29-09, B1, C1/C2, D1-D4, G1-G5, H1, H2+H3):
+  - **Tarefas duplicadas — causa achada:** o merge de 3 vias juntava listas de tarefas comparando o OBJETO INTEIRO → agora por **id, campo a campo** (`fund3ArrId`), cópias limpas na porta (`tarDedupArr`) e a linha limpa sobe de volta pro servidor.
+  - `lpcPush` com trava (prazo 90 s + **dono** `_lpcPushGen`): dois envios não correm juntos.
+  - Empresa VG: telefone segue o ⭐ e sai com o contato (`pjTelDe`, inclusive empresa gravada antes da regra — `pjTelDeLegado`).
+  - **Regra ÚNICA empresa↔pessoa** (CRM `pjContatoAlvos`/`pjEmpresasDaPessoa` = extensão `lpNegocios`): ct que existe → ele; sem ct → telefone (8+ dígitos; telefone de mais de uma pessoa desempata pelo nome); sem telefone → nome, só se for de UMA pessoa; papel do ct na frente.
+  - REC: carimbo só na criação (não a cada salvar), "sem data" respeitado, Agenda = origem genérica · Solicitações: "com quem está" aceita nome livre · Revisão: `cxNum` + selfTest sem efeito colateral.
+- **Banco (aplicado com OK dele; migrations no repo):** RLS em `comp_*` só admin (as `*_autorizado` caíram) e `_bkp_20260921_ta` deny-all (`rls_comp_20260929.sql`) · `search_path` fixo em 11 funções + `unaccent` → schema `extensions` (`seguranca_lints_20260930.sql`) · troca de dono sempre auditada sob o dono antigo (`lp_audita_troca_dono_20260930.sql`). **E-mail de segurança do Supabase (rls_disabled_in_public) RESOLVIDO:** lints críticos/alerta = 0 (9 INFO = backups deny-all, de propósito).
+- **CRM Captação ARQUIVADO (#285, pedido dele 30/09 — "foco é Vendas LP"):** app inteiro em `arquivo/captacao/` + `LEIA-ME.md` (como retomar), etiqueta git `captacao-arquivada-2026-10-01`, dados (`leads`, `app_users`…) intactos no Supabase. Raiz só redireciona.
+
+**Verificação final (01/10):** 3 rodadas seguidas LIMPAS — repo (Pages = main, portão 47 telas × 375/1024/1280 × base cheia/vazia, CI, sem segredo, REST de pé) + banco (22 checagens: RLS, lints, policies anon, triggers, integridade de dono/eventos/pjContatos/rec, módulos Victor/Daniel) + navegador em produção (desktop, 375, 768: Revisão 55/55, extensão sintaxe + regra única 8/8, console limpo). INFO: 2 negócios ainda com tarefa duplicada antiga (limpam no próximo salvar) · `lp_auditoria` com 9 linhas.
+
+**Fila (ordem):**
+1. Calculadora **T3b** (premissa curta em toda entrada) → **T4** (puxar idade/sexo/coberturas do cliente da Revisão).
+2. Relatórios: fixture da Lista de Atraso com texto real anonimizado (ele cola) → "colar texto" redondo nos outros 6 → liberar pro Victor; texto velho embaixo de Subir relatório.
+3. Estoque não apaga no servidor (família do SYNC-APAGA).
+4. Pasta de arquivos por cliente espelhada Drive + iCloud.
+5. Agregador de WhatsApp: ele escolhe A (extensão varre o dia) × B (importar .txt).
+- ⚠️ PR **#282 PARCEIROS-V1** (outra sessão) está aberto numerado **v8.61** → ao rebasear vira **v8.62**.
+
+**Pendências dele:** ↻ recarregar a extensão (chrome://extensions, agora 2.7.0) e conferir o Rápido na empresa I. V. · perfil 2 do Chrome (WhatsApp pessoal, passo 1/6) · conferir no iPad a Agenda por dia · refazer 1× a duplicata (caso E.) · texto real da Lista de Atraso · repo privado + redeploy da Edge Function · refs D. V./B. V. → Drive + Acervo Notion · Daniel: decidir funis_extra, painel-wa, plano, pm-padrao, revisao, carga.
+
+**Lições:** merge de 3 vias em LISTA = por id, nunca o objeto inteiro · trava com prazo precisa de dono, senão o atrasado solta a do novo · regra de vínculo usada em 2 telas = uma regra espelhada + invariante nas duas · campo derivado novo (pjTelDe) tem que tratar o registro antigo na porta · duas sessões no mesmo main: avisar a outra quando o merge vai conflitar (SendMessage), não mexer na pasta dela.
 
 ## 🟢 RETOMAR AQUI — 29/09/2026 (fechamento, sessão Code) — vendas.html v8.58 + Revisão com 🧮 Calculadora (T2+T3) + extensão 2.6.0
 

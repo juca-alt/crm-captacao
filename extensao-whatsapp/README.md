@@ -1,4 +1,11 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.5.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.7.0
+
+## 2.7.0 (01/10/2026) — criar novo direto do WhatsApp + versão certa no painel
+- **Rec no nome da conversa:** "Fulano Rec Beltrana Silva" → pessoa *Fulano*, recomendante *Beltrana Silva* (port fiel do `recDoNome`, REC-DO-NOME-V1 do app). A busca por nome só compara a parte da PESSOA — antes casava a conversa do indicado com a recomendante.
+- **＋ Novo** ao lado da busca (sempre) e **＋ é outra pessoa** no card: formulário com nome/recomendante tirados da conversa, telefone do chat e o pipe/funil (Vida Individual, Prud. Demais, MFO — NN e Base). Recomendante preenchido carimba `rec_recebida_em` = hoje (REC-TIMING). A conversa fica ligada ao negócio novo.
+- Card achado **só pelo nome** mostra o aviso "confira" com **＋ Criar contato novo** (antes era um toast que sumia).
+- **＋ Novo negócio** em 💼 Negócios desta pessoa: mesmo pessoaId (MULTI-NEG); o negócio de origem ganha pessoaId se não tinha (ação `pessoa`, nunca troca um existente). Vida em Grupo fica no CRM (card da empresa).
+- Versão do cabeçalho sai do `manifest.json` (antes era texto fixo e mostrava v2.5.0 com a 2.6.0 instalada).
 
 ## 2.3 → 2.5 (28/09/2026) — card completo DENTRO do painel + conversa ligada ao negócio
 - **2.2.x (caminho, testado com ele):** o painel lateral do Chrome não abriu confiável; a janela separada do CRM funcionou,
