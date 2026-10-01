@@ -212,3 +212,10 @@ do $$ declare t text; begin
     end if;
   end loop;
 end $$;
+
+-- Base da projeção por apólice (última parcela conhecida): competência, nº da parcela, comissão e prêmio
+-- líquido de UMA parcela. Atualizada ao fechar cada competência (só apólices que compensaram nela).
+alter table public.parceria_acordos add column if not exists ult_comp     text;
+alter table public.parceria_acordos add column if not exists ult_parcela  integer;
+alter table public.parceria_acordos add column if not exists ult_comissao numeric(12,2);
+alter table public.parceria_acordos add column if not exists ult_premio   numeric(12,2);
