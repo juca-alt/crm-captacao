@@ -84,6 +84,8 @@ const LPC_FUNIS={
   nn:{label:'Novos Negócios', cor:'#8b5cf6', etapas:['SitPlan','TA','OI/FF','P/C','C2','N','FA','EMISSÃO','DELIVERY','Não','Prop. Cancelada','Apól. Cancelada']},
   bc:{label:'Base de Clientes', cor:'#0d9488', etapas:['Clientes Ativos','Pendência/Atraso','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','N/Emissão','Emissão Final','Delivery','Venda ganha','Venda perdida']}
 };
+/* 2.7.0: 1ª etapa de cada funil (FUNIL_FAB do vendas.html) — fallback quando o Funil & Etapas não trouxer o funil */
+const LPC_ETAPA0={nn:'SitPlan',bc:'Clientes Ativos',vg:'Oportunidade',prud:'Oportunidade',mfo:'Oportunidade','vg-bc':'Clientes Ativos','prud-bc':'Clientes Ativos','mfo-bc':'Clientes Ativos'};
 function lpcFunilDe(c){ return (c&&c.funil==='bc')?'bc':'nn'; }   /* só p/ rótulo/cor legados — NUNCA pra gravar (v2.0) */
 /* v2.0: o funil GRAVADO é preservado como veio (vg, prud, mfo, *-bc, prospects…). Antes o normalizador forçava 'nn' e editar
    um contato de VG pela extensão o jogava pra Novos Negócios. Só vazio vira 'nn'; 'bn' (Estoque) nunca passa pelo card do funil. */
@@ -116,7 +118,7 @@ function lpcNormContato(c){
   // campo do funil; `premio_mes` é o canônico da ficha. Só ESPELHA, nunca inventa.
   if(c.pm!=null&&c.premio_mes==null){ const n=Number(c.pm); if(isFinite(n)&&n>0) c.premio_mes=n; }
   c.funil=lpcFunilGravar(c);                 // v2.0: preserva vg/prud/mfo/prospects; ausente ⇒ 'nn'
-  if(!c.etapa&&LPC_FUNIS[c.funil]) c.etapa=LPC_FUNIS[c.funil].etapas[0];  // nn → SitPlan, bc → Clientes Ativos
+  if(!c.etapa&&LPC_ETAPA0[c.funil]) c.etapa=LPC_ETAPA0[c.funil];  // nn → SitPlan, bc → Clientes Ativos, pipes → 1ª etapa (2.7.0)
   if(!c.criadoEm) c.criadoEm=lpcHojeISO();   // data LOCAL (hojeISO do app), não UTC
   return c;
 }
@@ -143,11 +145,30 @@ function fillTpl(txt,l){ l=l||{}; return (txt||'').replace(/\{\{\s*primeiro_nome
 // Tokens de nome p/ casar apelidos operacionais do WhatsApp ("OT Fulano Jr Due
 // Rec LP Daniel") com o nome limpo do CRM: quebra em palavras ≥3 letras.
 function nameTokens(s){ return fuzzyNameKey(s||'').split(' ').filter(w=>w.length>=3); }
+/* 2.7.0 REC-DO-NOME — port FIEL do recDoNome do vendas.html (REC-DO-NOME-V1). O nome da conversa carrega quem
+   indicou: "Fulano Rec Beltrana Silva" → pessoa Fulano · recomendante Beltrana Silva. Antes a busca por nome usava
+   TODAS as palavras e casava a conversa do indicado com a recomendante — caso real de 01/10. */
+function recDoNome(nome){
+  let s=String(nome||'').replace(/\s+/g,' ').trim(); if(!s) return null;
+  const RE=/(^|[\s\-–—(])rec\.?\s*:?\s+(?=\S)/i;
+  if(!RE.test(s)) return null;
+  let ehRec=false;
+  if(/^rec\.?\s*:?\s+/i.test(s)){ ehRec=true; s=s.replace(/^rec\.?\s*:?\s+/i,''); }
+  const m=s.match(/\s*[\-–—(]?\s*\brec\.?\s*:?\s+(.+)$/i);
+  let pessoa=s, quem='';
+  if(m){ pessoa=s.slice(0,m.index); quem=m[1]; }
+  pessoa=pessoa.replace(/[\s\-–—(]+$/,'').trim();
+  quem=quem.replace(/[)\s]+$/,'').replace(/\s+(cliente|novo|nova)\s*$/i,'').trim();
+  if(!pessoa||!quem) return null;
+  return { nome:pessoa, recomendante:quem, ehRec, original:String(nome).trim() };
+}
+/* a parte do nome da conversa que é a PESSOA (sem o "Rec Fulano") — é só ela que a busca por nome compara */
+function nomePessoaDoChat(s){ const r=recDoNome(s); return r?r.nome:String(s||''); }
 // Match FORTE por nome: primeiro+último nome do candidato contidos nos tokens do
 // apelido do chat. Continua sendo nome (nunca 100%), mas com essa régua o único
 // candidato forte pode abrir o card direto — com aviso pra conferir.
 function nameStrongMatch(chatName,candName){
-  const set=new Set(nameTokens(chatName));
+  const set=new Set(nameTokens(nomePessoaDoChat(chatName)));   /* 2.7.0: a recomendante não é a pessoa */
   const fl=firstLastKey(candName||'');
   return !!(fl&&fl.split(' ').every(t=>set.has(t)));
 }
@@ -195,6 +216,10 @@ function lpcAplicar(cfg,dados,acao,por){
   if(t==='wa_desv'){ const antes=Array.isArray(c.wa_chats)?c.wa_chats.map(String):[]; const tira=new Set((acao.keys||[]).map(String));
     const dep=antes.filter(k=>!tira.has(k)); if(dep.length===antes.length) return {dados,mudou:false};
     if(dep.length) c.wa_chats=dep; else delete c.wa_chats; return {dados:c,mudou:true}; }
+  /* 2.7.0: liga este negócio à mesma PESSOA de outro (pessoaId, MULTI-NEG do app). Só preenche quando está vazio:
+     nunca troca a pessoa de um negócio que já tem outra (silêncio é melhor que palpite, mesma régua do app). */
+  if(t==='pessoa'){ const pid=String(acao.id||'').trim(); if(!pid||c.pessoaId) return {dados,mudou:false};
+    c.pessoaId=pid; return {dados:c,mudou:true}; }
   if(t==='campos'){ const set=acao.set||{}; let m=false; ['telefone','notas'].forEach(k=>{ if(k in set){ const v=set[k]==null?'':String(set[k]); if(String(c[k]==null?'':c[k])!==v){ c[k]=v||(k==='telefone'?null:''); m=true; } } }); return {dados:c,mudou:m}; }
   return {dados,mudou:false};
 }

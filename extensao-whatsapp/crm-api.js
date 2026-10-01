@@ -129,7 +129,7 @@ async function searchByName(q){
 // consulta por CADA token (or=ilike) e ranqueia; strong = único candidato cujo
 // primeiro+último nome estão contidos no apelido do chat.
 async function findByName(nameRaw){
-  const toks=nameTokens(nameRaw).slice(0,6);
+  const toks=nameTokens(nomePessoaDoChat(nameRaw)).slice(0,6);   /* 2.7.0: sem o "Rec Fulano" */
   if(!toks.length) return {strong:null,sugestoes:[]};
   const ors=toks.map(t=>`nome.ilike.*${t.replace(/[%*,()"]/g,'')}*`).join(',');
   let rows=[];
@@ -386,7 +386,7 @@ async function lpcSave(id,dados){
   return saiu;
 }
 async function lpcFindByName(nameRaw){
-  const toks=nameTokens(nameRaw);
+  const toks=nameTokens(nomePessoaDoChat(nameRaw));   /* 2.7.0: sem o "Rec Fulano" — quem indicou não é a pessoa */
   if(!toks.length) return {strong:null,sugestoes:[]};
   const set=new Set(toks);
   const rows=(await lpcAll()).filter(r=>!_lpcEhBn(r));
