@@ -704,8 +704,12 @@ function renderLpContatoPicker(list){
      telefone do chat, escolhe o pipe/funil; a conversa fica ligada ao negócio novo.
    · NOVO NEGÓCIO da MESMA pessoa (irmao = negócio aberto): outro pipe/funil, nasce com o mesmo pessoaId (MULTI-NEG do app);
      se o negócio de origem ainda não tinha pessoaId, ganha um antes (ação 'pessoa', nunca troca um existente).
-   Vida em Grupo fica de fora: lá o negócio é a EMPRESA (VG-EMPRESA do app) — cria-se no CRM. */
-const NOVO_FUNIS=[['nn','📈 Vida Individual · Novos Negócios'],['bc','📈 Vida Individual · Base de Clientes'],['prud','🧩 Prud. Demais · Novos Negócios'],['prud-bc','🧩 Prud. Demais · Base'],['mfo','🏦 MFO · Novos Negócios'],['mfo-bc','🏦 MFO · Base']];
+   2.7.1 (pedido dele 01/10: "não achei funil do vida em grupo"): no Vida em Grupo o negócio é a EMPRESA (VG-EMPRESA do app,
+   espelho de pjSalvarNovaEmpresa) — o formulário pede a empresa e o papel; a pessoa entra como contato ⭐ (com ct quando já é
+   negócio no CRM). Empresa NUNCA leva pessoaId (regra do app). */
+const NOVO_FUNIS=[['nn','📈 Vida Individual · Novos Negócios'],['bc','📈 Vida Individual · Base de Clientes'],['vg','👥 Vida em Grupo · Novos Negócios (empresa)'],['vg-bc','👥 Vida em Grupo · Base (empresa)'],['prud','🧩 Prud. Demais · Novos Negócios'],['prud-bc','🧩 Prud. Demais · Base'],['mfo','🏦 MFO · Novos Negócios'],['mfo-bc','🏦 MFO · Base']];
+const PJ_PAPEIS=[['decisor','Decisor'],['rh','RH'],['fin','Financeiro'],['socio','Sócio'],['outro','Outro']];   /* mesma lista do app */
+const ehVG=f=>f==='vg'||f==='vg-bc';
 function etapa0(funil){ const arr=LPCFG.funil&&LPCFG.funil[lpcCfgKey({funil})];
   const e=Array.isArray(arr)?arr.find(x=>x&&x.id&&!x.enc):null; return (e&&e.id)||LPC_ETAPA0[funil]||'SitPlan'; }
 function renderLpCreate(sugestoes,irmao){
@@ -721,44 +725,66 @@ function renderLpCreate(sugestoes,irmao){
         <span class="muted">${esc(LPC_FUNIS[lpcFunilDe(cc)].label)} · ${esc(cc.etapa||'—')} · ${esc(cc.telefone||'sem telefone')}</span></div>`; }).join(''):''}
     <div class="card">
       <h2 style="margin-bottom:8px">${d0?'＋ Novo negócio de '+esc(firstName(nome0)||'—'):'＋ Novo contato na Visão LP'}</h2>
-      ${d0?`<p class="muted" style="margin-bottom:8px">Mesma pessoa, outro pipe — o negócio novo fica ligado a ${esc(nome0)} (aparece em 💼 Negócios desta pessoa).</p>`:''}
+      ${d0?`<p class="muted" id="wa-lpn-irm" style="margin-bottom:8px">Mesma pessoa, outro pipe — o negócio novo fica ligado a ${esc(nome0)} (aparece em 💼 Negócios desta pessoa).</p>`:''}
       ${fieldHTML('wa-lpn-nome','Nome',nome0)}
       ${fieldHTML('wa-lpn-tel','Telefone',tel0)}
       ${fieldHTML('wa-lpn-rec','Recomendante (quem indicou)',rec0,'opcional')}
       <div class="field"><label>Pipe · funil</label><select id="wa-lpn-funil">${NOVO_FUNIS.map(([f,l])=>`<option value="${f}" ${f===fun0?'selected':''}>${esc(l)}${f===funAtual?' (já é este)':''}</option>`).join('')}</select></div>
+      <div id="wa-lpn-vg" style="display:none">
+        <div class="note" style="margin:0 0 8px">🏢 No Vida em Grupo o negócio é a <b>empresa</b> — <span id="wa-lpn-vgquem">${esc(firstName(nome0)||'a pessoa')}</span> entra como contato ⭐ dela.</div>
+        ${fieldHTML('wa-lpn-emp','Nome da empresa *','','ex.: Padaria Silva')}
+        <div class="row2">${fieldHTML('wa-lpn-cnpj','CNPJ','','opcional')}<div class="field"><label>Nº de vidas</label><input id="wa-lpn-vidas" type="number" min="0" inputmode="numeric" placeholder="opcional"></div></div>
+        <div class="field"><label>Papel na empresa</label><select id="wa-lpn-papel">${PJ_PAPEIS.map(([k,l])=>`<option value="${k}" ${k==='decisor'?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+      </div>
       <div class="field"><label>Notas</label><textarea id="wa-lpn-notas"></textarea></div>
       <button class="btn primary" id="wa-lpn-save">＋ Criar no CRM</button>
-      <p class="muted" style="margin-top:6px;font-size:11px">Vida em Grupo é card da empresa — crie no CRM.</p>
     </div>
     ${d0?`<button class="btn" id="wa-lpn-volta">← voltar pro card de ${esc(firstName(nome0))}</button>`:''}
   `);
   panel.querySelectorAll('[data-lpsug]').forEach(el=>{ el.onclick=()=>{ const x=sugestoes[+el.dataset.lpsug]; renderLpContato(x); vincular(x); }; });
   const volta=$('#wa-lpn-volta'); if(volta) volta.onclick=()=>renderLpContato(irmao,CUR_CART);
+  const fsel=$('#wa-lpn-funil'), vgBox=$('#wa-lpn-vg');
+  const syncVG=()=>{ const vg=ehVG(fsel.value); vgBox.style.display=vg?'':'none';
+    const lb=$('#wa-lpn-nome').closest('.field').querySelector('label'); if(lb) lb.textContent=vg?'Contato (quem fala pela empresa)':'Nome';
+    const irm=$('#wa-lpn-irm'); if(irm) irm.style.display=vg?'none':'';
+    $('#wa-lpn-save').textContent=vg?'🏢 Criar empresa no CRM':'＋ Criar no CRM'; if(vg){ const e=$('#wa-lpn-emp'); if(e&&!e.value) e.focus(); } };
+  fsel.onchange=syncVG; syncVG();
+  $('#wa-lpn-nome').addEventListener('input',()=>{ const q=$('#wa-lpn-vgquem'); if(q) q.textContent=firstName($('#wa-lpn-nome').value)||'a pessoa'; });
   $('#wa-lpn-save').onclick=async()=>{
     const nome=$('#wa-lpn-nome').value.trim(), funil=$('#wa-lpn-funil').value, rec=$('#wa-lpn-rec').value.trim();
     if(!nome){ toast('Nome é obrigatório.'); return; }
+    const vg=ehVG(funil), empNome=vg?$('#wa-lpn-emp').value.trim():'';
+    if(vg&&!empNome){ toast('Falta o nome da empresa.'); $('#wa-lpn-emp').focus(); return; }
     if(BUSY) return; BUSY=true; $('#wa-lpn-save').disabled=true;
     const seq=LOOKSEQ;
     const fim=(msg)=>{ BUSY=false; const b=$('#wa-lpn-save'); if(b) b.disabled=false; if(msg) toast(msg); };
     let pid=null;
-    if(d0){ pid=d0.pessoaId||('p-'+lpcUid().slice(1));
+    if(d0&&!vg){ pid=d0.pessoaId||('p-'+lpcUid().slice(1));
       if(!d0.pessoaId){ const rp=await send('lpc.patch',{id:irmao.id,acoes:[{tipo:'pessoa',id:pid}]});
         if(!handleAuthFail(rp)){ BUSY=false; return; }
         if(!rp.ok){ fim('Erro ao ligar à pessoa: '+(rp.error||'falha')); return; }
         pid=(rp.data&&rp.data.dados&&rp.data.dados.pessoaId)||pid; } }
     // shape completo do vendas.html vem do lpcNovoContato (normalize.js) — aqui só o que a UI coletou.
-    const campos={ nome, telefone:$('#wa-lpn-tel').value.trim()||null, funil, etapa:etapa0(funil), notas:$('#wa-lpn-notas').value };
+    const tel=$('#wa-lpn-tel').value.trim();
+    const campos={ nome, telefone:tel||null, funil, etapa:etapa0(funil), notas:$('#wa-lpn-notas').value };
     if(rec){ campos.recomendante=rec; if(!d0||rec!==String(d0.recomendante||'')) campos.rec_recebida_em=lpcHojeISO(); }   /* REC-TIMING do app: rec nova ganha a data de hoje */
-    if(d0){ campos.pessoaId=pid; ['email','nascimento','sexo','idade','profissao','instagram'].forEach(k=>{ const v=d0[k]; if(v!=null&&v!==''&&v!=='—') campos[k]=v; }); }
+    if(vg){ /* espelho de pjSalvarNovaEmpresa + pjNormalizar: o telefone da empresa é o do contato ⭐ (pjTelDe) */
+      const pj={}; const cnpj=$('#wa-lpn-cnpj').value.trim(), vidas=$('#wa-lpn-vidas').value.trim();
+      if(cnpj) pj.cnpj=cnpj; if(vidas) pj.vidas=Math.max(0,parseInt(vidas,10)||0);
+      const kid='pj'+lpcUid().slice(1);
+      Object.assign(campos,{ nome:empNome, telefone:tel||'', pj, pjContatos:[{id:kid,nome,tel,papel:$('#wa-lpn-papel').value||'decisor',principal:true,ct:d0?String(irmao.id):null}] });
+      if(tel) campos.pjTelDe=kid; }
+    else if(d0){ campos.pessoaId=pid; ['email','nascimento','sexo','idade','profissao','instagram'].forEach(k=>{ const v=d0[k]; if(v!=null&&v!==''&&v!=='—') campos[k]=v; }); }
     const dados=lpcNovoContato(campos);
     const r=await send('lpc.save',{id:dados.id,dados});
     BUSY=false;
     if(!handleAuthFail(r)) return;
     if(!r.ok){ fim('Erro: '+(r.error||'falha ao criar')); return; }
-    if(seq!==LOOKSEQ){ toast('✓ Criado no CRM: '+nome); return; }   /* trocou de conversa no meio: não pinta por cima */
+    if(seq!==LOOKSEQ){ toast('✓ Criado no CRM: '+(vg?empNome:nome)); return; }   /* trocou de conversa no meio: não pinta por cima */
     PELO_NOME=null;
     renderLpContato(r.data);
-    if(d0) toast('✓ Novo negócio de '+firstName(nome)+' — ligado aos outros dele');
+    if(vg){ if(!d0) vincular(r.data); toast('🏢 '+empNome+' criada no Vida em Grupo — '+firstName(nome)+' é o contato ⭐'); }
+    else if(d0) toast('✓ Novo negócio de '+firstName(nome)+' — ligado aos outros dele');
     else { vincular(r.data); toast('✓ '+firstName(nome)+' criado na Visão LP'); }
   };
 }
