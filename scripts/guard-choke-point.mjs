@@ -10,7 +10,7 @@ const lineOf = (src, i) => src.slice(0, i).split('\n').length;
 let falhas = 0;
 
 // index.html: inserts só entre a definição de insertLead e o fim de insertLeadsBatch
-const idx = readFileSync('arquivo/captacao/index.html', 'utf8');   // 30/09/2026: Captação arquivada (ver arquivo/captacao/LEIA-ME.md)
+const idx = readFileSync('arquivo/captacao/index.html', 'utf8');   // 01/10/2026: Captação arquivada (ver arquivo/captacao/LEIA-ME.md)
 const ini = idx.indexOf('async function insertLead(');
 const fim = idx.indexOf('// ===== FILTERING');
 if (ini < 0 || fim < 0 || fim < ini) {
