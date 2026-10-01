@@ -30,7 +30,7 @@ CRM interno de **recrutamento/captação de Life Planners** (agentes de seguros 
 ### Arquivos principais
 | Arquivo | O que é |
 |---|---|
-| `index.html` | CRM principal (prod, v2.6.2): Visão Geral, Contatos, Funil LinkedIn (Minerar/Qualificar/Inbox), Recomendações, Funil Captação, Relatório, Duplicatas, Config. |
+| `index.html` | **01/10/2026: só redireciona pro `vendas.html`; a Captação foi arquivada em `arquivo/captacao/` (ver LEIA-ME lá).** Antes: CRM principal (prod, v2.6.2): Visão Geral, Contatos, Funil LinkedIn (Minerar/Qualificar/Inbox), Recomendações, Funil Captação, Relatório, Duplicatas, Config. |
 | `index-dev.html` | Cópia dev/staging do CRM. |
 | `vendas.html` | Módulo "Visão Life Planner": parsing do PDF semanal da Prudential (Atrasos, Pendências, Status T, Aniversariantes). |
 | `ot-captacao-guia-jx92kf.html` | Guia de condução da OT (entrevista). Progresso salvo em `localStorage`. |
