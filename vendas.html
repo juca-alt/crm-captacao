@@ -2354,9 +2354,10 @@ async function pushResiliente(rows){ const falhas=new Set(); if(!rows.length) re
     if(parou) break; }
   return falhas; }
 /* AUDIT B2 (30/09): dois pushes em paralelo chegavam fora de ordem e deixavam a base velha → um de cada vez; o que chegar no meio reagenda */
-let _lpcPushVoo=false, _lpcPushDeNovo=false, _lpcPushVooEm=0;
+let _lpcPushVoo=false, _lpcPushDeNovo=false, _lpcPushVooEm=0, _lpcPushGen=0;
 async function lpcPush(){ if(_lpcPushVoo&&Date.now()-_lpcPushVooEm<90000){ _lpcPushDeNovo=true; return; } _lpcPushVoo=true; _lpcPushVooEm=Date.now();   /* AUDIT G2: trava com prazo — rede travada não segura os envios até recarregar */
-  try{ await lpcPushCorpo(); } finally{ _lpcPushVoo=false; if(_lpcPushDeNovo){ _lpcPushDeNovo=false; lpcAgendarPush(); } } }
+  const meu=++_lpcPushGen;   /* AUDIT H2: trava com dono — o envio que estourou o prazo, ao terminar, não solta a trava do envio novo */
+  try{ await lpcPushCorpo(); } finally{ if(meu===_lpcPushGen){ _lpcPushVoo=false; if(_lpcPushDeNovo){ _lpcPushDeNovo=false; lpcAgendarPush(); } } } }
 async function lpcPushCorpo(){
   if(!LPC_REMOTE||!sb) return;
   try{
@@ -5959,20 +5960,34 @@ function pjContatos(c){ return Array.isArray(c&&c.pjContatos)?c.pjContatos:[]; }
 function pjPrincipal(c){ const l=pjContatos(c); return l.find(x=>x.principal)||l[0]||null; }
 function pjPapel(k){ const p=PJ_PAPEIS.find(x=>x[0]===k); return p?p[1]:'Contato'; }
 /* uma regra só: 1 principal, e o telefone do negócio é o dele */
+function pjTelDeLegado(c,l){ if(c.pjTelDe||!c.telefone) return; const tk=telKey(c.telefone); if(!tk) return;
+  const d=(l||[]).find(x=>x&&x.tel&&telKey(x.tel)===tk); if(d) c.pjTelDe=String(d.id); }
 function pjNormalizar(c){ const l=pjContatos(c);
   /* AUDIT G1 (01/10): o telefone do negócio de empresa é o do ⭐ principal; quando ele foi COPIADO de um contato (pjTelDe),
      sai junto com esse contato (tirado ou sem ⭐). Telefone próprio do negócio (sem pjTelDe) nunca é apagado aqui. */
+  pjTelDeLegado(c,l);   /* AUDIT H3: empresa gravada antes do G1 (sem pjTelDe) — o telefone igual ao de um contato é dele */
   const p=l.find(x=>x.principal)||l[0]||null; l.forEach(x=>{ x.principal=(x===p); });
   if(p&&p.tel){ c.telefone=telLimpa(p.tel); c.pjTelDe=String(p.id); return c; }
   if(c.pjTelDe&&(!p||String(p.id)!==String(c.pjTelDe))){ c.telefone=''; delete c.pjTelDe; }
   return c; }
 /* empresas onde esta pessoa é contato (ficha da pessoa → "🏢 Contato de empresa") */
+/* AUDIT H1 (01/10): UMA regra pra ligar contato da empresa ↔ negócio de pessoa — a mesma da extensão (lpNegocios), nos dois sentidos:
+   ct que existe → ele; sem ct (ou ct apagado) → telefone (se o telefone servir a mais de uma pessoa, só quem bate o nome);
+   sem telefone (sem dígitos) → nome, só se o nome é de UMA pessoa. Silêncio é melhor que palpite. */
+function pjPessoaKey(o){ return String(pessoaDe(o)||o.id); }
+function pjContatoAlvos(x,todos){ const L=(todos||S.contatos||[]).filter(o=>o&&!VG_FUNIS.includes(o.funil)&&o.funil!=='bn');
+  if(x.ct){ const o=L.find(r=>String(r.id)===String(x.ct)); if(o) return [o]; }
+  const tk=telKey(x.tel), nk=normKey(x.nome||'');
+  if(tk&&String(x.tel||'').replace(/\D/g,'').length>=8){ let a=L.filter(o=>telKey(o.telefone)===tk);
+    if(new Set(a.map(pjPessoaKey)).size>1) a=a.filter(o=>normKey(o.nome||'')===nk);
+    return a; }
+  if(!nk) return [];
+  const a=L.filter(o=>normKey(o.nome||'')===nk); return new Set(a.map(pjPessoaKey)).size===1?a:[]; }
 function pjEmpresasDaPessoa(c,todos){ if(!c) return [];
   const ids=new Set([String(c.id)].concat(pessoaIrmaos(c,todos).map(o=>String(o.id))));
-  const tk=telKey(c.telefone), nk=normKey(c.nome||'');
-  return (todos||S.contatos||[]).filter(e=>e!==c&&VG_FUNIS.includes(e.funil)&&escVisivel(e)&&pjContatos(e).some(x=>
-    (x.ct&&ids.has(String(x.ct))) || (!x.ct&&((tk&&telKey(x.tel)===tk)||(nk&&normKey(x.nome||'')===nk))) ))
-    .map(e=>({e, x:pjContatos(e).find(x=>(x.ct&&ids.has(String(x.ct)))||(!x.ct&&((tk&&telKey(x.tel)===tk)||(nk&&normKey(x.nome||'')===nk))))})); }
+  const casa=x=>pjContatoAlvos(x,todos).some(o=>ids.has(String(o.id)));
+  return (todos||S.contatos||[]).filter(e=>e!==c&&VG_FUNIS.includes(e.funil)&&escVisivel(e)&&pjContatos(e).some(casa))
+    .map(e=>{ const l=pjContatos(e); return {e, x:l.find(x=>x.ct&&ids.has(String(x.ct)))||l.find(casa)}; }); }   /* ct direto passa na frente (papel certo) */
 function pjNaPessoaHtml(c){ if(!novoOn('vg-empresa')||ehEmpresa(c)) return '';
   const l=pjEmpresasDaPessoa(c); if(!l.length) return '';
   return `<div class="sec"><h3>🏢 Contato de empresa <span class="badge b-azul">${l.length}</span></h3>
@@ -6021,6 +6036,7 @@ function pjAtual(id){ const c=ct(); return c?[c,pjContatos(c).find(x=>x.id===id)
 function pjPrincipalSet(id){ const [c,x]=pjAtual(id); if(!x) return; pjContatos(c).forEach(o=>{ o.principal=(o===x); }); pjNormalizar(c); salvar(); renderDrawer(); render(); toast(`⭐ ${x.nome.split(' ')[0]} é o contato principal`,true); }
 function pjPapelSet(id,v){ const [c,x]=pjAtual(id); if(!x) return; x.papel=v; salvar(); render(); }
 function pjRemover(id){ const [c,x]=pjAtual(id); if(!x) return; const antes=JSON.parse(JSON.stringify(c.pjContatos)), telAntes=c.telefone, telDeAntes=c.pjTelDe;   /* AUDIT B4: cópia profunda */
+  pjTelDeLegado(c,c.pjContatos);   /* AUDIT H3: antes de tirar — senão o contato some da lista e o telefone dele fica na empresa */
   c.pjContatos=c.pjContatos.filter(o=>o!==x); pjNormalizar(c); salvar(); renderDrawer(); render();
   toastDesfazer(`${x.nome.split(' ')[0]} saiu da empresa`,()=>{ c.pjContatos=antes; c.telefone=telAntes; if(telDeAntes) c.pjTelDe=telDeAntes; else delete c.pjTelDe; salvar(); renderDrawer(); render(); }); }
 /* ＋ Contato: puxa do CRM (mesma busca do Novo negócio: funil + carteira + estoque) ou cria só nome/telefone */
@@ -20070,6 +20086,24 @@ function lpSelfCheck(){
         &&String(agNovaAtividade).includes('tn-hora')&&String(agNovaAtividade).includes('tn-dur')&&String(agNovaAtividade).includes('tn-pessoa')
         &&!String(agDataHtml).includes('onchange="tarSetData')&&String(agSalvarData).includes('tarSetData')&&String(viewAgenda).includes('agSalvarHtml')
         &&par.indexOf("'evento'")<par.indexOf("'tarefa'")&&row.indexOf("'evento'")<row.indexOf("'tarefa'")&&!row.includes('ag-glbl'); })());
+    ok('AUDIT H2+H3: envio com trava de dono (o que estourou o prazo não solta a do novo) · empresa antiga sem pjTelDe perde o telefone do contato que sai', (()=>{
+      const f=String(lpcPush); if(!/meu===_lpcPushGen/.test(f)) return false;
+      const e={id:'h3',funil:'vg',telefone:'81 99999-0009',pjContatos:[{id:'a',nome:'A',tel:'(81) 99999-0009',principal:true}]};
+      pjTelDeLegado(e,e.pjContatos); e.pjContatos=[]; pjNormalizar(e);
+      const e2={id:'h4',funil:'vg',telefone:'81 3333-1111',pjContatos:[{id:'b',nome:'B',tel:'81 98888-0000',principal:true}]};
+      pjNormalizar(e2); const e3={id:'h5',funil:'vg',telefone:'81 3333-1111',pjContatos:[{id:'c',nome:'C',principal:true}]}; pjNormalizar(e3);
+      return e.telefone===''&&!e.pjTelDe&&e2.pjTelDe==='b'&&e3.telefone==='81 3333-1111'; })());
+    ok('AUDIT H1: contato da empresa ↔ pessoa com UMA regra (ct vivo; telefone com desempate pelo nome; nome só se de uma pessoa) — homônimo de outro telefone não liga, ct apagado cai no telefone, papel do ct passa na frente', (()=>{
+      const j1={id:'h1',nome:'Joao Silva',telefone:'81 99999-0001',funil:'nn',lp:S.activeUser}, j2={id:'h2',nome:'Joao Silva',telefone:'81 98888-0002',funil:'bc',lp:S.activeUser};
+      const emp={id:'he',nome:'Padaria',funil:'vg',lp:S.activeUser,pjContatos:[{id:'p1',nome:'Joao Silva',tel:'81 99999-0001',papel:'rh'}]};
+      const c1={id:'hc',nome:'Carlos',telefone:'81 3333-0000',funil:'nn',lp:S.activeUser}, emp2={id:'he2',nome:'Emp2',funil:'vg',lp:S.activeUser,pjContatos:[{id:'q1',nome:'Ana',tel:'81 3333-0000',papel:'rh'},{id:'q2',nome:'Carlos',ct:'hc',papel:'fin'}]};
+      const emp3={id:'he3',nome:'Emp3',funil:'vg',lp:S.activeUser,pjContatos:[{id:'r1',nome:'Joao Silva',tel:'não sei',papel:'outro'}]};
+      const T=[j1,j2,emp,c1,emp2,emp3];
+      const a=pjEmpresasDaPessoa(j1,T).some(r=>r.e===emp)&&!pjEmpresasDaPessoa(j2,T).some(r=>r.e===emp);
+      const b=(pjEmpresasDaPessoa(c1,T).find(r=>r.e===emp2)||{}).x.papel==='fin';
+      const c=!pjEmpresasDaPessoa(j1,T).some(r=>r.e===emp3);   /* sem dígitos → nome; 2 pessoas com esse nome → não liga */
+      const d=pjContatoAlvos({nome:'X',tel:'81 99999-0001',ct:'nao-existe'},T).map(o=>o.id).join()==='h1';
+      return a&&b&&c&&d; })());
     ok('AUDIT G1-G5: telefone próprio da empresa fica ao tirar contato (só o copiado de contato sai); Com quem está "daniel" volta igual; trava do push com prazo; origem Agenda visível e não é recomendante', (()=>{
       const e={id:'zg1',funil:'vg',telefone:'81 3333-0000',pjContatos:[{id:'a',nome:'A',tel:''}]}; pjNormalizar(e); e.pjContatos.push({id:'b',nome:'B',tel:''}); pjNormalizar(e); e.pjContatos=e.pjContatos.filter(x=>x.id!=='b'); pjNormalizar(e);
       const a=e.telefone==='81 3333-0000';

@@ -441,30 +441,32 @@ async function vincAchar(keys){
 /* 2.6.0 MULTI-NEG: os negócios da MESMA pessoa (pessoaId) + as empresas do Vida em Grupo onde ela é contato
    (dados.pjContatos[].ct — VG-EMPRESA-V1 do CRM). Lê do cache (lpcAll); o card de cada um é relido ao abrir. */
 async function lpNegocios(id){
+  /* 2.6.1 (AUDIT H1, 01/10): UMA regra pra contato da empresa ↔ negócio de pessoa, igual à do CRM (pjContatoAlvos), nos dois sentidos:
+     ct que existe → ele; sem ct (ou ct apagado) → telefone (se o telefone servir a mais de uma pessoa, só quem bate o nome);
+     sem telefone (sem dígitos) → nome, só se o nome é de UMA pessoa. */
   const rows=(await lpcAll()).filter(r=>r&&r.dados&&!_lpcEhBn(r));
   const eu=rows.find(r=>String(r.id)===String(id)); if(!eu) return [];
+  const ehEmp=r=>(r.dados.funil==='vg'||r.dados.funil==='vg-bc')&&Array.isArray(r.dados.pjContatos);
+  const pess=rows.filter(r=>!ehEmp(r)), pk=r=>String(r.dados.pessoaId||r.id);
   const item=(r,papel,pessoa)=>({id:String(r.id),funil:r.dados.funil||'nn',etapa:r.dados.etapa||'',nome:r.dados.nome||'',papel:papel||null,pessoa:pessoa||null});
   const irmaosDe=r=>{ const pid=r.dados.pessoaId; return pid?rows.filter(x=>x.dados.pessoaId===pid):[r]; };
-  const ehEmp=r=>(r.dados.funil==='vg'||r.dados.funil==='vg-bc')&&Array.isArray(r.dados.pjContatos);
+  const alvos=p=>{ if(!p) return [];
+    if(p.ct){ const o=pess.find(r=>String(r.id)===String(p.ct)); if(o) return [o]; }
+    const pv=new Set(String(p.tel||'').replace(/\D/g,'').length>=8?phoneE164Variants(p.tel):[]), nk=waNormNome(p.nome||'');   /* telefone com menos de 8 dígitos = sem telefone (igual ao CRM) */
+    if(pv.size){ let a=pess.filter(r=>phoneE164Variants(r.dados.telefone||'').some(v=>pv.has(v)));
+      if(new Set(a.map(pk)).size>1) a=a.filter(r=>waNormNome(r.dados.nome||'')===nk); return a; }
+    if(!nk) return [];
+    const a=pess.filter(r=>waNormNome(r.dados.nome||'')===nk); return new Set(a.map(pk)).size===1?a:[]; };
   const out=[], vistos=new Set(), add=(r,papel,pessoa)=>{ const k=String(r.id); if(vistos.has(k)) return; vistos.add(k); out.push(item(r,papel,pessoa)); };
-  if(ehEmp(eu)){   /* 2.6.1 (AUDIT E2/B8): na ficha da EMPRESA a faixa mostra a empresa + os negócios de cada contato (com ct, ou achado por telefone/nome) */
+  if(ehEmp(eu)){   /* ficha da EMPRESA: a empresa + os negócios de cada contato */
     add(eu,null);
-    eu.dados.pjContatos.forEach(p=>{ if(!p) return;
-      let alvo=[];
-      const o=p.ct&&rows.find(r=>String(r.id)===String(p.ct));
-      if(o) alvo=[o];
-      else {   /* AUDIT D5: sem ct → TODOS os negócios com o telefone dele; nome só quando há UM negócio com esse nome (homônimo não entra) */
-        const tv=new Set(phoneE164Variants(p.tel||'')), nk=waNormNome(p.nome||'');
-        alvo=tv.size?rows.filter(r=>!ehEmp(r)&&phoneE164Variants(r.dados.telefone||'').some(v=>tv.has(v))):[];
-        if(!alvo.length&&nk&&!tv.size){ const pn=rows.filter(r=>!ehEmp(r)&&waNormNome(r.dados.nome||'')===nk); if(new Set(pn.map(r=>r.dados.pessoaId||r.id)).size===1) alvo=pn; } }   /* AUDIT G6: UMA pessoa (pode ter vários negócios) */
-      alvo.forEach(a=>irmaosDe(a).forEach(r=>add(r,null,r.dados.nome||p.nome||''))); });
+    eu.dados.pjContatos.forEach(p=>alvos(p).forEach(a=>irmaosDe(a).forEach(r=>add(r,null,r.dados.nome||p.nome||''))));
     return out; }
-  const pessoasComNome=n=>{ const k=waNormNome(n||''); return new Set(rows.filter(r=>!ehEmp(r)&&waNormNome(r.dados.nome||'')===k).map(r=>r.dados.pessoaId||r.id)).size; };
   const irmaos=irmaosDe(eu), ids=new Set(irmaos.map(r=>String(r.id)));
   irmaos.forEach(r=>add(r,null));
-  const tels=new Set(irmaos.flatMap(r=>phoneE164Variants(r.dados.telefone||''))), nks=new Set(irmaos.map(r=>waNormNome(r.dados.nome||'')).filter(Boolean));   /* telefone/nome de QUALQUER negócio da pessoa */
-  rows.forEach(r=>{ if(!ehEmp(r)||ids.has(String(r.id))) return;
-    const x=r.dados.pjContatos.find(p=>p&&(p.ct?ids.has(String(p.ct)):(p.tel?phoneE164Variants(p.tel).some(v=>tels.has(v)):(nks.has(waNormNome(p.nome||''))&&pessoasComNome(p.nome)===1))));   /* AUDIT E3/G4: telefone; nome só sem telefone e de UMA pessoa */
+  const casa=p=>alvos(p).some(a=>ids.has(String(a.id)));
+  rows.forEach(r=>{ if(!ehEmp(r)||ids.has(String(r.id))) return; const l=r.dados.pjContatos;
+    const x=l.find(p=>p&&p.ct&&ids.has(String(p.ct)))||l.find(p=>p&&casa(p));   /* ct direto passa na frente (papel certo) */
     if(x) add(r,x.papel||'outro'); });
   if(!vistos.has(String(id))) out.unshift(item(eu,null));
   return out;
