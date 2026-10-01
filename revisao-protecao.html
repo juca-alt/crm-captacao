@@ -452,6 +452,7 @@ i.mix-t{background:var(--laranja)}
 .calc .cx-chips button[aria-pressed="true"]{background:var(--c-accent);border-color:var(--c-accent);color:var(--c-paper)}
 .calc .cx-chips button[aria-pressed="true"] small{color:var(--c-paper)}
 .calc .cx-memo{font-size:12px;color:var(--c-muted);background:var(--c-bg);border-radius:9px;padding:7px 9px;font-variant-numeric:tabular-nums;line-height:1.4}
+.calc .cx-pm[hidden]{display:none} /* AUDIT A13: o aviso de teto usa [hidden] */
 .calc .cx-pm{display:block;font-size:11.5px;color:var(--c-muted);margin:-2px 0 4px;line-height:1.35}
 .calc .cx-grp-h{font-family:var(--c-display);font-size:24px;line-height:1.1;margin-top:4px}
 </style>
@@ -2088,6 +2089,11 @@ function selfTest(){
     const m10 = cxMotor(q({prof:'saude', ded:[15,10,5,15], fam:true, rm:10000, cv:40000, edu:300000, anosP:18}));
     chk2('T10 Se faltar precisa ~4,3 mi, cobre 1 mi, selo 🔴', m10.needM > 4.25e6 && m10.needM < 4.35e6 && m10.covM === 1000000 && cxSt(m10.covM/m10.needM)[0] === 'cx-bad');
     chk2('T6 tetos: ossos 500 mil → 300 mil; diária 5 mil → 3 mil; autonomia 3 mi → 2 mi; abaixo do teto fica', cxTeto('c_brb',500000) === 300000 && cxTeto('c_hc',5000) === 3000 && cxTeto('c_pa',3e6) === 2e6 && cxTeto('c_brb',200000) === 200000 && cxTeto('c_inv',9e6) === 9e6);
+    /* AUDIT A12/A13 — sem tocar nos campos da tela (o selfTest roda a cada redesenho do rodapé) */
+    { const mk = (t, v) => { const e = document.createElement('input'); e.type = t; if (t === 'range') { e.min = 0; e.max = 40; e.step = 0.5; } e.value = v; return e; };
+      chk2('A12 slider com decimal: 27,5 e 6,5 lidos certos; R$ com ponto de milhar também', cxNum(mk('range','27.5')) === 27.5 && cxNum(mk('range','6.5')) === 6.5 && cxNum(mk('text','1.000.000')) === 1000000 && String(cxN).includes('cxNum('));
+      const root = document.getElementById('cxRoot'); if (root) { const av = document.createElement('small'); av.className = 'cx-pm'; av.hidden = true; root.appendChild(av);
+        const ok13 = getComputedStyle(av).display === 'none'; av.remove(); chk2('A13 aviso de teto some quando hidden', ok13); } }
     chk2('T2 CLT não tem "Impostos" (chips de regime somem)', !CX_PRESETS.clt.d.some(d => /Impostos/.test(d[1])));
   }
   return {ok, total, bad};
@@ -6675,7 +6681,10 @@ function cxRiscos(i, m){
 }
 /* ── tela ── */
 const cx$ = id => document.getElementById('cx_'+id);
-const cxN = id => { const el = cx$(id); if (!el) return 0; return parseFloat(String(el.value).replace(/\./g,'').replace(',','.')) || 0; };
+/* AUDIT A12: slider/número já vêm com ponto DECIMAL (27.5) — só o campo de R$ (.cx-num de texto) tem ponto de milhar */
+const cxNum = el => { if (!el) return 0; if (el.type === 'range' || el.type === 'number') return parseFloat(el.value) || 0;
+  return parseFloat(String(el.value).replace(/\./g,'').replace(',','.')) || 0; };
+const cxN = id => cxNum(cx$(id));
 let cxRegime = null, cxPronto = false;
 function cxLer(){
   const prof = cx$('prof').value, P = CX_PRESETS[prof] || CX_PRESETS.beleza;

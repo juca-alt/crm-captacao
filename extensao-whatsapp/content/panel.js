@@ -581,13 +581,15 @@ const NEG_PAPEL={decisor:'Decisor',rh:'RH',fin:'Financeiro',socio:'Sócio',outro
 async function pintaNegocios(id){ const box=$('#lp2-negs'); if(!box) return; const seq=LOOKSEQ;
   const r=await send('lp.negocios',{id}); if(seq!==LOOKSEQ||!$('#lp2-negs')||String(CUR_ROW&&CUR_ROW.id)!==String(id)) return;
   const l=(r&&r.ok&&Array.isArray(r.data))?r.data.slice().sort((a,b)=>NEG_ORD.indexOf(a.funil)-NEG_ORD.indexOf(b.funil)):[];
-  if(l.length<=1){ box.innerHTML='<div class="muted">💼 só este negócio desta pessoa</div>'; return; }
-  box.innerHTML=`<div class="sec-t" style="margin:0 0 6px">💼 Negócios desta pessoa <span class="dob-r">${l.length}</span></div><div class="chips">${l.map(n=>{ const p=NEG_PIPE[n.funil]||['📈',n.funil], eu=n.id===String(id);
+  if(l.length<=1){ const emp=/^vg(-bc)?$/.test(String(CUR_ROW&&CUR_ROW.dados&&CUR_ROW.dados.funil||''))&&Array.isArray(CUR_ROW.dados.pjContatos); box.innerHTML=`<div class="muted">${emp?'🏢 nenhum contato desta empresa com negócio no CRM':'💼 só este negócio desta pessoa'}</div>`; return; }   /* AUDIT G6 */
+  const ehEmpresa=/^vg(-bc)?$/.test(String(CUR_ROW&&CUR_ROW.dados&&CUR_ROW.dados.funil||''))&&Array.isArray(CUR_ROW.dados.pjContatos);   /* 2.6.1 (AUDIT B8) */
+  box.innerHTML=`<div class="sec-t" style="margin:0 0 6px">💼 ${ehEmpresa?'Empresa e negócios dos contatos':'Negócios desta pessoa'} <span class="dob-r">${l.length}</span></div><div class="chips">${l.map(n=>{ const p=NEG_PIPE[n.funil]||['📈',n.funil], eu=n.id===String(id);
     const et=lpcEtapaDe(LPCFG.funil,{funil:n.funil,etapa:n.etapa});
-    return `<button class="chip neg${eu?' on':''}" ${eu?'disabled':''} data-neg="${esc(n.id)}" title="${esc(n.nome)}">${p[0]} ${esc(p[1])}${n.papel?` · 🏢 ${esc(n.nome)} (${esc(NEG_PAPEL[n.papel]||'Contato')})`:''}<br><small>${esc((et&&et.label)||n.etapa||'—')}</small></button>`; }).join('')}</div>`;
+    return `<button class="chip neg${eu?' on':''}" ${eu?'disabled':''} data-neg="${esc(n.id)}" title="${esc(n.nome)}">${p[0]} ${esc(p[1])}${n.papel?` · 🏢 ${esc(n.nome)} (${esc(NEG_PAPEL[n.papel]||'Contato')})`:''}${n.pessoa?` · 👤 ${esc(n.pessoa)}`:''}<br><small>${esc((et&&et.label)||n.etapa||'—')}</small></button>`; }).join('')}</div>`;
   box.querySelectorAll('[data-neg]').forEach(b=>b.onclick=async()=>{ if(sujo(DRAFTS[String(id)])&&!window.confirm('Tem mudança não salva neste negócio. Trocar mesmo assim? (o rascunho fica guardado)')) return;
-    b.disabled=true; const seq2=LOOKSEQ; const rr=await send('lpc.um',{id:b.dataset.neg}); if(seq2!==LOOKSEQ) return;
-    if(rr&&rr.ok&&rr.data) renderLpContato(rr.data,CUR_CART); else { b.disabled=false; toast('Não consegui abrir esse negócio'); } }); }
+    b.disabled=true; const seq2=LOOKSEQ; const rr=await send('lpc.um',{id:b.dataset.neg}); if(seq2!==LOOKSEQ||MODO!=='rapido') return;   /* AUDIT E4: foi pro Card completo no meio → não sobrescreve */
+    if(rr&&rr.ok&&rr.data){ const ks=chatKeys(CHAT), wc=rr.data.dados&&rr.data.dados.wa_chats; VINC=Array.isArray(wc)&&wc.some(k=>ks.includes(String(k)));   /* AUDIT E1: o 📌 é DESTE negócio, não do anterior */
+      renderLpContato(rr.data,CUR_CART); } else { b.disabled=false; toast('Não consegui abrir esse negócio'); } }); }
 function renderLpContato(row,cartHit){
   const id=String(row.id);
   CUR_ROW=row; CUR_CART=cartHit||null;
