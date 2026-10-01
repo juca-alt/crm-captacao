@@ -2,6 +2,35 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 01/10/2026 (fechamento, sessão Code) — v8.61 auditoria + extensão 2.7.0 + segurança do banco + Captação ARQUIVADA
+
+**No ar (Pages conferido por hash):** vendas.html **v8.61** (PR #283) · Revisão (selfTest 55/55) · extensão **2.7.0** no main (#284, sessão da extensão, rebaseada sobre a 2.6.1 deste PR) · raiz `index.html` → `vendas.html` (#285). Pasta do Chrome (`crm-wt-insta`) = origin/main.
+
+**Entregue 29/09 → 01/10 (depois do bloco de 29/09 abaixo):**
+- v8.59/v8.60 — REC-TIMING T2/T3 (data da recomendação + selos Rec nova/morna/esfriando/Contatada, só funil) + CICLO-ETAPA (⏱️ dias na etapa no card) (#279/#280) · #281 privacidade (nomes de clientes → iniciais no repo).
+- **v8.61 — Auditoria** (4 rodadas de busca + conferência adversarial, invariantes AUDIT-29-09, B1, C1/C2, D1-D4, G1-G5, H1, H2+H3):
+  - **Tarefas duplicadas — causa achada:** o merge de 3 vias juntava listas de tarefas comparando o OBJETO INTEIRO → agora por **id, campo a campo** (`fund3ArrId`), cópias limpas na porta (`tarDedupArr`) e a linha limpa sobe de volta pro servidor.
+  - `lpcPush` com trava (prazo 90 s + **dono** `_lpcPushGen`): dois envios não correm juntos.
+  - Empresa VG: telefone segue o ⭐ e sai com o contato (`pjTelDe`, inclusive empresa gravada antes da regra — `pjTelDeLegado`).
+  - **Regra ÚNICA empresa↔pessoa** (CRM `pjContatoAlvos`/`pjEmpresasDaPessoa` = extensão `lpNegocios`): ct que existe → ele; sem ct → telefone (8+ dígitos; telefone de mais de uma pessoa desempata pelo nome); sem telefone → nome, só se for de UMA pessoa; papel do ct na frente.
+  - REC: carimbo só na criação (não a cada salvar), "sem data" respeitado, Agenda = origem genérica · Solicitações: "com quem está" aceita nome livre · Revisão: `cxNum` + selfTest sem efeito colateral.
+- **Banco (aplicado com OK dele; migrations no repo):** RLS em `comp_*` só admin (as `*_autorizado` caíram) e `_bkp_20260921_ta` deny-all (`rls_comp_20260929.sql`) · `search_path` fixo em 11 funções + `unaccent` → schema `extensions` (`seguranca_lints_20260930.sql`) · troca de dono sempre auditada sob o dono antigo (`lp_audita_troca_dono_20260930.sql`). **E-mail de segurança do Supabase (rls_disabled_in_public) RESOLVIDO:** lints críticos/alerta = 0 (9 INFO = backups deny-all, de propósito).
+- **CRM Captação ARQUIVADO (#285, pedido dele 30/09 — "foco é Vendas LP"):** app inteiro em `arquivo/captacao/` + `LEIA-ME.md` (como retomar), etiqueta git `captacao-arquivada-2026-10-01`, dados (`leads`, `app_users`…) intactos no Supabase. Raiz só redireciona.
+
+**Verificação final (01/10):** 3 rodadas seguidas LIMPAS — repo (Pages = main, portão 47 telas × 375/1024/1280 × base cheia/vazia, CI, sem segredo, REST de pé) + banco (22 checagens: RLS, lints, policies anon, triggers, integridade de dono/eventos/pjContatos/rec, módulos Victor/Daniel) + navegador em produção (desktop, 375, 768: Revisão 55/55, extensão sintaxe + regra única 8/8, console limpo). INFO: 2 negócios ainda com tarefa duplicada antiga (limpam no próximo salvar) · `lp_auditoria` com 9 linhas.
+
+**Fila (ordem):**
+1. Calculadora **T3b** (premissa curta em toda entrada) → **T4** (puxar idade/sexo/coberturas do cliente da Revisão).
+2. Relatórios: fixture da Lista de Atraso com texto real anonimizado (ele cola) → "colar texto" redondo nos outros 6 → liberar pro Victor; texto velho embaixo de Subir relatório.
+3. Estoque não apaga no servidor (família do SYNC-APAGA).
+4. Pasta de arquivos por cliente espelhada Drive + iCloud.
+5. Agregador de WhatsApp: ele escolhe A (extensão varre o dia) × B (importar .txt).
+- ⚠️ PR **#282 PARCEIROS-V1** (outra sessão) está aberto numerado **v8.61** → ao rebasear vira **v8.62**.
+
+**Pendências dele:** ↻ recarregar a extensão (chrome://extensions, agora 2.7.0) e conferir o Rápido na empresa I. V. · perfil 2 do Chrome (WhatsApp pessoal, passo 1/6) · conferir no iPad a Agenda por dia · refazer 1× a duplicata (caso E.) · texto real da Lista de Atraso · repo privado + redeploy da Edge Function · refs D. V./B. V. → Drive + Acervo Notion · Daniel: decidir funis_extra, painel-wa, plano, pm-padrao, revisao, carga.
+
+**Lições:** merge de 3 vias em LISTA = por id, nunca o objeto inteiro · trava com prazo precisa de dono, senão o atrasado solta a do novo · regra de vínculo usada em 2 telas = uma regra espelhada + invariante nas duas · campo derivado novo (pjTelDe) tem que tratar o registro antigo na porta · duas sessões no mesmo main: avisar a outra quando o merge vai conflitar (SendMessage), não mexer na pasta dela.
+
 ## 🟢 RETOMAR AQUI — 29/09/2026 (fechamento, sessão Code) — vendas.html v8.58 + Revisão com 🧮 Calculadora (T2+T3) + extensão 2.6.0
 
 **No ar (Pages conferido por hash a cada versão):** v8.49 VG-EMPRESA (Vida em Grupo = card de EMPRESA com contatos por papel; A. S. → I. V. (empresa dela) no banco, backup `_bkp_20260929_vg_(caso A. S.)`) · v8.50 MULTI-NEG (faixa 💼 Negócios desta pessoa + ＋ Novo negócio por pipe) · v8.51 SOLIC-VICTOR (autor = quem está logado; editar não troca dono; 6 chaves de Solicitações → MODS) · v8.52 SO-BUSCA (busca ao lado de Nova solicitação) · v8.53 AGENDA-DIA (Agenda por dia com 📅 Eventos/☑️ Tarefas, reuniões a finalizar dentro do dia, ✏️ editar, modal de evento firme + ＋ Criar negócio, TAR-DEDUP) · v8.54 LIBERA-VICTOR (melhorias liberadas pra todos; módulos novos por usuário) · v8.55–v8.57 (outra sessão: NIVER-TAP, CARGA, SYNC-BOOT/SYNC-APAGA) · v8.58 `carga` → MODS. **NOVO_SO_MEU vazio.** Extensão WhatsApp **2.6.0** (⚡ Rápido mostra os negócios da pessoa; `crm-wt-insta` em origin/main).
