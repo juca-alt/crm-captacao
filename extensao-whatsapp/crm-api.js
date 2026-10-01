@@ -450,10 +450,14 @@ async function lpNegocios(id){
   if(ehEmp(eu)){   /* 2.6.1 (AUDIT E2/B8): na ficha da EMPRESA a faixa mostra a empresa + os negócios de cada contato (com ct, ou achado por telefone/nome) */
     add(eu,null);
     eu.dados.pjContatos.forEach(p=>{ if(!p) return;
-      let o=p.ct&&rows.find(r=>String(r.id)===String(p.ct));
-      if(!o){ const tv=new Set(phoneE164Variants(p.tel||'')), nk=waNormNome(p.nome||'');
-        o=rows.find(r=>!ehEmp(r)&&((tv.size&&phoneE164Variants(r.dados.telefone||'').some(v=>tv.has(v)))||(nk&&waNormNome(r.dados.nome||'')===nk))); }
-      if(o) irmaosDe(o).forEach(r=>add(r,null,p.nome||r.dados.nome||'')); });
+      let alvo=[];
+      const o=p.ct&&rows.find(r=>String(r.id)===String(p.ct));
+      if(o) alvo=[o];
+      else {   /* AUDIT D5: sem ct → TODOS os negócios com o telefone dele; nome só quando há UM negócio com esse nome (homônimo não entra) */
+        const tv=new Set(phoneE164Variants(p.tel||'')), nk=waNormNome(p.nome||'');
+        alvo=tv.size?rows.filter(r=>!ehEmp(r)&&phoneE164Variants(r.dados.telefone||'').some(v=>tv.has(v))):[];
+        if(!alvo.length&&nk){ const pn=rows.filter(r=>!ehEmp(r)&&waNormNome(r.dados.nome||'')===nk); if(pn.length===1) alvo=pn; } }
+      alvo.forEach(a=>irmaosDe(a).forEach(r=>add(r,null,r.dados.nome||p.nome||''))); });
     return out; }
   const irmaos=irmaosDe(eu), ids=new Set(irmaos.map(r=>String(r.id)));
   irmaos.forEach(r=>add(r,null));
