@@ -2,6 +2,18 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 02–03/10/2026 (sessão Code) — Revisão: 🎯 Apresentar planos + 🔎 Buscar cliente/histórico (BRANCH, aguardando OK)
+
+**Branch `claude/festive-bohr-id0fct` · PR aberto · NÃO mergeado** (merge = deploy, só com OK dele). vendas.html intocado.
+- **Módulo novo `modulos/apresentacao-planos.js`** (formato `plano-cards-v1`): `prepararApresentacao` / `gerarApresentacao` / `renderApresentacao` / `exportarHTML`. Visual = HTML aprovado do caso-modelo (Drive), CSS escopado em `.apz`; recolhível por clique/Enter/Espaço; ▲ só quando o capital supera o de Hoje (V&S compara com Vida Inteira, Temporário com Morte total); nunca ▼. Sem dependência global — pronto pra `vendas.html` usar depois.
+- **Revisão:** botão **🎯 Apresentar planos** (tela cheia, Voltar/Esc/botão voltar do Android fecham, 🖨️ Exportar HTML standalone offline). Com `apresentacao` no JSON usa ela (expande o formato condensado do Claude com as linhas dos cenários + apólice antiga mantida); sem, gera dos cenários (tarifador, resgate WV, comparação TM/TP10 × WV10 com IPCA 4,5%).
+- **🔎 Buscar cliente:** card no `lp_contatos` (dono atual, sessão herdada do app) → preenche cliente e vincula em **`state.crm`** (não `state.lp`, que já é o Life Planner). Histórico = `dados.revisoes` do card (máx. 10, snapshot **gzip+base64** em `snapshot_gz` — o card também mora no cache do app) + subpasta do cliente no Drive (mesmo handle do Salvar). Mescla por nome do arquivo. Revisão não salva → modal do próprio app.
+- **Salvar** com card vinculado também grava em `dados.revisoes` (+ `_hist` op `revisao`). Sem tabela nova, RLS intocado.
+- **Seed (T8) APLICADO em produção 03/10:** `revisao_2026-10-02_0015.json` (origem claude) no card ativo do caso-modelo (funil `bc`, id `bn178…973`); os 2 homônimos do Estoque (`bn`) ficaram sem. Script: `scripts/seed-revisao-card.py` (gera o SQL, idempotente).
+- **Testes:** `scripts/teste-apresentacao.mjs` (12 testes do PROMPT_CODE, 41 checagens, Supabase/Drive simulados, fixture inventada `scripts/fixtures/revisao_fulano_plano-cards.json`) → **41/41**. selfTest da Revisão 55/55 igual à main; totais/tarifador idênticos.
+- **Diferença consciente:** valores < 20 mil saem com 1 decimal (Cirurgia de hoje "11,4 mil"; o HTML feito à mão dizia "11 mil").
+- **Próximo:** ele testar no iPad com dados reais → OK → merge. Depois: decidir se a busca filtra também por homônimos/acentos e se o módulo entra no vendas.html.
+
 ## 🟢 RETOMAR AQUI — 01/10/2026 (fechamento, sessão Code) — v8.61 auditoria + extensão 2.7.0 + segurança do banco + Captação ARQUIVADA
 
 **No ar (Pages conferido por hash):** vendas.html **v8.61** (PR #283) · Revisão (selfTest 55/55) · extensão **2.7.0** no main (#284, sessão da extensão, rebaseada sobre a 2.6.1 deste PR) · raiz `index.html` → `vendas.html` (#285). Pasta do Chrome (`crm-wt-insta`) = origin/main.
