@@ -110,10 +110,13 @@ create table if not exists public.parceria_pagamentos (
 );
 create index if not exists parceria_pagamentos_comp on public.parceria_pagamentos (parceiro_id, competencia);
 
--- Quem enxerga o parceiro: admin, ou quem recebeu delegação de BackOffice do parceiro.
+-- Quem enxerga o parceiro: admin, o PRÓPRIO parceiro (liberado em 02/10 — vê a parceria dele, só leitura)
+-- ou quem recebeu delegação de BackOffice do parceiro (Victor).
 create or replace function public.parc_pode_ler(p_parceiro bigint) returns boolean
 language sql stable security definer set search_path = public as $$
   select public.lp_sou_admin() or exists (
+    select 1 from public.parceiros p where p.id = p_parceiro
+       and lower(p.email) = lower(coalesce(auth.jwt()->>'email',''))) or exists (
     select 1 from public.parceiros p
       join public.lp_delegacoes d on lower(d.dono_email) = lower(p.email)
      where p.id = p_parceiro
