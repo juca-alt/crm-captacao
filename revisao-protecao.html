@@ -4491,6 +4491,16 @@ function selfTestFam(){
     ok('em vida: sem idade não inventa percentual', evPct(null) === null);
     ok('em vida: WD e WL antecipam por idade', evTipo('WD10G') === 'VI' && evTipo('WL65G') === 'VI');
     ok('em vida: WV depende da quitação', evTipo('WV10G') === 'WV');
+    /* BUSCA-CARTEIRA-V1: capital da carteira só entra onde é inequívoco; prêmio por cobertura fica zerado */
+    ok('busca-carteira: 1 apólice → capital por tipo único; morte somada (2 produtos) fica zerada', (() => { try{
+      const cart = {cli:{dados:{produtos:'-WL65G--AF05G--DDMRG--HC05G--PD05G--DR30G-', cob:{cs:500000, funeral:13000, ddr:280000, hc:500, pd:540000}}},
+                    aps:[{dados:{apolice:'000000123', status:'Ativa', premio:'400', periodicidade:'Mensal'}}]};
+      const r = rvCartApolices(cart), cap = cod => (r.aps[0].cob.find(x => x.cod === cod) || {}).cap;
+      const dois = rvCartApolices(Object.assign({}, cart, {aps:cart.aps.concat([{dados:{apolice:'000000124', status:'Ativa'}}])}));
+      return r.aps.length === 1 && cap('AF05G') === 13000 && cap('DDMRG') === 280000 && cap('HC05G') === 500 && cap('PD05G') === 540000
+        && cap('WL65G') === 0 && cap('DR30G') === 0 && r.comCap === 4 && r.nCob === 6 && r.aps[0].cob.every(x => x.pre === 0) && r.aps[0].per === 'mes'
+        && dois.aps.length === 2 && dois.aps.every(a => !a.cob.length);
+    }catch(e){ return false; } })());
     ok('em vida: código de outra família fica fora', evTipo('TP10G') === null && evTipo('DDP5G') === null && evTipo('') === null);
     ok('em vida: quitação = emissão + anos do código', evAnoQuitacao('2026-04-17','WV10G') === 2036);
     ok('em vida: sem emissão não crava ano', evAnoQuitacao('','WV10G') === null);
@@ -9038,9 +9048,9 @@ function revTemConteudo(){ return !!((state.cliente && state.cliente.nome) || (s
 function revSujo(){ return revTemConteudo() && state._salvo !== revHashEstado(); }
 
 /* ---------- toast e modal do próprio app (sem confirm() nativo) ---------- */
-function rvToast(msg, ok){ try{ const d = document.createElement('div'); d.className = 'no-print'; d.textContent = msg; d.setAttribute('role','status');
+function rvToast(msg, ok, ms){ try{ const d = document.createElement('div'); d.className = 'no-print'; d.textContent = msg; d.setAttribute('role','status');
   d.setAttribute('style','position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:99999;max-width:calc(100% - 32px);background:'+(ok?'#065f46':'#7f1d1d')+';color:#fff;padding:10px 16px;border-radius:10px;font:600 13px system-ui;box-shadow:0 6px 24px rgba(0,0,0,.25)');
-  document.body.appendChild(d); setTimeout(() => d.remove(), 3600); }catch(_){} }
+  document.body.appendChild(d); setTimeout(() => d.remove(), ms || 3600); }catch(_){} }
 function rvModal(titulo, textoHTML, botoes){
   return new Promise(res => {
     const w = $('rvModal'), b = w.querySelector('.rv-box');
@@ -9230,6 +9240,77 @@ function rvPreencher(x){
   if (x.cidade) c.cidade = x.cidade;
   const renda = +x.renda_estimada; if (renda > 0) c.renda = renda;
 }
+/* BUSCA-CARTEIRA-V1 (05/10/2026): escolher o card agora também acha o cliente na CARTEIRA
+   (carteira_clientes + carteira_apolices) e puxa nascimento/idade e as apólices ativas.
+   A carteira traz o capital SOMADO por tipo, não por cobertura, e não traz prêmio por cobertura:
+   o capital só entra onde é inequívoco (1 apólice e 1 produto daquele tipo); o resto fica zerado
+   e o aviso manda colar o "Detalhes da Apólice", que é a fonte exata. Nunca sobrescreve apólices
+   que já estão na tela. */
+/* telefone = identidade da pessoa no CRM (mesma regra do app): casa pelos últimos 10 dígitos */
+function rvTelChave(t){ const d = String(t || '').replace(/\D/g, ''); return d.length >= 8 ? d.slice(-10) : ''; }
+async function rvCartBuscar(nome, dono, tel){
+  const c = await rvSbHead(); if (!c || !nome) return null;
+  const eu = dono || c.sb.email(), fDono = eu ? '&dono=eq.' + encodeURIComponent(eu) : '';
+  const base = c.sb.url + '/rest/v1/carteira_clientes?select=ref,dono,dados';
+  const get = async q => { const r = await fetch(base + q + fDono, {headers:c.H}); if (!r.ok) throw new Error('carteira respondeu ' + r.status); return r.json(); };
+  let rows = [], via = 'nome';
+  const tk = rvTelChave(tel);
+  if (tk){   /* 1º telefone: busca larga pelos 4 últimos dígitos e confere o número inteiro aqui */
+    const f4 = tk.slice(-4); let cand;
+    try{ cand = await get('&or=(dados->>celular.ilike.*' + f4 + '*,dados->>telefone.ilike.*' + f4 + '*)&limit=40'); }
+    catch(_){ cand = (await get('&dados->>celular=ilike.*' + f4 + '*&limit=40')).concat(await get('&dados->>telefone=ilike.*' + f4 + '*&limit=40')); }
+    rows = cand.filter(x => { const d = x.dados || {}; return [d.celular, d.telefone, d.telComercial].some(v => { const k = rvTelChave(v); return k && (k === tk || k.slice(-8) === tk.slice(-8)); }); });
+    if (rows.length) via = 'telefone';
+  }
+  if (!rows.length) rows = await get('&ref=eq.' + encodeURIComponent(String(nome).trim().toLowerCase().replace(/\s+/g, ' ')) + '&limit=2');
+  if (!rows.length){   /* primeiro + último nome (o card às vezes tem o nome curto) */
+    const t = rvTokens(nome); if (t.length >= 2) rows = await get('&ref=ilike.' + encodeURIComponent(t[0] + '*' + t[t.length - 1] + '*') + '&limit=3');
+  }
+  if (rows.length !== 1) return rows.length ? {ambiguo:true} : null;
+  const cli = rows[0]; cli.via = via;
+  const ra = await fetch(c.sb.url + '/rest/v1/carteira_apolices?select=chave,dados&dono=eq.' + encodeURIComponent(cli.dono) +
+    '&dados->>cli_ref=eq.' + encodeURIComponent(cli.ref), {headers:c.H});
+  return {cli, aps: ra.ok ? await ra.json() : []};
+}
+function rvCartApolices(cart){
+  const d = (cart && cart.cli && cart.cli.dados) || {}, cob = d.cob || {};
+  const ativas = ((cart && cart.aps) || []).map(r => r.dados || {}).filter(a => !a.status || /ativ/i.test(a.status));
+  const cods = Array.from(new Set(String(d.produtos || '').split('-').map(x => x.trim().toUpperCase()).filter(Boolean)));
+  const linhas = cods.map(cod => { const L = lookupLegado(cod);
+    return {id:uid(), cod, nome:L ? L.nome : cod, grupo:L ? L.grupo : 'MQC_TEMP', cap:0, pre:0, fim:'', classe:'', status:'Ativa'}; });
+  const fonte = {FUN:'funeral', INT:'hc', DG:'ddr', INV:'pd', MA:'morteAcid'};
+  const nGrupo = g => linhas.filter(l => l.grupo === g).length, nMorte = linhas.filter(l => /^MQC/.test(l.grupo)).length;
+  if (ativas.length === 1) linhas.forEach(l => {
+    if (/^MQC/.test(l.grupo)) l.cap = nMorte === 1 ? (+cob.cs || 0) : 0;
+    else if (fonte[l.grupo] && nGrupo(l.grupo) === 1) l.cap = +cob[fonte[l.grupo]] || 0;
+  });
+  const aps = ativas.map((a, i) => { const anual = /anual/i.test(a.periodicidade || '');
+    return {id:uid(), num:String(a.apolice || a.proposta || ('C' + (i + 1))), proposta:a.proposta || '', per:anual ? 'ano' : 'mes',
+      pagto:[a.forma || '', a.premio ? 'prêmio ' + fmt(+a.premio) + (anual ? '/ano' : '/mês') + ' (carteira)' : ''].filter(Boolean).join(' · '),
+      cob:ativas.length === 1 ? linhas : [], origem:'carteira'}; });
+  return {aps, nCob:linhas.length, comCap:ativas.length === 1 ? linhas.filter(l => l.cap > 0).length : 0};
+}
+function rvPreencherCarteira(cart){
+  const d = (cart.cli && cart.cli.dados) || {}, c = state.cliente;
+  const nasc = rvData(d.nascimento);
+  if (nasc && !c.nasc){ c.nasc = nasc; const a = idadeDe(nasc); if (a) c.idade = a; }
+  else if (!c.idade && +d.idade > 0) c.idade = +d.idade;
+  if ((state.hoje.apolices || []).length) return {ja:true};
+  const r = rvCartApolices(cart);
+  if (r.aps.length){ state.hoje.semNada = false; state.hoje.apolices = r.aps; }
+  return r;
+}
+function rvAvisoCarteira(cart, rc){
+  if (!cart) return 'Cliente puxado do card. Não achei esse nome na carteira — as apólices entram colando o "Detalhes da Apólice".';
+  if (cart.ambiguo) return 'Cliente puxado do card. Há mais de um cliente com esse nome na carteira — cole o "Detalhes da Apólice" pra trazer as apólices.';
+  if (rc.ja) return 'Dados do cliente atualizados. A revisão já tinha apólices na tela — mantive as que estavam.';
+  const quem = cart.cli && cart.cli.dados && cart.cli.dados.nome, outro = quem && rvNorm(quem) !== rvNorm((state.crm && state.crm.nome) || '');
+  const pref = outro ? 'Achei na carteira pelo ' + (cart.cli.via === 'telefone' ? 'telefone' : 'nome') + ' como "' + quem + '" — confira. ' : '';
+  if (!rc.aps.length) return pref + 'Cliente puxado da carteira, sem apólice ativa lá.';
+  return pref + 'Da carteira: ' + rc.aps.length + (rc.aps.length > 1 ? ' apólices' : ' apólice') +
+    (rc.nCob && rc.aps.length === 1 ? ' · ' + rc.comCap + ' de ' + rc.nCob + ' coberturas com capital' : ' (coberturas não separadas por apólice)') +
+    '. Prêmio por cobertura não vem na carteira — cole o "Detalhes da Apólice" pra fechar os números.';
+}
 async function rvEscolher(x){
   const card = {id:String(x.id), dono:x.dono || null, nome:x.nome || ''};
   const atual = (state.cliente && state.cliente.nome) || '';
@@ -9243,9 +9324,13 @@ async function rvEscolher(x){
     const ui = state.ui; state = VAZIO(); state.ui = Object.assign(ui, {aba:'cliente'}); limpa = true;
   }
   rvPreencher(x); state.crm = card; _rvCard = card;
+  let cart = null, rc = {};
+  try{ cart = await rvCartBuscar(card.nome, card.dono, x.telefone); if (cart && !cart.ambiguo) rc = rvPreencherCarteira(cart); }
+  catch(e){ console.warn('[carteira]', e); }
   if (limpa) revMarcarSalvo();
   save(); bindCliente(); bindNec(); render();
   rvMarcaSel(); rvMostrarHist(card);
+  rvToast(rvAvisoCarteira(cart, rc), true, 7000);
 }
 function rvMarcaSel(){ document.querySelectorAll('#rvBuscaOut li[data-card]').forEach(li => { const x = _rvRows[+li.dataset.card]; li.classList.toggle('sel', !!(x && _rvCard && String(x.id) === String(_rvCard.id))); }); }
 async function rvMostrarHist(card, soDrive){
