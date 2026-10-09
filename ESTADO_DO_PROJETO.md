@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 09/10/2026 (sessão Code) — v8.62 PARCEIROS NO AR + liberado pro Daniel (pedido "B")
+
+**PR #282 mergeado com OK dele no chat ("B" = mergear e liberar pro Daniel).**
+- **Daniel (parceiro) LÊ a própria parceria:** `parc_pode_ler` agora aceita o e-mail do próprio parceiro (além de admin e do delegado BackOffice dele). Testado como Daniel em transação desfeita: parceiros 1 · fechamentos 8 · acordos 27 · `comp_*` 0. Gravar continua só admin (Gustavo).
+- **`lp_perfis.modulos.parceiros = true` pro Daniel** (banco, 09/10). No app: ele vê Acordo, Apuração, Histórico & pagamentos e Prestação de contas — **sem a aba Projeção** (`parcSouParceiro`; é ferramenta de negociação do dono) e sem botões de fechar/editar %.
+- **Próximo (decidido "1A 2B"):** área "📎 Solte o arquivo aqui" + pasta por cliente no Drive — Revisão unifica no mesmo Drive dos anexos (API, funciona no iPad); pastas antecipadas pros 146 clientes do Gustavo + 76 do Daniel; lead/oportunidade cria no 1º arquivo.
+
 ## 🟢 RETOMAR AQUI — 02–05/10/2026 (sessão Code) — Revisão: 🎯 Apresentar planos + 🔎 Buscar cliente/histórico (NO AR)
 
 **PR #288 mergeado em 05/10 com OK dele no chat ("Pode publicar").** vendas.html intocado.
@@ -14,6 +21,15 @@
 - **Diferença consciente:** valores < 20 mil saem com 1 decimal (Cirurgia de hoje "11,4 mil"; o HTML feito à mão dizia "11 mil").
 - **Próximo:** ele testar no iPad com dados reais (busca "diego" → Abrir → 🎯). Depois: decidir se a busca filtra também por homônimos/acentos e se o módulo entra no vendas.html.
 
+## 🟢 RETOMAR AQUI — 01/10/2026 (sessão Code) — v8.62 PARCEIROS-V1 em branch (aguarda OK pra merge; renumerada — a v8.61 foi a auditoria de outra sessão)
+
+**Branch `claude/parceiros-v1` (NÃO mergeada):** módulo **🤝 Parceiros** em Módulos (MODS `parceiros` def:false — Victor ligado no banco; Daniel desligado). Primeiro parceiro = Daniel (LP, CPD do parceiro no banco), acordo Pipe X.
+- **Banco (aplicado no playground via MCP, migration `supabase/migrations/parceiros_v1.sql`, idempotente — rodada 2×, mesmo estado):** `parceiros`, `parceria_acordos` (% por apólice com vigência desde/ate + `ult_*` base da projeção), `parceria_extratos`, `parceria_linhas` (formato da comp_linhas; dedup por competência+apólice+cobertura+parcela+dt geração+seq), `parceria_fechamentos` (fotografia), `parceria_pagamentos`. RLS: admin + delegado de BackOffice do parceiro (Victor) leem; só admin grava; extrato entra só pela RPC `parceria_importar_extrato` (valida linhas E total contra o gravado — não bateu, nada grava; competência fechada + mesmo arquivo = "já importado").
+- **Decisão de modelo:** NÃO reusei `comp_linhas/comp_extratos` — são da comissão do PRÓPRIO Gustavo (processo do Compensation) e a `comp_apuracao` é por mês sem CPD; linha de parceiro ali contaminaria a conferência. **Achado de segurança corrigido:** `comp_*` estava legível/gravável por qualquer logado (inclusive o Daniel) → agora só admin.
+- **Carga (direto no banco, fora do repo):** 20 apólices do acordo (27 linhas de vigência, histórico de % da Central preservado), 0 órfãs na carteira do parceiro; extrato Set/26 real (548 linhas · R$ 15.215,08, do Drive); fechamentos Fev–Set (Abr 462,30 · Mai 484,24 · Jun 685,32 · Jul 898,00 · Ago 963,21 · Set 1.100,80); pagamentos (devido = pago = R$ 4.593,87). Fonte: `pipex_state` da Central (01/09) + extratos Jun/Ago/Set do Drive.
+- **Aceites conferidos:** Set/26 comissão 2.579,61 → bruto 1.171,07 → Simples 70,27 → parte 1.100,80; linhas-chave (V. S. G. 374,58 · G. P. 140,08 · L. T. S. 139,97 · P. N. L. S. 29,77 · S. E. X. P. 0,00); 7 não compensaram; projeção a partir de Out/26: a gerar 38.774 · Gustavo 14.054 · parceiro 24.720 · Out/26 1.243,33; RPC 2× sem duplicar; Victor importa e não edita %; Daniel não vê nada; carteira do Gustavo 146/238 intacta. Portão verde (48 telas × 6) + autoteste com fixture anônima.
+- **Telas:** lista (devido × pago × saldo) · Acordo (% por cliente, editar % vale da próxima competência) · Apuração (fechar competência = admin; não compensaram; fora do acordo com ＋ incluir) · Histórico (grade cliente × mês + pagamentos) · Prestação de contas (imprimir/PDF) · Projeção (acordo atual / tudo a X% / cheio). Selo "🤝 Parceria · %" na ficha do cliente da carteira. Subir relatório reconhece o Extrato Detalhado (.xls).
+- **Pendências dele:** (1) validar no preview e dar OK pro merge; (2) liberar ou não pro Daniel (hoje desligado); (3) refs visuais `REF_*` de 29/09 e o seed JSON do Jucá3.7 não estavam no Drive — layout seguiu o padrão do CRM; (4) Central Financeira continua com o `pipex_state` antigo (01/09): decidir se passa a ler do CRM.
 ## 🟢 RETOMAR AQUI — 01/10/2026 (fechamento, sessão Code) — v8.61 auditoria + extensão 2.7.0 + segurança do banco + Captação ARQUIVADA
 
 **No ar (Pages conferido por hash):** vendas.html **v8.61** (PR #283) · Revisão (selfTest 55/55) · extensão **2.7.0** no main (#284, sessão da extensão, rebaseada sobre a 2.6.1 deste PR) · raiz `index.html` → `vendas.html` (#285). Pasta do Chrome (`crm-wt-insta`) = origin/main.
