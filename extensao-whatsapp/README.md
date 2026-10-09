@@ -1,4 +1,9 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.7.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.7.1
+
+## 2.7.1 (01/10/2026) — Vida em Grupo no "＋ Novo"
+- O formulário de criar ganhou **👥 Vida em Grupo** (Novos Negócios e Base). Lá o negócio é a **empresa** (espelho do `pjSalvarNovaEmpresa` do app): pede nome da empresa*, CNPJ, nº de vidas e o papel da pessoa; ela entra como contato ⭐ (`pjContatos`, telefone da empresa = o dela via `pjTelDe`).
+- Vindo de "＋ Novo negócio" num card de pessoa: o contato leva `ct` = id do negócio dela (aparece em 💼 dos dois lados pela regra única H1). Empresa nunca leva `pessoaId`; a conversa continua ligada ao card da pessoa.
+- Vindo de "＋ Novo" (pessoa que ainda não está no CRM): cria só a empresa, contato sem `ct`, e a conversa fica ligada à empresa.
 
 ## 2.7.0 (01/10/2026) — criar novo direto do WhatsApp + versão certa no painel
 - **Rec no nome da conversa:** "Fulano Rec Beltrana Silva" → pessoa *Fulano*, recomendante *Beltrana Silva* (port fiel do `recDoNome`, REC-DO-NOME-V1 do app). A busca por nome só compara a parte da PESSOA — antes casava a conversa do indicado com a recomendante.
