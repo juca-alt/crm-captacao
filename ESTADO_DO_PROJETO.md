@@ -2,6 +2,17 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 10/10/2026 (sessão Code) — v8.63 DRIVE por cliente em branch (aguarda OK) · pastas da carteira criadas · protótipo da extensão
+
+**Branch `claude/drive-pasta-cliente` (NÃO mergeada, v8.63):** pedido dele "um espaço só pra eu jogar um arquivo… salva na pasta do cliente" + decisão **1A 2B**.
+- **DRIVE-PASTA-V1 (vendas):** pasta do cliente = filha de *Histórico de Clientes* achada por CHAVE (sem acento/maiúscula; abreviação só com o mesmo nº de palavras) — não duplica. Área **"📎 Solte o arquivo aqui"** (desktop arrasta; celular toca e escolhe) na solicitação, ficha do cliente da carteira (bloco 📁 Arquivos no Drive), ficha do negócio (seção da gaveta; lead/oportunidade cria a pasta no 1º arquivo) e benefício; o link entra na linha do tempo/diário. Tudo atrás do módulo `anexos-drive` (ele + Victor).
+- **DRIVE-CLIENTE-V1 (Revisão, 1A):** `modulos/drive-cliente.js` — Salvar e histórico do Buscar cliente pelo Google Drive via API (funciona no iPad); a pasta local do Chrome virou reserva. **📎 Arquivo** + soltar na tela (.json abre; o resto vai pra pasta do cliente). Token: do app (iframe) ou a conexão Google salva pelo app.
+- **MENU-SUB-ESPACO:** subitens do menu tinham 18px embaixo (o `.sub` do subtítulo vazava) → 2px.
+- **Testes:** portão verde (48 telas × 6); selfTest da Revisão com `drive-cliente`; Drive simulado (salvar, histórico, soltar PDF). **Falta teste com o Drive real dele.**
+- **2B FEITO (Drive, fora do repo):** 204 pastas criadas + 18 que já existiam = **222** (146 Gustavo + 76 Daniel; 2 clientes nas duas carteiras = 1 pasta).
+- **Extensão:** protótipo "Perfil + Negócios" (as duas abas pelo caminho rápido; sai o Card completo que carrega o app de 2,3 MB no iframe; ↗ CRM abre em aba nova) — aguardando validação dele antes de construir (seria 2.8.0).
+- **Pendências dele:** (1) OK pra publicar a v8.63; (2) aprovar/ajustar o protótipo da extensão.
+
 ## 🟢 RETOMAR AQUI — 09/10/2026 (sessão Code) — v8.62 PARCEIROS NO AR + liberado pro Daniel (pedido "B")
 
 **PR #282 mergeado com OK dele no chat ("B" = mergear e liberar pro Daniel).**
