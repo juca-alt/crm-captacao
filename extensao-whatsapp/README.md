@@ -1,4 +1,25 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.8.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.8.1
+
+## 2.8.1 (13/10/2026) — atividades, valor e funil de volta ao negócio aberto
+- Palavra dele no teste da 2.8.0: *"tirou a parte de tarefas/agenda e atualização de funil, os valores? — poder marcar tarefas e
+  agendas da extensão é essencial"*.
+- **📅 Atividades à vista** no negócio aberto (onde ficava "Sem próxima atividade"): até 3 abertas, a 1ª como ➡️ Próxima, cada uma
+  com **✓ concluir · +1d · +7d · 📅 Agenda**. **rápido:** 📞 ligar hoje · 💬 WhatsApp amanhã · 🔁 follow-up 7d (o `tarAtalho` do app)
+  e o formulário tipo · título · dia · hora (opcional) · duração. Formato **igual ao `tarCriar`** do vendas.html em `dados.tarefas`
+  (`{id,tipo,tit,quando,hora,dur,feito:null,notas:'',criadoEm,por}`, id do `uid()`), com o registro "Tarefa criada / Tarefa
+  concluída: …" em `dados.interacoes`. Concluir = `feito` ISO (`tarConcluir`); +1d/+7d = `tarNovaData` (parte de hoje se venceu).
+- **Agenda Google:** o app só sobe pro Google o que está na fila DELE (`crmlp_gsync_v1`, localStorage do navegador do CRM) — não há
+  varredura de "tarefa com `gcalSync` sem `gcalId`" no boot. Por isso a extensão **não** grava `gcalSync` (seria sincronia de
+  mentira): cada atividade tem **📅 Agenda**, o link do Google Agenda já preenchido (mesmo formato do `tarGcalUrl`), 1 clique.
+  Pra subir sozinho faltaria, no vendas.html, enfileirar no boot/sync as tarefas abertas com hora e sem `gcalId`/`gtaskId`.
+- **💰 Valor do negócio:** Prêmio mensal R$ → `pm` + `premio_mes` + `premio_total` (= pm × 12, salvo se ajustado à mão no app),
+  igual ao `drwSalvarPM`; o PA aparece derivado. Funis **MFO**: 💰 Receita estimada R$ → `receita_estimada`.
+- **Funil + Etapa à vista** (saíram ◀ voltar / Avançar etapa ▶): select **Funil** com os 8 funis do app (`FUNIS`) e as etapas do
+  funil em chips. Trocar de funil leva à 1ª etapa do funil novo (ele escolhe outra nos chips), limpa o status e registra
+  "Funil: A → B (etapa x → y)" (`drwMoverFunil`). VG/Prud/MFO sem Funil & Etapas no banco usam o esqueleto de fábrica do app.
+  Status e listas seguem no bloco **⚑ Status · listas** (fechado, com resumo).
+- Tudo entra no **rascunho** e sobe no **💾 Salvar**: o SW relê a linha fresca e grava uma vez só (`lpc.patch`), conferindo
+  depois que o banco devolveu cada atividade/valor/funil.
 
 ## 2.8.0 (13/10/2026) — um painel só: 👤 Perfil e 💼 Negócios
 - **Saíram os modos "🗂 Card completo" e "⚡ Rápido".** O card completo (iframe do `vendas.html?wa=1`, até 25 s pra abrir)
