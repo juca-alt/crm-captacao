@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.64 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.65 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -11914,8 +11914,23 @@ async function gsyncPuxar(op){
 function gsyncRepintar(){ try{ const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return; render(); }catch(_){} }
 /* o pulso: drena e puxa. Roda em QUALQUER tela (antes só na Agenda) — a
    sincronia não pode depender de ele estar olhando pra ela. */
+/* GSYNC-EXTENSAO-V1 (13/10): atividade marcada na extensão do WhatsApp chega em dados.tarefas sem passar pelo
+   tarCriar (que é quem põe na fila). Pedido dele ("2A"): quando o CRM abrir, manda sozinho pra Agenda. Mesma regra do
+   tarCriar — tem hora → espelha —, só pra atividade aberta, de hoje em diante, criada por ELE (t.por = o login dele),
+   que nunca foi pro Google nem foi apagada lá (gcalFora). */
+function gsyncVarrerNovas(){ try{
+  if(typeof S==='undefined'||!S||!Array.isArray(S.contatos)||typeof gsyncEnfileirar!=='function') return 0;
+  const eu=String((typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)||'').toLowerCase(); if(!eu) return 0;
+  const hoje=hojeISO(); let n=0;
+  S.contatos.forEach(c=>{ (c.tarefas||[]).forEach(t=>{
+    if(!t||t.feito||!t.hora||!t.quando||t.quando<hoje||t.gcalSync||t.gcalId||t.gtaskId||t.gcalFora) return;
+    if(String(t.por||'').toLowerCase()!==eu) return;
+    t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert'); n++; }); });
+  if(n) salvar();
+  return n; }catch(e){ console.warn('[gsync varrer]',e); return 0; } }
 function gsyncTick(forcar){
   if(typeof document!=='undefined'&&document.hidden) return;
+  if(GCAL.conectado) gsyncVarrerNovas();
   if(!GCAL.conectado&&!gsyncPendentes()) return;
   const agora=Date.now();
   if(!forcar&&GSYNC.ultimo&&(agora-GSYNC.ultimo)<25000) return;
@@ -20798,6 +20813,15 @@ function lpSelfCheck(){
           return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/>📎 boleto\.pdf</.test(anxLinkHtml(l[0]))
             &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
         } finally{ SO_EV=bak; } })());
+        ok('GSYNC-EXTENSAO-V1: atividade da extensão com hora, aberta, futura e dele entra na fila; sem hora, feita, passada, de outro, já no Google ou apagada lá: não', (()=>{
+          const bkS=S.contatos, bkE=window.gsyncEnfileirar, bkP=(typeof PERFIL!=='undefined')?PERFIL:null, bkSv=window.salvar; const fila=[];
+          try{ window.gsyncEnfileirar=(c,t)=>fila.push(t); window.salvar=()=>{}; PERFIL=Object.assign({},bkP||{},{email:'eu@x'});
+            const f=isoAddDias(hojeISO(),2), p=isoAddDias(hojeISO(),-2);
+            S.contatos=[{id:'zg1',nome:'Fulano',tarefas:[{id:'a',hora:'10:00',quando:f,por:'eu@x'},{id:'b',quando:f,por:'eu@x'},{id:'c',hora:'10:00',quando:f,por:'eu@x',feito:'2026-01-01'},
+              {id:'d',hora:'10:00',quando:p,por:'eu@x'},{id:'e',hora:'10:00',quando:f,por:'outro@x'},{id:'f',hora:'10:00',quando:f,por:'eu@x',gcalId:'g'},{id:'g',hora:'10:00',quando:f,por:'eu@x',gcalFora:true}]}];
+            const n=gsyncVarrerNovas(), n2=gsyncVarrerNovas();
+            return n===1&&n2===0&&fila.join()==='a'&&S.contatos[0].tarefas[0].gcalSync===true;
+          } finally{ S.contatos=bkS; window.gsyncEnfileirar=bkE; window.salvar=bkSv; if(bkP) PERFIL=bkP; } })());
         ok('CONVITE-CLIENTE-V1: grupo "pro cliente" separado do par do Google (💬 enviar · ✉️ convite · 📋 evento WA); mensagem com local e link limpo pra salvar na agenda (sem nota interna); selo do Sim/Não do convite', (()=>{
           const c={id:'zcv1',nome:'Fulano de Tal',telefone:'81999990000',email:'fulano@exemplo.com',notas:'NOTA INTERNA'}; const t={id:'t1',tipo:'reuniao',tit:'x',quando:'2031-03-04',hora:'10:00',dur:60,notas:'SEGREDO'};
           const h=tarClienteHTML(c,t), lk=tarLinkCliente(c,t), msg=tarWaMsg(c,t);
