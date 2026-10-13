@@ -183,7 +183,57 @@ function lpcUid(){ return 'i'+Date.now().toString(36)+Math.random().toString(36)
 function lpcCfgKey(c){ const f=c&&c.funil; return (!f||f==='nn')?'lp':f; }
 function lpcEtapasDe(cfg,c){ const arr=(cfg&&cfg[lpcCfgKey(c)])||null;
   if(Array.isArray(arr)&&arr.length) return arr.filter(e=>e&&e.id).map(e=>({id:e.id,label:String(e.label||e.id).trim()||e.id,cor:e.cor||'cinza',enc:!!e.enc,status:Array.isArray(e.status)?e.status.map(x=>String(x||'').trim()).filter(Boolean):[]}));
+  const fab=LPC_FAB_EXTRA[lpcCfgKey(c)];   /* 2.8.1: VG/Prud/MFO (+Base) sem Funil & Etapas no banco → esqueleto de fábrica do app */
+  if(fab) return fab.map(([id,cor,enc])=>({id,label:id,cor,enc:!!enc,status:[]}));
   const f=LPC_FUNIS[lpcFunilDe(c)]; return f.etapas.map((id,i)=>({id,label:id,cor:'cinza',enc:/^(N[aã]o|Prop\. Cancelada|Ap[oó]l\. Cancelada|Venda perdida)$/.test(id),status:[]})); }
+/* 2.8.1: FUNIL_FAB do vendas.html (FUNIS-EXTRA-V1 / PIPES-V1) — só os funis extras; nn/bc seguem no LPC_FUNIS de sempre */
+const _FAB_PIPE=[['Oportunidade','cinza'],['Em contato','azul'],['Proposta','roxo'],['Fechamento','amarelo'],['Ganho','verde',1],['Perdido','verm',1]];
+const _FAB_PIPE_BC=[['Clientes Ativos','verde'],['Contato/Revisita','amarelo'],['Revisita agendada','azul'],['Proposta','roxo'],['Fechamento','amarelo'],['Ganho','verde',1],['Perdido','verm',1]];
+const LPC_FAB_EXTRA={vg:_FAB_PIPE,prud:_FAB_PIPE,mfo:_FAB_PIPE,'vg-bc':_FAB_PIPE_BC,'prud-bc':_FAB_PIPE_BC,'mfo-bc':_FAB_PIPE_BC};
+/* 2.8.1: os funis que a ficha do app oferece no select "Funil: …" (FUNIS do vendas.html, mesma ordem e rótulos) */
+const LPC_FUNIS_APP=[['nn','Novos Negócios'],['bc','Negócios Base de Clientes'],['vg','Vida em Grupo'],['prud','Prud. Demais'],['mfo','MFO'],
+  ['vg-bc','Vida em Grupo · Base'],['prud-bc','Prud. Demais · Base'],['mfo-bc','MFO · Base']];
+function lpcFunilApp(c){ const f=c&&c.funil; return (f&&f!=='nn'&&LPC_FAB_EXTRA[f])?f:(f==='bc'?'bc':'nn'); }   /* funilDe do app */
+function lpcFunilNome(f){ const x=LPC_FUNIS_APP.find(y=>y[0]===f); return x?x[1]:f; }   /* funilNome do app */
+/* 1ª etapa de fluxo do funil (a que o negócio recebe ao trocar de funil) */
+function lpcEtapa0De(cfg,f){ const et=lpcEtapasDe(cfg,{funil:f}); const e=et.find(x=>!x.enc)||et[0]; return e?e.id:''; }
+
+/* ===== 2.8.1 ATIVIDADES — port fiel do vendas.html (TAR_TIPOS, tarCriar, tarConcluir, tarAdiar/tarNovaData, tarGcalUrl) =====
+   A tarefa vive em dados.tarefas do contato: {id, tipo, tit, quando:'AAAA-MM-DD', hora:'HH:MM'|'', dur, feito:ISO|null,
+   notas, criadoEm:ISO, por}. Criar e concluir também registram no histórico (interacoes, k:'tarefa'), igual ao app. */
+const LPC_TAR_TIPOS=[['ligar','\u{1F4DE}','Ligar'],['whats','\u{1F4AC}','WhatsApp'],['reuniao','\u{1F91D}','Reunião'],
+  ['proposta','\u{1F4C4}','Enviar proposta'],['follow','\u{1F501}','Follow-up'],['outro','✳️','Outro']];
+function lpcTarTipo(k){ return LPC_TAR_TIPOS.find(t=>t[0]===k)||LPC_TAR_TIPOS[LPC_TAR_TIPOS.length-1]; }
+function lpcIsoAddDias(iso,n){ const p=String(iso).split('-').map(Number); const dt=new Date(p[0],p[1]-1,p[2]+n); return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); }
+/* tarCriar: tipo padrão follow, título vazio = nome do tipo, dia padrão hoje, duração padrão 60 */
+function lpcTarNova(tipo,tit,quando,hora,dur,por){
+  return {id:lpcUid(), tipo:tipo||'follow', tit:String(tit||'').trim()||lpcTarTipo(tipo)[2],
+    quando:quando||lpcHojeISO(), hora:hora||'', dur:Number(dur)||60, feito:null, notas:'',
+    criadoEm:new Date().toISOString(), por:por||''}; }
+/* tarNovaData: remarcar parte de HOJE quando a data já passou (empurrar data vencida só acumula atraso) */
+function lpcTarNovaData(t,dias){ const h=lpcHojeISO(); const base=(t&&t.quando&&t.quando>h)?t.quando:h; return lpcIsoAddDias(base,dias); }
+/* tarGcalUrl: link do Google Agenda com o evento pré-preenchido (sem OAuth; ele cria com 1 clique) */
+function lpcTarGcalUrl(c,t){
+  if(!t||!t.quando) return '';
+  const p2=x=>String(x).padStart(2,'0');
+  const dia=t.quando.replace(/-/g,''), hh=(t.hora||'09:00').split(':');
+  const ini=dia+'T'+p2(hh[0])+p2(hh[1]||'00')+'00';
+  const totMin=Number(hh[0])*60+Number(hh[1]||0)+(Number(t.dur)||60), fimMin=totMin%(24*60);
+  const diaFim=(totMin>=1440?lpcIsoAddDias(t.quando,1):t.quando).replace(/-/g,'');
+  const fim=diaFim+'T'+p2(Math.floor(fimMin/60))+p2(fimMin%60)+'00';
+  const tit=lpcTarTipo(t.tipo)[2]+' · '+(c?c.nome||'':'');
+  const det=[t.tit||'', c&&c.telefone?('Telefone: '+c.telefone):'', c&&c.etapa?('Etapa: '+c.etapa):'', t.notas||'', 'CRM Life Planner'].filter(Boolean).join('\n');
+  const ls=(c&&Array.isArray(c.locais))?c.locais.filter(l=>l&&(l.nome||l.end)):[], lp=ls.find(l=>l.tipo==='trabalho')||ls[0]||null;
+  const loc=lp?[lp.nome,lp.end].filter(Boolean).join(', '):'';
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(tit)+
+    '&dates='+ini+'/'+fim+'&details='+encodeURIComponent(det)+(loc?'&location='+encodeURIComponent(loc):''); }
+/* ===== 2.8.1 VALOR DO NEGÓCIO — port do drwSalvarPM/parsePM: só o prêmio MENSAL é gravado (pm, espelhado em premio_mes);
+   o PA é derivado (pm × 12). premio_total acompanha, salvo quando foi ajustado à mão no app (premio_total_manual). */
+const LPC_PA_MESES=12;
+function lpcParsePM(txt){ const s=String(txt==null?'':txt).replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.');
+  const n=parseFloat(s); return isFinite(n)&&n>0?Math.round(n*100)/100:0; }
+function lpcPmInformado(c){ const n=Number(c&&c.pm); return isFinite(n)&&n>0?n:0; }
+function lpcEhMfo(c){ return /^mfo/.test(String(c&&c.funil||'')); }
 function lpcEtapaDe(cfg,c){ return lpcEtapasDe(cfg,c).find(e=>e.id===(c&&c.etapa))||null; }
 function lpcStatusOpts(cfg,c){ const e=lpcEtapaDe(cfg,c); return e?e.status:[]; }
 function lpcStatusDe(cfg,c){ const s=c&&String(c.status||'').trim(); if(!s) return ''; if(c.status_etapa&&c.status_etapa!==c.etapa) return ''; return lpcStatusOpts(cfg,c).includes(s)?s:''; }
@@ -220,6 +270,31 @@ function lpcAplicar(cfg,dados,acao,por){
      nunca troca a pessoa de um negócio que já tem outra (silêncio é melhor que palpite, mesma régua do app). */
   if(t==='pessoa'){ const pid=String(acao.id||'').trim(); if(!pid||c.pessoaId) return {dados,mudou:false};
     c.pessoaId=pid; return {dados:c,mudou:true}; }
+  /* 2.8.1: trocar de FUNIL (drwMoverFunil do app): funil + etapa de destino (padrão = 1ª etapa do funil novo) + registro
+     "Funil: A → B (etapa x → y)". O status sai junto (é por etapa de cada funil — mesma regra do "mudar etapa limpa o status"). */
+  if(t==='funil'){ if(bn) return {dados,mudou:false}; const dest=String(acao.para||''); if(!LPC_FUNIS_APP.some(f=>f[0]===dest)) return {dados,mudou:false};
+    const deF=lpcFunilApp(c); if(deF===dest) return {dados,mudou:false};
+    const et=lpcEtapasDe(cfg,{funil:dest}); const nova=et.some(e=>e.id===acao.etapa)?acao.etapa:lpcEtapa0De(cfg,dest); if(!nova) return {dados,mudou:false};
+    const deE=c.etapa; c.funil=dest; c.etapa=nova; delete c.status; delete c.status_etapa;
+    c.interacoes.push(lpcInteracao('funil',`Funil: ${lpcFunilNome(deF)} → ${lpcFunilNome(dest)} (etapa ${deE} → ${nova})`,por,{de:deE,para:nova})); return {dados:c,mudou:true}; }
+  /* 2.8.1: ATIVIDADES (dados.tarefas) — tarCriar / tarConcluir / tarAdiar do app */
+  if(t==='tarefa_nova'){ if(bn) return {dados,mudou:false}; const n=acao.t; if(!n||n.id==null) return {dados,mudou:false};
+    if(!Array.isArray(c.tarefas)) c.tarefas=[]; if(c.tarefas.some(x=>x&&String(x.id)===String(n.id))) return {dados,mudou:false};
+    const tt=Object.assign({},n,{por:n.por||por||''}); c.tarefas.push(tt);
+    c.interacoes.push(Object.assign(lpcInteracao('tarefa','Tarefa criada: '+tt.tit,por),{ts:tt.criadoEm})); return {dados:c,mudou:true}; }
+  if(t==='tarefa_feita'){ const l=Array.isArray(c.tarefas)?c.tarefas:[]; const x=l.find(y=>y&&String(y.id)===String(acao.id)); if(!x||x.feito) return {dados,mudou:false};
+    x.feito=acao.em||new Date().toISOString();
+    c.interacoes.push(Object.assign(lpcInteracao('tarefa','Tarefa concluída: '+x.tit,por),{ts:x.feito})); return {dados:c,mudou:true}; }
+  if(t==='tarefa_data'){ const l=Array.isArray(c.tarefas)?c.tarefas:[]; const x=l.find(y=>y&&String(y.id)===String(acao.id)); const q=String(acao.quando||'');
+    if(!x||!/^\d{4}-\d{2}-\d{2}$/.test(q)||x.quando===q) return {dados,mudou:false}; x.quando=q; return {dados:c,mudou:true}; }
+  /* 2.8.1: VALOR — prêmio mensal (drwSalvarPM) · MFO: receita estimada */
+  if(t==='pm'){ const v=Number(acao.v)>0?Math.round(Number(acao.v)*100)/100:0; if(v===lpcPmInformado(c)) return {dados,mudou:false};
+    c.pm=v||null; c.premio_mes=c.pm;
+    if(c.pm) c.premio_total=c.premio_total_manual?c.premio_total:Math.round(c.pm*LPC_PA_MESES*100)/100;
+    else { c.premio_total=null; c.premio_total_manual=false; }
+    return {dados:c,mudou:true}; }
+  if(t==='receita'){ const v=Number(acao.v)>0?Math.round(Number(acao.v)*100)/100:0; const a=Number(c.receita_estimada)>0?Number(c.receita_estimada):0; if(v===a) return {dados,mudou:false};
+    c.receita_estimada=v||null; return {dados:c,mudou:true}; }
   if(t==='campos'){ const set=acao.set||{}; let m=false; ['telefone','notas'].forEach(k=>{ if(k in set){ const v=set[k]==null?'':String(set[k]); if(String(c[k]==null?'':c[k])!==v){ c[k]=v||(k==='telefone'?null:''); m=true; } } }); return {dados:c,mudou:m}; }
   return {dados,mudou:false};
 }

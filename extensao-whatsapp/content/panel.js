@@ -577,15 +577,23 @@ function desvincular(){ if(!CHAT) return; send('wa.desvincular',{keys:chatKeys(C
 const LPC_COR={cinza:'#5b6770',azul:'#2563eb',amarelo:'#d97706',roxo:'#7c3aed',verde:'#16a34a',verm:'#dc2626'};
 async function loadLpCfg(force){ const r=await send('lpcfg.get',{force:!!force}); if(r&&r.ok&&r.data) LPCFG=r.data; return r; }
 /* ---- rascunho do card rápido (2.2) ---- */
-const RASC_K=['etapa','status','listas','nota','tel','notas'];
+/* 2.8.1: + funil · tarNovas (atividades criadas) · tarFeitas {id→ISO} · tarDatas {id→dia} · pm · receita (MFO) */
+const RASC_K=['funil','etapa','status','listas','nota','tel','notas','tarNovas','tarFeitas','tarDatas','pm','receita'];
 function sujo(d){ return !!d&&RASC_K.some(k=>k in d); }
-function nMud(d){ return d?RASC_K.filter(k=>k in d).length:0; }
+function nMud(d){ if(!d) return 0; return RASC_K.filter(k=>k in d).reduce((n,k)=>{ const v=d[k];
+  return n+(Array.isArray(v)?v.length:(v&&typeof v==='object')?Object.keys(v).length:1); },0); }
 function acoesDe(d){ const a=[];
-  if('etapa' in d) a.push({tipo:'etapa',para:d.etapa});
+  if('funil' in d) a.push({tipo:'funil',para:d.funil,etapa:d.etapa});   /* a etapa escolhida no funil novo vai junto */
+  else if('etapa' in d) a.push({tipo:'etapa',para:d.etapa});
   if('status' in d) a.push({tipo:'status',v:d.status});
   if('listas' in d) a.push({tipo:'listas',para:d.listas});
   if('nota' in d) a.push({tipo:'nota',texto:d.nota});
   const set={}; if('tel' in d) set.telefone=d.tel.trim(); if('notas' in d) set.notas=d.notas; if(Object.keys(set).length) a.push({tipo:'campos',set});
+  (d.tarNovas||[]).forEach(t=>a.push({tipo:'tarefa_nova',t}));                       /* criar → remarcar → concluir, nessa ordem */
+  Object.keys(d.tarDatas||{}).forEach(id=>a.push({tipo:'tarefa_data',id,quando:d.tarDatas[id]}));
+  Object.keys(d.tarFeitas||{}).forEach(id=>a.push({tipo:'tarefa_feita',id,em:d.tarFeitas[id]}));
+  if('pm' in d) a.push({tipo:'pm',v:d.pm});
+  if('receita' in d) a.push({tipo:'receita',v:d.receita});
   return a; }
 /* a PRÉVIA é o mesmo lpcAplicar que o service worker roda no banco — o que a tela mostra é o que vai ser gravado */
 function previa(c,d,sem){ let v=c; if(!d) return v; for(const a of acoesDe(d)){ if(sem&&a.tipo===sem) continue; v=lpcAplicar(LPCFG.funil,v,a,'').dados; } return v; }
@@ -598,6 +606,13 @@ function conferir(d,dd){ const f=[];
   if('nota' in d&&!lpcUltimos(dd,20).some(x=>String(x.l||'')===d.nota.trim())) f.push('nota');
   if('tel' in d&&String(dd.telefone||'')!==d.tel.trim()) f.push('telefone');
   if('notas' in d&&String(dd.notas||'')!==String(d.notas||'')) f.push('observação');
+  if('funil' in d&&lpcFunilApp(dd)!==d.funil) f.push('funil');
+  const tl=Array.isArray(dd.tarefas)?dd.tarefas:[], tDe=id=>tl.find(x=>x&&String(x.id)===String(id));
+  if((d.tarNovas||[]).some(t=>!tDe(t.id))) f.push('atividade nova');
+  if(Object.keys(d.tarFeitas||{}).some(id=>!(tDe(id)&&tDe(id).feito))) f.push('atividade concluída');
+  if(Object.keys(d.tarDatas||{}).some(id=>!(tDe(id)&&tDe(id).quando===d.tarDatas[id]))) f.push('data da atividade');
+  if('pm' in d&&lpcPmInformado(dd)!==(Number(d.pm)||0)) f.push('prêmio mensal');
+  if('receita' in d&&(Number(dd.receita_estimada)||0)!==(Number(d.receita)||0)) f.push('receita estimada');
   return f; }
 function hhmm(t){ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
 async function salvarRascunho(id){
@@ -686,6 +701,84 @@ async function pintaNegocios(id){ const box=$('#lp2-negs'); if(!box) return; con
 function desdeEtapa(c){ const l=(Array.isArray(c.interacoes)?c.interacoes:[]).filter(x=>x&&x.k==='etapa'&&x.para===c.etapa).sort((a,b)=>String(b.ts||b.dia||'').localeCompare(String(a.ts||a.dia||'')));
   const dia=(l[0]&&(String(l[0].ts||'').slice(0,10)||l[0].dia))||c.criadoEm; const n=diasEntre(dia,lpcHojeISO());
   return n==null?'':n<=0?'desde hoje':n===1?'há 1 dia':'há '+n+' dias'; }
+/* ===== 2.8.1 ATIVIDADES no negócio aberto (palavra dele: "poder marcar tarefas e agendas da extensão é essencial") =====
+   Mesmo formato do app (lpcTarNova = tarCriar). Tudo entra no RASCUNHO e sobe no 💾 Salvar, numa gravação só.
+   Agenda Google: o app só manda pro Google o que entra na fila DELE (localStorage do navegador onde o CRM roda) — a extensão
+   não alcança essa fila, então aqui não se finge sincronia: cada atividade tem "📅 Agenda", o link do Google Agenda já
+   preenchido (mesmo formato do tarGcalUrl do app), e ele confirma em 1 clique. */
+const TAR_RAPIDO=[[0,'ligar','📞 ligar hoje'],[1,'whats','💬 WhatsApp amanhã'],[7,'follow','🔁 follow-up 7d']];   /* tarAtalho do app */
+const TAR_DURS=[[15,'15 min'],[30,'30 min'],[45,'45 min'],[60,'1 h'],[90,'1h30'],[120,'2 h']];
+function durTxt(n){ const x=TAR_DURS.find(d=>d[0]===Number(n)); return x?x[1]:(Number(n)||60)+' min'; }
+function tarQuandoTxt(t){ if(!t||!t.quando) return 'sem data'; const h=lpcHojeISO(), hr=t.hora?' '+t.hora:'';
+  if(t.quando<h) return dataBR(t.quando)+hr+' · atrasada '+(-diasEntre(h,t.quando))+'d';
+  if(t.quando===h) return 'hoje'+hr; if(t.quando===lpcIsoAddDias(h,1)) return 'amanhã'+hr; return dataBR(t.quando)+hr; }
+function ativHTML(c,D){
+  const k=t=>(t.quando||'9999-12-31')+' '+(t.hora||'99:99');
+  const ab=(Array.isArray(c.tarefas)?c.tarefas:[]).filter(t=>t&&!t.feito).sort((a,b)=>k(a).localeCompare(k(b)));
+  const novas=new Set((D.tarNovas||[]).map(t=>String(t.id))), datas=D.tarDatas||{}, feitas=D.tarFeitas||{}, h=lpcHojeISO();
+  const lin=(t,i)=>{ const tp=lpcTarTipo(t.tipo), atr=!!(t.quando&&t.quando<h), url=lpcTarGcalUrl(c,t), nova=novas.has(String(t.id));
+    const marca=nova?'<b class="mud-t">● nova — não salva</b>':(String(t.id) in datas)?'<b class="mud-t">● remarcada — não salva</b>':'';
+    const g=t.gcalId?'<span class="gtag" title="Já está na sua Agenda Google (o CRM mantém os dois iguais quando você remarca por lá)">📅 na sua Agenda</span>':t.gtaskId?'<span class="gtag">☑️ nas Tarefas do Google</span>':'';
+    return `<div class="tar${i===0?' p1':''}${atr?' atr':''}${nova?' mud':''}"><div class="tar-t">${i===0?'<span class="tar-k">➡️ Próxima</span>':''}<b>${tp[1]} ${esc(t.tit||tp[2])}</b>
+        <span class="tar-q">${esc(tarQuandoTxt(t))}${t.hora?' · '+esc(durTxt(t.dur)):''}</span>${marca}${g}</div>
+      <div class="tar-b"><button class="btn primary edit" data-tfeita="${esc(t.id)}" title="Marcar como feita">✓ concluir</button><button class="btn edit" data-tadia="${esc(t.id)}" data-d="1" title="Remarcar para o dia seguinte">+1d</button><button class="btn edit" data-tadia="${esc(t.id)}" data-d="7" title="Remarcar para daqui a uma semana">+7d</button>${
+        url&&!t.gcalId&&!t.gtaskId?`<a class="btn" href="${esc(url)}" target="_blank" rel="noopener" title="Abre o Google Agenda com o evento pronto — você confirma em 1 clique">📅 Agenda</a>`:''}${
+        nova?`<button class="btn edit" data-tnx="${esc(t.id)}" title="Tirar esta atividade (ainda não foi salva)">✕</button>`:''}</div></div>`; };
+  const MOSTRA=3, lista=ab.slice(0,MOSTRA).map(lin).join('')+(ab.length>MOSTRA?`<div class="mut" style="padding:2px">+ ${ab.length-MOSTRA} outra(s) aberta(s) — veja no CRM (↗ CRM)</div>`:'');
+  const fx=(Array.isArray(c.tarefas)?c.tarefas:[]).filter(t=>t&&(String(t.id) in feitas));
+  const feitasH=fx.map(t=>`<div class="tar-f"><span>✓ ${esc(t.tit||lpcTarTipo(t.tipo)[2])} <b class="mud-t">● concluída — não salva</b></span><button class="btn edit" data-tdesf="${esc(t.id)}" title="Desfazer">↺</button></div>`).join('');
+  const amanha=lpcIsoAddDias(h,1);
+  return `<div class="ativ" id="lp2-ativ"><div class="ativ-h"><b>📅 Atividades</b><span class="mut">${ab.length?ab.length+' aberta'+(ab.length>1?'s':''):'nenhuma aberta'}</span></div>
+    ${ab.length?lista:`<div class="tar vaz"><b>Sem próxima atividade</b>marque a próxima aqui — negócio sem atividade fica parado</div>`}
+    ${feitasH}
+    <div class="rap"><span class="mut">rápido:</span>${TAR_RAPIDO.map((r,i)=>`<button class="btn edit" data-trap="${i}">${r[2]}</button>`).join('')}</div>
+    <div class="tform">
+      <div class="tf-l"><select id="tf-tipo" class="edit" aria-label="Tipo da atividade">${LPC_TAR_TIPOS.map(x=>`<option value="${x[0]}" ${x[0]==='follow'?'selected':''}>${x[1]} ${esc(x[2])}</option>`).join('')}</select>
+        <input id="tf-tit" class="edit" placeholder="O que fazer (ex.: retomar a proposta)" aria-label="Título" enterkeyhint="done"></div>
+      <div class="tf-l tf-3"><input id="tf-dia" class="edit" type="date" value="${esc(amanha)}" aria-label="Dia"><input id="tf-hora" class="edit" type="time" aria-label="Hora (opcional)" title="Hora (opcional)">
+        <select id="tf-dur" class="edit" aria-label="Duração" title="Duração — define o fim do evento na Agenda">${TAR_DURS.map(d=>`<option value="${d[0]}" ${d[0]===60?'selected':''}>${d[1]}</option>`).join('')}</select></div>
+      <button class="btn primary edit" id="tf-ok">＋ Marcar atividade</button>
+      <div class="mut tf-g">📅 <b>Agenda Google:</b> a extensão não sincroniza sozinha — toque em <b>📅 Agenda</b> na atividade e o Google abre com o evento pronto (1 clique pra confirmar).</div>
+    </div></div>`; }
+function wireAtiv(c,c0,D,redesenha){
+  const box=$('#lp2-ativ'); if(!box) return;
+  const tDe=id=>(Array.isArray(c.tarefas)?c.tarefas:[]).find(x=>x&&String(x.id)===String(id));
+  const nova=t=>{ (D.tarNovas||(D.tarNovas=[])).push(t); toast(`● ${lpcTarTipo(t.tipo)[1]} ${t.tit} ${diaCurto(t.quando)||dataBR(t.quando)} — toque em 💾 Salvar`); redesenha(); };
+  box.querySelectorAll('[data-trap]').forEach(b=>b.onclick=()=>{ const r=TAR_RAPIDO[+b.dataset.trap]; if(!r) return;
+    nova(lpcTarNova(r[1],'',lpcIsoAddDias(lpcHojeISO(),r[0]),'',60,AUTH.email)); });
+  const ok=$('#tf-ok'), tit=$('#tf-tit');
+  const criar=()=>{ const dia=$('#tf-dia').value; if(!/^\d{4}-\d{2}-\d{2}$/.test(dia||'')){ toast('Escolha o dia da atividade'); try{ $('#tf-dia').focus(); }catch(_){} return; }
+    nova(lpcTarNova($('#tf-tipo').value,tit.value,dia,$('#tf-hora').value||'',$('#tf-dur').value,AUTH.email)); };
+  if(ok) ok.onclick=criar; if(tit) tit.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); criar(); } });
+  box.querySelectorAll('[data-tfeita]').forEach(b=>b.onclick=()=>{ (D.tarFeitas||(D.tarFeitas={}))[b.dataset.tfeita]=new Date().toISOString(); redesenha(); });
+  box.querySelectorAll('[data-tdesf]').forEach(b=>b.onclick=()=>{ if(D.tarFeitas){ delete D.tarFeitas[b.dataset.tdesf]; if(!Object.keys(D.tarFeitas).length) delete D.tarFeitas; } redesenha(); });
+  box.querySelectorAll('[data-tnx]').forEach(b=>b.onclick=()=>{ const id=b.dataset.tnx; D.tarNovas=(D.tarNovas||[]).filter(t=>String(t.id)!==id); if(!D.tarNovas.length) delete D.tarNovas;
+    if(D.tarFeitas){ delete D.tarFeitas[id]; if(!Object.keys(D.tarFeitas).length) delete D.tarFeitas; } redesenha(); });
+  box.querySelectorAll('[data-tadia]').forEach(b=>b.onclick=()=>{ const id=b.dataset.tadia, t=tDe(id); if(!t) return; const q=lpcTarNovaData(t,+b.dataset.d);
+    const dn=(D.tarNovas||[]).find(x=>String(x.id)===id);
+    if(dn) dn.quando=q;                                   /* atividade ainda não salva: muda nela mesma */
+    else { const orig=(Array.isArray(c0.tarefas)?c0.tarefas:[]).find(x=>x&&String(x.id)===id);
+      D.tarDatas=D.tarDatas||{}; if(orig&&orig.quando===q) delete D.tarDatas[id]; else D.tarDatas[id]=q; if(!Object.keys(D.tarDatas).length) delete D.tarDatas; }
+    toast('Remarcada para '+dataBR(q)+(t.gcalId?' — o evento na Agenda Google não muda daqui; remarque lá ou pelo CRM':'')); redesenha(); });
+}
+/* ===== 2.8.1 VALOR DO NEGÓCIO — 💰 Prêmio mensal (pm; PA = pm × 12, derivado) · MFO: 💰 Receita estimada ===== */
+function valorHTML(c0,c,D){ const mfo=lpcEhMfo(c), k=mfo?'receita':'pm';
+  const base=mfo?(Number(c0.receita_estimada)||0):lpcPmInformado(c0), v=(k in D)?(Number(D[k])||0):base;
+  return `<div class="val${(k in D)?' mud':''}"><label for="lp2-val">💰 ${mfo?'Receita estimada':'Prêmio mensal'} R$</label>
+    <input id="lp2-val" class="edit" type="text" inputmode="decimal" placeholder="${mfo?'ex.: 3.000':'ex.: 600'}" value="${v?esc(String(v).replace('.',',')):''}" enterkeyhint="done">
+    <span class="pa" id="lp2-pa">${valorPaTxt(c,v,mfo)}</span></div>`; }
+function valorPaTxt(c,v,mfo){ if(mfo) return v?'':'<span class="mut">quanto o negócio rende</span>';
+  if(!v) return '<span class="mut">o PA (anual) sai sozinho</span>';
+  const man=c&&c.premio_total_manual&&Number(c.premio_total)>0;
+  return `PA <b>${esc(brl(man?Number(c.premio_total):v*LPC_PA_MESES))}</b>${man?' <span class="mut">(ajustado no CRM)</span>':` <span class="mut">(× ${LPC_PA_MESES})</span>`}`; }
+function wireValor(c0,c,D,id){ const el=$('#lp2-val'); if(!el) return; const mfo=lpcEhMfo(c), k=mfo?'receita':'pm';
+  const base=mfo?(Number(c0.receita_estimada)||0):lpcPmInformado(c0);
+  el.addEventListener('input',()=>{ const raw=el.value, n=lpcParsePM(raw), pa=$('#lp2-pa'), w=el.closest('.val');
+    if(raw.trim()&&!n){ if(pa) pa.innerHTML='<span class="mud-t">valor inválido — só números (ex.: 600 ou 1.200,50)</span>'; return; }
+    if(n===base) delete D[k]; else D[k]=n||null;
+    if(pa) pa.innerHTML=valorPaTxt(c,n,mfo); if(w) w.classList.toggle('mud',k in D);
+    if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; pintaBarra(); });
+  el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } }); }
 /* ===== 2.8.0 PERFIL-NEGOCIOS: o card da pessoa — cabeçalho + abas 👤 Perfil e 💼 Negócios =====
    Mesma consulta rápida de antes (lp.lookup → lp_contatos + Carteira). Edição continua por RASCUNHO + 💾 Salvar
    (2.2: nada grava sozinho); ◀ voltar / Avançar etapa ▶ e a nota rápida entram no mesmo rascunho. */
@@ -703,9 +796,8 @@ function renderLpContato(row,cartHit){
   const pipe=NEG_PIPE[c.funil||'nn']||['📈',funNome];
   const ult=lpcUltimos(c0,5);
   const mud=k=>(k in D)?' mud':'';
-  const iF=fluxo.findIndex(e=>e.id===c.etapa), ant=iF>0?fluxo[iF-1]:null, prox=ehEnc?null:(iF<0?fluxo[0]||null:fluxo[iF+1]||null);
+  const iF=fluxo.findIndex(e=>e.id===c.etapa);   /* 2.8.1: ◀ voltar / Avançar ▶ saíram — funil e etapa se escolhem direto (como na ficha do app) */
   const lab=(atual&&atual.label)||c.etapa||'—';
-  const t=proxTarefa(c0), hoje=lpcHojeISO(), atr=!!(t&&t.quando&&t.quando<hoje), tt=t?(TAR_TIPO[t.tipo]||TAR_TIPO.outro):null;
   const nasc=c0.nascimento||(cartHit&&cartHit.nascimento), idade=idadeDe(nasc)!=null?idadeDe(nasc):(valido(c0.idade)?c0.idade:(cartHit&&cartHit.idade));
   const al=alertasDe(c0,cartHit), nAp=cartHit?(cartHit.aps||cartHit.apolices||[]).length:0;
   const mask=telMascara(c0.telefone||(CHAT&&CHAT.phoneRaw));
@@ -714,10 +806,14 @@ function renderLpContato(row,cartHit){
     chips:[cartHit?`<span class="hc ok">Cliente · ${nAp} apólice${nAp===1?'':'s'}</span>`:'', `<span class="hc">${pipe[0]} ${esc(lab)}</span>`, ehEnc?'<span class="hc al">✖ encerrado</span>':'', ...al.chips].filter(Boolean),
     extra:`<div class="ph-acts"><button class="ph-act${MSG_ON?' on':''}" id="wa-msg-tg">💬 Mensagem pronta</button></div>
       <div class="ph-vinc">${VINC?`📌 ligado a esta conversa · <a href="#" id="lp2-desv">não é esta pessoa</a>`:`<a href="#" id="lp2-vinc">📌 ligar esta conversa a este negócio</a>`} · <a href="#" id="lp2-outro">＋ é outra pessoa</a></div>` };
-  const sumEt=[esc(lab),st?esc(st):'',listas.length?'📋 '+listas.length:'',(('etapa' in D)||('status' in D)||('listas' in D))?'<b class="mud-t">● não salvo</b>':''].filter(Boolean).join(' · ');
-  const etapaCorpo=`<div class="chips${mud('etapa')}">${fluxo.map(e=>`<button class="chip edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
-      ${enc.length?`<div class="enc-l">Encerrar: ${enc.map(e=>`<button class="chip enc edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}">${esc(e.label)}</button>`).join('')}</div>`:''}
-      <div class="field${mud('status')}" style="margin-top:8px"><label>${ehEnc?'✖ Motivo da perda':'⚑ Status nesta etapa'}</label>
+  const sumEt=[st?esc(st):'sem status',listas.length?'📋 '+listas.length:'',(('status' in D)||('listas' in D))?'<b class="mud-t">● não salvo</b>':''].filter(Boolean).join(' · ');
+  /* 2.8.1: FUNIL + ETAPA à vista no negócio aberto (pedido dele: "atualização de funil" como na ficha do app) */
+  const funEtapa=`<div class="fe">
+      <div class="field${mud('funil')}"><label for="lp2-funil">Funil</label><select id="lp2-funil" class="edit">${LPC_FUNIS_APP.map(([k,n])=>`<option value="${esc(k)}" ${k===lpcFunilApp(c)?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
+      <div class="field" style="margin-bottom:0"><label>Etapa${('funil' in D)?' <span class="mut">(do funil novo — escolha)</span>':''}</label>
+      <div class="chips${mud('etapa')}">${fluxo.map(e=>`<button class="chip edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}" style="${e.id===c.etapa?'background:'+(LPC_COR[e.cor]||'#2563eb')+';border-color:'+(LPC_COR[e.cor]||'#2563eb'):''}">${esc(e.label)}</button>`).join('')}</div>
+      ${enc.length?`<div class="enc-l">Encerrar: ${enc.map(e=>`<button class="chip enc edit${e.id===c.etapa?' on':''}" data-etapa="${esc(e.id)}">${esc(e.label)}</button>`).join('')}</div>`:''}</div></div>`;
+  const etapaCorpo=`<div class="field${mud('status')}"><label>${ehEnc?'✖ Motivo da perda':'⚑ Status nesta etapa'}</label>
         ${opts.length?`<select id="lp2-status" class="edit ${ehEnc&&!st?'destaque':''}">${orf?`<option value="" selected>⚠ ${esc(orf)} (saiu da lista)</option>`:''}<option value="">${ehEnc?'— escolha o motivo —':'— sem status —'}</option>${opts.map(o=>`<option ${o===st?'selected':''}>${esc(o)}</option>`).join('')}</select>`
           :`<div class="muted">${ehEnc?'nenhum motivo cadastrado':'esta etapa não tem status'} — cadastre em Funil &amp; Etapas no CRM</div>`}</div>
       <div class="field${mud('listas')}"><label>📋 Listas de TA</label>
@@ -735,12 +831,12 @@ function renderLpContato(row,cartHit){
         <div class="neg-h"><b>${pipe[0]} ${esc(pipe[1])}</b><span class="f">${esc(funNome)}</span></div>
         ${trilhoHTML(fluxo,ehEnc?-1:iF)}
         <div class="etapa"><span>${ehEnc?`encerrado · <b>${esc(lab)}</b>`:iF>=0?`etapa <b>${iF+1} de ${fluxo.length} · ${esc(lab)}</b>`:`<b>${esc(lab)}</b>`}${st?` · ⚑ ${esc(st)}`:''}</span><span>${esc(desdeEtapa(c0))}</span></div>
-        ${('etapa' in D)?`<div class="mud-t" style="margin-top:4px">● etapa mudada — toque em 💾 Salvar</div>`:''}
-        <div class="row-bt"><button class="btn edit" id="n-volta" ${ant?'':'disabled'} title="${ant?'Voltar pra '+esc(ant.label):'Primeira etapa'}">◀ voltar</button><button class="btn primary edit" id="n-avanca" ${prox?'':'disabled'} title="${prox?'Avançar pra '+esc(prox.label):ehEnc?'Negócio encerrado — reabra em Etapa · status':'Última etapa'}">Avançar etapa ▶</button></div>
-        ${t?`<div class="prox${atr?' atr':''}"><b>➡️ Próxima: ${tt[0]} ${esc(t.tit||tt[1])}</b>${[t.quando?diaCurto(t.quando):'sem data',t.hora||'',atr?'atrasada':''].filter(Boolean).map(esc).join(' · ')}</div>`
-          :`<div class="prox vaz"><b>Sem próxima atividade</b>marque a próxima no CRM (↗ CRM) — negócio sem atividade fica parado</div>`}
+        ${(('etapa' in D)||('funil' in D))?`<div class="mud-t" style="margin-top:4px">● ${('funil' in D)?'funil':'etapa'} mudado — toque em 💾 Salvar</div>`:''}
+        ${ativHTML(c,D)}
+        ${valorHTML(c0,c,D)}
+        ${funEtapa}
         <div class="nota"><input id="lp2-nota" class="edit${mud('nota')}" placeholder="registrar o que aconteceu…" value="${esc(D.nota||'')}" enterkeyhint="done"><button class="btn primary edit" id="lp2-nota-ok">Salvar</button></div>
-        ${blocoHTML('v28.n-etapa','⚑ Etapa · status · listas',sumEt,etapaCorpo,'in')}
+        ${blocoHTML('v28.n-etapa','⚑ Status · listas',sumEt,etapaCorpo,'in')}
       </div>
       ${blocoHTML('v28.n-int','🕓 Últimas interações',ult.length?`${ult.length} · última ${esc(diaCurto(ult[0].dia||String(ult[0].ts||'').slice(0,10))||'—')}`:'nenhuma',
         ult.length?ult.map(x=>`<div class="int">${esc(x.l||'')}<div class="q">${esc(dataBR(x.dia||String(x.ts||'').slice(0,10)))}${x.por?' · '+esc(porCurto(x.por)):''}</div></div>`).join(''):'<div class="mut">Nenhum registro ainda.</div>')}
@@ -765,7 +861,8 @@ function renderLpContato(row,cartHit){
     const o1=$('#lp2-outro'); if(o1) o1.onclick=outro; const o2=$('#lp2-outro2'); if(o2) o2.onclick=()=>outro(); }
   const redesenha=()=>{ if(SAVE_ST[id]&&SAVE_ST[id].st!=='salvando') delete SAVE_ST[id]; renderLpContato(CUR_ROW,CUR_CART); };
   const limpaIgual=()=>{ /* voltou ao que está no banco? então não é mudança */
-    if('etapa' in D&&D.etapa===c0.etapa){ delete D.etapa; }
+    if('funil' in D&&D.funil===lpcFunilApp(c0)){ delete D.funil; delete D.etapa; }   /* voltou pro funil de origem */
+    if(!('funil' in D)&&'etapa' in D&&D.etapa===c0.etapa){ delete D.etapa; }
     if('status' in D&&lpcStatusDe(cfg,previa(c0,D,'status'))===D.status) delete D.status;
     if('listas' in D&&mesmoSet(D.listas,Array.isArray(previa(c0,D,'listas').listas)?previa(c0,D,'listas').listas:[])) delete D.listas; };
   const mudaEtapa=para=>{ if(!para||para===c.etapa) return; const e=etapas.find(x=>x.id===para);
@@ -773,7 +870,12 @@ function renderLpContato(row,cartHit){
     if(e&&e.enc){ D.listas=[]; D._encL=true; } else if(D._encL){ delete D.listas; delete D._encL; }
     limpaIgual(); redesenha(); };
   panel.querySelectorAll('[data-etapa]').forEach(b=>b.onclick=()=>mudaEtapa(b.dataset.etapa));
-  { const v=$('#n-volta'); if(v&&ant) v.onclick=()=>mudaEtapa(ant.id); const a=$('#n-avanca'); if(a&&prox) a.onclick=()=>mudaEtapa(prox.id); }
+  /* 2.8.1: trocar de FUNIL — a etapa vai pra 1ª do funil novo (ele escolhe outra nos chips) e o status sai */
+  { const fs=$('#lp2-funil'); if(fs) fs.onchange=()=>{ const f=fs.value;
+      if(f===lpcFunilApp(c0)){ delete D.funil; delete D.etapa; } else { D.funil=f; D.etapa=lpcEtapa0De(cfg,f); }
+      delete D.status; if(D._encL){ delete D.listas; delete D._encL; } limpaIgual(); redesenha(); }; }
+  wireAtiv(c,c0,D,redesenha);
+  wireValor(c0,c,D,id);
   const ss=$('#lp2-status'); if(ss) ss.onchange=()=>{ D.status=ss.value; limpaIgual(); redesenha(); };
   panel.querySelectorAll('[data-tira]').forEach(b=>b.onclick=()=>{ const n=b.dataset.tira; D.listas=listas.filter(x=>x!==n); delete D._encL; limpaIgual(); redesenha(); });
   const sl=$('#lp2-lista'); if(sl) sl.onchange=()=>{ let v=sl.value; if(!v) return;
