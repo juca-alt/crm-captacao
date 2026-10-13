@@ -290,26 +290,56 @@ function phonesFromJson(obj){
   }
   return out;
 }
-function apolicesDoCliente(cart,cli){
-  const nome=normName((cli.dados&&cli.dados.nome)||cli.ref||'');
-  if(!nome) return [];
-  return cart.apolices.filter(a=>normName(JSON.stringify(a.dados||{})).includes(nome)).map(a=>a.chave);
+/* 2.8.0: a apólice também casa pelo vínculo explícito do cockpit (dados.cli_ref = ref do cliente) */
+function apolicesRowsDoCliente(cart,cli){
+  const nome=normName((cli.dados&&cli.dados.nome)||cli.ref||''), ref=String(cli.ref||'');
+  if(!nome&&!ref) return [];
+  return cart.apolices.filter(a=>{ const d=a.dados||{}; if(ref&&d.cli_ref&&String(d.cli_ref)===ref) return true; return !!nome&&normName(JSON.stringify(d)).includes(nome); });
 }
+function apolicesDoCliente(cart,cli){ return apolicesRowsDoCliente(cart,cli).map(a=>a.chave); }
+/* 2.8.0 (aba 👤 Perfil): resumo de cada apólice nos DOIS formatos da carteira (importador {apolice,periodicidade,status,premio}
+   e cockpit {ap,period,mrr} — mesma régua do cartNormApolice do vendas.html). O número sai MASCARADO daqui (001…611):
+   o painel nunca recebe o número inteiro. Sem status na carga = 'Ativa' presumido (é a carteira ativa), carimbado. */
+function cartMoneyNum(v){ if(typeof v==='number') return isFinite(v)?v:0; const s=String(v==null?'':v).replace(/[^\d,.-]/g,''); if(!s) return 0;
+  const n=/,\d{1,2}$/.test(s)?Number(s.replace(/\./g,'').replace(',','.')):Number(s.replace(/,/g,'')); return isFinite(n)?n:0; }
+function numMascara(n){ const s=String(n||'').replace(/\s/g,''); if(!s) return ''; return s.length>6?s.slice(0,3)+'…'+s.slice(-3):'…'+s.slice(-3); }
+function apoliceResumo(a){ const d=a.dados||{}; const num=d.apolice||d.ap||String(a.chave||'').split('|')[0]||d.proposta||'';
+  return { num:numMascara(num), premio:cartMoneyNum(d.premio!=null?d.premio:d.mrr), periodicidade:d.periodicidade||d.period||'', forma:d.forma||'',
+    status:d.status||'Ativa', statusPresumido:!d.status, produto:d.produto||d.plano||d.familia||'' }; }
+function _cartCliOut(cart,c){ const d=c.dados||{}, rows=apolicesRowsDoCliente(cart,c), cob=(d.cob&&typeof d.cob==='object')?d.cob:null;
+  return {ref:c.ref,dados:d,atualizado:c.atualizado,apolices:rows.map(a=>a.chave),aps:rows.map(apoliceResumo),
+    cob:cob||{cs:cartMoneyNum(d.cap!=null?d.cap:d.cs),pm:cartMoneyNum(d.mrr!=null?d.mrr:d.pm),renda:cartMoneyNum(d.renda)},cobDetalhe:!!cob,
+    nascimento:d.nascimento||d.nasc||null,idade:d.idade!=null?d.idade:null}; }
 async function lpFindByPhone(rawPhone){
   const vars=new Set(phoneE164Variants(rawPhone));
   if(!vars.size) return [];
   const cart=await carteiraAll();
   return cart.clientes
     .filter(c=>{ const ph=phonesFromJson(c.dados); return [...vars].some(v=>ph.has(v)); })
-    .map(c=>({ref:c.ref,dados:c.dados,atualizado:c.atualizado,apolices:apolicesDoCliente(cart,c)}))
+    .map(c=>_cartCliOut(cart,c))
     .slice(0,5);
+}
+/* 2.8.0: o negócio achado mas a Carteira não bateu pelo telefone (número diferente no portal) → nome IGUAL (normalizado),
+   só quando um único cliente tem esse nome. Nada de "parecido": é o chip "Cliente · N apólices" do cabeçalho. */
+async function lpCarteiraPorNome(nome){
+  const n=normName(nome||''); if(!n||n.split(' ').length<2) return [];
+  const cart=await carteiraAll();
+  const hit=cart.clientes.filter(c=>normName((c.dados&&c.dados.nome)||c.ref||'')===n);
+  return hit.length===1?[_cartCliOut(cart,hit[0])]:[];
+}
+/* 2.8.0: Família da aba 👤 Perfil — carteira_perfil (PERFIL-DO-CLIENTE-V1 do app: cônjuge, filhos, outros, profissão, locais).
+   1 GET pequeno, só quando o card mostra um cliente da Carteira. Sem tabela/permissão = sem bloco. */
+async function cartPerfilGet(ref){
+  ref=String(ref||''); if(!ref) return null;
+  try{ const rows=await sbJson(`/rest/v1/carteira_perfil?select=dados&ref=eq.${encodeURIComponent(ref)}&limit=1`); return (rows&&rows[0]&&rows[0].dados)||null; }
+  catch(e){ if(e.code==='auth') throw e; return null; }
 }
 async function lpSearch(q){
   q=normName(q||''); if(!q) return [];
   const cart=await carteiraAll();
   return cart.clientes
     .filter(c=>normName((c.dados&&c.dados.nome)||c.ref||'').includes(q))
-    .map(c=>({ref:c.ref,dados:c.dados,atualizado:c.atualizado,apolices:apolicesDoCliente(cart,c)}))
+    .map(c=>_cartCliOut(cart,c))
     .slice(0,10);
 }
 
@@ -472,9 +502,17 @@ async function lpNegocios(id){
   return out;
 }
 async function lpcUm(id){ const f=await lpcFrescos([{id}]); if(f&&f[0]&&f[0].dados) return f[0]; return (await lpcAll()).find(r=>String(r.id)===String(id))||null; }
+/* 2.8.0: Carteira do negócio achado — telefone do chat → telefone do cadastro → nome igual (ver lpCarteiraPorNome) */
+async function _cartDoContato(rawPhone,row){
+  let c=[]; try{ c=await lpFindByPhone(rawPhone); }catch(_){}
+  const d=(row&&row.dados)||{};
+  if(!c.length&&d.telefone) try{ c=await lpFindByPhone(d.telefone); }catch(_){}
+  if(!c.length&&d.nome) try{ c=await lpCarteiraPorNome(d.nome); }catch(_){}
+  return c;
+}
 async function lpLookup(rawPhone,chatName,keys){
   if(keys&&keys.length){ let row=null; try{ row=await vincAchar(keys); }catch(e){ if(e.code==='auth') throw e; }
-    if(row&&row.dados){ let carteira=[]; try{ carteira=await lpFindByPhone(rawPhone); }catch(_){}
+    if(row&&row.dados){ const carteira=_lpcEhBn(row)?[]:await _cartDoContato(rawPhone,row);
       return _lpcEhBn(row)?{contatos:[],carteira,byName:null,estoque:[row],vinculo:true}:{contatos:[row],carteira,byName:null,estoque:[],vinculo:true}; } }
   const [contatos,carteira,estoque]=await Promise.all([lpcFindByPhone(rawPhone),lpFindByPhone(rawPhone),lpcEstoqueByPhone(rawPhone)]);
   let byName=null;
@@ -483,7 +521,9 @@ async function lpLookup(rawPhone,chatName,keys){
   const alvo=[...contatos,...estoque,...(byName&&byName.strong?[byName.strong]:[])];
   if(alvo.length){ const f=await lpcFrescos(alvo); const m={}; f.forEach(r=>{ m[String(r.id)]=r; });
     const troca=r=>(r&&m[String(r.id)])||r;
-    return {contatos:contatos.map(troca),carteira,byName:byName?Object.assign({},byName,{strong:troca(byName.strong)}):byName,estoque:estoque.map(troca)}; }
+    const um=contatos.length===1?troca(contatos[0]):(!contatos.length&&byName&&byName.strong?troca(byName.strong):null);
+    const cart=(!carteira.length&&um)?await _cartDoContato('',um):carteira;   /* 2.8.0: chip "Cliente" também pelo cadastro */
+    return {contatos:contatos.map(troca),carteira:cart,byName:byName?Object.assign({},byName,{strong:troca(byName.strong)}):byName,estoque:estoque.map(troca)}; }
   return {contatos,carteira,byName,estoque};
 }
 
