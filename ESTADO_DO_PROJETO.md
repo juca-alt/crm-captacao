@@ -2,6 +2,15 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 13/10/2026 (sessão Code) — NO AR: v8.63 Drive por cliente · v8.64 convite pro cliente · extensão 2.8.0
+
+Tudo com OK dele no chat ("1A 2A 3A+B", "A", "A - SIM"). Pages conferido por hash (v8.64).
+- **v8.63 (PR #290):** Drive por cliente + Revisão no Drive + respiro do submenu (detalhe no snapshot de 10/10 abaixo). 222 pastas da carteira criadas.
+- **v8.64 (PR #291) CONVITE-CLIENTE-V1:** na atividade com data, grupo **pro cliente** separado do par 📅 Evento / ☑️ Tarefa (que segue só na agenda dele): 💬 enviar (texto com local + link limpo "salvar na agenda") · ✉️ convite do Google pro e-mail do cliente (`sendUpdates=all`; Sim/Não vira selo) · 📋 evento WA (copia pro Evento nativo do WhatsApp — o cartão nativo não sai de fora do app). Liberado pra todos (melhoria de tela já usada).
+- **Extensão 2.8.0 (PR #292):** sai o Card completo (iframe do app inteiro) e a chave Rápido/Completo; um painel rápido com **👤 Perfil** + **💼 Negócios** (trilho de etapas, próxima atividade, nota). embed.html/embed.js/rules.json removidos; permissões sidePanel/declarativeNetRequest saíram.
+- **Falta (dele):** testar a 2.8.0 ao vivo no WhatsApp Web (cliente, lead, fora do CRM; Família; Avançar + Salvar); 1º convite real pra um e-mail dele; Drive real (soltar arquivo, Salvar da Revisão).
+- **Ideia pendente:** link direto pra ficha (↗ CRM da extensão hoje cai no Início do app).
+
 ## 🟢 RETOMAR AQUI — 10/10/2026 (sessão Code) — v8.63 DRIVE por cliente em branch (aguarda OK) · pastas da carteira criadas · protótipo da extensão
 
 **Branch `claude/drive-pasta-cliente` (NÃO mergeada, v8.63):** pedido dele "um espaço só pra eu jogar um arquivo… salva na pasta do cliente" + decisão **1A 2B**.
