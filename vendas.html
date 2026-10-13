@@ -976,6 +976,20 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .ag-grp{display:inline-flex;gap:5px;align-items:center}
   .ag-gpar{display:inline-flex;align-items:center;border:1px solid var(--linha);border-radius:10px;padding:2px;gap:2px;background:var(--fundo)}
   .ag-cpar{display:inline-flex;align-items:center;flex-wrap:wrap;border:1px dashed var(--linha);border-radius:10px;padding:2px 4px;gap:4px}   /* CONVITE-CLIENTE-V1: o que vai PRO CLIENTE, separado do par do Google */
+  .mfo-bl{margin:0 0 12px;flex:0 0 auto}   /* a gaveta é flex column: sem isso o bloco encolhe a 2px */
+  .mfo-f{padding:4px 2px 8px}
+  .mfo-l{display:block;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:10px 0 5px}
+  .mfo-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .mfo-chip{border:1px solid var(--linha);background:var(--card,#fff);border-radius:999px;padding:6px 12px;font:600 12.5px system-ui;color:var(--ink);cursor:pointer;min-height:34px}
+  .mfo-chip.on{background:var(--azul,#2563eb);border-color:var(--azul,#2563eb);color:#fff}
+  .mfo-in{display:block;width:100%;margin-top:4px;text-transform:none;letter-spacing:0;font:500 14px system-ui;color:var(--ink);padding:9px 11px;border:1px solid var(--linha);border-radius:10px;background:var(--card,#fff);min-height:40px;box-sizing:border-box}
+  .mfo-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mfo-legado{font-size:13px;padding:8px 10px;border-radius:10px;background:var(--fundo,#f6f8fb);border:1px dashed var(--linha)}
+  .mfo-ap{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--linha);border-radius:10px;padding:8px 10px;margin-top:6px;font-size:13px}
+  .mfo-mut{font-size:12px;color:var(--muted)}
+  .mfo-venc{font-size:11px;color:var(--muted);font-weight:600;display:flex;flex-direction:column;gap:3px;flex:0 0 auto}
+  .tarchip.mfo-semativ{color:#a16207;background:#fef3c7;border:1px solid #fcd34d}
+  @media (max-width:640px){ .mfo-2{grid-template-columns:1fr} .mfo-chip{min-height:44px} .mfo-in,.mfo-venc input{font-size:16px;min-height:44px} .mfo-ap{flex-direction:column;align-items:stretch} }
   .ag-cpar-l{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding:0 2px}
   .ag-gpar .ag-glbl{font-size:10.5px;font-weight:700;color:var(--muted);padding:0 5px 0 4px;letter-spacing:.3px}
   .ag-gpar .btn{border:0;box-shadow:none}
@@ -6411,6 +6425,7 @@ function renderDrawer(){
         <div style="font-size:11px;color:var(--muted);margin-top:8px">Toque pra mover · fica registrado na hora.</div>
       </div>
 
+      ${mfoFichaHTML(c)}
       ${soDrawerBloco(c)}
       <div class="sec" id="tarBox">
         <h3><span>Tarefas &amp; atividades</span>${proxTarefa(c)?'':'<span style="font-size:11px;font-weight:700;color:var(--verm);text-transform:none;letter-spacing:0">sem próxima atividade</span>'}</h3>
@@ -14514,6 +14529,53 @@ function drvNegSoltar(id){ return files=>{ const c=(S.contatos||[]).find(x=>Stri
 function drvBfSoltar(id){ return files=>{ const r=bfAcha(id); if(!r) return; return drvSoltarCliente(atTitleC(r.segurado||'Sem nome'),files,'beneficio',a=>bfEvento(r,'nota','📎 '+a.name+' — '+a.url)); }; }
 function drvNegBloco(c){ if(!anxOn()||!c) return ''; const k=drvChave(c.nome);   /* seção nativa da gaveta (dobra/ordem do drawer cuidam dela) */
   return `<div class="sec"><h3><span>📁 Arquivos no Drive</span><span class="drv-res" data-drv-res="${esc(k)}" style="text-transform:none;letter-spacing:0">${esc(drvResumo(c.nome))}</span></h3>${drvBlocoCorpo(c.nome,c.nome,drvNegSoltar(c.id))}</div>`; }
+/* ═══ MFO-FICHA-V1 (13/10/2026) ═══ PROMPT_CODE "Funil MFO · Passo A" (validado por ele). Ficha só nos funis mfo*:
+   ramos · fecha por (+ parceiro) · origem · receita estimada · próxima atividade (= Tarefas, sem campo novo) ·
+   próximo passo legado (só leitura) · pasta do Drive · apólices externas (só o vencimento é editável).
+   Reaproveita as chaves que já existem em dados (fecha_por, origem_mfo, apolices_externas, drive_pasta, proximo_passo);
+   novas: ramos[], parceiro, receita_estimada, apolices_externas[i].vencimento. Grava pelo salvar() de sempre.
+   Fonte ÚNICA das listas: MFO_RAMOS e MFO_FECHA (o card do Kanban usa as mesmas). */
+const MFO_RAMOS=[['vida_prudential','Vida Prudential','Vida Prud.'],['patrimonial','Patrimonial','Patrim.'],['vida_grupo','Vida em Grupo','VG'],
+  ['saude','Saúde','Saúde'],['previdencia_invest','Previdência/Invest.','Prev./Inv.'],['planejamento_cfp','Planejamento/CFP','CFP']];
+const MFO_FECHA=[['Prudential','b-azul'],['Outliers','b-roxo'],['Parceiro','b-cinza']];
+function mfoEh(c){ return !!(c&&/^mfo/.test(String(c.funil||''))); }
+function mfoRamoRot(k,curto){ const r=MFO_RAMOS.find(x=>x[0]===k); return r?(curto?r[2]:r[1]):k; }
+function mfoReceita(c){ const v=Number(c&&c.receita_estimada); return isFinite(v)&&v>0?v:0; }
+function mfoPremioAp(a){ const k=['premio_ano','premio_bruto','premio_liquido','premio_ano_estimado'].find(x=>a&&a[x]!=null&&a[x]!=='')||Object.keys(a||{}).find(x=>/^premio_/.test(x));
+  return k?{k,v:Number(a[k])}:null; }
+function mfoResumo(c){ return [(c.ramos||[]).map(k=>mfoRamoRot(k,true)).join(', ')||'sem ramo',c.fecha_por||'fecha por ?',mfoReceita(c)?brl(mfoReceita(c))+' receita':'R$ definir receita'].join(' · '); }
+function mfoAberta(){ const st=iniLer(); return Object.prototype.hasOwnProperty.call(st,'mfo-ficha')?!!st['mfo-ficha']:true; }   /* exceção pedida no PROMPT_CODE: a Ficha nasce aberta; a escolha dele fica lembrada */
+function mfoFichaHTML(c){ if(!mfoEh(c)) return ''; const id=esc(jsq(c.id)), ab=mfoAberta();
+  const ramos=c.ramos||[], fp=c.fecha_por||'', t=proxTarefa(c), sit=t?tarSituacao(t):'';
+  const prox=t?`<span class="tarchip ${tarClasse(sit)}" style="cursor:pointer" onclick="abrirContatoTarefa('${id}')">${tarIco(t.tipo)} ${esc(tarQuandoTxt(t))} · ${esc(t.tit||tarNomeTipo(t.tipo))}</span>`
+               :`<span class="tarchip mfo-semativ" style="cursor:pointer" onclick="abrirContatoTarefa('${id}')">! Sem próxima atividade — marcar</span>`;
+  const aps=(c.apolices_externas||[]).map((a,i)=>{ const pr=mfoPremioAp(a);
+    return `<div class="mfo-ap"><div><b>${esc(a.seguradora||'Seguradora ?')}</b><div class="mfo-mut">${esc(a.tipo||'')}${pr?' · '+brl(pr.v)+(/ano/.test(pr.k)?'/ano':'')+(/estimado/.test(pr.k)?' (estimado)':''):''}</div></div>
+      <label class="mfo-venc">Vencimento<input type="date" value="${esc(a.vencimento||'')}" onchange="mfoVenc('${id}',${i},this.value)"></label></div>`; }).join('');
+  const corpo=`<div class="mfo-f">
+    <div class="mfo-l">Ramos</div><div class="mfo-chips">${MFO_RAMOS.map(([k,r])=>`<button type="button" class="mfo-chip${ramos.includes(k)?' on':''}" aria-pressed="${ramos.includes(k)}" onclick="mfoRamo('${id}','${k}')">${esc(r)}</button>`).join('')}</div>
+    <div class="mfo-l">Fecha por</div><div class="mfo-chips">${MFO_FECHA.map(([k])=>`<button type="button" class="mfo-chip${fp===k?' on':''}" aria-pressed="${fp===k}" onclick="mfoSet('${id}','fecha_por',${fp===k?"''":`'${k}'`})">${k}</button>`).join('')}</div>
+    ${fp==='Parceiro'?`<label class="mfo-l">Parceiro<input class="mfo-in" value="${esc(c.parceiro||'')}" placeholder="quem fecha" onchange="mfoSet('${id}','parceiro',this.value)"></label>`:''}
+    <div class="mfo-2">
+      <label class="mfo-l">Origem<input class="mfo-in" value="${esc(c.origem_mfo||'')}" placeholder="ex.: base própria, indicação" onchange="mfoSet('${id}','origem_mfo',this.value)"></label>
+      <label class="mfo-l">Receita estimada (R$)<input class="mfo-in" inputmode="decimal" value="${mfoReceita(c)?String(mfoReceita(c)).replace('.',','):''}" placeholder="comissão estimada" onchange="mfoSetReceita('${id}',this.value)"></label>
+    </div>
+    <div class="mfo-l">Próxima atividade</div><div>${prox}</div>
+    ${c.proximo_passo?`<div class="mfo-l">Próximo passo (registro antigo)</div><div class="mfo-legado">${esc(c.proximo_passo)}</div>`:''}
+    ${c.drive_pasta?`<div style="margin-top:10px"><a class="btn btn-s btn-mini" style="text-decoration:none;min-height:40px" target="_blank" rel="noopener" href="${esc(urlSegura(c.drive_pasta))}">📂 Abrir pasta no Drive</a></div>`:''}
+    ${aps?`<div class="mfo-l">Apólices externas</div>${aps}`:''}
+  </div>`;
+  return `<div class="ini-bl mfo-bl${ab?'':' fechado'}" data-ini="mfo-ficha"><button class="ini-h" onclick="iniToggle('mfo-ficha')" aria-expanded="${ab?'true':'false'}"><span class="ini-car">${ab?'▾':'▸'}</span><span class="ini-t">🧭 Ficha MFO</span><span class="ini-res">${esc(mfoResumo(c))}</span></button><div class="ini-b">${corpo}</div></div>`; }
+function mfoContato(cid){ return (S.contatos||[]).find(x=>String(x.id)===String(cid)); }
+function mfoGravar(c){ salvar(); if(CONTATO===c.id&&typeof renderDrawer==='function') renderDrawer(); if(typeof VIEW!=='undefined'&&/funil/.test(String(VIEW))) render(); }
+function mfoSet(cid,k,v){ const c=mfoContato(cid); if(!c||!['fecha_por','parceiro','origem_mfo'].includes(k)) return; v=String(v==null?'':v).trim();
+  if(v) c[k]=v; else delete c[k]; mfoGravar(c); }
+function mfoRamo(cid,k){ const c=mfoContato(cid); if(!c||!MFO_RAMOS.some(r=>r[0]===k)) return; const l=new Set(c.ramos||[]); l.has(k)?l.delete(k):l.add(k);
+  c.ramos=MFO_RAMOS.map(r=>r[0]).filter(x=>l.has(x)); mfoGravar(c); }
+function mfoSetReceita(cid,txt){ const c=mfoContato(cid); if(!c) return; const s=String(txt||'').replace(/[R$\s.]/g,'').replace(',','.'); const v=Number(s);
+  if(!s){ delete c.receita_estimada; } else if(isFinite(v)&&v>=0){ c.receita_estimada=Math.round(v*100)/100; } else { toast('Valor inválido',false); return; } mfoGravar(c); }
+function mfoVenc(cid,i,v){ const c=mfoContato(cid); const a=c&&(c.apolices_externas||[])[i]; if(!a) return; if(v) a.vencimento=v; else delete a.vencimento; mfoGravar(c); }
+window.mfoSet=mfoSet; window.mfoRamo=mfoRamo; window.mfoSetReceita=mfoSetReceita; window.mfoVenc=mfoVenc;
 function drvDobra(k,el){ try{ const o=iniLer(); o[k]=el.open?1:0; iniGravar(o); }catch(_){} if(el.open){ const b=el.querySelector('.drv-bloco'); if(b&&!_drvCont[b.dataset.drv]) drvBlocoCarregar(b,false); } }
 window.anxZonaClique=anxZonaClique; window.drvBlocoCarregar=drvBlocoCarregar; window.drvDobra=drvDobra;
 /* ═══ SOLIC-NEGOCIO-V1 (23/09/2026) ═══ "permitir associar as solicitações aos clientes e oportunidades no funil —
@@ -20814,6 +20876,11 @@ function lpSelfCheck(){
           return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/>📎 boleto\.pdf</.test(anxLinkHtml(l[0]))
             &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
         } finally{ SO_EV=bak; } })());
+        ok('MFO-FICHA-V1: Ficha só em funil mfo*; ramos/fecha por de UMA constante; receita aceita 1.500 e 1500,5; vencimento muda só esse campo; parceiro só com fecha_por=Parceiro', (()=>{
+          const c={id:'zmfx',nome:'Fulano',funil:'mfo',etapa:'Proposta',fecha_por:'Parceiro',apolices_externas:[{seguradora:'X',premio_bruto:10}]};
+          const h=mfoFichaHTML(c), hb=mfoFichaHTML({id:'zb',funil:'bc'}), h2=mfoFichaHTML(Object.assign({},c,{fecha_por:'Outliers'}));
+          return /Ficha MFO/.test(h)&&hb===''&&/quem fecha/.test(h)&&!/quem fecha/.test(h2)&&MFO_RAMOS.length===6&&MFO_FECHA.map(x=>x[0]).join()==='Prudential,Outliers,Parceiro'
+            &&mfoPremioAp({premio_liquido:5,premio_bruto:7}).k==='premio_bruto'&&mfoResumo({ramos:['patrimonial'],fecha_por:'Outliers',receita_estimada:1500})==='Patrim. · Outliers · '+brl(1500)+' receita'; })());
         ok('GSYNC-EXTENSAO-V1: atividade da extensão com hora, aberta, futura e dele entra na fila; sem hora, feita, passada, de outro, já no Google ou apagada lá: não', (()=>{
           const bkS=S.contatos, bkE=window.gsyncEnfileirar, bkP=(typeof PERFIL!=='undefined')?PERFIL:null, bkSv=window.salvar; const fila=[];
           try{ window.gsyncEnfileirar=(c,t)=>fila.push(t); window.salvar=()=>{}; PERFIL=Object.assign({},bkP||{},{email:'eu@x'});
