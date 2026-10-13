@@ -1,4 +1,33 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.7.1
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.8.0
+
+## 2.8.0 (13/10/2026) — um painel só: 👤 Perfil e 💼 Negócios
+- **Saíram os modos "🗂 Card completo" e "⚡ Rápido".** O card completo (iframe do `vendas.html?wa=1`, até 25 s pra abrir)
+  foi removido com tudo o que só servia a ele: `content/embed.html`, `content/embed.js`, `rules.json` (regra COEP do
+  declarativeNetRequest), o painel lateral do Chrome, a janela separada e a injeção `ABRIR_NO_CRM` no `sw.js`.
+  Permissões que caíram: `sidePanel`, `declarativeNetRequest`, host `juca-alt.github.io`. O app inteiro fica a um clique:
+  **↗ CRM** no cabeçalho abre o `vendas.html` numa aba nova (o app não tem parâmetro de URL pra abrir um contato por id
+  fora do modo `?wa=1` — por isso abre na tela inicial).
+- **Cabeçalho escuro com a pessoa:** nome, idade (nascimento do cadastro ou da Carteira), telefone **só com os 4 últimos
+  dígitos**, "LP <dona>", chips "Cliente · N apólices" (Carteira) e alertas baratos: atividade atrasada, aniversário em até
+  30 dias, apólice com status fora de "Ativa". Botão **💬 Mensagem pronta** (os modelos de sempre) e o vínculo
+  📌 ligar / não é esta pessoa / ＋ é outra pessoa. 🔍 abre a busca por nome.
+- **👤 Perfil:** blocos Quem é · Família (`carteira_perfil` do app: cônjuge, filhos, outros) · 🛡️ Apólices (número
+  **mascarado** `001…611` já no service worker, prêmio, periodicidade, forma, status) · 🧭 Coberturas (resumo da Carteira;
+  sem detalhe na carga do cockpit = diz isso) · ✏️ Telefone e observação.
+- **💼 Negócios:** o negócio aberto com trilho de etapas (Funil & Etapas do app), "etapa N de M", há quanto tempo está nela,
+  **◀ voltar / Avançar etapa ▶**, próxima atividade (1ª tarefa não feita de `dados.tarefas`, por data/hora — régua do
+  `proxTarefa` do app), nota rápida com **Salvar**, e os blocos ⚑ Etapa · status · listas (tudo o que o Rápido tinha) e
+  🕓 Últimas interações (5). Os outros negócios da pessoa viram blocos com "Abrir este negócio"; ＋ Novo negócio continua.
+- **Gravação igual à 2.2:** etapa/status/listas/nota/telefone/observação entram no rascunho; **💾 Salvar** (ou o Salvar da
+  nota) grava via `lpc.patch` e confere contra o que o banco devolveu.
+- **Ninguém com esse telefone:** busca por nome já preenchida (sugestões do CRM + Carteira), "É ele · ligar" (liga a
+  conversa), **＋ Novo negócio** / **＋ Negócio na Base** (o formulário de criar de sempre, com o pipe já escolhido).
+- **Blocos nascem fechados** (regra permanente), com resumo no cabeçalho, e cada aba tem **⊕ abrir tudo / ⊖ recolher tudo**.
+  Aberto/fechado e a aba escolhida ficam lembrados neste Chrome (`wa_crm_dob` chaves `v28.*`, `wa_crm_aba`).
+- Carteira: o chip "Cliente" também casa pelo telefone do cadastro e pelo nome **igual** (único) quando o telefone do
+  chat não bate; apólice casa também pelo `cli_ref` do cockpit.
+- Ícone da extensão na barra do Chrome: no WhatsApp Web abre o painel; fora dele, abre o WhatsApp Web.
+- Painel com 400px (era 330px), campos com 16px, alvos de toque ≥40–44px.
 
 ## 2.7.1 (01/10/2026) — Vida em Grupo no "＋ Novo"
 - O formulário de criar ganhou **👥 Vida em Grupo** (Novos Negócios e Base). Lá o negócio é a **empresa** (espelho do `pjSalvarNovaEmpresa` do app): pede nome da empresa*, CNPJ, nº de vidas e o papel da pessoa; ela entra como contato ⭐ (`pjContatos`, telefone da empresa = o dela via `pjTelDe`).
