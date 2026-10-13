@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.63 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.64 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -975,9 +975,12 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .ini-h .ag-novo{flex:0 0 auto;margin-left:4px}
   .ag-grp{display:inline-flex;gap:5px;align-items:center}
   .ag-gpar{display:inline-flex;align-items:center;border:1px solid var(--linha);border-radius:10px;padding:2px;gap:2px;background:var(--fundo)}
+  .ag-cpar{display:inline-flex;align-items:center;flex-wrap:wrap;border:1px dashed var(--linha);border-radius:10px;padding:2px 4px;gap:4px}   /* CONVITE-CLIENTE-V1: o que vai PRO CLIENTE, separado do par do Google */
+  .ag-cpar-l{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding:0 2px}
   .ag-gpar .ag-glbl{font-size:10.5px;font-weight:700;color:var(--muted);padding:0 5px 0 4px;letter-spacing:.3px}
   .ag-gpar .btn{border:0;box-shadow:none}
   @media(max-width:980px){ .ag-grp{flex:1 1 auto} .ag-grp>.btn{flex:1 1 0;justify-content:center;text-align:center} .ag-gpar{flex:1 1 100%} .ag-gpar>.btn{flex:1 1 0;justify-content:center} }
+  @media(max-width:980px){ .ag-cpar{flex:1 1 100%;padding:4px 6px} .ag-cpar-l{flex:1 1 auto;order:-2} .ag-cpar>.badge{order:-1} .ag-cpar>.btn{flex:1 1 28%;justify-content:center;text-align:center;min-height:44px;white-space:nowrap} }
   .tar-ok{opacity:.55;text-decoration:line-through}
   .tar-grp{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:16px 0 4px}
 
@@ -4123,8 +4126,55 @@ function tarWaMsg(c,t){
     return abre+'Passando pra lembrar da nossa reunião: '+lq+'. Posso confirmar? Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:''); }
   const tipo=t.tipo==='reuniao'?'nossa reunião':t.tipo==='ligar'?'nossa ligação':'nosso compromisso';
   const quando=diaSemanaBR(t.quando)+', '+dataBR(t.quando)+(t.hora?' às '+t.hora:'');
-  return abre+'Confirmando '+tipo+(t.tit&&t.tipo!=='reuniao'&&t.tipo!=='ligar'?' ('+t.tit+')':'')+': '+quando+'. Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:'');
+  /* CONVITE-CLIENTE-V1 (13/10): + onde é + link pro cliente salvar na agenda dele (o link não leva nota interna) */
+  const loc=locTexto(locPrincipal(c)), lk=t.hora?tarLinkCliente(c,t):'';
+  return abre+'Confirmando '+tipo+(t.tit&&t.tipo!=='reuniao'&&t.tipo!=='ligar'?' ('+t.tit+')':'')+': '+quando+(loc&&t.tipo!=='ligar'?' · 📍 '+loc:'')+'.'+(lk?'\n\n📅 Pra salvar na sua agenda: '+lk:'')+'\n\nMe confirma? Qualquer imprevisto, me avisa por aqui. Até lá!'+(ass?' — '+ass:'');
 }
+/* ═══ CONVITE-CLIENTE-V1 (13/10/2026) ═══ pedido dele (print do cartão de evento do WhatsApp): "quando eu marcar uma agenda,
+   poder enviar no WhatsApp do cliente nesse formato… importante ter em botões separados mandar pro Google e mandar pro cliente,
+   pois nem sempre mando pro cliente". Decisão 3A+B: o cartão nativo do WhatsApp não sai de fora do app (wa.me só leva texto),
+   então: ✉️ convite do Google pro e-mail do cliente (Sim/Não volta pra Agenda e vira selo aqui) · 💬 texto pronto com
+   link "salvar na agenda" · 📋 copiar os dados pro Evento do WhatsApp (＋ → Evento → colar). Grupo "pro cliente" separado
+   do par do Google (📅 Evento / ☑️ Tarefa), que continua sendo só a SUA agenda. */
+function tarTituloCliente(c,t){ const eu=(typeof user==='function'&&user())||{}; const quem=String(eu.nome||'').trim();
+  const o=t.tipo==='reuniao'?'Reunião':t.tipo==='ligar'?'Ligação':(t.tit||tarNomeTipo(t.tipo)); return o+(quem?' com '+quem:'')+' · Prudential'; }
+function tarLinkCliente(c,t){ if(!t||!t.quando) return ''; const iv=tarReuniaoInterval(t), f=x=>x.replace(/[-:]/g,'');
+  const loc=locTexto(locPrincipal(c));
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(tarTituloCliente(c,t))+'&dates='+f(iv.ini)+'/'+f(iv.fim)+'&ctz='+encodeURIComponent(GCAL_TZ)+(loc?'&location='+encodeURIComponent(loc):''); }
+function tarConviteEstado(c,t){ if(!t||!t.convite||!t.convite.email) return '';
+  const ev=t.gcalId?gcalEvPorId(t.gcalId):null; const a=ev&&(ev.attendees||[]).find(x=>String(x.email||'').toLowerCase()===String(t.convite.email).toLowerCase());
+  const st=(a&&a.responseStatus)||t.convite.status||'needsAction'; if(a&&a.responseStatus&&t.convite.status!==a.responseStatus){ t.convite.status=a.responseStatus; }
+  return st; }
+function tarConviteSelo(c,t){ const st=tarConviteEstado(c,t); if(!st) return '';
+  const m={accepted:['✅ confirmou','b-verde'],declined:['❌ recusou','b-verm'],tentative:['🤔 talvez','b-amarelo'],needsAction:['⏳ convite enviado','b-cinza']}[st]||['⏳ convite enviado','b-cinza'];
+  return `<span class="badge ${m[1]}" title="Convite do Google enviado pra ${esc(t.convite.email)}">${m[0]}</span>`; }
+function tarClienteHTML(c,t){ if(!c||!t||!t.quando||t.feito) return '';
+  const id=`'${esc(jsq(c.id))}','${esc(jsq(t.id))}'`, wa=tarWaHref(c,t);
+  return `<span class="ag-cpar" role="group" aria-label="Mandar pro cliente"><span class="ag-cpar-l">pro cliente</span>`
+    +(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="WhatsApp com o compromisso pronto (dia, hora, local e o link pro cliente salvar na agenda dele)">💬 enviar</a>`:'')
+    +`<button class="btn btn-s btn-mini" onclick="tarConvidarCliente(${id})" title="${c.email?'Manda o convite do Google pro e-mail do cliente ('+esc(c.email)+') — o Sim/Não dele volta pra sua Agenda':'Manda o convite do Google pro e-mail do cliente (pede o e-mail)'}">✉️ convite${t.convite?' ↻':''}</button>`
+    +`<button class="btn btn-s btn-mini" onclick="tarCopiarEventoWa(${id})" title="Copia título, dia, hora e local e abre a conversa — no WhatsApp: ＋ → Evento → cole">📋 evento WA</button>`
+    +tarConviteSelo(c,t)+`</span>`; }
+async function tarConvidarCliente(cid,tid){ const par=tarPar(cid,tid); if(!par) return; const {c,t}=par;
+  let email=String(c.email||'').trim();
+  if(!email){ email=String(prompt('E-mail do cliente pro convite do Google:','')||'').trim(); if(!email) return; if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ toast('E-mail inválido',false); return; } c.email=email; }
+  const tok=await gcalTokenPra(true); if(!tok){ toast('Conecte a Agenda Google pra mandar o convite',false); return; }
+  try{
+    if(!t.gcalId||gtDestino(t)==='tarefa'){ gtDestinoAplicar(t,'evento'); t.gcalSync=true; t.gcalFora=false; await gsyncAplicarItem({op:'upsert',cid:c.id,tid:t.id}); }
+    const ev=gcalEvPorId(t.gcalId); const atuais=((ev&&ev.attendees)||[]).filter(a=>String(a.email||'').toLowerCase()!==email.toLowerCase());
+    const r=await gcalApi('PATCH','/'+encodeURIComponent(t.gcalId),{attendees:atuais.concat([{email}]),guestsCanModify:false},{sendUpdates:'all'});
+    if(r&&r.id){ const i=(GCAL.eventos||[]).findIndex(e=>e.id===r.id); if(i>=0) GCAL.eventos[i]=Object.assign(GCAL.eventos[i],r); else (GCAL.eventos=GCAL.eventos||[]).push(r); }
+    t.convite={email,em:new Date().toISOString(),status:'needsAction'};
+    interacoesDe(c).push({id:uid(),k:'tarefa',l:'✉️ Convite do Google enviado pra '+email+': '+tarTituloCliente(c,t)+' · '+dataBR(t.quando)+(t.hora?' '+t.hora:''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
+    salvar(); render(); if(CONTATO===c.id&&typeof renderDrawer==='function') renderDrawer();
+    toast('✉️ Convite enviado pra '+email+' — o Sim/Não dele aparece aqui',true);
+  }catch(e){ console.warn('[convite]',e); toast('Convite não saiu: '+(e&&e.message||e),false); } }
+function tarCopiarEventoWa(cid,tid){ const par=tarPar(cid,tid); if(!par) return; const {c,t}=par;
+  const loc=locTexto(locPrincipal(c)); const txt=[tarTituloCliente(c,t), diaSemanaBR(t.quando)+', '+dataBR(t.quando)+(t.hora?' · '+t.hora+(t.dur?' ('+t.dur+' min)':''):''), loc].filter(Boolean).join('\n');
+  const abrir=()=>{ const u=waHref(c.telefone); if(u) window.open(u,'_blank','noopener'); };
+  const ok=()=>{ toast('📋 Copiado — no WhatsApp: ＋ → Evento → cole o título; dia e hora estão no texto',true); abrir(); };
+  try{ navigator.clipboard.writeText(txt).then(ok,()=>{ prompt('Copie e cole no Evento do WhatsApp:',txt); abrir(); }); }catch(_){ prompt('Copie e cole no Evento do WhatsApp:',txt); abrir(); } }
+window.tarConvidarCliente=tarConvidarCliente; window.tarCopiarEventoWa=tarCopiarEventoWa;
 function tarWaHref(c,t){ const m=tarWaMsg(c,t); if(!m) return ''; return cartWaUrl(c&&c.telefone,m)||''; }
 function tarWaAcaoHTML(c,t){ const h=tarWaHref(c,t); return h?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(h)}" target="_blank" rel="noopener" title="Enviar o compromisso ao cliente pelo WhatsApp (texto pronto)">💬 enviar</a>`:''; }
 /* ── mutadores ── */
@@ -5353,11 +5403,11 @@ function tarBlocoDrawer(c){
         <button class="btn btn-p btn-mini" onclick="tarConcluir('${esc(c.id)}','${esc(t.id)}')" title="Marcar como feita">✓ feita</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',1)" title="Remarcar para o dia seguinte">+1d</button>
         <button class="btn btn-s btn-mini" onclick="tarAdiar('${esc(c.id)}','${esc(t.id)}',7)" title="Remarcar para daqui a uma semana">+7d</button>
-        ${tarWaAcaoHTML(c,t)}
         <button class="btn btn-s btn-mini" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar: tipo, título, dia, hora, duração, destino no Google">✏️</button>
         <button class="btn btn-ghost btn-mini" onclick="tarRemover('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Remover">✕</button>
         ${tarAnexosHtml(c,t)}
         ${tarGoogleParHTML(c,t)}
+        ${tarClienteHTML(c,t)||tarWaAcaoHTML(c,t)}
       </span></div>`;   /* FICHA-GOOGLE-2BOT-V1 (25/09): o mesmo par ☑️ Tarefa | 📅 Evento da Agenda */
   };
   let h = abertas.length ? abertas.map(linha).join('')
@@ -12288,6 +12338,7 @@ function viewAgenda(){
         <span class="ag-grp">${tarWaAcaoHTML(c,t)||(wa?`<a class="btn btn-s btn-mini" style="text-decoration:none" href="${esc(wa)}" target="_blank" rel="noopener" title="Abrir WhatsApp">💬</a>`:'')}
           ${agSalvarHtml(c,t)}</span>
         ${tarGoogleParHTML(c,t)}
+        ${tarClienteHTML(c,t).replace(/<a class="btn[^"]*"[^>]*>💬 enviar<\/a>/,'')}
         <button class="btn btn-ghost btn-mini ag-edit" onclick="tarEditar('${esc(jsq(c.id))}','${esc(jsq(t.id))}')" title="Editar a atividade (tipo, dia, hora, título)">✏️ editar</button>
       </span></div>`;
   };
@@ -20747,6 +20798,13 @@ function lpSelfCheck(){
           return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/>📎 boleto\.pdf</.test(anxLinkHtml(l[0]))
             &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
         } finally{ SO_EV=bak; } })());
+        ok('CONVITE-CLIENTE-V1: grupo "pro cliente" separado do par do Google (💬 enviar · ✉️ convite · 📋 evento WA); mensagem com local e link limpo pra salvar na agenda (sem nota interna); selo do Sim/Não do convite', (()=>{
+          const c={id:'zcv1',nome:'Fulano de Tal',telefone:'81999990000',email:'fulano@exemplo.com',notas:'NOTA INTERNA'}; const t={id:'t1',tipo:'reuniao',tit:'x',quando:'2031-03-04',hora:'10:00',dur:60,notas:'SEGREDO'};
+          const h=tarClienteHTML(c,t), lk=tarLinkCliente(c,t), msg=tarWaMsg(c,t);
+          const t2=Object.assign({},t,{convite:{email:'fulano@exemplo.com',status:'accepted'}});
+          return /pro cliente/.test(h)&&/💬 enviar/.test(h)&&/✉️ convite/.test(h)&&/📋 evento WA/.test(h)&&!/ag-gpar/.test(h)
+            &&/action=TEMPLATE/.test(lk)&&/20310304T100000\/20310304T110000/.test(lk)&&!/SEGREDO|NOTA/.test(decodeURIComponent(lk))&&msg.includes(lk)&&/Me confirma\?/.test(msg)
+            &&/✅ confirmou/.test(tarConviteSelo(c,t2))&&tarClienteHTML(c,Object.assign({},t,{feito:true}))===''&&tarClienteHTML(c,{id:'t3',tipo:'ligar'})===''; })());
         ok('DRIVE-PASTA: pasta do cliente achada pela chave (sem acento/maiúscula), abreviação só com mesmo nº de palavras, homônimo parcial NÃO casa, nome novo em Title Case; área de soltar com os dois rótulos (soltar/tocar); bloco na ficha da carteira, do negócio e do benefício', (()=>{
           const idx=new Map([[drvChave('José Rogério Silva de Holanda'),{id:'a'}],[drvChave('Bruno de Oliveira G Beserra de Almeida'),{id:'b'}],[drvChave('Fulano de Tal'),{id:'c'}]]);
           const z=anxZona('t:1','fulano de tal',()=>{});
