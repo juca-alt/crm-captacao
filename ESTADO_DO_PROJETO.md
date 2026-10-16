@@ -2,6 +2,15 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 16/10/2026 (noite, sessão Code) — v8.69 Embaixadores: nota do embaixador, adicionar 1 nome, link de acesso, portal novo (branch `claude/emb-acesso`, aguarda OK)
+
+- **Lista do Lucas (id 4) IMPORTADA** (OK dele "A amarelos"): 415 nomes (GI A 200 · B 141 · C 74); 5 já clientes e 14 já no Estoque ficaram de fora (só aviso); **27 amarelos (o 1º filtro do Lucas, todos GI A) → Para esquentar**. 4 amarelos já estavam no Estoque por outra fonte (seguem lá).
+- **Embaixador de teste:** "Gustavo · Simulação do portal" (id 5, e-mail pessoal dele, 6 nomes inventados "…Simulada/Fictício" com nota "Simulação do portal — pode apagar"). **Apagar quando ele terminar o teste.**
+- **Edge Function `emb-acesso`** (verify_jwt off, checa sozinha): gera o link mágico (1 h, uso único) pra quem GERENCIA (emb_gestor) ou por chave de operação pontual (hash em `app_settings.emb_ops_chave_hash` — hoje "revogado"). No card: **🔗 Link de acesso** → copia + 💬 Mandar no WhatsApp. Motivo: o envio de e-mail embutido do Supabase não entrega pra fora da equipe.
+- **v5 no banco (`embaixadores_v5_notas.sql`):** `emb_nota` (o embaixador escreve nota nos nomes DELE já liberados; máx. 50 × 1.000 car.), `emb_portal` ganha `notas`, `emb_leads_notas` (quem gerencia lê), `emb_adicionar` (UM nome = emb_importar de 1 linha + opção já em Para esquentar). Testado em transação desfeita (dedup na 2ª vez, Winny recusada, nota vazia/mapeado recusadas, Victor lê).
+- **CRM:** ➕ Adicionar um nome (card e lista); linha mostra 📝 última nota + 💬 N (abre as notas). **Portal:** painel do topo com total + resumo por etapa (5 quadros, tocar leva ao bloco; celular 3+2), 📝 em cada nome (folha inferior no celular, janela no desktop).
+- **E-mail (decisão "A"):** SMTP do Google com o juca@ — falta ele gerar a senha de app e colar no Supabase (passo a passo no chat de 16/10).
+
 ## 🟢 RETOMAR AQUI — 16/10/2026 (tarde, sessão Code) — v8.68 Embaixadores T3–T6 NO AR
 
 **PR #297 mergeado com OK dele ("1A 3A"); Pages conferido por hash (v8.68) e `embaixador.html` 200. Decisão 3A: valor a receber fica "—" por enquanto (T6 não liga ao Parceiros agora).** Banco JÁ aplicado (v3 + v4; funções novas, nada destrutivo; o v8.67 no ar segue funcionando).

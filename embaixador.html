@@ -4,59 +4,107 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#0f2b4c">
 <title>Embaixadores da Proteção</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- EMBAIXADORES-V5 · T5 (16/10/2026) — o PORTAL do embaixador (mobile-first). PROMPT_CODE "Embaixadores da Proteção".
-     Ele entra por link mágico no e-mail (sem senha) e vê SÓ os leads dele que o Gustavo escolheu, com nome, etapa e valor.
-     O isolamento é do BANCO (view emb_portal + RPC emb_esquentei; ver supabase/migrations/embaixadores_v4_portal.sql):
-     esta página não recebe telefone, renda, GI nem nada de outro embaixador — não há o que esconder aqui.
-     3 blocos: Para esquentar (botão "Esquentei" — o único movimento dele), Em andamento, Fechados (valor a receber).
-     Rodapé: total a receber. Valor sem comissão registrada = "—", nunca R$ 0,00 inventado (T6). -->
+     Ele entra por link mágico no e-mail (sem senha) e vê SÓ os nomes dele que o Gustavo escolheu, com nome, etapa e valor.
+     O isolamento é do BANCO (view emb_portal + RPCs emb_esquentei / emb_nota; ver supabase/migrations/embaixadores_v4_portal.sql
+     e embaixadores_v5_notas.sql): esta página não recebe telefone, renda, GI nem nada de outro embaixador.
+     EMBAIXADORES-V7 (16/10): visual novo (painel no topo com o total e o resumo por etapa — tocar leva ao bloco),
+     e NOTAS: o embaixador escreve observações em cada nome (o Gustavo lê no CRM). Folha inferior no celular, janela no desktop.
+     Blocos: Para esquentar (botão "Esquentei" — o único movimento de etapa dele), Em andamento, Fechados (valor a receber),
+     Encerrados (dobrado, nasce fechado). Rodapé fixo: total a receber. Valor sem comissão registrada = "—", nunca R$ 0,00 (T6). -->
 <style>
-:root{--bg:#f4f6f8;--card:#fff;--tx:#15212b;--mut:#5b6873;--linha:#e3e8ee;--azul:#2563eb;--verde:#16a34a;--laranja:#ea580c;--sombra:0 1px 2px rgba(0,0,0,.05)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1720;--card:#17212b;--tx:#e6edf3;--mut:#93a1ad;--linha:#26323e;--azul:#3b82f6;--verde:#22c55e;--laranja:#f97316;--sombra:none}}
-:root[data-theme="dark"]{--bg:#0f1720;--card:#17212b;--tx:#e6edf3;--mut:#93a1ad;--linha:#26323e;--azul:#3b82f6;--verde:#22c55e;--laranja:#f97316;--sombra:none}
+:root{--bg:#f3f5f9;--card:#fff;--tx:#14202b;--mut:#5d6b78;--linha:#e2e7ee;--azul:#2563eb;--verde:#15803d;--verde-bg:#dcfce7;--laranja:#ea580c;--laranja-bg:#ffedd5;
+  --roxo:#6d28d9;--roxo-bg:#ede9fe;--azul-bg:#dbeafe;--cinza-bg:#eef1f5;--ouro:#f5b301;--hero1:#0f2b4c;--hero2:#1d4ed8;--sombra:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d141c;--card:#16202b;--tx:#e6edf3;--mut:#94a3b1;--linha:#26323f;--azul:#3b82f6;--verde:#4ade80;--verde-bg:#12301f;
+  --laranja:#fb923c;--laranja-bg:#3a2312;--roxo:#a78bfa;--roxo-bg:#2a2140;--azul-bg:#15284a;--cinza-bg:#1d2833;--hero1:#0b1f38;--hero2:#1e3a8a;--sombra:none}}
+:root[data-theme="dark"]{--bg:#0d141c;--card:#16202b;--tx:#e6edf3;--mut:#94a3b1;--linha:#26323f;--azul:#3b82f6;--verde:#4ade80;--verde-bg:#12301f;
+  --laranja:#fb923c;--laranja-bg:#3a2312;--roxo:#a78bfa;--roxo-bg:#2a2140;--azul-bg:#15284a;--cinza-bg:#1d2833;--hero1:#0b1f38;--hero2:#1e3a8a;--sombra:none}
 *{box-sizing:border-box}
+html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
-.wrap{max-width:560px;margin:0 auto;padding:16px 16px calc(96px + env(safe-area-inset-bottom))}
-header{display:flex;align-items:center;gap:10px;margin:4px 0 14px}
-header h1{font-size:19px;margin:0;flex:1;line-height:1.2}
-header small{display:block;font-size:13px;color:var(--mut);font-weight:400}
+.wrap{max-width:620px;margin:0 auto;padding:16px 16px calc(100px + env(safe-area-inset-bottom))}
 .btn{font:inherit;border-radius:12px;border:1px solid var(--linha);background:var(--card);color:var(--tx);padding:10px 16px;min-height:44px;cursor:pointer;font-weight:600}
 .btn-p{background:var(--azul);border-color:var(--azul);color:#fff}
 .btn-ok{background:var(--laranja);border-color:var(--laranja);color:#fff;white-space:nowrap}
-.btn-ok.conf{background:var(--verde);border-color:var(--verde)}
+.btn-ok.conf{background:var(--verde);border-color:var(--verde);color:#fff}
+.btn-ic{min-width:44px;padding:8px 10px;color:var(--mut);background:transparent;border-color:transparent;font-size:18px;position:relative}
+.btn-ic .q{position:absolute;top:4px;right:2px;background:var(--azul);color:#fff;border-radius:999px;font-size:10.5px;min-width:16px;height:16px;line-height:16px;padding:0 4px;font-weight:700}
 .btn:disabled{opacity:.55;cursor:default}
-.card{background:var(--card);border:1px solid var(--linha);border-radius:16px;padding:16px;box-shadow:var(--sombra)}
+.card{background:var(--card);border:1px solid var(--linha);border-radius:18px;padding:18px;box-shadow:var(--sombra)}
 .mut{color:var(--mut);font-size:13px}
-.login input{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1px solid var(--linha);border-radius:12px;background:var(--bg);color:var(--tx);min-height:48px;margin:10px 0}
-.login .btn{width:100%}
-.bloco{margin-top:16px}
-.bloco h2{font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px}
-.bloco h2 .n{background:var(--linha);border-radius:999px;padding:1px 9px;font-size:12.5px}
-.lista{background:var(--card);border:1px solid var(--linha);border-radius:16px;overflow:hidden}
-.item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--linha);min-height:56px}
+/* painel do topo */
+.hero{background:linear-gradient(135deg,var(--hero1),var(--hero2));color:#fff;border-radius:22px;padding:18px 18px 16px;box-shadow:0 8px 24px rgba(15,43,76,.25)}
+.hero-top{display:flex;align-items:center;gap:12px}
+.hero-ic{width:46px;height:46px;border-radius:14px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-size:24px;flex:0 0 auto}
+.hero h1{font-size:18px;margin:0;line-height:1.2}
+.hero .ola{font-size:13.5px;opacity:.85}
+.hero-tot{margin-top:14px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.hero-tot small{display:block;font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.04em}
+.hero-tot b{font-size:28px;line-height:1.1;font-variant-numeric:tabular-nums}
+.hero-tot .regra{font-size:12px;opacity:.8;max-width:260px}
+.etps{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:14px}
+.etp{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);color:#fff;border-radius:14px;padding:8px 4px;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;font:inherit;text-decoration:none}
+.etp b{font-size:20px;line-height:1.1} .etp span{font-size:11px;opacity:.9;text-align:center;line-height:1.15}
+.etp i{font-style:normal;font-size:14px}
+/* blocos */
+.bloco{margin-top:20px;scroll-margin-top:12px}
+.bloco h2{font-size:15.5px;margin:0 0 4px;display:flex;align-items:center;gap:8px}
+.bloco h2 .n{background:var(--cinza-bg);border-radius:999px;padding:1px 9px;font-size:12.5px}
+.dica{font-size:13px;color:var(--mut);margin:0 0 8px}
+.lista{background:var(--card);border:1px solid var(--linha);border-radius:18px;overflow:hidden;box-shadow:var(--sombra)}
+.item{display:flex;align-items:center;gap:6px;padding:10px 10px 10px 14px;border-top:1px solid var(--linha);min-height:60px}
 .item:first-child{border-top:0}
 .item .nm{flex:1;min-width:0}
 .item .nm b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.item .val{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
-.tag{font-size:12px;border-radius:999px;padding:2px 9px;border:1px solid var(--linha);color:var(--mut);white-space:nowrap}
-.vazio{padding:14px;color:var(--mut);font-size:13.5px}
-details.enc{margin-top:16px}
-details.enc>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--mut)}
-.rodape{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--linha);padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
-.rodape>div{max-width:560px;margin:0 auto;display:flex;align-items:center;gap:10px}
-.rodape .tot{flex:1}
-.rodape .tot b{font-size:20px;display:block}
-.dica{font-size:13px;color:var(--mut);margin:6px 0 0}
+.item .nm .ult{display:block;font-size:12.5px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .val{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;padding-right:4px}
+.tag{font-size:12px;border-radius:999px;padding:3px 10px;white-space:nowrap;font-weight:600}
+.t-esquentado{background:var(--laranja-bg);color:var(--laranja)} .t-em_atendimento{background:var(--azul-bg);color:var(--azul)}
+.t-fechado{background:var(--verde-bg);color:var(--verde)} .t-encerrado{background:var(--cinza-bg);color:var(--mut)}
+.vazio{padding:16px;color:var(--mut);font-size:13.5px}
+details.enc{margin-top:20px}
+details.enc>summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;color:var(--mut);list-style:none}
+details.enc>summary::-webkit-details-marker{display:none}
+details.enc>summary::before{content:'▸';margin-right:8px} details.enc[open]>summary::before{content:'▾'}
+/* rodapé */
+.rodape{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--linha);padding:10px 16px calc(10px + env(safe-area-inset-bottom));z-index:5}
+.rodape>div{max-width:620px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.rodape .tot{flex:1} .rodape .tot b{font-size:20px;display:block;font-variant-numeric:tabular-nums}
+/* login */
+.login input,.folha textarea{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1px solid var(--linha);border-radius:12px;background:var(--bg);color:var(--tx);min-height:48px}
+.login input{margin:12px 0}
+.login .btn{width:100%}
 .msg{margin-top:10px;font-size:14px}
-@media (min-width:900px){.wrap{padding-top:32px}header h1{font-size:22px}}
+/* folha de notas: inferior no celular, janela no desktop */
+.fundo{position:fixed;inset:0;background:rgba(10,16,24,.5);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.folha{background:var(--card);width:100%;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.folha .puxa{width:40px;height:4px;border-radius:4px;background:var(--linha);margin:0 auto 12px}
+.folha h3{margin:0 0 2px;font-size:17px}
+.folha textarea{min-height:96px;resize:vertical;margin:12px 0 10px}
+.notas{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.nota{background:var(--cinza-bg);border-radius:12px;padding:10px 12px;font-size:14px;white-space:pre-wrap;word-break:break-word}
+.nota time{display:block;font-size:11.5px;color:var(--mut);margin-bottom:2px}
+.folha-acoes{display:flex;gap:8px;justify-content:flex-end}
+@media (min-width:720px){
+  .wrap{padding-top:28px}
+  .hero{padding:22px 24px 20px} .hero h1{font-size:21px}
+  .etp{min-height:72px} .etp b{font-size:22px} .etp span{font-size:12px}
+  .fundo{align-items:center}
+  .folha{max-width:520px;border-radius:20px;max-height:80vh} .folha .puxa{display:none}
+  .item:hover{background:var(--bg)}
+}
+@media (max-width:719px){ .etps{grid-template-columns:repeat(6,minmax(0,1fr))} .etp{grid-column:span 2;min-width:0} .etp:nth-child(n+4){grid-column:span 3} }
+@media (max-width:380px){ .etp span{font-size:10.5px} .hero-tot b{font-size:24px} }
 </style>
 </head>
 <body>
 <div class="wrap" id="app"><div class="mut">Carregando…</div></div>
 <div class="rodape" id="rodape" hidden><div><div class="tot"><span class="mut">Total a receber</span><b id="total">—</b></div>
   <button class="btn" onclick="sair()">Sair</button></div></div>
+<div id="camada"></div>
 <script>
 'use strict';
 const SB_URL='https://cjieobmdpqcupzdpckef.supabase.co';
@@ -65,17 +113,20 @@ let sb=null; try{ sb=window.supabase.createClient(SB_URL,SB_KEY); }catch(e){ con
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl=v=>'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-let EU=null, LEADS=[], CONF='';
+const dt=s=>{ try{ const d=new Date(s); return d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return ''; } };
+let EU=null, LEADS=[], CONF='', NOTA_ID='';
 
-/* PURA: separa os leads nos blocos do portal e soma o que já tem valor. Sem nenhum valor registrado → total null ("—"). */
+/* PURA: separa os nomes nos blocos do portal, conta por etapa e soma o que já tem valor. Sem nenhum valor → total null ("—"). */
 function blocos(leads){
-  const b={esquentar:[],andamento:[],fechados:[],encerrados:[]};
-  (leads||[]).forEach(l=>{ const k=l.etapa==='selecionado'?'esquentar':(l.etapa==='esquentado'||l.etapa==='em_atendimento')?'andamento':l.etapa==='fechado'?'fechados':l.etapa==='encerrado'?'encerrados':null; if(k) b[k].push(l); });
-  Object.values(b).forEach(a=>a.sort((x,y)=>String(x.nome||'').localeCompare(String(y.nome||''),'pt-BR')));
+  const b={esquentar:[],andamento:[],fechados:[],encerrados:[],qtd:{selecionado:0,esquentado:0,em_atendimento:0,fechado:0,encerrado:0}};
+  (leads||[]).forEach(l=>{ if(l.etapa in b.qtd) b.qtd[l.etapa]++;
+    const k=l.etapa==='selecionado'?'esquentar':(l.etapa==='esquentado'||l.etapa==='em_atendimento')?'andamento':l.etapa==='fechado'?'fechados':l.etapa==='encerrado'?'encerrados':null; if(k) b[k].push(l); });
+  ['esquentar','andamento','fechados','encerrados'].forEach(k=>b[k].sort((x,y)=>String(x.nome||'').localeCompare(String(y.nome||''),'pt-BR')));
   const comValor=b.fechados.filter(l=>l.valor!=null&&l.valor!=='');
   b.total=comValor.length?comValor.reduce((s,l)=>s+Number(l.valor),0):null;
   return b;
 }
+function ultimaNota(l){ const n=Array.isArray(l&&l.notas)?l.notas:[]; return n.length?n[n.length-1]:null; }
 
 async function iniciar(){
   if(!sb){ $('#app').innerHTML='<div class="card">Sem conexão. Tente de novo em instantes.</div>'; return; }
@@ -86,14 +137,14 @@ async function iniciar(){
   EU=r.data; await carregar();
 }
 async function carregar(){
-  const r=await sb.from('emb_portal').select('id,nome,etapa,etapa_rotulo,valor');
-  if(r.error){ $('#app').innerHTML=topo()+`<div class="card">Não consegui carregar a sua lista (${esc(r.error.message)}). <button class="btn" onclick="carregar()">Tentar de novo</button></div>`; return; }
-  LEADS=r.data||[]; render();
+  const r=await sb.from('emb_portal').select('id,nome,etapa,etapa_rotulo,valor,notas');
+  if(r.error){ $('#app').innerHTML=`<div class="card">Não consegui carregar a sua lista (${esc(r.error.message)}). <button class="btn" onclick="carregar()">Tentar de novo</button></div>`; return; }
+  LEADS=r.data||[]; render(); if(NOTA_ID) abrirNota(NOTA_ID);
 }
-function topo(){ return `<header><div style="font-size:30px">🌟</div><h1>Embaixadores da Proteção${EU?`<small>Olá, ${esc(String(EU.nome||'').split(' ')[0])}!</small>`:''}</h1></header>`; }
+function cabecalhoSimples(){ return `<div class="hero"><div class="hero-top"><div class="hero-ic">🌟</div><div><h1>Embaixadores da Proteção</h1><div class="ola">Seu portal de indicações</div></div></div></div>`; }
 function telaLogin(msg){
   $('#rodape').hidden=true;
-  $('#app').innerHTML=topo()+`<div class="card login">
+  $('#app').innerHTML=cabecalhoSimples()+`<div class="card login" style="margin-top:16px">
     <b>Entrar no seu portal</b>
     <div class="mut">Digite o e-mail que você passou pro Gustavo. Chega um link de acesso — sem senha.</div>
     <input id="em" type="email" inputmode="email" autocomplete="email" placeholder="seu@email.com">
@@ -109,29 +160,36 @@ async function pedirLink(){
 }
 function telaSemCadastro(email){
   $('#rodape').hidden=true;
-  $('#app').innerHTML=topo()+`<div class="card">O e-mail <b>${esc(email)}</b> não está cadastrado como embaixador.
+  $('#app').innerHTML=cabecalhoSimples()+`<div class="card" style="margin-top:16px">O e-mail <b>${esc(email)}</b> não está cadastrado como embaixador.
     <div class="mut" style="margin:8px 0 12px">Se você usa o CRM, abra pelo endereço de sempre.</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn" href="vendas.html" style="text-decoration:none;display:inline-flex;align-items:center">Abrir o CRM</a><button class="btn" onclick="sair()">Sair</button></div></div>`;
 }
 function linha(l,acao){
+  const n=Array.isArray(l.notas)?l.notas.length:0, u=ultimaNota(l);
   const dir=acao==='esquentar'
     ?`<button class="btn btn-ok${CONF===l.id?' conf':''}" onclick="esquentei('${esc(l.id)}')">${CONF===l.id?'Confirmar ✓':'Esquentei'}</button>`
     :acao==='valor'?`<span class="val">${l.valor==null||l.valor===''?'—':brl(l.valor)}</span>`
-    :`<span class="tag">${esc(l.etapa_rotulo||'')}</span>`;
-  return `<div class="item"><div class="nm"><b>${esc(l.nome||'')}</b></div>${dir}</div>`;
+    :`<span class="tag t-${esc(l.etapa)}">${esc(l.etapa_rotulo||'')}</span>`;
+  return `<div class="item"><div class="nm"><b>${esc(l.nome||'')}</b>${u?`<span class="ult">📝 ${esc(u.texto)}</span>`:''}</div>
+    <button class="btn btn-ic" title="Notas" aria-label="Notas de ${esc(l.nome||'')}" onclick="abrirNota('${esc(l.id)}')">📝${n?`<span class="q">${n}</span>`:''}</button>${dir}</div>`;
 }
-function bloco(tit,arr,acao,vazio,dica){
-  return `<section class="bloco"><h2>${tit} <span class="n">${arr.length}</span></h2>${dica?`<div class="dica" style="margin:-4px 0 8px">${dica}</div>`:''}
+function bloco(id,tit,arr,acao,vazio,dica){
+  return `<section class="bloco" id="b-${id}"><h2>${tit} <span class="n">${arr.length}</span></h2>${dica?`<p class="dica">${dica}</p>`:''}
     <div class="lista">${arr.length?arr.map(l=>linha(l,acao)).join(''):`<div class="vazio">${vazio}</div>`}</div></section>`;
 }
 function render(){
-  const b=blocos(LEADS);
-  $('#app').innerHTML=topo()
-    +bloco('🔥 Para esquentar',b.esquentar,'esquentar','Nada pra esquentar agora. Quando o Gustavo escolher novos nomes da sua lista, eles aparecem aqui.','Avise a pessoa que o Gustavo vai procurá-la e toque em <b>Esquentei</b>.')
-    +bloco('⏳ Em andamento',b.andamento,'etapa','Ninguém em andamento ainda.')
-    +bloco('✅ Fechados',b.fechados,'valor','Nenhum fechado ainda.')
-    +(b.encerrados.length?`<details class="enc"><summary>Encerrados · ${b.encerrados.length}</summary><div class="lista">${b.encerrados.map(l=>linha(l,'etapa')).join('')}</div></details>`:'')
-    +`<p class="dica" style="margin-top:18px">Você recebe 50% da comissão líquida do 1º ano de cada negócio fechado. "—" = o valor ainda não foi apurado.</p>`;
+  const b=blocos(LEADS), q=b.qtd, nome=String(EU&&EU.nome||'').split(' ')[0];
+  const etp=(ic,n,rot,alvo)=>`<a class="etp" href="#b-${alvo}"><i>${ic}</i><b>${n}</b><span>${rot}</span></a>`;
+  $('#app').innerHTML=`<div class="hero">
+      <div class="hero-top"><div class="hero-ic">🌟</div><div><h1>Embaixadores da Proteção</h1><div class="ola">Olá, ${esc(nome)}! Esta é a sua rede de indicações.</div></div></div>
+      <div class="hero-tot"><div><small>Total a receber</small><b>${b.total==null?'—':brl(b.total)}</b></div>
+        <div class="regra">50% da comissão líquida do 1º ano de cada negócio fechado.</div></div>
+      <div class="etps">${etp('🔥',q.selecionado,'Para esquentar','esquentar')}${etp('♨️',q.esquentado,'Esquentados','andamento')}${etp('💬',q.em_atendimento,'Em conversa','andamento')}${etp('✅',q.fechado,'Fechados','fechados')}${etp('⏹',q.encerrado,'Encerrados','encerrados')}</div>
+    </div>`
+    +bloco('esquentar','🔥 Para esquentar',b.esquentar,'esquentar','Nada pra esquentar agora. Quando o Gustavo escolher novos nomes da sua lista, eles aparecem aqui.','Avise a pessoa que o Gustavo vai procurá-la e toque em <b>Esquentei</b>. Use 📝 pra deixar um recado sobre ela.')
+    +bloco('andamento','⏳ Em andamento',b.andamento,'etapa','Ninguém em andamento ainda.')
+    +bloco('fechados','✅ Fechados',b.fechados,'valor','Nenhum fechado ainda.','"—" = o valor ainda não foi apurado.')
+    +(b.encerrados.length?`<details class="enc bloco" id="b-encerrados"><summary>Encerrados · ${b.encerrados.length}</summary><div class="lista">${b.encerrados.map(l=>linha(l,'etapa')).join('')}</div></details>`:`<div id="b-encerrados"></div>`);
   $('#total').textContent=b.total==null?'—':brl(b.total);
   $('#rodape').hidden=false;
 }
@@ -142,8 +200,24 @@ async function esquentei(id){
   if(r.error){ alert('Não foi: '+r.error.message); }
   await carregar();
 }
-async function sair(){ try{ await sb.auth.signOut(); }catch(_){} EU=null; LEADS=[]; telaLogin(); }
+/* ── notas ── */
+function abrirNota(id){ const l=LEADS.find(x=>x.id===id); if(!l){ fecharNota(); return; } NOTA_ID=id;
+  const ns=(Array.isArray(l.notas)?l.notas:[]).slice().reverse();
+  $('#camada').innerHTML=`<div class="fundo" onclick="if(event.target===this)fecharNota()"><div class="folha" role="dialog" aria-label="Notas">
+    <div class="puxa"></div><h3>📝 ${esc(l.nome||'')}</h3><div class="mut">O Gustavo lê o que você escrever aqui.</div>
+    <textarea id="nota-tx" maxlength="1000" placeholder="Ex.: falei com ele, prefere contato à tarde"></textarea>
+    <div class="folha-acoes"><button class="btn" onclick="fecharNota()">Fechar</button><button class="btn btn-p" id="nota-bt" onclick="salvarNota()">Salvar nota</button></div>
+    <div class="notas">${ns.length?ns.map(n=>`<div class="nota"><time>${esc(dt(n.em))}</time>${esc(n.texto)}</div>`).join(''):'<div class="mut">Nenhuma nota ainda.</div>'}</div>
+  </div></div>`; }
+function fecharNota(){ NOTA_ID=''; $('#camada').innerHTML=''; }
+async function salvarNota(){ const tx=($('#nota-tx').value||'').trim(); if(!tx) return; const bt=$('#nota-bt'); bt.disabled=true;
+  const r=await sb.rpc('emb_nota',{p_id:NOTA_ID,p_texto:tx}); bt.disabled=false;
+  if(r.error){ alert('Não salvou: '+r.error.message); return; }
+  const l=LEADS.find(x=>x.id===NOTA_ID); if(l) l.notas=r.data||[]; render(); abrirNota(NOTA_ID); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&NOTA_ID) fecharNota(); });
+async function sair(){ try{ await sb.auth.signOut(); }catch(_){} EU=null; LEADS=[]; fecharNota(); telaLogin(); }
 window.pedirLink=pedirLink; window.esquentei=esquentei; window.sair=sair; window.carregar=carregar; window.portalBlocos=blocos;
+window.abrirNota=abrirNota; window.fecharNota=fecharNota; window.salvarNota=salvarNota;
 if(sb) sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_IN'&&!EU) iniciar(); });
 iniciar();
 </script>
