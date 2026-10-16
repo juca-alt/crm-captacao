@@ -2,6 +2,16 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 16/10/2026 (sessão Code) — v8.67: MFO no ar (v8.66) + Embaixadores T1/T2 no ar
+
+- **v8.66 (PR #295) Funil MFO Passo A:** etapa Análise, Ficha MFO, card + Pipeline MFO (delta no Drive: `CANONICO_CRM_delta_2026-10-13_MFO.md`). Extensão 2.8.1 (atividades, valor, funil/etapa) e v8.65 (atividade da extensão → Agenda) também no ar.
+- **Embaixadores da Proteção (PROMPT_CODE 13/10):**
+  - **T1 (banco):** `parceiros.tipo` ('lp'|'embaixador'); lead do embaixador = nome do ESTOQUE (funil 'bn') com `embaixador_id`, `etapa_embaixador` (mapeado/selecionado/esquentado), `gi`, `pessoa_chave`, `area_atuacao`; etapa resumida DERIVADA do card do funil por `emb_etapa_resumida()` (prob 100 → fechado; enc → encerrado; aberta → em_atendimento). Decisões dele: Fechado só em DELIVERY/100% (1A) e apólice cancelada volta a "Encerrado" (2A). `supabase/migrations/embaixadores_v1.sql`.
+  - **T2 (importação):** `emb_importar(embaixador, linhas, arquivo, simular)` (só admin; dedup por DDD+8 dígitos, sem telefone → nome; cliente da carteira e quem já está no CRM só viram aviso). Tela **🌟 Embaixadores** (MODS def:false) com leitor .xlsx nativo + simulação antes. Parceiros ignora tipo embaixador. `supabase/migrations/embaixadores_v2_import.sql`.
+  - Embaixadores cadastrados: Pedro Cortizo (id 2), Winny Karollyne (3), Lucas Pacheco (4) — **e-mail provisório (@email-pendente.invalid)** até ele passar os reais (T4).
+  - Lista do Pedro (Projeto_X_OFICIAL, 554 nomes) importada com OK dele ("1a").
+- **Pendências:** e-mails dos embaixadores; T3 (visão por embaixador, filtros GI/PC, seleção em lote), T4 (login + RLS), T5 (portal), T6 (valor a receber). Função de teste vazia `emb_teste_x` no banco (remover exige confirmar DROP).
+
 ## 🟢 RETOMAR AQUI — 13/10/2026 (sessão Code) — NO AR: v8.63 Drive por cliente · v8.64 convite pro cliente · extensão 2.8.0
 
 Tudo com OK dele no chat ("1A 2A 3A+B", "A", "A - SIM"). Pages conferido por hash (v8.64).
