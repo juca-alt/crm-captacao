@@ -1,7 +1,7 @@
 -- EMBAIXADORES-V2 · T2 (16/10/2026) — importação da planilha Mercado X do embaixador. Idempotente.
 -- emb_tel_chave: chave de identidade do telefone = DDD + últimos 8 dígitos (casa com/sem o 9 e com/sem +55).
 -- emb_nome_norm: nome sem acento, minúsculo, espaços únicos.
--- emb_importar(embaixador, linhas, arquivo): só admin. Cria os nomes no ESTOQUE (funil 'bn', estagio 'estoque') em
+-- emb_importar(embaixador, linhas, arquivo): admin ou backoffice dele (emb_gestor, v3). Cria os nomes no ESTOQUE (funil 'bn', estagio 'estoque') em
 --   etapa_embaixador='mapeado'. Linha sem nome: ignorada e contada. Mesmo telefone (ou, sem telefone, mesmo nome) já
 --   importado pra este embaixador: pula (2ª importação = 0 novos). Já existe no CRM (qualquer funil/Estoque) ou é
 --   cliente da carteira (telefone ou nome igual): NÃO cria, só sinaliza no relatório. id determinístico (emb<id>_<chave>).
@@ -24,11 +24,10 @@ create or replace function public.emb_importar(p_embaixador bigint, p_linhas jso
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_emb public.parceiros%rowtype; v_dono text; v_r jsonb;
 begin
-  if not public.lp_sou_admin() then raise exception 'Só o admin importa leads de embaixador'; end if;
+  v_dono := public.emb_gestor();   -- v3: admin ou backoffice dele; o lead nasce na base do ADMIN
+  if v_dono is null then raise exception 'Só quem gerencia os embaixadores importa'; end if;
   select * into v_emb from public.parceiros where id = p_embaixador and tipo = 'embaixador';
   if not found then raise exception 'Embaixador % não encontrado', p_embaixador; end if;
-  v_dono := lower(coalesce(auth.jwt()->>'email',''));
-  if v_dono = '' then raise exception 'Sem login'; end if;
   -- uma consulta só (sem tabela temporária): classifica cada linha, insere as novas e devolve o relatório
   with l as (
     select n, nullif(trim(x->>'nome'),'') nome, nullif(trim(x->>'telefone'),'') telefone,
