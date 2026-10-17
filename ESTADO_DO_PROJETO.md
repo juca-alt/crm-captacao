@@ -2,7 +2,9 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 16/10/2026 (noite, sessão Code) — v8.69 Embaixadores: nota do embaixador, adicionar 1 nome, link de acesso, portal novo (branch `claude/emb-acesso`, aguarda OK)
+## 🟢 RETOMAR AQUI — 16/10/2026 (noite, sessão Code) — v8.69 Embaixadores NO AR: nota do embaixador, adicionar 1 nome, link de acesso, portal novo
+
+**PR #298 mergeado com OK dele ("publica aí tudo e roda"); Pages conferido por hash (v8.69). Ao vivo: emb-acesso sem login e com chave falsa → 403; emb_portal anônimo → 401. Placar: Pedro 536 (1 Para esquentar) · Lucas 415 (27 Para esquentar) · Winny 0 · Simulação 6.**
 
 - **Lista do Lucas (id 4) IMPORTADA** (OK dele "A amarelos"): 415 nomes (GI A 200 · B 141 · C 74); 5 já clientes e 14 já no Estoque ficaram de fora (só aviso); **27 amarelos (o 1º filtro do Lucas, todos GI A) → Para esquentar**. 4 amarelos já estavam no Estoque por outra fonte (seguem lá).
 - **Embaixador de teste:** "Gustavo · Simulação do portal" (id 5, e-mail pessoal dele, 6 nomes inventados "…Simulada/Fictício" com nota "Simulação do portal — pode apagar"). **Apagar quando ele terminar o teste.**
