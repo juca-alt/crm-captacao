@@ -1010,6 +1010,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .emb-renda{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
   .emb-mais{width:100%;margin-top:8px;min-height:44px}
   .emb-so-cel{display:none}
+  #sem-perfil{position:fixed;left:0;right:0;top:0;z-index:200;background:#fef3c7;color:#78350f;border-bottom:1px solid #fcd34d;padding:8px 16px;display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;font-size:13.5px}
+  #sem-perfil .btn{min-height:40px}
   .emb-mini{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px} .emb-mini .btn{min-height:40px;flex:1 1 30%}
   .emb-nota-ult{font-size:12px;color:var(--azul,#2563eb);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .emb-nota-bt{font:inherit;font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;cursor:pointer;white-space:nowrap}
@@ -1029,7 +1031,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
   .emb-f-full{grid-column:1 / -1} .emb-f-ck{flex-direction:row !important;align-items:center;gap:8px !important;color:inherit !important;font-size:13.5px !important;min-height:40px}
   .emb-f-ck input{width:20px;height:20px;min-height:0}
   .emb-link-tx{width:100%;min-height:90px;margin-top:10px;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--linha);border-radius:10px;background:var(--card,#fff);color:inherit;word-break:break-all}
-  @media (max-width:640px){ .emb-kpis{grid-template-columns:repeat(2,1fr)} .emb-so-cel{display:inline} .emb-topo h1{display:none} .emb-mini .btn{min-height:44px;flex:1 1 45%}
+  @media (max-width:640px){ .emb-kpis{grid-template-columns:repeat(2,1fr)} .emb-so-cel{display:inline} .emb-topo h1{display:none} #sem-perfil .btn{min-height:44px} .emb-mini .btn{min-height:44px;flex:1 1 45%}
     .emb-form{grid-template-columns:1fr} .emb-form input,.emb-form select,.emb-link-tx{font-size:16px;min-height:44px} .emb-f-ck{min-height:44px}
     .emb-nota-bt{min-height:44px;padding:4px 14px} .emb-anx,.emb-anx-chip button{min-height:44px;min-width:44px}
     .emb-etps{grid-template-columns:repeat(3,1fr)} .emb-etp{min-height:56px}
@@ -17332,6 +17334,12 @@ function modOn(k){ if(!PERFIL) return true;              // sem login = modo loc
   const alvo=(typeof delegAtivo==='function'&&delegAtivo())? (ESC.perfis||{})[delegAtivo()] : null;
   if(alvo){ if(alvo.papel==='admin') return true; const m=alvo.modulos; if(m&&k in m) return !!m[k]; return MODS[k]?MODS[k].def:true; }
   if(souAdm()) return true; const m=PERFIL.modulos; if(m&&k in m) return !!m[k]; return MODS[k]?MODS[k].def:true; }
+/* SEM-PERFIL-AVISO-V1 (18/10/2026): ele abriu o CRM no navegador onde testou o portal com o e-mail pessoal (login sem perfil)
+   e achou que módulos tinham sumido (Revisão etc.). Login sem linha em lp_perfis e que não é embaixador → faixa fixa no topo
+   dizendo com qual e-mail está e o botão de sair. Não bloqueia (usuário novo ainda sem perfil segue usando os módulos padrão). */
+function semPerfilAviso(email){ if(document.getElementById('sem-perfil')) return; const d=document.createElement('div'); d.id='sem-perfil';
+  d.innerHTML=`<span>⚠️ Você entrou como <b>${esc(email||'')}</b>, que não tem acesso liberado no CRM — por isso faltam módulos.</span><button class="btn btn-p" onclick="sairDaConta()">Sair e entrar com a sua conta</button>`;
+  document.body.appendChild(d); }
 async function perfilCarregar(){
   if(!sb) return; try{
     const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return;
@@ -17340,7 +17348,8 @@ async function perfilCarregar(){
     if(error) throw error;
     /* EMBAIXADORES-V5 (T5 · teste 11): quem entra é EMBAIXADOR (sem perfil no CRM e com cadastro de embaixador) → vai pro portal
        dele. Os dados já estão blindados pela RLS (ele não enxerga nada daqui); isto só tira ele de telas que não são dele. */
-    if(!data){ try{ const e=await sb.rpc('emb_eu'); if(!e.error&&e.data!=null){ location.replace('embaixador.html'); return; } }catch(_){} }
+    if(!data){ try{ const e=await sb.rpc('emb_eu'); if(!e.error&&e.data!=null){ location.replace('embaixador.html'); return; } }catch(_){}
+      setTimeout(()=>semPerfilAviso(email),600); }   /* SEM-PERFIL-AVISO-V1 (18/10): login sem perfil no CRM abre só com os módulos padrão — avisa, senão parece que módulos sumiram */
     /* CONTA-TROCOU-V1 (12/09): outro e-mail neste aparelho → o cache (e a fila PEND) é do usuário anterior:
        limpa tudo e recarrega, senão a PEND do Gustavo sobe com dono do Daniel e o push inteiro é rejeitado. */
     PERFIL=data||{email,papel:'lp',modulos:{}};
@@ -20995,6 +21004,9 @@ function lpSelfCheck(){
           const bk=Object.assign({},EMB); let h='';
           try{ EMB.leads=[{id:'n1',nome:'Beltrano',etapa:'selecionado',gi:'A'}]; EMB.notas={n1:[{em:'2026-10-16T10:00:00Z',texto:'liga à tarde'}]}; EMB.f={gi:'',pc:'',etapa:'',q:''}; EMB.sel=new Set(); EMB.lim=100; h=embCorpoHTML(); } finally{ Object.assign(EMB,bk); }
           return o.nome==='Fulano Teste'&&!('telefone' in o)&&o.gi==='A'&&/🗨️ liga à tarde/.test(h)&&/🕓 1/.test(h)&&String(embLinkAcesso).includes('/functions/v1/emb-acesso'); })());
+        ok('SEM-PERFIL-AVISO-V1: login sem perfil (e não embaixador) ganha a faixa com o e-mail e o botão de sair; não duplica', (()=>{
+          try{ semPerfilAviso('fulano@x.com'); semPerfilAviso('fulano@x.com'); const n=document.querySelectorAll('#sem-perfil').length, t=(document.getElementById('sem-perfil')||{}).textContent||'';
+            return n===1&&/fulano@x\.com/.test(t)&&/Sair/.test(t)&&String(perfilCarregar).includes('semPerfilAviso(email)'); } finally{ const e=document.getElementById('sem-perfil'); if(e) e.remove(); } })());
         ok('EMBAIXADORES-V8: jornada = posts dos dois lados + marcos do mais novo pro mais antigo, etapa atual no topo; marco desconhecido fica de fora; anexo vai pra pasta <embaixador>/<nome>/', (()=>{
           const it=embJornadaItens([{em:'2026-10-17T10:00:00Z',por:'equipe',texto:'agendei'},{em:'2026-10-18T10:00:00Z',por:'embaixador',texto:'liguei'}],
             [{em:'2026-10-16T10:00:00Z',para:'selecionado'},{em:'2026-10-16T11:00:00Z',para:'xyz'}],'em_atendimento');
