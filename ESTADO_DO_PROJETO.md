@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 📌 PENDENTE ATÉ 31/10/2026 — sessão própria: ORGANIZAR O SUPABASE (decisão dele 18/10: "A")
+
+Diagnóstico de 17/10 (projeto `cjieobmdpqcupzdpckef`): 43 MB de 500 MB · 65 tabelas, todas com RLS · 45 funções · 4 logins. **Risco real: plano grátis sem backup restaurável.**
+1. **Ele:** assinar o **Supabase Pro** (US$ 25/mês → backup diário de 7 dias, sem pausa) — https://supabase.com/dashboard/org/_/billing
+2. **Code (na sessão própria):** exportar pro Drive e tirar do banco as 9 tabelas de backup antigas (`lp_contatos_bkp_20260812`, `lp_contatos_bkp2_20260812`, `leads_bkp_20260615`, `_bkp_20260928_contato_porta`, `_bkp_20261013_mfo`, `_bkp_20260921_ta`, `_bkp_20261013_funcfg`, `_bkp_20260929_vg_amanda` e afins, ~8 MB); apagar `emb_teste_x()`; renomear o projeto ("CRM Vendas LP · produção"); numerar as 59 migrations em ordem + índice; decidir o destino das tabelas da Captação arquivada.
+3. **E-mail (já decidido A):** SMTP do Google com o juca@ + Redirect URL do `embaixador.html`.
+
 ## 🟢 RETOMAR AQUI — 16/10/2026 (noite, sessão Code) — v8.69 Embaixadores NO AR: nota do embaixador, adicionar 1 nome, link de acesso, portal novo
 
 **PR #298 mergeado com OK dele ("publica aí tudo e roda"); Pages conferido por hash (v8.69). Ao vivo: emb-acesso sem login e com chave falsa → 403; emb_portal anônimo → 401. Placar: Pedro 536 (1 Para esquentar) · Lucas 415 (27 Para esquentar) · Winny 0 · Simulação 6.**
