@@ -11,6 +11,7 @@
      Ele entra por link mágico no e-mail (sem senha) e vê SÓ os nomes dele que o Gustavo escolheu, com nome, etapa e valor.
      O isolamento é do BANCO (view emb_portal + RPCs emb_esquentei / emb_nota; ver supabase/migrations/embaixadores_v4_portal.sql
      e embaixadores_v5_notas.sql): esta página não recebe telefone, renda, GI nem nada de outro embaixador.
+     EMBAIXADORES-V8 (18/10): as notas viraram a JORNADA (linha do tempo dos dois lados + anexos imagem/PDF no Storage privado).
      EMBAIXADORES-V7 (16/10): visual novo (painel no topo com o total e o resumo por etapa — tocar leva ao bloco),
      e NOTAS: o embaixador escreve observações em cada nome (o Gustavo lê no CRM). Folha inferior no celular, janela no desktop.
      Blocos: Para esquentar (botão "Esquentei" — o único movimento de etapa dele), Em andamento, Fechados (valor a receber),
@@ -84,10 +85,20 @@ details.enc>summary::before{content:'▸';margin-right:8px} details.enc[open]>su
 .folha .puxa{width:40px;height:4px;border-radius:4px;background:var(--linha);margin:0 auto 12px}
 .folha h3{margin:0 0 2px;font-size:17px}
 .folha textarea{min-height:96px;resize:vertical;margin:12px 0 10px}
-.notas{display:flex;flex-direction:column;gap:8px;margin-top:12px}
-.nota{background:var(--cinza-bg);border-radius:12px;padding:10px 12px;font-size:14px;white-space:pre-wrap;word-break:break-word}
-.nota time{display:block;font-size:11.5px;color:var(--mut);margin-bottom:2px}
-.folha-acoes{display:flex;gap:8px;justify-content:flex-end}
+.jornada{display:flex;flex-direction:column;gap:10px;margin-top:14px;position:relative;padding-left:16px;border-left:2px solid var(--linha)}
+.jt{position:relative;font-size:14px;word-break:break-word} .jt-post>div{white-space:pre-wrap}
+.jt::before{content:'';position:absolute;left:-23px;top:9px;width:12px;height:12px;border-radius:50%;background:var(--card);border:2px solid var(--linha)}
+.jt time{display:block;font-size:11.5px;color:var(--mut);margin-bottom:2px;white-space:normal}
+.jt-post{background:var(--cinza-bg);border-radius:12px;padding:10px 12px}
+.jt-post.meu{background:var(--azul-bg)} .jt-post.meu::before{border-color:var(--azul)}
+.jt-marco{color:var(--mut);padding:4px 0} .jt-marco::before{border-color:var(--laranja)}
+.jt-agora{font-weight:700;padding:4px 0} .jt-agora::before{background:var(--verde);border-color:var(--verde)}
+.anx{display:flex;align-items:center;gap:6px;margin-top:8px;font:inherit;font-size:13.5px;border:1px solid var(--linha);background:var(--card);color:var(--tx);border-radius:10px;padding:8px 10px;min-height:44px;cursor:pointer;width:100%;text-align:left}
+.anx-sel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px} .anx-sel:empty{display:none}
+.anx-chip{display:inline-flex;align-items:center;gap:6px;background:var(--cinza-bg);border-radius:999px;padding:4px 4px 4px 12px;font-size:13px;max-width:100%}
+.anx-chip small{color:var(--mut)} .anx-chip button{border:0;background:transparent;color:var(--mut);font-size:16px;min-width:44px;min-height:44px;cursor:pointer}
+.anx-bt{display:inline-flex;align-items:center}
+.folha-acoes{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
 @media (min-width:720px){
   .wrap{padding-top:28px}
   .hero{padding:22px 24px 20px} .hero h1{font-size:21px}
@@ -137,9 +148,9 @@ async function iniciar(){
   EU=r.data; await carregar();
 }
 async function carregar(){
-  const r=await sb.from('emb_portal').select('id,nome,etapa,etapa_rotulo,valor,notas');
+  const r=await sb.from('emb_portal').select('id,nome,etapa,etapa_rotulo,valor,notas,marcos');
   if(r.error){ $('#app').innerHTML=`<div class="card">Não consegui carregar a sua lista (${esc(r.error.message)}). <button class="btn" onclick="carregar()">Tentar de novo</button></div>`; return; }
-  LEADS=r.data||[]; render(); if(NOTA_ID) abrirNota(NOTA_ID);
+  LEADS=r.data||[]; render(); if(NOTA_ID) abrirJornada(NOTA_ID);
 }
 function cabecalhoSimples(){ return `<div class="hero"><div class="hero-top"><div class="hero-ic">🌟</div><div><h1>Embaixadores da Proteção</h1><div class="ola">Seu portal de indicações</div></div></div></div>`; }
 function telaLogin(msg){
@@ -170,8 +181,8 @@ function linha(l,acao){
     ?`<button class="btn btn-ok${CONF===l.id?' conf':''}" onclick="esquentei('${esc(l.id)}')">${CONF===l.id?'Confirmar ✓':'Esquentei'}</button>`
     :acao==='valor'?`<span class="val">${l.valor==null||l.valor===''?'—':brl(l.valor)}</span>`
     :`<span class="tag t-${esc(l.etapa)}">${esc(l.etapa_rotulo||'')}</span>`;
-  return `<div class="item"><div class="nm"><b>${esc(l.nome||'')}</b>${u?`<span class="ult">📝 ${esc(u.texto)}</span>`:''}</div>
-    <button class="btn btn-ic" title="Notas" aria-label="Notas de ${esc(l.nome||'')}" onclick="abrirNota('${esc(l.id)}')">📝${n?`<span class="q">${n}</span>`:''}</button>${dir}</div>`;
+  return `<div class="item"><div class="nm"><b>${esc(l.nome||'')}</b>${u?`<span class="ult">${u.por==='equipe'?'💼':'🗨️'} ${esc(u.texto||((u.anexos||[]).length?'📎 anexo':''))}</span>`:''}</div>
+    <button class="btn btn-ic" title="Jornada" aria-label="Jornada de ${esc(l.nome||'')}" onclick="abrirJornada('${esc(l.id)}')">🕓${n?`<span class="q">${n}</span>`:''}</button>${dir}</div>`;
 }
 function bloco(id,tit,arr,acao,vazio,dica){
   return `<section class="bloco" id="b-${id}"><h2>${tit} <span class="n">${arr.length}</span></h2>${dica?`<p class="dica">${dica}</p>`:''}
@@ -186,7 +197,7 @@ function render(){
         <div class="regra">50% da comissão líquida do 1º ano de cada negócio fechado.</div></div>
       <div class="etps">${etp('🔥',q.selecionado,'Para esquentar','esquentar')}${etp('♨️',q.esquentado,'Esquentados','andamento')}${etp('💬',q.em_atendimento,'Em conversa','andamento')}${etp('✅',q.fechado,'Fechados','fechados')}${etp('⏹',q.encerrado,'Encerrados','encerrados')}</div>
     </div>`
-    +bloco('esquentar','🔥 Para esquentar',b.esquentar,'esquentar','Nada pra esquentar agora. Quando o Gustavo escolher novos nomes da sua lista, eles aparecem aqui.','Avise a pessoa que o Gustavo vai procurá-la e toque em <b>Esquentei</b>. Use 📝 pra deixar um recado sobre ela.')
+    +bloco('esquentar','🔥 Para esquentar',b.esquentar,'esquentar','Nada pra esquentar agora. Quando o Gustavo escolher novos nomes da sua lista, eles aparecem aqui.','Avise a pessoa que o Gustavo vai procurá-la e toque em <b>Esquentei</b>. Use 🕓 pra contar como foi e anexar print ou PDF.')
     +bloco('andamento','⏳ Em andamento',b.andamento,'etapa','Ninguém em andamento ainda.')
     +bloco('fechados','✅ Fechados',b.fechados,'valor','Nenhum fechado ainda.','"—" = o valor ainda não foi apurado.')
     +(b.encerrados.length?`<details class="enc bloco" id="b-encerrados"><summary>Encerrados · ${b.encerrados.length}</summary><div class="lista">${b.encerrados.map(l=>linha(l,'etapa')).join('')}</div></details>`:`<div id="b-encerrados"></div>`);
@@ -200,24 +211,60 @@ async function esquentei(id){
   if(r.error){ alert('Não foi: '+r.error.message); }
   await carregar();
 }
-/* ── notas ── */
-function abrirNota(id){ const l=LEADS.find(x=>x.id===id); if(!l){ fecharNota(); return; } NOTA_ID=id;
-  const ns=(Array.isArray(l.notas)?l.notas:[]).slice().reverse();
-  $('#camada').innerHTML=`<div class="fundo" onclick="if(event.target===this)fecharNota()"><div class="folha" role="dialog" aria-label="Notas">
-    <div class="puxa"></div><h3>📝 ${esc(l.nome||'')}</h3><div class="mut">O Gustavo lê o que você escrever aqui.</div>
-    <textarea id="nota-tx" maxlength="1000" placeholder="Ex.: falei com ele, prefere contato à tarde"></textarea>
-    <div class="folha-acoes"><button class="btn" onclick="fecharNota()">Fechar</button><button class="btn btn-p" id="nota-bt" onclick="salvarNota()">Salvar nota</button></div>
-    <div class="notas">${ns.length?ns.map(n=>`<div class="nota"><time>${esc(dt(n.em))}</time>${esc(n.texto)}</div>`).join(''):'<div class="mut">Nenhuma nota ainda.</div>'}</div>
+/* ── JORNADA (EMBAIXADORES-V8, 18/10) — linha do tempo do nome, dos dois lados: o que ele conta + o que o Gustavo/Victor
+   contam + os marcos (liberado, esquentei) + onde está agora. Anexos (imagem/PDF, até 10 MB) no Storage privado. ── */
+const MARCO={selecionado:'🔥 Liberado pra você esquentar',esquentado:'♨️ Você marcou Esquentei',mapeado:'↩ Saiu da lista de esquentar'};
+const AGORA={em_atendimento:'💬 Agora: em conversa com o Gustavo',fechado:'✅ Agora: negócio fechado',encerrado:'⏹ Agora: encerrado'};
+/* PURA: junta posts + marcos numa lista do mais novo pro mais antigo; a etapa atual (sem data) vai no topo */
+function jornadaItens(posts,marcos,etapa){
+  const it=[]; (posts||[]).forEach(p=>it.push({tipo:'post',em:p.em,p}));
+  (marcos||[]).forEach(m=>{ if(MARCO[m.para]) it.push({tipo:'marco',em:m.em,txt:MARCO[m.para]}); });
+  it.sort((a,b)=>String(b.em||'').localeCompare(String(a.em||'')));
+  if(AGORA[etapa]) it.unshift({tipo:'agora',txt:AGORA[etapa]});
+  return it; }
+let ANEXOS=[];
+const tamTxt=n=>n>=1048576?(n/1048576).toFixed(1).replace('.',',')+' MB':Math.max(1,Math.round(n/1024))+' KB';
+function itemHTML(x){
+  if(x.tipo==='agora') return `<div class="jt jt-agora">${esc(x.txt)}</div>`;
+  if(x.tipo==='marco') return `<div class="jt jt-marco"><time>${esc(dt(x.em))}</time>${esc(x.txt)}</div>`;
+  const p=x.p, meu=p.por!=='equipe';
+  return `<div class="jt jt-post${meu?' meu':''}"><time>${esc(meu?'Você':(p.autor||'Equipe'))} · ${esc(dt(p.em))}</time>${p.texto?`<div>${esc(p.texto)}</div>`:''}
+    ${(p.anexos||[]).map(a=>`<button class="anx" onclick="abrirAnexo('${esc(a.path)}')">${/pdf/.test(a.mime||'')?'📄':'🖼️'} ${esc(a.nome||'arquivo')}</button>`).join('')}</div>`; }
+function abrirJornada(id){ const l=LEADS.find(x=>x.id===id); if(!l){ fecharJornada(); return; } if(NOTA_ID!==id) ANEXOS=[]; NOTA_ID=id;
+  const its=jornadaItens(l.notas,l.marcos,l.etapa), tx=document.getElementById('nota-tx'), rascunho=tx?tx.value:'';
+  $('#camada').innerHTML=`<div class="fundo" onclick="if(event.target===this)fecharJornada()"><div class="folha" role="dialog" aria-label="Jornada">
+    <div class="puxa"></div><h3>🕓 ${esc(l.nome||'')}</h3><div class="mut">Conte como foi o contato. O Gustavo vê aqui, e o que ele registrar aparece pra você.</div>
+    <textarea id="nota-tx" maxlength="2000" placeholder="Ex.: falei com ele, prefere contato à tarde">${esc(rascunho)}</textarea>
+    <div class="anx-sel">${ANEXOS.map((f,i)=>`<span class="anx-chip">${/pdf/.test(f.type)?'📄':'🖼️'} ${esc(f.name)} <small>${tamTxt(f.size)}</small><button aria-label="Tirar" onclick="tirarAnexo(${i})">✕</button></span>`).join('')}</div>
+    <div class="folha-acoes"><label class="btn anx-bt">📎 Anexar<input type="file" accept="image/*,application/pdf" multiple hidden onchange="escolherAnexos(this.files)"></label>
+      <span style="flex:1"></span><button class="btn" onclick="fecharJornada()">Fechar</button><button class="btn btn-p" id="nota-bt" onclick="enviarJornada()">Enviar</button></div>
+    <div class="jornada">${its.length?its.map(itemHTML).join(''):'<div class="mut">Nada registrado ainda.</div>'}</div>
   </div></div>`; }
-function fecharNota(){ NOTA_ID=''; $('#camada').innerHTML=''; }
-async function salvarNota(){ const tx=($('#nota-tx').value||'').trim(); if(!tx) return; const bt=$('#nota-bt'); bt.disabled=true;
-  const r=await sb.rpc('emb_nota',{p_id:NOTA_ID,p_texto:tx}); bt.disabled=false;
-  if(r.error){ alert('Não salvou: '+r.error.message); return; }
-  const l=LEADS.find(x=>x.id===NOTA_ID); if(l) l.notas=r.data||[]; render(); abrirNota(NOTA_ID); }
-document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&NOTA_ID) fecharNota(); });
-async function sair(){ try{ await sb.auth.signOut(); }catch(_){} EU=null; LEADS=[]; fecharNota(); telaLogin(); }
+function fecharJornada(){ NOTA_ID=''; ANEXOS=[]; $('#camada').innerHTML=''; }
+function escolherAnexos(fs){ const tx=document.getElementById('nota-tx');
+  [...(fs||[])].forEach(f=>{ if(ANEXOS.length>=5){ alert('Até 5 arquivos por vez.'); return; }
+    if(!/^image\/|^application\/pdf$/.test(f.type||'')){ alert(f.name+': só imagem ou PDF.'); return; }
+    if(f.size>10485760){ alert(f.name+': passa de 10 MB.'); return; } ANEXOS.push(f); });
+  abrirJornada(NOTA_ID); if(tx){ const n=document.getElementById('nota-tx'); if(n) n.value=tx.value; } }
+function tirarAnexo(i){ ANEXOS.splice(i,1); abrirJornada(NOTA_ID); }
+const nomeSeguro=n=>String(n||'arquivo').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^\w.\-]+/g,'_').slice(-80);
+async function enviarJornada(){ const tx=($('#nota-tx').value||'').trim(); if(!tx&&!ANEXOS.length) return; const bt=$('#nota-bt'); bt.disabled=true; bt.textContent='Enviando…';
+  try{ const an=[];
+    for(const f of ANEXOS){ const path=`${EU.id}/${NOTA_ID}/${Date.now()}_${nomeSeguro(f.name)}`;
+      const u=await sb.storage.from('emb-anexos').upload(path,f,{contentType:f.type,upsert:false}); if(u.error) throw u.error;
+      an.push({path,nome:f.name,mime:f.type,tam:f.size}); }
+    const r=await sb.rpc('emb_jornada_add',{p_id:NOTA_ID,p_texto:tx,p_anexos:an}); if(r.error) throw r.error;
+    const l=LEADS.find(x=>x.id===NOTA_ID); if(l) l.notas=r.data||[]; ANEXOS=[]; const t=document.getElementById('nota-tx'); if(t) t.value='';
+    render(); abrirJornada(NOTA_ID);
+  }catch(e){ alert('Não foi: '+(e&&e.message||e)); bt.disabled=false; bt.textContent='Enviar'; } }
+async function abrirAnexo(path){ const w=window.open('','_blank');
+  const r=await sb.storage.from('emb-anexos').createSignedUrl(path,600);
+  if(r.error||!r.data){ if(w) w.close(); alert('Não abriu: '+(r.error&&r.error.message||'sem link')); return; }
+  if(w) w.location=r.data.signedUrl; else location.href=r.data.signedUrl; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&NOTA_ID) fecharJornada(); });
+async function sair(){ try{ await sb.auth.signOut(); }catch(_){} EU=null; LEADS=[]; fecharJornada(); telaLogin(); }
 window.pedirLink=pedirLink; window.esquentei=esquentei; window.sair=sair; window.carregar=carregar; window.portalBlocos=blocos;
-window.abrirNota=abrirNota; window.fecharNota=fecharNota; window.salvarNota=salvarNota;
+window.abrirJornada=abrirJornada; window.fecharJornada=fecharJornada; window.enviarJornada=enviarJornada; window.escolherAnexos=escolherAnexos; window.tirarAnexo=tirarAnexo; window.abrirAnexo=abrirAnexo; window.portalJornada=jornadaItens;
 if(sb) sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_IN'&&!EU) iniciar(); });
 iniciar();
 </script>

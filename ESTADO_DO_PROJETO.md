@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 18/10/2026 (sessão Code) — v8.70 Embaixadores: JORNADA com anexos (no lugar das notas) · simulação apagada
+
+- **Simulação apagada** (pedido dele, teste OK): cadastro id 5 + 6 nomes inventados. O login de teste (e-mail pessoal dele) ficou no Auth sem cadastro → o portal diz "não cadastrado".
+- **Jornada (EMBAIXADORES-V8):** linha do tempo por nome, dos DOIS lados — posts do embaixador (🗨️) e da equipe (💼 Gustavo/Victor; o embaixador vê), marcos automáticos (liberado, esquentei; sem e-mail de quem moveu) e "Agora: …" no topo. Anexos imagem/PDF (até 5 × 10 MB) no **Storage privado `emb-anexos`**, pasta `<embaixador>/<nome>/`, abertos por URL assinada (10 min). Banco: `embaixadores_v6_jornada.sql` (bucket + 2 políticas no storage.objects, `emb_jornada_add`, `emb_marcos`, `emb_jornada_lead`, `emb_portal` + coluna `marcos`, `emb_portal_eu` com id). Testado em transação desfeita (os dois lados postam; pasta errada, vazio e Winny recusados).
+- **SEM-PERFIL-AVISO-V1:** ele achou que módulos tinham sumido (Revisão…) — era o navegador logado com o e-mail de TESTE (perfis intactos, conferido no banco). Agora login sem perfil no CRM e que não é embaixador ganha faixa fixa no topo com o e-mail e "Sair e entrar com a sua conta" (não bloqueia).
+- CRM: botão 🕓 na linha (todo nome já liberado ou com post) → modal com a jornada + Registrar + 📎. Portal: 🕓 em cada nome → folha com a jornada + Enviar + 📎.
+
 ## 📌 PENDENTE ATÉ 31/10/2026 — sessão própria: ORGANIZAR O SUPABASE (decisão dele 18/10: "A")
 
 Diagnóstico de 17/10 (projeto `cjieobmdpqcupzdpckef`): 43 MB de 500 MB · 65 tabelas, todas com RLS · 45 funções · 4 logins. **Risco real: plano grátis sem backup restaurável.**
