@@ -2,6 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 19/10/2026 (noite) — v8.72 FUNIL-BC-EDITAVEL-V1 · v8.71 + extensão 2.9.0 NO AR
+
+- **v8.71 + extensão 2.9.0 publicadas** (PR #300, OK dele "A, pode publicar"); Pages conferido por hash. Zip 2.9.0 entregue no chat.
+- **Bug (relato dele com print):** em Funil & Etapas → Base de Clientes, "＋ Adicionar etapa" dizia "Etapa criada" e a etapa sumia. Causa: `bcRedesign` (migração de 09/09) rodava a cada `rebuildFunilLp` e remontava o bc na lista fixa de 9 etapas — apagava etapa nova e desfazia reordenação. Agora só migra cfg ANTIGA (falta alguma das 9) e preserva etapas `cst_*`. E `funAdd` gera código `cst_N` único em TODOS os funis (antes olhava só lp/bc → VG e MFO ganhavam o mesmo `cst_2`, e ET_LABEL é mapa global por código). SelfTest novo.
+
 ## 🟢 RETOMAR AQUI — 19/10/2026 (sessão Code) — v8.71 + extensão 2.9.0: CARD DO CRM no painel + Umbler Talk (branch `claude/ext-card-crm`, aguarda OK)
 
 - **Pedido dele (19/10):** a extensão "tem que abrir um card como é no CRM, igual" (decisão **A**: só o card do CRM, saem as abas 2.8), abrindo rápido — principalmente com a conversa ligada (📌). E o **PROMPT_CODE Umbler Talk (v2.9.0)**: o mesmo painel ao lado da conversa no `app-utalk.umbler.com`, só DOM, sem API.

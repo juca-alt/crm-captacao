@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.71 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.72 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1998,13 +1998,17 @@ const BC_ENC_V1={'Venda perdida':true};
    A venda fecha em Apólice Emitida (bc:'Venda ganha'; lp:'EMISSÃO'→'DELIVERY'). Delivery NÃO soma
    PA/pond no funil nem conta como venda — mas mantém a coluna. Fonte ÚNICA do "é pós-venda". */
 function ehPosVenda(etapa,funil){ return (funil==='bc') ? etapa===BC_DELIVERY : etapa==='DELIVERY'; }
+/* FUNIL-BC-EDITAVEL-V1 (19/10/2026): ele criava etapa na Base de Clientes, aparecia "Etapa criada" e ela sumia — esta migração
+   de 09/09 rodava a CADA salvar e remontava o funil na lista fixa (apagava etapa nova e desfazia reordenação). Agora ela só
+   migra cfg ANTIGA (falta alguma das 9 etapas-base) e preserva as etapas criadas por ele (antes do encerramento). */
 function bcRedesign(cfg){ if(!cfg||!Array.isArray(cfg.bc)) return false;
-  const atual=cfg.bc.map(e=>e&&e.id).join('|');
-  const jaOk = atual===BC_ORDER_V1.join('|') && cfg.bc.every(e=>!!e.enc===!!BC_ENC_V1[e.id]);
-  if(jaOk) return false;
   const byId={}; cfg.bc.forEach(e=>{ if(e&&e.id) byId[e.id]=e; });
+  if(BC_ORDER_V1.every(id=>byId[id])) return false;   /* já migrada: o funil é dele — adicionar, tirar do fluxo e reordenar valem */
   const fab={}; (FUNIL_FAB.bc||[]).forEach(x=>{ fab[x[0]]={id:x[0],label:x[0],cor:x[1],prob:x[2],enc:!!x[3]}; });
-  cfg.bc=BC_ORDER_V1.map(id=>{ const e=byId[id]||fab[id]||{id,label:id,cor:'cinza',prob:10}; return {id,label:e.label||id,cor:e.cor||'cinza',prob:(e.prob==null?10:e.prob),enc:!!BC_ENC_V1[id]}; });
+  const base=BC_ORDER_V1.map(id=>{ const e=byId[id]||fab[id]||{id,label:id,cor:'cinza',prob:10}; return {id,label:e.label||id,cor:e.cor||'cinza',prob:(e.prob==null?10:e.prob),enc:!!BC_ENC_V1[id]}; });
+  const extras=cfg.bc.filter(e=>e&&/^cst_/.test(e.id));   /* etapas criadas à mão sobrevivem */
+  const iEnc=base.findIndex(e=>e.enc); base.splice(iEnc<0?base.length:iEnc,0,...extras);
+  cfg.bc=base;
   return true; }
 let FUNIL_CFG=funFabMat();
 try{ const _r=localStorage.getItem('crmlp_funil_cfg_v1'); if(_r){ const _c=JSON.parse(_r); if(funCfgValida(_c)) Object.keys(_c).forEach(k=>{ if(Array.isArray(_c[k])) FUNIL_CFG[k]=_c[k]; }); } }catch(_){}
@@ -19911,7 +19915,7 @@ function funSetProb(i,v){ let n=Math.max(0,Math.min(100,parseInt(v||'0',10)||0))
   const r=document.querySelectorAll('#funcfg-rows .fc-row')[i]; if(r) r.classList.toggle('ed',funEditado(FUN_edit,i)); }
 function funToggleEnc(i){ FUNIL_CFG[FUN_edit][i].enc=!FUNIL_CFG[FUN_edit][i].enc; funApply(); funRenderRows(); funRenderPreview(); funRenderInv(); }
 function funMove(i,d){ const a=FUNIL_CFG[FUN_edit], j=i+d; if(j<0||j>=a.length)return; const t=a[i];a[i]=a[j];a[j]=t; funApply(); funRenderRows(); funRenderPreview(); funRenderInv(); }
-function funAdd(){ let s=0; for(const f of ['lp','bc']) FUNIL_CFG[f].forEach(e=>{const m=/^cst_(\d+)$/.exec(e.id); if(m)s=Math.max(s,+m[1]);});
+function funAdd(){ let s=0; for(const f of Object.keys(FUNIL_CFG)) (FUNIL_CFG[f]||[]).forEach(e=>{const m=/^cst_(\d+)$/.exec(e&&e.id); if(m)s=Math.max(s,+m[1]);});   /* FUNIL-BC-EDITAVEL-V1: código único em TODOS os funis (nome de etapa é mapa global por código) */
   const nova={id:'cst_'+(s+1),label:'Nova etapa',cor:'cinza',prob:10,enc:false}; const enc=FUNIL_CFG[FUN_edit].findIndex(e=>e.enc);
   if(enc<0) FUNIL_CFG[FUN_edit].push(nova); else FUNIL_CFG[FUN_edit].splice(enc,0,nova); funApply(); funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); toast('Etapa criada',true); }
 
@@ -21014,6 +21018,15 @@ function lpSelfCheck(){
           const bk=Object.assign({},EMB); let h='';
           try{ EMB.leads=[{id:'n1',nome:'Beltrano',etapa:'selecionado',gi:'A'}]; EMB.notas={n1:[{em:'2026-10-16T10:00:00Z',texto:'liga à tarde'}]}; EMB.f={gi:'',pc:'',etapa:'',q:''}; EMB.sel=new Set(); EMB.lim=100; h=embCorpoHTML(); } finally{ Object.assign(EMB,bk); }
           return o.nome==='Fulano Teste'&&!('telefone' in o)&&o.gi==='A'&&/🗨️ liga à tarde/.test(h)&&/🕓 1/.test(h)&&String(embLinkAcesso).includes('/functions/v1/emb-acesso'); })());
+        ok('FUNIL-BC-EDITAVEL-V1: etapa nova na Base de Clientes fica (antes do encerramento) e sobrevive ao salvar; cfg antiga ainda migra sem perder etapa criada; código único entre funis', (()=>{
+          const bk=JSON.stringify(FUNIL_CFG), bkE=FUN_edit, bkS=window.funCfgSalvar;
+          try{ window.funCfgSalvar=()=>{}; FUN_edit='bc'; const n0=FUNIL_CFG.bc.length; funAdd(); const nova=FUNIL_CFG.bc.find(e=>/^cst_/.test(e.id)&&!JSON.parse(bk).bc.some(x=>x.id===e.id));
+            rebuildFunilLp(); const fica=FUNIL_CFG.bc.length===n0+1&&!!nova&&FUNIL_CFG.bc.findIndex(e=>e.id===nova.id)<FUNIL_CFG.bc.findIndex(e=>e.enc);
+            FUN_edit='mfo'; funAdd(); const ids=Object.keys(FUNIL_CFG).flatMap(f=>(FUNIL_CFG[f]||[]).map(e=>e.id)).filter(x=>/^cst_/.test(x)); const unicos=new Set(ids).size===ids.length;
+            const velha={bc:[{id:'Clientes Ativos',label:'Clientes Ativos',cor:'cinza',prob:10},{id:'cst_9',label:'Minha',cor:'azul',prob:20},{id:'Venda perdida',label:'Perdida',cor:'verm',prob:0,enc:true}]};
+            const mig=bcRedesign(velha)&&velha.bc.length===BC_ORDER_V1.length+1&&velha.bc.some(e=>e.id==='cst_9')&&velha.bc[velha.bc.length-1].id==='Venda perdida';
+            return fica&&unicos&&mig; }
+          finally{ const o=JSON.parse(bk); Object.keys(FUNIL_CFG).forEach(k=>{ if(o[k]) FUNIL_CFG[k]=o[k]; }); FUN_edit=bkE; window.funCfgSalvar=bkS; rebuildFunilLp(); } })());
         ok('SEM-PERFIL-AVISO-V1: login sem perfil (e não embaixador) ganha a faixa com o e-mail e o botão de sair; não duplica', (()=>{
           try{ semPerfilAviso('fulano@x.com'); semPerfilAviso('fulano@x.com'); const n=document.querySelectorAll('#sem-perfil').length, t=(document.getElementById('sem-perfil')||{}).textContent||'';
             return n===1&&/fulano@x\.com/.test(t)&&/Sair/.test(t)&&String(perfilCarregar).includes('semPerfilAviso(email)'); } finally{ const e=document.getElementById('sem-perfil'); if(e) e.remove(); } })());
