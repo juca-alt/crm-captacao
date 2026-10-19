@@ -28,11 +28,12 @@ const HANDLERS={
   'cart.perfil':(m)=>cartPerfilGet(m.ref),          // 2.8.0: Família (carteira_perfil) na aba 👤 Perfil
 };
 
-/* 2.8.0: o card completo (iframe do vendas.html no painel / janela ao lado / painel lateral do Chrome) SAIU — o painel
-   rápido ganhou as abas 👤 Perfil e 💼 Negócios, e o app inteiro fica a um clique ("↗ CRM" = link pra aba nova, no panel.js). */
-/* ícone da extensão na barra do Chrome: no WhatsApp Web abre o painel; fora dele, abre o WhatsApp Web */
+/* 2.9.0: o painel volta a mostrar o CARD DO CRM (iframe content/embed.html → vendas.html?wa=1, modo leve) — e roda também
+   no Umbler Talk (content/umbler-dom.js). A rede da extensão continua toda aqui; o card fala com o banco pelo próprio app. */
+/* ícone da extensão na barra do Chrome: no WhatsApp Web ou no Umbler abre o painel; fora deles, abre o WhatsApp Web */
+const SITES_RE=/^https:\/\/(web\.whatsapp\.com|app-utalk\.umbler\.com)\//;
 try{ chrome.action.onClicked.addListener(async tab=>{
-  if(tab&&/^https:\/\/web\.whatsapp\.com\//.test(tab.url||'')){ try{ await chrome.tabs.sendMessage(tab.id,{type:'wa.abrir'}); }catch(_){} return; }
+  if(tab&&SITES_RE.test(tab.url||'')){ try{ await chrome.tabs.sendMessage(tab.id,{type:'wa.abrir'}); }catch(_){} return; }
   try{ await chrome.tabs.create({url:'https://web.whatsapp.com/'}); }catch(_){}
 }); }catch(_){}
 
@@ -42,11 +43,12 @@ try{ chrome.action.onClicked.addListener(async tab=>{
 // órfã no boot, então reinjetar é idempotente.
 chrome.runtime.onInstalled.addListener(async()=>{
   try{
-    const tabs=await chrome.tabs.query({url:'https://web.whatsapp.com/*'});
+    const tabs=await chrome.tabs.query({url:['https://web.whatsapp.com/*','https://app-utalk.umbler.com/*']});
     for(const t of tabs){
       try{
+        const umbler=/app-utalk\.umbler\.com/.test(t.url||'');
         await chrome.scripting.executeScript({target:{tabId:t.id},
-          files:['config.js','normalize.js','content/wa-dom.js','content/panel.js']});
+          files:['config.js','normalize.js',umbler?'content/umbler-dom.js':'content/wa-dom.js','content/panel.js']});
       }catch(_){/* aba descarregada/suspensa — o F5 manual resolve essa */}
     }
   }catch(_){}
