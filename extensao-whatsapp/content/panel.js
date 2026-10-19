@@ -10,7 +10,7 @@ if(window.__waCrmPanelLoaded) return; window.__waCrmPanelLoaded=true;
 // ---------- bridge com o service worker ----------
 // Contexto morto (extensão recarregada com a aba aberta) vira code:'ctx' com
 // mensagem acionável — nunca mais "Extension context invalidated" cru na cara.
-const CTX_MSG='A extensão foi atualizada. Recarregue esta página do WhatsApp pra reconectar.';
+const CTX_MSG='A extensão foi atualizada. Recarregue esta página pra reconectar.';
 function ctxMorto(m){ return /context invalidated|receiving end does not exist|message port closed/i.test(m||''); }
 function ctxErr(m){ return ctxMorto(m)?{ok:false,code:'ctx',error:CTX_MSG}:{ok:false,error:m}; }
 function send(type,payload){
@@ -25,6 +25,18 @@ function send(type,payload){
     }catch(e){ res(ctxErr(String(e))); }
   });
 }
+
+// ---------- 2.9.0: adaptador de DOM por site (o resto do painel não sabe em que site está) ----------
+const NO_UMBLER=/(^|\.)umbler\.com$/.test(location.hostname);
+const DOM=(NO_UMBLER&&typeof UMBLER_DOM!=='undefined')?UMBLER_DOM:WA_DOM;
+if(NO_UMBLER){ document.documentElement.classList.add('wa-crm-umbler');
+  /* PUSH: com o painel aberto a página do Umbler encolhe à esquerda — o painel nunca cobre a caixa de mensagem nem o
+     "Detalhes do contato" (offcanvas fixo na direita, que passa a abrir encostado no painel). Largura = a do .panel.crm. */
+  document.querySelectorAll('#wa-crm-push').forEach(e=>e.remove());
+  const st=document.createElement('style'); st.id='wa-crm-push';
+  st.textContent='html.wa-crm-umbler.wa-crm-aberto body{width:calc(100vw - 440px)!important;max-width:calc(100vw - 440px)!important;overflow-x:hidden!important}'
+    +'html.wa-crm-umbler.wa-crm-aberto .offcanvas.offcanvas-end{right:440px!important}';
+  document.documentElement.appendChild(st); }
 
 // ---------- shadow DOM ----------
 // Reinjeção pós-reload da extensão (sw.js onInstalled): a UI da injeção anterior
@@ -56,7 +68,7 @@ handle.textContent='❯';
 root.appendChild(handle);
 
 function setOpen(open){
-  OPEN=open;
+  OPEN=open; document.documentElement.classList.toggle('wa-crm-aberto',!!open);   /* 2.9.0: no Umbler a página encolhe (ver PUSH abaixo) */
   panel.classList.toggle('hidden',!open);
   handle.classList.toggle('hidden',!open);
   fab.classList.toggle('hidden',open); // aberto = fab some (a aba assume); recolhido = fab volta
@@ -212,7 +224,7 @@ function wireMsgCard(l){
   const fill=$('#wa-msg-fill'); if(!fill) return;
   fill.onclick=()=>{
     const t=selectedMsg(); if(!t){ toast('Nenhum modelo.'); return; }
-    const ok=WA_DOM.fillComposer(fillTpl(t.texto,l));
+    const ok=DOM.fillComposer(fillTpl(t.texto,l));
     toast(ok?'✓ Escrito no campo — revise e envie (Enter)':'Abra uma conversa pra escrever no campo.');
   };
   $('#wa-msg-copy').onclick=async()=>{
@@ -1068,51 +1080,62 @@ async function loadFunil(){
   if(r.ok&&r.data) FUNIL=buildFunnel(r.data);
 }
 
+// ---------- 2.9.0: CARD DO CRM — o mesmo card do app, dentro do painel ----------
+// Pedido dele (19/10): "tem que abrir um card como é no CRM, igual — aí atualizo tudo lá como se tivesse no CRM; se mudo algo
+// no CRM fica mais fácil pra extensão também". O painel segura UM iframe (content/embed.html → vendas.html?wa=1, o modo leve
+// CARD-WA-LEVE-V1 do app) que NUNCA recarrega ao trocar de conversa: só manda {crm-chat} com telefone/nome e, quando o
+// servidor confirma quem é (telefone ou 📌 vínculo da conversa), o id — aí o card abre direto pelo id.
+// As abas 👤 Perfil / 💼 Negócios da 2.8 ficam no código só como reserva (rollback rápido) — não são mais desenhadas.
+const EXT_ORIGIN='chrome-extension://'+chrome.runtime.id;
+let FRAME=null, CHAT_ID='';
+function crmChat(){ const c=CHAT; if(!c) return null; if(c.isGroup) return {grupo:true};
+  return {tel:c.phoneRaw||'',nome:chatPessoa()||c.name||'',id:CHAT_ID||'',keys:chatKeys(c)}; }
+function crmAvisa(){ if(!FRAME||!FRAME.contentWindow) return; try{ FRAME.contentWindow.postMessage({tipo:'crm-chat',chat:crmChat()},EXT_ORIGIN); }catch(_){} }
+function crmBarHTML(){ const n=CHAT&&!CHAT.isGroup?(chatPessoa()||CHAT.name||''):'';
+  return `<div class="cb"><span class="ph-t">VISÃO LP · CRM</span><span class="sub">${esc(EXT_VERSION)}</span><span class="cb-n">${esc(n)}</span>
+    <button class="ph-b" id="cb-rel" title="Recarregar o card">↻</button>
+    <a class="ph-b" href="${CRM_APP_URL}" target="_blank" rel="noopener" title="Abrir o CRM completo numa aba nova">↗ CRM</a>
+    <button class="ph-b" id="wa-logout" title="Sair da conta da extensão">sair</button>
+    <button class="x" id="wa-close" title="Fechar">×</button></div>`; }
+function renderCrm(aviso){
+  CUR=null; panel.classList.add('crm');
+  if(!FRAME){ FRAME=document.createElement('iframe'); FRAME.className='crm-frame'; FRAME.title='Card do CRM';
+    FRAME.setAttribute('allow','clipboard-write'); FRAME.src=chrome.runtime.getURL('content/embed.html'); }
+  if(!panel.querySelector('.crm-wrap')){
+    panel.innerHTML=crmBarHTML()+`<div class="crm-aviso" hidden></div><div class="crm-wrap"></div><div class="toast" id="wa-toast"></div>`;
+    panel.querySelector('.crm-wrap').appendChild(FRAME); wireHeader();
+    $('#cb-rel').onclick=()=>{ try{ FRAME.contentWindow.postMessage({tipo:'crm-recarregar'},EXT_ORIGIN); }catch(_){} };
+  } else { const n=panel.querySelector('.cb-n'); if(n) n.textContent=CHAT&&!CHAT.isGroup?(chatPessoa()||CHAT.name||''):''; }
+  const av=panel.querySelector('.crm-aviso'); av.innerHTML=aviso||''; av.hidden=!aviso;
+}
+/* mensagens do card (via embed.html): pronto → manda a conversa; texto pronto → caixa de mensagem (NÃO envia) */
+window.addEventListener('message',e=>{
+  if(!FRAME||e.source!==FRAME.contentWindow||e.origin!==EXT_ORIGIN) return;
+  const d=e.data||{};
+  if(d.tipo==='embed-pronto'){ crmAvisa(); return; }
+  if(d.tipo==='crm-texto'&&d.texto){ const ok=DOM.fillComposer(String(d.texto));
+    if(ok) toast('✓ Texto na caixa da conversa — revise e aperte Enter');
+    else { try{ navigator.clipboard.writeText(String(d.texto)); }catch(_){} toast('Não achei a caixa de mensagem — copiei o texto pra você colar'); } }
+});
 async function lookup(){
   if(!OPEN) return;
-  const c=CHAT, seq=++LOOKSEQ;
-  if(!AUTH.logged){ renderLogin(); return; }
-  if(!c){ renderNoChat(); return; }
-  if(c.isGroup){ renderGroup(); return; }
-  renderLoading();
-  if(VIEW==='lp'){ // Visão LP: contato do funil (telefone → nome forte) → Estoque → Carteira → criar
-    let contatos=[],carteira=[],byName=null,estoque=[]; PELO_NOME=null;
-    const [r]=await Promise.all([send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||'',keys:chatKeys(c)}),loadLpCfg()]);
-    VINC=!!(r&&r.ok&&r.data&&r.data.vinculo);
-    if(seq!==LOOKSEQ) return;                    /* já trocou de conversa: esta resposta é de outra pessoa */
-    if(!handleAuthFail(r)) return;
-    if(r.ok&&r.data){ contatos=r.data.contatos||[]; carteira=r.data.carteira||[]; byName=r.data.byName; estoque=r.data.estoque||[]; }
-    if(!contatos.length&&!(byName&&byName.strong)&&estoque.length===1){ renderLpEstoque(estoque[0]); return; }
-    if(contatos.length===1) renderLpContato(contatos[0],carteira[0]||null);
-    else if(contatos.length>1) renderLpContatoPicker(contatos,carteira[0]||null);
-    else if(byName&&byName.strong){ PELO_NOME=String(byName.strong.id); renderLpContato(byName.strong,carteira[0]||null); }
-    else if(carteira.length===1) renderLpCliente(carteira[0]);
-    else if(carteira.length>1) renderLpPicker(carteira);
-    else renderNaoAchou((byName&&byName.sugestoes)||[]);   /* 2.8.0: ninguém com esse telefone → busca por nome + criar */
-    return;
-  }
-  let matches=[];
-  if(c.phoneRaw){
-    const r=await send('leads.findByPhone',{phone:c.phoneRaw});
-    if(seq!==LOOKSEQ) return;
-    if(!handleAuthFail(r)) return;
-    matches=(r.ok&&r.data)||[];
-  }
-  if(matches.length===1){ LEAD=matches[0]; renderLead(); return; }
-  if(matches.length>1){ renderPicker(matches,'Mais de um lead com esse telefone — escolha (e unifique em Duplicatas no CRM):'); return; }
-  // sem match por telefone → nome, tolerante às tags do WhatsApp ("OT Fulano Rec LP…"):
-  // único candidato com primeiro+último nome contidos no apelido abre o card direto
-  // (com aviso); os demais viram sugestão — nome nunca trava criação.
-  let sugestoes=[];
-  if(c.name){
-    const r=await send('leads.findByName',{name:c.name});
-    if(seq!==LOOKSEQ) return;
-    if(!handleAuthFail(r)) return;
-    const d=(r.ok&&r.data)||{};
-    if(d.strong){ LEAD=d.strong; renderLead(); toast('Casado pelo NOME do contato — confira se é a pessoa certa'); return; }
-    sugestoes=d.sugestoes||[];
-  }
-  renderCreate(sugestoes);
+  const c=CHAT, seq=++LOOKSEQ; CHAT_ID='';
+  if(!AUTH.logged){   /* sem login na extensão o card abre igual (pelo telefone, no próprio CRM); o login só dá o atalho do 📌 vínculo */
+    renderCrm(c&&c.isGroup?'👥 Conversa de <b>grupo</b> — o card do CRM é por contato individual.':'🔑 <button class="lnk" id="cb-entrar">Entre na extensão</button> pra abrir direto pela conversa ligada (📌).');
+    const be=panel.querySelector('#cb-entrar'); if(be) be.onclick=()=>renderLogin(); crmAvisa(); return; }
+  const dica=c&&c.isGroup?'👥 Conversa de <b>grupo</b> — o card do CRM é por contato individual.'
+    :(c&&NO_UMBLER&&c.source==='nome'?'ℹ️ Contato salvo no Umbler: abra <b>Detalhes do contato</b> (👤 no topo da conversa) e eu acho pelo telefone.':'');
+  renderCrm(dica); crmAvisa();
+  if(!c||c.isGroup) return;
+  /* o CRM já abre pelo telefone, do próprio cache; aqui o servidor confirma QUEM é (telefone · 📌 vínculo) e manda o id */
+  const r=await send('lp.lookup',{phone:c.phoneRaw||'',name:c.name||'',keys:chatKeys(c)});
+  if(seq!==LOOKSEQ) return;                    /* já trocou de conversa: esta resposta é de outra pessoa */
+  if(!handleAuthFail(r)) return;
+  const d=(r&&r.ok&&r.data)||{}, cont=d.contatos||[], est=d.estoque||[];
+  let id='';
+  if(cont.length===1) id=String(cont[0].id);
+  else if(!cont.length&&est.length===1&&!(d.byName&&d.byName.strong)) id=String(est[0].id);
+  if(id&&seq===LOOKSEQ){ CHAT_ID=id; crmAvisa(); }
 }
 
 fab.onclick=()=>{ setOpen(true); lookup(); };
@@ -1125,5 +1148,5 @@ try{ const o=await chrome.storage.local.get(['wa_crm_aba','wa_crm_dob']); if(o&&
 const st=await send('auth.status');
 if(st.ok&&st.data.logged){ AUTH={logged:true,email:st.data.email,usuario:st.data.usuario}; loadFunil(); loadMsgs(); loadLpCfg(); }
 refreshFab();
-WA_DOM.observe(c=>{ CHAT=c; LEAD=null; BUSCA_ON=false; NEGS_CACHE=null; lookup(); });
+DOM.observe(c=>{ CHAT=c; LEAD=null; BUSCA_ON=false; NEGS_CACHE=null; lookup(); });
 })();

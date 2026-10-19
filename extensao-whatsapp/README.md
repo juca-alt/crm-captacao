@@ -1,4 +1,42 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.8.1
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.9.0
+
+## 2.9.0 (19/10/2026) — o CARD DO CRM no painel + Umbler Talk
+- **Palavra dele:** *"ela tem que abrir um card como é no CRM, igual — aí atualizo tudo lá como se tivesse no CRM; inclusive se mudo
+  algo no CRM fica mais fácil pra atualizar a extensão"* — e a abertura tem que ser rápida, principalmente com a conversa ligada (📌).
+- **O painel mostra o próprio card do CRM** (`content/embed.html` → `vendas.html?wa=1`), não mais as abas 👤 Perfil / 💼 Negócios.
+  Tudo o que o card tem no app (etapa, funil, status, listas, tarefas, agenda, valor, recomendações, jornada) funciona aqui e grava
+  no mesmo lugar; o que mudar no card do app aparece na extensão sem refazer nada nela. O código das abas 2.8 ficou como reserva
+  (rollback rápido) e sai na 2.9.1 depois da validação.
+- **Por que agora é rápido** (o card completo da 2.7 levava até 25 s): o app tem o **modo leve** `?wa=1` (CARD-WA-LEVE-V1) — não
+  desenha as telas de fundo, não roda o autoteste, carrega primeiro só contatos/perfil/carteira/dicionário (o resto 6 s depois) e
+  abre a ficha **do cache** antes do servidor responder. O iframe é criado UMA vez e nunca recarrega: trocar de conversa só manda a
+  pessoa por mensagem. Quando a extensão confirma quem é (telefone ou 📌 vínculo, pelo servidor), manda o **id** e o card abre direto.
+  Medido com base de teste: abrir ≈ 0,2–0,7 s · trocar de conversa ≈ 0,3 s.
+- **💬 Mensagem pronta** do card põe o texto **na caixa da conversa** (WhatsApp ou Umbler) — **não envia**; ele revisa e aperta Enter.
+  Sem caixa achada: copia o texto.
+- **Pessoa escolhida à mão** nas sugestões do card ("Parecidos pelo nome") → a extensão grava o 📌 vínculo da conversa (próxima vez abre direto).
+- **Sem login na extensão** o card abre igual (o CRM acha pelo telefone, no próprio cache); o login da extensão só dá o atalho do 📌.
+- **Login do card:** o CRM dentro do painel tem o login dele (entre com **e-mail e senha** — o Google não abre dentro de painel).
+  O Chrome guarda esse login **por site**: entra 1 vez no WhatsApp Web e 1 vez no Umbler.
+- **Umbler Talk** (`https://app-utalk.umbler.com/*`, plano Essencial, sem API — só DOM, nenhuma requisição ao Umbler):
+  `content/umbler-dom.js` com a MESMA interface do `wa-dom.js` (`getOpenChat`, `observe`, `fillComposer`); o `panel.js` escolhe o
+  adaptador pelo host. Leitura em camadas: (1) título = telefone (contato não salvo) → `header`; (2) "Detalhes do contato" aberto →
+  telefone do `h6` → `painel`; (3) senão só o nome → `nome` (o card sugere pelo nome; aviso "abra Detalhes do contato"). A lista
+  lateral **nunca** é lida (telefone de outra conversa); o id da URL `/chats/<id>` muda e **não** é chave. Grupo: sem marcador
+  confiável conhecido no DOM do Umbler (17/10) — heurística conservadora (ícone/"Grupo" no cabeçalho); senão vale como contato pelo
+  nome e o card só sugere, nunca cria sozinho. Vínculo: chaves `tel:` e `nome:` iguais às do WhatsApp → o 📌 vale nos dois (sem `lid:`).
+  Os 2 canais do Umbler (2 números) não importam: a busca é pelo telefone/nome do CONTATO.
+- **Layout no Umbler:** com o painel aberto a página encolhe à esquerda (440 px) — o painel não cobre a caixa de mensagem nem o
+  "Detalhes do contato" (o offcanvas passa a abrir encostado no painel). No WhatsApp Web segue sobreposto como na 2.8.
+- **Permissões que voltam:** `declarativeNetRequest` (regra `rules.json`: COEP `credentialless` + CORP só no iframe do CRM, senão o
+  WhatsApp barra o iframe) e host `juca-alt.github.io`. Novo host: `app-utalk.umbler.com`. Ícone da barra abre o painel nos dois sites.
+- **Atualizar:** baixe e descompacte o zip por cima da pasta da extensão → `chrome://extensions` → **↻** na extensão → **F5** no
+  WhatsApp Web e no Umbler.
+- **Testes rodados (19/10, Chrome com a extensão carregada, páginas que imitam WhatsApp e Umbler com os seletores reais):** card certo
+  pelo telefone (WA e Umbler não salvo) · troca de conversa ≤0,35 s sem mostrar o anterior · Umbler contato salvo: só nome → sugestões
+  em ~2 s; abrir Detalhes → resolve pelo telefone do h6 em ~0,3 s · grupo (WA) → card "abra uma conversa" + aviso de grupo ·
+  Mensagem pronta → texto na caixa, não enviado (WA e Umbler) · página do Umbler encolhe 440 px e o offcanvas encosta no painel ·
+  guard-choke-point verde. **Falta validar no WhatsApp/Umbler reais** (DOM real, login do card, vínculo 📌 entre os dois sites).
 
 ## 2.8.1 (13/10/2026) — atividades, valor e funil de volta ao negócio aberto
 - Palavra dele no teste da 2.8.0: *"tirou a parte de tarefas/agenda e atualização de funil, os valores? — poder marcar tarefas e

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.70 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.71 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1815,6 +1815,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <div id="toasts"></div>
 
 <script>
+/* CARD-WA-LEVE-V1 (19/10/2026): ?wa=1 = o card do CRM dentro da extensão do WhatsApp. Sabido ANTES de tudo (render e boot
+   leem isto) — o MODO_WA de lá de baixo nasce tarde demais pra quem roda na carga. */
+var __WA=/[?&]wa=1(&|$)/.test(location.search);
 /* == QA-CAMPOS-MORTOS-V1 (01/09) · parte 1 de 2: o carimbo ====================
    Cinco vezes o mesmo bug neste projeto: um campo que a tela DESENHA e ninguem
    LE. O ultimo (Mudanca de Seguro) tinha QUATRO controles decorativos de uma
@@ -16237,7 +16240,11 @@ function msgAssinatura(){ return String(ASSINAT||'').trim(); }
 function msgComAssinatura(txt){ const a=msgAssinatura(); return a?String(txt||'').replace(/\s+$/,'')+'\n\n'+a:String(txt||''); }
 function msgProntaTexto(key){ const t=MSG_TEMPLATES[key]||MSG_TEMPLATES.aniversario; return msgComAssinatura(msgPreencher(t.texto,MSGP_CTX||{})); }
 function msgProntaTroca(key){ const ta=document.getElementById('msgpTxt'); if(ta) ta.value=msgProntaTexto(key); }
-function msgProntaEnviar(){ const ta=document.getElementById('msgpTxt'); const txt=ta?ta.value:''; const tel=(MSGP_CTX&&MSGP_CTX.tel)||''; const url=cartWaUrl(tel,txt);
+function msgProntaEnviar(){ const ta=document.getElementById('msgpTxt'); const txt=ta?ta.value:''; const tel=(MSGP_CTX&&MSGP_CTX.tel)||'';
+  /* CARD-WA-LEVE-V1: dentro da extensão a conversa JÁ está aberta ao lado — o texto vai pra caixa de mensagem dela (WhatsApp Web
+     ou Umbler) e NÃO é enviado: ele revisa e aperta Enter (anti-ban). */
+  if(__WA&&waTexto(txt)){ const mm=document.getElementById('msgpModal'); if(mm) mm.remove(); return; }
+  const url=cartWaUrl(tel,txt);
   if(!url){ toast('Sem telefone válido pra este contato — copie a mensagem e envie manualmente.',false); return; }
   window.open(url,'_blank','noopener'); }
 function msgProntaCopiar(){ const ta=document.getElementById('msgpTxt'); if(!ta) return; try{ navigator.clipboard.writeText(ta.value); toast('Mensagem copiada',true); }catch(_){ ta.select(); document.execCommand&&document.execCommand('copy'); toast('Mensagem copiada',true); } }
@@ -19489,6 +19496,9 @@ function pausadoHtml(){
         Fale com o Gustavo para reativar.</div>`;
 }
 function render(){
+  /* CARD-WA-LEVE-V1: no card da extensão as telas de fundo ficam escondidas — repintar o Início, os funis e os contadores a cada
+     dado que chega era o que travava (o card completo antigo levava até 25 s). Aqui só a ficha aberta é atualizada. */
+  if(__WA){ try{ if(CONTATO) renderDrawer(); }catch(e){ console.warn('[wa] ficha',e); } return; }
   try{ pxPintar(); }catch(e){}
   /* PAINEL MASTER V2: pausa é do APP — a tela avisa e não pinta. Não é
      revogação: o token do Supabase segue valendo e o RLS é que manda no
@@ -23113,6 +23123,7 @@ function _camTirar(){
   }
 }
 function camSincronizar(){
+  if(__WA) return;   /* CARD-WA-LEVE-V1: nada de empilhar histórico dentro do iframe da extensão */
   if(_camNoPop||_camAgendado) return;
   _camAgendado=true;
   Promise.resolve().then(function(){
@@ -23123,6 +23134,7 @@ function camSincronizar(){
   });
 }
 window.addEventListener('popstate',function(){
+  if(__WA) return;   /* CARD-WA-LEVE-V1: dentro da extensão não há "voltar" do CRM — o histórico é o do WhatsApp */
   if(_camSuprimir){ _camSuprimir=false; return; }
   const abertas=camAbertas();
   if(!abertas.length){ _camSentinela=false; return; }   /* nada aberto: o voltar segue seu caminho */
@@ -23794,25 +23806,40 @@ function waMatchTel(tel){ const k=telKey(tel); if(!k) return {fun:[],bn:[]};
   const fun=(S.contatos||[]).filter(c=>escVisivel(c)&&bate(c)).sort((a,b)=>(enc(a)-enc(b))||String(b._upd||'').localeCompare(String(a._upd||'')));
   const bn=(typeof bnVivos==='function'?bnVivos():[]).filter(bate);
   return {fun,bn}; }
-function waAbrir(msg){ WA_ULT=msg||WA_ULT; const m=WA_ULT||{}; clearTimeout(_waTimer);
-  if(!m.tel&&!m.nome){ waPlaceholder(); return; }
+function waAbrir(msg){ if(msg&&WA_ULT&&msg.id&&String(msg.id)===String(WA_ULT.id||'')&&msg.tel===WA_ULT.tel&&(CONTATO||document.getElementById('ta-ficha'))) return;   /* CARD-WA-LEVE-V1: mesma pessoa já aberta */
+  WA_ULT=msg||WA_ULT; const m=WA_ULT||{}; clearTimeout(_waTimer);
+  if(!m.tel&&!m.nome&&!m.id){ waPlaceholder(); return; }
+  /* CARD-WA-LEVE-V1: a extensão já sabe QUEM é (vínculo da conversa / telefone, pelo servidor) → abre direto pelo id, do cache */
+  if(m.id){ const c=(S.contatos||[]).find(x=>String(x.id)===String(m.id));
+    if(c){ _waTent=0; const ta=document.getElementById('ta-ficha'); if(ta) ta.remove(); if(!CONTATO||String(CONTATO.id)!==String(c.id)) abrirContato(c.id); return; }
+    const bb=(typeof bnPor==='function')?bnPor(m.id):null;
+    if(bb){ _waTent=0; fecharDrawerSo(); taFichaAbrir(bb.id); return; } }
   const r=waMatchTel(m.tel||'');
   if(r.fun.length){ _waTent=0; const ta=document.getElementById('ta-ficha'); if(ta) ta.remove(); abrirContato(r.fun[0].id); if(r.fun.length>1) toast(`Esta pessoa tem ${r.fun.length} negócios — abri o mais recente em aberto`,true); return; }
   if(r.bn.length){ _waTent=0; fecharDrawerSo(); taFichaAbrir(r.bn[0].id); return; }
-  if(_waTent<12){ _waTent++; waTela(`<h3>⏳ Procurando ${esc(m.nome||'')}…</h3>carregando sua base`); _waTimer=setTimeout(()=>waAbrir(),800); return; }   /* base ainda chegando do servidor */
+  if(_waTent<(m.tel?12:2)){ _waTent++;   /* CARD-WA-LEVE-V1: sem telefone (contato salvo só com nome) não adianta esperar a base — vai pras sugestões */
+    waTela(`<h3>⏳ Procurando ${esc(m.nome||'')}…</h3>carregando sua base`); _waTimer=setTimeout(()=>waAbrir(),800); return; }   /* base ainda chegando do servidor */
   _waTent=0;
   const sug=m.nome?lpkMatches(m.nome).slice(0,6):[];
   waTela(`<h3>Nenhum negócio com ${esc(telBR(m.tel||'')||'esse telefone')}</h3>${esc(m.nome||'')}
     ${sug.length?`<div style="margin-top:10px;font-weight:600;color:var(--ink)">Parecidos pelo nome:</div><div class="wa-sug">${sug.map((x,i)=>`<button class="btn btn-s" style="text-align:left" onclick="waAbrirSug(${i})">${esc(x.nome)} <span style="color:var(--muted);font-size:12px">· ${esc(x.tag)}</span></button>`).join('')}</div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-p" onclick="waCriar('nn')">➕ Novo negócio</button><button class="btn btn-s" onclick="waCriar('bc')">➕ Negócio na Base</button></div>`);
   window._waSug=sug; }
-function waAbrirSug(i){ const x=(window._waSug||[])[i]; if(!x) return; LPK_RES=window._waSug; lpkGo(String(i)); }
+function waAbrirSug(i){ const x=(window._waSug||[])[i]; if(!x) return;
+  /* CARD-WA-LEVE-V1: no card não há tela de fundo — Estoque abre a ficha do Estoque; cliente da Carteira, a ficha dele */
+  if(x.t==='bn'){ fecharDrawerSo(); taFichaAbrir(x.id); } else if(x.t==='funil') abrirContato(x.id); else { LPK_RES=window._waSug; lpkGo(String(i)); return; }
+  waLigar(x.id,x.nome); }
+/* a pessoa foi escolhida à mão nesta conversa → pede à extensão pra gravar o vínculo (próxima vez abre direto) */
+let WA_ORIGEM='';
+function waTexto(txt){ try{ if(WA_ORIGEM&&window.parent&&window.parent!==window&&txt){ window.parent.postMessage({tipo:'wa-texto',texto:String(txt)},WA_ORIGEM); return true; } }catch(_){} return false; }
+function waLigar(id,nome){ try{ if(WA_ORIGEM&&window.parent&&window.parent!==window) window.parent.postMessage({tipo:'wa-ligar',id:String(id),nome:String(nome||'')},WA_ORIGEM); }catch(_){} }
 function fecharDrawerSo(){ $('#overlay').classList.remove('aberto'); $('#drawer').classList.remove('aberto'); CONTATO=null; }
 function waCriar(funil){ openNovoContato(funil); setTimeout(()=>{ const m=WA_ULT||{}; const n=document.getElementById('ncNome'), t=document.getElementById('ncTel');
   if(n&&m.nome&&!n.value) n.value=String(m.nome).replace(/\s+(rec|indic)\b.*$/i,'').trim(); if(t&&m.tel&&!t.value) t.value=telBR(m.tel)||m.tel; },60); }
 if(MODO_WA){
-  window.addEventListener('message',e=>{ const o=String(e.origin||''); if(!/^chrome-extension:\/\//.test(o)) return; const d=e.data||{}; if(d.tipo==='wa-abrir') waAbrir({tel:String(d.tel||''),nome:String(d.nome||'')}); });
-  setTimeout(()=>{ try{ const h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const tel=h.get('tel')||'', nome=h.get('nome')||''; if(tel||nome) waAbrir({tel,nome}); else waPlaceholder(); }catch(_){ waPlaceholder(); } },0);
+  window.addEventListener('message',e=>{ const o=String(e.origin||''); if(!/^chrome-extension:\/\//.test(o)) return; WA_ORIGEM=o; const d=e.data||{}; if(d.tipo==='wa-abrir') waAbrir({tel:String(d.tel||''),nome:String(d.nome||''),id:d.id?String(d.id):''}); });
+  try{ if(window.parent&&window.parent!==window) window.parent.postMessage({tipo:'wa-pronto'},'*'); }catch(_){}   /* avisa a extensão que já dá pra mandar a conversa (só sinal, sem dado) */
+  setTimeout(()=>{ try{ const h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const tel=h.get('tel')||'', nome=h.get('nome')||'', id=h.get('id')||''; if(tel||nome||id) waAbrir({tel,nome,id}); else waPlaceholder(); }catch(_){ waPlaceholder(); } },0);
 }
 
 /* PAINEL-TA-NATIVO-V1: vendas.html#view=bn-ta&q=Nome abre direto a tela (é o que o
@@ -24117,7 +24144,7 @@ function selfCheckMudo(fn){
   finally{ SC_MUDO=false; Object.keys(guarda).forEach(k=>{ window[k]=guarda[k]; }); }
 }
 window.selfCheckMudo=selfCheckMudo;
-const _scFalhas=selfCheckMudo(()=>{ const a=lpSelfCheck()||[]; const b=funSelfCheck()||[]; return {lp:a,fun:b}; });
+const _scFalhas=__WA?{lp:[],fun:[]}:selfCheckMudo(()=>{ const a=lpSelfCheck()||[]; const b=funSelfCheck()||[]; return {lp:a,fun:b}; });   /* CARD-WA-LEVE-V1: o autoteste abre e fecha fichas e gasta a abertura — no card da extensão não roda (o portão roda no app normal) */
 try{ if((_scFalhas.lp||[]).length||(_scFalhas.fun||[]).length) console.warn('[self-check] invariantes quebrados:',_scFalhas); }catch(_){}
 render();
 /* FLUIDEZ-V1:BOOT — antes era Promise.all([...8 cargas]).then(render): a tela
@@ -24129,6 +24156,13 @@ render();
 (async function(){ try{ if(typeof delegCarregar==='function') await delegCarregar(); }catch(_){}   /* BOOT-DELEG-V1: escopo decidido ANTES dos loaders (senão a 1ª pintura é da base errada e o cache guarda todos os donos) */
   /* CONTA-TROCOU-V2: a checagem mora AQUI, antes de qualquer loader — no perfilCarregar corria em paralelo e o merge regravava o cache do usuário anterior antes do reload */
   if(contaConferir()) return;
+  /* CARD-WA-LEVE-V1: no card da extensão sobe primeiro só o que a ficha usa (contatos, perfil, carteira, dicionário); o resto
+     (BackOffice, emissão, benefícios…) entra 6 s depois, sem disputar a abertura. Nada deixa de carregar. */
+  const WA_JA=[lpcCarregar,perfilCarregar,cartCarregar,dicCarregar];
+  if(__WA){ const resto=BOOT_LOADERS.filter(f=>WA_JA.indexOf(f)<0);
+    WA_JA.forEach(function(f){ try{ Promise.resolve(f()).then(agendarRender,function(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); agendarRender(); }); }catch(e){ console.warn('carga falhou:',f.name,e); } });
+    setTimeout(function(){ resto.forEach(function(f){ try{ Promise.resolve(f()).catch(function(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); }); }catch(e){} }); },6000);
+    return; }
   BOOT_LOADERS.forEach(function(f){
     try{ Promise.resolve(f()).then(agendarRender,function(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); agendarRender(); }); }
     catch(e){ console.warn('carga falhou, segue com o que tem:',f.name,e); }
