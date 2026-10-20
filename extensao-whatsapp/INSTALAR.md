@@ -8,7 +8,7 @@ Nunca envia mensagem sozinha: o texto pronto vai para a caixa de mensagem e voc�
 - Entre pelo **Google** (a conta que você usa no CRM) — ou com e-mail e senha, se preferir.
 
 ## 1. Deixar a pasta no computador
-1. Baixe o arquivo **extensao-whatsapp-2.9.0.zip**.
+1. Baixe o arquivo (sempre a versão mais nova): **https://juca-alt.github.io/crm-captacao/downloads/extensao-whatsapp.zip**
 2. Descompacte:
    - **Mac:** dois cliques no zip.
    - **Windows:** botão direito no zip → **Extrair tudo…** → **Extrair**.
