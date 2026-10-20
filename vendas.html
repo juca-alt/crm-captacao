@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.72 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.73 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -15389,9 +15389,33 @@ const CFG_SECOES=[
     {acao:'bnavConfigurar()',     ic:'📱', titulo:'Barra inferior',    desc:'Quais quatro atalhos ficam na barra de baixo do celular.', tag:'⚙ abre um painel', so:'celular'}
   ]},
   {titulo:'Acesso', itens:[
-    {view:'lp-adm', ic:'🛡️', titulo:'Acessos & Módulos', desc:'Quem entra, o que cada um enxerga e quem trabalha na carteira de quem.', adm:true, tag:'🛡️ só admin'}
+    {view:'lp-adm', ic:'🛡️', titulo:'Acessos & Módulos', desc:'Quem entra, o que cada um enxerga e quem trabalha na carteira de quem.', adm:true, tag:'🛡️ só admin'},
+    {acao:'abrirTrocarSenha()', ic:'🔑', titulo:'Minha senha', desc:'Crie ou troque a senha de entrar com e-mail — a que vale no card da extensão (WhatsApp/Umbler) e no iPhone. Não pede a antiga.', tag:'⚙ abre um painel'}
   ]}
 ];
+/* MINHA-SENHA-V1 (20/10/2026): ele esqueceu a senha e o login do Google não abre dentro do painel da extensão (o Google não deixa
+   abrir dentro de iframe). O CRM não tinha "esqueci a senha" e o e-mail automático ainda não está configurado. Aqui, já logado
+   (pelo Google, no app normal), ele define uma senha nova pela própria sessão — sem e-mail, sem a senha antiga. Vale pra todos. */
+function senhaValida(a,b){ a=String(a||''); if(a.length<8) return 'A senha precisa de pelo menos 8 caracteres.'; if(a!==String(b||'')) return 'As duas senhas não são iguais.'; return ''; }
+async function abrirTrocarSenha(){
+  if(!sb||!logado()){ toast('Entre na sua conta primeiro',false); return; }
+  let em=''; try{ const {data:s}=await sb.auth.getSession(); em=(s&&s.session&&s.session.user&&s.session.user.email)||''; }catch(_){}
+  atModal(`<h2>🔑 Minha senha</h2><div class="sub">Conta <b>${esc(em)}</b>. Esta senha vale pra entrar com <b>e-mail e senha</b> — no card da extensão (WhatsApp/Umbler) e no iPhone. O Google continua funcionando igual.</div>
+    <label style="display:block;margin-top:12px;font-size:12.5px;color:var(--muted)">Senha nova<input id="ts-a" type="password" autocomplete="new-password" style="width:100%;font-size:16px;min-height:44px;margin-top:4px"></label>
+    <label style="display:block;margin-top:10px;font-size:12.5px;color:var(--muted)">Repita a senha<input id="ts-b" type="password" autocomplete="new-password" style="width:100%;font-size:16px;min-height:44px;margin-top:4px"></label>
+    <div id="ts-msg" style="margin-top:8px;font-size:13px;color:var(--verm)"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px"><button class="btn btn-ghost" style="min-height:44px" onclick="atClose()">Cancelar</button>
+      <button class="btn btn-p" id="ts-ok" style="min-height:44px" onclick="trocarSenhaSalvar()">Salvar senha</button></div>`);
+  setTimeout(()=>{ const e=document.getElementById('ts-a'); if(e) e.focus(); },50); }
+async function trocarSenhaSalvar(){ const a=(document.getElementById('ts-a')||{}).value, b2=(document.getElementById('ts-b')||{}).value, msg=document.getElementById('ts-msg'), bt=document.getElementById('ts-ok');
+  const erro=senhaValida(a,b2); if(erro){ if(msg) msg.textContent=erro; return; }
+  if(bt){ bt.disabled=true; bt.textContent='Salvando…'; }
+  try{ const r=await sb.auth.updateUser({password:a}); if(r.error) throw r.error;
+    atClose(); toast('✓ Senha salva — use este e-mail e esta senha no card da extensão',true);
+  }catch(e){ const m=String(e&&e.message||e);
+    if(msg) msg.textContent=/reauth|recent|nonce/i.test(m)?'Por segurança, saia e entre de novo com o Google e tente outra vez.':'Não salvou: '+m;
+    if(bt){ bt.disabled=false; bt.textContent='Salvar senha'; } } }
+window.abrirTrocarSenha=abrirTrocarSenha; window.trocarSenhaSalvar=trocarSenhaSalvar;
 const CFG_VIEWS=CFG_SECOES.flatMap(s=>s.itens.map(i=>i.view)).filter(Boolean);
 function cfgCabe(i){
   if(i.adm && !souAdm()) return false;
@@ -21018,6 +21042,10 @@ function lpSelfCheck(){
           const bk=Object.assign({},EMB); let h='';
           try{ EMB.leads=[{id:'n1',nome:'Beltrano',etapa:'selecionado',gi:'A'}]; EMB.notas={n1:[{em:'2026-10-16T10:00:00Z',texto:'liga à tarde'}]}; EMB.f={gi:'',pc:'',etapa:'',q:''}; EMB.sel=new Set(); EMB.lim=100; h=embCorpoHTML(); } finally{ Object.assign(EMB,bk); }
           return o.nome==='Fulano Teste'&&!('telefone' in o)&&o.gi==='A'&&/🗨️ liga à tarde/.test(h)&&/🕓 1/.test(h)&&String(embLinkAcesso).includes('/functions/v1/emb-acesso'); })());
+        ok('MINHA-SENHA-V1: Configurações › Acesso tem "Minha senha" pra todos; senha curta ou diferente é recusada', (()=>{
+          const it=CFG_SECOES.flatMap(s=>s.itens).find(i=>i.acao==='abrirTrocarSenha()');
+          return !!it&&!it.adm&&senhaValida('1234567','1234567')!==''&&senhaValida('12345678','12345679')!==''&&senhaValida('12345678','12345678')===''
+            &&String(trocarSenhaSalvar).includes('updateUser'); })());
         ok('FUNIL-BC-EDITAVEL-V1: etapa nova na Base de Clientes fica (antes do encerramento) e sobrevive ao salvar; cfg antiga ainda migra sem perder etapa criada; código único entre funis', (()=>{
           const bk=JSON.stringify(FUNIL_CFG), bkE=FUN_edit, bkS=window.funCfgSalvar;
           try{ window.funCfgSalvar=()=>{}; FUN_edit='bc'; const n0=FUNIL_CFG.bc.length; funAdd(); const nova=FUNIL_CFG.bc.find(e=>/^cst_/.test(e.id)&&!JSON.parse(bk).bc.some(x=>x.id===e.id));

@@ -2,6 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 20/10/2026 — v8.73 MINHA-SENHA-V1 (branch `claude/trocar-senha`, aguarda OK) · extensão 2.9.0 instalada por ele
+
+- Extensão 2.9.0 instalada no Chrome dele (link direto `downloads/extensao-whatsapp-2.9.0.zip` no Pages + `extensao-whatsapp/INSTALAR.md`); mandou pro Victor.
+- **Travou no login do card:** esqueceu a senha; o Google não abre dentro do iframe; o CRM não tinha "esqueci a senha" e o e-mail automático (SMTP) não está configurado. **v8.73:** Configurações › Acesso › **🔑 Minha senha** (todos os usuários): já logado pelo Google no app normal, define senha nova via `sb.auth.updateUser` (sem e-mail, sem a antiga; mín. 8, confirmação). Victor já tem senha (conferido em auth.users). SelfTest MINHA-SENHA-V1, portão verde, prints 390/1280.
+
 ## 🟢 RETOMAR AQUI — 19/10/2026 (noite) — v8.72 FUNIL-BC-EDITAVEL-V1 · v8.71 + extensão 2.9.0 NO AR
 
 - **v8.71 + extensão 2.9.0 publicadas** (PR #300, OK dele "A, pode publicar"); Pages conferido por hash. Zip 2.9.0 entregue no chat.
