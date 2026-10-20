@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.74 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.75 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -4288,7 +4288,7 @@ window.tarCriar = (cid,tipo,tit,quando,hora,notas,dur) => {
      garante a entrega mesmo se o Google estiver fora do ar na hora do clique. */
   if(t.hora&&typeof gsyncEnfileirar==='function'){ t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert'); gsyncAgendar(400); }
   salvar(); render();
-  toast(c.nome.split(' ')[0]+': '+tarNomeTipo(t.tipo)+' em '+(t.quando===hojeISO()?'hoje':dataBR(t.quando)),true);
+  toast(c.nome.split(' ')[0]+': '+tarNomeTipo(t.tipo)+' em '+(t.quando===hojeISO()?'hoje':dataBR(t.quando))+(t.hora&&tarDeOutroDono(c)?' · vai pra agenda de '+lpNome(c._dono)+' quando o CRM dele abrir':''),true);
   return t;
 };
 /* GC-25 · LEMBRETE FLEXÍVEL DE REUNIÃO: ao agendar a reunião, cria uma tarefa
@@ -11810,8 +11810,19 @@ function gsyncPendentes(){ return Object.keys(GSYNC.fila).length; }
 /* enfileira uma intenção. 'upsert' = garantir o evento igual à atividade;
    'apagar' = tirar da agenda (leva o gcalId junto, porque a atividade pode ter
    sido removida do CRM antes do item drenar). */
+/* AGENDA-DELEGADO-V1 (20/10/2026): pedido dele ("A"): o Victor (backoffice) marca/mexe atividade num cliente da base do
+   Gustavo pelo CRM e ela cai na Agenda Google do GUSTAVO — nunca na do Victor. Quem está mexendo na base de OUTRO dono não
+   usa o próprio Google: deixa o recado na atividade (gcalPend) ou no contato (gcalApagar) e o CRM do DONO, quando abrir,
+   manda (gsyncVarrerNovas). No Google o evento sai com "Marcado por <nome> no CRM" na descrição. */
+function tarDeOutroDono(c){ try{ if(typeof logado!=='function'||!logado()) return false; const eu=String(escEu()||'').toLowerCase(), d=String((c&&c._dono)||'').toLowerCase();
+  return !!(eu&&d&&d!==eu); }catch(_){ return false; } }
 function gsyncEnfileirar(cid,tid,op,extra){
   if(cid==null||tid==null) return;
+  { const cc=(typeof tarContato==='function')?tarContato(cid):null;
+    if(cc&&tarDeOutroDono(cc)){ extra=extra||{};
+      if(op==='apagar'){ if(extra.gcalId||extra.gtaskId){ cc.gcalApagar=(Array.isArray(cc.gcalApagar)?cc.gcalApagar:[]).filter(x=>x&&x.gcalId!==extra.gcalId); cc.gcalApagar.push({gcalId:extra.gcalId||'',gtaskId:extra.gtaskId||'',titulo:extra.titulo||''}); } }
+      else { const tt=(typeof tarDe==='function')?tarDe(cc,tid):null; if(tt){ tt.gcalPend=true; delete tt.gcalSync; } }
+      return; } }
   const k=gsyncChave(cid,tid), ant=GSYNC.fila[k]||{};
   const it=Object.assign({cid:String(cid),tid:String(tid),op:op||'upsert',tent:0,erro:null},extra||{});
   if(!it.gcalId&&ant.gcalId) it.gcalId=ant.gcalId;
@@ -11856,7 +11867,8 @@ function gsyncTitulo(c,t){
 /* corpo do evento a partir da atividade — fonte ÚNICA (o link-template e as duas
    ações de 1 toque passam todas por aqui, senão os formatos divergem com o tempo) */
 function gsyncCorpoEvento(c,t){
-  const body={ summary:gsyncTitulo(c,t), description:tarEventoDescricao(c,t),
+  const porOutro=t&&t.por&&String(t.por).toLowerCase()!==String((c&&c._dono)||escEu()||'').toLowerCase();   /* AGENDA-DELEGADO-V1 */
+  const body={ summary:gsyncTitulo(c,t), description:(porOutro?'Marcado por '+lpNome(t.por)+' no CRM.\n\n':'')+tarEventoDescricao(c,t),
     location:locTexto(locPrincipal(c))||undefined,
     extendedProperties:{private:{crmApp:GSYNC_APP,crmTarefa:String(t.id),crmContato:String(c.id)}} };
   if(t.hora){ const iv=tarReuniaoInterval(t); body.start={dateTime:iv.ini,timeZone:GCAL_TZ}; body.end={dateTime:iv.fim,timeZone:GCAL_TZ}; }
@@ -12017,9 +12029,15 @@ function gsyncVarrerNovas(){ try{
   if(typeof S==='undefined'||!S||!Array.isArray(S.contatos)||typeof gsyncEnfileirar!=='function') return 0;
   const eu=String((typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)||'').toLowerCase(); if(!eu) return 0;
   const hoje=hojeISO(); let n=0;
-  S.contatos.forEach(c=>{ (c.tarefas||[]).forEach(t=>{
-    if(!t||t.feito||!t.hora||!t.quando||t.quando<hoje||t.gcalSync||t.gcalId||t.gtaskId||t.gcalFora) return;
-    if(String(t.por||'').toLowerCase()!==eu) return;
+  S.contatos.forEach(c=>{
+    const meu=String(c._dono||'').toLowerCase()===eu;   /* AGENDA-DELEGADO-V1: contato da MINHA base */
+    if(meu&&Array.isArray(c.gcalApagar)&&c.gcalApagar.length){ c.gcalApagar.forEach((x,i)=>{ if(x&&(x.gcalId||x.gtaskId)){ gsyncEnfileirar(c.id,'apg_'+(x.gcalId||x.gtaskId),'apagar',{gcalId:x.gcalId||undefined,gtaskId:x.gtaskId||undefined,titulo:x.titulo||''}); n++; } }); c.gcalApagar=[]; }
+    (c.tarefas||[]).forEach(t=>{
+    if(!t) return;
+    if(meu&&t.gcalPend){ delete t.gcalPend; if(t.gcalId||t.gtaskId||(!t.feito&&t.hora&&t.quando&&t.quando>=hoje&&!t.gcalFora)){ t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert',{gcalId:t.gcalId}); n++; } return; }
+    if(t.feito||!t.hora||!t.quando||t.quando<hoje||t.gcalSync||t.gcalId||t.gtaskId||t.gcalFora) return;
+    const meuTb=String(t.por||'').toLowerCase()===eu;
+    if(!meuTb&&!(meu&&t.por)) return;   /* criada por ele, ou por alguém (delegado) na base dele */
     t.gcalSync=true; gsyncEnfileirar(c.id,t.id,'upsert'); n++; }); });
   if(n) salvar();
   return n; }catch(e){ console.warn('[gsync varrer]',e); return 0; } }
@@ -21043,6 +21061,20 @@ function lpSelfCheck(){
           const bk=Object.assign({},EMB); let h='';
           try{ EMB.leads=[{id:'n1',nome:'Beltrano',etapa:'selecionado',gi:'A'}]; EMB.notas={n1:[{em:'2026-10-16T10:00:00Z',texto:'liga à tarde'}]}; EMB.f={gi:'',pc:'',etapa:'',q:''}; EMB.sel=new Set(); EMB.lim=100; h=embCorpoHTML(); } finally{ Object.assign(EMB,bk); }
           return o.nome==='Fulano Teste'&&!('telefone' in o)&&o.gi==='A'&&/🗨️ liga à tarde/.test(h)&&/🕓 1/.test(h)&&String(embLinkAcesso).includes('/functions/v1/emb-acesso'); })());
+        ok('AGENDA-DELEGADO-V1: na base de OUTRO dono nada vai pro Google de quem mexe (deixa gcalPend/gcalApagar); o dono manda o que o delegado criou, mudou e apagou; o evento diz "Marcado por"', (()=>{
+          const bkS=S.contatos, bkE=window.escEu, bkL=window.logado, bkF=GSYNC.fila, bkSv=window.salvar; let ok1,ok2,ok3,ok4,ok5;
+          try{ window.salvar=()=>{}; window.logado=()=>true; GSYNC.fila={}; const f=isoAddDias(hojeISO(),2);
+            const c={id:'zd1',nome:'Fulano',_dono:'dono@x',tarefas:[{id:'t1',hora:'10:00',quando:f,por:'vic@x'},{id:'t2',hora:'11:00',quando:f,por:'vic@x',gcalId:'ev2'}]};
+            S.contatos=[c]; window.escEu=()=>'vic@x';
+            gsyncEnfileirar('zd1','t2','upsert',{gcalId:'ev2'}); gsyncEnfileirar('zd1','t9','apagar',{gcalId:'ev9'});
+            ok1=Object.keys(GSYNC.fila).length===0&&c.tarefas[1].gcalPend===true&&c.gcalApagar.length===1;
+            window.escEu=()=>'dono@x'; const pe=PERFIL; PERFIL=Object.assign({},pe||{},{email:'dono@x'});
+            try{ gsyncVarrerNovas(); } finally{ PERFIL=pe; }
+            const ks=Object.keys(GSYNC.fila); ok2=ks.length===3; ok3=!c.tarefas[1].gcalPend&&c.gcalApagar.length===0;
+            ok4=Object.values(GSYNC.fila).some(x=>x.op==='apagar'&&x.gcalId==='ev9');
+            ok5=/Marcado por/.test(gsyncCorpoEvento(c,c.tarefas[0]).description||'');
+          } finally{ S.contatos=bkS; window.escEu=bkE; window.logado=bkL; GSYNC.fila=bkF; window.salvar=bkSv; }
+          return ok1&&ok2&&ok3&&ok4&&ok5; })());
         ok('CARD-WA-GOOGLE-V1 + MINHA-SENHA-V2: no card da extensão o Google vai pela extensão (wa-google) e a sessão volta (wa-sessao); 🔑 Senha no topo e no ⋯', (()=>{
           const t=[...document.scripts].map(s=>s.textContent).join('\n');
           return t.includes("postMessage({tipo:'wa-google'}")&&t.includes("d.tipo==='wa-sessao'")&&!!document.getElementById('tb-senha')&&String(tbMaisHtml).includes('abrirTrocarSenha()'); })());
