@@ -275,6 +275,8 @@ function renderLogin(note){
     ${note?`<div class="warn">${esc(note)}</div>`:''}
     <div class="card">
       <h2 style="margin-bottom:8px">Entrar no CRM</h2>
+      <button class="btn primary" id="wa-google" style="margin-bottom:6px">Entrar com Google</button>
+      <p class="muted" style="margin:4px 0 10px;font-size:11.5px">Abre uma janelinha do Google — sem senha. Ou use e-mail e senha:</p>
       <p class="muted" style="margin-bottom:10px">Mesma conta do CRM Captação (é a mesma senha que você usa pra conectar a extensão).</p>
       ${fieldHTML('wa-email','E-mail','','voce@exemplo.com')}
       <div class="field"><label>Senha</label><input id="wa-pass" type="password"></div>
@@ -297,6 +299,10 @@ function renderLogin(note){
     lookup();
   };
   $('#wa-pass').addEventListener('keydown',e=>{ if(e.key==='Enter') $('#wa-login').click(); });
+  $('#wa-google').onclick=async()=>{ $('#wa-google').disabled=true; const r=await send('auth.google'); $('#wa-google').disabled=false;   /* 2.9.1 */
+    if(r.code==='ctx'){ renderCtxLost(); return; }
+    if(!r.ok){ const e=$('#wa-login-err'); e.textContent=r.error||'Login do Google não deu certo'; e.style.display='block'; return; }
+    AUTH={logged:true,email:r.data.email,usuario:r.data.usuario}; await loadFunil(); loadMsgs(); refreshFab(); lookup(); };
 }
 
 // extensão recarregada com a aba aberta: 1 botão resolve (recarrega a página)

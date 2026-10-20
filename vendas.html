@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.73 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.74 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1775,6 +1775,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
       <span class="tag">PipeX · <span class="ver-auto">v7.9</span> · Vendas LP</span>
       <button class="tb-link" id="tb-sync" onclick="sincronizarDados()" title="Buscar dados novos do servidor sem recarregar a página — você não perde a tela, o modal aberto nem o que estava fazendo">🔄 Sincronizar</button>
       <button class="tb-link" onclick="atualizarApp()" title="Baixar uma versão nova do APP (limpa o cache e recarrega a página)">⬆︎ Atualizar app</button>
+      <button class="tb-link" onclick="abrirTrocarSenha()" title="Criar ou trocar a senha de entrar com e-mail (card da extensão do WhatsApp/Umbler, iPhone)" style="${'display:none'}" id="tb-senha">🔑 Senha</button>
       <button class="tb-link" onclick="sairDaConta()" title="Sair da conta e limpar o cache deste aparelho" style="${'display:none'}" id="tb-sair">🚪 Sair</button>
       <button class="tb-link" id="tb-captacao" hidden onclick="location.href='arquivo/captacao/index.html'" title="CRM de Captação (arquivado)">⇄ Captação</button>
     </header>
@@ -17395,7 +17396,7 @@ async function perfilCarregar(){
     try{ niverFeitoCarregar().then(()=>{ if(VIEW==='inicio'&&typeof render==='function') render(); }); }catch(_){}   /* NIVER-FEITO-V1 */
   }catch(e){ console.warn('lp_perfis: sem perfil remoto → defaults',e); }
 }
-function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) b.style.display=logado()?'':'none'; }catch(_){}
+function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) b.style.display=logado()?'':'none'; const s=document.getElementById('tb-senha'); if(s) s.style.display=logado()?'':'none'; }catch(_){}   /* MINHA-SENHA-V2: 🔑 à vista no topo */
   const adm=$('#nav-lpadm'); if(adm) adm.style.display=(souAdm()&&!(typeof delegAtivo==='function'&&delegAtivo()))?'':'none';   /* vendo como outro: painel admin some da tela */
   Object.keys(MODS).forEach(k=>{
     const on=modOn(k);
@@ -21042,6 +21043,9 @@ function lpSelfCheck(){
           const bk=Object.assign({},EMB); let h='';
           try{ EMB.leads=[{id:'n1',nome:'Beltrano',etapa:'selecionado',gi:'A'}]; EMB.notas={n1:[{em:'2026-10-16T10:00:00Z',texto:'liga à tarde'}]}; EMB.f={gi:'',pc:'',etapa:'',q:''}; EMB.sel=new Set(); EMB.lim=100; h=embCorpoHTML(); } finally{ Object.assign(EMB,bk); }
           return o.nome==='Fulano Teste'&&!('telefone' in o)&&o.gi==='A'&&/🗨️ liga à tarde/.test(h)&&/🕓 1/.test(h)&&String(embLinkAcesso).includes('/functions/v1/emb-acesso'); })());
+        ok('CARD-WA-GOOGLE-V1 + MINHA-SENHA-V2: no card da extensão o Google vai pela extensão (wa-google) e a sessão volta (wa-sessao); 🔑 Senha no topo e no ⋯', (()=>{
+          const t=[...document.scripts].map(s=>s.textContent).join('\n');
+          return t.includes("postMessage({tipo:'wa-google'}")&&t.includes("d.tipo==='wa-sessao'")&&!!document.getElementById('tb-senha')&&String(tbMaisHtml).includes('abrirTrocarSenha()'); })());
         ok('MINHA-SENHA-V1: Configurações › Acesso tem "Minha senha" pra todos; senha curta ou diferente é recusada', (()=>{
           const it=CFG_SECOES.flatMap(s=>s.itens).find(i=>i.acao==='abrirTrocarSenha()');
           return !!it&&!it.adm&&senhaValida('1234567','1234567')!==''&&senhaValida('12345678','12345679')!==''&&senhaValida('12345678','12345678')===''
@@ -23086,6 +23090,7 @@ function tbMaisHtml(){
       ${item('⬆︎','Atualizar app','Baixa a versão nova do app e recarrega','atualizarApp()')}
       ${CAPTACAO_VISIVEL?item('⇄','Ir para Captação','Abre o CRM de Captação (arquivado)',"location.href='arquivo/captacao/index.html'"):''}
       ${item('🎨','Ajustes de visual','Cor de destaque, densidade e barra lateral',"document.getElementById('tw-panel').classList.remove('hidden')")}
+      ${logado()?item('🔑','Minha senha','Crie ou troque a senha de entrar com e-mail (extensão, iPhone)','abrirTrocarSenha()'):''}
       <button class="btn btn-s" style="width:100%;justify-content:center;margin-top:8px;min-height:48px" onclick="tbMaisFechar()">Fechar</button>
     </div></div>`;
 }
@@ -23878,7 +23883,11 @@ function fecharDrawerSo(){ $('#overlay').classList.remove('aberto'); $('#drawer'
 function waCriar(funil){ openNovoContato(funil); setTimeout(()=>{ const m=WA_ULT||{}; const n=document.getElementById('ncNome'), t=document.getElementById('ncTel');
   if(n&&m.nome&&!n.value) n.value=String(m.nome).replace(/\s+(rec|indic)\b.*$/i,'').trim(); if(t&&m.tel&&!t.value) t.value=telBR(m.tel)||m.tel; },60); }
 if(MODO_WA){
-  window.addEventListener('message',e=>{ const o=String(e.origin||''); if(!/^chrome-extension:\/\//.test(o)) return; WA_ORIGEM=o; const d=e.data||{}; if(d.tipo==='wa-abrir') waAbrir({tel:String(d.tel||''),nome:String(d.nome||''),id:d.id?String(d.id):''}); });
+  window.addEventListener('message',e=>{ const o=String(e.origin||''); if(!/^chrome-extension:\/\//.test(o)) return; WA_ORIGEM=o; const d=e.data||{}; if(d.tipo==='wa-abrir') waAbrir({tel:String(d.tel||''),nome:String(d.nome||''),id:d.id?String(d.id):''});
+    /* CARD-WA-GOOGLE-V1: sessão nova feita pelo Google na extensão → entra e recarrega o card */
+    if(d.tipo==='wa-sessao'&&d.access_token&&d.refresh_token&&sb){ sb.auth.setSession({access_token:String(d.access_token),refresh_token:String(d.refresh_token)}).then(r=>{ if(r&&r.error) throw r.error; location.reload(); })
+      .catch(x=>{ const er=document.getElementById('lg-err'); if(er) er.textContent='Não entrou: '+(x&&x.message||x); }); }
+    if(d.tipo==='wa-sessao-erro'){ const er=document.getElementById('lg-err'); if(er) er.textContent=String(d.erro||'O login do Google não deu certo')+' — ou entre com e-mail e senha.'; } });
   try{ if(window.parent&&window.parent!==window) window.parent.postMessage({tipo:'wa-pronto'},'*'); }catch(_){}   /* avisa a extensão que já dá pra mandar a conversa (só sinal, sem dado) */
   setTimeout(()=>{ try{ const h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const tel=h.get('tel')||'', nome=h.get('nome')||'', id=h.get('id')||''; if(tel||nome||id) waAbrir({tel,nome,id}); else waPlaceholder(); }catch(_){ waPlaceholder(); } },0);
 }
@@ -24222,6 +24231,12 @@ render();
   function esconder(){ if(ov) ov.style.display='none'; }
   if(gbtn) gbtn.onclick=async function(){
     if(err) err.textContent='';
+    /* CARD-WA-GOOGLE-V1 (20/10): dentro da extensão o Google não abre (iframe) — quem abre é o Chrome, pela extensão 2.9.1+,
+       e a sessão nova volta por mensagem (wa-sessao, no bloco MODO-WA). Extensão antiga não responde → aviso pra usar a senha. */
+    if(window.__WA&&window.parent!==window){ try{ window.parent.postMessage({tipo:'wa-google'},(typeof WA_ORIGEM!=='undefined'&&WA_ORIGEM)||'*'); }catch(_){}
+      if(err) err.textContent='Abrindo a janela do Google…';
+      setTimeout(()=>{ if(err&&/Abrindo a janela/.test(err.textContent)) err.textContent='Se a janela do Google não abriu, atualize a extensão (2.9.1) ou entre com e-mail e senha.'; },15000);
+      return; }
     try{
       var volta=location.origin+location.pathname; // volta pra esta mesma tela
       var r=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:volta}});

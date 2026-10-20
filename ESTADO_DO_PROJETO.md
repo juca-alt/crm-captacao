@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 20/10/2026 (noite) — v8.74 + extensão 2.9.1: LOGIN PELO GOOGLE no card (branch `claude/ext-google-login`, aguarda OK)
+
+- v8.73 (Minha senha) publicada (PR #302). Ele não achou o card em Configurações (seção "Acesso" nasce fechada) → **MINHA-SENHA-V2:** botão **🔑 Senha** no topo (ao lado do Sair) e no ⋯ do celular.
+- **Pedido:** "login pelo Gmail na extensão, lembrar senha é loucura". **CARD-WA-GOOGLE-V1 + extensão 2.9.1:** o Chrome abre o Google (`chrome.identity.launchWebAuthFlow`) e a sessão NOVA vai pro card (`wa-google` → `auth.google.card` → `wa-sessao` → `setSession`); botão Entrar com Google também no login da extensão. Manifest com `"key"` → id FIXO `mjickkflfaghdchkbpoiefioggomfdea` (mesmo no Chrome dele e do Victor; a chave privada NÃO foi guardada — não é necessária pra extensão sem empacotar).
+- **Falta dele (1×):** Supabase › Authentication › URL Configuration › Redirect URLs › Add `https://mjickkflfaghdchkbpoiefioggomfdea.chromiumapp.org/**` — e reinstalar a extensão (id novo = extensão nova).
+- Testes: portão verde; id/redirect conferidos no Chrome; teste completo WA+Umbler verde (regressão).
+
 ## 🟢 RETOMAR AQUI — 20/10/2026 — v8.73 MINHA-SENHA-V1 (branch `claude/trocar-senha`, aguarda OK) · extensão 2.9.0 instalada por ele
 
 - Extensão 2.9.0 instalada no Chrome dele (link direto `downloads/extensao-whatsapp-2.9.0.zip` no Pages + `extensao-whatsapp/INSTALAR.md`); mandou pro Victor.
