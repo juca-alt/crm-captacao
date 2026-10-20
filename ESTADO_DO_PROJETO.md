@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 20/10/2026 (madrugada) — v8.75 AGENDA-DELEGADO-V1 (publicado com OK dele: "A, pode fazer e publicar")
+
+- **Pedido:** Victor (backoffice) marcando atividade no CRM, na base do Gustavo, cair na **agenda Google do Gustavo** (e não na do Victor). O Workspace bloqueia compartilhar a agenda com detalhes pra fora; pela regra do CRM fica mais organizado de todo jeito.
+- **Como funciona:** atividade criada/remarcada/concluída/apagada pelo delegado num contato de outro dono (`tarDeOutroDono(c)`: logado e `c._dono` ≠ eu) **não usa o Google do delegado** — fica marcada no próprio contato (`t.gcalPend` / `c.gcalApagar`). Quando o CRM do DONO abre (PC ou celular), `gsyncVarrerNovas` empurra pro Google dele; a descrição do evento leva "Marcado por <nome> no CRM.". Toast pro delegado: "vai pra agenda de Gustavo quando o CRM dele abrir".
+- Dono = match explícito de `_dono` (contato sem `_dono` segue a regra antiga: só o que é dele). SelfTest AGENDA-DELEGADO-V1; GSYNC-EXTENSAO-V1 segue verde; portão verde.
+- **Falta dele:** instruir o Victor (trocar pra base do Gustavo no seletor de base antes de marcar). Pendências anteriores seguem (Redirect URL da extensão, desbloqueio do Workspace, Supabase até 31/10).
+
 ## 🟢 RETOMAR AQUI — 20/10/2026 (noite) — v8.74 + extensão 2.9.1: LOGIN PELO GOOGLE no card (branch `claude/ext-google-login`, aguarda OK)
 
 - v8.73 (Minha senha) publicada (PR #302). Ele não achou o card em Configurações (seção "Acesso" nasce fechada) → **MINHA-SENHA-V2:** botão **🔑 Senha** no topo (ao lado do Sair) e no ⋯ do celular.
