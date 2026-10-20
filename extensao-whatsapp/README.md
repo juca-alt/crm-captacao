@@ -1,4 +1,16 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.9.0
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.9.1
+
+## 2.9.1 (20/10/2026) — entrar pelo GOOGLE (sem senha)
+- Palavra dele: *"ajusta pra eu fazer login pelo Gmail também na extensão, porque lembrar senha é loucura"*.
+- O Google não abre dentro do painel (iframe). Agora **quem abre é o Chrome**: `chrome.identity.launchWebAuthFlow` numa janelinha;
+  o Supabase devolve a sessão pro endereço fixo da extensão e ela vai pro card por mensagem (`wa-google` → `auth.google.card` →
+  `wa-sessao` → `sb.auth.setSession` no app). Cada login cria uma sessão NOVA (o card e a extensão não dividem refresh token).
+  Também vale no login da própria extensão (botão **Entrar com Google**). E-mail e senha continuam funcionando.
+- **Endereço fixo:** o manifest ganhou `"key"` → o id da extensão é o mesmo em qualquer Chrome: `mjickkflfaghdchkbpoiefioggomfdea`.
+  Por isso a 2.9.1 entra como extensão NOVA (o login da extensão e as preferências do painel começam do zero uma vez).
+- ⚠️ **Passo único no Supabase:** Authentication › URL Configuration › Redirect URLs › **Add URL** →
+  `https://mjickkflfaghdchkbpoiefioggomfdea.chromiumapp.org/**` (sem isso o Google volta pro site e o login não completa).
+- Permissão nova: `identity`.
 
 ## 2.9.0 (19/10/2026) — o CARD DO CRM no painel + Umbler Talk
 - **Palavra dele:** *"ela tem que abrir um card como é no CRM, igual — aí atualizo tudo lá como se tivesse no CRM; inclusive se mudo

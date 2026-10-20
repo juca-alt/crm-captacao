@@ -54,6 +54,11 @@ window.addEventListener('message',e=>{
   if(d.tipo==='wa-ligar'&&d.id&&ultima&&!ultima.grupo&&Array.isArray(ultima.keys)&&ultima.keys.length){
     try{ chrome.runtime.sendMessage({type:'wa.vincular',keys:ultima.keys,id:String(d.id),nome:String(d.nome||'')},()=>void chrome.runtime.lastError); }catch(_){}
     return; }
+  /* 2.9.1: o card pediu login pelo Google → o Chrome abre a janelinha do Google (fora do iframe) e a sessão nova volta pro card */
+  if(d.tipo==='wa-google'){ try{ chrome.runtime.sendMessage({type:'auth.google.card'},r=>{ void chrome.runtime.lastError;
+      if(r&&r.ok&&r.data&&r.data.access_token) fr.contentWindow.postMessage({tipo:'wa-sessao',access_token:r.data.access_token,refresh_token:r.data.refresh_token},CRM_ORIGIN);
+      else fr.contentWindow.postMessage({tipo:'wa-sessao-erro',erro:String((r&&r.error)||'não deu certo')},CRM_ORIGIN); }); }catch(_){}
+    return; }
   if(d.tipo==='wa-texto'&&d.texto){ try{ const o=(location.ancestorOrigins&&location.ancestorOrigins[0])||'*'; window.parent.postMessage({tipo:'crm-texto',texto:String(d.texto)},o); }catch(_){} }
 });
 

@@ -46,6 +46,29 @@ async function login(email,password){
   return {email:s.user_email,usuario:s.usuario};
 }
 
+/* 2.9.1 · LOGIN PELO GOOGLE (pedido dele: "lembrar senha é loucura"). O Google não abre dentro do painel (iframe), então quem
+   abre é o próprio Chrome: chrome.identity.launchWebAuthFlow numa janelinha, com o Supabase mandando de volta pro endereço fixo
+   da extensão (https://<id>.chromiumapp.org/supabase — o id é FIXO pela "key" do manifest: o mesmo no Chrome dele e do Victor).
+   ⚠️ Esse endereço precisa estar em Supabase › Authentication › URL Configuration › Redirect URLs (INSTALAR.md / README).
+   Cada chamada cria uma sessão NOVA (a da extensão e a do card não dividem o mesmo refresh token). */
+async function googleTokens(){
+  const volta=chrome.identity.getRedirectURL('supabase');
+  const url=`${SB_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(volta)}`;
+  let fim='';
+  try{ fim=await chrome.identity.launchWebAuthFlow({url,interactive:true}); }
+  catch(e){ throw {code:'google',message:/did not approve|canceled|cancelled|closed/i.test(String(e&&e.message||e))
+    ?'Login do Google cancelado.':'O Google não completou o login — confira se o endereço da extensão está liberado no Supabase ('+volta+').'}; }
+  const h=new URLSearchParams(String(fim||'').split('#')[1]||''), q=new URLSearchParams((String(fim||'').split('?')[1]||'').split('#')[0]);
+  const erro=h.get('error_description')||q.get('error_description');
+  if(erro) throw {code:'google',message:'Google: '+decodeURIComponent(erro.replace(/\+/g,' '))};
+  const at=h.get('access_token'), rt=h.get('refresh_token');
+  if(!at||!rt) throw {code:'google',message:'O Google não devolveu o login — confira se '+volta+' está nas Redirect URLs do Supabase.'};
+  const ur=await fetch(`${SB_URL}/auth/v1/user`,{headers:{apikey:SB_KEY,Authorization:'Bearer '+at}});
+  const user=await ur.json().catch(()=>({}));
+  return {access_token:at,refresh_token:rt,expires_in:Number(h.get('expires_in'))||3600,user};
+}
+async function loginGoogle(){ const t=await googleTokens(); const s=sessionFromTokenResponse(t); await setSession(s); return {email:s.user_email,usuario:s.usuario}; }
+
 async function logout(){
   const s=await getSession();
   if(s){ try{ await fetch(`${SB_URL}/auth/v1/logout`,{method:'POST',headers:{apikey:SB_KEY,Authorization:`Bearer ${s.access_token}`}}); }catch(_){} }

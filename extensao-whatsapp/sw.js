@@ -6,6 +6,8 @@ importScripts('config.js','normalize.js','crm-api.js');
 const HANDLERS={
   'auth.status': async ()=>{ const s=await getSession(); return s?{logged:true,email:s.user_email,usuario:s.usuario}:{logged:false}; },
   'auth.login':  (m)=>login(m.email,m.password),
+  'auth.google': ()=>loginGoogle(),                   // 2.9.1: login da extensão pelo Google
+  'auth.google.card': async ()=>{ const t=await googleTokens(); return {access_token:t.access_token,refresh_token:t.refresh_token}; },   // 2.9.1: sessão NOVA pro card do CRM (embed.js)
   'auth.logout': ()=>logout(),
   'funil.get':   ()=>getFunilCfg(),
   'msg.templates':()=>getMsgTemplates(),
