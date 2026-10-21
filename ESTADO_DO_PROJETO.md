@@ -2,6 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 21/10/2026 (madrugada) — v8.76 AGENDA DOS DOIS MODOS + bug do evento duplicado (publicado: "deixa tudo funcionando… roda de forma autônoma")
+
+- **Pedido:** "deixa funcionando dos dois modos — ele botando direto da minha agenda e com CRM".
+- **ESPELHO-SEM-DUPLICAR-V1 (bug em produção):** evento criado direto no Google e ligado a um cliente vira atividade-espelho (`gcalEvId`, AGENDA-ATIV-V1). A varredura da extensão (GSYNC-EXTENSAO-V1, 13/10) não conhecia o `gcalEvId` e REENVIAVA o espelho como evento novo → duplicado. Visto na agenda real: em 19/10, "P/C <cliente>" criado no Google às 12:40:53 e a cópia "🟢 [PC] …" pelo CRM 14 s depois (uma dupla na janela 13–28/10). Corrigido em 3 pontos: varredura, guarda do delegado e `gsyncAplicarItem` (espelho sem `gcalId` nunca é recriado). A cópia que já existe NÃO foi apagada (decisão dele).
+- **AGENDA-DELEGADO-V2:** se o dono compartilhar a agenda com o delegado com **"Fazer alterações nos eventos"**, o CRM do delegado grava DIRETO na agenda do dono (`calendars/<email do dono>`, conferido em `users/me/calendarList/<email>` a cada 30 min). Sem esse acesso, ou com 403/404, recua pro V1 (pendente → o CRM do dono manda), sem desconectar o Google do delegado. Google Tasks do dono e espelhos ficam sempre no V1. Toast: "indo direto pra agenda de Gustavo".
+- **Modo "direto na agenda":** evento que o delegado cria no Google do dono e que bate com um cliente (nome no título ou telefone na descrição) entra na ficha como espelho, com "· marcado por <nome>" (via `creator`). **Depende do desbloqueio do Workspace** (admin.google.com › Agenda › compartilhamento externo) + compartilhar com o Victor em "Fazer alterações nos eventos".
+- Testes: selfTest AGENDA-DELEGADO-V2 + ESPELHO-SEM-DUPLICAR-V1; Google simulado no Chromium (POST na agenda do dono; 403 → pendente, mantém `gcalId`, segue conectado); portão verde; guard ok.
+
 ## 🟢 RETOMAR AQUI — 20/10/2026 (madrugada) — v8.75 AGENDA-DELEGADO-V1 (publicado com OK dele: "A, pode fazer e publicar")
 
 - **Pedido:** Victor (backoffice) marcando atividade no CRM, na base do Gustavo, cair na **agenda Google do Gustavo** (e não na do Victor). O Workspace bloqueia compartilhar a agenda com detalhes pra fora; pela regra do CRM fica mais organizado de todo jeito.
