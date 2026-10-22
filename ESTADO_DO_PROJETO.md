@@ -2,6 +2,12 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 22/10/2026 (tarde) — Revisão de Proteção · CARREIRA-MANUAL-V1 (publicado com OK dele: "a")
+
+- **Problema:** linha vitalícia (WV/WL) com prêmio digitado (`l.manual`) saía da "Carreira do ativo · plano proposto" — `calcLinha` devolve `code:'MANUAL'` e `resgProduto` descartava. Caso real: Vida e Saúde 360 cotado no LP Business (o motor só tem WV10).
+- **Agora:** em `ativoSimuladoDaLinha`, manual → código da curva pelo `buildCode(p, prazo, sexo, classe, fumante)`; prêmio segue o manual (`pre` = líquido, `preExib` = com IOF). Guarda extra (fora do prompt, exigida pelo A6): manual sem `resgCurva` (ex.: WV15) fica fora.
+- Aceite com a revisão do Diego em memória: A1–A7 ✅ (curva idêntica à não-manual; `pre` 1.907,24; totais dos 7 planos iguais); selfTest 55/55 no estado padrão (54/55 com o Diego = falha já existente da MS prévia, igual antes).
+
 ## 🟢 RETOMAR AQUI — 22/10/2026 — v8.77 AGENDA-SO-NO-CLIQUE-V1 (janelinha do Google só no toque)
 
 - **Pedido (print):** "o conectar Google Agenda fica abrindo automático toda hora — deixa só abrindo quando eu clicar no botão de conectar".
