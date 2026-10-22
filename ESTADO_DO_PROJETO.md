@@ -2,6 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 22/10/2026 — v8.77 AGENDA-SO-NO-CLIQUE-V1 (janelinha do Google só no toque)
+
+- **Pedido (print):** "o conectar Google Agenda fica abrindo automático toda hora — deixa só abrindo quando eu clicar no botão de conectar".
+- **Causa:** o acesso do Google (GIS) vale ~1h e `gcalToken` ignorava o `interactive`. Vencido, todo pedido em segundo plano (pulso de 90 s, foco, voltar pra aba, abrir a Agenda, Drive) chamava `requestAccessToken` e abria a janela de contas.
+- **Agora:** `gcalPodeAbrir()` só deixa abrir com toque dele (`navigator.userActivation.isActive`). Sem toque: desconecta, a fila espera e aparece **🔗 Conectar Google Agenda** (Agenda) / **Reconectar e enviar** (aviso da fila). Efeito colateral aceito: depois de ~1h sem reconectar, a sincronia pausa até ele tocar no botão.
+- Testes: selfTest novo; Chromium com GIS simulado (sem clique: 0 pedidos; clique em Conectar: 1 pedido e conecta); portão verde.
+- Extensão: ele instalou a 2.9.1; o login Google do card ainda falha — falta conferir/adicionar no Supabase a Redirect URL `https://mjickkflfaghdchkbpoiefioggomfdea.chromiumapp.org/**` (a sessão na nuvem não alcança o painel do Supabase nem o PC dele).
+
 ## 🟢 RETOMAR AQUI — 21/10/2026 (madrugada) — v8.76 AGENDA DOS DOIS MODOS + bug do evento duplicado (publicado: "deixa tudo funcionando… roda de forma autônoma")
 
 - **Pedido:** "deixa funcionando dos dois modos — ele botando direto da minha agenda e com CRM".

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.76 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.77 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -11186,8 +11186,16 @@ let _gcalTC=null,_gcalPending=null;
 function gcalGisReady(cb){ if(window.google&&google.accounts&&google.accounts.oauth2){cb();return;}
   const ex=document.getElementById('gis-sdk'); if(ex){ ex.addEventListener('load',cb); return; }
   const s=document.createElement('script'); s.id='gis-sdk'; s.src='https://accounts.google.com/gsi/client'; s.async=true; s.defer=true; s.onload=cb; document.head.appendChild(s); }
+/* AGENDA-SO-NO-CLIQUE-V1 (22/10): "o Google Agenda fica abrindo automático toda hora — deixa só abrindo quando eu clicar no botão
+   de conectar". O acesso do Google vale ~1h; vencido, todo pedido em segundo plano (pulso de 90s, foco, voltar pra aba, abrir a Agenda)
+   abria a janelinha de contas. Agora a janelinha SÓ abre no toque dele (navigator.userActivation); sem toque, marca desconectado e
+   aparece o botão 🔗 Conectar / Reconectar (Agenda e aviso da fila). Nada se perde: a fila espera. */
+function gcalPodeAbrir(interactive){ if(!interactive) return false; try{ const ua=navigator.userActivation; return !ua||!!ua.isActive; }catch(_){ return true; } }
 function gcalToken(interactive){ return new Promise((res,rej)=>{
   if(GCAL.tok&&Date.now()<GCAL.exp-60000) return res(GCAL.tok);
+  if(!gcalPodeAbrir(interactive)){ GCAL.tok=null; GCAL.exp=0; GCAL.conectado=false;
+    try{ if(gsyncPendentes()) GSYNC.precisaLogin=true; }catch(_){}
+    return rej(new Error('401 a Agenda Google pede um toque em Conectar')); }
   gcalGisReady(()=>{ try{
     if(!_gcalTC){ _gcalTC=google.accounts.oauth2.initTokenClient({client_id:GCAL_CLIENT_ID,scope:GCAL_SCOPE,
       callback:r=>{ if(r&&r.access_token){ GCAL.tok=r.access_token; GCAL.exp=Date.now()+(Number(r.expires_in||3600)*1000); GCAL.conectado=true; GCAL.hint=GCAL.hint||gcalHint(); GCAL.escopos=String(r.scope||''); gcalTokSalvar(); if(_gcalPending){_gcalPending.res(GCAL.tok);_gcalPending=null;} } else if(_gcalPending){_gcalPending.rej(new Error('sem token'));_gcalPending=null;} },
@@ -21125,6 +21133,12 @@ function lpSelfCheck(){
             ok5=/Marcado por/.test(gsyncCorpoEvento(c,c.tarefas[0]).description||'');
           } finally{ S.contatos=bkS; window.escEu=bkE; window.logado=bkL; GSYNC.fila=bkF; window.salvar=bkSv; }
           return ok1&&ok2&&ok3&&ok4&&ok5; })());
+        ok('AGENDA-SO-NO-CLIQUE-V1: sem toque dele a janelinha do Google nunca abre (token vencido → desconecta e espera o botão)', (()=>{
+          const g=Object.assign({},GCAL), rg=window.gcalGisReady; let abriu=false;
+          try{ window.gcalGisReady=()=>{ abriu=true; }; GCAL.tok='velho'; GCAL.exp=Date.now()-1000; GCAL.conectado=true;
+            gcalToken(false).catch(()=>{}); gcalToken(true).catch(()=>{});
+            return !abriu&&GCAL.conectado===false&&!GCAL.tok&&gcalPodeAbrir(false)===false; }
+          finally{ window.gcalGisReady=rg; Object.assign(GCAL,g); } })());
         ok('AGENDA-DELEGADO-V2 + ESPELHO-SEM-DUPLICAR-V1: com a agenda do dono editável o delegado manda direto (calId = dono); sem acesso fica pendente; espelho de evento do Google nunca vira evento novo', (()=>{
           const bkS=S.contatos, bkE=window.escEu, bkL=window.logado, bkF=GSYNC.fila, bkSv=window.salvar, bkC=GCAL.conectado, bkG=Object.assign({},GDELEG); let r=false;
           try{ window.salvar=()=>{}; window.logado=()=>true; GSYNC.fila={}; const f=isoAddDias(hojeISO(),2);
