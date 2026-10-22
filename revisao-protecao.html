@@ -3905,10 +3905,14 @@ function ativoSimuladoDaLinha(cen, l, ci, cli){
   const p = PRODS[l.pid]; if (!p) return null;
   const cc = calcC(cen, l, cli), r = cc.r;
   if (!r || !r.ok) return null;
-  const cod = String(r.code || p.id || '');
+  /* CARREIRA-MANUAL-V1 (22/10): prêmio digitado à mão (r.manual) vem com code:'MANUAL' e caía fora da carreira.
+     Caso real: Vida e Saúde 360 cotado no LP Business — o motor só tem a tarifa do WV10 (o 360 custa ≈ +3%), então
+     ele digita o prêmio da prévia. A curva de resgate é a do produto/prazo (buildCode, fonte única); o prêmio segue o manual. */
+  const cod = r.manual ? String(buildCode(p, l.prazo, cli.sexo || 'M', l.classe, l.fumante) || '') : String(r.code || p.id || '');
   if (!resgProduto(cod)) return null;                 /* sem tabela de resgate = não é ativo */
   const cap = +r.cs || +l.capital || 0; if (!cap) return null;
   const idade = cli.idade || idadeDe(cli.nasc);
+  if (r.manual && !resgCurva(cod, cli.sexo || 'M', idade)) return null;   /* CARREIRA-MANUAL-V1: prazo fora do catálogo (ex.: WV15) não tem curva — sem tarifa, o calcLinha já barrava; manual, não */
   const sexo = cli.sexo || 'M';
   const hoje = new Date().toISOString().slice(0,10);
   /* apólice hipotética: mesma forma da apólice real, para passar pelo mesmo motor */
