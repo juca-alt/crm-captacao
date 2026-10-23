@@ -10862,9 +10862,10 @@ async function relUltimas(forca){ if(!forca&&Date.now()-_relUltAt<60000) return 
   try{ const {data,error}=await sb.from('rel_importacoes').select('tipo,por,em,linhas').order('em',{ascending:false}).limit(300); if(error) throw error;
     const m={}; (data||[]).forEach(r=>{ if(!m[r.tipo]) m[r.tipo]=r; }); REL_ULT=m; _relUltAt=Date.now(); }catch(e){ console.warn('rel_importacoes: leitura falhou',e); }
   return REL_ULT; }
-function relLog(tipo,linhas){ try{ const por=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():'';
-  REL_ULT[tipo]={tipo,por,em:new Date().toISOString(),linhas:linhas==null?null:Number(linhas)||0};
-  if(sb&&logado()&&por) sb.from('rel_importacoes').insert({tipo,por,linhas:linhas==null?null:Number(linhas)||0}).then(({error})=>{ if(error) console.warn('rel_importacoes: não gravou',error); }); }catch(_){} }
+function relLog(tipo,linhas,extra){ try{ const por=(typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():'';
+  const x={}; if(extra) ['descartadas','novas','sairam'].forEach(k=>{ if(extra[k]!=null) x[k]=Number(extra[k])||0; });   /* ATRASO-V2 T3: descarte + diff */
+  REL_ULT[tipo]=Object.assign({tipo,por,em:new Date().toISOString(),linhas:linhas==null?null:Number(linhas)||0},x);
+  if(sb&&logado()&&por) sb.from('rel_importacoes').insert(Object.assign({tipo,por,linhas:linhas==null?null:Number(linhas)||0},x)).then(({error})=>{ if(error) console.warn('rel_importacoes: não gravou',error); }); }catch(_){} }
 async function relSuportadosAbrir(){
   const hj=new Date();
   const pinta=()=>{ const lin=REL_CATALOGO.filter(r=>!r.mod||modOn(r.mod)).map(r=>{ const u=REL_ULT[r.k], d=u?Math.floor((hj-new Date(u.em))/864e5):null, atras=u&&r.dias&&d>r.dias;
@@ -10881,7 +10882,10 @@ async function relSuportadosAbrir(){
     <button class="btn btn-ghost" style="width:100%;min-height:44px;justify-content:center;margin-top:10px" onclick="document.getElementById('rel-sup-bd').remove()">Fechar</button></div></div>`);
   pinta(); await relUltimas(true); pinta(); }
 window.relSuportadosAbrir=relSuportadosAbrir;
-function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
+/* ATRASO-V2 T3: a tabela de assinaturas é UMA (esta). relDetectar mantém o padrão de sempre (sem assinatura → semanal, que
+   vai pra leitura do semanal/IA); a Central usa relDetectarOu(txt,null) pra PERGUNTAR o tipo quando não reconhece. */
+function relDetectar(txt){ return relDetectarOu(txt,'semanal'); }
+function relDetectarOu(txt,padrao){ const t=String(txt||''); const n=normKey(t.slice(0,6000)); const cab=t.slice(0,4000);
   if(/<table|<tr|<td/i.test(cab)){ const h=normKey(cab.replace(/<[^>]+>/g,' '));
     if(/comissao direta/.test(h)&&/mes pago ate/.test(h)) return 'comissao_direta';   /* PARCEIROS-V1: vem ANTES da carteira (o cabeçalho também tem Segurado/Prêmio/Apólice) */
     if(/data de nascimento/.test(h)&&/num\.? ?apolices|apolices/.test(h)&&/cs/.test(h)) return 'carteira_clientes';
@@ -10905,7 +10909,8 @@ function relDetectar(txt){ const t=String(txt||''); const n=normKey(t.slice(0,60
   if(/prazos? p\/ status t/.test(n)||/mes\s+proposta\s+apolice\s+segurado/.test(n)||(/apolices emitidas\s*-/.test(n)&&/proposta/.test(n))) return 'statust';
   /* Benefícios: aviso de sinistro/evento coberto — não tem relatório do portal; vira caso no módulo */
   if(/aviso de sinistro|comunicado de sinistro|\bsinistro\b|regulacao do beneficio|abertura de beneficio|solicitacao de beneficio/.test(n)) return 'beneficios';
-  return 'semanal'; }
+  if(/relatorio semanal|performance semanal|semana \d+/.test(n)) return 'semanal';
+  return padrao; }
 async function relRotear(tipo,bruto){
   if(tipo==='comissao_direta'){ await parcImportarExtrato(bruto); return; }   /* PARCEIROS-V1 */
   if(tipo==='carteira_clientes'||tipo==='carteira_apolices'){
@@ -10933,6 +10938,103 @@ async function relRotear(tipo,bruto){
     toast(r.lidos?('Aniversariantes: '+r.lidos+' lido(s) — '+r.novos+' novo(s), '+r.atualizados+' atualizado(s)'):'Não achei nenhum aniversariante nesse texto — confira se copiou o relatório inteiro',!!r.lidos); return; }
   openLpImport(); setTimeout(()=>{ const t=$('#lp-text'); if(t){ t.value=bruto; } },80);
 }
+/* ═══ CENTRAL DE IMPORTAÇÕES (ATRASO-V2 T3 · 23/10/2026) ═══════════════════════════════════════════════════════════════
+   Menu "Relatórios do portal". Lê rel_importacoes (última por tipo + a anterior pro diff) e mostra o semáforo de cada relatório
+   contra o frescor esperado. "Subir arquivo à mão": um campo só; o tipo sai da MESMA tabela de assinaturas (relDetectarOu) e o
+   arquivo vai pro importador que já existe (relRotear). Não reconheceu → pergunta o tipo. Busca automática no portal é outro
+   prompt (Gabi própria). fontes = os tipos de rel_importacoes que alimentam cada linha. */
+const IMP_CATALOGO=[
+  {k:'atraso',      fontes:['atraso'],                               nome:'Lista de Atraso',        vai:'Lista de Atraso',              fresc:{tipo:'uteis',n:2}, view:'lp-atrasos'},
+  {k:'pendencias',  fontes:['pendencias'],                           nome:'UW · Propostas pendentes',vai:'Pendências de Emissão',        fresc:{tipo:'uteis',n:2}, view:'lp-pendencias'},
+  {k:'emitidas',    fontes:['emitidas'],                             nome:'UW · Apólices emitidas', vai:'Emissão / PLACED',             fresc:{tipo:'uteis',n:2}, view:'emissao-diaria'},
+  {k:'carteira',    fontes:['carteira_clientes','carteira_apolices'],nome:'Carteira de Clientes',   vai:'Clientes / Funil BC',          fresc:{tipo:'dias',n:7},  view:'cart-clientes'},
+  {k:'consolidado', fontes:['persistencia'],                         nome:'Extrato Consolidado',    vai:'Persistência / Comissionamento',fresc:{tipo:'mensal',dia:10}, view:'persistencia'},
+  {k:'detalhado',   fontes:['comissao_direta'],                      nome:'Extrato Detalhado',      vai:'Comissionamento / Parceiros',  fresc:{tipo:'mensal',dia:20}, view:'parceiros'},
+  {k:'resgate',     fontes:[],                                       nome:'Valor de Resgate / RPU', vai:'Revisão de Proteção',          fresc:{tipo:'dias',n:30}, semImportador:true}];
+let IMP={hist:{}, carregado:false, txt:'', tipo:null, msg:''};
+(function impCss(){ if(document.getElementById('imp-css')) return; const s=document.createElement('style'); s.id='imp-css'; s.textContent=`
+  .imp-cards{display:none;flex-direction:column;gap:8px}
+  .imp-card{padding:12px;display:flex;flex-direction:column;gap:5px}
+  .imp-drop.drag{background:var(--azul-claro,#eef4ff)}
+  @media (max-width:760px){ .imp-cards{display:flex} .imp-tab{display:none} .imp-card a{display:inline-block;min-height:44px;line-height:44px} }`; document.head.appendChild(s); })();
+function impFrescTxt(f){ return f.tipo==='uteis'?f.n+' dias úteis':f.tipo==='dias'?f.n+' dias':'mensal (até dia '+f.dia+')'; }
+/* dias úteis (seg–sex) entre a data da importação e hoje */
+function impDiasUteis(de,ate){ const a=new Date(de); a.setHours(0,0,0,0); const b2=new Date(ate); b2.setHours(0,0,0,0); let n=0;
+  for(const d=new Date(a); d<b2; d.setDate(d.getDate()+1)){ const w=new Date(d); w.setDate(w.getDate()+1); const dw=w.getDay(); if(dw!==0&&dw!==6) n++; } return n; }
+/* semáforo: em_dia (dentro do frescor) · vencendo (até 50% além) · atrasado · nunca. Mensal: em dia se importou neste mês;
+   antes do dia de vencimento é "vencendo"; depois, "atrasado". */
+function impSemaforo(ultEm,f,hoje){ if(!ultEm) return 'nunca'; const h=hoje||new Date(), u=new Date(ultEm);
+  if(f.tipo==='mensal'){ if(u.getFullYear()===h.getFullYear()&&u.getMonth()===h.getMonth()) return 'em_dia'; return h.getDate()<=f.dia?'vencendo':'atrasado'; }
+  const idade=f.tipo==='uteis'?impDiasUteis(u,h):Math.floor((new Date(h).setHours(0,0,0,0)-new Date(u).setHours(0,0,0,0))/864e5);
+  return idade<=f.n?'em_dia':idade<=Math.ceil(f.n*1.5)?'vencendo':'atrasado'; }
+const IMP_SEM={em_dia:['b-verde','Em dia'], vencendo:['b-amarelo','Vencendo'], atrasado:['b-verm','Atrasado'], nunca:['b-cinza','Nunca importado']};
+function impUltimas(c){ const l=[].concat(...c.fontes.map(t=>IMP.hist[t]||[])).sort((a,b)=>String(b.em).localeCompare(String(a.em))); return l; }
+/* "última mudança": diff da importação mais recente; sem novas/saíram gravados, compara as linhas com a anterior do mesmo tipo */
+function impDiff(l){ const u=l[0]; if(!u) return null; if(u.novas!=null||u.sairam!=null) return {novas:u.novas||0,sairam:u.sairam||0,descartadas:u.descartadas||0};
+  const a=l.find((x,i)=>i>0&&x.tipo===u.tipo); if(!a||u.linhas==null||a.linhas==null) return null; return {delta:u.linhas-a.linhas}; }
+function impDiffTxt(d){ if(!d) return ''; if(d.delta!=null) return (d.delta>0?'+':'')+d.delta+' linha(s) vs anterior';
+  return d.novas+' nova(s) · '+d.sairam+' saiu(saíram)'+(d.descartadas?' · '+d.descartadas+' descartada(s)':''); }
+async function impCarregar(){ if(!sb||!logado()){ IMP.carregado=true; return; }
+  try{ const {data,error}=await sb.from('rel_importacoes').select('*').order('em',{ascending:false}).limit(400); if(error) throw error;
+    const h={}; (data||[]).forEach(r=>{ (h[r.tipo]=h[r.tipo]||[]).push(r); }); IMP.hist=h;
+    const ult={}; Object.keys(h).forEach(t=>{ ult[t]=h[t][0]; }); Object.assign(REL_ULT,ult); _relUltAt=Date.now();
+  }catch(e){ console.warn('Central de Importações',e); }
+  IMP.carregado=true; }
+async function viewImportacoes(){ const m=$('#main'); if(!m) return;
+  if(!IMP.carregado){ m.innerHTML='<h1 class="pg">Relatórios do portal</h1><div class="sub">Carregando…</div>'; await impCarregar(); if(VIEW!=='importacoes') return; }
+  const hoje=new Date();
+  const lin=IMP_CATALOGO.map(c=>{ const l=impUltimas(c), u=l[0]; return {c,l,u,s:c.semImportador?'nunca':impSemaforo(u&&u.em,c.fresc,hoje),d:impDiff(l)}; });
+  const emDia=lin.filter(x=>x.s==='em_dia').length, desat=lin.filter(x=>x.s!=='em_dia').length;
+  const recente=lin.filter(x=>x.u).sort((a,b)=>String(b.u.em).localeCompare(String(a.u.em)))[0];
+  const dt=iso=>{ const d=new Date(iso); return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); };
+  m.innerHTML=`<h1 class="pg">Relatórios do portal</h1>
+    <div class="sub">O que entrou, quando e o que está vencido. Subir à mão aqui embaixo: eu reconheço o relatório e mando pro módulo certo.</div>
+    <div class="kpis" style="margin-top:10px">
+      <div class="kpi"><div class="lbl">Em dia</div><div class="num" style="color:var(--verde)">${emDia}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">de ${lin.length} relatórios</div></div>
+      <div class="kpi"><div class="lbl">Desatualizados</div><div class="num" style="color:${desat?'var(--verm)':'var(--ink)'}">${desat}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">vencendo, atrasados ou nunca</div></div>
+      <div class="kpi"><div class="lbl">Última mudança</div><div class="num" style="font-size:16px">${recente?esc(recente.c.nome):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${recente?dt(recente.u.em)+(impDiffTxt(recente.d)?' · '+esc(impDiffTxt(recente.d)):''):'nenhuma importação registrada'}</div></div>
+    </div>
+    <div class="card imp-drop" id="imp-drop" style="padding:14px;margin:12px 0;border:2px dashed var(--azul-borda,#cddffb);display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="flex:1;min-width:200px">📥 Subir arquivo à mão</b>
+        <button class="btn btn-p btn-mini" onclick="document.getElementById('imp-file').click()">Escolher arquivo</button>
+        <input type="file" id="imp-file" accept="application/pdf,.pdf,.xls,.htm,.html,.txt" style="display:none" onchange="impArquivo(this.files&&this.files[0])"></div>
+      <div style="font-size:12.5px;color:var(--muted)">Solte aqui o PDF ou o .xls do portal, ou cole o texto embaixo. Linhas de cabeçalho/rodapé são descartadas e contadas no log.</div>
+      <textarea id="imp-txt" rows="3" placeholder="…ou cole aqui o texto do relatório" oninput="impTexto(this.value)" style="width:100%;font-size:16px">${esc(IMP.txt)}</textarea>
+      <div id="imp-res">${impResHtml()}</div>
+    </div>
+    <div class="imp-cards">${lin.map(x=>{ const [cor,rot]=IMP_SEM[x.s]; return `<div class="card imp-card">
+      <div style="display:flex;gap:8px;align-items:flex-start"><b style="flex:1;min-width:0">${esc(x.c.nome)}</b><span class="badge ${cor}">${rot}</span></div>
+      <div style="font-size:12.5px;color:var(--muted)">→ ${x.c.view&&!x.c.semImportador?`<a href="#" onclick="event.preventDefault();irPara('${x.c.view}')">${esc(x.c.vai)}</a>`:esc(x.c.vai)} · ${esc(impFrescTxt(x.c.fresc))}</div>
+      <div style="font-size:12.5px">${x.u?'Última: '+dt(x.u.em)+(x.u.por?' · '+esc(String(x.u.por).split('@')[0]):'')+(x.u.linhas!=null?' · '+x.u.linhas+' linha(s)':''):(x.c.semImportador?'ainda sem importador':'nunca importado')}${x.d?'<br><span style="color:var(--muted)">'+esc(impDiffTxt(x.d))+'</span>':''}</div></div>`; }).join('')}</div>
+    <div class="card imp-tab" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
+      <th style="padding:6px 8px">Relatório</th><th>Vai para</th><th>Frescor</th><th>Última</th><th>Linhas · mudança</th><th>Situação</th></tr></thead><tbody>
+      ${lin.map(x=>{ const [cor,rot]=IMP_SEM[x.s]; return `<tr style="border-top:1px solid var(--linha)">
+        <td style="padding:8px"><b>${esc(x.c.nome)}</b>${x.c.semImportador?'<br><span style="font-size:11px;color:var(--muted)">ainda sem importador</span>':''}</td>
+        <td style="font-size:12.5px">${x.c.view&&!x.c.semImportador?`<a href="#" onclick="event.preventDefault();irPara('${x.c.view}')">${esc(x.c.vai)}</a>`:esc(x.c.vai)}</td>
+        <td style="font-size:12px;color:var(--muted)">${esc(impFrescTxt(x.c.fresc))}</td>
+        <td style="font-size:12.5px;white-space:nowrap">${x.u?dt(x.u.em)+(x.u.por?'<br><span style="font-size:11px;color:var(--muted)">'+esc(String(x.u.por).split('@')[0])+'</span>':''):'—'}</td>
+        <td style="font-size:12px">${x.u&&x.u.linhas!=null?x.u.linhas+' linha(s)':'—'}${x.d?'<br><span style="color:var(--muted)">'+esc(impDiffTxt(x.d))+'</span>':''}</td>
+        <td><span class="badge ${cor}">${rot}</span></td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  const z=$('#imp-drop'); if(z){ z.ondragover=e=>{ e.preventDefault(); z.classList.add('drag'); }; z.ondragleave=()=>z.classList.remove('drag');
+    z.ondrop=e=>{ e.preventDefault(); z.classList.remove('drag'); if(e.dataTransfer.files&&e.dataTransfer.files[0]) impArquivo(e.dataTransfer.files[0]); }; } }
+function impResHtml(){ if(IMP.msg) return `<div style="font-size:12.5px;color:var(--verm)">${esc(IMP.msg)}</div>`;
+  if(!IMP.txt) return '';
+  if(IMP.tipo) return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">✅ Identifiquei: <b>${esc((REL_TIPOS[IMP.tipo]||{}).nome||IMP.tipo)}</b><span style="flex:1"></span><button class="btn btn-p btn-mini" onclick="impImportar()">Importar</button></div>`;
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">❓ Não reconheci esse relatório. Qual é?
+    <select id="imp-tipo" aria-label="Tipo do relatório" style="padding:6px 8px;border:1px solid var(--linha);border-radius:9px;font-size:16px">${Object.keys(REL_TIPOS).map(k=>`<option value="${k}">${esc(REL_TIPOS[k].nome)}</option>`).join('')}</select>
+    <button class="btn btn-p btn-mini" onclick="IMP.tipo=document.getElementById('imp-tipo').value;impImportar()">Importar</button></div>`; }
+function impPintarRes(){ const e=$('#imp-res'); if(e) e.innerHTML=impResHtml(); }
+function impTexto(v){ IMP.txt=String(v||''); IMP.msg=''; IMP.tipo=IMP.txt.trim().length>=40?relDetectarOu(IMP.txt,null):null; impPintarRes(); }
+async function impArquivo(f){ if(!f) return; IMP.msg='';
+  const ehPdf=/pdf$/i.test(f.name)||f.type==='application/pdf';
+  if(ehPdf){ const buf=await f.arrayBuffer(); let t=''; try{ t=await lpPdfText(buf.slice(0)); }catch(_){ t=''; }
+    if(!t||t.replace(/\s/g,'').length<80){ IMP.msg='Esse PDF não tem texto (escaneado). Use o 📄 Subir relatório do menu — ele manda pra leitura por IA.'; IMP.txt=''; IMP.tipo=null; impPintarRes(); return; }
+    const ta=$('#imp-txt'); if(ta) ta.value=t; impTexto(t); return; }
+  const fr=new FileReader(); fr.onload=()=>{ const t=String(fr.result||''); const ta=$('#imp-txt'); if(ta) ta.value=t.slice(0,20000); impTexto(t); }; fr.readAsText(f,'ISO-8859-1'); }
+async function impImportar(){ const tipo=IMP.tipo, bruto=IMP.txt; if(!tipo||!bruto) return; IMP.txt=''; IMP.tipo=null; IMP.carregado=false;
+  await relRotear(tipo,bruto); }
+window.impArquivo=impArquivo; window.impTexto=impTexto; window.impImportar=impImportar;
 /* REL-BENEF-V1 (05/09): texto de aviso de sinistro → módulo Benefícios com o caso pré-preenchido (segurado/apólice/protocolo/data) */
 function relExtrairBeneficio(txt){ const t=String(txt||''); const n=normKey(t); const o={segurado:'',apolice:'',protocolo:'',data:''};
   const ap=t.match(/ap[oó]lice[^0-9]{0,12}(\d{6,9})/i); if(ap) o.apolice=ap[1];
@@ -13112,6 +13214,13 @@ const AT_NAME="([A-ZÀ-ÿ][A-Za-zÀ-ÿ.'\\- ]{3,60}?)(?=\\s{2,}|\\n|\\s+(?:Cel|E
 function atNomeProx(win,anchor,label){ const re=new RegExp(label+':?\\s*'+AT_NAME,'gi'); let m,best='',bestD=Infinity; while((m=re.exec(win))){ const d=Math.abs(m.index-anchor); if(d<bestD){ bestD=d; best=m[1]; } } return best; }
 // Parser OFICIAL Prudential (port de processarOficial, endurecido). Preserva a
 // leitura do artefato; só normaliza chave/datas e trava a janela por bloco (BUG 3).
+/* ATRASO-V2 T3 — rodapé/cabeçalho de página do PDF do portal. Linha que ainda carregar isso (ou um motivo com data dentro,
+   sinal de colunas embaralhadas na cópia) é DESCARTADA e contada no log; nunca vira registro. */
+const AT_RODAPE_RE=/Life Planner [ée] a marca registrada|Ap[óo]lices em Atraso\s*\d/i;
+function atLinhaLixo(r){ const t=[r.segurado,r.resp_pagto,r.forma_pagto,r.motivo_recusa,r.celular].join(' ');
+  return !/^\d{9}$/.test(String(r.apolice||''))||/marca registrada|ap[óo]lices em atraso/i.test(t)||/\d{2}\/\d{2}\/\d{4}/.test(String(r.motivo_recusa||'')); }
+/* total declarado: só "Total: <inteiro>" conta como contagem de apólices (Total em dinheiro é ignorado) */
+function atTotalDeclarado(txt){ const re=/Total:\s*(\d{1,4})(?![\d.,])/g; let m, s=0, n=0; while((m=re.exec(String(txt||'')))){ s+=Number(m[1]); n++; } return n?s:null; }
 function atParseOficial(txt){
   const errors=[]; let m;
   const lpMarks=[], lpRe=/LP:\s*([A-ZÀ-ÿ][^\n]+)/gi;
@@ -13127,7 +13236,7 @@ function atParseOficial(txt){
     // datas, motivo, prêmio) vem DEPOIS do nº da apólice, até a próxima apólice. Ler
     // para FRENTE mata o bug (antigo do artefato) em que uma apólice herdava as datas
     // da de cima. Corta "Total:" do rodapé da seção.
-    const blk=txt.slice(numEnd,end).split(/Total:/)[0];
+    const blk=txt.slice(numEnd,end).split(/Total:/)[0].split(AT_RODAPE_RE)[0];   /* ATRASO-V2 T3: o rodapé da página (e o cabeçalho da seguinte) não entra no registro */
     // datas SÓ deste registro: emissão, "pago até /", "vencido em"
     const dts=[]; const dre=/(\d{2}\/\d{2}\/\d{4})/g; let dm; while((dm=dre.exec(blk))) dts.push({iso:atBrToISO(dm[1]),idx:dm.index});
     let pago=null; for(let j=0;j<dts.length;j++){ if(/^\s{0,3}\//.test(blk.slice(dts[j].idx+10,dts[j].idx+15))){ pago=dts[j]; break; } }
@@ -13158,7 +13267,8 @@ function atParseOficial(txt){
       motivo_recusa:atTitleC(motivo).replace(/\s+/g,' ').trim(), celular:tel.replace(/\s+/g,' ').trim(),
       forma_pagto:forma });
   }
-  return {records,errors};
+  const validos=records.filter(r=>!atLinhaLixo(r));
+  return {records:validos,errors,descartadas:records.length-validos.length,declarado:atTotalDeclarado(txt)};
 }
 // Parser ASSISTENTES / Global CRM — SÓ tratativa (nunca datas/prêmio).
 function atParseAssist(txt){
@@ -13543,7 +13653,9 @@ function atColarRelatorio(){ atModal(`<h2>📋 Colar relatório</h2>
 function atProcessar(){ const txt=($('#at_txt')||{}).value||''; const err=$('#at_err'); if(err) err.textContent='';
   if(txt.trim().length<40){ if(err) err.textContent='Cole o texto do relatório primeiro.'; return; }
   try{ const of=atParseOficial(txt);
-    if(of.records.length){ atPreviewOficial(of.records); return; }
+    if(of.records.length&&of.declarado!=null&&of.declarado!==of.records.length){   /* ATRASO-V2 T3: validação bloqueante */
+      if(err) err.textContent='O relatório declara '+of.declarado+' apólice(s) e eu li '+of.records.length+(of.descartadas?' ('+of.descartadas+' linha(s) de cabeçalho/rodapé ou embaralhada(s) descartada(s))':'')+'. Nada foi gravado — copie o relatório de novo, inteiro, e cole aqui.'; return; }
+    if(of.records.length){ atPreviewOficial(of.records); if(_atPend) _atPend.descartadas=of.descartadas||0; return; }
     const as=atParseAssist(txt);
     if(as.linhas.length){ atPreviewAssist(as.linhas); return; }
     if(err) err.textContent=(of.errors[0]||'Não reconheci o formato. Confira se colou o relatório oficial completo (com números de apólice).');
@@ -13596,7 +13708,7 @@ async function atAplicarOficialUI(){ const p=_atPend; if(!p||p.tipo!=='oficial')
   atSalvarLocal(); let msg='';
   if(AT_REMOTE){ try{ await atUpsertRemoto(up); msg=' · sincronizado'; }catch(e){ msg=' · só neste aparelho (falha no servidor)'; console.error('AT upsert',e); } }
   else msg=' · só neste aparelho (faça login pra sincronizar)';
-  atClose(); render(); relLog('atraso',p.updates.length+nNovos); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${nNovos} nova(s)${msg}`,true);
+  atClose(); render(); relLog('atraso',p.updates.length+nNovos,{descartadas:p.descartadas||0,novas:nNovos,sairam:(p.sumiram||[]).length}); toast(`Relatório aplicado: ${p.updates.length} atualizada(s), ${nNovos} nova(s)${msg}`,true);
 }
 function atPreviewAssist(linhas){ const m=atMatchAssist(AT.itens,linhas); _atPend={tipo:'assist',updates:m.updates,naoAchou:m.naoAchou};
   let h=`<h2>Relatório das assistentes — tratativas</h2>`;
@@ -15377,7 +15489,8 @@ const HUB_SECOES=[
     {view:'solicitacoes', ic:'📨', titulo:'Solicitações',         desc:'Pedidos à assessoria com prazo, dono e retorno; texto pronto pro WhatsApp.', mod:'backoffice', cnt:()=>(SO.itens||[]).filter(escLinhaOk).filter(s=>s.status==='aberta').length},
     {view:'lp-statust',   ic:'🅣', titulo:'Status T',             desc:'Apólices emitidas na janela dos 30 dias / 2º prêmio.', mod:'backoffice', cnt:()=>lpAtivos('statust').length},
     {view:'subst',        ic:'🔁', titulo:'Substituições',        desc:'Controle de substituição e postecipação, apólice antiga × nova.', mod:'backoffice'},
-    {view:'persistencia', ic:'📉', titulo:'Persistência',        desc:'PAV/PANCEC e % de persistência por mês (Extrato de Comissão) + simulador de cancelamento.', mod:'backoffice'}
+    {view:'persistencia', ic:'📉', titulo:'Persistência',        desc:'PAV/PANCEC e % de persistência por mês (Extrato de Comissão) + simulador de cancelamento.', mod:'backoffice'},
+    {view:'importacoes',  ic:'📥', titulo:'Relatórios do portal', desc:'Central de Importações: o que entrou, quando e o que está vencido; subir arquivo à mão (eu reconheço o tipo).', mod:'importacoes'}   /* ATRASO-V2 T3 (23/10): tela nova → MODS def:false */
   ]},
   {titulo:'Parceiros', itens:[   /* PARCEIROS-V1 (30/09): módulo novo — MODS def:false (Victor ligado; Daniel quando ele disser) */
     {view:'parceiros', ic:'🤝', titulo:'Parceiros', desc:'Comissão dividida com LP parceiro (Pipe X): acordo por cliente, extrato do mês, apuração, prestação de contas e projeção.', mod:'parceiros'},
@@ -17346,6 +17459,7 @@ const MODS={
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']},
   embaixadores:{label:'🌟 Embaixadores da Proteção (importar a lista Mercado X do embaixador, selecionar quem ele esquenta, acompanhar até fechar) — você e o seu backoffice (Victor) importam e selecionam; os leads ficam sempre na SUA base', def:false, views:['embaixadores']},
   parceiros:{label:'🤝 Parceiros (comissão dividida com LP parceiro: acordo por cliente, importação do Extrato Detalhado, apuração, histórico, prestação de contas, projeção) — só o admin fecha competência e edita %', def:false, views:['parceiros']},   /* PARCEIROS-V1 (30/09): módulo novo — liga por usuário (Victor ligado no banco) */
+  importacoes:{label:'📥 Relatórios do portal (Central de Importações: semáforo do que está em dia/vencido e subir arquivo à mão)', def:false, views:['importacoes']},   /* ATRASO-V2 T3 (23/10): tela nova — Victor liga por usuário */
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']}
 };
 /* ═══ NOVO-PRIMEIRO-NA-MINHA-BASE-V1 (16/09/2026) ══════════════════════════════
@@ -19643,7 +19757,7 @@ const TITULO_VIEW={inicio:'Início',consolidado:'Visão Consolidada',modulos:'M�
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo · Novos Negócios','prud-funil':'Prud. Demais · Novos Negócios','mfo-funil':'MFO · Novos Negócios',
   plano:'Plano Prudential','consol-vg':'Consolidada · Vida em Grupo','consol-prud':'Consolidada · Prud. Demais','consol-mfo':'Consolidada · MFO','vg-bc-funil':'Vida em Grupo · Negócios na Base','prud-bc-funil':'Prud. Demais · Negócios na Base','mfo-bc-funil':'MFO · Negócios na Base','lp-atrasos':'Lista de Atraso',
-  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência',parceiros:'Parceiros',embaixadores:'Embaixadores','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
+  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência',parceiros:'Parceiros',embaixadores:'Embaixadores',importacoes:'Relatórios do portal','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
   revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice', 'pc-simulador':'Melhor dia de vencimento'};
 function renderTituloTopo(){
@@ -19788,6 +19902,7 @@ function render(){
   else if(VIEW==='apolices-detalhado') viewApolicesDetalhado();
   else if(VIEW==='persistencia') viewPersistencia();
   else if(VIEW==='parceiros') viewParceiros();
+  else if(VIEW==='importacoes') viewImportacoes();
   else if(VIEW==='embaixadores') viewEmbaixadores();
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
@@ -21247,8 +21362,8 @@ function lpSelfCheck(){
         ok('AGENDA-SO-NO-CLIQUE-V1: sem toque dele a janelinha do Google nunca abre (token vencido → desconecta e espera o botão)', (()=>{
           const g=Object.assign({},GCAL), rg=window.gcalGisReady; let abriu=false;
           try{ window.gcalGisReady=()=>{ abriu=true; }; GCAL.tok='velho'; GCAL.exp=Date.now()-1000; GCAL.conectado=true;
-            gcalToken(false).catch(()=>{}); gcalToken(true).catch(()=>{});
-            return !abriu&&GCAL.conectado===false&&!GCAL.tok&&gcalPodeAbrir(false)===false; }
+            gcalToken(false).catch(()=>{});   /* sem gesto: nunca abre (o caso com gesto depende de navigator.userActivation — não dá pra simular aqui sem falso positivo) */
+            return !abriu&&GCAL.conectado===false&&!GCAL.tok&&gcalPodeAbrir(false)===false&&/gcalPodeAbrir\(interactive\)/.test(String(gcalToken)); }
           finally{ window.gcalGisReady=rg; Object.assign(GCAL,g); } })());
         ok('AGENDA-DELEGADO-V2 + ESPELHO-SEM-DUPLICAR-V1: com a agenda do dono editável o delegado manda direto (calId = dono); sem acesso fica pendente; espelho de evento do Google nunca vira evento novo', (()=>{
           const bkS=S.contatos, bkE=window.escEu, bkL=window.logado, bkF=GSYNC.fila, bkSv=window.salvar, bkC=GCAL.conectado, bkG=Object.assign({},GDELEG); let r=false;
@@ -21975,6 +22090,20 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         const t7=/^https:\/\/wa\.me\/5581999990000\?text=/.test(w1)&&decodeURIComponent(w1.split('text=')[1])==='Oi Fulano, sobre a apólice 000000077'&&w2==='https://wa.me/5581999990000';
         return t3&&t4&&t5&&t6&&t7&&atV2ExtratoRecente(['Set/26'],new Date(2026,9,23))==='Set/26'&&atV2ExtratoRecente(['Jul/26'],new Date(2026,9,23))===null;
       } finally{ Object.assign(ATV2,bk); AT_SCRIPTS_DB=bkS; } })());
+    ok('CENTRAL-IMPORTACOES (T3): semáforo 1/3/5 dias úteis = em dia/vencendo/atrasado, nunca; mensal; detecção pela assinatura (atraso/emitidas) e "não reconheci" = null; rodapé do PDF não entra no registro; lixo descartado; total declarado só se inteiro; mesmo relatório 2× = 0 novas / 0 saíram', (()=>{
+      const h=new Date(2026,9,21,15,0), f2={tipo:'uteis',n:2}, fm={tipo:'mensal',dia:10};
+      const t8=impSemaforo(new Date(2026,9,20,9,0),f2,h)==='em_dia'&&impSemaforo(new Date(2026,9,16,9,0),f2,h)==='vencendo'&&impSemaforo(new Date(2026,9,14,9,0),f2,h)==='atrasado'&&impSemaforo(null,f2,h)==='nunca'
+        &&impSemaforo(new Date(2026,9,2),fm,h)==='em_dia'&&impSemaforo(new Date(2026,8,21),fm,h)==='atrasado'&&impSemaforo(new Date(2026,8,21),fm,new Date(2026,9,5))==='vencendo';
+      const t9=relDetectarOu('Apólices em Atraso LP: FULANO Dias de atraso Vencido em',null)==='atraso'&&relDetectarOu('Apólices Emitidas no Período de 01/10/2026 a 22/10/2026',null)==='emitidas'
+        &&relDetectarOu('lista de compras do mercado: arroz, feijão, café e pão francês para a semana toda',null)===null&&relDetectar('texto qualquer sem assinatura nenhuma aqui dentro')==='semanal';
+      const txt='Apólices em Atraso\nLP: GUSTAVO\n001111111 10/01/2025 Ativa FULANO DE TAL Cel.: (81) 99999-0000 Mensal Cartão de Crédito 18/09/2026 / 10/09/2026 Limite Insuficiente - Libere Limite 849,81\nLife Planner é a marca registrada da The Prudential Insurance Company of America para designar as Corretoras Franqueadas de Seguro de Vida. Apólices em Atraso 2\n001222222 05/02/2025 Ativa BELTRANO SILVA Cel.: (81) 98888-0000 Mensal Boleto 20/09/2026 / 12/09/2026 Boleto sem retorno de pagamento 320,50\nTotal: 2';
+      const of=atParseOficial(txt), sujo=JSON.stringify(of.records);
+      const t10=of.records.length===2&&of.descartadas===0&&of.declarado===2&&!/marca registrada|Atraso 2/i.test(sujo)&&of.records[0].premio===849.81
+        &&atLinhaLixo({apolice:'001111111',motivo_recusa:'04/07/2026 / 10/07/2026 Dados Do Cartão'})&&atLinhaLixo({apolice:'001111111',forma_pagto:'Life Planner é a marca registrada'})&&!atLinhaLixo(of.records[0])
+        &&atTotalDeclarado('Total: 849,81')===null&&atTotalDeclarado('Total: 3\nTotal: 2')===5;
+      const ex=of.records.map((r,i)=>Object.assign({id:'x'+i,status:'Sem tratativa'},r)), d=atDiffOficial(ex,of.records);
+      const t11=d.novos.length===0&&d.sumiram.length===0&&d.updates.every(u=>!u.ch.length);
+      return t8&&t9&&t10&&t11; })());
     ok('cobrança: os scripts carregam no boot, não só no Sincronizar', BOOT_LOADERS.indexOf(atScriptsCarregar)>=0);
     ok('script: rótulo separa "sem motivo" de "motivo sem script"', (()=>{
       const a=atScriptRot({motivo_recusa:''}), b=atScriptRot({motivo_recusa:'erro 733 sei la'});
@@ -24076,7 +24205,7 @@ window.embAbrir=embAbrir; window.embFechar=embFechar; window.embFiltro=embFiltro
 window.embImportarEscolher=embImportarEscolher; window.embImportarConfirmar=embImportarConfirmar; window.viewEmbaixadores=viewEmbaixadores; window.embCarregar=embCarregar;
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','plano','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
-  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado','parceiros','embaixadores'];
+  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado','parceiros','embaixadores','importacoes'];
 /* ═══ MODO-WA-V1 (28/09/2026) ════════════════════════════════════════════════════════
    Palavra dele (extensão do WhatsApp): "abre algo como o próprio card da oportunidade que abro no CRM — ali tem tudo,
    inclusive tarefas, agendamentos… esse mesmo card". Em vez de reescrever a ficha na extensão (e ela ficar sempre
