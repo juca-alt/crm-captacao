@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 23/10/2026 — COPILOTO 2.10.0 · T1 (backend) pronto, PARADO pra revisão (branch `claude/copiloto-t1`)
+
+- **Pedido (PROMPT_CODE):** copiloto humano + IA na extensão (Umbler): a IA sugere categoria, rascunho e ação no CRM; o humano revisa/envia/aplica. Nunca envia, nunca fala de produto/preço/cobertura/saúde.
+- **T1 entregue:** tabela `copiloto_sugestoes` (migração `copiloto_v1.sql`, **aplicada** 2× sem erro; RLS `lp_donos_visiveis`; sem coluna de conversa) + `app_settings.copiloto_config.janelas_agenda` (vazia) + Edge Function **`copiloto-sugerir` publicada** (v1, verify_jwt off com checagem própria; SDK oficial `@anthropic-ai/sdk@0.133.0`; `claude-haiku-5-5`, tool `entregar_sugestao` forçada + strict, effort low, 600 tokens, timeout 10 s, sem retry). Núcleo puro `nucleo.ts` (redact, prompt, validação, trava dura) com 11 testes (`node --test --experimental-strip-types`).
+- **Trava dura depois do modelo:** assunto do Gustavo → rascunho só de espera (zero dígito/palavra proibida); rascunho comum que cita produto/valor vira assunto_gustavo; agendamento sem janela não pode trazer horário.
+- **Falta (bloqueia o "3 chamadas reais"):** o Gustavo criar a `ANTHROPIC_API_KEY` e cadastrar em Supabase › Edge Functions › Secrets. Sem ela a função responde `sem_chave` (aceite 7 ✅ no mock). Anthropic até agora: nenhuma no repo (só Gemini em `capturar-lead`/`importar-relatorio-lp`).
+
 ## 🟢 RETOMAR AQUI — 22/10/2026 (tarde) — Revisão de Proteção · CARREIRA-MANUAL-V1 (publicado com OK dele: "a")
 
 - **Problema:** linha vitalícia (WV/WL) com prêmio digitado (`l.manual`) saía da "Carreira do ativo · plano proposto" — `calcLinha` devolve `code:'MANUAL'` e `resgProduto` descartava. Caso real: Vida e Saúde 360 cotado no LP Business (o motor só tem WV10).
