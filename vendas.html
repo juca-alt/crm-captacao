@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.79 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.80 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -312,6 +312,28 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     padding:5px 8px;cursor:pointer;text-align:center;opacity:.55;transition:opacity .12s,border-color .12s,background .12s}
   .nncard:hover .nc-avancar{opacity:1;border-color:var(--azul)}
   .nc-avancar:hover{background:var(--azul-claro,#eef4ff)}
+  /* CONGELAR-V1 (23/10) */
+  .nc-cong{margin-top:5px;font-size:11px;font-weight:600;color:#0e6f8f;background:#e6f6fb;border:1px solid #b9e3ef;border-radius:7px;padding:3px 8px;display:inline-block}
+  .nc-descong{color:#0e6f8f;opacity:.85}
+  .fun-cong-btn{white-space:nowrap}
+  .cong-ficha{margin-top:10px}
+  .cong-ficha.on{background:#e6f6fb;border:1px solid #b9e3ef;border-radius:10px;padding:9px 11px;font-size:13px;color:#0b5268;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+  .cong-ficha.on .btn{margin-left:auto}
+  .cong-mot{flex-basis:100%;font-size:12px;color:var(--muted)}
+  .cong-card{max-width:420px;width:calc(100% - 32px)}
+  .cong-lbl{font-size:12px;font-weight:700;color:var(--muted);margin:12px 0 6px}
+  .cong-prazos{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .cong-pz{font:inherit;font-size:13px;padding:6px 12px;border:1px solid var(--linha);border-radius:999px;background:#fff;cursor:pointer;color:var(--ink)}
+  .cong-pz.on{background:#0e6f8f;border-color:#0e6f8f;color:#fff}
+  .cong-in{font:inherit;font-size:14px;width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--linha);border-radius:8px}
+  .overlay.aberto.cong-ov{display:flex;align-items:center;justify-content:center;z-index:1200}
+  @media (max-width:860px){
+    .overlay.aberto.cong-ov{align-items:flex-end;padding:0}
+    .cong-card{width:100%;max-width:none;border-radius:16px 16px 0 0;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+    .cong-pz{min-height:44px;padding:8px 14px}
+    .cong-in{font-size:16px;min-height:44px;height:44px}
+    .cong-card .btn,.cong-ficha .btn,.fun-cong-btn{min-height:44px}
+  }
   .nc-avancar:focus-visible{outline:2px solid var(--azul);outline-offset:2px;opacity:1}
   .toast-undo{font:inherit;font-size:12px;font-weight:700;margin-left:10px;background:transparent;
     border:0;border-bottom:1px solid currentColor;color:inherit;cursor:pointer;padding:0}
@@ -1900,6 +1922,80 @@ function negDelayMarcar(c,ate,motivo){ if(!c) return null; ate=ate||isoAddDias(h
   interacoesDe(c).push({id:uid(),k:'etstatus',l:'⏳ Delay até '+dataBR(ate)+(st?' · status '+st:'')+(motivo?' — '+motivo:''),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   return ate; }
 function negDelayLimpar(c){ if(!c||!c.delay_ate) return; delete c.delay_ate; if(/^delay/i.test(etStatusDe(c))){ delete c.status; delete c.status_etapa; } }
+/* ═══ CONGELAR-V1 (23/10/2026) ══════════════════════════════════════════════════════
+   Palavra dele: "pode congelar oportunidades, e com botão fácil depois de olhar essa lista tipo filtro — tem coisa que fica
+   no funil que eu deixo porque tem negócio ainda pra sair, mesmo ciclo mais longo". Escolha dele: opção A, e sai do PA.
+   • c.congelado = {em, ate, motivo, etapa, por}. Vale em qualquer etapa aberta e NÃO se perde quando o status muda.
+   • Congelado some do Kanban/Lista do dia a dia; o botão "❄️ Congelados (N)" (funCongBtn) mostra só eles. Porta única: funAplicaLente.
+   • Relógio parado: não conta como "sem próxima atividade" (semProxAtividade) e os dias congelados saem do "⏱️ Nd em etapa".
+   • "Rever em" (opcional): na data ele descongela sozinho (congVarrer) e nasce a atividade "Rever" pra hoje.
+   • Sair do PA muda número → MODS 'congelar-pa' (def:false, liga por usuário). Sem ela, o congelado some do quadro mas a
+     coluna continua somando o PA dele (congPA). O botão de congelar em si é melhoria de tela já usada: nasce pra todos. */
+const FUN_CONG={};
+const CONG_PRAZOS=[[30,'30 dias'],[60,'60 dias'],[90,'90 dias'],[0,'sem data']];
+function congEh(c){ return !!(c&&c.congelado&&c.congelado.em); }
+function congTiraPA(){ return novoOn('congelar-pa'); }
+function congMarcar(c,ate,motivo){ if(!c) return null; const hoje=hojeISO();
+  c.congelado={em:hoje,ate:ate||'',motivo:String(motivo||'').trim().slice(0,200),etapa:c.etapa||'',por:quemFez()};
+  interacoesDe(c).push({id:uid(),k:'congelar',l:'❄️ Congelou'+(ate?' · rever em '+dataBR(ate):' · sem data pra rever')+(c.congelado.motivo?' — '+c.congelado.motivo:''),dia:hoje,ts:new Date().toISOString(),por:quemFez()});
+  return c.congelado; }
+function congTirar(c,auto){ if(!congEh(c)) return null; const em=c.congelado.em, hoje=hojeISO();
+  const d=Math.max(0,Math.round((new Date(hoje+'T12:00:00')-new Date(em+'T12:00:00'))/864e5));
+  delete c.congelado;
+  interacoesDe(c).push({id:uid(),k:'descongelar',l:'☀️ Descongelou'+(auto?' (chegou a data de rever)':'')+' · ficou '+d+'d congelado',dia:hoje,cong_desde:em,ts:new Date().toISOString(),por:quemFez()});
+  return d; }
+/* dias congelados dentro da etapa atual (pra o "⏱️ Nd em etapa" contar só o tempo vivo) */
+function congDiasPausa(c,desde,hoje){ if(!c||!desde) return 0; hoje=hoje||hojeISO(); let t=0;
+  const dd=(a,b)=>Math.max(0,Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/864e5));
+  (c.interacoes||[]).forEach(x=>{ if(x&&x.k==='descongelar'&&x.cong_desde&&x.dia&&x.dia>=desde) t+=dd(x.cong_desde<desde?desde:x.cong_desde,x.dia); });
+  if(congEh(c)) t+=dd(c.congelado.em<desde?desde:c.congelado.em,hoje);
+  return t; }
+/* na data de rever: descongela e cria a atividade "Rever" pra hoje. Idempotente (depois de descongelado não volta a rodar). */
+function congVarrer(){ const hoje=hojeISO(); let n=0;
+  (S.contatos||[]).forEach(c=>{ if(!congEh(c)||!c.congelado.ate||c.congelado.ate>hoje) return;
+    const mot=c.congelado.motivo; congTirar(c,true);
+    tarefasDe(c).push({id:uid(),tipo:'ligar',tit:'Rever (estava congelado)'+(mot?' — '+mot:''),quando:hoje,hora:'',feito:null,notas:'',criadoEm:new Date().toISOString(),por:quemFez()});
+    n++; });
+  if(n){ try{ salvar(); }catch(_){} } return n; }
+function congListaNs(ns){ try{ return ns==='nn'?meusContatos():ns==='bc'?meusContatosBC():fxLista(ns); }catch(_){ return []; } }
+/* PA da coluna: com 'congelar-pa' (ou vendo os congelados) é só o que está no quadro; sem ela, o congelado da etapa continua somando */
+function congPA(cs,lista,ns,e){ if(FUN_CONG[ns]||congTiraPA()) return cs; return cs.concat((lista||[]).filter(c=>congEh(c)&&c.etapa===e)); }
+function funCongBtn(ns){ const on=!!FUN_CONG[ns]; let l=[]; if(!on){ try{ congVarrer(); }catch(_){} }
+  l=congListaNs(ns).filter(congEh); if(!l.length&&!on) return '';
+  const pa=somaPA(l);
+  return `<button class="btn ${on?'btn-p':'btn-ghost'} btn-mini fun-cong-btn" onclick="funCongTroca('${esc(ns)}')" title="${on?'Voltar ao funil do dia a dia':'Ver só as oportunidades congeladas (ciclo longo)'}">❄️ ${on?'Congelados · voltar ao funil':'Congelados'} (${l.length}${pa?' · '+brlCurto(pa):''})</button>`; }
+function funCongTroca(ns){ FUN_CONG[ns]=!FUN_CONG[ns]; render(); }
+function congChipHtml(c){ if(!congEh(c)) return ''; const g=c.congelado, j=esc(jsq(c.id));
+  return `<div class="nc-cong" title="${esc(g.motivo||'Congelado: fica fora do funil do dia a dia')}">❄️ Congelado desde ${esc(dataBR(g.em))}${g.ate?` · rever ${esc(dataBR(g.ate))}`:''}</div>
+    <button class="nc-avancar nc-descong" onclick="event.stopPropagation();congDescongelar('${j}')" title="Volta pro funil do dia a dia, na mesma etapa">☀️ Descongelar</button>`; }
+function congDescongelar(id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c||!congEh(c)) return; const d=congTirar(c,false);
+  salvar(); render(); if(document.getElementById('drawer')&&document.getElementById('drawer').classList.contains('aberto')&&CONTATO===id) renderDrawer();
+  toast('☀️ '+String(c.nome||'').split(' ')[0]+' voltou pro funil ('+d+'d congelado)',true); }
+function congFichaHtml(c){ if(!c||etEhEnc(c)) return ''; const j=esc(jsq(c.id));
+  if(congEh(c)){ const g=c.congelado; return `<div class="cong-ficha on">❄️ <b>Congelado</b> desde ${esc(dataBR(g.em))}${g.ate?` · rever em ${esc(dataBR(g.ate))}`:' · sem data pra rever'}${g.motivo?`<div class="cong-mot">${esc(g.motivo)}</div>`:''}
+    <button class="btn btn-s btn-mini" onclick="congDescongelar('${j}')">☀️ Descongelar</button></div>`; }
+  return `<div class="cong-ficha"><button class="btn btn-ghost btn-mini" onclick="congAbrir('${j}')" title="Tira do funil do dia a dia sem perder a etapa — pra negócio de ciclo longo">❄️ Congelar oportunidade</button></div>`; }
+function congAbrir(id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return; try{ taFecharMenu(); }catch(_){}
+  const old=document.getElementById('cong-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.className='overlay aberto cong-ov'; ov.id='cong-ov';
+  ov.innerHTML=`<div class="lp-modal-card cong-card" onclick="event.stopPropagation()">
+    <h2 style="margin:0 0 4px">❄️ Congelar ${esc(String(c.nome||'').split(' ')[0])}</h2>
+    <div class="sub" style="color:var(--muted);font-size:13px">Sai do funil do dia a dia e fica em <b>❄️ Congelados</b>, na mesma etapa (${esc(LBLE(c.etapa))}). O relógio para.</div>
+    <div class="cong-lbl">Rever em</div>
+    <div class="cong-prazos">${CONG_PRAZOS.map(p=>`<button type="button" class="cong-pz${p[0]===60?' on':''}" data-d="${p[0]}" onclick="congPrazo(this)">${p[1]}</button>`).join('')}</div>
+    <input type="date" id="cong-ate" class="cong-in" value="${esc(isoAddDias(hojeISO(),60))}" onchange="document.querySelectorAll('.cong-pz').forEach(b=>b.classList.remove('on'))">
+    <div class="cong-lbl">Por quê (opcional)</div>
+    <input type="text" id="cong-mot" class="cong-in" maxlength="200" placeholder="ex.: só decide depois do bônus de março">
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-ghost" onclick="document.getElementById('cong-ov').remove()">Cancelar</button><button class="btn btn-p" style="margin-left:auto" onclick="congSalvar('${esc(jsq(id))}')">❄️ Congelar</button></div></div>`;
+  ov.onclick=()=>ov.remove(); document.body.appendChild(ov); }
+function congPrazo(btn){ document.querySelectorAll('.cong-pz').forEach(b=>b.classList.toggle('on',b===btn)); const d=Number(btn.dataset.d)||0;
+  const i=document.getElementById('cong-ate'); if(i) i.value=d?isoAddDias(hojeISO(),d):''; }
+function congSalvar(id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c) return;
+  const ate=(document.getElementById('cong-ate')||{}).value||'', mot=(document.getElementById('cong-mot')||{}).value||'';
+  if(ate&&ate<=hojeISO()){ toast('A data de rever tem que ser depois de hoje',false); return; }
+  congMarcar(c,ate,mot); const ov=document.getElementById('cong-ov'); if(ov) ov.remove();
+  salvar(); render(); if(CONTATO===id&&document.getElementById('drawer')&&document.getElementById('drawer').classList.contains('aberto')) renderDrawer();
+  toast('❄️ '+String(c.nome||'').split(' ')[0]+' congelado'+(ate?' até '+dataBR(ate):'')+' — veja em ❄️ Congelados',true); }
 /* MOTIVO-PERDA-V1 (28/09): palavra dele — "deixa eu editar os motivos de perda da oportunidade no encerramento; às vezes ela é perdida
    já no TA, ex.: uma pessoa que já é cliente de outro LP". Motivo de perda = o "status" da etapa de ENCERRAMENTO (Não, Prop. Cancelada,
    Apól. Cancelada; Oportunidade perdida na Base) — mesmo cadastro de Funil & Etapas, mesmo campo c.status, mesmo histórico. */
@@ -1964,6 +2060,7 @@ function etStatusMenu(ev,id){ const c=(S.contatos||[]).find(x=>x.id===id); if(!c
   taMenuAt(ev,`<div class="ta-menu-h">${esc(String(c.nome||'').split(' ')[0])} · status em ${esc(LBLE(c.etapa))}</div>${orf?`<div style="padding:4px 10px 6px;font-size:12px;color:var(--amarelo,#b45309)">⚠ “${esc(orf)}” saiu da lista desta etapa — escolha o novo:</div>`:''}
     ${o.map(x=>`<button onclick="etStatusCard('${j}','${esc(jsq(x))}')">${x===s?'✓ ':'⚑ '}${esc(x)}</button>`).join('')}
     ${s?`<button onclick="etStatusCard('${j}','')">✕ Tirar o status</button>`:''}
+    ${etEhEnc(c)?'':congEh(c)?`<button onclick="taFecharMenu();congDescongelar('${j}')">☀️ Descongelar (volta pro funil)</button>`:`<button onclick="congAbrir('${j}')">❄️ Congelar (ciclo longo, sai do dia a dia)</button>`}
     ${o.length?'':`<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Nenhum status nesta etapa ainda.</div>`}
     ${(!logado()||souAdm())?`<button onclick="taFecharMenu();irPara('config-funil')">⚙️ Criar/editar status (Funil & Etapas)</button>`:''}`); }
 function etStatusCard(id,v){ taFecharMenu(); const c=(S.contatos||[]).find(x=>x.id===id); if(etSetStatusDe(c,v)) render(); }
@@ -1988,7 +2085,7 @@ function funBuscaBate(c,q){ const n=normKey(q); if(!n) return true; const d=n.re
   if(Array.isArray(c.pjContatos)&&c.pjContatos.some(x=>normKey(x.nome||'').includes(n)||(d.length>=4&&String(x.tel||'').replace(/\D/g,'').includes(d)))) return true;   /* VG-EMPRESA-V1 */
   return [c.nome,c.profissao,c.recomendante,c.origem,c.notas,c.contexto].some(x=>x&&normKey(String(x)).includes(n)); }
 function funFiltrosSel(ns){ const on=(FUN_STATUS[ns]?1:0)+(FUN_LISTA[ns]?1:0);
-  return `${funStatusSel(ns)}${funListaSel(ns)}${on?`<button class="btn btn-ghost btn-mini" onclick="FUN_STATUS['${ns}']='';FUN_LISTA['${ns}']='';render()" title="Tirar os filtros">✕ limpar filtro${on>1?'s':''}</button>`:''}`; }
+  return `${funCongBtn(ns)}${funStatusSel(ns)}${funListaSel(ns)}${on?`<button class="btn btn-ghost btn-mini" onclick="FUN_STATUS['${ns}']='';FUN_LISTA['${ns}']='';render()" title="Tirar os filtros">✕ limpar filtro${on>1?'s':''}</button>`:''}`; }
 const BC_ETAPA_EXTINTA='Pendência/Atraso', BC_ATIVOS='Clientes Ativos', BC_DELIVERY='Delivery', BC_EMITIDA='Venda ganha';
 /* BC-REDESIGN-V1 (07/09): Delivery vai pro FIM (pós-Apólice Emitida) e volta pra Clientes Ativos;
    Oportunidade Perdida deixa de ser coluna do fluxo (fica como encerramento, marcável em qualquer etapa).
@@ -3463,7 +3560,7 @@ function funEtapasBarHtml(lista,fluxo,ns){
   const foco = ns==='bc' ? BC_FOCUS : NN_FOCUS;
   const ir   = ns==='bc' ? 'bcGoEtapa' : 'nnGoEtapa';
   const chip = e => {
-    const n = lista.filter(c=>c.etapa===e).length;
+    const n = lista.filter(c=>c.etapa===e && congEh(c)===!!FUN_CONG[ns]).length;   /* CONGELAR-V1: conta o que o quadro mostra */
     return `<button class="fun-et${foco===e?' on':''}" onclick="${ir}('${esc(jsq(e))}')"
       title="Ir para ${esc(ET_LABEL[e]||e)}">${esc(ET_LABEL[e]||e)}<span>${n}</span></button>`;
   };
@@ -3607,6 +3704,7 @@ let FUN_LENTE={nn:'',bc:''};
 function funLente(ns){ const v=FUN_LENTE[ns]||''; return FUN_LENTES[v]?v:''; }
 function funSetLente(ns,v){ FUN_LENTE[ns]=(funLente(ns)===v)?'':v; render(); }
 function funAplicaLente(lista,ns){
+  { const cv=!!FUN_CONG[ns]; lista=(lista||[]).filter(c=>congEh(c)===cv); }   /* CONGELAR-V1: porta única — congelado só no ❄️ Congelados */
   const st=FUN_STATUS[ns]||''; if(st) lista=lista.filter(c=>st==='__sem'?!etStatusDe(c):etStatusDe(c)===st);   /* STATUS-ETAPA-V1 + FILTROS-FUNIL-V1 */
   const bq=(FUN_BUSCA[ns]||'').trim(); if(bq) lista=lista.filter(c=>funBuscaBate(c,bq));   /* FUNIL-BUSCA-V1 */
   const li=FUN_LISTA[ns]||''; if(li) lista=lista.filter(c=>{ const l=Array.isArray(c.listas)?c.listas:[]; return li==='__sem'?!l.length:l.includes(li); });
@@ -3656,7 +3754,7 @@ function funEmitidasCiclo(lista,ns,per){ per=per||cicloAtual(); const no=[]; let
   return {per,lista:no,pa:somaPA(no),n:no.length,semData}; }
 function nnNegocioHtml(lista,fluxo,ns,rec){
   /* BC: cliente ativo é a carteira inteira — dinheiro só conta a partir de Contato Agenda/Revisita */
-  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&(c.etapa===BC_ATIVOS||c.etapa===BC_EMITIDA))&&!ehPosVenda(c.etapa,ns));
+  const vivos=lista.filter(c=>fluxo.includes(c.etapa)&&!(ns==='bc'&&(c.etapa===BC_ATIVOS||c.etapa===BC_EMITIDA))&&!ehPosVenda(c.etapa,ns)&&!(congEh(c)&&congTiraPA()));   /* CONGELAR-V1: congelado sai do PA (por usuário) */
   const pa=somaPA(vivos), pm=somaPM(vivos), pond=paPonderado(vivos);
   const comValor=vivos.filter(c=>pmDe(c)>0).length;
   const mes=mesAtual(), cf=novoOn('cards-funil'), per=cicloAtual(), noCiclo=iso=>!!iso&&iso>=per.ini&&iso<=per.fim;   /* CARDS-FUNIL-V1 */
@@ -3725,7 +3823,7 @@ function tarOrdenar(l){ return l.slice().sort((a,b)=>tarChave(a).localeCompare(t
 function tarAbertas(c){ return tarOrdenar(tarefasDe(c).filter(t=>!t.feito)); }
 function tarFeitas(c){ return tarefasDe(c).filter(t=>t.feito).sort((a,b)=>String(b.feito).localeCompare(String(a.feito))); }
 function proxTarefa(c){ return tarAbertas(c)[0] || null; }
-function semProxAtividade(c){ return !proxTarefa(c); }
+function semProxAtividade(c){ return !congEh(c) && !proxTarefa(c); }   /* CONGELAR-V1: congelado tem o relógio parado */
 /* situação é derivada da data, nunca gravada — data que passa vira "atrasada"
    sozinha, sem depender de ninguém rodar nada */
 function tarSituacao(t){
@@ -4600,7 +4698,7 @@ function consolFaixaDe(c){
   const r=(i+1)/fluxo.length;
   return r<=0.34?'prosp':(r<=0.67?'abert':'prop');
 }
-function consolEmJogo(c){ const k=consolFaixaDe(c); return k!=='enc'&&k!=='entr'; }
+function consolEmJogo(c){ if(congEh(c)&&congTiraPA()) return false; const k=consolFaixaDe(c); return k!=='enc'&&k!=='entr'; }   /* CONGELAR-V1: congelado sai do PA em jogo (por usuário) */
 /* CONSOL-UX-V1: ele, olhando a lista: "está aparecendo base de negócio, base de
    negócio — o que eu quero ver é QUAL é o negócio e QUANTO é cada um".
    Então o nome vem primeiro e inteiro, a etapa vira marca curta e o PA fica na
@@ -4864,10 +4962,10 @@ function viewNnFunil(){
   probCalibrar(rec.lista,ETAPAS_FLUXO);
   const tx=nnTaxaMapa(rec.lista,ETAPAS_FLUXO);
   const colDe=e=>{
-    const cs=nnOrdenar(funAplicaLente(lista,'nn').filter(c=>c.etapa===e));
+    const cs=nnOrdenar(funAplicaLente(lista,'nn').filter(c=>c.etapa===e)); const csPA=congPA(cs,lista,'nn',e);   /* CONGELAR-V1 */
     return `<div class="nncol${NN_FOCUS===e?' foco':''}${ETAPAS_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
-      ${ehPosVenda(e,'nn')? (cs.length?`<div class="nncol-pa" style="opacity:.6;font-weight:500" title="Pós-venda — a venda já foi contada em Apólice Emitida; não soma no funil">📦 pós-venda</div>`:'') : (somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:'')}
+      ${ehPosVenda(e,'nn')? (cs.length?`<div class="nncol-pa" style="opacity:.6;font-weight:500" title="Pós-venda — a venda já foi contada em Apólice Emitida; não soma no funil">📦 pós-venda</div>`:'') : (somaPA(csPA)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(csPA))}${paPonderado(csPA)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(csPA))}</span>`:''}</div>`:'')}
       ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
@@ -4959,11 +5057,11 @@ function fxLista(fid){ return S.contatos.filter(c=>c.funil===fid && escVisivel(c
 function viewFunilExtra(fid){
   const meta=fxMeta(fid), M=ETAPAS_MAP[fid]||{fluxo:[],enc:[]};
   const lista=fxLista(fid);
-  const colDe=e=>{ const cs=nnOrdenar(funAplicaLente(lista,fid).filter(c=>c.etapa===e));
+  const colDe=e=>{ const cs=nnOrdenar(funAplicaLente(lista,fid).filter(c=>c.etapa===e)); const csPA=congPA(cs,lista,fid,e);   /* CONGELAR-V1 */
     return `<div class="nncol${M.enc.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
       ${/^mfo/.test(fid)?(cs.reduce((s,c)=>s+mfoReceita(c),0)?`<div class="nncol-pa" title="Soma da receita estimada desta etapa">Receita ${esc(mfoBRL(cs.reduce((s,c)=>s+mfoReceita(c),0)))}</div>`:'')
-        :(somaPA(cs)?`<div class="nncol-pa" title="Soma do prêmio anual desta etapa">PA ${brlCurto(somaPA(cs))}</div>`:'')}
+        :(somaPA(csPA)?`<div class="nncol-pa" title="Soma do prêmio anual desta etapa">PA ${brlCurto(somaPA(csPA))}</div>`:'')}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`; };
   const body='<div class="nnboard">'+M.fluxo.concat(M.enc).map(colDe).join('')+'</div>';
@@ -5012,10 +5110,10 @@ function viewBcFunil(){
   const tx=nnTaxaMapa(rec.lista,ETAPAS_BC_FLUXO);
   const colDe=e=>{
     if(e===BC_ATIVOS) return bcColAtivos(lista);
-    const cs=nnOrdenar(funAplicaLente(lista,'bc').filter(c=>c.etapa===e));
+    const cs=nnOrdenar(funAplicaLente(lista,'bc').filter(c=>c.etapa===e)); const csPA=congPA(cs,lista,'bc',e);   /* CONGELAR-V1 */
     return `<div class="nncol${BC_FOCUS===e?' foco':''}${ETAPAS_BC_ENCERR.includes(e)?' enc':''}" data-etapa="${esc(e)}">
       <div class="nncol-head"><span style="display:flex;align-items:center;gap:6px"><span style="font-size:8px;color:${etapaVar(e)}">●</span>${esc(ET_LABEL[e]||e)}</span><span class="qt">${cs.length}</span></div>
-      ${ehPosVenda(e,'bc')? (cs.length?`<div class="nncol-pa" style="opacity:.6;font-weight:500" title="Pós-venda — a venda já foi contada em Apólice Emitida; não soma no funil">📦 pós-venda</div>`:'') : (somaPA(cs)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(cs))}${paPonderado(cs)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(cs))}</span>`:''}</div>`:'')}
+      ${ehPosVenda(e,'bc')? (cs.length?`<div class="nncol-pa" style="opacity:.6;font-weight:500" title="Pós-venda — a venda já foi contada em Apólice Emitida; não soma no funil">📦 pós-venda</div>`:'') : (somaPA(csPA)? `<div class="nncol-pa" title="Soma do prêmio anual dos negócios desta etapa">PA ${brlCurto(somaPA(csPA))}${paPonderado(csPA)?` <span style="font-weight:600;opacity:.75">· pond. ${brlCurto(paPonderado(csPA))}</span>`:''}</div>`:'')}
       ${nnTaxaChip(tx[e])}
       ${cs.map(nnCard).join('')||'<div class="nncol-vazia">—</div>'}
     </div>`;
@@ -5132,8 +5230,8 @@ function cicloEntradaEtapa(c){ if(!c) return null;
   if(mv.length) return {iso:mv[mv.length-1],fonte:'movimento'};
   const e=entradaFunil(c); return e&&e.iso?{iso:e.iso,fonte:e.fonte}:null; }
 function cicloDiasNaEtapa(c,hoje){ const e=cicloEntradaEtapa(c); if(!e) return null;
-  const d=Math.round((new Date((hoje||hojeISO())+'T12:00:00')-new Date(e.iso+'T12:00:00'))/864e5); return d<0?0:d; }
-function cicloChipHtml(c){ if(!c||etEhEnc(c)) return ''; const d=cicloDiasNaEtapa(c); if(d==null) return '';
+  const d=Math.round((new Date((hoje||hojeISO())+'T12:00:00')-new Date(e.iso+'T12:00:00'))/864e5)-congDiasPausa(c,e.iso,hoje); return d<0?0:d; }   /* CONGELAR-V1: dias congelados não contam */
+function cicloChipHtml(c){ if(!c||etEhEnc(c)) return ''; if(congEh(c)) return congChipHtml(c); const d=cicloDiasNaEtapa(c); if(d==null) return '';
   const e=cicloEntradaEtapa(c), cor=d>=30?'var(--verm,#dc2626)':d>=14?'#b45309':'var(--muted)';
   return `<div class="nc-ciclo" style="font-size:10.5px;margin-top:4px;color:${cor}" title="Na etapa ${esc(ET_LABEL[c.etapa]||c.etapa||'')} desde ${dataBR(e.iso)}${e.fonte==='movimento'?'':' (sem registro de movimento: conta da entrada no funil)'}">⏱️ ${d===0?'entrou hoje':d+'d'} em ${esc(ET_LABEL[c.etapa]||c.etapa||'')}</div>`; }
 function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }
@@ -6471,7 +6569,7 @@ function renderDrawer(){
       <button class="fechar" onclick="fecharDrawer()">✕</button>
       <div class="nome">${ehEmpresa(c)?'🏢 ':''}${esc(c.nome)}</div>
       <div class="meta">${esc((ehEmpresa(c)?pjMetaPartes(c):drwMetaPartes(c)).concat(isMaster()?['LP: '+lpNome(c.lp)]:[]).join(' · '))}</div>
-      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${(()=>{const e=CT_EST_BY_K[ctEstado(c)];return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`;})()} ${badgeEtapa(c.etapa)}${quenteChip(c)} ${recomendanteChip(c,true)}
+      <div style="margin-top:7px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${estrelasHtml(estrelasDe(c))} ${congEh(c)?`<span class="badge" style="background:#e6f6fb;color:#0e6f8f;border:1px solid #b9e3ef" title="Congelado desde ${esc(dataBR(c.congelado.em))}${c.congelado.ate?' · rever em '+esc(dataBR(c.congelado.ate)):''}">❄️ Congelado</span>`:''} ${(()=>{const e=CT_EST_BY_K[ctEstado(c)];return `<span class="badge ${e.cor}" title="${esc(e.ajuda)}">${esc(e.l.replace(/s$/,''))}</span>`;})()} ${badgeEtapa(c.etapa)}${quenteChip(c)} ${recomendanteChip(c,true)}
         ${telHref(c.telefone)? `<a class="btn btn-s btn-mini drw-acao" style="text-decoration:none" href="${esc(telHref(c.telefone))}">📞 Ligar</a>`:''}
         ${waHref(c.telefone)? `<a class="btn btn-s btn-mini drw-acao" style="text-decoration:none" href="${esc(waHref(c.telefone))}" target="_blank" rel="noopener">💬 WhatsApp</a>`:''}
         <button class="btn btn-s btn-mini drw-acao" onclick="msgProntaContato('${esc(c.id)}','abordagem')" title="Mensagem pronta (abordagem, revisão, apólice emitida, agradecer indicação…) — editável antes de enviar">💬 Mensagem pronta</button>
@@ -6501,6 +6599,7 @@ function renderDrawer(){
         ${drwStepperHtml(c)}
         ${drwListaTaHtml(c)}
         ${etStatusSelHtml(c)}
+        ${congFichaHtml(c)}
         <div style="font-size:11px;color:var(--muted);margin-top:8px">Toque pra mover · fica registrado na hora.</div>
       </div>
 
@@ -17677,6 +17776,7 @@ const MODS={
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']},
   embaixadores:{label:'🌟 Embaixadores da Proteção (importar a lista Mercado X do embaixador, selecionar quem ele esquenta, acompanhar até fechar) — você e o seu backoffice (Victor) importam e selecionam; os leads ficam sempre na SUA base', def:false, views:['embaixadores']},
   parceiros:{label:'🤝 Parceiros (comissão dividida com LP parceiro: acordo por cliente, importação do Extrato Detalhado, apuração, histórico, prestação de contas, projeção) — só o admin fecha competência e edita %', def:false, views:['parceiros']},   /* PARCEIROS-V1 (30/09): módulo novo — liga por usuário (Victor ligado no banco) */
+  'congelar-pa':{label:'❄️ Congelado sai do PA: oportunidade congelada não soma no PA/ponderado da coluna nem no PA em jogo (sem isto ela só sai do quadro do dia a dia)', def:false, views:[]},   /* CONGELAR-V1 (23/10): regra que muda número — liga por usuário */
   importacoes:{label:'📥 Relatórios do portal (Central de Importações: semáforo do que está em dia/vencido e subir arquivo à mão)', def:false, views:['importacoes']},   /* ATRASO-V2 T3 (23/10): tela nova — Victor liga por usuário */
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']}
 };
@@ -22346,6 +22446,24 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         &&plpClassifica({emissao:'2026-05-01',desfecho:'reabilitada',saiu_do_relatorio_em:'2026-01-01T10:00:00Z',desfecho_em:'2026-08-01'},p1)==='cancelada';
       const t12=plpPct(plpSim(26,21,3,0))==='92,3'&&plpPct(plpSim(26,21,0,37))==='92,1'&&plpSim(26,21,5,0)===100;
       return t8&&t9&&t11&&t7&&t10&&t12; })());
+    ok('CONGELAR-V1: congelar tira do quadro e põe em ❄️ Congelados; relógio para; descongela na data com atividade; PA por usuário', (()=>{ const bak=S.contatos, bkC=FUN_CONG.nn, bkS=FUN_STATUS.nn, bkB=FUN_BUSCA.nn, bkL=FUN_LISTA.nn; try{
+        FUN_STATUS.nn=''; FUN_BUSCA.nn=''; FUN_LISTA.nn=''; FUN_CONG.nn=false;
+        const hoje=hojeISO(), ontem=isoAddDias(hoje,-1);
+        const a=normContato({id:'zzcg1',nome:'Zz Fulano Congela',funil:'nn',etapa:'OI/FF',telefone:'81999990031',pm:500}), b=normContato({id:'zzcg2',nome:'Zz Beltrano',funil:'nn',etapa:'OI/FF',telefone:'81999990032',pm:300});
+        a.interacoes.push({id:'i1',k:'etapa',para:'OI/FF',dia:isoAddDias(hoje,-20)}); S.contatos=[a,b];
+        const d0=cicloDiasNaEtapa(a); const semAtivAntes=semProxAtividade(a);
+        congMarcar(a,isoAddDias(hoje,30),'teste'); a.congelado.em=isoAddDias(hoje,-5);   /* congelado há 5 dias */
+        const fora=funAplicaLente(S.contatos,'nn').map(c=>c.id).join(','); FUN_CONG.nn=true; const dentro=funAplicaLente(S.contatos,'nn').map(c=>c.id).join(','); FUN_CONG.nn=false;
+        const d1=cicloDiasNaEtapa(a), relogio=!semProxAtividade(a), chip=/Congelado desde/.test(cicloChipHtml(a))&&/Descongelar/.test(cicloChipHtml(a));
+        const btn=/Congelados \(1/.test(funCongBtn('nn')), menu=/congAbrir|congDescongelar/.test(String(etStatusMenu)), ficha=/Descongelar/.test(congFichaHtml(a));
+        const paCs=[b], paCom=congPA(paCs,S.contatos,'nn','OI/FF').length;   /* admin: novoOn liga → só o quadro */
+        const nT=a.tarefas.length; a.congelado.ate=ontem; const n=congVarrer(); const voltou=!congEh(a)&&a.tarefas.length===nT+1&&/Rever/.test(a.tarefas[a.tarefas.length-1].tit)&&a.tarefas[a.tarefas.length-1].quando===hoje;
+        const it=(a.interacoes||[]).filter(x=>x.k==='descongelar').pop(); const d2=cicloDiasNaEtapa(a);
+        const n2=congVarrer();
+        return semAtivAntes && fora==='zzcg2' && dentro==='zzcg1' && d0===20 && d1===15 && relogio && chip && btn && menu && ficha
+          && (congTiraPA()?paCom===1:paCom===2) && n===1 && voltou && it && it.cong_desde && d2===15 && n2===0
+          && MODS['congelar-pa'] && MODS['congelar-pa'].def===false && /congEh\(c\)===cv/.test(String(funAplicaLente));
+      } finally{ S.contatos=bak; FUN_CONG.nn=bkC; FUN_STATUS.nn=bkS||''; FUN_BUSCA.nn=bkB||''; FUN_LISTA.nn=bkL||''; } })());
     ok('cobrança: os scripts carregam no boot, não só no Sincronizar', BOOT_LOADERS.indexOf(atScriptsCarregar)>=0);
     ok('script: rótulo separa "sem motivo" de "motivo sem script"', (()=>{
       const a=atScriptRot({motivo_recusa:''}), b=atScriptRot({motivo_recusa:'erro 733 sei la'});
