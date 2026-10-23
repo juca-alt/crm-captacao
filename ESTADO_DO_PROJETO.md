@@ -2,6 +2,15 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 23/10/2026 (noite) — LOTE GLOBAL 1 · PARTE A pronta no branch `feat/atraso-v2-central-importacoes` (v8.78, NÃO publicada — falta o OK dele)
+
+- **T1 (no banco, aplicado):** `kb_motivos_atraso` (13 motivos com classe e instrução) + `fn_normalizar_motivo_atraso` / `fn_normalizar_forma_pagto` + gatilho em `vendas_atrasos` → colunas `motivo_chave`/`forma_norm` (92 linhas, 0 em "outro"; bruto intacto). `kb_scripts_cobranca.motivo_normalizado` vira FK.
+- **T2 (tela):** Lista de Atraso v2 — KPIs Em persistência / Críticas com "cancela em" / Até 12 m / Valor em risco (críticas ∪ persistência), filtros rápidos (críticas, sem tratativa, persistência, contato hoje, cartão/débito/boleto, adotadas), ordenação, motivo normalizado + classe + instrução na linha, 💬 com script do motivo, ficha com retorno da seguradora/instrução/histórico, 8 status oficiais. `app_settings.atraso_config` = 60 dias (OK dele) / 12 meses.
+- **T3:** Central de Importações (menu "Relatórios do portal", MODS `importacoes` def:false) com semáforo, diff e subir arquivo à mão (assinatura única `relDetectarOu`; pergunta o tipo se não reconhece). Parser do atraso corta o rodapé do PDF, descarta lixo e bloqueia se o total declarado não bater. `rel_importacoes` + descartadas/novas/saíram. Os 2 registros contaminados foram LIMPOS (não apagados).
+- **T4 pulado** (carteira não traz próximo vencimento) · **T5 feito** (adotada = `lpVenda` ≠ `lp`). Doc: `docs/atraso-v2-central-importacoes.md`.
+- Portão verde (50 telas × 6), selfTests novos (ATRASO-V2, CENTRAL-IMPORTACOES), prints 390/1280.
+- **Em aberto:** persistência aparece "sem data" pra todas (emitidas só tem ago–out/26); Parte B (UW & Emissão + entrega + PLACED) ainda não começou. Copiloto: chave da Anthropic ainda não está nos secrets do Supabase (checklist "Destravar o CRM").
+
 ## 🟢 RETOMAR AQUI — 22/10/2026 (tarde) — Revisão de Proteção · CARREIRA-MANUAL-V1 (publicado com OK dele: "a")
 
 - **Problema:** linha vitalícia (WV/WL) com prêmio digitado (`l.manual`) saía da "Carreira do ativo · plano proposto" — `calcLinha` devolve `code:'MANUAL'` e `resgProduto` descartava. Caso real: Vida e Saúde 360 cotado no LP Business (o motor só tem WV10).
