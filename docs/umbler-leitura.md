@@ -25,8 +25,14 @@ A extensão (`umbler-dom.js`, Caminho A) continua: ela preenche o campo de respo
 3. **Histórico antigo:** para trás a partir de `msgs_desde`, até 1.000 msgs por chat por rodada, até `historico_completo`.
 - Orçamento de 100 s por rodada; limite da API (100 req/5 s) respeitado com 60 ms entre chamadas e espera de 5 s no 429.
 
+## Primeira carga (23/10, 15h)
+- Token salvo pelo Gustavo às ~14h55. Organização achada sozinha. 1ª rodada: 300 conversas, 2.565 mensagens em 100 s, sem erro.
+- `source: External` = mensagem que ele mandou **pelo WhatsApp do celular**, fora do Talk → gravada como `de='nos'`, autor "pelo celular".
+- Atendente: a API manda só o id; o nome vem de `/v1/members/me/` + `/v1/organizations/{id}/` (mapa em `umbler_estado.stats.membros`).
+- Canais vistos: o atendimento do Gustavo e o corporativo do Victor (os dois entram).
+
 ## Falta (só ele)
-1. **Token da API do Talk** → secret `UMBLER_TOKEN` no Supabase. Sem ele a função responde `sem_token` e não faz nada.
+1. ~~Token da API do Talk~~ → **feito 23/10**.
 2. **Webhook no Talk** (opcional, deixa em tempo real; sem ele o atraso é de até 10 min): colar a URL com `?k=` que foi passada no chat.
 
 ## Depois

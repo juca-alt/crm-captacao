@@ -15,7 +15,7 @@
 //  Limite da API: 100 req / 5 s → espaçamos 60 ms e, no 429, esperamos 5 s.
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { chatUltimoEvento, extrairDoWebhook, itens, mapChat, mapMensagem, msgQuando, orgDoMe, type Obj } from "./nucleo.ts";
+import { chatUltimoEvento, coletarMembros, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, type Obj } from "./nucleo.ts";
 
 const API = "https://app-utalk.umbler.com/api";
 const DONO = "juca@segurocomjuca.com";          // dono da conta Umbler (RLS por dono; Victor lê como delegado)
@@ -91,6 +91,15 @@ async function garantirOrg(est: Estado, tk: string): Promise<string> {
   return o.id;
 }
 
+// ---------- nomes da equipe (a API manda o atendente só com id) ----------
+let MEMBROS: Record<string, string> = {};
+async function carregarMembros(org: string, tk: string, est: Estado) {
+  MEMBROS = { ...((est.stats?.membros as Record<string, string>) ?? {}) };
+  for (const c of ["/v1/members/me/", `/v1/organizations/${encodeURIComponent(org)}/`, `/v1/organizations/${encodeURIComponent(org)}/details/`]) {
+    try { Object.assign(MEMBROS, coletarMembros(await apiGet(c, {}, tk))); } catch (_) { /* rota pode não existir no plano: segue sem nome */ }
+  }
+}
+
 // ---------- mensagens de um chat ----------
 type ChatRow = { id: string; msgs_ate: string | null; msgs_desde: string | null; historico_completo: boolean };
 let msgsGravadas = 0;
@@ -160,7 +169,7 @@ async function listarChats(org: string, skip: number, tk: string) {
 
 /** grava a página de chats e lê as mensagens dos que mudaram. Devolve quantos já estavam em dia. */
 async function processarPagina(lista: unknown[], org: string, tk: string, prazo: number): Promise<number> {
-  const rows = lista.map((c) => mapChat(c, DONO, org)).filter(Boolean) as Obj[];
+  const rows = lista.map((c) => mapChat(c, DONO, org, MEMBROS)).filter(Boolean) as Obj[];
   const atuais = await linhasAtuais(rows.map((r) => r.id as string));
   if (rows.length) {
     const { error } = await db.from("umbler_chats").upsert(rows, { onConflict: "id" });
@@ -169,7 +178,7 @@ async function processarPagina(lista: unknown[], org: string, tk: string, prazo:
   let emDia = 0;
   for (const c of lista) {
     if (Date.now() > prazo) break;
-    const r = mapChat(c, DONO, org); if (!r) continue;
+    const r = mapChat(c, DONO, org, MEMBROS); if (!r) continue;
     const at = atuais.get(r.id as string) ?? null;
     const ult = chatUltimoEvento(c);
     if (at?.msgs_ate && (!ult || ult <= at.msgs_ate)) { emDia++; continue; }
@@ -186,23 +195,31 @@ async function sincronizar(origem: string) {
   const passos: Obj = {};
   try {
     const org = await garantirOrg(est, tk);
+    await carregarMembros(org, tk, est);
+    const vistos = new Set<string>();
+    const novosNa = (lista: unknown[]) => { let n = 0; for (const c of lista) { const id = String((c as Obj)?.id ?? ""); if (id && !vistos.has(id)) { vistos.add(id); n++; } } return n; };
     // 1) cabeça: chats com mensagem nova (lista vem do mais recente pro mais antigo)
     let skip = 0, paginas = 0;
     while (Date.now() < prazo && paginas < 20) {
       const lista = await listarChats(org, skip, tk);
+      const novos = novosNa(lista);
       const emDia = await processarPagina(lista, org, tk, prazo);
       paginas++; skip += TAKE_CHATS;
-      if (lista.length < TAKE_CHATS || emDia === lista.length) break;
+      if (lista.length < TAKE_CHATS || emDia === lista.length || !novos) break; // !novos = página repetida
     }
     passos.cabeca_paginas = paginas;
     // 2) varredura completa (1ª vez): todos os chats, inclusive fechados. Cursor sobrevive entre rodadas.
     if (!est.lista_completa) {
-      let s = Math.max(0, (est.lista_skip ?? 0) - 10), completa = false;
+      let s = Math.max(0, (est.lista_skip ?? 0) - 10), completa = false; let anterior = "";
       while (Date.now() < prazo) {
         const lista = await listarChats(org, s, tk);
+        const assin = lista.map((c) => String((c as Obj)?.id ?? "")).join(",");
+        const repetida = !!assin && assin === anterior; // a API devolveu a mesma página de novo: para, não gira em falso
+        anterior = assin;
         await processarPagina(lista, org, tk, prazo);
-        if (lista.length < TAKE_CHATS) { completa = true; break; }
+        if (lista.length < TAKE_CHATS || repetida) { completa = true; break; }
         s += TAKE_CHATS;
+        await gravarEstado({ lista_skip: s }); // se a rodada cair no meio, a próxima continua daqui
       }
       await gravarEstado({ lista_skip: s, lista_completa: completa });
       passos.varredura = { skip: s, completa };
@@ -220,13 +237,13 @@ async function sincronizar(origem: string) {
     passos.historico_chats = hist;
     const { count: nChats } = await db.from("umbler_chats").select("id", { count: "exact", head: true }).eq("dono", DONO);
     const { count: nMsgs } = await db.from("umbler_mensagens").select("id", { count: "exact", head: true }).eq("dono", DONO);
-    const stats = { origem, ms: Date.now() - t0, req: totalReq, msgs_gravadas: msgsGravadas, chats: nChats, mensagens: nMsgs, ...passos };
+    const stats = { origem, ms: Date.now() - t0, req: totalReq, msgs_gravadas: msgsGravadas, chats: nChats, mensagens: nMsgs, ...passos, membros: MEMBROS };
     const agora = new Date().toISOString();
     await gravarEstado({ ultimo_sync: agora, ultimo_ok: agora, ultimo_erro: null, stats });
     return { ok: true, ...stats };
   } catch (e) {
     const msg = String((e as Error)?.message ?? e).slice(0, 500);
-    await gravarEstado({ ultimo_sync: new Date().toISOString(), ultimo_erro: msg, stats: { origem, ms: Date.now() - t0, req: totalReq, ...passos } });
+    await gravarEstado({ ultimo_sync: new Date().toISOString(), ultimo_erro: msg, stats: { origem, ms: Date.now() - t0, req: totalReq, ...passos, membros: MEMBROS } });
     return { ok: false, motivo: msg };
   }
 }
@@ -239,7 +256,7 @@ async function webhook(body: unknown) {
   const evId = (ev as { id: number } | null)?.id;
   try {
     const est = await lerEstado();
-    if (x.chat) { const r = mapChat(x.chat, DONO, est.org_id); if (r) await db.from("umbler_chats").upsert(r, { onConflict: "id" }); }
+    if (x.chat) { const r = mapChat(x.chat, DONO, est.org_id, (est.stats?.membros as Record<string, string>) ?? {}); if (r) await db.from("umbler_chats").upsert(r, { onConflict: "id" }); }
     if (x.mensagem && x.chatId) {
       const r = mapMensagem(x.mensagem, x.chatId, DONO);
       if (r) {

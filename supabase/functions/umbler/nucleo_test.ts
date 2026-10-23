@@ -1,6 +1,6 @@
 // deno test supabase/functions/umbler/nucleo_test.ts --allow-read
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, pick, quemEnviou, soDigitos } from "./nucleo.ts";
+import { coletarMembros, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, pick, quemEnviou, soDigitos } from "./nucleo.ts";
 
 const DONO = "dono@teste";
 
@@ -14,7 +14,7 @@ Deno.test("quem enviou: Contact/Member/Bot/External", () => {
   assertEquals(quemEnviou({ source: "Contact" }), "cliente");
   assertEquals(quemEnviou({ Source: "Member" }), "nos");
   assertEquals(quemEnviou({ source: "Bot" }), "bot");
-  assertEquals(quemEnviou({ source: "External" }), "externo");
+  assertEquals(quemEnviou({ source: "External" }), "nos"); // mandada pelo WhatsApp do celular, fora do Talk
   assertEquals(quemEnviou({ fromContact: true }), "cliente");
 });
 
@@ -79,6 +79,19 @@ Deno.test("webhook desconhecido não quebra", () => {
   const x = extrairDoWebhook({ qualquer: [1, 2, { coisa: true }] });
   assertEquals(x.chatId, null);
   assertEquals(x.mensagem, null);
+});
+
+Deno.test("mensagem pelo celular (External) = nossa, autor 'pelo celular'", () => {
+  const m = mapMensagem({ id: "e1", source: "External", messageType: "Text", content: "oi", sentByOrganizationMember: null }, "c", DONO)!;
+  assertEquals(m.de, "nos");
+  assertEquals(m.autor, "pelo celular");
+});
+
+Deno.test("atendente: id → nome pelo mapa de membros", () => {
+  const mem = coletarMembros({ id: "m1", displayName: "Gustavo", organizations: [{ id: "o1", name: "Org" }] }, { members: [{ member: { id: "m2", displayName: "Victor" } }] });
+  assertEquals(mem, { m1: "Gustavo", m2: "Victor" });
+  assertEquals(mapChat({ id: "c1", organizationMember: { id: "m2", muted: false } }, DONO, null, mem)!.atendente, "Victor");
+  assertEquals(mapChat({ id: "c2", organizationMember: { id: "zz" } }, DONO, null, mem)!.atendente, null);
 });
 
 Deno.test("itens / org / dígitos", () => {

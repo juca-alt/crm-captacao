@@ -38,13 +38,13 @@ function nome(v: unknown): string | null {
   return str(v) ?? str(pick(v, "name", "displayName", "title"));
 }
 
-/** Contact | Member | Bot | External → cliente | nos | bot | externo */
+/** Contact | Member | Bot | External → cliente | nos | bot.
+ *  External = mandada direto pelo WhatsApp do celular, fora do Talk (conferido nos dados reais em 23/10) → é NOSSA. */
 export function quemEnviou(m: unknown): "cliente" | "nos" | "bot" | "externo" {
   const s = String(str(pick(m, "source")) ?? "").toLowerCase();
   if (s === "contact") return "cliente";
-  if (s === "member") return "nos";
+  if (s === "member" || s === "external") return "nos";
   if (s === "bot") return "bot";
-  if (s === "external") return "externo";
   if (pick(m, "fromContact") === true) return "cliente";
   if (pick(m, "sentByOrganizationMember")) return "nos";
   return "externo";
@@ -68,7 +68,8 @@ export function mapMensagem(m: unknown, chatId: string, dono: string): Obj | nul
     texto: texto ? texto.slice(0, 20000) : null,
     arquivo_nome: str(pick(arq, "originalName", "name", "fileName")),
     arquivo_url: str(pick(arq, "url", "publicUrl", "downloadUrl")),
-    autor: nome(pick(m, "sentByOrganizationMember")),
+    autor: nome(pick(m, "sentByOrganizationMember")) ??
+      (String(str(pick(m, "source")) ?? "").toLowerCase() === "external" ? "pelo celular" : null),
     enviada_em: msgQuando(m),
     estado: str(pick(m, "messageState")),
     privada: pick(m, "isPrivate") === true,
@@ -81,7 +82,8 @@ export function chatUltimoEvento(c: unknown): string | null {
   return msgQuando(lm) ?? quando(pick(c, "eventAtUTC")) ?? quando(pick(c, "createdAtUTC"));
 }
 
-export function mapChat(c: unknown, dono: string, orgId: string | null): Obj | null {
+/** a API manda o atendente só com o id: o nome vem deste mapa (id → nome), montado por coletarMembros */
+export function mapChat(c: unknown, dono: string, orgId: string | null, membros: Record<string, string> = {}): Obj | null {
   const id = str(pick(c, "id"));
   if (!id) return null;
   const ct = pick(c, "contact");
@@ -101,7 +103,7 @@ export function mapChat(c: unknown, dono: string, orgId: string | null): Obj | n
     contato_tel_norm: soDigitos(tel),
     canal: nome(pick(c, "channel")),
     setor: nome(pick(c, "sector")),
-    atendente: nome(pick(c, "organizationMember")),
+    atendente: nome(pick(c, "organizationMember")) ?? membros[str(pick(pick(c, "organizationMember"), "id")) ?? ""] ?? null,
     etiquetas: Array.isArray(tags) ? tags.map((t) => nome(t)).filter(Boolean) as string[] : [],
     aberto: bool(pick(c, "open")),
     aguardando: bool(pick(c, "waiting")),
@@ -145,6 +147,22 @@ export function itens(r: unknown): unknown[] {
   if (Array.isArray(r)) return r;
   const it = pick(r, "items", "messages", "data");
   return Array.isArray(it) ? it : [];
+}
+
+/** junta, em qualquer profundidade, objetos {id, displayName} que pareçam membro da equipe → mapa id → nome */
+export function coletarMembros(...fontes: unknown[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  const visto = new Set<unknown>();
+  const anda = (o: unknown, prof: number) => {
+    if (!o || typeof o !== "object" || prof > 6 || visto.has(o)) return;
+    visto.add(o);
+    if (Array.isArray(o)) { o.forEach((x) => anda(x, prof + 1)); return; }
+    const id = str(pick(o, "id")), dn = str(pick(o, "displayName"));
+    if (id && dn) out[id] = dn;
+    for (const v of Object.values(o as Obj)) anda(v, prof + 1);
+  };
+  fontes.forEach((f) => anda(f, 0));
+  return out;
 }
 
 /** primeira organização do /v1/members/me/ */
