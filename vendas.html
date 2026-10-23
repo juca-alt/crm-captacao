@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.78 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.79 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -9264,6 +9264,97 @@ function plImportar(inp){
   r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d.cfg&&d.lps&&d.meses){ PL=plNorm(d); PL_DIRTY=true; viewPlaced(); toast('PLACED importado',true); } else toast('Arquivo fora do formato'); }catch(e){ toast('Não consegui ler o arquivo'); } };
   r.readAsText(f); inp.value='';
 }
+/* ═══ PLACED-PERIODO-V1 (23/10/2026) — Placed por PERÍODO DE APURAÇÃO + caminhos a 92% + simulador (Lote Global 1 · B, T4/T5) ═══
+   MOTOR ÚNICO (plp*): a tela e o selfTest usam as mesmas funções. O R05 mensal (pl*) segue com o motor dele; os dois leem as
+   mesmas tabelas (emissao_pendencias + emissao_emitidas). Regras (tela de ajuda do Global = regulamento do R05):
+   placed = emitidas ÷ assinadas; assinadas de 01/11/A a 31/10/A+1, emitidas até 31/01/A+2; Not Taken (cancelou em até 30 dias
+   da emissão sem a 2ª parcela) conta como não emitida; reabilitada em até 120 dias do cancelamento volta a contar;
+   fora: Minha Primeira Proteção, sem MQC e Divisão de Comissão (nao_conta, manual). Meta 92 (alto), corte 87 (baixo). */
+const PLP_REAB_DIAS=120;
+function plpIso(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+function plpPeriodo(hoje){ const h=hoje||atHojeLocal(), a=h.getMonth()>=10?h.getFullYear():h.getFullYear()-1;
+  const fim=new Date(a+1,9,31); return {inicio:a+'-11-01', fim:(a+1)+'-10-31', emissao_ate:(a+2)+'-01-31', faltam:Math.max(0,Math.round((fim-new Date(h.getFullYear(),h.getMonth(),h.getDate()))/864e5)), ano:a}; }
+function plpMeta(){ const c=(typeof PL!=='undefined'&&PL&&PL.cfg)||{}; return {alto:Number(c.alto)||92, baixo:Number(c.baixo)||87}; }
+/* universo: união pendências + emitidas, dedup pela proposta (a emitida ganha), assinadas dentro do período, sem "não conta" */
+function plpUniverso(pend,emit,per,lp){ const m=new Map(), k=r=>String(r.proposta||r.apolice||'');
+  (pend||[]).forEach(r=>{ if(!k(r)) return; m.set(k(r),Object.assign({_orig:'pend'},r,r.desfecho==='emitida'&&!r.emissao?{emissao:r.desfecho_em||null}:{})); });
+  (emit||[]).forEach(r=>{ if(!k(r)) return; const ja=m.get(k(r)); m.set(k(r),Object.assign({},ja||{},r,{_orig:'emit'})); });
+  const todos=[...m.values()].filter(r=>!lp||r.lp===lp).filter(r=>r.dt_assinatura&&r.dt_assinatura>=per.inicio&&r.dt_assinatura<=per.fim);
+  return {conta:todos.filter(r=>!r.nao_conta), fora:todos.filter(r=>r.nao_conta)}; }
+function plpCancelEm(r){ return r.cancelado_em||(r.saiu_do_relatorio_em?String(r.saiu_do_relatorio_em).slice(0,10):null); }
+function plpReabOk(r){ if(r.desfecho!=='reabilitada') return false; const c=atParseISO(plpCancelEm(r)), d=atParseISO(r.desfecho_em); if(!d) return false; return !c||Math.round((d-c)/864e5)<=PLP_REAB_DIAS; }
+function plpClassifica(r,per){ const canc=r.desfecho==='cancelada'||r.desfecho==='not_taken'||(r._orig==='pend'&&r.desfecho&&r.desfecho!=='emitida');
+  if(r.desfecho==='not_taken') return 'not_taken';
+  if(r.desfecho==='reabilitada') return plpReabOk(r)?'emitida':'cancelada';
+  if(r.emissao) return r.emissao<=per.emissao_ate?'emitida':'emitida_tarde';
+  return canc?'cancelada':'pendente'; }
+function plpFaixa(p,meta){ const m=meta||plpMeta(), v=Math.round(p*10)/10; return v>=m.alto?'qualifica':v>=m.baixo?'rebaixa':'nao_participa'; }
+const PLP_FAIXA_ROT={qualifica:'qualifica', rebaixa:'rebaixa uma candidatura', nao_participa:'não participa'};
+function plpCalc(A,E,P,meta){ const m=meta||plpMeta(), alvo=m.alto/100, pct=A?E/A*100:0;
+  const kMin=A?Math.max(0,Math.ceil(alvo*A-E-1e-9)):0, curto=kMin<=P?kMin:null;
+  const n=A?Math.max(0,Math.ceil((alvo*A-E)/(1-alvo)-1e-9)):0;
+  return {A,E,P,placed:pct, listrado:A?(E+P)/A*100:0, faixa:A?plpFaixa(pct,m):null, curto, cheio:A?(E+P)/A*100:0, n}; }
+function plpSim(A,E,k,n){ const d=A+n; return d?(E+k+n)/d*100:0; }
+function plpEstado(hoje,lp){ const per=plpPeriodo(hoje), U=plpUniverso((typeof EM!=='undefined'&&EM.itens)||[],(typeof EX!=='undefined'&&EX.itens)||[],per,lp);
+  const cl=U.conta.map(r=>({r,c:plpClassifica(r,per)})), E=cl.filter(x=>x.c==='emitida').length, P=cl.filter(x=>x.c==='pendente').length;
+  return {per,U,cl,calc:plpCalc(U.conta.length,E,P)}; }
+let PLP={k:0,n:0,lp:''};
+function plpPct(v){ return (Math.round(v*10)/10).toFixed(1).replace('.',','); }
+function plpSecaoHtml(){ const hoje=atHojeLocal(), S2=plpEstado(hoje,PLP.lp), c=S2.calc, per=S2.per, m=plpMeta();
+  if(PLP.k>c.P) PLP.k=c.P;
+  const bf=atFmtBR, cor=f=>f==='qualifica'?'var(--verde)':f==='rebaixa'?'var(--amar)':'var(--verm)';
+  const pendentes=S2.cl.filter(x=>x.c==='pendente').map(x=>x.r).sort((a,b)=>String(a.dt_assinatura).localeCompare(String(b.dt_assinatura)));
+  const nt=S2.cl.filter(x=>x.c==='emitida'&&!x.r.desfecho&&exRelogioNT(exDiasEmissao(x.r,hoje)).janela).map(x=>x.r);
+  const nao=[].concat(S2.cl.filter(x=>x.c==='not_taken').map(x=>({r:x.r,por:'Not Taken'+(plpCancelEm(x.r)?' · reabilitável até '+bf(plpIso(new Date(atParseISO(plpCancelEm(x.r)).getTime()+PLP_REAB_DIAS*864e5))):'')})),
+    S2.cl.filter(x=>x.c==='cancelada').map(x=>({r:x.r,por:'cancelada'})), S2.cl.filter(x=>x.c==='emitida_tarde').map(x=>({r:x.r,por:'emitida depois de '+bf(per.emissao_ate)})),
+    S2.U.fora.map(r=>({r,por:{mpp:'Minha Primeira Proteção',sem_mqc:'sem Morte Qualquer Causa',divisao_comissao:'Divisão de Comissão',outro:'não conta (manual)'}[r.nao_conta_motivo]||'não conta (manual)'})));
+  const sim=plpSim(c.A,c.E,PLP.k,PLP.n), simF=c.A+PLP.n?plpFaixa(sim,m):null;
+  const tab=(tit,l,cols)=>`<details class="card" style="padding:8px 12px;margin-top:8px"><summary style="cursor:pointer;font-weight:700;min-height:36px;display:flex;align-items:center">${tit} <span class="badge b-cinza" style="margin-left:6px">${l.length}</span></summary>${l.length?`<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px">${l.map(cols).join('')}</table></div>`:'<div class="sub">Nada aqui.</div>'}</details>`;
+  return `<h2>Placed por período · ${per.ano%100}/${(per.ano+1)%100}</h2>
+    <div class="card" style="padding:14px">
+      <div style="font-size:12.5px;color:var(--muted)">Assinadas de ${bf(per.inicio)} a ${bf(per.fim)} · emissão aceita até ${bf(per.emissao_ate)}${!logado()?' · sem login: só o que está neste aparelho':''}
+        <select aria-label="LP" onchange="PLP.lp=this.value;PLP.k=0;PLP.n=0;plpRepintar()" style="margin-left:8px;padding:4px 8px;border:1px solid var(--linha);border-radius:8px;font-size:16px;width:auto;max-width:220px;display:inline-block">${[['','Todos os LPs'],['Gustavo','Gustavo'],['Daniel','Daniel'],['Rebeca','Rebeca']].map(o=>`<option value="${o[0]}"${PLP.lp===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select></div>
+      <div class="kpis" style="margin-top:10px">
+        <div class="kpi"><div class="lbl">Placed</div><div class="num" style="color:${c.A?cor(c.faixa):'var(--ink)'}">${c.A?plpPct(c.placed)+'%':'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${c.A?PLP_FAIXA_ROT[c.faixa]+' · '+c.E+' de '+c.A:'sem propostas no período'}</div></div>
+        <div class="kpi"><div class="lbl">Listrado</div><div class="num">${c.A?plpPct(c.listrado)+'%':'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">se todas as pendentes emitirem</div></div>
+        <div class="kpi"><div class="lbl">Assinadas · emitidas · pendentes</div><div class="num" style="font-size:18px">${c.A} · ${c.E} · ${c.P}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">meta ${m.alto}% · corte ${m.baixo}%</div></div>
+      </div>
+      <div style="font-size:12.5px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--azul-claro,#eef4ff)">⏳ Faltam <b>${per.faltam} dia${per.faltam===1?'':'s'}</b> para fechar o período. Proposta assinada até ${bf(per.fim)} ainda pode ser emitida até ${bf(per.emissao_ate)}. A partir de ${bf(plpIso(new Date(atParseISO(per.fim).getTime()+864e5)))}, toda proposta nova conta pro próximo período.</div>
+      <div style="font-weight:700;margin-top:12px">Caminhos a ${m.alto}%</div>
+      <div class="plp-caminhos">
+        <button class="card plp-cam" onclick="PLP.k=${c.curto==null?c.P:c.curto};PLP.n=0;plpRepintar()"><b>Caminho curto</b><span>${c.curto==null?'não alcança só com as pendentes':'emitir '+c.curto+' das '+c.P+' pendentes → '+plpPct(plpSim(c.A,c.E,c.curto,0))+'%'}</span></button>
+        <button class="card plp-cam" onclick="PLP.k=${c.P};PLP.n=0;plpRepintar()"><b>Caminho cheio</b><span>todas as ${c.P} pendentes → ${plpPct(c.cheio)}%</span></button>
+        <button class="card plp-cam" onclick="PLP.k=0;PLP.n=${Math.min(40,c.n)};plpRepintar()"><b>Sem recuperar nenhuma</b><span>${c.n?c.n+' propostas novas emitidas → '+plpPct(plpSim(c.A,c.E,0,c.n))+'%':'já está na meta'}</span><span style="font-size:11px;color:var(--muted)">cada proposta que não vira apólice pede de 11 a 12 emitidas pra compensar</span></button>
+      </div>
+      <div style="font-weight:700;margin-top:12px">Simulador</div>
+      <div class="plp-sim">
+        <label for="plp-k">Pendentes que emitem: <b id="plp-kv">${PLP.k}</b></label><input id="plp-k" type="range" min="0" max="${c.P}" value="${PLP.k}" oninput="PLP.k=+this.value;plpSimPintar()">
+        <label for="plp-n">Propostas novas emitidas: <b id="plp-nv">${PLP.n}</b></label><input id="plp-n" type="range" min="0" max="40" value="${PLP.n}" oninput="PLP.n=+this.value;plpSimPintar()">
+        <div id="plp-res" style="font-size:14px">${plpSimTxt(c,m)}</div>
+        <button class="btn btn-ghost btn-mini" onclick="PLP.k=0;PLP.n=0;plpRepintar()">Zerar</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-mini" onclick="document.querySelectorAll('#plp-sec details').forEach(d=>d.open=true)">▾ Abrir tudo</button><button class="btn btn-ghost btn-mini" onclick="document.querySelectorAll('#plp-sec details').forEach(d=>d.open=false)">▸ Recolher tudo</button></div>
+    ${tab('Pendentes do período',pendentes,r=>{ const d=emDiasProposta(r,hoje), rl=emRelogio(d); return `<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 4px">${esc(r.proposta||'—')}<br><span style="color:var(--muted)">${esc(atTitleC(r.segurado)||'')}</span></td><td>${bf(r.dt_assinatura)}</td><td style="${rl.estado==='estourou'?'color:var(--verm);font-weight:700':''}">${rl.txt}</td><td style="text-align:right">${r.pa_sem_iof!=null?brl(r.pa_sem_iof):'—'}</td></tr>`; })}
+    ${tab('Emitidas que ainda podem virar Not Taken',nt,r=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 4px">${esc(r.apolice||r.proposta||'—')}<br><span style="color:var(--muted)">${esc(atTitleC(r.segurado)||'')}</span></td><td>${exRelogioNT(exDiasEmissao(r,hoje)).txt}</td><td>2ª parcela: ${r.segunda_parcela_em?'paga '+bf(r.segunda_parcela_em):'em aberto'}</td></tr>`)}
+    ${tab('Não contam e por quê',nao,x=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 4px">${esc(x.r.proposta||x.r.apolice||'—')}<br><span style="color:var(--muted)">${esc(atTitleC(x.r.segurado)||'')}</span></td><td>${esc(x.por)}</td></tr>`)}
+    <details class="card" style="padding:8px 12px;margin-top:8px"><summary style="cursor:pointer;font-weight:700;min-height:36px;display:flex;align-items:center">Como o Placed é calculado</summary><div style="font-size:13px;line-height:1.6;margin-top:6px">
+      Placed = apólices <b>emitidas</b> ÷ propostas <b>assinadas</b> no período. Contam as assinadas de 01/11 a 31/10, emitidas até 31/01 do ano seguinte.
+      Apólice cancelada em até 30 dias da emissão, sem cobrar a 2ª parcela, é <b>Not Taken</b> e conta como não emitida. Proposta cancelada pode ser
+      <b>reabilitada</b> em até 120 dias do cancelamento e volta a contar. Ficam de fora Minha Primeira Proteção, planos sem Morte Qualquer Causa e
+      propostas "Serviço – Divisão de Comissão". ${m.alto}% ou mais qualifica; de ${m.baixo}% a ${(m.alto-0.1).toFixed(1).replace('.',',')}% rebaixa uma candidatura; abaixo de ${m.baixo}% não participa.</div></details>`; }
+function plpSimTxt(c,m){ const s=plpSim(c.A,c.E,PLP.k,PLP.n), f=(c.A+PLP.n)?plpFaixa(s,m):null, de=c.placed;
+  return (c.A+PLP.n)?`${plpPct(de)}% → <b>${plpPct(s)}%</b> (${s>=de?'+':''}${plpPct(s-de)} pp) · <b style="color:${f==='qualifica'?'var(--verde)':f==='rebaixa'?'var(--amar)':'var(--verm)'}">${PLP_FAIXA_ROT[f]}</b>`:'sem propostas no período'; }
+function plpSimPintar(){ const S2=plpEstado(atHojeLocal(),PLP.lp); const e=$('#plp-res'); if(e) e.innerHTML=plpSimTxt(S2.calc,plpMeta());
+  const a=$('#plp-kv'), b2=$('#plp-nv'); if(a) a.textContent=PLP.k; if(b2) b2.textContent=PLP.n; }
+function plpRepintar(){ const w=$('#plp-sec'); if(w) w.innerHTML=plpSecaoHtml(); }
+(function plpCss(){ if(document.getElementById('plp-css')) return; const s=document.createElement('style'); s.id='plp-css'; s.textContent=`
+  .plp-caminhos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:6px}
+  .plp-cam{display:flex;flex-direction:column;gap:4px;text-align:left;padding:10px 12px;cursor:pointer;font:inherit;min-width:0;min-height:44px}
+  .plp-cam:hover{border-color:var(--azul,#2563eb)} .plp-cam span{font-size:12.5px}
+  .plp-sim{display:flex;flex-direction:column;gap:6px;margin-top:6px;max-width:520px} .plp-sim input[type=range]{width:100%;min-height:32px}
+  @media (max-width:760px){ .plp-caminhos{grid-template-columns:1fr} #plp-sec summary{min-height:44px} }`; document.head.appendChild(s); })();
+window.plpRepintar=plpRepintar; window.plpSimPintar=plpSimPintar;
 function viewPlaced(){
   const vazio=!PL.lps.length;
   const opcoesMes=(()=>{ let h=''; for(let n=plK2n('2025-09');n<=plK2n('2027-06');n++){ const k=plN2k(n); h+=`<option value="${k}" ${k===PL_HOJE?'selected':''}>${plLbl(k)}</option>`; } return h; })();
@@ -9278,6 +9369,7 @@ function viewPlaced(){
     </div>
     ${vazio?`<div class="card" style="text-align:center;padding:30px">Nenhum Life Planner lançado ainda. Cadastre os LPs da MFB abaixo (Histórico) e lance assinadas × entregues por mês${!logado()?', ou veja o exemplo':''}.</div>`:''}
 
+    <div id="plp-sec">${plpSecaoHtml()}</div>
     <h2>Onde a MFB vai bater na leitura</h2>
     <div class="card">
       <div class="row" style="margin-bottom:16px">
@@ -9966,7 +10058,8 @@ let EX={itens:[],carregadoEm:null}; let EX_REMOTE=false; let _exPend=null;
 function exChave(r){ return (r&&(r.apolice||r.proposta))||''; }
 function exMes(r){ return r&&r.dt_assinatura?String(r.dt_assinatura).slice(0,7):null; }
 function exRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
-function exRecToRow(r){ const row={lp_email:escEmailDoLp(r&&r.lp, EM_EMAIL)}; ['proposta','apolice','segurado','resp_pagamento','status_apolice','dt_assinatura','emissao','motivo_cancelamento','motivo_uw','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','origem_relatorio','periodo_ini','periodo_fim','nomes_conferir'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.nomes_conferir=!!r.nomes_conferir; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
+function exRecToRow(r){ const row={lp_email:escEmailDoLp(r&&r.lp, EM_EMAIL)}; ['proposta','apolice','segurado','resp_pagamento','status_apolice','dt_assinatura','emissao','motivo_cancelamento','motivo_uw','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','origem_relatorio','periodo_ini','periodo_fim','nomes_conferir','segunda_parcela_em','entrega_em','entrega_modo','entrega_obs','saiu_do_relatorio_em','desfecho','desfecho_em','nao_conta_motivo'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.nomes_conferir=!!r.nomes_conferir;
+  row.entrega_status=r.entrega_status||'sem_entrega'; row.nao_conta=!!r.nao_conta;   /* UW-EMISSAO T1: colunas NOT NULL com default */ row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
 async function exCarregar(){
   EX_REMOTE=await emRemoteOn();
   if(EX_REMOTE){ try{ const {data,error}=await sb.from(EX_TABLE).select('*'); if(error) throw error;
@@ -10112,6 +10205,9 @@ async function exAplicarUI(){
       if(feito.apolice) st.apolices++; if(feito.clienteNovo) st.clientes++; st.entregues+=feito.movidos.length;
     }
   }
+  /* UW-EMISSAO-V2 T3: o que estava na base, é do mesmo LP e foi emitido dentro do período deste relatório, mas não veio → "sumiu" */
+  const sumidas=exSumidas(EX.itens, d.p.records, emis[0]||null, emis[emis.length-1]||null);
+  sumidas.forEach(r=>{ r.saiu_do_relatorio_em=new Date().toISOString(); upEx.push(r); }); st.sumiram=sumidas.length;
   EX.carregadoEm=origem; exSalvarLocal(); if(upEm.length) emSalvarLocal();
   impRegistrar('emitidas', origem, st);
   let msg='';
@@ -10120,7 +10216,7 @@ async function exAplicarUI(){
   /* 4 · PLACED lê daqui */
   const pl=plSincronizarEmitidas();
   atClose(); render();
-  relLog('emitidas',(st.novas||0)+(st.atualizadas||0));
+  relLog('emitidas',(st.novas||0)+(st.atualizadas||0),{novas:st.novas||0,sairam:st.sumiram||0});
   toast(`Emitidas: ${st.novas} nova(s), ${st.atualizadas} atualizada(s) · ${st.desfechos} pendência(s) emitida(s) · ${st.apolices} apólice(s) na base · ${st.entregues} negócio(s) entregue(s)${pl?` · PLACED: ${pl.meses} mês(es) de ${pl.lps} LP(s)`:''}${msg}`,true);
 }
 /* resumo pra tela de Pendências (o que emiti no período) */
@@ -14007,7 +14103,7 @@ function boSelectVivo(){ return 'data-so-leitura="lido no Salvar da ficha"'; }
 /* ═══ Entrega 1 · PENDÊNCIAS DE EMISSÃO (em*) ═══════════════════════════════ */
 const EM_TABLE='emissao_pendencias', EM_CHAVE='crmlp_emissao_v1';
 let EM={itens:[],carregadoEm:null}; let EM_REMOTE=false, EM_EMAIL='';
-let FEM={q:'',faixa:'',lp:'',status:'',contest:'',mudo:false}; let _emPend=null;
+let FEM={q:'',faixa:'',lp:'',status:'',contest:'',mudo:false,lente:'',ccb:'',aba:'pend',exLente:''}; let _emPend=null;
 /* Faixas de dias — VÃO MUDAR (a confirmar com o Gustavo). Uma constante só. */
 const EM_FAIXAS={critico:15, atencao:8};
 const EM_COMP_DIA=20;   /* regra: vendido E EMITIDO até o dia 20 entra no pagamento do dia 30 */
@@ -14100,7 +14196,7 @@ function emDiff(existing,recs){
 /* ── camada de dados (igual ao at*) ── */
 async function emRemoteOn(){ if(!sb) return false; try{ const {data}=await sb.auth.getSession(); if(data&&data.session){ EM_EMAIL=delegDono((data.session.user&&data.session.user.email)||''); return true; } }catch(e){} return false; }
 function emRowToRec(row){ const r={}; Object.keys(row).forEach(k=>{ if(k!=='chave') r[k]=row[k]; }); r.pa_sem_iof=row.pa_sem_iof!=null?Number(row.pa_sem_iof):null; r.afyc_projetado=row.afyc_projetado!=null?Number(row.afyc_projetado):null; return r; }
-function emRecToRow(r){ const row={ lp_email:escEmailDoLp(r&&r.lp, EM_EMAIL) }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio','nomes_corrigidos'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
+function emRecToRow(r){ const row={ lp_email:escEmailDoLp(r&&r.lp, EM_EMAIL) }; ['proposta','apolice','segurado','resp_pagamento','status_apolice','contestacao','dias_pendentes','dt_assinatura','pa_sem_iof','afyc_projetado','lp','lp_nome_completo','pendencia_descricao','bola_com','status_tratativa','ultima_acao','ultima_acao_em','proxima_acao','proxima_acao_prazo','protocolo','observacao','saiu_do_relatorio_em','desfecho','desfecho_em','origem_relatorio','nomes_corrigidos','ccb_quitada_em','nao_conta_motivo'].forEach(k=>{ row[k]=(r[k]===''||r[k]===undefined)?null:r[k]; }); row.nao_conta=!!r.nao_conta; row.segurado=r.segurado||''; row.atualizado_em=new Date().toISOString(); if(r.id&&!String(r.id).startsWith('ex_')) row.id=r.id; return row; }
 async function emCarregar(){
   EM_REMOTE=await emRemoteOn();
   if(EM_REMOTE){ try{ const {data,error}=await sb.from(EM_TABLE).select('*'); if(error) throw error;
@@ -14301,6 +14397,8 @@ function emFiltrados(){ const hoje=atHojeLocal();
     if(FEM.contest&&r.contestacao!==FEM.contest) return false;
     if(FEM.faixa&&emFaixa(emDias(r,hoje))!==FEM.faixa) return false;
     if(FEM.mudo&&!boMudo(r)) return false;
+    if(FEM.lente&&!uwLente(r,hoje)) return false;   /* UW-EMISSAO-V2 */
+    if(FEM.ccb==='aberto'&&r.ccb_quitada_em) return false; if(FEM.ccb==='quitada'&&!r.ccb_quitada_em) return false;
     if(FEM.q){ const q=normKey(FEM.q), qn=FEM.q.replace(/\D/g,''); const hit=normKey(r.segurado).indexOf(q)>=0||normKey(r.resp_pagamento).indexOf(q)>=0||!!(qn&&(String(r.proposta||'').indexOf(qn)>=0||String(r.apolice||'').indexOf(qn)>=0)); if(!hit) return false; }
     return true;
   }).sort((a,b)=>(emDias(b,hoje)||0)-(emDias(a,hoje)||0));
@@ -14319,10 +14417,116 @@ function emExportar(){ const l=emFiltrados(); if(!l.length){ toast('Nada para ex
   const blob=new Blob(['\ufeff'+[cab].concat(corpo).join('\r\n')],{type:'text/csv;charset=utf-8'});
   subDocSalvar(blob,'emissao'+(FEM.lp?'-'+normKey(FEM.lp):'')+'-'+atHojeISO()+'.csv'); toast(`${l.length} proposta(s) exportada(s)`,true); }
 
+/* ═══ UW-EMISSAO-V2 (23/10/2026) — esteira proposta → emissão → entrega (Lote Global 1 · Parte B, T2/T3) ═══════════════
+   Os dois relógios que decidem o Placed: 60 dias da proposta (assinatura → emissão) e 30 dias da emissão (janela Not Taken).
+   1ª parcela (CCB), 2ª parcela e entrega são MANUAIS quando o relatório não traz (conferido 23/10: não traz) — nunca inferidos.
+   "Pronta pra entregar" é automática: a apólice está na carteira (CART). Entregue nunca volta pra pronta. */
+const EM_PRAZO_PROP=60, EX_JANELA_NT=30;
+function emDiasProposta(r,hoje){ const h=hoje||atHojeLocal(); const a=r&&r.dt_assinatura?Math.max(0,Math.round((h-atParseISO(r.dt_assinatura))/864e5)):null;
+  const rel=emDias(r,h); return a==null?rel:(rel!=null?Math.max(a,rel):a); }
+function emRelogio(d){ if(d==null) return {txt:'—',estado:''}; if(d>EM_PRAZO_PROP) return {txt:d+'/'+EM_PRAZO_PROP+' · estourou',estado:'estourou'};
+  if(d>=EM_PRAZO_PROP-7) return {txt:d+'/'+EM_PRAZO_PROP+' · faltam '+(EM_PRAZO_PROP-d),estado:'vence7'}; return {txt:d+'/'+EM_PRAZO_PROP,estado:''}; }
+function exDiasEmissao(r,hoje){ if(!r||!r.emissao) return null; return Math.max(0,Math.round(((hoje||atHojeLocal())-atParseISO(r.emissao))/864e5)); }
+function exRelogioNT(d){ if(d==null) return {txt:'—',janela:false}; return d<EX_JANELA_NT?{txt:d+'/'+EX_JANELA_NT+' · faltam '+(EX_JANELA_NT-d),janela:true}:{txt:d+'/'+EX_JANELA_NT+' · fora da janela',janela:false}; }
+/* contato do CRM pela apólice/segurado — o mesmo critério do cartClientePorAtraso (nome normalizado) + apólice guardada no card */
+function uwContato(r){ if(!r) return null; const ap=String(r.apolice||''), nk=normKey(r.segurado||'');
+  return (S.contatos||[]).find(c=>c&&((ap&&Array.isArray(c.apolices)&&c.apolices.indexOf(ap)>=0)||(ap&&String(c.apolice||'')===ap)))
+      || (nk?(S.contatos||[]).find(c=>c&&normKey(c.nome)===nk):null) || null; }
+function uwTel(r){ const c=uwContato(r); if(c&&c.telefone) return c.telefone; try{ const ap=(CART.apolices||[]).find(a=>a.apolice===r.apolice); if(ap){ const cl=(CART.clientes||[]).find(x=>x.ref===ap.cli); if(cl) return cartTel(cl); } }catch(_){} return ''; }
+/* ── 1ª parcela (CCB) ── */
+function emCcbAbrir(ch){ const r=EM.itens.find(x=>emChave(x)===ch); if(!r) return;
+  atModal(`<h2>1ª parcela (CCB)</h2><div class="sub">${esc(atTitleC(r.segurado)||ch)} · a proposta não emite sem a 1ª parcela quitada.</div>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-top:12px;font-weight:600" for="em_ccb">Quitada em</label>
+    <input id="em_ccb" type="date" value="${r.ccb_quitada_em||atHojeISO()}" style="margin-top:3px">
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">${r.ccb_quitada_em?`<button class="btn btn-ghost" onclick="emCcbSalvar('${esc(jsq(ch))}',null)">✕ Voltar pra em aberto</button>`:''}
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="emCcbSalvar('${esc(jsq(ch))}',($('#em_ccb')||{}).value||null)">Salvar</button></div>`); }
+async function emCcbSalvar(ch,iso){ await emPatch(ch,{ccb_quitada_em:iso||null}); atClose(); render(); toast(iso?'1ª parcela quitada em '+atFmtBR(iso):'1ª parcela em aberto',true); }
+/* ── emitidas: patch, pronta automática, entrega, tarefa, sumiu → desfecho ── */
+async function exPatch(ch,patch){ const r=EX.itens.find(x=>exChave(x)===ch); if(!r) return null; Object.assign(r,patch); exSalvarLocal();
+  if(EX_REMOTE){ try{ await exUpsertRemoto([r]); }catch(e){ console.error('EX patch',e); toast('Não consegui salvar no servidor',false); } } return r; }
+function exNaCarteira(r){ try{ return !!(r&&r.apolice&&(CART.apolices||[]).some(a=>a.apolice===r.apolice)); }catch(_){ return false; } }
+function exEntregaStatus(r){ const s=(r&&r.entrega_status)||'sem_entrega'; if(s==='entregue') return 'entregue'; return (s==='pronta'||exNaCarteira(r))?'pronta':'sem_entrega'; }
+let _exProntaT=null;
+function exMarcarProntas(){ const mud=(EX.itens||[]).filter(r=>(r.entrega_status||'sem_entrega')==='sem_entrega'&&exNaCarteira(r));
+  if(!mud.length) return 0; mud.forEach(r=>{ r.entrega_status='pronta'; }); exSalvarLocal();
+  clearTimeout(_exProntaT); _exProntaT=setTimeout(()=>{ if(EX_REMOTE) exUpsertRemoto(mud).catch(e=>console.warn('EX pronta',e)); },400); return mud.length; }
+function exEntregarAbrir(ch){ const r=EX.itens.find(x=>exChave(x)===ch); if(!r) return; const c=uwContato(r);
+  atModal(`<h2>📦 Entregar apólice</h2><div class="sub">${esc(atTitleC(r.segurado)||'')} · apólice ${esc(r.apolice||'—')}${c?' · vai pro histórico de '+esc(c.nome):' · sem contato vinculado no CRM (grava só na apólice)'}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><div style="flex:1;min-width:140px"><label style="display:block;font-size:12px;color:var(--muted);font-weight:600" for="ex_ent_dt">Data</label><input id="ex_ent_dt" type="date" value="${atHojeISO()}" style="width:100%;margin-top:3px"></div>
+      <div style="flex:1;min-width:140px"><label style="display:block;font-size:12px;color:var(--muted);font-weight:600" for="ex_ent_modo">Como</label><select id="ex_ent_modo" style="width:100%;margin-top:3px">${[['presencial','Presencial'],['whatsapp','WhatsApp'],['video','Vídeo'],['correio','Correio']].map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select></div></div>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600" for="ex_ent_obs">Observação</label><input id="ex_ent_obs" style="width:100%;margin-top:3px">
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="exEntregarSalvar('${esc(jsq(ch))}')">Entregar</button></div>`); }
+async function exEntregarSalvar(ch){ const dt=($('#ex_ent_dt')||{}).value||atHojeISO(), modo=($('#ex_ent_modo')||{}).value||'presencial', obs=(($('#ex_ent_obs')||{}).value||'').trim();
+  const r=await exPatch(ch,{entrega_status:'entregue',entrega_em:dt,entrega_modo:modo,entrega_obs:obs||null}); if(!r) return;
+  const c=uwContato(r); const txt='Apólice '+(r.apolice||'')+' entregue ('+modo+')'+(obs?' · '+obs:'');
+  if(c){ interacoesDe(c).push({id:uid(),k:'entrega',l:txt,dia:dt,ts:new Date().toISOString(),por:quemFez()}); salvar();
+    if(typeof LPC_REMOTE!=='undefined'&&LPC_REMOTE&&sb){ try{ await sb.from('lp_interacoes').insert({contato_id:c.id,tipo:'entrega',resultado:modo,obs:txt,dono:delegDono()}); }catch(e){ console.warn('lp_interacoes (entrega)',e); } } }
+  atClose(); render(); toast('Entregue em '+atFmtBR(dt)+(c?' · no histórico de '+c.nome.split(' ')[0]:''),true); }
+/* "virar tarefa": usa a tarefa do card do contato (o mecanismo que já existe), não cria outro */
+function exVirarTarefa(ch){ const r=EX.itens.find(x=>exChave(x)===ch); if(!r) return; const c=uwContato(r);
+  if(!c){ toast('Sem contato vinculado no CRM pra essa apólice — abra o card do cliente e crie a tarefa lá',false); return; }
+  const t={id:uid(),tipo:'reuniao',tit:'Entregar apólice '+(r.apolice||''),quando:atHojeISO(),hora:'',dur:30,feito:null,notas:'',criadoEm:new Date().toISOString(),por:quemFez()};
+  tarefasDe(c).push(t); salvar(); render(); toast('Tarefa criada no card de '+c.nome.split(' ')[0],true); }
+/* sumiu do relatório → desfecho (mesma UX das pendências). not_taken só se o cancelamento foi em até 30 dias da emissão */
+function exDesfechoValido(r,desf,cancelISO){ if(desf!=='not_taken') return {ok:true}; const e=atParseISO(r&&r.emissao), c=atParseISO(cancelISO);
+  if(!e||!c) return {ok:false,msg:'Informe a data do cancelamento.'}; const d=Math.round((c-e)/864e5);
+  return d<=EX_JANELA_NT?{ok:true}:{ok:false,msg:'Cancelou '+d+' dias depois da emissão — passou dos '+EX_JANELA_NT+'. Isso é "cancelada", não Not Taken.',sugere:'cancelada'}; }
+function exDesfechoAbrir(ch){ const r=EX.itens.find(x=>exChave(x)===ch); if(!r) return;
+  atModal(`<h2>Sumiu do relatório</h2><div class="sub">${esc(atTitleC(r.segurado)||'')} · apólice ${esc(r.apolice||'—')} · emitida em ${atFmtBR(r.emissao)}. O que aconteceu?</div>
+    <select id="ex_desf" style="width:100%;margin-top:12px"><option value="cancelada">Cancelada</option><option value="not_taken">Not Taken (cancelada em até ${EX_JANELA_NT} dias da emissão)</option><option value="continua_ativa">Continua ativa</option><option value="reabilitada">Reabilitada</option></select>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-top:8px;font-weight:600" for="ex_desf_dt">Data (cancelamento ou reabilitação)</label><input id="ex_desf_dt" type="date" value="${atHojeISO()}" style="margin-top:3px">
+    <div id="ex_desf_err" style="color:var(--verm);font-size:12.5px;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="exDesfechoSalvar('${esc(jsq(ch))}')">Salvar</button></div>`); }
+async function exDesfechoSalvar(ch){ const r=EX.itens.find(x=>exChave(x)===ch); if(!r) return; const desf=($('#ex_desf')||{}).value, dt=($('#ex_desf_dt')||{}).value||atHojeISO();
+  const v=exDesfechoValido(r,desf,dt); if(!v.ok){ const e=$('#ex_desf_err'); if(e) e.textContent=v.msg; if(v.sugere){ const s=$('#ex_desf'); if(s) s.value=v.sugere; } return; }
+  await exPatch(ch,desf==='continua_ativa'?{desfecho:null,desfecho_em:null,saiu_do_relatorio_em:null}:{desfecho:desf,desfecho_em:dt}); atClose(); render(); toast('Desfecho salvo',true); }
+/* na importação: apólice da base, do mesmo LP e emitida dentro do período do relatório novo, que não veio → sumiu.
+   Fora do período do relatório não é "sumiu" (o relatório é "emitidas NO PERÍODO"). */
+function exSumidas(base,recs,ini,fim){ const veio=new Set(recs.map(exChave).filter(Boolean)), lps=new Set(recs.map(r=>r.lp||''));
+  return (base||[]).filter(r=>exChave(r)&&!veio.has(exChave(r))&&!r.desfecho&&!r.saiu_do_relatorio_em&&lps.has(r.lp||'')&&r.emissao&&ini&&fim&&r.emissao>=ini&&r.emissao<=fim); }
+/* KPIs e lista da aba Emitidas */
+function exAbaDados(hoje){ const h=hoje||atHojeLocal(), mes=atHojeISO().slice(0,7);
+  const l=exVis().filter(r=>(r.status_apolice||'Ativa')==='Ativa'||r.saiu_do_relatorio_em).filter(r=>!FEM.lp||r.lp===FEM.lp);
+  const est=r=>exEntregaStatus(r), noMes=l.filter(r=>String(r.emissao||'').slice(0,7)===mes);
+  return { l, noMes, pa:noMes.reduce((s,r)=>s+(Number(r.pa_sem_iof)||0),0), janela:l.filter(r=>!r.desfecho&&exRelogioNT(exDiasEmissao(r,h)).janela),
+    prontas:l.filter(r=>est(r)==='pronta'), entreguesMes:l.filter(r=>est(r)==='entregue'&&String(r.entrega_em||'').slice(0,7)===mes),
+    semEntrega:l.filter(r=>est(r)!=='entregue'&&!r.desfecho).sort((a,b)=>String(a.emissao||'').localeCompare(String(b.emissao||''))), sumidas:l.filter(r=>r.saiu_do_relatorio_em&&!r.desfecho) }; }
+function exAbaHtml(){ const hoje=atHojeLocal(); exMarcarProntas(); const D=exAbaDados(hoje);
+  const kpi=(l,n,s,lente)=>`<button class="kpi kpi-lente${FEM.exLente===lente?' on':''}" onclick="FEM.exLente=FEM.exLente==='${lente}'?'':'${lente}';viewLpPendencias()"><div class="lbl">${l}</div><div class="num">${n}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div></button>`;
+  const base=FEM.exLente==='janela'?D.janela:FEM.exLente==='prontas'?D.prontas:FEM.exLente==='entregues'?D.entreguesMes:FEM.exLente==='sem'?D.semEntrega:FEM.exLente==='sumidas'?D.sumidas:D.l.slice().sort((a,b)=>String(b.emissao||'').localeCompare(String(a.emissao||'')));
+  const rot={sem_entrega:['b-cinza','sem entrega'],pronta:['b-azul','pronta pra entregar'],entregue:['b-verde','entregue']};
+  return `<div class="kpis" style="margin-top:10px">
+      <div class="kpi"><div class="lbl">Emitidas no mês</div><div class="num">${D.noMes.length}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">PA ${brl(D.pa)}</div></div>${kpi('Na janela Not Taken',D.janela.length,'menos de '+EX_JANELA_NT+' dias da emissão','janela')}
+      ${kpi('Prontas pra entregar',D.prontas.length,'já na carteira','prontas')}${kpi('Entregues no mês',D.entreguesMes.length,'com data e modo','entregues')}
+      ${kpi('Sem entrega · acumulado',D.semEntrega.length,'da emissão mais antiga','sem')}${D.sumidas.length?kpi('Sumiram',D.sumidas.length,'diga o desfecho','sumidas'):''}</div>
+    <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
+      <th style="padding:6px 8px">Segurado</th><th>Proposta / Apólice</th><th>Emissão · Not Taken</th><th>2ª parcela</th><th>Entrega</th><th></th></tr></thead><tbody>
+    ${base.length?base.map(r=>{ const ch=exChave(r), d=exDiasEmissao(r,hoje), nt=exRelogioNT(d), st=exEntregaStatus(r), [cor,rt]=rot[st];
+      return `<tr style="border-top:1px solid var(--linha)">
+        <td style="padding:8px">${esc(atTitleC(r.segurado)||'—')}${r.saiu_do_relatorio_em&&!r.desfecho?' <span class="badge b-roxo">sumiu</span>':''}${r.desfecho?` <span class="badge b-cinza">${esc({cancelada:'cancelada',not_taken:'Not Taken',reabilitada:'reabilitada'}[r.desfecho]||r.desfecho)}</span>`:''}<br><span style="font-size:11px;color:var(--muted)">${esc(r.lp||'')}</span></td>
+        <td style="font-size:12px">${esc(r.proposta||'—')}<br><b>${esc(r.apolice||'—')}</b></td>
+        <td style="font-size:12px;white-space:nowrap">${atFmtBR(r.emissao)}<br><span style="${nt.janela?'color:var(--amar);font-weight:700':'color:var(--muted)'}">${nt.txt}</span></td>
+        <td style="font-size:12px"><button class="btn btn-ghost btn-mini" onclick="exParcelaAbrir('${esc(jsq(ch))}')">${r.segunda_parcela_em?'✓ paga '+atFmtBR(r.segunda_parcela_em).slice(0,5):'✕ em aberto'}</button></td>
+        <td><span class="badge ${cor}">${rt}</span>${st==='entregue'?`<br><span style="font-size:11px;color:var(--muted)">${atFmtBR(r.entrega_em)} · ${esc(r.entrega_modo||'')}</span>`:''}</td>
+        <td style="white-space:nowrap">${r.saiu_do_relatorio_em&&!r.desfecho?`<button class="btn btn-p btn-mini" onclick="exDesfechoAbrir('${esc(jsq(ch))}')">Desfecho</button>`:st!=='entregue'?`<button class="btn btn-p btn-mini" onclick="exEntregarAbrir('${esc(jsq(ch))}')">📦 Entregar</button> <button class="btn btn-ghost btn-mini" title="Cria a tarefa de entrega no card do cliente" onclick="exVirarTarefa('${esc(jsq(ch))}')">＋ tarefa</button>`:''}</td>
+      </tr>`; }).join(''):`<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">Nada aqui. Cole o relatório de emitidas (✅ Colar emitidas).</td></tr>`}
+    </tbody></table></div>`; }
+function exParcelaAbrir(ch){ const r=EX.itens.find(x=>exChave(x)===ch); if(!r) return;
+  atModal(`<h2>2ª parcela</h2><div class="sub">${esc(atTitleC(r.segurado)||'')} · cancelar antes de cobrar a 2ª parcela, em até ${EX_JANELA_NT} dias da emissão, é Not Taken.</div>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-top:12px;font-weight:600" for="ex_p2">Paga em</label><input id="ex_p2" type="date" value="${r.segunda_parcela_em||atHojeISO()}" style="margin-top:3px">
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">${r.segunda_parcela_em?`<button class="btn btn-ghost" onclick="exPatch('${esc(jsq(ch))}',{segunda_parcela_em:null}).then(()=>{atClose();render();})">✕ Voltar pra em aberto</button>`:''}
+      <button class="btn btn-ghost" style="margin-left:auto" onclick="atClose()">Cancelar</button><button class="btn btn-p" onclick="exPatch('${esc(jsq(ch))}',{segunda_parcela_em:($('#ex_p2')||{}).value||null}).then(()=>{atClose();render();toast('2ª parcela registrada',true);})">Salvar</button></div>`); }
+function uwLente(r,hoje){ const d=emDiasProposta(r,hoje), e=emRelogio(d).estado;
+  return FEM.lente==='60'?e==='estourou':FEM.lente==='7'?e==='vence7':FEM.lente==='ccb'?!r.ccb_quitada_em:FEM.lente==='semacao'?!String(r.ultima_acao||'').trim():true; }
+function uwAbas(){ const t=(k,l)=>`<button class="sheet-chip${(FEM.aba||'pend')===k?' on':''}" style="min-height:40px" onclick="FEM.aba='${k}';viewLpPendencias()">${l}</button>`;
+  return `<div style="display:flex;gap:6px;margin:10px 0 0">${t('pend','⏳ Pendentes')}${t('emit','✅ Emitidas · entrega')}</div>`; }
+window.emCcbAbrir=emCcbAbrir; window.exEntregarAbrir=exEntregarAbrir; window.exDesfechoAbrir=exDesfechoAbrir; window.exParcelaAbrir=exParcelaAbrir; window.exVirarTarefa=exVirarTarefa;
+
 /* ════ VIEW: PENDÊNCIAS DE EMISSÃO (assume a view lp-pendencias, como o at* assumiu lp-atrasos) ════ */
 function viewLpPendencias(){
   const hoje=atHojeLocal();
-  if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${cargaLinha([['pendências',EM.carregadoEm]])}<div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; o Victor mantém o estado de cada caso.</div>
+  if(FEM.aba==='emit'&&!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${uwAbas()}${exAbaHtml()}`; return; }
+  if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${uwAbas()}${cargaLinha([['pendências',EM.carregadoEm]])}<div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; o Victor mantém o estado de cada caso.</div>
     <div class="card" style="text-align:center;padding:34px">Nenhuma proposta ainda. Cole o relatório de Propostas Pendentes pra montar a lista.<br><br>
       <button class="btn btn-p" onclick="emColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s" onclick="exColar()" style="margin-left:8px">✅ Colar emitidas</button>
@@ -14339,6 +14543,9 @@ function viewLpPendencias(){
   const semT=ativos.filter(r=>!r.status_tratativa||r.status_tratativa==='sem_tratativa');
   const sumiram=ativos.filter(r=>r.saiu_do_relatorio_em);
   const mudos=ativos.filter(boMudo);
+  const uwEst=r=>emRelogio(emDiasProposta(r,hoje)).estado, est60=ativos.filter(r=>uwEst(r)==='estourou'), v7=ativos.filter(r=>uwEst(r)==='vence7'),
+        ccbAb=ativos.filter(r=>!r.ccb_quitada_em), semAcao=ativos.filter(r=>!String(r.ultima_acao||'').trim());   /* UW-EMISSAO-V2 */
+  const uwLen=(k,l,n,sb)=>kpiLente(FEM.lente===k,"FEM.lente=FEM.lente==='"+k+"'?'':'"+k+"';viewLpPendencias()",l,n,sb);
   const lps=['Gustavo','Daniel','Rebeca'].map(k=>{ const l=todosAtivos.filter(r=>r.lp===k&&emRecorte(r,true)); return {k,n:l.length,v:afyc(l)}; });
   const jan=emJanela(hoje,ativos);
   const recorteOn=!!(FEM.lp||FEM.contest||FEM.q);
@@ -14350,10 +14557,14 @@ function viewLpPendencias(){
   $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>
     ${cargaLinha([['pendências',EM.carregadoEm]])}
     <div class="sub">${EM.carregadoEm?'Último relatório: '+atFmtBR(EM.carregadoEm)+' · ':''}${EM_REMOTE?'sincronizado com o servidor':'só neste aparelho (faça login pra sincronizar)'} · dias envelhecem pela data do relatório.</div>
-    ${delegFaixa()}${impFaixa('emissao','relatório de propostas pendentes')}
+    ${delegFaixa()}${impFaixa('emissao','relatório de propostas pendentes')}${uwAbas()}<div id="uw-pend">
     <div class="kpis" style="margin-top:10px">
       ${kpi('💰 AFYC em risco'+(recorteOn?' · filtrado':''),brl(totA),ativos.length+' proposta'+(ativos.length===1?'':'s')+' · PA '+brl(totPA)+(recorteOn?' · de '+todosAtivos.length:''))}
-      ${kpi('Total pendente',ativos.length,brl(totA))}
+      ${kpi('Total pendente',ativos.length,'PA '+brl(totPA)+' · AFYC '+brl(totA))}
+      ${uwLen('60','Passaram de '+EM_PRAZO_PROP+' d',est60.length,est60.length?'⚠ fora do prazo da proposta':'nenhuma estourou')}
+      ${uwLen('7','Vencem em 7 d',v7.length,'entre '+(EM_PRAZO_PROP-7)+' e '+EM_PRAZO_PROP+' dias')}
+      ${uwLen('ccb','1ª parcela em aberto',ccbAb.length,'não emite sem quitar')}
+      ${uwLen('semacao','Sem ação registrada',semAcao.length,'última ação vazia')}
       ${kpiLente(FEM.faixa==='critico',"FEM.faixa=FEM.faixa==='critico'?'':'critico';viewLpPendencias()",'Críticas ≥'+EM_FAIXAS.critico+'d',crit.length,brl(afyc(crit)))}
       ${kpiLente(FEM.status==='sem_tratativa',"FEM.status=FEM.status==='sem_tratativa'?'':'sem_tratativa';viewLpPendencias()",'Sem tratativa',semT.length,brl(afyc(semT))+' parado')}
       ${kpiLente(FEM.mudo,"FEM.mudo=!FEM.mudo;viewLpPendencias()",'🔇 Casos mudos',mudos.length,'sem status ou sem próxima ação')}
@@ -14375,7 +14586,11 @@ function viewLpPendencias(){
       ${sel('contest',[['','Contestação: todas'],['medica','Médica'],['nao_medica','Não médica']],FEM.contest)}
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-      ${chip('','Todas')}${chip('critico','🔴 ≥'+EM_FAIXAS.critico+'d')}${chip('atencao','🟠 '+EM_FAIXAS.atencao+'–'+(EM_FAIXAS.critico-1))}${chip('normal','🔵 < '+EM_FAIXAS.atencao+'d')}
+      ${['','60','7','ccb'].map((k,i)=>`<button class="sheet-chip${(FEM.lente||'')===k?' on':''}" onclick="FEM.lente='${k}';viewLpPendencias()">${['Todas','🔴 > '+EM_PRAZO_PROP+' d','⏰ ≤ 7 d','💳 1ª parcela em aberto'][i]}</button>`).join('')}
+      <select aria-label="1ª parcela" onchange="FEM.ccb=this.value;viewLpPendencias()" style="padding:6px 8px;border:1px solid var(--linha);border-radius:9px;font-size:12.5px">${[['','1ª parcela: todas'],['quitada','quitada'],['aberto','em aberto']].map(o=>`<option value="${o[0]}"${(FEM.ccb||'')===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      ${chip('','Todas as faixas')}${chip('critico','🔴 ≥'+EM_FAIXAS.critico+'d')}${chip('atencao','🟠 '+EM_FAIXAS.atencao+'–'+(EM_FAIXAS.critico-1))}${chip('normal','🔵 < '+EM_FAIXAS.atencao+'d')}
       <span style="flex:1"></span>
       <button class="btn btn-p btn-mini" onclick="emColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s btn-mini" onclick="exColar()">✅ Colar emitidas</button>
@@ -14383,26 +14598,29 @@ function viewLpPendencias(){
     </div>
     ${exResumoHtml().replace('margin-top:10px','margin:0 0 12px')}
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="text-align:left;font-size:11px;color:var(--muted)">
-      <th style="padding:6px 8px">Dias</th><th>Proposta / Apólice</th><th>Segurado / Resp.</th><th>LP</th><th>Assinatura</th><th>AFYC</th><th>Contestação</th><th>Pendência</th><th>Bola com</th><th>Status</th></tr></thead><tbody>
-    ${rows.length?rows.map(r=>{ const d=emDias(r,hoje)||0, fx=emFaixa(d);
-      return `<tr onclick="emAbrir('${esc(emChave(r))}')" style="cursor:pointer;border-top:1px solid var(--linha)${r.saiu_do_relatorio_em?';opacity:.75':''}">
-        <td style="padding:8px"><span class="dias-tag ${fx==='critico'?'hoje':fx==='atencao'?'perto':'longe'}">${d}d</span>${boMudo(r)?' <span title="caso mudo: sem status ou sem próxima ação">🔇</span>':''}${r.saiu_do_relatorio_em?' <span class="badge b-roxo">sumiu</span>':''}</td>
+      <th style="padding:6px 8px">Dias · prazo</th><th>Proposta / Apólice</th><th>Segurado / Resp.</th><th>LP</th><th>Assinatura</th><th>AFYC</th><th>1ª parcela</th><th>Contestação</th><th>Pendência</th><th>Bola com</th><th>Status</th><th></th></tr></thead><tbody>
+    ${rows.length?rows.map(r=>{ const d=emDias(r,hoje)||0, fx=emFaixa(d), dp=emDiasProposta(r,hoje), rl=emRelogio(dp), tel=uwTel(r), wa=tel?cartWaUrl(tel,''):null;
+      return `<tr onclick="emAbrir('${esc(emChave(r))}')" style="cursor:pointer;border-top:1px solid var(--linha)${r.saiu_do_relatorio_em?';opacity:.75':''}${rl.estado==='estourou'?';background:var(--verm-claro,#fdecec)':''}">
+        <td style="padding:8px;white-space:nowrap"><span class="dias-tag ${fx==='critico'?'hoje':fx==='atencao'?'perto':'longe'}">${d}d</span><br><span style="font-size:11px;${rl.estado==='estourou'?'color:var(--verm);font-weight:700':rl.estado==='vence7'?'color:var(--amar);font-weight:700':'color:var(--muted)'}">${rl.txt}</span>${boMudo(r)?' <span title="caso mudo: sem status ou sem próxima ação">🔇</span>':''}${r.saiu_do_relatorio_em?' <span class="badge b-roxo">sumiu</span>':''}</td>
         <td>${r.proposta?`<b>${esc(r.proposta)}</b>`:'<span class="badge b-amarelo" title="o relatório não trouxe o nº da proposta">sem proposta</span>'}${r.apolice?`<br><span style="font-size:11px;color:var(--muted)">apólice ${esc(r.apolice)}</span>`:''}</td>
         <td>${esc(atTitleC(r.segurado)||'—')}${r.resp_pagamento&&normKey(r.resp_pagamento)!==normKey(r.segurado)?`<br><span style="font-size:11px;color:var(--muted)">resp: ${esc(atTitleC(r.resp_pagamento))}</span>`:''}</td>
         <td style="font-size:12px">${esc(r.lp||'—')}</td>
         <td style="font-size:12px">${atFmtBR(r.dt_assinatura)}</td>
         <td style="font-weight:700">${r.afyc_projetado!=null?brl(r.afyc_projetado):'—'}</td>
+        <td style="font-size:12px" onclick="event.stopPropagation()"><button class="btn btn-ghost btn-mini" onclick="emCcbAbrir('${esc(jsq(emChave(r)))}')">${r.ccb_quitada_em?'✓ Quitada '+atFmtBR(r.ccb_quitada_em).slice(0,5):'✕ Em aberto'}</button></td>
         <td style="font-size:12px">${r.contestacao==='medica'?'<span class="badge b-amarelo">Médica</span>':r.contestacao==='nao_medica'?'<span class="badge b-cinza">Não médica</span>':'—'}</td>
         <td style="font-size:11px;color:var(--muted);max-width:200px">${esc(r.pendencia_descricao||'—')}</td>
         <td style="font-size:12px">${esc(boRot(BOLA_OPTS,r.bola_com))}</td>
         <td><span class="badge ${r.status_tratativa==='resolvido'?'b-verde':!r.status_tratativa||r.status_tratativa==='sem_tratativa'?'b-verm':'b-amarelo'}">${esc(stRotulo(r.status_tratativa||'sem_tratativa'))}</span>${r.proxima_acao?`<br><span style="font-size:10.5px;color:var(--muted)">→ ${esc(r.proxima_acao)}${r.proxima_acao_prazo?' · '+atFmtBR(r.proxima_acao_prazo):''}</span>`:''}</td>
-      </tr>`; }).join(''):`<tr><td colspan="10" style="padding:16px;text-align:center;color:var(--muted)">Nenhuma proposta com esses filtros.</td></tr>`}
+        <td style="white-space:nowrap" onclick="event.stopPropagation()">${wa?`<a class="btn btn-s btn-mini" href="${wa}" target="_blank" rel="noopener" title="Mensagem no WhatsApp">💬</a> <a class="btn btn-ghost btn-mini" href="tel:${esc(String(tel).replace(/\D/g,''))}" title="Ligar">📞</a>`:'<span style="font-size:11px;color:var(--muted)" title="Sem telefone no CRM pra esse segurado">—</span>'}</td>
+      </tr>`; }).join(''):`<tr><td colspan="12" style="padding:16px;text-align:center;color:var(--muted)">Nenhuma proposta com esses filtros.</td></tr>`}
     </tbody></table></div>
     ${encerradas.length?`<div class="pg" style="font-size:15px;margin-top:22px">✓ Encerradas (${encerradas.length})</div>
     <div class="card" style="padding:6px 10px;overflow-x:auto"><table style="width:100%;border-collapse:collapse"><tbody>
     ${encerradas.slice().sort((a,b)=>(b.desfecho_em||'').localeCompare(a.desfecho_em||'')).map(r=>`<tr onclick="emAbrir('${esc(emChave(r))}')" style="cursor:pointer;border-top:1px solid var(--linha);opacity:.72">
       <td style="padding:8px;font-weight:800;color:${r.desfecho==='emitida'?'var(--verde)':'var(--verm)'}">${r.desfecho==='emitida'?'✓ emitida':'✕ cancelada'}</td><td><b>${esc(r.proposta||r.apolice)}</b></td><td>${esc(atTitleC(r.segurado)||'—')}</td><td style="font-size:12px">${atFmtBR(r.desfecho_em)}</td><td style="font-weight:700">${r.afyc_projetado!=null?brl(r.afyc_projetado):'—'}</td></tr>`).join('')}
-    </tbody></table></div>`:''}`;
+    </tbody></table></div>`:''}</div>`;
+  if(FEM.aba==='emit'){ const w=$('#uw-pend'); if(w) w.innerHTML=exAbaHtml(); }   /* UW-EMISSAO-V2: aba Emitidas · entrega */
 }
 
 /* ═══ Entrega 2 · SOLICITAÇÕES (so*) ════════════════════════════════════════
@@ -22104,6 +22322,30 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const ex=of.records.map((r,i)=>Object.assign({id:'x'+i,status:'Sem tratativa'},r)), d=atDiffOficial(ex,of.records);
       const t11=d.novos.length===0&&d.sumiram.length===0&&d.updates.every(u=>!u.ch.length);
       return t8&&t9&&t10&&t11; })());
+    ok('UW-EMISSAO-V2: relógio 60 d (69 estourou · 55 faltam 5 · 4 sem chip); janela Not Taken 22/30 dentro e 45 fora; not_taken só até 30 d do cancelamento; sumiu só no período e LP do relatório; mesmo relatório 2× não marca ninguém', (()=>{
+      const h=atHojeLocal(), iso=n=>plpIso(new Date(h.getFullYear(),h.getMonth(),h.getDate()-n));
+      const t1=emRelogio(emDiasProposta({dt_assinatura:iso(69)},h)).txt===('69/60 · estourou')&&emRelogio(emDiasProposta({dt_assinatura:iso(55)},h)).estado==='vence7'
+        &&emRelogio(emDiasProposta({dt_assinatura:iso(55)},h)).txt==='55/60 · faltam 5'&&emRelogio(emDiasProposta({dt_assinatura:iso(4)},h)).estado===''&&emRelogio(4).txt==='4/60';
+      const t3=exRelogioNT(exDiasEmissao({emissao:iso(22)},h)).janela&&exRelogioNT(22).txt==='22/30 · faltam 8'&&!exRelogioNT(exDiasEmissao({emissao:iso(45)},h)).janela;
+      const em={emissao:'2026-09-01'}; const t6=!exDesfechoValido(em,'not_taken','2026-10-11').ok&&exDesfechoValido(em,'not_taken','2026-10-11').sugere==='cancelada'&&exDesfechoValido(em,'not_taken','2026-09-21').ok&&exDesfechoValido(em,'cancelada','2026-12-01').ok;
+      const base=[{apolice:'000000001',lp:'Gustavo',emissao:'2026-10-05'},{apolice:'000000002',lp:'Gustavo',emissao:'2026-08-01'},{apolice:'000000003',lp:'Daniel',emissao:'2026-10-05'},{apolice:'000000004',lp:'Gustavo',emissao:'2026-10-06'}];
+      const novo=[{apolice:'000000004',lp:'Gustavo',emissao:'2026-10-06'},{apolice:'000000005',lp:'Gustavo',emissao:'2026-10-20'}];
+      const sum=exSumidas(base,novo,'2026-10-01','2026-10-22'); const t14=sum.length===1&&sum[0].apolice==='000000001'&&exSumidas(novo,novo,'2026-10-01','2026-10-22').length===0;
+      return t1&&t3&&t6&&t14; })());
+    ok('PLACED-PERIODO-V1: A=26 E=21 P=5 → 80,8% · listrado 100% · curto k=3 (92,3%) · n=37 (36 não basta); A=26 E=24 já qualifica; A=0 sem divisão por zero; faixas 92,0/91,9/86,9; período 23/10/26 e 02/11/26; dedupe pendência+emitida; exclusões; simulador', (()=>{
+      const c=plpCalc(26,21,5,{alto:92,baixo:87});
+      const t8=plpPct(c.placed)==='80,8'&&Math.round(c.listrado)===100&&c.curto===3&&plpPct(plpSim(26,21,3,0))==='92,3'&&c.n===37&&plpSim(26,21,0,37)>=92&&plpSim(26,21,0,36)<92
+        &&plpCalc(26,24,0,{alto:92,baixo:87}).n===0&&plpCalc(26,24,0,{alto:92,baixo:87}).faixa==='qualifica'&&plpCalc(0,0,0).placed===0&&plpCalc(26,10,2,{alto:92,baixo:87}).curto===null;
+      const m={alto:92,baixo:87}; const t9=plpFaixa(92.0,m)==='qualifica'&&plpFaixa(91.9,m)==='rebaixa'&&plpFaixa(86.9,m)==='nao_participa';
+      const p1=plpPeriodo(new Date(2026,9,23)), p2=plpPeriodo(new Date(2026,10,2));
+      const t11=p1.inicio==='2025-11-01'&&p1.fim==='2026-10-31'&&p1.emissao_ate==='2027-01-31'&&p1.faltam===8&&p2.inicio==='2026-11-01'&&p2.fim==='2027-10-31'
+        &&plpClassifica({emissao:'2027-01-15'},p1)==='emitida'&&plpClassifica({emissao:'2027-02-15'},p1)==='emitida_tarde';
+      const U=plpUniverso([{proposta:'P1E',dt_assinatura:'2026-03-01'},{proposta:'P2E',dt_assinatura:'2026-03-02',nao_conta:true,nao_conta_motivo:'mpp'}],[{proposta:'P1E',apolice:'000000009',dt_assinatura:'2026-03-01',emissao:'2026-04-01'}],p1,'');
+      const t7=U.conta.length===1&&plpClassifica(U.conta[0],p1)==='emitida'&&U.fora.length===1;
+      const t10=plpClassifica({emissao:'2026-05-01',desfecho:'not_taken'},p1)==='not_taken'&&plpClassifica({emissao:'2026-05-01',desfecho:'reabilitada',saiu_do_relatorio_em:'2026-06-01T10:00:00Z',desfecho_em:'2026-08-01'},p1)==='emitida'
+        &&plpClassifica({emissao:'2026-05-01',desfecho:'reabilitada',saiu_do_relatorio_em:'2026-01-01T10:00:00Z',desfecho_em:'2026-08-01'},p1)==='cancelada';
+      const t12=plpPct(plpSim(26,21,3,0))==='92,3'&&plpPct(plpSim(26,21,0,37))==='92,1'&&plpSim(26,21,5,0)===100;
+      return t8&&t9&&t11&&t7&&t10&&t12; })());
     ok('cobrança: os scripts carregam no boot, não só no Sincronizar', BOOT_LOADERS.indexOf(atScriptsCarregar)>=0);
     ok('script: rótulo separa "sem motivo" de "motivo sem script"', (()=>{
       const a=atScriptRot({motivo_recusa:''}), b=atScriptRot({motivo_recusa:'erro 733 sei la'});
