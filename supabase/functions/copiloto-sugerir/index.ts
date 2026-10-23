@@ -38,6 +38,17 @@ function escolhaDaFerramenta(modelo: string) {
     : { type: "auto" as const };
 }
 
+// A chave: secret ANTHROPIC_API_KEY. Se cadastraram com outro nome ("Anthropic API Key", CLAUDE_API_KEY…), acha pelo formato sk-ant-.
+function chaveAnthropic(): string | undefined {
+  const limpa = (v?: string) => String(v ?? "").trim().replace(/^["']|["']$/g, "");
+  const k = limpa(Deno.env.get("ANTHROPIC_API_KEY"));
+  if (k.startsWith("sk-ant-")) return k;
+  for (const [n, v] of Object.entries(Deno.env.toObject())) {
+    if (/anthrop|claude/i.test(n) && limpa(v).startsWith("sk-ant-")) return limpa(v);
+  }
+  return k || undefined;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return falha(405, "metodo", "Use POST.");
@@ -61,8 +72,11 @@ Deno.serve(async (req) => {
   const contatoId = body?.contato_id ? String(body.contato_id).slice(0, 80) : null;
 
   // ── chave (antes de qualquer custo) ──
-  const KEY = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!KEY) return falha(503, "sem_chave", "Copiloto sem chave configurada.");
+  const KEY = chaveAnthropic();
+  if (!KEY) {
+    const nomes = Object.keys(Deno.env.toObject()).filter((n) => /anthrop|claude/i.test(n));   /* só NOMES, nunca valores */
+    return falha(503, "sem_chave", "Copiloto sem chave configurada." + (nomes.length ? ` Secrets parecidos: ${nomes.join(", ")} — o valor precisa começar com sk-ant-.` : ""));
+  }
 
   // ── contexto mínimo do CRM (RLS do próprio usuário) ──
   let nome = "", etapa = "", dono = email;
