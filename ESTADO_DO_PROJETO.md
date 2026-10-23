@@ -2,6 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 23/10/2026 (tarde/noite) — UMBLER LÊ TUDO (no ar) · crm-mcp v3 (no ar) · ❄️ Congelar v8.80 (PR #311, falta OK)
+
+- **Umbler (UMBLER-V1, decisão dele: "deve ler tudo"; envio SEMPRE humano, Gustavo/Victor):** tabelas `umbler_chats/mensagens/eventos/estado` (RLS só leitura por dono+delegado), Edge Function `umbler` (cron 10 min via pg_cron+pg_net, webhook `?k=`, botão), chaves no Vault. Token salvo por ele 23/10. 1ª carga completa: ~450 conversas, ~3.500 msgs, histórico completo. `External` = msg pelo celular → conta como nossa. Doc: `docs/umbler-leitura.md`. Branch `feat/umbler-leitura` (só backend; não precisa merge pra funcionar). Webhook no Talk: opcional, URL passada no chat.
+- **crm-mcp v3.0 (deploy v9, no ar):** 8 ferramentas só leitura pros assistentes — conversas_listar/ler/buscar/status, contato_conversa, funil_resumo, negocios_listar, emissao_pendencias. Testado ao vivo com conector temporário (revogado; linha vazia em `lp_mcp_sessions` label "teste-temporario-claude-23-10 (revogado)" → apagar na faxina de 31/10). Doc: `docs/crm-mcp-v3.md`.
+- **Pietra (neg. seguros) e Pietro (Multi Office):** prompts prontos em `docs/prompts-pietra-pietro.md` (entregues no chat). São chats do claude.ai — ele cola; pré-requisito: conector do CRM ligado no projeto de cada um.
+- **❄️ Congelar oportunidade (CONGELAR-V1, v8.80, PR #311 aberto, portão verde):** opção A dele, "sai do PA". Botão no menu ⚑ e na ficha; some do quadro; ❄️ Congelados (N · PA); relógio para; "rever em" descongela + cria atividade. Sair do PA = MODS `congelar-pa` def:false (admin ligado). **Falta: OK dele pro merge** e decidir se liga `congelar-pa` pro Victor/Daniel.
+- Copiloto: segue esperando ANTHROPIC_API_KEY (o print dele mostrou "No custom secrets" antes do UMBLER_TOKEN).
+
 ## 🟡 RETOMAR AQUI — 23/10/2026 (madrugada) — Parte A NO AR (v8.78, PR #308) · Parte B NO AR (v8.79, PR #309, OK dele: "A, publica")
 
 - **Parte B:** Pendências de Emissão com abas Pendentes / Emitidas · entrega; relógio 60 d da proposta (x/60, estourou, vencem em 7 d), 1ª parcela manual, 💬/📞; emitidas com x/30 (Not Taken), 2ª parcela manual, pronta automática (carteira), Entregar (histórico do card + lp_interacoes), ＋ tarefa no card, sumiu → desfecho (not_taken só ≤ 30 d). PLACED: seção "Placed por período" acima do R05 (motor único plp*, caminhos a 92%, simulador, tabelas, regras, aviso de prazo). R05 intacto. Doc: `docs/uw-emissao-entrega-placed.md`.
