@@ -28,7 +28,15 @@ const CORS = {
 };
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-const falha = (status: number, codigo: string, mensagem: string) => json(status, { ok: false, codigo, mensagem });
+const falha = (status: number, codigo: string, mensagem: string, detalhe?: string) =>
+  json(status, detalhe ? { ok: false, codigo, mensagem, detalhe } : { ok: false, codigo, mensagem });
+// COPILOTO-DIAG (24/10): o erro da Anthropic volta no campo `detalhe` (status + tipo + mensagem da API).
+// Nunca tem a chave: a API não ecoa credencial. Sem isso o "IA indisponível" escondia o motivo real.
+function detalheAnthropic(e: any): string {
+  const tipo = e?.error?.error?.type || e?.error?.type || "";
+  const msg = e?.error?.error?.message || e?.error?.message || e?.message || "";
+  return `${e?.status ?? "?"} ${tipo}: ${String(msg).slice(0, 240)}`.trim();
+}
 
 // Claude Haiku 5.5 aceita tool_choice forçado; Opus 5.5 / Sonnet 5.5 / Fable 5.1 recusam (400).
 // Se trocarem o COPILOTO_MODELO pra um desses, cai pra "auto" + a instrução no prompt.
@@ -114,8 +122,8 @@ Deno.serve(async (req) => {
     if (e instanceof Anthropic.AuthenticationError) return falha(503, "sem_chave", "Copiloto sem chave válida — confira o ANTHROPIC_API_KEY.");
     if (e instanceof Anthropic.APIConnectionTimeoutError) return falha(504, "timeout", "A IA demorou demais. Tente de novo.");
     if (e instanceof Anthropic.RateLimitError) return falha(429, "limite", "Muitas sugestões seguidas. Espere um pouco.");
-    if (e instanceof Anthropic.APIError) { console.error("anthropic", e.status, e.message); return falha(502, "ia_indisponivel", "A IA está indisponível agora."); }
-    console.error("copiloto", e); return falha(502, "ia_indisponivel", "A IA está indisponível agora.");
+    if (e instanceof Anthropic.APIError) { console.error("anthropic", e.status, e.message); return falha(502, "ia_indisponivel", "A IA está indisponível agora.", detalheAnthropic(e)); }
+    console.error("copiloto", e); return falha(502, "ia_indisponivel", "A IA está indisponível agora.", String((e as any)?.message ?? e).slice(0, 240));
   }
   if (!sug) return falha(502, "resposta_invalida", "A IA respondeu fora do formato. Tente de novo.");
   sug = travaDura(sug, nome, janelas);
