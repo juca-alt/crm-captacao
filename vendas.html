@@ -1688,6 +1688,9 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     <button class="nav-btn" data-view="agenda" onclick="irPara('agenda')"><span class="ic">📅</span><span class="lbl">Agenda &amp; Tarefas</span><span class="cnt" id="cnt-agenda"></span></button>
 
     <div class="sep"></div>
+    <!-- FUNIL-UNICO-V1 (24/10): os 2 funis novos — só na base dele (data-novo="funil-unico") até ele liberar. -->
+    <button class="nav-btn" data-view="fu-vi" data-novo="funil-unico" onclick="irPara('fu-vi')"><span class="ic">🎯</span><span class="lbl">Vida Individual · novo</span></button>
+    <button class="nav-btn" data-view="fu-mfo" data-novo="funil-unico" onclick="irPara('fu-mfo')"><span class="ic">🏢</span><span class="lbl">MFO · novo</span></button>
     <!-- PIPES-V1 (18/09): "Pipe Negócios" virou PIPE VIDA INDIVIDUAL (Consolidada · Novos Negócios · Negócios na Base).
          Nascem Pipe Vida em Grupo, Pipe Prud. Demais e Pipe MFO, com o MESMO trio e o mesmo estilo de card.
          Os 3 pipes novos: só na base dele (data-novo="pipes") e, quando liberar, por usuário (MODS.funis_extra). -->
@@ -1837,6 +1840,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <aside class="drawer" id="drawer"></aside>
 <div id="toasts"></div>
 
+<!-- FUNIL-UNICO-V1 · T3: o quadro dos 2 funis novos mora em arquivo próprio (não briga com a sessão paralela) -->
+<script src="modulos/funil-unico.js"></script>
 <script>
 /* CARD-WA-LEVE-V1 (19/10/2026): ?wa=1 = o card do CRM dentro da extensão do WhatsApp. Sabido ANTES de tudo (render e boot
    leem isto) — o MODO_WA de lá de baixo nasce tarde demais pra quem roda na carga. */
@@ -5331,7 +5336,7 @@ function cicloDiasNaEtapa(c,hoje){ const e=cicloEntradaEtapa(c); if(!e) return n
 function cicloChipHtml(c){ if(!c||etEhEnc(c)) return ''; if(congEh(c)) return congChipHtml(c); const d=cicloDiasNaEtapa(c); if(d==null) return '';
   const e=cicloEntradaEtapa(c), cor=d>=30?'var(--verm,#dc2626)':d>=14?'#b45309':'var(--muted)';
   return `<div class="nc-ciclo" style="font-size:10.5px;margin-top:4px;color:${cor}" title="Na etapa ${esc(ET_LABEL[c.etapa]||c.etapa||'')} desde ${dataBR(e.iso)}${e.fonte==='movimento'?'':' (sem registro de movimento: conta da entrada no funil)'}">⏱️ ${d===0?'entrou hoje':d+'d'} em ${esc(ET_LABEL[c.etapa]||c.etapa||'')}</div>`; }
-function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }
+function logEtapa(c,de,para){ if(c&&de!==para) delete c.status; /* STATUS-ETAPA-V1 */ interacoesDe(c).push({id:uid(),k:'etapa',l:`Etapa: ${de} → ${para}`,de,para,dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});  try{ if(typeof fuSincLegado==='function') fuSincLegado(c); }catch(_){} }   /* FUNIL-UNICO-V1: o funil novo acompanha a tela antiga */
 /* GC-08 (07/09): registrar um toque/status manual na jornada da rec/contato */
 let JORNADA_TUDO=false;
 function jornadaAddNota(){ const c=S.contatos.find(x=>x.id===CONTATO); if(!c) return; const el=document.getElementById('jornadaNota'); const t=el?(el.value||'').trim():''; if(!t){ if(el) el.focus(); return; }
@@ -16024,12 +16029,13 @@ let NAV_SRV_EM='';   /* troca de conta = busca de novo */
 let NAV_SRV=0;   /* 0 = não buscou · 1 = buscando · 2 = feito */
 function navPrefsEmail(){ return (typeof PERFIL!=='undefined'&&PERFIL&&PERFIL.email)?String(PERFIL.email).toLowerCase():''; }
 async function navPrefsSubir(){ const em=navPrefsEmail(); if(!em||!sb) return false;
-  try{ const {error}=await sb.from('lp_user_prefs').upsert({email:em,prefs:{nav_ordem:navOrdLer(),mod_fixados:modFixados()},atualizado:new Date().toISOString()},{onConflict:'email'});
+  try{ const {error}=await sb.from('lp_user_prefs').upsert({email:em,prefs:Object.assign({nav_ordem:navOrdLer(),mod_fixados:modFixados()},(typeof fuPrefsSubir==='function')?{fu_cols:fuPrefsSubir()}:{}),atualizado:new Date().toISOString()},{onConflict:'email'});
     if(error) throw error; return true; }catch(e){ console.warn('lp_user_prefs: não subiu (fica no aparelho)',e); return false; } }
 async function navPrefsBaixar(){
   if(NAV_SRV||!sb||!logado()||!navPrefsEmail()) return; NAV_SRV=1; NAV_SRV_EM=navPrefsEmail();
   try{ const {data,error}=await sb.from('lp_user_prefs').select('prefs').eq('email',navPrefsEmail()).maybeSingle(); if(error) throw error;
     const pr=(data&&data.prefs)||null;
+    try{ if(pr&&pr.fu_cols&&typeof fuPrefsAplicar==='function') fuPrefsAplicar(pr.fu_cols); }catch(_){}   /* FUNIL-UNICO-V1: colunas do funil novo por usuário */
     if(pr&&(pr.nav_ordem||Array.isArray(pr.mod_fixados))){
       if(pr.nav_ordem&&Array.isArray(pr.nav_ordem.ordem)) navOrdGravar(pr.nav_ordem);
       if(Array.isArray(pr.mod_fixados)){ try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(pr.mod_fixados.map(String))); }catch(_){} }
@@ -18128,7 +18134,8 @@ function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) 
     if(MODS[k].grp){ const t=$('#'+MODS[k].grp+'-toggle'); if(t){ /* grupo SitPlan fica: a lista do dia é core */ } }
   });
   /* NOVO-SO-MEU no menu: item com data-novo só aparece pra quem a chave libera (depois do MODS, que pode ter ligado) */
-  document.querySelectorAll('.nav-btn[data-novo]').forEach(b=>{ const k=b.dataset.novo; if(!(k==='pipes'?modOn('funis_extra'):novoOn(k))) b.style.display='none'; });   /* LIBERA-VICTOR-V1: os pipes seguem o módulo funis_extra (liga por usuário) */
+  document.querySelectorAll('.nav-btn[data-novo]').forEach(b=>{ const k=b.dataset.novo; if(!(k==='pipes'?modOn('funis_extra'):novoOn(k))) b.style.display='none'; });
+  document.querySelectorAll('.nav-btn[data-novo="funil-unico"]').forEach(b=>{ b.style.display=novoOn('funil-unico')?'':'none'; });   /* FUNIL-UNICO-V1: segue a chave nos dois sentidos (o perfil pode chegar depois) */   /* LIBERA-VICTOR-V1: os pipes seguem o módulo funis_extra (liga por usuário) */
   /* PIPES-V1: o cabeçalho de um pipe só aparece se sobrou algum item visível dentro dele */
   document.querySelectorAll('.nav-grp-btn[data-pipe]').forEach(t=>{ const g=document.getElementById(t.id.replace('-toggle','-group')); if(!g) return;
     const vivo=[...g.querySelectorAll('.nav-btn[data-view]')].some(b=>b.style.display!=='none'); t.style.display=vivo?'':'none'; if(!vivo) g.style.display='none'; else g.style.display=''; });
@@ -20178,7 +20185,7 @@ async function admDesdelegar(dono,para){ const r=await sb.from('lp_delegacoes').
 const TITULO_VIEW={inicio:'Início',consolidado:'Visão Consolidada',modulos:'Módulos',config:'Configurações',sitplan:'SitPlan',metas:'Metas',contatos:'Contatos',
   'bn-estoque':'Estoque de Nomes','bn-ta':'Painel TA','bn-wa':'Painel WA',mapa:'Mapa de locais','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
-  'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo · Novos Negócios','prud-funil':'Prud. Demais · Novos Negócios','mfo-funil':'MFO · Novos Negócios',
+  'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','fu-vi':'Vida Individual','fu-mfo':'MFO','vg-funil':'Vida em Grupo · Novos Negócios','prud-funil':'Prud. Demais · Novos Negócios','mfo-funil':'MFO · Novos Negócios',
   plano:'Plano Prudential','consol-vg':'Consolidada · Vida em Grupo','consol-prud':'Consolidada · Prud. Demais','consol-mfo':'Consolidada · MFO','vg-bc-funil':'Vida em Grupo · Negócios na Base','prud-bc-funil':'Prud. Demais · Negócios na Base','mfo-bc-funil':'MFO · Negócios na Base','lp-atrasos':'Lista de Atraso',
   'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência',parceiros:'Parceiros',embaixadores:'Embaixadores',importacoes:'Relatórios do portal',conversas:'Conversas','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
@@ -20298,6 +20305,7 @@ function render(){
   else if(VIEW==='consolidado'||VIEW==='consol-vg'||VIEW==='consol-prud'||VIEW==='consol-mfo') viewConsolidado();
   else if(VIEW==='nn-funil') viewNnFunil();
   else if(VIEW==='bc-funil') viewBcFunil();
+  else if(VIEW==='fu-vi'||VIEW==='fu-mfo'){ if(typeof viewFunilNovo==='function'&&novoOn('funil-unico')) viewFunilNovo(VIEW==='fu-mfo'?'mfo':'vi'); else { VIEW='inicio'; viewInicio(); } }   /* FUNIL-UNICO-V1 · T3 */
   else if(VIEW==='vg-funil') viewFunilExtra('vg');
   else if(VIEW==='prud-funil') viewFunilExtra('prud');
   else if(VIEW==='mfo-funil') viewFunilExtra('mfo');
@@ -23655,6 +23663,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: numero vazio nao vira zero', atCsvNum(null) === '' && atCsvNum(undefined) === '');
     ok('export: cabecalho tem uma coluna por definicao', atCsv([]).split(';').length === AT_CSV_COLS.length);
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
+    if(typeof fuSelfTests==='function') fuSelfTests(ok); else ok('FUNIL-UNICO T3: módulo modulos/funil-unico.js carregado',false);
     /* FUNIL-UNICO-V1 · T1 — teste de aceite nº 1 da spec (adaptado aos 2 funis) + cobertura de todo valor real (fábrica) */
     { const M=(f,e)=>mapearEtapa(f,e), _m=ETAPA_MAPA; ETAPA_MAPA=ETAPA_MAPA_FAB;
       const is=(r,fn,et,st,rv)=>r.funil_id===fn&&r.etapa_id===et&&(st===undefined||r.status_card===st)&&r.precisa_revisao===!!rv;
@@ -25204,7 +25213,7 @@ window.viewConversas=viewConversas; window.cvAbrir=cvAbrir; window.cvFechar=cvFe
 window.cvSincronizar=cvSincronizar; window.cvCopiar=cvCopiar; window.cvAbrirFicha=cvAbrirFicha;
 window.cvRecarregar=cvRecarregar; window.cvExemplo=cvExemplo;
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','plano','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','fu-vi','fu-mfo','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado','parceiros','embaixadores','importacoes','conversas'];
 /* ═══ MODO-WA-V1 (28/09/2026) ════════════════════════════════════════════════════════
    Palavra dele (extensão do WhatsApp): "abre algo como o próprio card da oportunidade que abro no CRM — ali tem tudo,
