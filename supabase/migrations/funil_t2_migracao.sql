@@ -9,6 +9,8 @@
 --     ↳ etapa_revisao e NÃO precisa_revisao: precisa_revisao já existe em 5.228 nomes do Estoque com outro sentido.
 --   linha (prud = Vida Individual | vg | prud_demais | mo = Multi Office) · origem_tipo — só se ainda não existirem
 --   ance_auto só na Vida Individual (no MFO fica null: o ANCE é método da vida individual)
+--   ance_manual (decisão 3C: automático + a nota dele por cima): nasce da marcação manual de hoje (ance a/n/c/e/avisado ou
+--     estrelas antigas); só se ainda não existir — depois é o clique dele nas estrelas que grava
 --   cliente_ativo · ance_auto · alta_renda · ultimo_contato · prox_passo — derivados, recalculados a cada rodada
 --     ↳ prox_passo e NÃO proximo_passo: proximo_passo já existe como TEXTO livre antigo (a ficha do MFO mostra).
 --   funil_unico_v = 1 (carimbo da migração)
@@ -133,6 +135,15 @@ begin
     'alta_renda', coalesce(public.fn_funil_num(fat->>'renda')      >= public.fn_funil_num(cfg#>>'{alta_renda,renda}'), false)
                or coalesce(public.fn_funil_num(fat->>'patrimonio') >= public.fn_funil_num(cfg#>>'{alta_renda,patrimonio}'), false));
 
+  -- 3C: a nota manual de hoje (A·N·C·E + Avisado, ou estrelas antigas) vira a nota por cima do automático
+  if not (d ? 'ance_manual') and coalesce(p->>'funil_id', d->>'funil_id') is distinct from 'mfo' then
+    p := p || jsonb_build_object('ance_manual', case
+      when jsonb_typeof(d->'ance') = 'object' and exists (select 1 from jsonb_each(case when jsonb_typeof(d->'ance')='object' then d->'ance' else '{}'::jsonb end) e where e.value = 'true'::jsonb)
+        then least(5, (select count(*) from jsonb_each(case when jsonb_typeof(d->'ance')='object' then d->'ance' else '{}'::jsonb end) e where e.key in ('a','n','c','e','avisado','av') and e.value = 'true'::jsonb))::int
+      when coalesce(public.fn_funil_num(d->>'estrelas'), 0) > 0 then least(5, public.fn_funil_num(d->>'estrelas'))::int
+      else null end);
+  end if;
+
   -- último contato: o mais recente entre o histórico do card, as tarefas concluídas e o Painel TA (lp_interacoes)
   p := p || jsonb_build_object('ultimo_contato', (
     select jsonb_build_object('tipo', tipo, 'quando', quando, 'fonte', fonte) from (
@@ -169,7 +180,7 @@ revoke all on function public.fn_funil_no_quadro(jsonb), public.fn_funil_num(tex
                        public.fn_funil_ance_auto(jsonb,jsonb), public.fn_funil_t2_patch(text,text,jsonb) from anon, public;
 
 -- 6) aplica (só onde muda)
-with alvo as (
+with alvo as materialized (   -- materialized: sem isso o patch roda 1× por referência (11× no relatório; 2× aqui)
   select c.dono, c.id, c.dados || public.fn_funil_t2_patch(c.dono, c.id, c.dados) as novo
     from public.lp_contatos c where public.fn_funil_no_quadro(c.dados))
 update public.lp_contatos c set dados = a.novo
