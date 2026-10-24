@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 RETOMAR AQUI — 24/10/2026 — 💬 CONVERSAS v8.81 (tela nova, aguarda o OK dele)
+## 🟢 RETOMAR AQUI — 24/10/2026 — 💬 CONVERSAS v8.81 NO AR (PR #312, OK dele: "A" = só ele + Victor)
 
 - **CONVERSAS-V1 (v8.81, branch `claude/conversas-t1`, portão verde, PR aberto):** o WhatsApp do Umbler Talk dentro do CRM, **só leitura**. Lê `umbler_chats`/`umbler_mensagens` (UMBLER-V1 de 23/10, já no ar); o único botão que vai ao servidor é o 🔄 Sincronizar agora, que chama a Edge Function `umbler` (que só faz GET no Talk). Doc: `docs/conversas.md`.
 - **Enviar: nunca daqui** (palavra dele, 23/10). Sem campo de resposta, sem botão de enviar — só 📋 copiar texto, 💬 abrir no WhatsApp e 🔗 abrir no Talk. Invariante fecha o portão se aparecer textarea, botão Enviar/Responder/Mandar, `/v1/messages` ou escrita nessas tabelas.
@@ -12,6 +12,7 @@
 - **Celular × desktop:** celular = lista, e a conversa em **tela cheia** com o **voltar do Android** fechando ela (camada `conversa`, entre `ficha` e `gaveta`); desktop = **dois painéis**. Portão: 51 telas × 6 cenários, 0 exceção / 0 campo morto / 0 estouro / 0 fonte <16px na lista E na conversa. Prints 390 e 1280.
 - `portao.html` ganhou `cvExemplo` (fixture **inventada**, sem dado de cliente) e o gancho que abre a conversa — assim o portão mede a tela cheia do celular também.
 - **A conferir com ele:** o 🔗 "Abrir no Talk" usa o id da API em `app-utalk.umbler.com/chats/<id>`; o `umbler-dom.js` diz que o id da URL do Talk muda entre a lista e a conversa aberta, então o link pode cair na lista. O 💬 WhatsApp (pelo telefone) funciona de todo jeito.
+- **Publicado 24/10** (OK dele "A"): PR #312 mergeado; Pages conferido por hash (v8.81, sha ef1300b7d9d3). Visível só pra ele e pro Victor.
 - **Pendente:** liberar (ou não) pro Daniel — decisão dele. Copiloto (Tarefa 2) segue esperando o `ANTHROPIC_API_KEY` nos secrets.
 
 ## 🟡 RETOMAR AQUI — 23/10/2026 (tarde/noite) — UMBLER LÊ TUDO (no ar) · crm-mcp v3 (no ar) · ❄️ Congelar v8.80 (no ar)
