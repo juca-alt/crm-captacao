@@ -1890,8 +1890,8 @@ const FUNIL_FAB={
   'mfo-bc': [['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
   /* FUNIL-UNICO-V1 · T1 (24/10): o funil único — a vida inteira do nome num quadro (spec PROMPT_CODE Funil Único §3.1).
      ids em minúsculas de propósito: ET_LABEL/PROB_ETAPA são mapa GLOBAL por id, e 'FA'/'N'/'C2' do Funil LP colidiriam.
-     5º campo = rótulo padrão. Ordem = a da spec; ele confirma a ordem final (FA × C2 × N) na revisão do T1. */
-  unico:[['novo','cinza',5,0,'Novo'],['oi','amarelo',20,0,'OI'],['revisita','amarelo',25,0,'Revisita'],['pc','roxo',35,0,'PC'],['n','amarelo',70,0,'N'],['c2','azul',50,0,'C2'],['fa','azul',85,0,'FA'],
+     5º campo = rótulo padrão. Ordem pela probabilidade (decisão dele 24/10, "1C"): PC → C2 → N → FA. */
+  unico:[['novo','cinza',5,0,'Novo'],['oi','amarelo',20,0,'OI'],['revisita','amarelo',25,0,'Revisita'],['pc','roxo',35,0,'PC'],['c2','azul',50,0,'C2'],['n','amarelo',70,0,'N'],['fa','azul',85,0,'FA'],
          ['emitida','verde',100,0,'Apólice Emitida'],['entrega','verde',100,0,'Entrega de Apólice'],['nao','verm',0,1,'Não'],['prop_cancelada','verm',0,1,'Proposta Cancelada'],['apol_cancelada','verm',0,1,'Apólice Cancelada']]
 };
 const PIPE_BC_ATIVOS='Clientes Ativos';   /* 1ª coluna dos "Negócios na Base" de qualquer pipe: cliente parado, fora do fluxo */
@@ -2147,10 +2147,10 @@ rebuildFunilLp();
    sem linha ou etapa vazia → novo + precisa_revisao (nunca inventar). */
 const ETAPA_MAPA_FAB=[
   ['*','SitPlan','novo','sitplan',false],['*','TA','novo','ta_na_lista',false],['*','OI/FF','oi',null,false],['*','P/C','pc',null,false],
-  ['*','C2','c2',null,false],['*','N','n',null,false],['*','FA','fa',null,false],['*','EMISSÃO','fa',null,false],['*','DELIVERY','entrega',null,false],
+  ['*','C2','c2',null,false],['*','N','n',null,false],['*','FA','fa',null,false],['*','EMISSÃO','n',null,false],['*','DELIVERY','entrega',null,false],
   ['*','Não','nao',null,false],['*','Prop. Cancelada','prop_cancelada',null,false],['*','Apól. Cancelada','apol_cancelada',null,false],
   ['*','Clientes Ativos','emitida',null,false],['*','Contato Agenda/Revisita','revisita',null,false],['*','Agendada Revisita','revisita',null,false],
-  ['*','Novo Negócio/Resolução pós Revisita','pc',null,false],['*','N/Emissão','n',null,false],['*','Emissão Final','fa',null,false],
+  ['*','Novo Negócio/Resolução pós Revisita','pc',null,false],['*','N/Emissão','n',null,false],['*','Emissão Final','n',null,false],
   ['*','Venda ganha','emitida',null,false],['*','Venda perdida','nao',null,false],['*','Pendência/Atraso','emitida',null,false],['bc','cst_1','novo',null,true],
   ['*','Oportunidade','novo',null,false],['*','Em contato','novo','em_contato',false],['*','Análise','n',null,false],['*','Proposta','n',null,false],
   ['*','Fechamento','fa',null,false],['*','Ganho','emitida',null,false],['*','Perdido','nao',null,false],['*','Contato/Revisita','revisita',null,false],
@@ -23526,7 +23526,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('FUNIL-UNICO T1: linha do funil ganha da genérica (Fechamento da captação → N; dos pipes → FA)', M('leads','Fechamento').etapa_id==='n'&&M('mfo','Fechamento').etapa_id==='fa');
         ok('FUNIL-UNICO T1: compara sem caixa e sem espaço nas pontas', M('NN','  oi/ff ').etapa_id==='oi'&&M('bc','delivery').etapa_id==='entrega');
         const ids=FUNIL_FAB.unico.map(x=>x[0]);
-        ok('FUNIL-UNICO T1: 12 etapas na ordem da spec (9 no fluxo, 3 encerramentos)', ids.join()==='novo,oi,revisita,pc,n,c2,fa,emitida,entrega,nao,prop_cancelada,apol_cancelada'&&FUNIL_FAB.unico.filter(x=>x[3]).length===3&&(ETAPAS_MAP.unico&&ETAPAS_MAP.unico.fluxo.length)===9);
+        ok('FUNIL-UNICO T1: 12 etapas na ordem combinada — PC → C2 → N → FA (9 no fluxo, 3 encerramentos)', ids.join()==='novo,oi,revisita,pc,c2,n,fa,emitida,entrega,nao,prop_cancelada,apol_cancelada'&&M('nn','EMISSÃO').etapa_id==='n'&&M('bc','Emissão Final').etapa_id==='n'&&M('vg','Oportunidade').etapa_id==='novo'&&FUNIL_FAB.unico.filter(x=>x[3]).length===3&&(ETAPAS_MAP.unico&&ETAPAS_MAP.unico.fluxo.length)===9);
         ok('FUNIL-UNICO T1: todo destino do mapa existe no funil único', ETAPA_MAPA_FAB.every(r=>ids.includes(r[2])));
         ok('FUNIL-UNICO T1: toda etapa de fábrica de todos os funis tem mapa (sem cair em revisão)', Object.keys(FUNIL_FAB).filter(f=>f!=='unico').every(f=>FUNIL_FAB[f].every(x=>!M(f==='lp'?'nn':f,x[0]).precisa_revisao)));
         const reais=['SitPlan','TA','OI/FF','P/C','C2','N','FA','N/Emissão','EMISSÃO','Emissão Final','DELIVERY','Delivery','Clientes Ativos','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','Fechamento','Venda perdida','Não','Prop. Cancelada','Apól. Cancelada','Oportunidade','Proposta','Análise','Em contato'];
