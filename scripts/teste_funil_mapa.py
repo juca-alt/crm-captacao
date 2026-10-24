@@ -9,11 +9,12 @@ import os, re, sys
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SQL = os.path.join(RAIZ, 'supabase', 'migrations', 'funil_t1_etapas_mapa.sql')
 APP = os.path.join(RAIZ, 'vendas.html')
-LINHA = r"""\(?\[?'([^']*)','([^']*)','([^']*)',\s*(null|'[^']*'),\s*(true|false)"""
+# [funil_origem, etapa_origem, funil_novo, etapa_nova, status_card, precisa_revisao] (2 funis desde 24/10)
+LINHA = r"""\(?\[?'([^']*)','([^']*)','([^']*)','([^']*)',\s*(null|'[^']*'),\s*(true|false)"""
 
 
 def linhas(txt):
-    return {(a, b): (c, None if d == 'null' else d.strip("'"), e == 'true') for a, b, c, d, e in re.findall(LINHA, txt)}
+    return {(a, b): (fn, et, None if st == 'null' else st.strip("'"), rv == 'true') for a, b, fn, et, st, rv in re.findall(LINHA, txt)}
 
 
 def checar():
@@ -30,7 +31,7 @@ def checar():
     for k in sorted(set(s) | set(a)):
         if s.get(k) != a.get(k):
             erros.append(f'{k}: SQL={s.get(k)} · app={a.get(k)}')
-    if len(s) < 40:
+    if len(s) < 60:
         erros.append(f'seed curto demais ({len(s)} linhas) — o regex parou de casar?')
     return erros
 

@@ -1888,11 +1888,13 @@ const FUNIL_FAB={
   'vg-bc':  [['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
   'prud-bc':[['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
   'mfo-bc': [['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
-  /* FUNIL-UNICO-V1 · T1 (24/10): o funil único — a vida inteira do nome num quadro (spec PROMPT_CODE Funil Único §3.1).
-     ids em minúsculas de propósito: ET_LABEL/PROB_ETAPA são mapa GLOBAL por id, e 'FA'/'N'/'C2' do Funil LP colidiriam.
-     5º campo = rótulo padrão. Ordem pela probabilidade (decisão dele 24/10, "1C"): PC → C2 → N → FA. */
-  unico:[['novo','cinza',5,0,'Novo'],['oi','amarelo',20,0,'OI'],['revisita','amarelo',25,0,'Revisita'],['pc','roxo',35,0,'PC'],['c2','azul',50,0,'C2'],['n','amarelo',70,0,'N'],['fa','azul',85,0,'FA'],
-         ['emitida','verde',100,0,'Apólice Emitida'],['entrega','verde',100,0,'Entrega de Apólice'],['nao','verm',0,1,'Não'],['prop_cancelada','verm',0,1,'Proposta Cancelada'],['apol_cancelada','verm',0,1,'Apólice Cancelada']]
+  /* FUNIL-UNICO-V1 · T1 (24/10): DOIS funis novos (decisão dele 24/10: "1 - vida individual · 2 - mfo (vg + demais seguros)").
+     ids em minúsculas e, no MFO, com prefixo m_: ET_LABEL/PROB_ETAPA são mapa GLOBAL por id — 'FA'/'N'/'C2' do Funil LP e a
+     'revisita' de um funil com a do outro colidiriam. 5º campo = rótulo padrão. Vida Individual pela probabilidade ("1C"): PC → C2 → N → FA. */
+  fu_vi:[['novo','cinza',5,0,'Novo'],['oi','amarelo',20,0,'OI'],['revisita','amarelo',25,0,'Revisita'],['pc','roxo',35,0,'PC'],['c2','azul',50,0,'C2'],['n','amarelo',70,0,'N'],['fa','azul',85,0,'FA'],
+         ['emitida','verde',100,0,'Apólice Emitida'],['entrega','verde',100,0,'Entrega de Apólice'],['nao','verm',0,1,'Não'],['prop_cancelada','verm',0,1,'Proposta Cancelada'],['apol_cancelada','verm',0,1,'Apólice Cancelada']],
+  fu_mfo:[['m_oportunidade','cinza',10,0,'Oportunidade'],['m_contato','azul',30,0,'Em contato'],['m_revisita','amarelo',30,0,'Revisita'],['m_analise','azul',45,0,'Análise'],
+          ['m_proposta','roxo',60,0,'Proposta'],['m_fechamento','amarelo',85,0,'Fechamento'],['m_ativo','verde',100,0,'Cliente ativo'],['m_perdido','verm',0,1,'Perdido']]
 };
 const PIPE_BC_ATIVOS='Clientes Ativos';   /* 1ª coluna dos "Negócios na Base" de qualquer pipe: cliente parado, fora do fluxo */
 const FUN_PAL=['cinza','azul','amarelo','roxo','verde','verm'];
@@ -2100,7 +2102,7 @@ const BC_ENC_V1={'Venda perdida':true};
 /* DELIVERY-POS-VENDA-V1 (09/09): Delivery é PÓS-VENDA (entrega da apólice impressa, UAU service).
    A venda fecha em Apólice Emitida (bc:'Venda ganha'; lp:'EMISSÃO'→'DELIVERY'). Delivery NÃO soma
    PA/pond no funil nem conta como venda — mas mantém a coluna. Fonte ÚNICA do "é pós-venda". */
-function ehPosVenda(etapa,funil){ return (funil==='bc') ? etapa===BC_DELIVERY : funil==='unico' ? etapa==='entrega' : etapa==='DELIVERY'; }   /* FUNIL-UNICO-V1: Entrega de Apólice é pós-venda */
+function ehPosVenda(etapa,funil){ return (funil==='bc') ? etapa===BC_DELIVERY : funil==='fu_vi' ? etapa==='entrega' : etapa==='DELIVERY'; }   /* FUNIL-UNICO-V1: Entrega de Apólice é pós-venda */
 /* FUNIL-BC-EDITAVEL-V1 (19/10/2026): ele criava etapa na Base de Clientes, aparecia "Etapa criada" e ela sumia — esta migração
    de 09/09 rodava a CADA salvar e remontava o funil na lista fixa (apagava etapa nova e desfazia reordenação). Agora ela só
    migra cfg ANTIGA (falta alguma das 9 etapas-base) e preserva as etapas criadas por ele (antes do encerramento). */
@@ -2138,33 +2140,95 @@ function rebuildFunilLp(){
    Clientes Ativos. */
 (function(){ try{ const arr=FUNIL_CFG&&FUNIL_CFG.bc; if(Array.isArray(arr)&&arr.some(e=>e.id===BC_ETAPA_EXTINTA)){ FUNIL_CFG.bc=arr.filter(e=>e.id!==BC_ETAPA_EXTINTA); localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); } }catch(_){} })();
 rebuildFunilLp();
-/* ═══ FUNIL-UNICO-V1 · T1 (24/10/2026) — mapa etapa legada → funil único ═══════════════════════════════════════
+/* ═══ FUNIL-UNICO-V1 · T1 (24/10/2026) — mapa etapa legada → funil novo (2 funis: fu_vi e fu_mfo) ═══════════════════
    FONTE ÚNICA = tabela kb_etapa_mapa (supabase/migrations/funil_t1_etapas_mapa.sql), lida no login (dicCarregar).
    Esta cópia de fábrica só vale deslogado/no portão — e TEM que ser igual ao seed do SQL (scripts/teste_funil_mapa.py
-   acusa no portão). Linhas: [funil_origem, etapa_origem, etapa_nova, status_card, precisa_revisao].
-   '*' = qualquer funil do CRM (nn, bn, bc, vg, prud, mfo, *-bc, prospects); 'leads' = captação LinkedIn (vocabulário próprio).
-   Regra (igual à fn_mapear_etapa): compara sem caixa e sem espaço nas pontas; a linha do funil ganha da '*';
-   sem linha ou etapa vazia → novo + precisa_revisao (nunca inventar). */
+   acusa no portão). Linhas: [funil_origem, etapa_origem, funil_novo ('vi'|'mfo'), etapa_nova, status_card, precisa_revisao].
+   '*' = vocabulário da Vida Individual (nn, bn, bc, prospects); 'leads' = captação LinkedIn; os pipes (vg, prud, mfo e *-bc)
+   têm linha própria e caem no MFO. Regra (igual à fn_mapear_etapa): compara sem caixa e sem espaço nas pontas; a linha do
+   funil ganha da '*'; a '*' só vale pra quem cai na Vida Individual; sem linha → 1ª etapa do funil de destino + revisão. */
 const ETAPA_MAPA_FAB=[
-  ['*','SitPlan','novo','sitplan',false],['*','TA','novo','ta_na_lista',false],['*','OI/FF','oi',null,false],['*','P/C','pc',null,false],
-  ['*','C2','c2',null,false],['*','N','n',null,false],['*','FA','fa',null,false],['*','EMISSÃO','n',null,false],['*','DELIVERY','entrega',null,false],
-  ['*','Não','nao',null,false],['*','Prop. Cancelada','prop_cancelada',null,false],['*','Apól. Cancelada','apol_cancelada',null,false],
-  ['*','Clientes Ativos','emitida',null,false],['*','Contato Agenda/Revisita','revisita',null,false],['*','Agendada Revisita','revisita',null,false],
-  ['*','Novo Negócio/Resolução pós Revisita','pc',null,false],['*','N/Emissão','n',null,false],['*','Emissão Final','n',null,false],
-  ['*','Venda ganha','emitida',null,false],['*','Venda perdida','nao',null,false],['*','Pendência/Atraso','emitida',null,false],['bc','cst_1','novo',null,true],
-  ['*','Oportunidade','novo',null,false],['*','Em contato','novo','em_contato',false],['*','Análise','n',null,false],['*','Proposta','n',null,false],
-  ['*','Fechamento','fa',null,false],['*','Ganho','emitida',null,false],['*','Perdido','nao',null,false],['*','Contato/Revisita','revisita',null,false],
-  ['*','Revisita agendada','revisita',null,false],['*','Descartado','nao',null,false],
-  ['leads','Conexao','novo','conexao',false],['leads','Dormente','novo','dormente',false],['leads','TA','novo','ta_na_lista',false],['leads','SitPlan','novo','sitplan',false],
-  ['leads','Qualificacao','oi',null,false],['leads','OT','oi',null,false],['leads','FIP','pc',null,false],['leads','Fechamento','n',null,false],['leads','Descartado','nao',null,false]
+  ['*','SitPlan','vi','novo','sitplan',false],
+  ['*','TA','vi','novo','ta_na_lista',false],
+  ['*','OI/FF','vi','oi',null,false],
+  ['*','P/C','vi','pc',null,false],
+  ['*','C2','vi','c2',null,false],
+  ['*','N','vi','n',null,false],
+  ['*','FA','vi','fa',null,false],
+  ['*','EMISSÃO','vi','n',null,false],
+  ['*','DELIVERY','vi','entrega',null,false],
+  ['*','Não','vi','nao',null,false],
+  ['*','Prop. Cancelada','vi','prop_cancelada',null,false],
+  ['*','Apól. Cancelada','vi','apol_cancelada',null,false],
+  ['*','Clientes Ativos','vi','emitida',null,false],
+  ['*','Contato Agenda/Revisita','vi','revisita',null,false],
+  ['*','Agendada Revisita','vi','revisita',null,false],
+  ['*','Novo Negócio/Resolução pós Revisita','vi','pc',null,false],
+  ['*','N/Emissão','vi','n',null,false],
+  ['*','Emissão Final','vi','n',null,false],
+  ['*','Venda ganha','vi','emitida',null,false],
+  ['*','Venda perdida','vi','nao',null,false],
+  ['*','Pendência/Atraso','vi','emitida',null,false],
+  ['*','Descartado','vi','nao',null,false],
+  ['bc','cst_1','vi','novo',null,true],
+  ['leads','Conexao','vi','novo','conexao',false],
+  ['leads','Dormente','vi','novo','dormente',false],
+  ['leads','TA','vi','novo','ta_na_lista',false],
+  ['leads','SitPlan','vi','novo','sitplan',false],
+  ['leads','Qualificacao','vi','oi',null,false],
+  ['leads','OT','vi','oi',null,false],
+  ['leads','FIP','vi','pc',null,false],
+  ['leads','Fechamento','vi','n',null,false],
+  ['leads','Descartado','vi','nao',null,false],
+  ['vg','Oportunidade','mfo','m_oportunidade',null,false],
+  ['vg','Em contato','mfo','m_contato','em_contato',false],
+  ['vg','Proposta','mfo','m_proposta',null,false],
+  ['vg','Fechamento','mfo','m_fechamento',null,false],
+  ['vg','Ganho','mfo','m_ativo',null,false],
+  ['vg','Perdido','mfo','m_perdido',null,false],
+  ['prud','Oportunidade','mfo','m_oportunidade',null,false],
+  ['prud','Em contato','mfo','m_contato','em_contato',false],
+  ['prud','Proposta','mfo','m_proposta',null,false],
+  ['prud','Fechamento','mfo','m_fechamento',null,false],
+  ['prud','Ganho','mfo','m_ativo',null,false],
+  ['prud','Perdido','mfo','m_perdido',null,false],
+  ['mfo','Oportunidade','mfo','m_oportunidade',null,false],
+  ['mfo','Em contato','mfo','m_contato','em_contato',false],
+  ['mfo','Análise','mfo','m_analise',null,false],
+  ['mfo','Proposta','mfo','m_proposta',null,false],
+  ['mfo','Fechamento','mfo','m_fechamento',null,false],
+  ['mfo','Ganho','mfo','m_ativo',null,false],
+  ['mfo','Perdido','mfo','m_perdido',null,false],
+  ['vg-bc','Clientes Ativos','mfo','m_ativo',null,false],
+  ['vg-bc','Contato/Revisita','mfo','m_revisita',null,false],
+  ['vg-bc','Revisita agendada','mfo','m_revisita',null,false],
+  ['vg-bc','Proposta','mfo','m_proposta',null,false],
+  ['vg-bc','Fechamento','mfo','m_fechamento',null,false],
+  ['vg-bc','Ganho','mfo','m_ativo',null,false],
+  ['vg-bc','Perdido','mfo','m_perdido',null,false],
+  ['prud-bc','Clientes Ativos','mfo','m_ativo',null,false],
+  ['prud-bc','Contato/Revisita','mfo','m_revisita',null,false],
+  ['prud-bc','Revisita agendada','mfo','m_revisita',null,false],
+  ['prud-bc','Proposta','mfo','m_proposta',null,false],
+  ['prud-bc','Fechamento','mfo','m_fechamento',null,false],
+  ['prud-bc','Ganho','mfo','m_ativo',null,false],
+  ['prud-bc','Perdido','mfo','m_perdido',null,false],
+  ['mfo-bc','Clientes Ativos','mfo','m_ativo',null,false],
+  ['mfo-bc','Contato/Revisita','mfo','m_revisita',null,false],
+  ['mfo-bc','Revisita agendada','mfo','m_revisita',null,false],
+  ['mfo-bc','Proposta','mfo','m_proposta',null,false],
+  ['mfo-bc','Fechamento','mfo','m_fechamento',null,false],
+  ['mfo-bc','Ganho','mfo','m_ativo',null,false],
+  ['mfo-bc','Perdido','mfo','m_perdido',null,false]
 ];
 let ETAPA_MAPA=ETAPA_MAPA_FAB;
 function mapearEtapa(funil,etapa){ const nk=x=>String(x==null?'':x).trim().toLowerCase(), f=nk(funil), e=nk(etapa);
-  let hit=null; if(e) for(const r of ETAPA_MAPA){ if(nk(r[1])!==e) continue; if(nk(r[0])===f){ hit=r; break; } if(r[0]==='*'&&!hit) hit=r; }
-  return hit?{etapa_id:hit[2],status_card:hit[3]||null,precisa_revisao:!!hit[4]}:{etapa_id:'novo',status_card:null,precisa_revisao:true}; }
+  const dr=ETAPA_MAPA.find(r=>nk(r[0])===f), dest=dr?dr[2]:'vi';
+  let hit=null; if(e) for(const r of ETAPA_MAPA){ if(nk(r[1])!==e) continue; if(nk(r[0])===f){ hit=r; break; } if(r[0]==='*'&&dest==='vi'&&!hit) hit=r; }
+  return hit?{funil_id:hit[2],etapa_id:hit[3],status_card:hit[4]||null,precisa_revisao:!!hit[5]}:{funil_id:dest,etapa_id:dest==='mfo'?'m_oportunidade':'novo',status_card:null,precisa_revisao:true}; }
 async function etapaMapaCarregar(){ if(!sb||!novoOn('funil-unico')) return;
-  try{ const {data,error}=await sb.from('kb_etapa_mapa').select('funil_origem,etapa_origem,etapa_nova,status_card,precisa_revisao'); if(error) throw error;
-    if(Array.isArray(data)&&data.length) ETAPA_MAPA=data.map(r=>[r.funil_origem,r.etapa_origem,r.etapa_nova,r.status_card,!!r.precisa_revisao]); }
+  try{ const {data,error}=await sb.from('kb_etapa_mapa').select('funil_origem,etapa_origem,funil_novo,etapa_nova,status_card,precisa_revisao'); if(error) throw error;
+    if(Array.isArray(data)&&data.length&&data.every(r=>r.funil_novo)) ETAPA_MAPA=data.map(r=>[r.funil_origem,r.etapa_origem,r.funil_novo,r.etapa_nova,r.status_card,!!r.precisa_revisao]); }
   catch(e){ console.warn('kb_etapa_mapa indisponível → mapa de fábrica',e); } }
 /* Funil Negócios BASE DE CLIENTES — espelho do funil "CLIENTES CARTEIRA" do Kommo
    (conta jucasegurocomjucacom, pipeline 12543239, capturado 23/07/2026).
@@ -17837,7 +17901,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
-  'funil-unico':{o:'🧭 Funil único (4 funis em 1): aba "Funil único" em Funil & Etapas + mapa de etapas legadas (kb_etapa_mapa) — T1 do PROMPT_CODE Funil Único', desde:'2026-10-24'},
+  'funil-unico':{o:'🧭 Funis novos (2): 🎯 Vida Individual e 🏢 MFO (VG + demais seguros) em Funil & Etapas + mapa de etapas legadas (kb_etapa_mapa) — T1 do PROMPT_CODE Funil Único', desde:'2026-10-24'},
   /* 'carga' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor (palavra dele: "libera a carga pro Victor também"). */
   /* 'aviso-versao' — LIBERADO pra todos em 29/09 (melhoria em algo que o Daniel já usa — regra dele: "evolução do que ele já tem acesso já deve ser estendida a ele"). */
   /* 'pm-padrao' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor; o Daniel espera a validação dele. */
@@ -20568,7 +20632,7 @@ function viewFunilCfg(){
   funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv();
 }
 function funRenderTabs(){ const el=$('#funcfg-tabs'); if(!el)return;
-  el.innerHTML=[['lp','🎯 Funil LP (Vendas)'],['bc','💼 Base de Clientes']].concat(novoOn('funil-unico')?[['unico','🧭 Funil único (em construção)']]:[]).map(([f,nm])=>`<button class="fc-tab" role="tab" aria-selected="${f===FUN_edit}" onclick="funSetFunnel('${f}')">${nm}<span class="n">${FUNIL_CFG[f].length}</span></button>`).join(''); }
+  el.innerHTML=[['lp','🎯 Funil LP (Vendas)'],['bc','💼 Base de Clientes']].concat(novoOn('funil-unico')?[['fu_vi','🎯 Vida Individual (novo)'],['fu_mfo','🏢 MFO (novo)']]:[]).map(([f,nm])=>`<button class="fc-tab" role="tab" aria-selected="${f===FUN_edit}" onclick="funSetFunnel('${f}')">${nm}<span class="n">${FUNIL_CFG[f].length}</span></button>`).join(''); }
 function funSetFunnel(f){ FUN_edit=f; funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); }
 function funRowHtml(e,i,arr){ const last=i===arr.length-1, n=funNeg(e.id);
   const sws=FUN_PAL.map(c=>`<button class="fc-sw" style="background:${FUN_COR[c]};color:${FUN_COR[c]}" aria-pressed="${c===e.cor}" title="${c}" onclick="funSetCor(${i},'${c}')"></button>`).join('');
@@ -20627,7 +20691,7 @@ function funDelDo(){ if(_funDel<0)return; const arr=FUNIL_CFG[FUN_edit]; if(funN
 function funReset(){ if(!confirm('Restaurar os dois funis ao padrão de fábrica? As personalizações serão descartadas.'))return; FUNIL_CFG=funFabMat(); funApply(); funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); toast('Funis restaurados',true); }
 
 /* invariantes do funil no portão (silencioso no sucesso, erro no console se quebrar) */
-function funSelfCheck(){ try{ let fail=[]; for(const f of ['lp','bc','unico']){ const arr=FUNIL_CFG[f]||[]; const ids=arr.map(e=>e.id);
+function funSelfCheck(){ try{ let fail=[]; for(const f of ['lp','bc','fu_vi','fu_mfo']){ const arr=FUNIL_CFG[f]||[]; const ids=arr.map(e=>e.id);
   if(new Set(ids).size!==ids.length) fail.push(f+': ids duplicados');
   if(!arr.some(e=>!e.enc)) fail.push(f+': sem etapa no fluxo');
   if(!arr.every(e=>e.label&&String(e.label).trim())) fail.push(f+': rótulo vazio');
@@ -23591,23 +23655,26 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: numero vazio nao vira zero', atCsvNum(null) === '' && atCsvNum(undefined) === '');
     ok('export: cabecalho tem uma coluna por definicao', atCsv([]).split(';').length === AT_CSV_COLS.length);
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
-    /* FUNIL-UNICO-V1 · T1 — teste de aceite nº 1 da spec + cobertura de todo valor real (fábrica) */
+    /* FUNIL-UNICO-V1 · T1 — teste de aceite nº 1 da spec (adaptado aos 2 funis) + cobertura de todo valor real (fábrica) */
     { const M=(f,e)=>mapearEtapa(f,e), _m=ETAPA_MAPA; ETAPA_MAPA=ETAPA_MAPA_FAB;
+      const is=(r,fn,et,st,rv)=>r.funil_id===fn&&r.etapa_id===et&&(st===undefined||r.status_card===st)&&r.precisa_revisao===!!rv;
       try{
-        const ac=[['bc','Clientes Ativos','emitida'],['bc','Contato Agenda/Revisita','revisita'],['nn','OI/FF','oi'],['nn','P/C','pc'],['nn','N/Emissão','n'],
-          ['nn','DELIVERY','entrega'],['bc','Delivery','entrega'],['leads','FIP','pc'],['nn','Venda perdida','nao']];
-        ok('FUNIL-UNICO T1: aceite nº 1 — etapas legadas caem na etapa certa', ac.every(([f,e,x])=>{ const r=M(f,e); return r.etapa_id===x&&!r.precisa_revisao; }));
-        ok('FUNIL-UNICO T1: TA vira Novo + "Fazer TA"; Dormente vira Novo + dormente', M('nn','TA').etapa_id==='novo'&&M('nn','TA').status_card==='ta_na_lista'&&M('leads','Dormente').etapa_id==='novo'&&M('leads','Dormente').status_card==='dormente');
-        ok('FUNIL-UNICO T1: etapa sem mapa → Novo + precisa_revisao (nunca inventa)', M('nn','xyz').etapa_id==='novo'&&M('nn','xyz').precisa_revisao===true&&M('prospects','').precisa_revisao===true&&M('bc',null).precisa_revisao===true);
-        ok('FUNIL-UNICO T1: linha do funil ganha da genérica (Fechamento da captação → N; dos pipes → FA)', M('leads','Fechamento').etapa_id==='n'&&M('mfo','Fechamento').etapa_id==='fa');
-        ok('FUNIL-UNICO T1: compara sem caixa e sem espaço nas pontas', M('NN','  oi/ff ').etapa_id==='oi'&&M('bc','delivery').etapa_id==='entrega');
-        const ids=FUNIL_FAB.unico.map(x=>x[0]);
-        ok('FUNIL-UNICO T1: 12 etapas na ordem combinada — PC → C2 → N → FA (9 no fluxo, 3 encerramentos)', ids.join()==='novo,oi,revisita,pc,c2,n,fa,emitida,entrega,nao,prop_cancelada,apol_cancelada'&&M('nn','EMISSÃO').etapa_id==='n'&&M('bc','Emissão Final').etapa_id==='n'&&M('vg','Oportunidade').etapa_id==='novo'&&FUNIL_FAB.unico.filter(x=>x[3]).length===3&&(ETAPAS_MAP.unico&&ETAPAS_MAP.unico.fluxo.length)===9);
-        ok('FUNIL-UNICO T1: todo destino do mapa existe no funil único', ETAPA_MAPA_FAB.every(r=>ids.includes(r[2])));
-        ok('FUNIL-UNICO T1: toda etapa de fábrica de todos os funis tem mapa (sem cair em revisão)', Object.keys(FUNIL_FAB).filter(f=>f!=='unico').every(f=>FUNIL_FAB[f].every(x=>!M(f==='lp'?'nn':f,x[0]).precisa_revisao)));
-        const reais=['SitPlan','TA','OI/FF','P/C','C2','N','FA','N/Emissão','EMISSÃO','Emissão Final','DELIVERY','Delivery','Clientes Ativos','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','Fechamento','Venda perdida','Não','Prop. Cancelada','Apól. Cancelada','Oportunidade','Proposta','Análise','Em contato'];
-        ok('FUNIL-UNICO T1: todo valor real da §1 tem destino; só o cst_1 órfão pede revisão', reais.every(e=>!M('nn',e).precisa_revisao&&ids.includes(M('nn',e).etapa_id))&&M('bc','cst_1').precisa_revisao===true);
-        ok('FUNIL-UNICO T1: ids minúsculos não pisam no rótulo do Funil LP (FA/N/C2) e Entrega é pós-venda', ET_LABEL['FA']===((FUNIL_CFG.lp||[]).find(e=>e.id==='FA')||{label:'FA'}).label&&ET_LABEL['fa']!=null&&ehPosVenda('entrega','unico')&&ehPosVenda('DELIVERY','nn')&&!ehPosVenda('emitida','unico'));
+        const ac=[['bc','Clientes Ativos','vi','emitida'],['bc','Contato Agenda/Revisita','vi','revisita'],['nn','OI/FF','vi','oi'],['nn','P/C','vi','pc'],['nn','N/Emissão','vi','n'],
+          ['nn','DELIVERY','vi','entrega'],['bc','Delivery','vi','entrega'],['leads','FIP','vi','pc'],['nn','Venda perdida','vi','nao'],['nn','EMISSÃO','vi','n'],['bc','Emissão Final','vi','n']];
+        ok('FUNIL-UNICO T1: aceite nº 1 — etapas da Vida Individual caem na etapa certa', ac.every(([f,e,fn,x])=>is(M(f,e),fn,x)));
+        ok('FUNIL-UNICO T1: TA vira Novo + "Fazer TA"; Dormente vira Novo + dormente', is(M('nn','TA'),'vi','novo','ta_na_lista')&&is(M('leads','Dormente'),'vi','novo','dormente'));
+        ok('FUNIL-UNICO T1: pipes caem no MFO (VG, Prud. Demais, MFO e as Bases deles)', is(M('mfo','Proposta'),'mfo','m_proposta')&&is(M('vg','Oportunidade'),'mfo','m_oportunidade')&&is(M('vg-bc','Clientes Ativos'),'mfo','m_ativo')&&is(M('prud','Ganho'),'mfo','m_ativo')&&is(M('mfo-bc','Contato/Revisita'),'mfo','m_revisita')&&is(M('mfo','Em contato'),'mfo','m_contato','em_contato'));
+        ok('FUNIL-UNICO T1: Clientes Ativos da Base → Vida Individual; da Base do VG → MFO (o funil de origem decide)', M('bc','Clientes Ativos').funil_id==='vi'&&M('vg-bc','Clientes Ativos').funil_id==='mfo');
+        ok('FUNIL-UNICO T1: etapa sem mapa → 1ª etapa do funil de destino + revisão (nunca inventa)', is(M('nn','xyz'),'vi','novo',null,true)&&is(M('mfo','xyz'),'mfo','m_oportunidade',null,true)&&M('prospects','').precisa_revisao===true&&M('bc',null).precisa_revisao===true&&is(M('mfo','TA'),'mfo','m_oportunidade',null,true));
+        ok('FUNIL-UNICO T1: linha do funil ganha da genérica (Fechamento da captação → N; do MFO → Fechamento)', is(M('leads','Fechamento'),'vi','n')&&is(M('mfo','Fechamento'),'mfo','m_fechamento'));
+        ok('FUNIL-UNICO T1: compara sem caixa e sem espaço nas pontas', M('NN','  oi/ff ').etapa_id==='oi'&&M('bc','delivery').etapa_id==='entrega'&&M('VG',' proposta').etapa_id==='m_proposta');
+        const vi=FUNIL_FAB.fu_vi.map(x=>x[0]), mf=FUNIL_FAB.fu_mfo.map(x=>x[0]);
+        ok('FUNIL-UNICO T1: Vida Individual com 12 etapas na ordem combinada (9 no fluxo, 3 encerramentos)', vi.join()==='novo,oi,revisita,pc,c2,n,fa,emitida,entrega,nao,prop_cancelada,apol_cancelada'&&FUNIL_FAB.fu_vi.filter(x=>x[3]).length===3&&(ETAPAS_MAP.fu_vi&&ETAPAS_MAP.fu_vi.fluxo.length)===9);
+        ok('FUNIL-UNICO T1: MFO com 8 etapas (7 no fluxo, Perdido encerra)', mf.join()==='m_oportunidade,m_contato,m_revisita,m_analise,m_proposta,m_fechamento,m_ativo,m_perdido'&&(ETAPAS_MAP.fu_mfo&&ETAPAS_MAP.fu_mfo.fluxo.length)===7);
+        ok('FUNIL-UNICO T1: todo destino do mapa existe no funil de destino', ETAPA_MAPA_FAB.every(r=>(r[2]==='vi'?vi:r[2]==='mfo'?mf:[]).includes(r[3])));
+        ok('FUNIL-UNICO T1: toda etapa de fábrica de todos os funis tem mapa (sem cair em revisão)', Object.keys(FUNIL_FAB).filter(f=>!/^fu_/.test(f)).every(f=>FUNIL_FAB[f].every(x=>!M(f==='lp'?'nn':f,x[0]).precisa_revisao)));
+        ok('FUNIL-UNICO T1: ids não colidem entre os funis novos nem com os antigos (rótulo global por id)', new Set(vi.concat(mf)).size===vi.length+mf.length&&ET_LABEL['FA']===((FUNIL_CFG.lp||[]).find(e=>e.id==='FA')||{label:'FA'}).label&&ET_LABEL['m_revisita']==='Revisita'&&PROB_ETAPA['revisita']===25&&PROB_ETAPA['m_revisita']===30);
+        ok('FUNIL-UNICO T1: Entrega é pós-venda só na Vida Individual', ehPosVenda('entrega','fu_vi')&&ehPosVenda('DELIVERY','nn')&&!ehPosVenda('emitida','fu_vi'));
       } finally { ETAPA_MAPA=_m; } }
     if(_iSalvo===null) localStorage.removeItem(IMP_CHAVE); else localStorage.setItem(IMP_CHAVE,_iSalvo);   /* self-check NÃO deixa lixo salvo (Livro de Erros #17) */
   }catch(e){ falhas.push('exceção: '+e.message); }

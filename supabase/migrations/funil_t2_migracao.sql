@@ -1,12 +1,14 @@
--- FUNIL ÚNICO · T2 (24/10/2026) — migração dos dados: chaves normalizadas em lp_contatos.dados.
+-- FUNIL ÚNICO · T2 (24/10/2026, revisado: 2 FUNIS) — migração dos dados: chaves normalizadas em lp_contatos.dados.
+-- Dois funis (decisão dele 24/10): funil_id = 'vi' (Vida Individual) | 'mfo' (VG + demais seguros). O mapa (T1) decide.
 -- Depende do T1 (kb_etapa_mapa, fn_mapear_etapa, app_settings.funil_ance_cfg).
 -- NÃO APAGA NADA: só acrescenta chaves em `dados` (merge `dados || patch`); funil, etapa e o resto ficam como estão.
 -- Quem entra: todo contato vivo (sem merged_into) fora do Estoque + do Estoque só quem tem etapa ou ta_dia.
 -- Chaves gravadas (nomes da spec §3.2, com 2 trocas por COLISÃO com chaves que já existem):
---   etapa_id · etapa_id_fonte ('mapa' = veio do mapa; quando ele arrastar no quadro vira 'manual' e a migração não toca mais)
+--   funil_id ('vi'|'mfo') · etapa_id · etapa_id_fonte ('mapa' = veio do mapa; quando ele arrastar no quadro vira 'manual' e a migração não toca mais)
 --   status_card (estado inicial que o mapa dá: ta_na_lista, sitplan, em_contato…) · etapa_revisao (true = ele decide)
 --     ↳ etapa_revisao e NÃO precisa_revisao: precisa_revisao já existe em 5.228 nomes do Estoque com outro sentido.
---   linha (prud|vg|mfo) · origem_tipo — só se ainda não existirem (depois ele edita na ficha)
+--   linha (prud = Vida Individual | vg | prud_demais | mo = Multi Office) · origem_tipo — só se ainda não existirem
+--   ance_auto só na Vida Individual (no MFO fica null: o ANCE é método da vida individual)
 --   cliente_ativo · ance_auto · alta_renda · ultimo_contato · prox_passo — derivados, recalculados a cada rodada
 --     ↳ prox_passo e NÃO proximo_passo: proximo_passo já existe como TEXTO livre antigo (a ficha do MFO mostra).
 --   funil_unico_v = 1 (carimbo da migração)
@@ -88,17 +90,17 @@ begin
   -- etapa: só enquanto veio do mapa (arrastou no quadro = 'manual' = não toca)
   if coalesce(d->>'etapa_id','') = '' or d->>'etapa_id_fonte' = 'mapa' then
     if f = 'bn' and coalesce(d->>'etapa','') = '' then
-      p := p || '{"etapa_id":"novo","status_card":"ta_na_lista","etapa_revisao":false}'::jsonb;   -- Estoque que já foi pra lista de TA
+      p := p || '{"funil_id":"vi","etapa_id":"novo","status_card":"ta_na_lista","etapa_revisao":false}'::jsonb;   -- Estoque que já foi pra lista de TA
     else
       select * into m from public.fn_mapear_etapa(f, d->>'etapa');
-      p := p || jsonb_build_object('etapa_id', m.etapa_id, 'status_card', m.status_card, 'etapa_revisao', m.precisa_revisao);
+      p := p || jsonb_build_object('funil_id', m.funil_id, 'etapa_id', m.etapa_id, 'status_card', m.status_card, 'etapa_revisao', m.precisa_revisao);
     end if;
     p := p || '{"etapa_id_fonte":"mapa"}'::jsonb;
   end if;
 
   -- linha e origem: só se ainda não tem (a partir do T3 é ele quem edita)
   if coalesce(d->>'linha','') = '' then
-    p := p || jsonb_build_object('linha', case when f in ('vg','vg-bc') then 'vg' when f in ('mfo','mfo-bc') then 'mfo' else 'prud' end);
+    p := p || jsonb_build_object('linha', case when f in ('vg','vg-bc') then 'vg' when f in ('prud','prud-bc') then 'prud_demais' when f in ('mfo','mfo-bc') then 'mo' else 'prud' end);
   end if;
   if not (d ? 'origem_tipo') then
     p := p || jsonb_build_object('origem_tipo', case
@@ -127,7 +129,7 @@ begin
   -- ANCE automático + Alta Renda (regras do setting funil_ance_cfg)
   fat := public.fn_funil_fatos(d);
   p := p || jsonb_build_object(
-    'ance_auto',  public.fn_funil_ance_auto(fat, cfg),
+    'ance_auto',  case when coalesce(p->>'funil_id', d->>'funil_id') = 'mfo' then null else public.fn_funil_ance_auto(fat, cfg) end,
     'alta_renda', coalesce(public.fn_funil_num(fat->>'renda')      >= public.fn_funil_num(cfg#>>'{alta_renda,renda}'), false)
                or coalesce(public.fn_funil_num(fat->>'patrimonio') >= public.fn_funil_num(cfg#>>'{alta_renda,patrimonio}'), false));
 
