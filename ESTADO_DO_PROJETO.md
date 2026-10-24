@@ -2,6 +2,13 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 24/10/2026 — FUNIL ÚNICO · T1 pronto no branch `claude/epic-turing-swxuth` (NÃO publicado — parado pra revisão dele)
+
+- **Banco (aplicado, aditivo):** `kb_etapa_mapa` (41 linhas: `'*'` = vocabulário do CRM, `'leads'` = captação LinkedIn) + `fn_mapear_etapa(funil, etapa)` + `app_settings.funil_ance_cfg` (6 regras, máx 5, Alta Renda 20 mil / 1 mi). Migração `supabase/migrations/funil_t1_etapas_mapa.sql` (rollback no cabeçalho). Nenhum registro de `lp_contatos`/`leads` tocado (isso é o T2).
+- **App:** `FUNIL_FAB.unico` (12 ids minúsculos — `FA`/`N`/`C2` do Funil LP colidiriam no mapa global de rótulos), aba "🧭 Funil único" em Funil & Etapas atrás de `novoOn('funil-unico')`, `mapearEtapa()` lendo a tabela no login (cópia de fábrica deslogado). `scripts/teste_funil_mapa.py` confere SQL × app e o portão fecha se divergirem.
+- **Testes:** aceite nº 1 15/15 no banco; 10 autotestes no `lpSelfCheck`; portão verde (50 telas × 6); prints 390/1280. Cobertura real: só 4 registros caem em revisão (3 na etapa `cst_1` órfã da Base + 1 "prospects" sem etapa).
+- **Decisões que esperam ele:** ordem FA × C2 × N (hoje o Funil LP dele é P/C → FA → C2 → N; a spec diz PC → N → C2 → FA) · EMISSÃO e "UW & Emissão" caírem em FA (spec) · "Oportunidade" dos pipes → Novo (desvio meu; a spec dizia Emitida) · ANCE da spec ≠ ANCE de hoje (A·N·C·E·Avisado manual) e o teste 8 conta 3 onde a regra dá 4.
+
 ## 🟡 RETOMAR AQUI — 23/10/2026 (madrugada) — Parte A NO AR (v8.78, PR #308) · Parte B NO AR (v8.79, PR #309, OK dele: "A, publica")
 
 - **Parte B:** Pendências de Emissão com abas Pendentes / Emitidas · entrega; relógio 60 d da proposta (x/60, estourou, vencem em 7 d), 1ª parcela manual, 💬/📞; emitidas com x/30 (Not Taken), 2ª parcela manual, pronta automática (carteira), Entregar (histórico do card + lp_interacoes), ＋ tarefa no card, sumiu → desfecho (not_taken só ≤ 30 d). PLACED: seção "Placed por período" acima do R05 (motor único plp*, caminhos a 92%, simulador, tabelas, regras, aviso de prazo). R05 intacto. Doc: `docs/uw-emissao-entrega-placed.md`.

@@ -1887,13 +1887,18 @@ const FUNIL_FAB={
      revisita, proposta, fechamento) num esqueleto curto, que ele vai evoluindo em Funil & Etapas. */
   'vg-bc':  [['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
   'prud-bc':[['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
-  'mfo-bc': [['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]]
+  'mfo-bc': [['Clientes Ativos','verde',0],['Contato/Revisita','amarelo',15],['Revisita agendada','azul',30],['Proposta','roxo',60],['Fechamento','amarelo',85],['Ganho','verde',100,1],['Perdido','verm',0,1]],
+  /* FUNIL-UNICO-V1 · T1 (24/10): o funil único — a vida inteira do nome num quadro (spec PROMPT_CODE Funil Único §3.1).
+     ids em minúsculas de propósito: ET_LABEL/PROB_ETAPA são mapa GLOBAL por id, e 'FA'/'N'/'C2' do Funil LP colidiriam.
+     5º campo = rótulo padrão. Ordem = a da spec; ele confirma a ordem final (FA × C2 × N) na revisão do T1. */
+  unico:[['novo','cinza',5,0,'Novo'],['oi','amarelo',20,0,'OI'],['revisita','amarelo',25,0,'Revisita'],['pc','roxo',35,0,'PC'],['n','amarelo',70,0,'N'],['c2','azul',50,0,'C2'],['fa','azul',85,0,'FA'],
+         ['emitida','verde',100,0,'Apólice Emitida'],['entrega','verde',100,0,'Entrega de Apólice'],['nao','verm',0,1,'Não'],['prop_cancelada','verm',0,1,'Proposta Cancelada'],['apol_cancelada','verm',0,1,'Apólice Cancelada']]
 };
 const PIPE_BC_ATIVOS='Clientes Ativos';   /* 1ª coluna dos "Negócios na Base" de qualquer pipe: cliente parado, fora do fluxo */
 const FUN_PAL=['cinza','azul','amarelo','roxo','verde','verm'];
 const FUN_BADGE={cinza:'b-cinza',azul:'b-azul',amarelo:'b-amarelo',roxo:'b-roxo',verde:'b-verde',verm:'b-verm'};
 const FUN_COR={cinza:'#5b6770',azul:'var(--azul)',amarelo:'var(--amarelo)',roxo:'var(--roxo)',verde:'var(--verde)',verm:'var(--verm)'};
-function funFabMat(){ const m={}; for(const f of Object.keys(FUNIL_FAB)) m[f]=FUNIL_FAB[f].map(x=>({id:x[0],label:x[0],cor:x[1],prob:x[2],enc:!!x[3]})); return m; }
+function funFabMat(){ const m={}; for(const f of Object.keys(FUNIL_FAB)) m[f]=FUNIL_FAB[f].map(x=>({id:x[0],label:x[4]||x[0],cor:x[1],prob:x[2],enc:!!x[3]})); return m; }
 function funCfgValida(c){ return c&&Array.isArray(c.lp)&&Array.isArray(c.bc)&&c.lp.every(e=>e&&e.id)&&c.bc.every(e=>e&&e.id); }
 /* STATUS-ETAPA-V1 (11/09): status DENTRO da etapa ("Delay OI", "Remarcou"…). A lista de status de cada
    etapa mora na cfg do funil (FUNIL_CFG[f][i].status), editada pelo admin em Funil & Etapas e salva junto
@@ -2095,7 +2100,7 @@ const BC_ENC_V1={'Venda perdida':true};
 /* DELIVERY-POS-VENDA-V1 (09/09): Delivery é PÓS-VENDA (entrega da apólice impressa, UAU service).
    A venda fecha em Apólice Emitida (bc:'Venda ganha'; lp:'EMISSÃO'→'DELIVERY'). Delivery NÃO soma
    PA/pond no funil nem conta como venda — mas mantém a coluna. Fonte ÚNICA do "é pós-venda". */
-function ehPosVenda(etapa,funil){ return (funil==='bc') ? etapa===BC_DELIVERY : etapa==='DELIVERY'; }
+function ehPosVenda(etapa,funil){ return (funil==='bc') ? etapa===BC_DELIVERY : funil==='unico' ? etapa==='entrega' : etapa==='DELIVERY'; }   /* FUNIL-UNICO-V1: Entrega de Apólice é pós-venda */
 /* FUNIL-BC-EDITAVEL-V1 (19/10/2026): ele criava etapa na Base de Clientes, aparecia "Etapa criada" e ela sumia — esta migração
    de 09/09 rodava a CADA salvar e remontava o funil na lista fixa (apagava etapa nova e desfazia reordenação). Agora ela só
    migra cfg ANTIGA (falta alguma das 9 etapas-base) e preserva as etapas criadas por ele (antes do encerramento). */
@@ -2133,6 +2138,34 @@ function rebuildFunilLp(){
    Clientes Ativos. */
 (function(){ try{ const arr=FUNIL_CFG&&FUNIL_CFG.bc; if(Array.isArray(arr)&&arr.some(e=>e.id===BC_ETAPA_EXTINTA)){ FUNIL_CFG.bc=arr.filter(e=>e.id!==BC_ETAPA_EXTINTA); localStorage.setItem('crmlp_funil_cfg_v1',JSON.stringify(FUNIL_CFG)); } }catch(_){} })();
 rebuildFunilLp();
+/* ═══ FUNIL-UNICO-V1 · T1 (24/10/2026) — mapa etapa legada → funil único ═══════════════════════════════════════
+   FONTE ÚNICA = tabela kb_etapa_mapa (supabase/migrations/funil_t1_etapas_mapa.sql), lida no login (dicCarregar).
+   Esta cópia de fábrica só vale deslogado/no portão — e TEM que ser igual ao seed do SQL (scripts/teste_funil_mapa.py
+   acusa no portão). Linhas: [funil_origem, etapa_origem, etapa_nova, status_card, precisa_revisao].
+   '*' = qualquer funil do CRM (nn, bn, bc, vg, prud, mfo, *-bc, prospects); 'leads' = captação LinkedIn (vocabulário próprio).
+   Regra (igual à fn_mapear_etapa): compara sem caixa e sem espaço nas pontas; a linha do funil ganha da '*';
+   sem linha ou etapa vazia → novo + precisa_revisao (nunca inventar). */
+const ETAPA_MAPA_FAB=[
+  ['*','SitPlan','novo','sitplan',false],['*','TA','novo','ta_na_lista',false],['*','OI/FF','oi',null,false],['*','P/C','pc',null,false],
+  ['*','C2','c2',null,false],['*','N','n',null,false],['*','FA','fa',null,false],['*','EMISSÃO','fa',null,false],['*','DELIVERY','entrega',null,false],
+  ['*','Não','nao',null,false],['*','Prop. Cancelada','prop_cancelada',null,false],['*','Apól. Cancelada','apol_cancelada',null,false],
+  ['*','Clientes Ativos','emitida',null,false],['*','Contato Agenda/Revisita','revisita',null,false],['*','Agendada Revisita','revisita',null,false],
+  ['*','Novo Negócio/Resolução pós Revisita','pc',null,false],['*','N/Emissão','n',null,false],['*','Emissão Final','fa',null,false],
+  ['*','Venda ganha','emitida',null,false],['*','Venda perdida','nao',null,false],['*','Pendência/Atraso','emitida',null,false],['bc','cst_1','novo',null,true],
+  ['*','Oportunidade','novo',null,false],['*','Em contato','novo','em_contato',false],['*','Análise','n',null,false],['*','Proposta','n',null,false],
+  ['*','Fechamento','fa',null,false],['*','Ganho','emitida',null,false],['*','Perdido','nao',null,false],['*','Contato/Revisita','revisita',null,false],
+  ['*','Revisita agendada','revisita',null,false],['*','Descartado','nao',null,false],
+  ['leads','Conexao','novo','conexao',false],['leads','Dormente','novo','dormente',false],['leads','TA','novo','ta_na_lista',false],['leads','SitPlan','novo','sitplan',false],
+  ['leads','Qualificacao','oi',null,false],['leads','OT','oi',null,false],['leads','FIP','pc',null,false],['leads','Fechamento','n',null,false],['leads','Descartado','nao',null,false]
+];
+let ETAPA_MAPA=ETAPA_MAPA_FAB;
+function mapearEtapa(funil,etapa){ const nk=x=>String(x==null?'':x).trim().toLowerCase(), f=nk(funil), e=nk(etapa);
+  let hit=null; if(e) for(const r of ETAPA_MAPA){ if(nk(r[1])!==e) continue; if(nk(r[0])===f){ hit=r; break; } if(r[0]==='*'&&!hit) hit=r; }
+  return hit?{etapa_id:hit[2],status_card:hit[3]||null,precisa_revisao:!!hit[4]}:{etapa_id:'novo',status_card:null,precisa_revisao:true}; }
+async function etapaMapaCarregar(){ if(!sb||!novoOn('funil-unico')) return;
+  try{ const {data,error}=await sb.from('kb_etapa_mapa').select('funil_origem,etapa_origem,etapa_nova,status_card,precisa_revisao'); if(error) throw error;
+    if(Array.isArray(data)&&data.length) ETAPA_MAPA=data.map(r=>[r.funil_origem,r.etapa_origem,r.etapa_nova,r.status_card,!!r.precisa_revisao]); }
+  catch(e){ console.warn('kb_etapa_mapa indisponível → mapa de fábrica',e); } }
 /* Funil Negócios BASE DE CLIENTES — espelho do funil "CLIENTES CARTEIRA" do Kommo
    (conta jucasegurocomjucacom, pipeline 12543239, capturado 23/07/2026).
    Fica de fora a "Etapa de leads de entrada" (etapa de sistema do Kommo); nomes
@@ -17478,6 +17511,7 @@ function dicCacheLer(){ try{ const r=localStorage.getItem('crmlp_dic_v1'); if(r)
 async function dicCarregar(){
   if(!sb) return; try{
     const {data:s}=await sb.auth.getSession(); if(!s||!s.session) return;
+    etapaMapaCarregar();   /* FUNIL-UNICO-V1: kb_etapa_mapa (só quem tem o funil único) */
     const {data,error}=await sb.from('app_settings').select('chave,valor').in('chave',['dicionario_civil_cod','dicionario_temperatura','lp_funil_cfg','lp_listas_ta']);
     if(error) throw error;
     (data||[]).forEach(r=>{ const v=typeof r.valor==='string'?JSON.parse(r.valor):r.valor;
@@ -17797,6 +17831,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
+  'funil-unico':{o:'🧭 Funil único (4 funis em 1): aba "Funil único" em Funil & Etapas + mapa de etapas legadas (kb_etapa_mapa) — T1 do PROMPT_CODE Funil Único', desde:'2026-10-24'},
   /* 'carga' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor (palavra dele: "libera a carga pro Victor também"). */
   /* 'aviso-versao' — LIBERADO pra todos em 29/09 (melhoria em algo que o Daniel já usa — regra dele: "evolução do que ele já tem acesso já deve ser estendida a ele"). */
   /* 'pm-padrao' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor; o Daniel espera a validação dele. */
@@ -20404,7 +20439,7 @@ async function funCfgSalvarAgora(){
 function funApply(){ rebuildFunilLp(); funCfgSalvar(); }
 function funEditado(f,i){ const e=FUNIL_CFG[f][i], fab=(FUNIL_FAB[f]||[])[i];
   if(!fab) return true; if(fab[0]!==e.id) return true;
-  return e.label!==e.id || e.cor!==fab[1] || (e.prob||0)!==(fab[2]||0) || (!!e.enc)!==(!!fab[3]); }
+  return e.label!==(fab[4]||e.id) ||e.cor!==fab[1] || (e.prob||0)!==(fab[2]||0) || (!!e.enc)!==(!!fab[3]); }
 
 function viewFunilCfg(){
   $('#main').innerHTML=`
@@ -20526,7 +20561,7 @@ function viewFunilCfg(){
   funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv();
 }
 function funRenderTabs(){ const el=$('#funcfg-tabs'); if(!el)return;
-  el.innerHTML=[['lp','🎯 Funil LP (Vendas)'],['bc','💼 Base de Clientes']].map(([f,nm])=>`<button class="fc-tab" role="tab" aria-selected="${f===FUN_edit}" onclick="funSetFunnel('${f}')">${nm}<span class="n">${FUNIL_CFG[f].length}</span></button>`).join(''); }
+  el.innerHTML=[['lp','🎯 Funil LP (Vendas)'],['bc','💼 Base de Clientes']].concat(novoOn('funil-unico')?[['unico','🧭 Funil único (em construção)']]:[]).map(([f,nm])=>`<button class="fc-tab" role="tab" aria-selected="${f===FUN_edit}" onclick="funSetFunnel('${f}')">${nm}<span class="n">${FUNIL_CFG[f].length}</span></button>`).join(''); }
 function funSetFunnel(f){ FUN_edit=f; funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); }
 function funRowHtml(e,i,arr){ const last=i===arr.length-1, n=funNeg(e.id);
   const sws=FUN_PAL.map(c=>`<button class="fc-sw" style="background:${FUN_COR[c]};color:${FUN_COR[c]}" aria-pressed="${c===e.cor}" title="${c}" onclick="funSetCor(${i},'${c}')"></button>`).join('');
@@ -20585,7 +20620,7 @@ function funDelDo(){ if(_funDel<0)return; const arr=FUNIL_CFG[FUN_edit]; if(funN
 function funReset(){ if(!confirm('Restaurar os dois funis ao padrão de fábrica? As personalizações serão descartadas.'))return; FUNIL_CFG=funFabMat(); funApply(); funRenderTabs(); funRenderRows(); funRenderPreview(); funRenderInv(); toast('Funis restaurados',true); }
 
 /* invariantes do funil no portão (silencioso no sucesso, erro no console se quebrar) */
-function funSelfCheck(){ try{ let fail=[]; for(const f of ['lp','bc']){ const arr=FUNIL_CFG[f]||[]; const ids=arr.map(e=>e.id);
+function funSelfCheck(){ try{ let fail=[]; for(const f of ['lp','bc','unico']){ const arr=FUNIL_CFG[f]||[]; const ids=arr.map(e=>e.id);
   if(new Set(ids).size!==ids.length) fail.push(f+': ids duplicados');
   if(!arr.some(e=>!e.enc)) fail.push(f+': sem etapa no fluxo');
   if(!arr.every(e=>e.label&&String(e.label).trim())) fail.push(f+': rótulo vazio');
@@ -23480,6 +23515,24 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: numero vazio nao vira zero', atCsvNum(null) === '' && atCsvNum(undefined) === '');
     ok('export: cabecalho tem uma coluna por definicao', atCsv([]).split(';').length === AT_CSV_COLS.length);
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
+    /* FUNIL-UNICO-V1 · T1 — teste de aceite nº 1 da spec + cobertura de todo valor real (fábrica) */
+    { const M=(f,e)=>mapearEtapa(f,e), _m=ETAPA_MAPA; ETAPA_MAPA=ETAPA_MAPA_FAB;
+      try{
+        const ac=[['bc','Clientes Ativos','emitida'],['bc','Contato Agenda/Revisita','revisita'],['nn','OI/FF','oi'],['nn','P/C','pc'],['nn','N/Emissão','n'],
+          ['nn','DELIVERY','entrega'],['bc','Delivery','entrega'],['leads','FIP','pc'],['nn','Venda perdida','nao']];
+        ok('FUNIL-UNICO T1: aceite nº 1 — etapas legadas caem na etapa certa', ac.every(([f,e,x])=>{ const r=M(f,e); return r.etapa_id===x&&!r.precisa_revisao; }));
+        ok('FUNIL-UNICO T1: TA vira Novo + "Fazer TA"; Dormente vira Novo + dormente', M('nn','TA').etapa_id==='novo'&&M('nn','TA').status_card==='ta_na_lista'&&M('leads','Dormente').etapa_id==='novo'&&M('leads','Dormente').status_card==='dormente');
+        ok('FUNIL-UNICO T1: etapa sem mapa → Novo + precisa_revisao (nunca inventa)', M('nn','xyz').etapa_id==='novo'&&M('nn','xyz').precisa_revisao===true&&M('prospects','').precisa_revisao===true&&M('bc',null).precisa_revisao===true);
+        ok('FUNIL-UNICO T1: linha do funil ganha da genérica (Fechamento da captação → N; dos pipes → FA)', M('leads','Fechamento').etapa_id==='n'&&M('mfo','Fechamento').etapa_id==='fa');
+        ok('FUNIL-UNICO T1: compara sem caixa e sem espaço nas pontas', M('NN','  oi/ff ').etapa_id==='oi'&&M('bc','delivery').etapa_id==='entrega');
+        const ids=FUNIL_FAB.unico.map(x=>x[0]);
+        ok('FUNIL-UNICO T1: 12 etapas na ordem da spec (9 no fluxo, 3 encerramentos)', ids.join()==='novo,oi,revisita,pc,n,c2,fa,emitida,entrega,nao,prop_cancelada,apol_cancelada'&&FUNIL_FAB.unico.filter(x=>x[3]).length===3&&(ETAPAS_MAP.unico&&ETAPAS_MAP.unico.fluxo.length)===9);
+        ok('FUNIL-UNICO T1: todo destino do mapa existe no funil único', ETAPA_MAPA_FAB.every(r=>ids.includes(r[2])));
+        ok('FUNIL-UNICO T1: toda etapa de fábrica de todos os funis tem mapa (sem cair em revisão)', Object.keys(FUNIL_FAB).filter(f=>f!=='unico').every(f=>FUNIL_FAB[f].every(x=>!M(f==='lp'?'nn':f,x[0]).precisa_revisao)));
+        const reais=['SitPlan','TA','OI/FF','P/C','C2','N','FA','N/Emissão','EMISSÃO','Emissão Final','DELIVERY','Delivery','Clientes Ativos','Contato Agenda/Revisita','Agendada Revisita','Novo Negócio/Resolução pós Revisita','Fechamento','Venda perdida','Não','Prop. Cancelada','Apól. Cancelada','Oportunidade','Proposta','Análise','Em contato'];
+        ok('FUNIL-UNICO T1: todo valor real da §1 tem destino; só o cst_1 órfão pede revisão', reais.every(e=>!M('nn',e).precisa_revisao&&ids.includes(M('nn',e).etapa_id))&&M('bc','cst_1').precisa_revisao===true);
+        ok('FUNIL-UNICO T1: ids minúsculos não pisam no rótulo do Funil LP (FA/N/C2) e Entrega é pós-venda', ET_LABEL['FA']===((FUNIL_CFG.lp||[]).find(e=>e.id==='FA')||{label:'FA'}).label&&ET_LABEL['fa']!=null&&ehPosVenda('entrega','unico')&&ehPosVenda('DELIVERY','nn')&&!ehPosVenda('emitida','unico'));
+      } finally { ETAPA_MAPA=_m; } }
     if(_iSalvo===null) localStorage.removeItem(IMP_CHAVE); else localStorage.setItem(IMP_CHAVE,_iSalvo);   /* self-check NÃO deixa lixo salvo (Livro de Erros #17) */
   }catch(e){ falhas.push('exceção: '+e.message); }
   finally{ window.toast=_toast; window.toastDesfazer=_toastDesf; }
