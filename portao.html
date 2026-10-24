@@ -198,14 +198,16 @@ async function rodarCenario(largura,base,opts){
   if(base==='cheia'){
     /* os módulos do BackOffice têm "Ver exemplo" próprio (sem login, só local). Usar o do app
        garante que a fixture deles evolui junto com o parser — sem cópia aqui. */
-    for(const fn of ['lpCarregarExemplo','atExemplo','emExemplo','bfExemplo','plExemplo','exExemplo']){ try{ if(typeof w[fn]==='function') w[fn](); }catch(e){ erros.push('exemplo '+fn+': '+e.message); } await assentar(); }
+    for(const fn of ['lpCarregarExemplo','atExemplo','emExemplo','bfExemplo','plExemplo','exExemplo','cvExemplo']){ try{ if(typeof w[fn]==='function') w[fn](); }catch(e){ erros.push('exemplo '+fn+': '+e.message); } await assentar(); }
     try{ w.atClose&&w.atClose(); }catch(_){ }
   }
   const views=w.eval('VIEWS_CONHECIDAS.slice()');
   const fichas={ 'nn-funil':()=>{ const id=w.eval('(S.contatos.find(c=>c.funil!=="bc")||{}).id'); if(id){ w.abrirContato(id); return 'ficha do negócio'; } },
                  'bc-funil':()=>{ const id=w.eval('(S.contatos.find(c=>c.funil==="bc")||{}).id'); if(id){ w.abrirContato(id); return 'ficha do negócio (bc)'; } },
                  'cart-clientes':()=>{ const ref=w.eval('(CART.clientes[0]||{}).ref'); if(ref){ w.cartAbrir(ref); return 'ficha do cliente'; } },
-                 'lp-pendencias':()=>{ const ch=w.eval('EM.itens.length?emChave(EM.itens[0]):""'); if(ch){ w.emAbrir(ch); return 'ficha da emissão'; } } };
+                 'lp-pendencias':()=>{ const ch=w.eval('EM.itens.length?emChave(EM.itens[0]):""'); if(ch){ w.emAbrir(ch); return 'ficha da emissão'; } },
+                 /* CONVERSAS-V1: no celular a conversa aberta é tela cheia — é ela que precisa ser medida */
+                 'conversas':()=>{ const id=w.eval('((CV.chats||[])[0]||{}).id'); if(id){ w.cvAbrir(id); return 'conversa aberta'; } } };
   for(const v of views){
     const antes=erros.length;
     try{ w.irPara(v); }catch(e){ erros.push('irPara('+v+'): '+e.message); }
@@ -215,7 +217,7 @@ async function rodarCenario(largura,base,opts){
     const linha={view:v,erros:erros.slice(antes),...med};
     /* fichas: abrir, medir, fechar — o drawer é onde os campos mortos se escondem */
     if(base==='cheia'&&fichas[v]){ try{ const nome=fichas[v](); if(nome){ await assentar(); const m2=medirTela(w,largura); linha.ficha={nome,...m2}; } }catch(e){ linha.erros.push('ficha: '+e.message); }
-      try{ w.fecharDrawer&&w.fecharDrawer(); w.atClose&&w.atClose(); }catch(_){ } }
+      try{ w.fecharDrawer&&w.fecharDrawer(); w.atClose&&w.atClose(); w.cvFechar&&w.cvFechar(); }catch(_){ } }
     linha.ok=!linha.erros.length&&!linha.mortos.length&&linha.estouro<=1&&!linha.fontes&&(!linha.ficha||(!linha.ficha.mortos.length&&linha.ficha.estouro<=1&&!linha.ficha.fontes&&!linha.ficha.erros));
     if(!linha.ok) cen.ok=false;
     cen.telas.push(linha);

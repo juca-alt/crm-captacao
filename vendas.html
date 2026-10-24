@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.80 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.81 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -6604,6 +6604,7 @@ function renderDrawer(){
       </div>
 
       ${mfoFichaHTML(c)}
+      ${cvFichaBloco(c)}
       ${soDrawerBloco(c)}
       <div class="sec" id="tarBox">
         <h3><span>Tarefas &amp; atividades</span>${proxTarefa(c)?'':'<span style="font-size:11px;font-weight:700;color:var(--verm);text-transform:none;letter-spacing:0">sem próxima atividade</span>'}</h3>
@@ -6771,6 +6772,7 @@ function renderDrawer(){
 
     </div>`;
   drwSecsWire();
+  cvFichaPrep(c);   /* CONVERSAS-V1: acha a conversa pelo telefone e preenche o bloco 💬 WhatsApp */
 }
 function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); try{ funOrdemInserir(c,e,null); }catch(_){} const _auto=funAutoDelivery(c); salvar(); renderDrawer(); etFocoMotivo();   /* MOTIVO-PERDA-V1 */ toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁`:`${c.nome.split(' ')[0]}: ${de} → ${e}`,true);
   /* QUADRO-ACOMPANHA-V1 (04/09): mudar a etapa pela ficha deixava o quadro atrás na versão velha ("travado") — o card só andava na próxima tela. Agora o fundo redesenha junto, sem fechar a ficha. */
@@ -15785,6 +15787,9 @@ const HUB_SECOES=[
     {view:'consolidado', ic:'🔭', titulo:'Visão Consolidada', desc:'Os funis que você escolher numa régua só — onde o negócio está, sem operar.'},
     {view:'plano',       ic:'🧭', titulo:'Plano Prudential',  desc:'O Planejamento Financeiro da franquia por mês: apólices, PA médio, CS médio e comissão. Vira a referência de realizado × plano nos cards.', novo:'plano'}
   ]},
+  {titulo:'Atendimento', itens:[   /* CONVERSAS-V1 (24/10): módulo novo — MODS def:false (Victor ligado; Daniel quando ele disser) */
+    {view:'conversas', ic:'💬', titulo:'Conversas', desc:'O WhatsApp do Umbler Talk aqui dentro, só pra ler: quem está aguardando resposta na frente, histórico completo e a ponte com a ficha. Responder é sempre você ou o Victor.', mod:'conversas', cnt:()=>(CV.chats||[]).filter(cvAguardando).length}
+  ]},
   {titulo:'Prospecção', itens:[
     {view:'mapa',    ic:'🗺️', titulo:'Mapa de locais',      desc:'Hospitais, clínicas, empresas e casas de leads e clientes — quem está em cada lugar.'},
     {view:'bn-dups', ic:'🔀', titulo:'Duplicatas',           desc:'Fila de possíveis duplicados no Estoque de Nomes — você decide juntar.', cnt:()=>BN.dups.filter(d=>!d.decisao).length}
@@ -17777,6 +17782,7 @@ const MODS={
   embaixadores:{label:'🌟 Embaixadores da Proteção (importar a lista Mercado X do embaixador, selecionar quem ele esquenta, acompanhar até fechar) — você e o seu backoffice (Victor) importam e selecionam; os leads ficam sempre na SUA base', def:false, views:['embaixadores']},
   parceiros:{label:'🤝 Parceiros (comissão dividida com LP parceiro: acordo por cliente, importação do Extrato Detalhado, apuração, histórico, prestação de contas, projeção) — só o admin fecha competência e edita %', def:false, views:['parceiros']},   /* PARCEIROS-V1 (30/09): módulo novo — liga por usuário (Victor ligado no banco) */
   'congelar-pa':{label:'❄️ Congelado sai do PA: oportunidade congelada não soma no PA/ponderado da coluna nem no PA em jogo (sem isto ela só sai do quadro do dia a dia)', def:false, views:[]},   /* CONGELAR-V1 (23/10): regra que muda número — liga por usuário */
+  conversas:{label:'💬 Conversas (o WhatsApp do Umbler Talk dentro do CRM, SÓ LEITURA: quem está aguardando resposta, histórico da conversa e o bloco 💬 WhatsApp na ficha. Não envia mensagem — responder é sempre você ou o Victor)', def:false, views:['conversas']},   /* CONVERSAS-V1 (24/10): tela nova — Victor ligado; Daniel quando ele disser */
   importacoes:{label:'📥 Relatórios do portal (Central de Importações: semáforo do que está em dia/vencido e subir arquivo à mão)', def:false, views:['importacoes']},   /* ATRASO-V2 T3 (23/10): tela nova — Victor liga por usuário */
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']}
 };
@@ -20075,7 +20081,7 @@ const TITULO_VIEW={inicio:'Início',consolidado:'Visão Consolidada',modulos:'M�
   'cart-visao':'Visão da Carteira','cart-clientes':'Clientes','cart-oportunidades':'Oportunidades',
   'nn-funil':'Novos Negócios','bc-funil':'Negócios na Base','vg-funil':'Vida em Grupo · Novos Negócios','prud-funil':'Prud. Demais · Novos Negócios','mfo-funil':'MFO · Novos Negócios',
   plano:'Plano Prudential','consol-vg':'Consolidada · Vida em Grupo','consol-prud':'Consolidada · Prud. Demais','consol-mfo':'Consolidada · MFO','vg-bc-funil':'Vida em Grupo · Negócios na Base','prud-bc-funil':'Prud. Demais · Negócios na Base','mfo-bc-funil':'MFO · Negócios na Base','lp-atrasos':'Lista de Atraso',
-  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência',parceiros:'Parceiros',embaixadores:'Embaixadores',importacoes:'Relatórios do portal','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
+  'lp-pendencias':'Pendências de Emissão',solicitacoes:'Solicitações',beneficios:'Benefícios',persistencia:'Persistência',parceiros:'Parceiros',embaixadores:'Embaixadores',importacoes:'Relatórios do portal',conversas:'Conversas','lp-statust':'Status T','lp-aniversario':'Aniversariantes',
   'lp-datas':'Aniversário de Apólice',subst:'Substituições',planos:'Planos & Simulações','config-funil':'Funil & Etapas',
   revisao:'Revisão de Proteção', montagem:'Montagem de planos', placed:'Controle de PLACED', 'emissao-diaria':'Emissão Diária', 'apolices-detalhado':'Detalhado por Apólice', 'pc-simulador':'Melhor dia de vencimento'};
 function renderTituloTopo(){
@@ -20221,6 +20227,7 @@ function render(){
   else if(VIEW==='persistencia') viewPersistencia();
   else if(VIEW==='parceiros') viewParceiros();
   else if(VIEW==='importacoes') viewImportacoes();
+  else if(VIEW==='conversas') viewConversas();
   else if(VIEW==='embaixadores') viewEmbaixadores();
   else if(VIEW==='bn-estoque') viewBnEstoque();
   else if(VIEW==='bn-ta') viewBnTa();
@@ -20890,8 +20897,8 @@ function lpSelfCheck(){
       const temEsq=!!m.querySelector('.esq');
       return !temEsq || m.children.length===1; })());
     /* FLUIDEZ-V1:SELFCHECK-VOLTAR */
-    ok('voltar: ordem das camadas é folha > busca > modal > ficha > gaveta',
-       CAM_ORDEM.map(c=>c.n).join('>')==='folha>busca>modal>ficha>gaveta');
+    ok('voltar: ordem das camadas é folha > busca > modal > ficha > conversa > gaveta',
+       CAM_ORDEM.map(c=>c.n).join('>')==='folha>busca>modal>ficha>conversa>gaveta');   /* CONVERSAS-V1 (24/10): a conversa em tela cheia entrou entre a ficha e a gaveta */
     ok('voltar: profundidade acompanha as camadas realmente abertas', (()=>{
       const n0=camProfundidade(); toggleMenu(true); const subiu=camProfundidade()===n0+1;
       toggleMenu(false); return subiu && camProfundidade()===n0; })());
@@ -21535,6 +21542,75 @@ function lpSelfCheck(){
         ok('dobra: nenhum details com "open" LITERAL sobrou no código — abrir só por escolha gravada (vale pro futuro)',
            (()=>{ const re=/<details(?:\s+class="[^"]*")?\s+open[\s>]/; return ![...document.scripts].some(s=>re.test(s.textContent||'')); })());
       } finally{ try{ if(_bne===null) localStorage.removeItem(BNE_SEC_CHAVE); else localStorage.setItem(BNE_SEC_CHAVE,_bne); }catch(_){} PERFIL=_p; }
+    }
+    /* ═══ CONVERSAS-V1 (24/10) — 💬 Conversas do Umbler Talk: SÓ LEITURA ═══════════════════
+       Decisão dele (23/10): "pode ler tudo… os envios da resposta são avaliados por mim e Victor".
+       Então o invariante guarda as DUAS coisas: a leitura (ordem, filtros, ponte com o CRM pelo
+       telefone) e a trava — a tela não tem campo de resposta nem botão de enviar, e o módulo não
+       escreve nem chama rota de envio. Tudo em cima de cópias; CV e S voltam ao que eram no fim. */
+    { const _c=CV.chats,_m=CV.msgs,_ab=CV.aberto,_f=CV.f,_e=CV.estado,_ex=CV.exemplo,_car=CV.carregado,_pc=CV.porContato,_er=CV.erro,_s=S.contatos,_p=PERFIL;
+      try{
+        ok('conversas: telefone casa pelos 8 últimos dígitos + DDD (a MESMA regra do crm-mcp)',
+           cvTelScore('(81) 99999-0001','5581999990001')===2 && cvTelScore('81999990001','81988880001')===0
+           && cvTelScore('999990001','81999990001')===1 && cvTelScore('(82) 99999-0001','81999990001')===0
+           && cvTelChave('1234567')===null && (cvTelChave('5581999990001')||{}).ddd==='81');
+        const hh=t=>new Date(Date.now()-t*36e5).toISOString();
+        const A={id:'a',contato_nome:'Fulano Zz',contato_tel_norm:'81900009101',canal:'C1',aberto:true, ultima_msg_em:hh(30),ultima_msg_de:'cliente',ultima_msg_previa:'preciso da proposta'};
+        const B={id:'b',contato_nome:'Beltrana Zz',contato_tel_norm:'81900009102',canal:'C1',aberto:true, ultima_msg_em:hh(2), ultima_msg_de:'cliente',ultima_msg_previa:'obrigada'};
+        const C2={id:'c',contato_nome:'Ciclano Zz',contato_tel_norm:'81900009103',canal:'C2',aberto:false,ultima_msg_em:hh(1), ultima_msg_de:'nos',    ultima_msg_previa:'mandei por e-mail'};
+        const base=[C2,B,A];
+        ok('conversas: aguardando resposta primeiro, e dentro deles o MAIS RECENTE na frente (quem espera agora)',
+           cvOrdenar(base).map(x=>x.id).join(',')==='b,a,c' && cvAguardando(A) && !cvAguardando(C2));
+        /* ESFRIANDO: 213 "aguardando" na base real, mas a mais antiga é de dezembro/25 — a lista
+           curta de bola caída (1 a 7 dias) é a que dá pra zerar, e aí o mais parado vem na frente. */
+        ok('conversas: ⏰ Esfriando = cliente esperando de 1 a 7 dias, o mais parado na frente',
+           cvEsfriando(A)&&!cvEsfriando(B)&&!cvEsfriando(C2)
+           && cvFiltrar(base,{modo:'esfriando'}).map(x=>x.id).join('')==='a'
+           && cvOrdenar([B,A],'esfriando').map(x=>x.id).join(',')==='a,b');
+        ok('conversas: filtros — só aguardando · só abertas · canal',
+           cvFiltrar(base,{modo:'aguardando'}).length===2 && cvFiltrar(base,{modo:'todas',abertas:true}).length===2
+           && cvFiltrar(base,{modo:'todas',canal:'C2'}).map(x=>x.id).join('')==='c');
+        ok('conversas: busca por nome e por telefone (com o DDD conferido)',
+           cvFiltrar(base,{modo:'todas',busca:'beltrana'}).map(x=>x.id).join('')==='b'
+           && cvFiltrar(base,{modo:'todas',busca:'(81) 90000-9103'}).map(x=>x.id).join('')==='c'
+           && cvFiltrar(base,{modo:'todas',busca:'(82) 90000-9103'}).length===0);
+        ok('conversas: "há quanto tempo" em linguagem de gente', cvHa(hh(0))==='agora' && cvHa(hh(2))==='há 2 h' && cvHa(hh(30))==='há 1 d' && cvHa(hh(50))==='há 2 d');
+        CV.chats=base; CV.f={modo:'todas',busca:'',canal:'',abertas:false}; CV.erro=''; CV.carregado=true; CV.exemplo=false;
+        CV.estado={ultimo_ok:hh(0.1)}; CV.aberto='a';
+        CV.msgs={a:[{id:'m1',chat_id:'a',de:'cliente',tipo:'Text',texto:'oi',enviada_em:hh(30)},
+                    {id:'m2',chat_id:'a',de:'nos',tipo:'Text',texto:'oi!',autor:'pelo celular',enviada_em:hh(29)},
+                    {id:'m3',chat_id:'a',de:'nos',tipo:'Text',texto:'pediu invalidez',privada:true,enviada_em:hh(28)},
+                    {id:'m4',chat_id:'a',de:'cliente',tipo:'Image',texto:'',arquivo_nome:'zz.jpg',enviada_em:hh(27)}]};
+        const html=cvTelaHtml();
+        ok('conversas: ENVIAR NUNCA — nem campo de resposta na tela, nem rota de envio no código',
+           !/<textarea/i.test(html) && !/contenteditable/i.test(html) && !/>\s*(Enviar|Responder|Mandar)\b/i.test(html)
+           && !/\/v1\/messages/.test(String(cvSincronizar))
+           && !/\.(insert|upsert|update|delete)\(/.test(String(cvCarregar)+String(cvMsgsCarregar)+String(cvChatsDoTel)+String(cvSincronizar)));
+        ok('conversas: mensagens em ordem cronológica, nota interna marcada e arquivo pelo nome',
+           html.indexOf('>oi<')<html.indexOf('>oi!<') && /cv-b-nota/.test(html) && /🔒 nota interna/.test(html)
+           && /📎 zz\.jpg/.test(html) && /pelo celular/.test(html));
+        ok('conversas: a linha mostra a espera e a prévia da última mensagem', /⏳ há 1 d/.test(html) && /cv-row-p/.test(html) && /preciso da proposta/.test(html));
+        ok('conversas: 🔄 sincronizar agora e a última leitura ficam na tela', /cvSincronizar\(\)/.test(html) && /Última leitura/.test(html));
+        ok('conversas: copiar texto sai pronto pra colar', (()=>{ const t=cvTexto(A,CV.msgs.a);
+           return /Conversa com Fulano Zz/.test(t) && /\[nota interna\]/.test(t) && /\(zz\.jpg\)/.test(t) && t.split('\n').length>=6; })());
+        PERFIL=null; S.contatos=[{id:'zzcv1',nome:'Fulano Zz',telefone:'(81) 90000-9101',etapa:'TA',funil:'nn',lp:S.activeUser}];
+        const r=cvCasar(A);
+        ok('conversas: casa a conversa com o negócio do funil pelo telefone (e abre a ficha)',
+           !!r && r.tipo==='funil' && r.id==='zzcv1' && typeof cvAbrirFicha==='function');
+        CV.porContato={zzcv1:[A]};
+        const fb=cvFichaBloco(S.contatos[0]);
+        ok('conversas: bloco 💬 WhatsApp na ficha nasce FECHADO, com o resumo no cabeçalho (DOBRA-FECHADA-V1)',
+           /<details>/.test(fb) && !/<details[^>]*\sopen[\s>]/.test(fb) && /💬 WhatsApp/.test(fb)
+           && /esperando resposta/.test(fb) && /📎 zz\.jpg/.test(fb) && !/<textarea/i.test(fb));
+        ok('conversas: tela NOVA atrás de MODS def:false (liga por usuário), no hub, no título e no portão',
+           !!MODS.conversas && MODS.conversas.def===false && MODS.conversas.views.join('')==='conversas'
+           && VIEWS_CONHECIDAS.includes('conversas') && TITULO_VIEW.conversas==='Conversas'
+           && HUB_SECOES.some(s=>s.itens.some(i=>i.view==='conversas'&&i.mod==='conversas'))
+           && typeof viewConversas==='function' && typeof cvExemplo==='function');
+        ok('conversas: o voltar do Android fecha a conversa antes da gaveta e depois da ficha (camada própria)',
+           (()=>{ const n=CAM_ORDEM.map(x=>x.n), i=n.indexOf('conversa');
+             return i>0 && i>n.indexOf('ficha') && i<n.indexOf('gaveta'); })());
+      } finally{ CV.chats=_c; CV.msgs=_m; CV.aberto=_ab; CV.f=_f; CV.estado=_e; CV.exemplo=_ex; CV.carregado=_car; CV.porContato=_pc; CV.erro=_er; S.contatos=_s; PERFIL=_p; }
     }
     /* ═══ NIVER-FEITO-V1 (17/09) ═══ */
     { const _c=CART.clientes, _s=S.contatos, _b=BN.contatos, _f={...NIVER_F}, _nf=NIVER_FEITO, _ls=(()=>{ try{ return localStorage.getItem(NIVER_FEITO_CHAVE); }catch(_){ return null; } })(), _p=PERFIL, _v=NIVER_VER_FEITOS;
@@ -24563,9 +24639,453 @@ async function embLinkAcesso(id){ const p=EMB.lista.find(x=>x.id===id); if(!p||!
 window.embAdicionar=embAdicionar; window.embAdicionarSalvar=embAdicionarSalvar; window.embJornadaVer=embJornadaVer; window.embJEscolher=embJEscolher; window.embJTirar=embJTirar; window.embJEnviar=embJEnviar; window.embAnexoAbrir=embAnexoAbrir; window.embLinkAcesso=embLinkAcesso;
 window.embAbrir=embAbrir; window.embFechar=embFechar; window.embFiltro=embFiltro; window.embBusca=embBusca; window.embMarcar=embMarcar; window.embMarcarTodos=embMarcarTodos; window.embMover=embMover; window.embRenderCorpo=embRenderCorpo;
 window.embImportarEscolher=embImportarEscolher; window.embImportarConfirmar=embImportarConfirmar; window.viewEmbaixadores=viewEmbaixadores; window.embCarregar=embCarregar;
+/* ═══ CONVERSAS-V1 (24/10/2026) — 💬 Conversas do WhatsApp (Umbler Talk), SÓ LEITURA ══════════
+   O servidor já lê TODAS as conversas do Talk a cada 10 min (UMBLER-V1, 23/10) e guarda em
+   umbler_chats / umbler_mensagens. Esta tela é essa leitura dentro do CRM:
+     • quem está "aguardando resposta" primeiro (o cliente falou por último), com o tempo de espera;
+     • filtros (abertas, canal, busca por nome ou telefone), prévia da última mensagem e atendente;
+     • conversa aberta em ordem cronológica, nota interna marcada, arquivo pelo nome;
+     • ponte com o CRM pelo telefone — DDD + 8 últimos dígitos, a MESMA regra do crm-mcp
+       (telChave/telScore) — com "abrir ficha", e na ficha o bloco 💬 WhatsApp.
+   ENVIAR, NUNCA (decisão dele, 23/10: "os envios da resposta são avaliados por mim e Victor").
+   Não existe campo de resposta nem botão de enviar aqui: o que a tela faz é COPIAR o texto e
+   ABRIR a conversa no WhatsApp/Talk, onde gente de verdade responde. Um invariante do self-check
+   fecha o portão se um campo de resposta ou uma chamada de envio aparecer neste módulo.
+   Quem vê: RLS de leitura por dono + delegados (lp_donos_visiveis) — hoje Gustavo e o Victor.
+   Celular: a lista, e a conversa em tela cheia com o voltar do Android fechando ela (camada).
+   Desktop: dois painéis (lista à esquerda, conversa à direita). */
+const CV_CHATS_LIM=600, CV_MSGS_CONV=120, CV_MSGS_FICHA=12;
+const CV_COLS='id,contato_nome,contato_tel,contato_tel_norm,canal,setor,atendente,aberto,aguardando,aguardando_desde,nao_lidas,ultima_msg_em,ultima_msg_de,ultima_msg_previa,criado_em,fechado_em';
+const CV_MSG_COLS='id,chat_id,de,tipo,texto,arquivo_nome,arquivo_url,autor,enviada_em,privada';
+const CV_TALK='https://app-utalk.umbler.com/chats/';
+/* rótulo do que não é texto — o Talk manda o tipo, e a mensagem em si pode vir vazia */
+const CV_TIPOS={Text:'',Image:'🖼️ imagem',Audio:'🎧 áudio',Video:'🎬 vídeo',File:'📎 arquivo',Sticker:'🏷️ figurinha',
+  Contact:'👤 contato',Location:'📍 localização',Poll:'📊 enquete',CallAttempt:'📞 tentativa de chamada'};
+function cvTipoRot(t){ return Object.prototype.hasOwnProperty.call(CV_TIPOS,String(t||''))? CV_TIPOS[t] : String(t||''); }
+let CV={chats:[],carregado:false,carregando:null,estado:null,erro:'',msgs:{},porContato:{},aberto:null,sinc:false,exemplo:false,
+  f:{modo:'aguardando',busca:'',canal:'',abertas:false}};
+
+(function cvCss(){ if(document.getElementById('cv-css')) return; const s=document.createElement('style'); s.id='cv-css'; s.textContent=`
+  .cv-wrap{display:block}
+  .cv-lista{display:flex;flex-direction:column;gap:6px}
+  .cv-row{width:100%;text-align:left;display:flex;flex-direction:column;gap:3px;padding:10px 12px;min-height:44px;
+    background:var(--card);border:1px solid var(--linha);border-radius:12px;cursor:pointer;color:inherit}
+  .cv-row.sel{border-color:var(--azul);box-shadow:0 0 0 2px var(--azul-claro)}
+  .cv-row-t{display:flex;gap:6px;align-items:center;width:100%;min-width:0}
+  .cv-row-n{font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cv-row-h{font-size:11px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
+  .cv-row-p{display:block;width:100%;min-width:0;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cv-row-m{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+  .cv-pane{display:none}
+  .cv-head{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid var(--linha)}
+  .cv-acts{display:flex;gap:6px;flex-wrap:wrap}
+  .cv-acts .btn{min-height:44px;text-decoration:none;display:inline-flex;align-items:center}
+  .cv-msgs{display:flex;flex-direction:column;gap:7px;padding:10px 12px}
+  .cv-b{max-width:80%;padding:8px 11px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+  .cv-b-cli{align-self:flex-start;background:var(--fundo);border:1px solid var(--linha)}
+  .cv-b-nos{align-self:flex-end;background:var(--azul-claro);border:1px solid var(--azul-borda)}
+  .cv-b-bot{align-self:flex-end;background:var(--roxo-bg);border:1px solid #ddd3fa}
+  .cv-b-nota{align-self:center;max-width:94%;background:var(--amarelo-bg);border:1px dashed #e0bd63}
+  .cv-dia{align-self:center;font-size:11px;color:var(--muted);padding:3px 10px;background:var(--fundo);border-radius:9px}
+  .cv-mt{display:block;font-size:10.5px;color:var(--muted);margin-top:4px}
+  .cv-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0}
+  .cv-chips input[type=search],.cv-chips select{font-size:16px;padding:8px 10px;min-height:44px;border:1px solid var(--linha);border-radius:10px;background:var(--card);color:inherit}
+  /* o app tem um select com width:100% global (linha 86) — aqui o canal divide a linha com a busca */
+  .cv-chips select{width:auto;flex:0 1 220px;min-width:150px;max-width:100%}
+  .cv-chips input[type=search]{flex:1 1 170px;min-width:140px}
+  /* desktop: dois painéis, cada lista com a sua rolagem */
+  @media(min-width:981px){
+    .cv-wrap{display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:14px;align-items:start}
+    .cv-lista{max-height:70vh;overflow-y:auto;padding-right:4px}
+    .cv-pane{display:block}
+    .cv-msgs{max-height:58vh;overflow-y:auto}
+    .cv-volta{display:none}
+  }
+  /* celular: a conversa vira tela cheia (o voltar do Android fecha ela — camada 'conversa') */
+  @media(max-width:980px){
+    .cv-wrap.cv-abr>.cv-lista,.cv-wrap.cv-abr>.cv-vazia{display:none}
+    .cv-pane.aberto{display:block;position:fixed;inset:0;z-index:96;background:var(--fundo);overflow-y:auto;
+      padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+    .cv-b{max-width:88%}
+  }`; document.head.appendChild(s); })();
+
+/* ── chave de telefone: a MESMA do servidor (crm-mcp telChave/telScore) ───────────────
+   telKey() do app exige DDD (10+ dígitos); a conversa do Talk às vezes chega sem DDD.
+   Aqui vale a regra do servidor: os 8 últimos dígitos têm que casar; se os DOIS lados
+   tiverem DDD, o DDD também. 2 = certeza · 1 = sem DDD de um lado · 0 = outra pessoa. */
+function cvTelChave(v){ let d=String(v==null?'':v).replace(/\D/g,'');
+  if(d.length>=12&&d.slice(0,2)==='55') d=d.slice(2);
+  if(d.length<8) return null;
+  const ddd=((d.length===11&&d[2]==='9')||d.length===10)? d.slice(0,2) : '';
+  return {ddd,ult8:d.slice(-8)}; }
+function cvTelScore(a,b){ const x=cvTelChave(a), y=cvTelChave(b);
+  if(!x||!y||x.ult8!==y.ult8) return 0;
+  if(x.ddd&&y.ddd) return x.ddd===y.ddd?2:0;
+  return 1; }
+function cvChatTel(ch){ return (ch&&(ch.contato_tel_norm||ch.contato_tel))||''; }
+/* só pra mostrar na tela — formata o número INTEIRO (a chave acima corta em 8 dígitos de propósito) */
+function cvTelFmt(v){ let d=String(v==null?'':v).replace(/\D/g,'');
+  if(d.length>=12&&d.slice(0,2)==='55') d=d.slice(2);
+  if(d.length===11) return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);
+  if(d.length===10) return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6);
+  if(d.length===9)  return d.slice(0,5)+'-'+d.slice(5);
+  if(d.length===8)  return d.slice(0,4)+'-'+d.slice(4);
+  return String(v||''); }
+
+/* "agora" / "há 12 min" / "há 3 h" / "há 4 d" — espera em linguagem de gente */
+function cvHa(iso,agora){ const t=Date.parse(iso||''); if(!isFinite(t)) return '';
+  const min=Math.floor(Math.max(0,(agora||Date.now())-t)/6e4);
+  if(min<1) return 'agora';
+  if(min<60) return 'há '+min+' min';
+  const h=Math.floor(min/60); if(h<24) return 'há '+h+' h';
+  const d=Math.floor(h/24); if(d<30) return 'há '+d+' d';
+  const me=Math.floor(d/30); return 'há '+me+(me===1?' mês':' meses'); }
+function cvHora(iso){ const t=Date.parse(iso||''); if(!isFinite(t)) return '';
+  try{ return new Date(t).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }catch(_){ return ''; } }
+function cvDia(iso){ const t=Date.parse(iso||''); if(!isFinite(t)) return '';
+  const d=new Date(t); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+/* ── as funções puras que mandam na lista (testadas no self-check) ── */
+function cvAguardando(ch){ return !!ch && ch.ultima_msg_de==='cliente'; }   /* o cliente falou por último */
+/* ESFRIANDO: medido na base real em 24/10 — 213 conversas com o cliente falando por último,
+   mas só 24 nas últimas 24 h e a mais antiga de dezembro/25. Ou seja: "cliente falou por
+   último" junta o cliente de HOJE esperando resposta com o "obrigada!" de um ano atrás.
+   Por isso a ordem padrão é o MAIS RECENTE na frente (quem está esperando agora), e o que
+   escapou de um dia mas ainda está morno (1 a 7 dias) ganha um filtro próprio, aí sim com
+   o mais parado na frente — é a lista curta de bola caída, que dá pra zerar. */
+function cvEsfriando(ch,agora){ if(!cvAguardando(ch)) return false;
+  const t=Date.parse(ch.ultima_msg_em||''); if(!isFinite(t)) return false;
+  const d=Math.max(0,(agora||Date.now())-t)/864e5; return d>=1&&d<=7; }
+function cvFiltrar(chats,f,agora){
+  const b=normKey(String((f&&f.busca)||'')).trim(), dig=String((f&&f.busca)||'').replace(/\D/g,'');
+  return (chats||[]).filter(ch=>{
+    if(f&&f.abertas&&ch.aberto===false) return false;
+    if(f&&f.canal&&String(ch.canal||'')!==f.canal) return false;
+    if(f&&f.modo==='aguardando'&&!cvAguardando(ch)) return false;
+    if(f&&f.modo==='esfriando'&&!cvEsfriando(ch,agora)) return false;
+    if(!b) return true;
+    if(dig.length>=8&&cvTelScore(dig,cvChatTel(ch))>0) return true;                /* telefone: confere o DDD */
+    if(dig.length>=4&&String(cvChatTel(ch)).indexOf(dig)>=0) return true;          /* pedaço do número */
+    return normKey(String(ch.contato_nome||'')).indexOf(b)>=0;
+  }); }
+function cvOrdenar(l,modo){
+  const t=x=>Date.parse((x&&x.ultima_msg_em)||'')||0;
+  if(modo==='esfriando') return (l||[]).slice().sort((a,b)=>t(a)-t(b));   /* o mais parado na frente */
+  return (l||[]).slice().sort((a,b)=>{                                    /* aguardando primeiro, o mais recente na frente */
+    const aa=cvAguardando(a)?1:0, ba=cvAguardando(b)?1:0;
+    return (ba-aa) || (t(b)-t(a)); }); }
+
+/* ── ponte com o CRM: conversa → negócio do funil ou lead do Estoque ──────────── */
+function cvCasar(ch){
+  const tel=cvChatTel(ch); if(!cvTelChave(tel)) return null;
+  try{
+    const bate=o=>(typeof pTels==='function'?pTels(o):[o&&o.telefone]).some(t=>cvTelScore(tel,t)>0);
+    const enc=c=>{ const m=ETAPAS_MAP[c.funil||'nn']; return !!(m&&m.enc&&m.enc.includes(c.etapa)); };
+    const fun=(S.contatos||[]).filter(c=>(typeof escVisivel!=='function'||escVisivel(c))&&bate(c))
+      .sort((a,b)=>(enc(a)-enc(b))||String(b._upd||'').localeCompare(String(a._upd||'')));
+    if(fun.length) return {tipo:'funil',id:fun[0].id,nome:fun[0].nome,n:fun.length};
+    const bn=(typeof bnVivos==='function'?bnVivos():[]).filter(bate);
+    if(bn.length) return {tipo:'bn',id:bn[0].id,nome:bn[0].nome,n:bn.length};
+  }catch(e){ console.warn('Conversas: casar com o CRM',e); }
+  return null; }
+/* o caminho inverso (ficha → conversas), a partir do índice já carregado */
+function cvChatsDoContato(c){
+  const tels=(typeof pTels==='function'?pTels(c):[c&&c.telefone]).filter(Boolean); if(!tels.length) return [];
+  return (CV.chats||[]).filter(ch=>tels.some(t=>cvTelScore(t,cvChatTel(ch))>0))
+    .sort((a,b)=>String(b.ultima_msg_em||'').localeCompare(String(a.ultima_msg_em||''))); }
+
+/* ── leitura (nenhuma escrita: o app só tem SELECT nessas tabelas, por RLS) ── */
+async function cvCarregar(forcar){
+  if(CV.carregando) return CV.carregando;
+  if(CV.carregado&&!forcar) return;
+  if(!sb||!logado()){ CV.carregado=true; return; }
+  CV.carregando=(async()=>{
+    try{
+      const {data,error}=await sb.from('umbler_chats').select(CV_COLS)
+        .order('ultima_msg_em',{ascending:false,nullsFirst:false}).limit(CV_CHATS_LIM);
+      if(error) throw error;
+      CV.chats=data||[]; CV.erro=''; CV.exemplo=false;
+      const e=await sb.from('umbler_estado').select('dono,ultimo_sync,ultimo_ok,ultimo_erro').limit(1);
+      CV.estado=(e.data&&e.data[0])||null;
+    }catch(e){ console.warn('Conversas: leitura falhou',e); CV.erro=String((e&&e.message)||e); }
+    CV.carregado=true; CV.carregando=null;
+  })();
+  return CV.carregando; }
+async function cvMsgsCarregar(chatId,limite){
+  if(!sb||!logado()||!chatId) return [];
+  try{
+    const {data,error}=await sb.from('umbler_mensagens').select(CV_MSG_COLS)
+      .eq('chat_id',chatId).order('enviada_em',{ascending:false}).limit(limite||CV_MSGS_CONV);
+    if(error) throw error;
+    const l=(data||[]).slice().reverse(); CV.msgs[chatId]=l; return l;
+  }catch(e){ console.warn('Conversas: mensagens',e); CV.msgs[chatId]=[]; return []; } }
+/* ficha: acha a conversa pelo telefone sem baixar o índice inteiro (igual o crm-mcp faz) */
+async function cvChatsDoTel(tels){
+  if(!sb||!logado()) return [];
+  const ks=[...new Set((tels||[]).map(t=>{ const k=cvTelChave(t); return k&&k.ult8; }).filter(Boolean))].slice(0,4);
+  if(!ks.length) return [];
+  const m=new Map();
+  for(const u8 of ks){
+    try{
+      const {data,error}=await sb.from('umbler_chats').select(CV_COLS).ilike('contato_tel_norm','%'+u8)
+        .order('ultima_msg_em',{ascending:false,nullsFirst:false}).limit(10);
+      if(error) throw error;
+      (data||[]).forEach(ch=>{ const s=Math.max(0,...tels.map(t=>cvTelScore(t,cvChatTel(ch))).concat([0]));
+        if(s>0&&!m.has(ch.id)) m.set(ch.id,ch); });
+    }catch(e){ console.warn('Conversas: casar telefone',e); }
+  }
+  return [...m.values()].sort((a,b)=>String(b.ultima_msg_em||'').localeCompare(String(a.ultima_msg_em||''))); }
+
+/* botão "🔄 Sincronizar agora": chama a Edge Function `umbler` com o JWT (dono ou delegado).
+   Aquela função só faz GET na API do Talk — ela LÊ. Nada daqui envia mensagem pra ninguém. */
+async function cvSincronizar(){
+  if(CV.sinc) return;
+  if(!sb||!logado()){ toast('Entre com a sua conta pra sincronizar',false); return; }
+  CV.sinc=true; if(VIEW==='conversas') viewConversas();
+  try{
+    const {data:s}=await sb.auth.getSession(); const tok=s&&s.session&&s.session.access_token;
+    if(!tok) throw new Error('entre com a sua conta');
+    const r=await fetch(SB_URL+'/functions/v1/umbler',{method:'POST',
+      headers:{'Content-Type':'application/json',apikey:SB_KEY,Authorization:'Bearer '+tok},
+      body:JSON.stringify({modo:'app'})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||j.ok===false) throw new Error(j.motivo||('servidor respondeu '+r.status));
+    CV.msgs={}; CV.porContato={};
+    await cvCarregar(true);
+    toast('💬 Leitura em dia'+(j.mensagens!=null?' · '+j.mensagens+' mensagens guardadas':''),true);
+  }catch(e){ console.warn('[conversas sinc]',e); toast('Não sincronizou: '+((e&&e.message)||e),false); }
+  CV.sinc=false; if(VIEW==='conversas') viewConversas(); }
+
+/* ── a tela ─────────────────────────────────────────────────────────────────── */
+async function viewConversas(){
+  const m=$('#main'); if(!m) return;
+  if(!CV.carregado){
+    m.innerHTML='<h1 class="pg">💬 Conversas</h1><div class="sub">Carregando as conversas do WhatsApp…</div>';
+    await cvCarregar(); if(VIEW!=='conversas') return;
+  }
+  m.innerHTML=cvTelaHtml();
+  const ch=CV.aberto&&(CV.chats||[]).find(x=>x.id===CV.aberto);
+  if(ch&&!CV.msgs[ch.id]) cvMsgsCarregar(ch.id).then(()=>{ if(VIEW==='conversas'&&CV.aberto===ch.id) viewConversas(); }); }
+
+function cvTelaHtml(){
+  const todos=CV.chats||[], agora=Date.now();
+  const aguard=todos.filter(cvAguardando), abertas=todos.filter(ch=>ch.aberto!==false);
+  const hoje=aguard.filter(ch=>(agora-(Date.parse(ch.ultima_msg_em||'')||0))<864e5);
+  const esfria=todos.filter(ch=>cvEsfriando(ch,agora));
+  const canais=[...new Set(todos.map(ch=>String(ch.canal||'')).filter(Boolean))].sort();
+  const lista=cvOrdenar(cvFiltrar(todos,CV.f,agora),CV.f.modo);
+  const sel=CV.aberto? (todos.find(ch=>ch.id===CV.aberto)||null) : null;
+  const ult=CV.estado&&(CV.estado.ultimo_ok||CV.estado.ultimo_sync);
+  const f=CV.f;
+  const chip=(on,rot,acao,ajuda)=>`<button class="btn ${on?'btn-p':'btn-s'} btn-mini" style="min-height:44px" onclick="${acao}" title="${esc(ajuda||'')}">${rot}</button>`;
+  const aviso=CV.erro? `<div class="card" style="padding:14px;margin-top:10px;color:var(--verm);font-size:13.5px">Não consegui ler as conversas: ${esc(CV.erro)}</div>`
+    : (!logado()&&!CV.exemplo)? `<div class="card" style="padding:14px;margin-top:10px;font-size:13.5px">Entre com a sua conta pra ver as conversas — elas ficam no servidor, visíveis só pra você e pra quem você delegou.</div>` : '';
+  return `<h1 class="pg">💬 Conversas</h1>
+  <div class="sub">O WhatsApp do Umbler Talk aqui dentro, <b>só pra ler</b>. Responder é sempre você ou o Victor, no WhatsApp ou no Talk — este módulo não envia nada.</div>
+  ${aviso}
+  <div class="kpis" style="margin-top:10px">
+    <div class="kpi"><div class="lbl">Aguardando resposta</div><div class="num" style="color:${hoje.length?'var(--verm)':'var(--ink)'}">${hoje.length}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--muted)">nas últimas 24 h · ${aguard.length} no total</div></div>
+    <div class="kpi"><div class="lbl">⏰ Esfriando</div><div class="num" style="color:${esfria.length?'var(--amarelo)':'var(--ink)'}">${esfria.length}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--muted)">${esfria.length?'esperando de 1 a 7 dias':'nada parado de 1 a 7 dias'}</div></div>
+    <div class="kpi"><div class="lbl">Última leitura</div><div class="num" style="font-size:16px">${ult?esc(cvHa(ult,agora)):'—'}</div>
+      <div class="kpi-sub" style="font-size:11px;color:var(--muted)">${CV.estado&&CV.estado.ultimo_erro?'⚠️ '+esc(String(CV.estado.ultimo_erro).slice(0,70)):'o servidor lê sozinho a cada 10 min'}</div></div>
+  </div>
+  <div class="cv-chips">
+    ${chip(f.modo==='aguardando','⏳ Aguardando',"cvFiltro('modo','aguardando')",'Quem falou por último foi o cliente — o mais recente na frente')}
+    ${chip(f.modo==='esfriando','⏰ Esfriando',"cvFiltro('modo','esfriando')",'Cliente esperando de 1 a 7 dias — o mais parado na frente. É a lista curta de bola caída.')}
+    ${chip(f.modo!=='aguardando'&&f.modo!=='esfriando','Todas',"cvFiltro('modo','todas')",'Todas as conversas')}
+    ${chip(!!f.abertas,'Só abertas',"cvFiltro('abertas',"+(f.abertas?'false':'true')+")",'Esconde as conversas já fechadas no Talk')}
+    ${canais.length>1?`<select aria-label="Canal" onchange="cvFiltro('canal',this.value)"><option value="">Todos os canais</option>${canais.map(c=>`<option value="${esc(c)}" ${f.canal===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`:''}
+    <input type="search" placeholder="🔎 nome ou telefone" value="${esc(f.busca)}" aria-label="Buscar conversa" oninput="cvFiltro('busca',this.value)">
+    <button class="btn btn-s btn-mini" style="min-height:44px" onclick="cvSincronizar()" ${CV.sinc?'disabled':''} title="Pede ao servidor pra ler o Talk agora (ele já lê sozinho a cada 10 min)">${CV.sinc?'⏳ lendo…':'🔄 Sincronizar agora'}</button>
+  </div>
+  <div class="cv-wrap${CV.aberto?' cv-abr':''}">
+    ${lista.length? `<div class="cv-lista">${lista.map(ch=>cvRowHtml(ch,agora,!!sel&&sel.id===ch.id)).join('')}</div>`
+      : `<div class="card cv-vazia" style="padding:16px;color:var(--muted);font-size:13.5px">${todos.length?'Nenhuma conversa com esses filtros.':'Nenhuma conversa guardada ainda.'}</div>`}
+    <div class="cv-pane${CV.aberto?' aberto':''}">${cvPainelHtml(sel)}</div>
+  </div>
+  <div style="font-size:11.5px;color:var(--muted);margin-top:12px">${todos.length} conversa(s) nesta leitura${todos.length>=CV_CHATS_LIM?' (as '+CV_CHATS_LIM+' mais recentes)':''}. O histórico inteiro fica no servidor; aqui aparecem as ${CV_MSGS_CONV} últimas mensagens de cada conversa.</div>`; }
+
+function cvRowHtml(ch,agora,sel){
+  const esperando=cvAguardando(ch);
+  const quando=cvHa(ch.ultima_msg_em,agora);
+  const quem=esperando?'':(ch.ultima_msg_de==='bot'?'robô: ':'você: ');
+  const previa=String(ch.ultima_msg_previa||'—').replace(/\s+/g,' ');
+  return `<button class="cv-row${sel?' sel':''}" onclick="cvAbrir('${esc(jsq(ch.id))}')" title="Abrir a conversa">
+    <span class="cv-row-t"><span class="cv-row-n">${esc(ch.contato_nome||cvTelFmt(cvChatTel(ch))||'sem nome')}</span>
+      ${esperando? `<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(quando)}</span>` : `<span class="cv-row-h">${esc(quando)}</span>`}</span>
+    <span class="cv-row-p">${esc(quem+previa)}</span>
+    <span class="cv-row-m">${ch.atendente?'<span>👤 '+esc(ch.atendente)+'</span>':''}${ch.canal?'<span>📡 '+esc(ch.canal)+'</span>':''}${ch.aberto===false?'<span>✔️ fechada</span>':''}${ch.nao_lidas?'<span>🔵 '+ch.nao_lidas+'</span>':''}</span>
+  </button>`; }
+
+function cvPainelHtml(ch){
+  if(!ch) return `<div class="card" style="padding:18px;color:var(--muted);font-size:13.5px;line-height:1.6">
+    Escolha uma conversa. A lista começa por quem <b>está esperando resposta</b> — quem falou por último foi o cliente, e quem espera há mais tempo vem na frente.</div>`;
+  const tel=cvChatTel(ch), casa=cvCasar(ch), msgs=CV.msgs[ch.id];
+  const wa=(typeof waHref==='function'&&tel)?waHref(tel):'';
+  return `<div class="card" style="padding:0;overflow:hidden">
+    <div class="cv-head">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-ghost btn-mini cv-volta" style="min-height:44px" onclick="cvFechar()" title="Voltar pra lista">← voltar</button>
+        <b style="flex:1;min-width:0;font-size:15px">${esc(ch.contato_nome||cvTelFmt(tel)||'sem nome')}</b>
+        ${cvAguardando(ch)?`<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(cvHa(ch.ultima_msg_em))}</span>`:''}
+      </div>
+      <div style="font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
+        ${tel?'<span>📱 '+esc(cvTelFmt(tel))+'</span>':''}${ch.canal?'<span>📡 '+esc(ch.canal)+'</span>':''}${ch.atendente?'<span>👤 '+esc(ch.atendente)+'</span>':''}${ch.aberto===false?'<span>✔️ fechada no Talk</span>':''}
+        ${casa?'<span>🔗 '+esc(casa.nome)+(casa.n>1?' (+'+(casa.n-1)+')':'')+'</span>':'<span>sem ficha no CRM com esse telefone</span>'}
+      </div>
+      <div class="cv-acts">
+        ${casa?`<button class="btn btn-p btn-mini" onclick="cvAbrirFicha('${esc(jsq(ch.id))}')" title="Abre a ficha dessa pessoa no CRM">📂 Abrir ficha</button>`:''}
+        <button class="btn btn-s btn-mini" onclick="cvCopiar('${esc(jsq(ch.id))}')" title="Copia a conversa como texto, pra colar onde você quiser">📋 Copiar texto</button>
+        ${wa?`<a class="btn btn-s btn-mini" href="${esc(wa)}" target="_blank" rel="noopener" title="Abre o WhatsApp nessa conversa — a resposta é sua">💬 Abrir no WhatsApp</a>`:''}
+        <a class="btn btn-s btn-mini" href="${esc(CV_TALK+encodeURIComponent(ch.id))}" target="_blank" rel="noopener" title="Abre o Umbler Talk; se não cair direto na conversa, ela está na lista do Talk">🔗 Abrir no Talk</a>
+        <button class="btn btn-ghost btn-mini" onclick="cvRecarregar('${esc(jsq(ch.id))}')" title="Relê as mensagens desta conversa">↻</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted)">Só leitura: responder é sempre você ou o Victor, pelo WhatsApp ou pelo Talk.</div>
+    </div>
+    ${msgs? (msgs.length? `<div class="cv-msgs">${cvMsgsHtml(msgs)}</div>`
+      : `<div style="padding:16px;color:var(--muted);font-size:13px">Nenhuma mensagem guardada desta conversa ainda.</div>`)
+      : `<div style="padding:16px;color:var(--muted);font-size:13px">Carregando as mensagens…</div>`}
+  </div>`; }
+
+function cvMsgsHtml(msgs){
+  let dia='';
+  return (msgs||[]).map(ms=>{
+    let out=''; const d=cvDia(ms.enviada_em);
+    if(d&&d!==dia){ dia=d; out+=`<span class="cv-dia">${esc(typeof dataBR==='function'?dataBR(d):d)}</span>`; }
+    return out+cvMsgHtml(ms);
+  }).join(''); }
+function cvMsgHtml(ms){
+  const cls=ms.privada?'cv-b cv-b-nota':ms.de==='cliente'?'cv-b cv-b-cli':ms.de==='bot'?'cv-b cv-b-bot':'cv-b cv-b-nos';
+  const rot=cvTipoRot(ms.tipo), partes=[];
+  if(ms.privada) partes.push('<b>🔒 nota interna</b>');
+  if(ms.texto) partes.push(esc(ms.texto));
+  else if(rot) partes.push('<i style="color:var(--muted)">'+esc(rot)+'</i>');
+  if(ms.arquivo_nome) partes.push('<span style="font-size:12.5px">📎 '+(ms.arquivo_url?`<a href="${esc(ms.arquivo_url)}" target="_blank" rel="noopener">${esc(ms.arquivo_nome)}</a>`:esc(ms.arquivo_nome))+'</span>');
+  if(!partes.length) partes.push('<i style="color:var(--muted)">(sem conteúdo)</i>');
+  const quem=ms.de==='cliente'?'':ms.de==='bot'?'robô':(ms.autor||'nós');
+  return `<span class="${cls}">${partes.join('<br>')}<span class="cv-mt">${esc([quem,cvHora(ms.enviada_em)].filter(Boolean).join(' · '))}</span></span>`; }
+
+/* ── ações da tela ── */
+function cvFiltro(k,v){ CV.f[k]=v; if(VIEW==='conversas') viewConversas(); }
+function cvCelular(){ try{ return window.matchMedia('(max-width:980px)').matches; }catch(_){ return false; } }
+function cvAbrir(id){ CV.aberto=id;
+  if(VIEW==='conversas') viewConversas();
+  if(!CV.msgs[id]) cvMsgsCarregar(id).then(()=>{ if(VIEW==='conversas'&&CV.aberto===id) viewConversas(); });
+  try{ camSincronizar(); }catch(_){}
+  try{ if(cvCelular()) window.scrollTo(0,0); }catch(_){} }
+function cvFechar(){ if(!CV.aberto) return; CV.aberto=null; if(VIEW==='conversas') viewConversas(); try{ camSincronizar(); }catch(_){} }
+function cvRecarregar(id){ delete CV.msgs[id]; if(VIEW==='conversas') viewConversas();
+  cvMsgsCarregar(id).then(()=>{ if(VIEW==='conversas') viewConversas(); }); }
+function cvAbrirFicha(id){
+  const ch=(CV.chats||[]).find(x=>x.id===id), r=ch&&cvCasar(ch);
+  if(!r){ toast('Esse telefone não está no CRM — crie o negócio pelo funil ou pelo Estoque',false); return; }
+  if(cvCelular()) cvFechar();   /* no celular a conversa é tela cheia (z96) e cobriria a ficha */
+  if(r.tipo==='funil'){ abrirContato(r.id); if(r.n>1) toast(r.n+' negócios com esse telefone — abri o mais recente em aberto',true); }
+  else if(typeof taFichaAbrir==='function'){ if(typeof fecharDrawerSo==='function') fecharDrawerSo(); taFichaAbrir(r.id); }
+  else toast('Achei no Estoque de Nomes: '+r.nome,true); }
+/* texto da conversa pra ele colar onde quiser (função pura — o self-check confere) */
+function cvTexto(ch,msgs){
+  const nome=(ch&&(ch.contato_nome||cvTelFmt(cvChatTel(ch))))||'conversa';
+  const cab='Conversa com '+nome+(ch&&ch.canal?' · '+ch.canal:'')+(ch&&cvChatTel(ch)?' · '+cvTelFmt(cvChatTel(ch)):'');
+  const linhas=(msgs||[]).map(ms=>{
+    const quem=ms.privada?'[nota interna]':ms.de==='cliente'?nome:ms.de==='bot'?'robô':(ms.autor||'nós');
+    const corpo=ms.texto||cvTipoRot(ms.tipo)||'';
+    const dia=typeof dataBR==='function'?dataBR(cvDia(ms.enviada_em)):cvDia(ms.enviada_em);
+    return '['+dia+' '+cvHora(ms.enviada_em)+'] '+quem+': '+corpo+(ms.arquivo_nome?' ('+ms.arquivo_nome+')':'');
+  });
+  return cab+'\n\n'+linhas.join('\n'); }
+async function cvCopiar(id){
+  const ch=(CV.chats||[]).find(x=>x.id===id); if(!ch) return;
+  const msgs=CV.msgs[id]||await cvMsgsCarregar(id);
+  const txt=cvTexto(ch,msgs);
+  try{ await navigator.clipboard.writeText(txt); toast('Conversa copiada ('+msgs.length+' mensagens)',true); }
+  catch(_){ atModal(`<h2>📋 Copiar a conversa</h2><div class="sub">O navegador não deixou copiar sozinho — toque no texto e copie.</div>
+    <textarea readonly style="width:100%;min-height:220px;font-size:16px;margin-top:8px" data-so-leitura="texto pra copiar" onclick="this.select()">${esc(txt)}</textarea>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-p" style="min-height:44px" onclick="atClose()">Fechar</button></div>`); } }
+
+/* "Ver exemplo" — fixture INVENTADA (sem nenhum dado de cliente), usada pelo portão pra medir a
+   lista e a conversa aberta nos 4 cenários. Não toca o banco e some ao sincronizar de verdade. */
+function cvExemplo(){
+  const h=t=>new Date(Date.now()-t*36e5).toISOString();
+  CV.chats=[
+    {id:'cv-ex-1',contato_nome:'Fulano Exemplo Lima',contato_tel:'(81) 90000-9101',contato_tel_norm:'81900009101',canal:'Atendimento exemplo',setor:'Geral',atendente:null,aberto:true,aguardando:true,aguardando_desde:h(26),nao_lidas:2,ultima_msg_em:h(26),ultima_msg_de:'cliente',ultima_msg_previa:'Bom dia! Consegue me mandar a proposta ainda hoje?'},
+    {id:'cv-ex-2',contato_nome:'Beltrana Exemplo Rocha',contato_tel:'(81) 90000-9102',contato_tel_norm:'81900009102',canal:'Atendimento exemplo',setor:'Geral',atendente:'Victor Exemplo',aberto:true,aguardando:true,aguardando_desde:h(3),nao_lidas:1,ultima_msg_em:h(3),ultima_msg_de:'cliente',ultima_msg_previa:'Perfeito, obrigada!'},
+    {id:'cv-ex-3',contato_nome:'Ciclano Exemplo Prado',contato_tel:'(81) 90000-9103',contato_tel_norm:'81900009103',canal:'Corporativo exemplo',setor:'Geral',atendente:'Gustavo Exemplo',aberto:true,aguardando:false,nao_lidas:0,ultima_msg_em:h(1),ultima_msg_de:'nos',ultima_msg_previa:'Mandei o resumo por e-mail, qualquer dúvida me chama.'},
+    {id:'cv-ex-4',contato_nome:'Deltano Exemplo Vaz',contato_tel:'(81) 90000-9104',contato_tel_norm:'81900009104',canal:'Corporativo exemplo',setor:'Geral',atendente:null,aberto:false,aguardando:false,nao_lidas:0,ultima_msg_em:h(70),ultima_msg_de:'bot',ultima_msg_previa:'Atendimento encerrado automaticamente.'}
+  ];
+  CV.msgs={'cv-ex-1':[
+    {id:'m1',chat_id:'cv-ex-1',de:'cliente',tipo:'Text',texto:'Oi! Vi o seu material sobre proteção da família.',enviada_em:h(50),privada:false},
+    {id:'m2',chat_id:'cv-ex-1',de:'nos',tipo:'Text',texto:'Oi, Fulano! Que bom. Posso te ligar amanhã às 10h?',autor:'pelo celular',enviada_em:h(49),privada:false},
+    {id:'m3',chat_id:'cv-ex-1',de:'nos',tipo:'Text',texto:'Conversa de ontem: pediu a proposta com cobertura de invalidez.',autor:'Victor Exemplo',enviada_em:h(48),privada:true},
+    {id:'m4',chat_id:'cv-ex-1',de:'cliente',tipo:'Image',texto:'',arquivo_nome:'exemplo.jpg',enviada_em:h(27),privada:false},
+    {id:'m5',chat_id:'cv-ex-1',de:'cliente',tipo:'Text',texto:'Bom dia! Consegue me mandar a proposta ainda hoje?',enviada_em:h(26),privada:false}
+  ]};
+  CV.estado={dono:'exemplo',ultimo_ok:h(0.2),ultimo_sync:h(0.2),ultimo_erro:null};
+  CV.carregado=true; CV.exemplo=true; CV.aberto=null; CV.erro='';
+  if(VIEW==='conversas') viewConversas(); }
+
+/* ── bloco 💬 WhatsApp na ficha do contato (nasce FECHADO, resumo no cabeçalho) ── */
+function cvFichaBloco(c){
+  if(!c||!modOn('conversas')) return '';
+  const l=CV.porContato[String(c.id)];
+  if(!l||!l.length) return '';                      /* sem conversa casada: nada de bloco morto na ficha */
+  const ch=l[0], msgs=CV.msgs[ch.id];
+  const resumo=(cvAguardando(ch)?'⏳ esperando resposta '+cvHa(ch.ultima_msg_em):'última '+cvHa(ch.ultima_msg_em))
+    +(l.length>1?' · '+l.length+' conversas':'')+(ch.canal?' · '+ch.canal:'');
+  return `<div class="sec"><details>
+    <summary style="cursor:pointer;font-weight:700;font-size:14px">💬 WhatsApp <span style="font-weight:400;color:var(--muted);font-size:12px">${esc(resumo)}</span></summary>
+    <div style="margin-top:8px" id="cv-fx">${cvFichaCorpoHtml(ch,msgs,l)}</div>
+  </details></div>`; }
+function cvFichaCorpoHtml(ch,msgs,l){
+  const tel=cvChatTel(ch), wa=(typeof waHref==='function'&&tel)?waHref(tel):'';
+  const corpo=msgs? (msgs.length?`<div class="cv-msgs" style="padding:0">${cvMsgsHtml(msgs)}</div>`
+      :'<div style="color:var(--muted);font-size:13px">Nenhuma mensagem guardada.</div>')
+    : '<div style="color:var(--muted);font-size:13px">Carregando as últimas mensagens…</div>';
+  return `${corpo}
+    <div class="cv-acts" style="margin-top:8px">
+      <button class="btn btn-s btn-mini" onclick="irPara('conversas');cvAbrir('${esc(jsq(ch.id))}')" title="Abre a conversa inteira na tela Conversas">💬 Ver a conversa</button>
+      <button class="btn btn-s btn-mini" onclick="cvCopiar('${esc(jsq(ch.id))}')">📋 Copiar texto</button>
+      ${wa?`<a class="btn btn-s btn-mini" href="${esc(wa)}" target="_blank" rel="noopener">💬 Abrir no WhatsApp</a>`:''}
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px">Últimas ${CV_MSGS_FICHA} mensagens${(l&&l.length>1)?' da conversa mais recente ('+l.length+' no total)':''}. Só leitura — a resposta é sempre sua ou do Victor.</div>`; }
+/* roda no fim de cada render da ficha: a 1ª passada acha a conversa pelo telefone (e repinta a
+   ficha se achou), a 2ª busca as mensagens e repinta só o miolo do bloco. */
+async function cvFichaPrep(c){
+  try{
+    if(typeof __WA!=='undefined'&&__WA) return;      /* card da extensão: boot enxuto, sem consulta extra */
+    if(!c||!sb||!logado()||!modOn('conversas')) return;
+    const cid=String(c.id);
+    if(!(cid in CV.porContato)){
+      CV.porContato[cid]=[];                         /* marca como "já procurei" antes de ir ao servidor */
+      const l=await cvChatsDoTel(typeof pTels==='function'?pTels(c):[c.telefone]);
+      CV.porContato[cid]=l;
+      if(l.length&&CONTATO&&String(CONTATO.id)===cid) renderDrawer();
+      return;
+    }
+    const l=CV.porContato[cid]; if(!l||!l.length) return;
+    const id=l[0].id; if(CV.msgs[id]) return;
+    await cvMsgsCarregar(id,CV_MSGS_FICHA);
+    const box=document.getElementById('cv-fx');
+    if(box&&CONTATO&&String(CONTATO.id)===cid) box.innerHTML=cvFichaCorpoHtml(l[0],CV.msgs[id],l);
+  }catch(e){ console.warn('Conversas na ficha',e); } }
+
+/* voltar do Android: a conversa em tela cheia é camada própria — fecha ela antes da ficha e da
+   gaveta. No desktop o painel é inline (não é camada), então a detecção olha a largura. */
+(function cvCamada(){ try{
+  if(typeof CAM_ORDEM==='undefined'||CAM_ORDEM.some(x=>x.n==='conversa')) return;
+  const i=CAM_ORDEM.findIndex(x=>x.n==='gaveta');
+  CAM_ORDEM.splice(i<0?CAM_ORDEM.length:i,0,
+    {n:'conversa',aberta:()=>!!CV.aberto&&VIEW==='conversas'&&cvCelular(),fechar:()=>cvFechar()});
+}catch(_){} })();
+
+window.viewConversas=viewConversas; window.cvAbrir=cvAbrir; window.cvFechar=cvFechar; window.cvFiltro=cvFiltro;
+window.cvSincronizar=cvSincronizar; window.cvCopiar=cvCopiar; window.cvAbrirFicha=cvAbrirFicha;
+window.cvRecarregar=cvRecarregar; window.cvExemplo=cvExemplo;
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','plano','cart-visao','cart-clientes','cart-oportunidades',
   'nn-funil','bc-funil','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
-  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado','parceiros','embaixadores','importacoes'];
+  'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado','parceiros','embaixadores','importacoes','conversas'];
 /* ═══ MODO-WA-V1 (28/09/2026) ════════════════════════════════════════════════════════
    Palavra dele (extensão do WhatsApp): "abre algo como o próprio card da oportunidade que abro no CRM — ali tem tudo,
    inclusive tarefas, agendamentos… esse mesmo card". Em vez de reescrever a ficha na extensão (e ela ficar sempre
