@@ -449,7 +449,9 @@ function fuMover(id,X,motivo){ const c=fuAcha(id); if(!c) return; const fid=fuDe
   salvar(); fuRepinta(); }
 /* redesenha o quadro e, se a ficha em painel estiver aberta, ela também */
 function fuRepinta(){ try{ render(); }catch(_){} if(FU.pan) fuPainelRender();
-  try{ const d=document.getElementById('drawer'); if(d&&d.classList.contains('aberto')&&typeof CONTATO!=='undefined'&&CONTATO&&typeof renderDrawer==='function') renderDrawer(); }catch(_){} }   /* a ficha de sempre (aberta por cima) acompanha */
+  try{ const d=document.getElementById('drawer'); if(d&&d.classList.contains('aberto')&&typeof CONTATO!=='undefined'&&CONTATO&&typeof renderDrawer==='function'){
+    const b=d.querySelector('.drawer-body'), st=b?b.scrollTop:0, foco=document.activeElement&&d.contains(document.activeElement)?document.activeElement.id:''; renderDrawer();
+    const b2=d.querySelector('.drawer-body'); if(b2) b2.scrollTop=st; if(foco){ const f=document.getElementById(foco); if(f&&f.tagName!=='SELECT') try{ f.focus({preventScroll:true}); }catch(_){} } } }catch(_){} }   /* a ficha de sempre acompanha, sem pular pro topo */   /* a ficha de sempre (aberta por cima) acompanha */
 function fuMotivoAbrir(id,X){ const c=fuAcha(id); if(!c) return; FU.motivo={id,X};
   const e=etapa(fuDestino(c).funil_id,X)||{}, opts=[...new Set([...(Array.isArray(e.status)?e.status:[]),...(()=>{ try{ const l=fuVoltaLegado(c,X); return l?((FUNIL_CFG[etCfgKey(c.funil)]||[]).find(y=>y.id===l)||{}).status||[]:[]; }catch(_){ return []; } })(),...MOTIVOS_SUGESTAO])];
   fuModal(`<h2>Encerrar ${esc(String(c.nome||'').split(' ')[0])} em “${esc(lbl(X))}”</h2><div class="sub" style="margin:0">Sem motivo não encerra. A lista vem de Funil & Etapas (motivos da perda) + sugestões.</div>
@@ -546,6 +548,9 @@ function fuAbrir(id){ let c=fuAcha(id); if(!c) return;
     else { const j=esc(jsq(id));
       fuModal(`<h2>${esc(c.nome||'—')}</h2><div class="sub" style="margin:0">Este nome ainda mora no <b>Estoque</b> (está na lista de TA). Pra abrir a ficha completa ele vira contato do funil.</div>
         <div class="acts"><button type="button" class="btn btn-ghost" onclick="fuFechar();irPara('bn-estoque')">Ver no Estoque</button><button type="button" class="btn btn-p" onclick="fuFechar();bnPromover('${j}')">Trazer pro funil e abrir</button></div>`); return; } }
+  /* FICHA-UMA-V1 (25/10): "achei que toda ficha tava completa no novo formato" — com a Ficha UX 2.0 ligada, o card abre ELA direto
+     (estrelas clicáveis e os blocos MFO vão junto); o painel só fica pra quem ainda não tem a ficha nova. */
+  if(typeof novoOn==='function'&&novoOn('ficha-ux2')&&typeof abrirContato==='function'){ if(FU.pan) fuPainelFechar(); abrirContato(c.id); return; }
   const novo=!FU.pan; FU.pan={id:String(c.id),cheia:FU.pan?FU.pan.cheia:panPref().cheia===true}; FU.histN=30; fuPainelRender(novo); }
 
 /* ═══ T5 · FICHA EM PAINEL (Versão 3 aprovada na demo) ════════════════════════════════════════════════════════════
@@ -589,18 +594,18 @@ function fld(c,lab,k,tipo,o){ o=o||{}; const v=val(c,k,o.top), id='fu-m-'+k, j=e
   return `<div class="fu-fld${cls}"><label for="${id}">${esc(lab)}</label><input id="${id}" ${tipo==='number'?'type="number" inputmode="numeric"':tipo==='date'?'type="date"':'type="text"'} value="${esc(v)}" ${on}></div>`; }
 function fuMfoSet(id,k,v,top,re){ const c=fuAcha(id); if(!c) return; v=String(v==null?'':v).trim();
   if(top){ c[k]=v||null; } else { const o=mfoF(c); if(v) o[k]=v; else delete o[k]; }
-  if(c.funil==='bn'){ try{ bnSalvar(); }catch(_){} } else salvar(); salvoFlash(); if(re) fuPainelRender(); else try{ render(); }catch(_){} }
+  if(c.funil==='bn'){ try{ bnSalvar(); }catch(_){} } else salvar(); salvoFlash(); if(re) fuRepinta(); else try{ render(); }catch(_){} }
 function fuMfoArr(id,arr,i,f,v){ const c=fuAcha(id); if(!c) return; const o=mfoF(c), l=Array.isArray(o[arr])?o[arr]:(o[arr]=[]); if(!l[i]) return;
   if(f==='ok') l[i].ok=!!v; else { v=String(v==null?'':v).trim(); if(v) l[i][f]=v; else delete l[i][f]; }
-  salvar(); salvoFlash(); if(f==='ok'||f==='status'||f==='grav') fuPainelRender(); }
+  salvar(); salvoFlash(); if(f==='ok'||f==='status'||f==='grav') fuRepinta(); }
 function fuMfoAdd(id,arr){ const c=fuAcha(id); if(!c) return; const o=mfoF(c), l=Array.isArray(o[arr])?o[arr]:(o[arr]=[]);
   const el=document.getElementById('fu-add-'+arr), t=el?String(el.value||'').trim():'';
   if(arr==='pendencias'){ if(!t){ if(el) el.focus(); return; } l.push({t,ok:false}); }
   else if(arr==='lacunas'){ if(!t){ if(el) el.focus(); return; } l.push({t,grav:'média'}); }
   else if(arr==='cotacoes') l.push({data:hojeISO(),status:'Em análise'});
   else l.push({});
-  const d=dobraSt(); d['m-'+arr]=1; panGravar({dobra:d}); salvar(); fuPainelRender(); }
-function fuMfoDel(id,arr,i){ const c=fuAcha(id); if(!c) return; const l=mfoF(c)[arr]; if(!Array.isArray(l)||!l[i]) return; l.splice(i,1); salvar(); fuPainelRender(); }
+  const d=dobraSt(); d['m-'+arr]=1; panGravar({dobra:d}); salvar(); fuRepinta(); }
+function fuMfoDel(id,arr,i){ const c=fuAcha(id); if(!c) return; const l=mfoF(c)[arr]; if(!Array.isArray(l)||!l[i]) return; l.splice(i,1); salvar(); fuRepinta(); }
 function fuMfoRamo(id,k){ if(typeof mfoRamo==='function') mfoRamo(id,k); fuRepinta(); }
 function fuMfoFecha(id,k){ const c=fuAcha(id); if(!c||typeof mfoSet!=='function') return; mfoSet(id,'fecha_por',c.fecha_por===k?'':k); fuRepinta(); }
 function fuMfoReceita(id,v){ if(typeof mfoSetReceita==='function') mfoSetReceita(id,v); salvoFlash(); fuRepinta(); }
@@ -905,7 +910,7 @@ function fuSelfTests(ok){
 
 Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAgendarOk,fuPainelRender,fuPainelFechar,fuPainelCheia,fuHist,fuNota,fuTarFeita,fuTarNova,fuFichaCompleta,
   fuMfoSet,fuMfoArr,fuMfoAdd,fuMfoDel,fuMfoRamo,fuMfoFecha,fuMfoReceita,fuMfoVenc,fuDobra,fuDobraTodas,fuAnce,fuRepinta});
-Object.assign(W,{fuModal,fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
+Object.assign(W,{fuStarsHtml:starsHtml,fuMfoBlocosHtml:mfoBlocos,fuCss,fuModal,fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
 Object.assign(W,{viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
   fuAbrir,fuMover,fuMotivoOk,fuMoverMenu,fuLigar,fuZap,fuRegistrar,fuDelay,fuFiltrosAbrir,fuColunas,fuColVer,fuColMover,fuColPadrao,fuMais,fuDesempenho,fuExportar,
   fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca});
