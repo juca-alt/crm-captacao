@@ -2860,7 +2860,8 @@ function valorTag(c){
 function estrelasHtml(n){ let h=''; for(let i=1;i<=5;i++) h+=`<span class="${i<=n?'':'off'}">★</span>`; return `<span class="estrelas">${h}</span>`; }
 /* ── ANCE: estrelas derivadas dos critérios (fallback: estrelas manuais antigas) ── */
 function anceScore(c){ if(!c||!c.ance) return null; return ANCE_DEFS.filter(d=>c.ance[d[0]]).length; }
-function estrelasDe(c){ const s=anceScore(c); return s==null? (c.estrelas||0) : s; }
+function estrelasDe(c){ if(c&&c.ance_manual_em&&c.ance_manual!=null&&c.ance_manual!==''&&isFinite(+c.ance_manual)) return +c.ance_manual;   /* FUNIL-UNICO T4: a nota que ele deu nas estrelas do quadro novo manda aqui também */
+  const s=anceScore(c); return s==null? (c.estrelas||0) : s; }
 function isQuente(c){ return estrelasDe(c)>=4; }
 /* Quantas recomendações ele PEDIU nesse contato. O app já registra as coletadas
    (c.recs); o pedido fica no histórico de interações/eventos — se nunca foi
@@ -15335,7 +15336,10 @@ function drvNegBloco(c){ if(!anxOn()||!c) return ''; const k=drvChave(c.nome);  
    novas: ramos[], parceiro, receita_estimada, apolices_externas[i].vencimento. Grava pelo salvar() de sempre.
    Fonte ÚNICA das listas: MFO_RAMOS e MFO_FECHA (o card do Kanban usa as mesmas). */
 const MFO_RAMOS=[['vida_prudential','Vida Prudential','Vida Prud.'],['patrimonial','Patrimonial','Patrim.'],['vida_grupo','Vida em Grupo','VG'],
-  ['saude','Saúde','Saúde'],['previdencia_invest','Previdência/Invest.','Prev./Inv.'],['planejamento_cfp','Planejamento/CFP','CFP']];
+  ['saude','Saúde','Saúde'],['previdencia_invest','Previdência/Invest.','Prev./Inv.'],['planejamento_cfp','Planejamento/CFP','CFP'],
+  /* FUNIL-UNICO T5 (decisões 1A e 2A, 24/10): crédito/passivo bancário vira ramo; os ramos sem caso ainda ficam na lista */
+  ['credito','Crédito / passivo bancário','Crédito'],['juridico','Jurídico / recuperação','Jurídico'],['vida_outra','Vida de outra seguradora','Vida outra'],
+  ['auto','Auto','Auto'],['residencial','Residencial','Resid.'],['consorcio','Consórcio','Consórcio']];
 const MFO_FECHA=[['Prudential','b-azul'],['Outliers','b-roxo'],['Parceiro','b-cinza']];
 function mfoEh(c){ return !!(c&&/^mfo/.test(String(c.funil||''))); }
 function mfoRamoRot(k,curto){ const r=MFO_RAMOS.find(x=>x[0]===k); return r?(curto?r[2]:r[1]):k; }
@@ -21817,7 +21821,7 @@ function lpSelfCheck(){
         ok('MFO-FICHA-V1: Ficha só em funil mfo*; ramos/fecha por de UMA constante; receita aceita 1.500 e 1500,5; vencimento muda só esse campo; parceiro só com fecha_por=Parceiro', (()=>{
           const c={id:'zmfx',nome:'Fulano',funil:'mfo',etapa:'Proposta',fecha_por:'Parceiro',apolices_externas:[{seguradora:'X',premio_bruto:10}]};
           const h=mfoFichaHTML(c), hb=mfoFichaHTML({id:'zb',funil:'bc'}), h2=mfoFichaHTML(Object.assign({},c,{fecha_por:'Outliers'}));
-          return /Ficha MFO/.test(h)&&hb===''&&/quem fecha/.test(h)&&!/quem fecha/.test(h2)&&MFO_RAMOS.length===6&&MFO_FECHA.map(x=>x[0]).join()==='Prudential,Outliers,Parceiro'
+          return /Ficha MFO/.test(h)&&hb===''&&/quem fecha/.test(h)&&!/quem fecha/.test(h2)&&MFO_RAMOS.length===12&&MFO_FECHA.map(x=>x[0]).join()==='Prudential,Outliers,Parceiro'
             &&mfoPremioAp({premio_liquido:5,premio_bruto:7}).k==='premio_bruto'&&mfoResumo({ramos:['patrimonial'],fecha_por:'Outliers',receita_estimada:1500})==='Patrim. · Outliers · '+brl(1500)+' receita'; })());
         ok('EMBAIXADORES-V1: acha a aba da lista Mercado X (com GI) mesmo com a ficha do candidato antes; cabeçalho fora da 1ª linha; 1ª coluna que casa; linha vazia fora; Parceiros ignora embaixador', (()=>{
           const abas=[{nome:'Base',linhas:[['Nome completo do candidato','CPF','Celular candidato','Estado civil'],['Fulano','1','81999990000','casado']]},
