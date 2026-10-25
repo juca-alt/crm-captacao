@@ -12,7 +12,7 @@ let TAB='neg', ULT_ID=null, MENU=null;
 
 /* ── em que aba mora cada tópico (pela chave do tópico, a mesma do "organizar"); o que não casar fica em Negócio ── */
 const REGRAS=[
-  ['neg','etapa',/etapa de comercial/],['neg','tarefas',/^tarefas/],['neg','mfo',/^@mfo$/],['neg','valor',/valor do negocio/],['neg','planos',/planos|simulac/],
+  ['neg','etapa',/etapa de comercial/],['neg','tarefas',/^tarefas/],['neg','mfo2',/ficha do negocio/],['neg','mfo',/^@mfo$/],['neg','valor',/valor do negocio/],['neg','planos',/planos|simulac/],
   ['neg','sitplan',/sitplan/],['neg','solic',/solicitac/],['neg','drive',/drive/],
   ['pes','negs',/^@negs$/],['pes','quem',/quem e a pessoa/],['pes','dados',/dados da pessoa|^@pj$/],['pes','ance',/qualificacao/],['pes','recdata',/^@recdata$/],
   ['pes','recs',/^recomendac/],['pes','info',/infoclient/],['pes','cart',/^@cart$/],
@@ -45,6 +45,7 @@ function resumo(n,c){ const t=tx(()=>proxTarefa(c));
     case 'sitplan': return c.sitplan?'na lista de '+ddmm(c.sitplan):'fora da lista';
     case 'ance': { const e=tx(()=>estrelasDe(c))||0; return `${e}/5${e>=4?' · 🔥 quente':''}${c.mercado?' · Mercado '+c.mercado:''}`; }
     case 'quem': return '';
+    case 'mfo2': { const ramos=(c.ramos||[]).map(k=>tx(()=>mfoRamoRot(k,true))||k).join(', '); const o=c.mfo_ficha||{}; return [ramos||'sem ramo',c.fecha_por?'fecha por '+c.fecha_por:'',o.premio_total?'prêmio '+o.premio_total:'',(o.pendencias||[]).filter(x=>!x.ok).length?(o.pendencias||[]).filter(x=>!x.ok).length+' pendência(s)':''].filter(Boolean).join(' · '); }
     case 'notas': { const s=String(c.notas||'').trim(); return s?s.slice(0,32)+(s.length>32?'…':''):'vazio'; }
     case 'registrar': { const l=(Array.isArray(c.interacoes)?c.interacoes:[]).filter(i=>i&&typeof RES_BY_K!=='undefined'&&RES_BY_K[i.k]); const u=l[l.length-1]; return u?`último: ${u.l} · ${ddmm(u.dia)}`:'nunca registrado'; }
     default: return ''; } }
@@ -58,7 +59,7 @@ function cabecalho(c){ const j=esc(jsq(c.id));
   return `<button class="fechar" onclick="fecharDrawer()" aria-label="Fechar ficha">✕</button>
     <div class="nome">${tx(()=>ehEmpresa(c))?'🏢 ':''}${esc(c.nome||'—')}</div>
     ${quem.length?`<div class="u2-quem">${quem.map(x=>esc(String(x))).join(' · ')}</div>`:''}
-    <div class="u2-l3">${tx(()=>estrelasHtml(estrelasDe(c)))}${chips}</div>
+    <div class="u2-l3">${ehMfo(c)?'':(typeof fuStarsHtml==='function'?tx(()=>fuStarsHtml(c)):tx(()=>estrelasHtml(estrelasDe(c))))}${chips}</div>
     ${r&&r.nome?`<div class="u2-rec">🙌 Recomendado por <b>${esc(r.nome)}</b>${r.cliente?' · <span class="cli">cliente</span>':''}</div>`:''}
     <div class="u2-acoes"><button type="button" class="p" onclick="u2Menu(event,'zap','${j}')">💬 WhatsApp</button><button type="button" onclick="u2Menu(event,'lig','${j}')">☏ Ligar</button><button type="button" onclick="u2Agendar('${j}')">📅 Agendar</button><button type="button" onclick="u2Menu(event,'mais','${j}')">⋯ Mais</button></div>`; }
 
@@ -73,9 +74,17 @@ function trilha(c){ const j=esc(jsq(c.id)), et=etapaInfo(c);
   return `<div class="u2-tri" role="group" aria-label="Etapas">${fl.map((e,k)=>`<button type="button" class="u2-st ${k<i?'feita':k===i?'atual':''}" onclick="mudarEtapa('${esc(jsq(e))}')">${k<i?'✓ ':''}${esc((ET_LABEL&&ET_LABEL[e])||e)}</button>`).join('')}${todas.filter(e=>enc.includes(e)).length?`<button type="button" class="u2-st enc" onclick="u2Menu(event,'enc','${j}')">✖ Encerrar…</button>`:''}</div>`; }
 
 /* ── aplica tudo por cima da gaveta pronta ── */
+const ehMfo=c=>{ try{ return typeof fuDestino==='function'&&fuDestino(c).funil_id==='mfo'; }catch(_){ return false; } };
 function fichaUx2Aplicar(c){ const dr=document.getElementById('drawer'); if(!dr||!c) return;
   if(ULT_ID!==String(c.id)){ ULT_ID=String(c.id); TAB='neg'; }
-  dr.classList.add('ux2'); css();
+  dr.classList.add('ux2'); css(); try{ if(typeof fuCss==='function') fuCss(); }catch(_){}
+  /* MFO: os blocos da ficha do negócio (Cliente, Este negócio, Prêmio, Coberturas, Campos do ramo, Cotações, Análise, Pendências)
+     viram UM tópico da aba Negócio; a "Ficha MFO" antiga (ramos/fecha por/receita/apólices) já está dentro deles e sai daqui. */
+  { const b0=dr.querySelector('.drawer-body');
+    if(b0&&ehMfo(c)&&typeof fuMfoBlocosHtml==='function'&&!b0.querySelector('#u2-mfo2')){ let h=''; try{ h=fuMfoBlocosHtml(c); }catch(e){ console.warn('ficha-ux2 mfo',e); }
+      if(h){ const sec=document.createElement('div'); sec.className='sec'; sec.id='u2-mfo2'; sec.innerHTML=`<h3>Ficha do negócio (MFO)</h3><div class="fu-pg u2-mfo">${h}</div>`;
+        const ant=b0.querySelector('.mfo-bl'); if(ant) ant.replaceWith(sec); else b0.appendChild(sec);
+        try{ if(typeof drwSecsWire==='function') drwSecsWire(); }catch(_){} } } }
   const head=dr.querySelector('.drawer-head'); if(head) head.innerHTML=cabecalho(c);
   const body=dr.querySelector('.drawer-body'); if(!body) return;
   const org=typeof DRW_ORG!=='undefined'&&DRW_ORG;
@@ -159,6 +168,8 @@ function css(){ if(document.getElementById('u2-css')) return; const s=document.c
 .u2-tabs button.on{color:var(--primary,#2563eb);border-bottom-color:var(--primary,#2563eb)}
 .u2-tabs .n{font-weight:500;font-size:12px;color:var(--muted);margin-left:4px}
 #drawer.ux2 .drawer-body > .u2-fora{display:none!important}
+#drawer.ux2 .fu-pg.u2-mfo{position:static;transform:none;visibility:visible;width:auto;box-shadow:none;background:transparent;padding:0;overflow:visible;display:flex;flex-direction:column;gap:8px;height:auto;border-radius:0;transition:none;z-index:auto}
+#drawer.ux2 .fu-pg.u2-mfo::before{display:none}
 #drawer.ux2 .sec > h3.sec-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 #drawer.ux2 .sec.sec-fechada > :not(h3){display:none!important}
 #drawer.ux2 .sec > h3{text-transform:none;letter-spacing:0;font-size:14px;font-weight:700;color:var(--texto,#0f172a);margin:0;min-height:28px}
