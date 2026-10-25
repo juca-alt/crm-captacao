@@ -128,6 +128,12 @@ def main():
     a = ap.parse_args()
     if a.servido:
         sys.exit(servido())
+    # FUNIL-UNICO-V1 (24/10): o mapa de etapas do app tem que ser igual ao seed da kb_etapa_mapa
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import teste_funil_mapa
+    _div = teste_funil_mapa.checar()
+    if _div and not a.prova:
+        print('❌ PORTÃO FECHADO — mapa de etapas: SQL e app divergem'); [print('  ·', x) for x in _div]; sys.exit(1)
     srv, porta = subir_servidor(a.porta)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{porta}/portao.html?auto=1&post=1' + ('&quebrar=1' if a.prova else '')
