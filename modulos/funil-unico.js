@@ -339,7 +339,7 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
   .fu-board{display:block}.fu-board .fu-col{display:none;width:100%}.fu-board .fu-col.vis{display:flex}
   .fu-tabs{display:flex}.fu-fc,.fu-sel,.fu-qa button,.fu-vt button,.fu-row .btn{min-height:44px}.fu-busca{min-height:44px;flex:1 1 0}
   .fu-busca input,.fu-md select,.fu-md input[type=text],.fu-sel{font-size:16px}
-  .fu-ov.sheet{align-items:flex-end;padding:0}.fu-ov.sheet .fu-md{border-radius:16px 16px 0 0;max-height:88vh}
+  .fu-ov.fu-sheet{align-items:flex-end;padding:0}.fu-ov.fu-sheet .fu-md{border-radius:16px 16px 0 0;max-height:88vh}
   .fu-row .fu-nova{flex:1}
   .fu-acts,.fu-fb{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.fu-acts::-webkit-scrollbar,.fu-fb::-webkit-scrollbar{display:none}.fu-acts>*,.fu-fb>*{flex:0 0 auto}
   .fu-b .tx{display:none}.fu-b.p .tx{display:inline}.fu-b,.fu-sv,.fu-acts .fu-vt button{min-height:44px}.fu-b{padding:0 12px}
@@ -380,7 +380,7 @@ function topoHtml(){ const nVi=fuPopulacao('vi').length, nMf=fuPopulacao('mfo').
   return `<div class="fu-seg" role="tablist" aria-label="Funil"><button type="button" class="${FU.fid==='vi'?'on':''}" onclick="fuFunil('vi')">🎯 Vida Individual <span class="n">${nVi}</span></button><button type="button" class="${FU.fid==='mfo'?'on':''}" onclick="fuFunil('mfo')">🏢 MFO <span class="n">${nMf}</span></button></div>`; }
 function barraHtml(){ const c=colsDe(FU.fid), nv=c.ordem.length-c.ocultas.length, ol=(ORDENS.find(o=>o[0]===FU.ordem)||ORDENS[0])[1];
   return `<div class="fu-acts"><button type="button" class="fu-b" onclick="irPara('sitplan')" title="SitPlan do dia">📅 <span class="tx">SitPlans</span></button><button type="button" class="fu-b" onclick="irPara('bn-recs')" title="Recomendações">🌳 <span class="tx">Recomendações</span></button>
-    <button type="button" class="fu-b p" onclick="openNovoContato()">＋ <span class="tx">Novo negócio</span></button>
+    <button type="button" class="fu-b p" onclick="openNovoContato()">＋ <span class="tx">Novo negócio</span></button>${FU.fid==='vi'&&typeof fuNovaRec==='function'?'<button type="button" class="fu-b" onclick="fuNovaRec()" title="Cole texto, foto, PDF ou contato: a IA lê e você revisa">✨ <span class="tx">Nova recomendação</span></button>':''}
     <button type="button" class="fu-b" onclick="fuOrdemMenu(event)" title="Ordenar">⇅ <span class="tx">${esc(ol)}</span> ▾</button>
     <span class="fu-vt" role="group" aria-label="Vista"><button type="button" class="${FU.modo==='kanban'?'on':''}" onclick="fuModo('kanban')" title="Kanban" aria-label="Kanban">▦</button><button type="button" class="${FU.modo==='tabela'?'on':''}" onclick="fuModo('tabela')" title="Tabela" aria-label="Tabela">☰</button></span>
     <button type="button" class="fu-b" onclick="fuColunas()" title="Colunas">▥ <span class="tx">Colunas</span> <span class="cn">(${nv}/${c.ordem.length})</span></button>
@@ -757,7 +757,7 @@ function filtrosHtml(){ const lista=fuLista(FU.fid), v=lista.filter(x=>fuPassa(x
       <div class="fu-svnovo"><input type="text" id="fu-sv-n" maxlength="40" placeholder="${at?'Nome pro filtro atual (ex.: Quentes de Recife)':'Marque filtros acima pra salvar'}" ${at?'':'disabled'} aria-label="Nome do filtro salvo" onkeydown="if(event.key==='Enter')fuSalvoSalvar()"><button type="button" class="btn btn-ghost" ${at?'':'disabled'} onclick="fuSalvoSalvar()">💾 Salvar</button></div></div>
     <div class="acts" style="justify-content:space-between"><button type="button" class="btn btn-ghost" onclick="fuLimpar()">Limpar</button><button type="button" class="btn btn-p" onclick="fuFechar()">Ver ${v} card${v===1?'':'s'}</button></div>`; }
 function fuFiltrosAbrir(){ fuModal(filtrosHtml(),true); }
-function fuRefiltros(){ const md=document.querySelector('.fu-ov.sheet .fu-md'); if(md) md.innerHTML=filtrosHtml(); }
+function fuRefiltros(){ const md=document.querySelector('.fu-ov.fu-sheet .fu-md'); if(md) md.innerHTML=filtrosHtml(); }
 function colsHtml(){ const fid=FU.fid, c=colsDe(fid);
   return `<h2>▥ Colunas (${c.ordem.length-c.ocultas.length}/${c.ordem.length})</h2><div class="sub" style="margin:0">Só pra você: cada usuário tem a sua ordem e esconde o que não usa. No PC também dá pra arrastar a alça ⠿ da coluna no quadro.</div>
     ${c.ordem.map((id,i)=>`<div class="fu-colrow"><label for="fu-cv-${esc(id)}"><input type="checkbox" id="fu-cv-${esc(id)}" ${c.ocultas.includes(id)?'':'checked'} onchange="fuColVer('${esc(jsq(id))}',this.checked)"> ${esc(lbl(id))}</label><button type="button" class="btn btn-ghost btn-mini" ${i?'':'disabled'} onclick="fuColMover(${i},-1)" aria-label="Subir">▲</button><button type="button" class="btn btn-ghost btn-mini" ${i===c.ordem.length-1?'disabled':''} onclick="fuColMover(${i},1)" aria-label="Descer">▼</button></div>`).join('')}
@@ -835,7 +835,7 @@ function fuExportar(){ const fid=FU.fid, l=fuOrdenar(fuLista(fid).filter(x=>fuPa
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`funil-${fid==='vi'?'vida-individual':'mfo'}-${hojeISO()}.csv`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
 
 /* ── modal e menu ── */
-function fuModal(html,sheet){ fuFechar(); camRegistrar(); const ov=document.createElement('div'); ov.className='fu-ov'+(sheet?' sheet':''); ov.id='fu-ov'; ov.innerHTML=`<div class="fu-md" role="dialog" aria-modal="true">${html}</div>`;
+function fuModal(html,sheet){ fuFechar(); camRegistrar(); const ov=document.createElement('div'); ov.className='fu-ov'+(sheet?' fu-sheet':''); ov.id='fu-ov'; ov.innerHTML=`<div class="fu-md" role="dialog" aria-modal="true">${html}</div>`;
   ov.addEventListener('click',e=>{ if(e.target===ov) fuFechar(); }); document.body.appendChild(ov); const f=ov.querySelector('select,input,button'); if(f) try{ f.focus(); }catch(_){} camSinc(); }
 function fuFechar(){ const o=document.getElementById('fu-ov'); if(o){ o.remove(); camSinc(); } }
 let _menu=null;
@@ -905,7 +905,7 @@ function fuSelfTests(ok){
 
 Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAgendarOk,fuPainelRender,fuPainelFechar,fuPainelCheia,fuHist,fuNota,fuTarFeita,fuTarNova,fuFichaCompleta,
   fuMfoSet,fuMfoArr,fuMfoAdd,fuMfoDel,fuMfoRamo,fuMfoFecha,fuMfoReceita,fuMfoVenc,fuDobra,fuDobraTodas,fuAnce,fuRepinta});
-Object.assign(W,{fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
+Object.assign(W,{fuModal,fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
 Object.assign(W,{viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
   fuAbrir,fuMover,fuMotivoOk,fuMoverMenu,fuLigar,fuZap,fuRegistrar,fuDelay,fuFiltrosAbrir,fuColunas,fuColVer,fuColMover,fuColPadrao,fuMais,fuDesempenho,fuExportar,
   fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca});
