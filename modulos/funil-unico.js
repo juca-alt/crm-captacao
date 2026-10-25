@@ -19,9 +19,10 @@ const CLIENTE_COL={vi:'emitida',mfo:'m_ativo'};
 const ORIGEM={recomendacao:'Recomendação',lead:'Lead',estoque:'Estoque',parceiro:'Parceiro',carteira:'Carteira',importacao:'Importação'};
 const LINHA={prud:'Vida Individual',vg:'VG',prud_demais:'Prud. Demais',mo:'Multi Office'};
 const RAPIDOS=['semprox','ta','quente','nunca'];
-const GRUPOS=[['Ação',['semprox','ta','delay','nunca']],['Perfil',['quente','alta','niver','revisar']],['Mercado',['mx','my','mz','msem']],['Origem',['o_rec','o_lead','o_parc','o_cart']]];
+const GRUPOS=[['Ação',['semprox','nunca','ta','delay','esfriando']],['Perfil',['quente','alta','niver','cliente','revisar']],['Origem',['o_rec','o_lead','o_parc','o_cart']],['Mercado',['mx','my','mz','msem']]];
+const SO_VI=['quente','ta'];   /* ANCE e TA não existem no MFO */
 const MOTIVOS_SUGESTAO=['Sem interesse','Já é cliente de outro LP','Sem renda / momento financeiro','Não atende mais','Saúde (não passa na análise)'];
-const FU={fid:'vi',modo:'kanban',ordem:'rec',q:'',f:{},origem:'',dono:'',linha:'',enc:{},tab:{},cong:false,motivo:null};
+const FU={fid:'vi',modo:'kanban',ordem:'livre',q:'',f:{},origem:'',dono:'',linha:'',enc:{},tab:{},cong:false,motivo:null};
 let _qT=null;
 W.FU_STATE=FU;
 
@@ -100,15 +101,15 @@ function fuInfo(c,fid){ const d=fuDestino(c), enc=ehEnc(fid,d.etapa_id), cli=CLI
     niver:(()=>{ const n=String(c.nascimento||''); const m=/^\d{4}-(\d{2})/.exec(n)||/^\d{2}\/(\d{2})/.exec(n); return !!m&&+m[1]===(new Date().getMonth()+1); })()}; }
 
 /* ── filtros (faceta: o número diz quantos sobram somando com os ligados) ── */
-const FILTROS={
-  semprox:['⚠ Sem próximo passo',(c,i)=>i.semProx], ta:['Fazer TA',(c,i)=>i.ta], delay:['Delay',(c,i)=>i.delay], nunca:['Nunca conversei',(c,i)=>!i.ult],
-  quente:['Quentes',(c,i)=>i.quente], alta:['Alta Renda',(c,i)=>i.alta], niver:['Aniversariantes do mês',(c,i)=>i.niver], revisar:['Pra revisar (mapa)',(c,i)=>i.d.revisao],
-  mx:['X',c=>c.mercado==='X'], my:['Y',c=>c.mercado==='Y'], mz:['Z',c=>c.mercado==='Z'], msem:['sem mercado',c=>!c.mercado],
-  o_rec:['Recomendação',c=>c.origem_tipo==='recomendacao'], o_lead:['Lead',c=>c.origem_tipo==='lead'], o_parc:['Parceiro',c=>c.origem_tipo==='parceiro'], o_cart:['Carteira',c=>c.origem_tipo==='carteira']};
+const FILTROS={   /* chave: [rótulo, teste, tom do chip, ícone] */
+  semprox:['Sem próximo passo',(c,i)=>i.semProx,'lj','⚠'], nunca:['Nunca conversei',(c,i)=>!i.ult,'verde','✆'], ta:['Fazer TA',(c,i)=>i.ta,'azul','☏'], delay:['Delay',(c,i)=>i.delay,'verm','⏳'], esfriando:['Esfriando (30d+)',(c,i)=>i.esfriando,'azul','❄'],
+  quente:['Quentes',(c,i)=>i.quente,'amar','☆'], alta:['Alta Renda',(c,i)=>i.alta,'cinza','✦'], niver:['Aniversariantes do mês',(c,i)=>i.niver,'rosa','🎂'], cliente:['Já é cliente',c=>fuEhCliente(c),'verde','🛡'], revisar:['Pra revisar (mapa)',(c,i)=>i.d.revisao,'amar','?'],
+  mx:['Mercado X',c=>c.mercado==='X','verde',''], my:['Mercado Y',c=>c.mercado==='Y','amar',''], mz:['Mercado Z',c=>c.mercado==='Z','cinza',''], msem:['Sem mercado',c=>!c.mercado,'cinza',''],
+  o_rec:['Recomendação',c=>c.origem_tipo==='recomendacao','roxo','🙌'], o_lead:['Lead',c=>c.origem_tipo==='lead','azul','✦'], o_parc:['Parceiro',c=>c.origem_tipo==='parceiro','lj','🤝'], o_cart:['Carteira',c=>c.origem_tipo==='carteira','verde','🛡']};
 function fuBate(c,q){ if(!q) return true; try{ if(funBuscaBate(c,q)) return true; }catch(_){}
   const n=normKey(q); return [lbl(fuDestino(c).etapa_id),c.cidade,c.renda,c.renda_estimada,c.tags,c.mercado?'mercado '+c.mercado:'',ORIGEM[c.origem_tipo]].some(x=>x!=null&&normKey(String(x)).includes(n)); }
 function fuPassa(c,i,ignora){ if(!fuBate(c,FU.q)) return false;
-  for(const k of Object.keys(FU.f)){ if(!FU.f[k]||k===ignora) continue; if(!FILTROS[k][1](c,i)) return false; }
+  for(const k of Object.keys(FU.f)){ if(!FU.f[k]||k===ignora||!FILTROS[k]) continue; if(!FILTROS[k][1](c,i)) return false; }
   if(FU.origem&&c.origem_tipo!==FU.origem) return false;
   if(FU.dono&&(c._dono||'')!==FU.dono) return false;
   if(FU.linha&&c.linha!==FU.linha) return false;
@@ -116,24 +117,34 @@ function fuPassa(c,i,ignora){ if(!fuBate(c,FU.q)) return false;
   if(FU.cong&&!i.cong) return false;
   return true; }
 function fuLista(fid){ return fuPopulacao(fid).map(c=>({c,i:fuInfo(c,fid)})); }
-const ativos=()=>Object.keys(FU.f).filter(k=>FU.f[k]).map(k=>[k,FILTROS[k][0].replace(/^(X|Y|Z)$/,'Mercado $1')]).concat(FU.origem?[['@origem','Origem: '+(ORIGEM[FU.origem]||FU.origem)]]:[]).concat(FU.dono?[['@dono','Dono: '+donoNome(FU.dono)]]:[]).concat(FU.linha?[['@linha','Linha: '+LINHA[FU.linha]]]:[]);
+const ativos=()=>Object.keys(FU.f).filter(k=>FU.f[k]&&FILTROS[k]).map(k=>[k,FILTROS[k][0]]).concat(FU.origem?[['@origem','Origem: '+(ORIGEM[FU.origem]||FU.origem)]]:[]).concat(FU.dono?[['@dono','Dono: '+donoNome(FU.dono)]]:[]).concat(FU.linha?[['@linha','Linha: '+LINHA[FU.linha]]]:[]);
 const donoNome=e=>{ const s=String(e||''); return s? (s.split('@')[0].replace(/^./,x=>x.toUpperCase())) : '—'; };
 
 /* ── colunas por usuário (ordem + ocultas) — sobe junto com as prefs do menu (lp_user_prefs) ── */
 const COLS_CHAVE='crmlp_fu_cols_v1';
 let COLS=null;
 function colsLer(){ if(COLS) return COLS; try{ COLS=JSON.parse(localStorage.getItem(COLS_CHAVE)||'null')||{}; }catch(_){ COLS={}; } return COLS; }
-function colsDe(fid){ const fluxo=cfg(fid).filter(e=>!e.enc).map(e=>e.id), p=colsLer()[fid]||{};
-  const ordem=(Array.isArray(p.ordem)?p.ordem.filter(id=>fluxo.includes(id)):[]).concat(fluxo.filter(id=>!(p.ordem||[]).includes(id)));
-  return {ordem,ocultas:(p.ocultas||[]).filter(id=>fluxo.includes(id))}; }
+function colsDe(fid){ const todas=cfg(fid).map(e=>e.id), p=colsLer()[fid]||{};
+  const ordem=(Array.isArray(p.ordem)?p.ordem.filter(id=>todas.includes(id)):[]).concat(todas.filter(id=>!(p.ordem||[]).includes(id)));
+  return {ordem,ocultas:(p.ocultas||[]).filter(id=>todas.includes(id))}; }
 function colsGravar(fid,v){ const all=colsLer(); all[fid]=v; try{ localStorage.setItem(COLS_CHAVE,JSON.stringify(all)); }catch(_){} try{ if(typeof navPrefsSubir==='function') navPrefsSubir(); }catch(_){} }
 function fuPrefsSubir(){ return colsLer(); }
+/* filtros salvos (por usuário, junto das colunas → lp_user_prefs). Nascem com 4 de exemplo; ele apaga/cria na gaveta. */
+const SALVOS_PADRAO=[{n:'🔥 Quentes sem próximo passo',f:{quente:true,semprox:true}},{n:'☏ Fazer TA',f:{ta:true}},{n:'⚠ Sem próximo passo',f:{semprox:true}},{n:'⏳ Delay',f:{delay:true}}];
+function salvos(){ const a=colsLer(); if(!Array.isArray(a._salvos)) a._salvos=SALVOS_PADRAO.map(x=>({n:x.n,f:Object.assign({},x.f)})); return a._salvos; }
+function salvosGravar(){ try{ localStorage.setItem(COLS_CHAVE,JSON.stringify(colsLer())); }catch(_){} try{ if(typeof navPrefsSubir==='function') navPrefsSubir(); }catch(_){} }
+const fAtivos=()=>Object.keys(FU.f).filter(k=>FU.f[k]&&FILTROS[k]);
+const fChaves=f=>Object.keys(f||{}).filter(k=>f[k]&&FILTROS[k]);
+function fIgual(f){ const a=fAtivos().sort().join(), b=fChaves(f).sort().join(); return !!a&&a===b; }
+function contaSalvo(lista,f){ const ks=fChaves(f).filter(k=>FU.fid==='vi'||!SO_VI.includes(k)); return lista.filter(x=>fuBate(x.c,FU.q)&&(FU.cong?x.i.cong:!x.i.cong)&&ks.every(k=>FILTROS[k][1](x.c,x.i))).length; }
 function fuPrefsAplicar(p){ if(p&&typeof p==='object'){ COLS=p; try{ localStorage.setItem(COLS_CHAVE,JSON.stringify(p)); }catch(_){} } }
 
 /* ── ordenar ── */
-const ORDENS=[['rec','Mais recentes'],['ag','Data do próximo passo'],['prob','Prob. negócio'],['nome','Nome']];
+const ORDENS=[['livre','Ordem manual (arrastar)'],['rec','Mais recentes'],['ag','Data do próximo passo'],['prob','Prob. negócio'],['nome','Nome']];
 function fuOrdenar(l){ const o=FU.ordem, ent=c=>{ try{ return (entradaFunil(c).iso)||''; }catch(_){ return ''; } };
-  return l.slice().sort((A,B)=> o==='nome'?String(A.c.nome||'').localeCompare(String(B.c.nome||''),'pt-BR')
+  const ord=c=>(c.fu_ord!=null&&isFinite(+c.fu_ord))?+c.fu_ord:1e9;
+  return l.slice().sort((A,B)=> o==='livre'?(ord(A.c)-ord(B.c))||String(ent(B.c)).localeCompare(String(ent(A.c)))
+    : o==='nome'?String(A.c.nome||'').localeCompare(String(B.c.nome||''),'pt-BR')
     : o==='prob'?(prob(B.i.d.etapa_id)-prob(A.i.d.etapa_id))||String(A.c.nome||'').localeCompare(String(B.c.nome||''),'pt-BR')
     : o==='ag'?String((A.i.prox&&A.i.prox.quando)||'9').localeCompare(String((B.i.prox&&B.i.prox.quando)||'9'))
     : String(ent(B.c)).localeCompare(String(ent(A.c)))); }
@@ -284,53 +295,100 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
   .fu-fld input,.fu-fld select,.fu-fld textarea,.fu-add input,.fu-tnova input,.fu-tnova select,.fu-cov input,.fu-cov select,.fu-lac input,.fu-lac select,.fu-ap input{font-size:16px;min-height:44px}
   .fu-lac{grid-template-columns:1fr 104px auto}.fu-hist{max-height:none}
 }
+.fu-acts{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px}
+.fu-b{min-height:34px;padding:0 11px;border-radius:9px;border:1px solid var(--linha);background:#fff;font-weight:600;font-size:13px;color:#334155;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer}
+.fu-b:hover{border-color:#cbd5e1}.fu-b.p{background:var(--primary);border-color:var(--primary);color:#fff}.fu-b .cn{font-weight:500;color:var(--muted)}
+.fu-acts .fu-vt button{min-height:32px}
+.fu-fb{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px}
+.fu-fb-l{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-left:4px}
+.fu-sv{display:inline-flex;align-items:center;gap:5px;min-height:30px;padding:0 10px;border-radius:999px;border:1px solid var(--linha);background:#fff;font-size:12.5px;font-weight:600;color:#334155;white-space:nowrap;cursor:pointer}
+.fu-sv .q{font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}.fu-sv.on{background:var(--navy,#0f172a);border-color:var(--navy,#0f172a);color:#fff}.fu-sv.on .q{color:#cbd5e1}
+.fu-fc.t-verde{background:#dcfce7;border-color:#dcfce7;color:#15803d}.fu-fc.t-amar{background:#fef3c7;border-color:#fef3c7;color:#b45309}.fu-fc.t-verm{background:#fee2e2;border-color:#fee2e2;color:#b91c1c}
+.fu-fc.t-roxo{background:#ede9fe;border-color:#ede9fe;color:#6d28d9}.fu-fc.t-azul{background:#dbeafe;border-color:#dbeafe;color:#1d4ed8}.fu-fc.t-lj{background:#ffedd5;border-color:#ffedd5;color:#c2410c}
+.fu-fc.t-rosa{background:#fce7f3;border-color:#fce7f3;color:#be185d}.fu-fc.t-cinza{background:#e2e8f0;border-color:#e2e8f0;color:#475569}
+.fu-fc[class*=" t-"] .cn{background:rgba(255,255,255,.6);color:inherit}.fu-fc[class*=" t-"].on{box-shadow:inset 0 0 0 2px currentColor;font-weight:700}
+.fu-bd.t-verde{background:#dcfce7;color:#15803d}.fu-bd.t-amar{background:#fef3c7;color:#b45309}.fu-bd.t-cinza{background:#e2e8f0;color:#475569}
+.fu-qd{background:#fff;border:1px solid var(--linha);border-radius:14px;overflow:hidden}
+.fu-bq{display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--linha);flex-wrap:wrap}
+.fu-bq .fu-busca{flex:1 1 260px;max-width:520px;min-height:36px}.fu-res{margin-left:auto;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.fu-qd .fu-board{padding:12px}.fu-qd .fu-tabs{padding:10px 12px 0}.fu-qd .fu-tw{border:0;border-radius:0}
+.fu-col{background:#f8fafc;border:1px solid var(--linha);padding:0;gap:0}.fu-col.enc{background:#fdf6f6}.fu-col.dragging{opacity:.4}
+.fu-col-h{padding:9px 8px 9px 6px;border-bottom:1px solid var(--linha);gap:7px}
+.fu-col-s{padding:6px 10px 0;flex-direction:row;justify-content:space-between;gap:8px}
+.fu-cards{display:flex;flex-direction:column;gap:8px;padding:8px}
+.fu-colx{min-width:28px;min-height:28px;border-radius:7px;border:0;background:none;color:var(--muted);font-size:15px;cursor:pointer;line-height:1}.fu-colx:hover{background:#e2e8f0}
+.fu-col-h .qt{margin-left:auto}
+.fu-alca{cursor:grab;color:#cbd5e1;font-size:14px;line-height:1;user-select:none;padding:1px 1px 0}.fu-alca:active{cursor:grabbing}
+.fu-nova-col{flex:0 0 200px;min-height:110px;border:2px dashed #cbd5e1;border-radius:12px;background:transparent;color:var(--primary);font-weight:600;cursor:pointer}.fu-nova-col:hover{background:#fff}
+.fu-drop{height:3px;background:var(--primary);border-radius:2px;margin:-4px 0}
+.fu-card{padding:9px 10px 0;gap:4px}
+.fu-l1{display:flex;align-items:flex-start;gap:5px}
+.fu-l1 .fu-nome{flex:1;min-width:0;display:flex;align-items:center;gap:3px}.fu-l1 .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fu-l1 .fu-i{min-height:22px;min-width:22px;font-size:13px}
+.fu-avc{font-size:11px;color:#9a3412;font-weight:600;white-space:nowrap;flex:0 0 auto;margin-top:2px}
+.fu-card .fu-stars,.fu-card .fu-meta2,.fu-card .fu-bds,.fu-card .fu-st{margin-left:18px}
+.fu-meta2{font-size:12.5px;color:#334155;display:flex;flex-direction:column;gap:1px}.fu-meta2 .r{display:flex;justify-content:space-between;gap:8px}.fu-meta2 .val{font-weight:600;font-variant-numeric:tabular-nums}.fu-meta2 .pa{color:#15803d;font-weight:600;font-size:12px}
+.fu-cf{display:flex;align-items:center;gap:2px;border-top:1px solid var(--linha);margin:4px -10px 0;padding:3px 6px 3px 10px}
+.fu-cf .lb{font-size:11.5px;color:var(--muted);margin-right:auto;white-space:nowrap}
+.fu-cf button{min-width:28px;min-height:30px;border-radius:7px;border:0;background:none;font-size:14px;color:#334155;cursor:pointer}.fu-cf button:hover{background:var(--fundo,#f1f5f9)}
+.fu-svrow{display:flex;align-items:center;gap:6px;border:1px solid var(--linha);border-radius:9px;padding:3px 6px 3px 10px;font-size:13px}.fu-svrow span{flex:1}
+.fu-svnovo{display:flex;gap:6px}.fu-svnovo input{flex:1;min-width:0;border:1px solid var(--linha);border-radius:8px;padding:0 10px;min-height:38px;font-size:14px}
+.fu-cores{display:flex;gap:8px;flex-wrap:wrap}.fu-cores button{width:32px;height:32px;border-radius:50%;border:3px solid transparent;cursor:pointer}.fu-cores button.on{border-color:var(--navy,#0f172a)}
+.fu-md .fu-fld input,.fu-md .fu-fld select{border:1px solid var(--linha);border-radius:8px;padding:7px 9px;min-height:40px;font-size:14px;width:100%}
 @media (max-width:760px){
   .fu-board{display:block}.fu-board .fu-col{display:none;width:100%}.fu-board .fu-col.vis{display:flex}
   .fu-tabs{display:flex}.fu-fc,.fu-sel,.fu-qa button,.fu-vt button,.fu-row .btn{min-height:44px}.fu-busca{min-height:44px;flex:1 1 0}
   .fu-busca input,.fu-md select,.fu-md input[type=text],.fu-sel{font-size:16px}
   .fu-ov.sheet{align-items:flex-end;padding:0}.fu-ov.sheet .fu-md{border-radius:16px 16px 0 0;max-height:88vh}
   .fu-row .fu-nova{flex:1}
+  .fu-acts,.fu-fb{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.fu-acts::-webkit-scrollbar,.fu-fb::-webkit-scrollbar{display:none}.fu-acts>*,.fu-fb>*{flex:0 0 auto}
+  .fu-b .tx{display:none}.fu-b.p .tx{display:inline}.fu-b,.fu-sv,.fu-acts .fu-vt button{min-height:44px}.fu-b{padding:0 12px}
+  .fu-alca,.fu-nova-col{display:none}.fu-card .fu-stars,.fu-card .fu-meta2,.fu-card .fu-bds,.fu-card .fu-st{margin-left:0}
+  .fu-cf button,.fu-colx,.fu-l1 .fu-i{min-width:44px;min-height:44px}.fu-cf .lb{display:none}.fu-cf{justify-content:space-around}
+  .fu-svnovo input,.fu-md .fu-fld input,.fu-md .fu-fld select,.fu-bq .fu-busca input{font-size:16px;min-height:44px}.fu-cores button{width:44px;height:44px}
+  .fu-qd .fu-board{padding:10px}
 }`; document.head.appendChild(s); }
 
 /* ── desenho ── */
 function fuCount(lista,k){ const fn=FILTROS[k][1]; return lista.filter(x=>fuPassa(x.c,x.i,k)&&fn(x.c,x.i)).length; }
-function fcHtml(lista,k,curto){ const n=fuCount(lista,k), on=!!FU.f[k], t=FILTROS[k][0];
-  return `<button type="button" class="fu-fc${on?' on':''}${!n&&!on?' zero':''}" onclick="fuFiltro('${k}')" aria-pressed="${on}">${esc(curto&&/^(X|Y|Z)$/.test(t)?t:(/^(X|Y|Z)$/.test(t)?'Mercado '+t:t))} <span class="cn">${n}</span></button>`; }
+function fcHtml(lista,k){ const n=fuCount(lista,k), on=!!FU.f[k], F=FILTROS[k];
+  return `<button type="button" class="fu-fc t-${F[2]}${on?' on':''}${!n&&!on?' zero':''}" onclick="fuFiltro('${k}')" aria-pressed="${on}">${F[3]?F[3]+' ':''}${esc(F[0])} <span class="cn">${n}</span></button>`; }
 function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn';
   const st=i.delay?'⏳ Delay':i.ta?'📋 Fazer TA':i.ult?ULT_LBL(i.ult.tipo):'';
-  const bds=[fuEhCliente(c)?'<span class="fu-bd v">Cliente · apólice ativa</span>':'', c.mercado?`<span class="fu-bd b">Mercado ${esc(c.mercado)}</span>`:'',
-    fid==='mfo'&&c.linha?`<span class="fu-bd r">${esc(LINHA[c.linha]||c.linha)}</span>`:'', c.origem_tipo?`<span class="fu-bd">${esc(ORIGEM[c.origem_tipo]||c.origem_tipo)}</span>`:'',
+  const bds=[fuEhCliente(c)?'<span class="fu-bd v">Cliente</span>':'', c.mercado?`<span class="fu-bd t-${({X:'verde',Y:'amar',Z:'cinza'})[c.mercado]||'cinza'}">Mercado ${esc(c.mercado)}</span>`:'',
+    fid==='mfo'&&c.linha?`<span class="fu-bd r">${esc(LINHA[c.linha]||c.linha)}</span>`:'', c.origem_tipo&&c.origem_tipo!=='recomendacao'?`<span class="fu-bd">${esc(ORIGEM[c.origem_tipo]||c.origem_tipo)}</span>`:'',
     bn?'<span class="fu-bd">Estoque</span>':'', i.alta?'<span class="fu-bd a">Alta renda</span>':'', i.esfriando?'<span class="fu-bd lj">❄ esfriando</span>':'', i.quente&&!i.enc?'<span class="fu-bd vm">🔥 quente</span>':'',
     i.d.revisao?'<span class="fu-bd a">revisar etapa</span>':'', i.cong?'<span class="fu-bd b">❄️ congelado</span>':''].join('');
-  const px=i.prox?`<div class="fu-px">📅 ${esc(i.prox.tit||({reuniao:'Reunião',ligar:'Ligar',whats:'WhatsApp'}[i.prox.tipo]||'Tarefa'))} · ${esc(dataBR(i.prox.quando))}${i.prox.hora?' '+esc(i.prox.hora):''}</div>`:'';
-  const renda=c.renda||c.renda_estimada; const pa=(typeof paDe==='function')?paDe(c):0;
+  const renda=c.renda||c.renda_estimada, rv=renda?Math.round((+String(renda).replace(/\D/g,'')||0)/1000):0, pa=(typeof paDe==='function')?paDe(c):0;
   return `<article class="fu-card${i.semProx?' semprox':''}" draggable="true" data-id="${esc(c.id)}" onclick="fuAbrir('${j}')">
-    <div class="fu-nl"><div class="fu-nome">${esc(c.nome||'—')}</div><button type="button" class="fu-i" onclick="event.stopPropagation();fuInfoPop(event,'${j}')" aria-label="Resumo de ${esc(c.nome||'')}">ⓘ</button></div>
+    <div class="fu-l1"><span class="fu-alca" aria-hidden="true" title="Arraste pra mover ou reordenar">⠿</span><div class="fu-nome"><span class="nm">${esc(c.nome||'—')}</span><button type="button" class="fu-i" onclick="event.stopPropagation();fuInfoPop(event,'${j}')" aria-label="Resumo de ${esc(c.nome||'')}">ⓘ</button></div>${i.semProx?'<span class="fu-avc" title="Sem próximo passo">⚠ Sem próx. passo</span>':''}</div>
     ${fid==='vi'?starsHtml(c,i.ance):''}
-    <div class="fu-meta">${fid==='mfo'&&c.produto?`<span><b style="color:#334155">${esc(c.produto)}</b></span>`:''}${c.profissao?`<span>${esc(c.profissao)}</span>`:''}${c.cidade?`<span>${esc(c.cidade)}</span>`:''}${renda?`<span>R$ ${esc(String(Math.round((+String(renda).replace(/\D/g,'')||0)/1000)))} mil</span>`:''}${pa?`<span>PA ${esc(brlCurto(pa))}</span>`:''}</div>
-    ${px}${st?`<span class="fu-st">${esc(st)}</span>`:''}${i.enc&&(c.motivo_perda||c.status)?`<span class="fu-st">✖ ${esc(c.motivo_perda||c.status)}</span>`:''}
-    <div class="fu-bds">${bds}</div>
-    ${i.semProx?'<div class="fu-av">⚠ Sem próximo passo</div>':''}
-    <div class="fu-qa" onclick="event.stopPropagation()"><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar">☏ Ligar</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp">💬 Zap</button><button type="button" onclick="fuDelay('${j}')" title="Delay (remarcou)">✕ Delay</button><button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa">⇄ Mover</button></div>
+    <div class="fu-meta2">${fid==='mfo'&&c.produto?`<b>${esc(c.produto)}</b>`:''}${c.profissao?`<span>${esc(c.profissao)}</span>`:''}${c.cidade||rv?`<span class="r"><span>${esc(c.cidade||'')}</span>${rv?`<span class="val">R$ ${rv} mil</span>`:''}</span>`:''}${i.prox?`<span>📅 ${esc(dataBR(i.prox.quando))}${i.prox.hora?' '+esc(i.prox.hora):''}${i.prox.tit?' · '+esc(i.prox.tit):''}</span>`:''}${pa?`<span class="pa">PA ${esc(brlCurto(pa))}</span>`:''}</div>
+    ${st?`<span class="fu-st">${esc(st)}</span>`:''}${i.enc&&(c.motivo_perda||c.status)?`<span class="fu-st">✖ ${esc(c.motivo_perda||c.status)}</span>`:''}
+    ${bds?`<div class="fu-bds">${bds}</div>`:''}
+    <div class="fu-cf" onclick="event.stopPropagation()"><span class="lb">Contato rápido</span>${i.prox?`<button type="button" onclick="fuFeito('${j}')" title="Feito (conclui o próximo passo)" aria-label="Feito">✓</button>`:''}<button type="button" onclick="fuDelay('${j}')" title="Delay (remarcou)" aria-label="Delay">✕</button><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp">💬</button><button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover de etapa">⇄</button></div>
   </article>`; }
-function colHtml(fid,id,itens){ const enc=ehEnc(fid,id), e=etapa(fid,id)||{}, cs=itens.map(x=>x.c);
-  const sp=itens.filter(x=>x.i.semProx).length, pa=(typeof somaPA==='function')?somaPA(cs):0;
-  const pos=id==='entrega';
+function colHtml(fid,id,itens){ const enc=ehEnc(fid,id), cs=itens.map(x=>x.c);
+  const sp=itens.filter(x=>x.i.semProx).length, pa=(typeof somaPA==='function')?somaPA(cs):0, pos=id==='entrega', j=esc(jsq(id));
   return `<section class="fu-col${enc?' enc':''}${(FU.tab[fid]||colsVis(fid)[0])===id?' vis':''}" data-etapa="${esc(id)}" aria-label="${esc(lbl(id))}">
-    <div class="fu-col-h"><span style="width:9px;height:9px;border-radius:50%;background:${corDe(fid,id)}"></span><b>${esc(lbl(id))}</b><span class="qt">${itens.length}</span></div>
-    <div class="fu-col-s">${enc?'<span>encerramento · fora do funil</span>':pos?'<span>📦 pós-venda · não soma no funil</span>':`<span>prob. ${prob(id)}%${sp?` · ⚠ ${sp} sem próximo passo`:''}</span>${pa?`<span class="pa">PA ${esc(brlCurto(pa))}</span>`:''}`}</div>
-    ${itens.length?itens.map(x=>cardHtml(x,fid)).join(''):`<div class="fu-vazio">Nenhum card aqui${ativos().length||FU.q?' com estes filtros':''}</div>`}
+    <div class="fu-col-h"><span class="fu-alca fu-alca-col" draggable="true" data-alca="${esc(id)}" title="Arraste pra mudar a ordem das colunas" aria-hidden="true">⠿</span><span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:${corDe(fid,id)}"></span><b>${esc(lbl(id))}</b><span class="qt">${itens.length}</span><button type="button" class="fu-colx" onclick="fuColMenu(event,'${j}')" aria-label="Organizar a etapa ${esc(lbl(id))}" title="Organizar esta etapa">⋯</button></div>
+    <div class="fu-col-s">${enc?'<span>encerramento · fora do funil</span>':pos?'<span>📦 pós-venda · não soma no funil</span>':`<span>prob. ${prob(id)}%${sp?` · ⚠ ${sp}`:''}</span>${pa?`<span class="pa">PA ${esc(brlCurto(pa))}</span>`:''}`}</div>
+    <div class="fu-cards">${itens.length?itens.map(x=>cardHtml(x,fid)).join(''):`<div class="fu-vazio">${ativos().length||FU.q?'Nenhum card com estes filtros':'Solte um card aqui'}</div>`}</div>
   </section>`; }
-function colsVis(fid){ const c=colsDe(fid); return c.ordem.filter(id=>!c.ocultas.includes(id)).concat(cfg(fid).filter(e=>e.enc&&FU.enc[fid+':'+e.id]).map(e=>e.id)); }
+function colsVis(fid){ const c=colsDe(fid); return c.ordem.filter(id=>!c.ocultas.includes(id)); }
 function topoHtml(){ const nVi=fuPopulacao('vi').length, nMf=fuPopulacao('mfo').length;
   return `<div class="fu-seg" role="tablist" aria-label="Funil"><button type="button" class="${FU.fid==='vi'?'on':''}" onclick="fuFunil('vi')">🎯 Vida Individual <span class="n">${nVi}</span></button><button type="button" class="${FU.fid==='mfo'?'on':''}" onclick="fuFunil('mfo')">🏢 MFO <span class="n">${nMf}</span></button></div>`; }
-function barraHtml(){ const n=ativos().length;
-  return `<div class="fu-tb"><div class="fu-row"><label class="fu-busca" for="fu-q">🔎 <input id="fu-q" type="search" placeholder="Buscar nome, cidade, profissão, etapa…" autocomplete="off" value="${esc(FU.q)}" oninput="fuBusca(this.value)"></label><button type="button" class="btn btn-ghost" onclick="fuFiltrosAbrir()">⚙ Filtros${n?` <span class="fu-cnt">${n}</span>`:''}</button></div>
-    <div class="fu-row"><button type="button" class="btn btn-p fu-nova" onclick="openNovoContato()">＋ Novo negócio</button><span class="fu-vt" role="group" aria-label="Vista"><button type="button" class="${FU.modo==='kanban'?'on':''}" onclick="fuModo('kanban')" title="Kanban" aria-label="Kanban">▦</button><button type="button" class="${FU.modo==='tabela'?'on':''}" onclick="fuModo('tabela')" title="Tabela" aria-label="Tabela">☰</button></span><button type="button" class="btn btn-ghost fu-mais" onclick="fuMais(event)" aria-label="Mais opções">⋯</button></div></div>`; }
-function rapidosHtml(lista){ const extra=ativos().filter(([k])=>!RAPIDOS.includes(k)), nCong=lista.filter(x=>x.i.cong).length;
-  return `<div class="fu-q">${RAPIDOS.map(k=>fcHtml(lista,k)).join('')}${nCong||FU.cong?`<button type="button" class="fu-fc${FU.cong?' on':''}" onclick="fuCong()">❄️ Congelados <span class="cn">${nCong}</span></button>`:''}${extra.length?'<span class="fu-sep"></span>'+extra.map(([k,l])=>`<button type="button" class="fu-fc ativo" onclick="fuTirar('${esc(k)}')">${esc(l)} ✕</button>`).join(''):''}${ativos().length?`<button type="button" class="fu-fc txt" onclick="fuLimpar()">limpar</button>`:''}</div>`; }
-function encHtml(fid,vis){ const enc=cfg(fid).filter(e=>e.enc); if(!enc.length) return '';
-  return `<div class="fu-q"><span class="fu-fc txt">Encerrados:</span>${enc.map(e=>`<button type="button" class="fu-fc enc${FU.enc[fid+':'+e.id]?' on':''}" onclick="fuEnc('${esc(jsq(e.id))}')">${esc(lbl(e.id))} <span class="cn">${vis.filter(x=>x.i.d.etapa_id===e.id).length}</span></button>`).join('')}</div>`; }
+function barraHtml(){ const c=colsDe(FU.fid), nv=c.ordem.length-c.ocultas.length, ol=(ORDENS.find(o=>o[0]===FU.ordem)||ORDENS[0])[1];
+  return `<div class="fu-acts"><button type="button" class="fu-b" onclick="irPara('sitplan')" title="SitPlan do dia">📅 <span class="tx">SitPlans</span></button><button type="button" class="fu-b" onclick="irPara('bn-recs')" title="Recomendações">🌳 <span class="tx">Recomendações</span></button>
+    <button type="button" class="fu-b p" onclick="openNovoContato()">＋ <span class="tx">Novo negócio</span></button>
+    <button type="button" class="fu-b" onclick="fuOrdemMenu(event)" title="Ordenar">⇅ <span class="tx">${esc(ol)}</span> ▾</button>
+    <span class="fu-vt" role="group" aria-label="Vista"><button type="button" class="${FU.modo==='kanban'?'on':''}" onclick="fuModo('kanban')" title="Kanban" aria-label="Kanban">▦</button><button type="button" class="${FU.modo==='tabela'?'on':''}" onclick="fuModo('tabela')" title="Tabela" aria-label="Tabela">☰</button></span>
+    <button type="button" class="fu-b" onclick="fuColunas()" title="Colunas">▥ <span class="tx">Colunas</span> <span class="cn">(${nv}/${c.ordem.length})</span></button>
+    <button type="button" class="fu-b" onclick="fuMais(event)" aria-label="Mais opções">⋯</button></div>`; }
+function filtroBarHtml(lista){ const at=ativos(), S2=salvos(), algum=S2.some(x=>fIgual(x.f));
+  return `<div class="fu-fb" aria-label="Filtros"><button type="button" class="fu-b" onclick="fuFiltrosAbrir()">⚙ Filtros${at.length?` <span class="fu-cnt">${at.length}</span>`:''}</button>
+    ${S2.length?'<span class="fu-fb-l">Salvos</span>':''}${S2.map((x,k)=>`<button type="button" class="fu-sv${fIgual(x.f)?' on':''}" onclick="fuSalvoAplicar(${k})">${esc(x.n)} <span class="q">${contaSalvo(lista,x.f)}</span></button>`).join('')}
+    ${at.length&&!algum?'<span class="fu-sep"></span>'+at.map(([k,l])=>`<button type="button" class="fu-fc ativo" onclick="fuTirar('${esc(k)}')">${esc(l)} ✕</button>`).join(''):''}${FU.cong?'<button type="button" class="fu-fc ativo" onclick="fuCong()">❄️ Congelados ✕</button>':''}${at.length?'<button type="button" class="fu-fc txt" onclick="fuLimpar()">limpar</button>':''}</div>`; }
 function tabelaHtml(fid,vis){ const l=fuOrdenar(vis);
   return `<div class="fu-tw"><table><thead><tr><th><button type="button" class="btn-ghost" onclick="fuOrdem('nome')">Nome</button></th><th>Criado em</th><th><button type="button" class="btn-ghost" onclick="fuOrdem('prob')">Prob. ↓</button></th><th>Etapa</th><th>Recomendante</th><th>Profissão</th><th>Renda</th><th>Cidade</th><th>SitPlan</th><th>Tags</th><th>Observação</th><th>Mercado</th><th>Ações</th></tr></thead><tbody>
   ${l.map(({c,i})=>{ const j=esc(jsq(c.id)); let ent=''; try{ ent=entradaFunil(c).iso||''; }catch(_){}
@@ -338,22 +396,39 @@ function tabelaHtml(fid,vis){ const l=fuOrdenar(vis);
   </tbody></table></div><div class="sub" style="margin-top:8px">${l.length} card(s) · mesmos filtros do Kanban · ⋯ exporta a planilha</div>`; }
 
 function viewFunilNovo(fid){ fuCss(); if(fid) FU.fid=fid; fid=FU.fid;
-  const lista=fuLista(fid), vis=lista.filter(x=>fuPassa(x.c,x.i)), cols=colsVis(fid);
+  const lista=fuLista(fid), vis=lista.filter(x=>fuPassa(x.c,x.i)), cols=colsVis(fid), adm=podeEditarEtapa();
   if(!cols.includes(FU.tab[fid])) FU.tab[fid]=cols[0];
+  const busca=`<div class="fu-bq"><label class="fu-busca" for="fu-q">🔎 <input id="fu-q" type="search" placeholder="Buscar em qualquer coluna (nome, cidade, profissão, etapa…)" autocomplete="off" value="${esc(FU.q)}" oninput="fuBusca(this.value)"></label><span class="fu-res">${vis.length} de ${lista.filter(x=>FU.cong?x.i.cong:!x.i.cong).length} resultados</span></div>`;
   let body;
   if(FU.modo==='tabela') body=tabelaHtml(fid,vis);
   else body=`<div class="fu-tabs">${cols.map(id=>`<button type="button" class="${FU.tab[fid]===id?'on':''}" onclick="fuTab('${esc(jsq(id))}')">${esc(lbl(id))} · ${vis.filter(x=>x.i.d.etapa_id===id).length}</button>`).join('')}</div>
-    <div class="fu-board" id="fu-board">${cols.map(id=>colHtml(fid,id,fuOrdenar(vis.filter(x=>x.i.d.etapa_id===id)))).join('')}</div>`;
-  $('#main').innerHTML=`<div class="fu">${topoHtml()}${barraHtml()}${rapidosHtml(lista)}${encHtml(fid,lista.filter(x=>fuPassa(x.c,x.i)))}${body}</div>`;
+    <div class="fu-board" id="fu-board">${cols.map(id=>colHtml(fid,id,fuOrdenar(vis.filter(x=>x.i.d.etapa_id===id)))).join('')}${adm?'<button type="button" class="fu-nova-col" onclick="fuEtapaNova()">＋ Nova etapa</button>':''}</div>`;
+  $('#main').innerHTML=`<div class="fu">${topoHtml()}${barraHtml()}${filtroBarHtml(lista)}<div class="fu-qd">${busca}${body}</div></div>`;
   if(FU.modo==='kanban') fuWire(); }
 
 /* ── arrastar (desktop) ── */
-function fuWire(){ const b=document.getElementById('fu-board'); if(!b) return; let dragId=null;
-  b.querySelectorAll('.fu-card').forEach(card=>{ card.addEventListener('dragstart',e=>{ dragId=card.dataset.id; card.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',dragId); }catch(_){} });
-    card.addEventListener('dragend',()=>{ dragId=null; card.classList.remove('dragging'); b.querySelectorAll('.fu-col.drop').forEach(x=>x.classList.remove('drop')); }); });
-  b.querySelectorAll('.fu-col').forEach(col=>{ col.addEventListener('dragover',e=>{ if(!dragId) return; e.preventDefault(); col.classList.add('drop'); });
-    col.addEventListener('dragleave',e=>{ if(!col.contains(e.relatedTarget)) col.classList.remove('drop'); });
-    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop'); const id=dragId; dragId=null; if(id) fuMover(id,col.dataset.etapa); }); }); }
+function fuWire(){ const b=document.getElementById('fu-board'); if(!b) return; let dragId=null, dragCol=null;
+  const limpa=()=>b.querySelectorAll('.fu-drop').forEach(x=>x.remove());
+  b.querySelectorAll('.fu-card').forEach(card=>{ card.addEventListener('dragstart',e=>{ if(dragCol) return; dragId=card.dataset.id; card.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',dragId); }catch(_){} });
+    card.addEventListener('dragend',()=>{ dragId=null; card.classList.remove('dragging'); limpa(); b.querySelectorAll('.fu-col.drop').forEach(x=>x.classList.remove('drop')); }); });
+  b.querySelectorAll('[data-alca]').forEach(a=>{ a.addEventListener('dragstart',e=>{ e.stopPropagation(); dragCol=a.dataset.alca; const c=a.closest('.fu-col'); if(c) c.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain','col:'+dragCol); }catch(_){} });
+    a.addEventListener('dragend',()=>{ dragCol=null; b.querySelectorAll('.fu-col').forEach(x=>x.classList.remove('dragging','drop')); }); });
+  b.querySelectorAll('.fu-col').forEach(col=>{
+    col.addEventListener('dragover',e=>{ if(!dragId&&!dragCol) return; e.preventDefault(); col.classList.add('drop'); if(dragCol) return;
+      const box=col.querySelector('.fu-cards'); limpa(); const depois=[...box.querySelectorAll('.fu-card:not(.dragging)')].find(x=>e.clientY<x.getBoundingClientRect().top+x.offsetHeight/2);
+      const m=document.createElement('div'); m.className='fu-drop'; box.insertBefore(m,depois||null); });
+    col.addEventListener('dragleave',e=>{ if(!col.contains(e.relatedTarget)){ col.classList.remove('drop'); limpa(); } });
+    col.addEventListener('drop',e=>{ e.preventDefault(); col.classList.remove('drop');
+      if(dragCol){ const de=dragCol; dragCol=null; fuColPara(de,col.dataset.etapa); return; }
+      const id=dragId; dragId=null; if(!id) return; const mk=col.querySelector('.fu-drop'), nx=mk&&mk.nextElementSibling, antes=nx&&nx.dataset?nx.dataset.id:null; limpa();
+      fuSoltar(id,col.dataset.etapa,antes); }); }); }
+/* soltar o card: muda de etapa (mesma regra do ⇄) e guarda a posição na coluna (ordem manual, por card: c.fu_ord) */
+function fuSoltar(id,X,antes){ const c=fuAcha(id); if(!c) return; const fid=fuDestino(c).funil_id, era=fuDestino(c).etapa_id;
+  if(era!==X){ fuMover(id,X); if(ehEnc(fid,X)||c.funil==='bn') return; }
+  const c2=fuAcha(id); if(!c2||c2.funil==='bn'||fuDestino(c2).etapa_id!==X) return;
+  fuOrdInserir(fid,X,c2,antes); FU.ordem='livre'; salvar(); fuRepinta(); if(era===X) toast(`${pn(c2)} mudou de posição na coluna`,true); }
+function fuOrdInserir(fid,X,c,antes){ const pop=fuOrdenar(fuLista(fid).filter(x=>x.i.d.etapa_id===X&&x.c!==c&&x.c.funil!=='bn')).map(x=>x.c);
+  let k=antes?pop.findIndex(x=>String(x.id)===String(antes)):-1; if(k<0) k=pop.length; pop.splice(k,0,c); pop.forEach((x,n)=>{ x.fu_ord=n; }); }
 
 /* ── mover (com sincronia pro funil antigo) ── */
 function fuMover(id,X,motivo){ const c=fuAcha(id); if(!c) return; const fid=fuDestino(c).funil_id; if(!etapa(fid,X)) return;   /* o funil é o do card (a ficha em painel abre negócio do outro funil) */
@@ -673,25 +748,79 @@ function camRegistrar(){ try{ if(typeof CAM_ORDEM==='undefined'||CAM_ORDEM.some(
 function camSinc(){ try{ if(typeof camSincronizar==='function') camSincronizar(); }catch(_){} }
 
 /* ── gaveta de filtros, colunas, mais ── */
-function filtrosHtml(){ const lista=fuLista(FU.fid), v=lista.filter(x=>fuPassa(x.c,x.i)).length;
-  const donos=[...new Set(lista.map(x=>x.c._dono).filter(Boolean))];
+function filtrosHtml(){ const lista=fuLista(FU.fid), v=lista.filter(x=>fuPassa(x.c,x.i)).length, at=fAtivos().length;
+  const donos=[...new Set(lista.map(x=>x.c._dono).filter(Boolean))], nCong=lista.filter(x=>x.i.cong).length;
   const sel=(id,lab,opts,val,fn)=>`<select class="fu-sel" id="${id}" aria-label="${lab}" onchange="${fn}(this.value)"><option value="">${lab}: todas</option>${opts.map(([k,t])=>`<option value="${esc(k)}" ${k===val?'selected':''}>${lab}: ${esc(t)}</option>`).join('')}</select>`;
-  return `<h2>⚙ Filtros</h2>${GRUPOS.map(([g,ks])=>`<div class="fu-grp"><h3>${g}</h3><div class="fu-grid">${ks.map(k=>fcHtml(lista,k,g==='Mercado')).join('')}</div></div>`).join('')}
-    <div class="fu-grp"><h3>Mais</h3><div class="fu-grid">${FU.fid==='mfo'?sel('fu-flin','Linha',['vg','prud_demais','mo'].map(k=>[k,LINHA[k]]),FU.linha,'fuLinha'):''}${sel('fu-forig','Origem',Object.entries(ORIGEM),FU.origem,'fuOrigem')}${donos.length>1?sel('fu-fdono','Dono',donos.map(d=>[d,donoNome(d)]),FU.dono,'fuDono'):''}</div></div>
+  return `<h2>⚙ Filtros</h2>${GRUPOS.map(([g,ks])=>`<div class="fu-grp"><h3>${g}</h3><div class="fu-grid">${ks.filter(k=>FU.fid==='vi'||!SO_VI.includes(k)).map(k=>fcHtml(lista,k)).join('')}</div></div>`).join('')}
+    <div class="fu-grp"><h3>Mais</h3><div class="fu-grid">${FU.fid==='mfo'?sel('fu-flin','Linha',['vg','prud_demais','mo'].map(k=>[k,LINHA[k]]),FU.linha,'fuLinha'):''}${sel('fu-forig','Origem',Object.entries(ORIGEM),FU.origem,'fuOrigem')}${donos.length>1?sel('fu-fdono','Dono',donos.map(d=>[d,donoNome(d)]),FU.dono,'fuDono'):''}${nCong||FU.cong?`<button type="button" class="fu-fc t-azul${FU.cong?' on':''}" onclick="fuCong();fuRefiltros()">❄️ Só congelados <span class="cn">${nCong}</span></button>`:''}</div></div>
+    <div class="fu-grp"><h3>Filtros salvos</h3>${salvos().map((x,k)=>`<div class="fu-svrow"><span>${esc(x.n)}</span><button type="button" class="btn btn-ghost btn-mini" onclick="fuSalvoAplicar(${k})" aria-label="Aplicar ${esc(x.n)}">▶</button><button type="button" class="btn btn-ghost btn-mini" onclick="fuSalvoApagar(${k})" aria-label="Apagar ${esc(x.n)}">🗑</button></div>`).join('')||'<div class="sub" style="margin:0">Nenhum ainda.</div>'}
+      <div class="fu-svnovo"><input type="text" id="fu-sv-n" maxlength="40" placeholder="${at?'Nome pro filtro atual (ex.: Quentes de Recife)':'Marque filtros acima pra salvar'}" ${at?'':'disabled'} aria-label="Nome do filtro salvo" onkeydown="if(event.key==='Enter')fuSalvoSalvar()"><button type="button" class="btn btn-ghost" ${at?'':'disabled'} onclick="fuSalvoSalvar()">💾 Salvar</button></div></div>
     <div class="acts" style="justify-content:space-between"><button type="button" class="btn btn-ghost" onclick="fuLimpar()">Limpar</button><button type="button" class="btn btn-p" onclick="fuFechar()">Ver ${v} card${v===1?'':'s'}</button></div>`; }
 function fuFiltrosAbrir(){ fuModal(filtrosHtml(),true); }
 function fuRefiltros(){ const md=document.querySelector('.fu-ov.sheet .fu-md'); if(md) md.innerHTML=filtrosHtml(); }
 function colsHtml(){ const fid=FU.fid, c=colsDe(fid);
-  return `<h2>▥ Colunas (${c.ordem.length-c.ocultas.length}/${c.ordem.length})</h2><div class="sub" style="margin:0">Só pra você: cada usuário tem a sua ordem. Encerramentos ficam na linha "Encerrados".</div>
+  return `<h2>▥ Colunas (${c.ordem.length-c.ocultas.length}/${c.ordem.length})</h2><div class="sub" style="margin:0">Só pra você: cada usuário tem a sua ordem e esconde o que não usa. No PC também dá pra arrastar a alça ⠿ da coluna no quadro.</div>
     ${c.ordem.map((id,i)=>`<div class="fu-colrow"><label for="fu-cv-${esc(id)}"><input type="checkbox" id="fu-cv-${esc(id)}" ${c.ocultas.includes(id)?'':'checked'} onchange="fuColVer('${esc(jsq(id))}',this.checked)"> ${esc(lbl(id))}</label><button type="button" class="btn btn-ghost btn-mini" ${i?'':'disabled'} onclick="fuColMover(${i},-1)" aria-label="Subir">▲</button><button type="button" class="btn btn-ghost btn-mini" ${i===c.ordem.length-1?'disabled':''} onclick="fuColMover(${i},1)" aria-label="Descer">▼</button></div>`).join('')}
-    <div class="acts"><button type="button" class="btn btn-ghost" onclick="fuColPadrao()">Restaurar padrão</button><button type="button" class="btn btn-p" onclick="fuFechar()">Pronto</button></div>`; }
+    <div class="acts" style="justify-content:space-between"><span style="display:flex;gap:8px;flex-wrap:wrap">${podeEditarEtapa()?'<button type="button" class="btn btn-ghost" onclick="fuEtapaNova()">＋ Nova etapa</button>':''}<button type="button" class="btn btn-ghost" onclick="fuColPadrao()">Restaurar padrão</button></span><button type="button" class="btn btn-p" onclick="fuFechar()">Pronto</button></div>`; }
 function fuColunas(){ fuModal(colsHtml()); }
+/* ── organizar a etapa no próprio quadro (sem ir em Configuração) ──
+   ordem e esconder = de cada usuário (colunas); nome, cor, probabilidade e etapa nova = do funil (FUNIL_CFG, mesmo caminho do
+   Funil & Etapas: funApply → app_settings.lp_funil_cfg; só quem administra grava, como lá). */
+const podeEditarEtapa=()=>{ try{ return typeof souAdm==='function'?!!souAdm():true; }catch(_){ return false; } };
+const COR_NOMES=[['cinza','Cinza'],['azul','Azul'],['amarelo','Amarelo'],['roxo','Roxo'],['verde','Verde'],['verm','Vermelho']];
+function fuColMenu(ev,id){ const fid=FU.fid, c=colsDe(fid), k=c.ordem.indexOf(id), j=esc(jsq(id)), adm=podeEditarEtapa();
+  fuMenu(ev,`<div class="mh">${esc(lbl(id))}</div>${adm?`<button type="button" onclick="fuFecharMenu();fuEtapaRenomear('${j}')">✎ Renomear</button><button type="button" onclick="fuFecharMenu();fuEtapaCor('${j}')">🎨 Cor e probabilidade</button>`:''}
+    <button type="button" ${k>0?'':'disabled style="opacity:.5"'} onclick="fuFecharMenu();fuColLado('${j}',-1)">← Mover pra esquerda</button><button type="button" ${k<c.ordem.length-1?'':'disabled style="opacity:.5"'} onclick="fuFecharMenu();fuColLado('${j}',1)">Mover pra direita →</button>
+    ${adm&&!ehEnc(fid,id)?`<button type="button" onclick="fuFecharMenu();fuEtapaNova('${j}')">＋ Nova etapa depois desta</button>`:''}<button type="button" onclick="fuFecharMenu();fuColEsconder('${j}')">🙈 Esconder (volta em Colunas)</button>`); }
+function fuColLado(id,d){ const fid=FU.fid, c=colsDe(fid), k=c.ordem.indexOf(id), q=k+d; if(k<0||q<0||q>=c.ordem.length) return; [c.ordem[k],c.ordem[q]]=[c.ordem[q],c.ordem[k]]; colsGravar(fid,c); render(); }
+function fuColPara(de,para){ const fid=FU.fid, c=colsDe(fid), a=c.ordem.indexOf(de), b=c.ordem.indexOf(para); if(a<0||b<0||a===b) return; c.ordem.splice(a,1); c.ordem.splice(b,0,de); colsGravar(fid,c); render(); toast(`${lbl(de)} mudou de lugar (só pra você)`,true); }
+function fuColEsconder(id){ const fid=FU.fid, c=colsDe(fid); if(c.ordem.length-c.ocultas.length<=1){ toast('Fica pelo menos uma coluna',false); return; } if(!c.ocultas.includes(id)) c.ocultas.push(id); colsGravar(fid,c); render(); toast(`${lbl(id)} escondida · volta em ▥ Colunas`,true); }
+const cfgArr=()=>{ const k=FK[FU.fid]; if(!Array.isArray(FUNIL_CFG[k])) FUNIL_CFG[k]=[]; return FUNIL_CFG[k]; };
+function corBtns(atual){ return `<div class="fu-cores" role="radiogroup" aria-label="Cor">${COR_NOMES.map(([k,t])=>`<button type="button" role="radio" aria-checked="${k===atual}" aria-label="${t}" class="${k===atual?'on':''}" style="background:${COR[k]}" onclick="FU_STATE.cor='${k}';this.parentNode.querySelectorAll('button').forEach(b=>{b.classList.toggle('on',b===this);b.setAttribute('aria-checked',b===this);})"></button>`).join('')}</div>`; }
+function fuEtapaNova(depois){ if(!podeEditarEtapa()) return; FU.cor='azul'; const fl=cfg(FU.fid).filter(e=>!e.enc), ult=fl.length?fl[fl.length-1].id:'';
+  fuModal(`<h2>＋ Nova etapa · ${FU.fid==='mfo'?'MFO':'Vida Individual'}</h2>
+    <div class="fu-fld"><label for="fu-ne-n">Nome da etapa</label><input type="text" id="fu-ne-n" maxlength="40" placeholder="ex.: Aguardando exame médico" onkeydown="if(event.key==='Enter')fuEtapaCriar()"></div>
+    <div class="fu-g2"><div class="fu-fld"><label for="fu-ne-d">Depois de qual etapa</label><select id="fu-ne-d">${fl.map(e=>`<option value="${esc(e.id)}" ${e.id===(depois||ult)?'selected':''}>${esc(lbl(e.id))}</option>`).join('')}</select></div><div class="fu-fld"><label for="fu-ne-p">Probabilidade de virar apólice (%)</label><input type="number" id="fu-ne-p" inputmode="numeric" min="0" max="100" value="40"></div></div>
+    <div class="fu-fld"><label for="fu-ne-t">Tipo</label><select id="fu-ne-t"><option value="fluxo">Etapa do caminho (entra no PA)</option><option value="enc">Encerramento (pede motivo, sai do PA)</option></select></div>
+    <div class="fu-fld"><span class="fu-lb">Cor</span>${corBtns('azul')}</div>
+    <div class="sub" style="margin:0">Entra direto no funil (a mesma lista do quadro, da Tabela, dos KPIs e da ficha) — sem ir em Configuração. Se um dia não servir mais, tira em Funil & Etapas, que move os cards antes.</div>
+    <div class="acts"><button type="button" class="btn btn-ghost" onclick="fuFechar()">Cancelar</button><button type="button" class="btn btn-p" onclick="fuEtapaCriar()">Criar etapa</button></div>`);
+  setTimeout(()=>{ const n=document.getElementById('fu-ne-n'); if(n) n.focus(); },30); }
+function fuEtapaCriar(){ const g=k=>document.getElementById(k), nome=String((g('fu-ne-n')||{}).value||'').trim(); if(!nome){ toast('Dê um nome pra etapa',false); return; }
+  const arr=cfgArr(); if(arr.some(e=>normKey(lbl(e.id))===normKey(nome))){ toast('Já existe uma etapa com esse nome',false); return; }
+  let s=0; Object.keys(FUNIL_CFG).forEach(f=>(FUNIL_CFG[f]||[]).forEach(e=>{ const m=/^cst_(\d+)$/.exec(e&&e.id); if(m) s=Math.max(s,+m[1]); }));   /* código único em TODOS os funis (como o funAdd) */
+  const enc=(g('fu-ne-t')||{}).value==='enc', nova={id:'cst_'+(s+1),label:nome,cor:FU.cor||'azul',prob:enc?0:Math.max(0,Math.min(100,+((g('fu-ne-p')||{}).value)||0)),enc};
+  const dep=(g('fu-ne-d')||{}).value, k=arr.findIndex(e=>e.id===dep), kEnc=arr.findIndex(e=>e.enc);
+  if(enc) arr.push(nova); else arr.splice(k>=0?k+1:(kEnc<0?arr.length:kEnc),0,nova);
+  const c=colsDe(FU.fid), q=c.ordem.indexOf(dep); c.ordem=c.ordem.filter(x=>x!==nova.id); if(enc) c.ordem.push(nova.id); else c.ordem.splice(q>=0?q+1:c.ordem.length,0,nova.id); colsGravar(FU.fid,c);
+  try{ funApply(); }catch(_){} fuFechar(); render(); toast(`Etapa “${nome}” criada`,true); }
+function fuEtapaRenomear(id){ if(!podeEditarEtapa()) return; const j=esc(jsq(id));
+  fuModal(`<h2>✎ Renomear etapa</h2><div class="fu-fld"><label for="fu-rn">Nome</label><input type="text" id="fu-rn" maxlength="40" value="${esc(lbl(id))}" onkeydown="if(event.key==='Enter')fuEtapaRenOk('${j}')"></div>
+    <div class="sub" style="margin:0">Muda o nome no quadro, na Tabela, nos KPIs e na ficha. Os cards ficam onde estão.</div><div class="acts"><button type="button" class="btn btn-ghost" onclick="fuFechar()">Cancelar</button><button type="button" class="btn btn-p" onclick="fuEtapaRenOk('${j}')">Salvar</button></div>`);
+  setTimeout(()=>{ const n=document.getElementById('fu-rn'); if(n){ n.focus(); n.select(); } },30); }
+function fuEtapaRenOk(id){ const v=String((document.getElementById('fu-rn')||{}).value||'').trim(); if(!v){ toast('Nome vazio não vale',false); return; }
+  const e=cfgArr().find(x=>x.id===id); if(!e) return; if(cfgArr().some(x=>x!==e&&normKey(lbl(x.id))===normKey(v))){ toast('Já existe uma etapa com esse nome',false); return; }
+  e.label=v; try{ funApply(); }catch(_){} fuFechar(); render(); toast('Etapa renomeada',true); }
+function fuEtapaCor(id){ if(!podeEditarEtapa()) return; const e=cfgArr().find(x=>x.id===id)||{}, j=esc(jsq(id)); FU.cor=e.cor||'cinza';
+  fuModal(`<h2>🎨 ${esc(lbl(id))}</h2><div class="fu-fld"><span class="fu-lb">Cor</span>${corBtns(FU.cor)}</div>${e.enc?'':`<div class="fu-fld"><label for="fu-cp">Probabilidade de virar apólice (%)</label><input type="number" id="fu-cp" inputmode="numeric" min="0" max="100" value="${esc(String(e.prob==null?10:e.prob))}"></div>`}
+    <div class="acts"><button type="button" class="btn btn-ghost" onclick="fuFechar()">Cancelar</button><button type="button" class="btn btn-p" onclick="fuEtapaCorOk('${j}')">Salvar</button></div>`); }
+function fuEtapaCorOk(id){ const e=cfgArr().find(x=>x.id===id); if(!e) return; e.cor=FU.cor||e.cor; const p=document.getElementById('fu-cp'); if(p&&!e.enc) e.prob=Math.max(0,Math.min(100,+p.value||0));
+  try{ funApply(); }catch(_){} fuFechar(); render(); toast('Etapa atualizada',true); }
+/* filtros salvos */
+function fuSalvoAplicar(k){ const x=salvos()[k]; if(!x) return; FU.f=fIgual(x.f)?{}:Object.assign({},x.f); render(); fuRefiltros(); }
+function fuSalvoApagar(k){ const x=salvos()[k]; if(!x) return; salvos().splice(k,1); salvosGravar(); render(); fuRefiltros(); toast(`Filtro “${x.n}” apagado`,true); }
+function fuSalvoSalvar(){ const el=document.getElementById('fu-sv-n'), n=String(el&&el.value||'').trim(); if(!fAtivos().length){ toast('Marque algum filtro antes de salvar',false); return; }
+  if(!n){ toast('Dê um nome pro filtro',false); if(el) el.focus(); return; } const f={}; fAtivos().forEach(k=>{ f[k]=true; }); salvos().push({n,f}); salvosGravar(); render(); fuRefiltros(); toast(`Filtro “${n}” salvo · aparece no topo`,true); }
+/* ✓ do card: conclui o próximo passo (a tarefa aberta mais próxima) */
+function fuFeito(id){ const c=fuAcha(id); if(!c) return; const t=(typeof proxTarefa==='function')?proxTarefa(c):null; if(!t||typeof window.tarConcluir!=='function'){ toast('Sem próximo passo pra concluir',false); return; }
+  window.tarConcluir(c.id,t.id); fuRepinta(); }
+
 function fuColVer(id,on){ const fid=FU.fid, c=colsDe(fid); if(on) c.ocultas=c.ocultas.filter(x=>x!==id); else if(c.ordem.length-c.ocultas.length>1) c.ocultas.push(id); else { toast('Fica pelo menos uma coluna',false); }
   colsGravar(fid,c); render(); const md=document.querySelector('.fu-ov .fu-md'); if(md) md.innerHTML=colsHtml(); }
 function fuColMover(i,d){ const fid=FU.fid, c=colsDe(fid), j=i+d; if(j<0||j>=c.ordem.length) return; [c.ordem[i],c.ordem[j]]=[c.ordem[j],c.ordem[i]]; colsGravar(fid,c); render(); const md=document.querySelector('.fu-ov .fu-md'); if(md) md.innerHTML=colsHtml(); }
-function fuColPadrao(){ const all=colsLer(); delete all[FU.fid]; colsGravar(FU.fid,{ordem:cfg(FU.fid).filter(e=>!e.enc).map(e=>e.id),ocultas:[]}); render(); const md=document.querySelector('.fu-ov .fu-md'); if(md) md.innerHTML=colsHtml(); }
-function fuMais(ev){ fuMenu(ev,`<div class="mh">Ordenar por</div>${ORDENS.map(([k,t])=>`<button type="button" onclick="fuFecharMenu();fuOrdem('${k}')">${FU.ordem===k?'✓ ':'　'}${t}</button>`).join('')}
-  <div class="mh">Mais</div><button type="button" onclick="fuFecharMenu();fuColunas()">▥ Colunas</button><button type="button" onclick="fuFecharMenu();fuDesempenho()">📈 Desempenho por mercado</button><button type="button" onclick="fuFecharMenu();fuExportar()">⤓ Exportar planilha (.csv)</button><button type="button" onclick="fuFecharMenu();irPara('sitplan')">📋 SitPlan do dia</button><button type="button" onclick="fuFecharMenu();irPara('bn-recs')">🌳 Recomendações</button>`); }
+function fuColPadrao(){ const all=colsLer(); delete all[FU.fid]; colsGravar(FU.fid,{ordem:cfg(FU.fid).map(e=>e.id),ocultas:[]}); render(); const md=document.querySelector('.fu-ov .fu-md'); if(md) md.innerHTML=colsHtml(); }
+function fuOrdemMenu(ev){ fuMenu(ev,`<div class="mh">Ordenar por</div>${ORDENS.map(([k,t])=>`<button type="button" onclick="fuFecharMenu();fuOrdem('${k}')">${FU.ordem===k?'✓ ':'　'}${t}</button>`).join('')}`); }
+function fuMais(ev){ fuMenu(ev,`<div class="mh">Mais</div><button type="button" onclick="fuFecharMenu();fuColunas()">▥ Colunas</button><button type="button" onclick="fuFecharMenu();fuDesempenho()">📈 Desempenho por mercado</button><button type="button" onclick="fuFecharMenu();fuExportar()">⤓ Exportar planilha (.csv)</button><button type="button" onclick="fuFecharMenu();irPara('sitplan')">📋 SitPlan do dia</button><button type="button" onclick="fuFecharMenu();irPara('bn-recs')">🌳 Recomendações</button>`); }
 function fuDesempenho(){ const fid=FU.fid, ordem=cfg(fid).map(e=>e.id), iOI=ordem.indexOf(fid==='vi'?'oi':'m_contato');
   const l=fuLista(fid).filter(x=>['recomendacao','lead','parceiro'].includes(x.c.origem_tipo));
   const grp=m=>{ const g=l.filter(x=>(x.c.mercado||null)===m), oi=g.filter(x=>{ const k=ordem.indexOf(x.i.d.etapa_id); return k>=iOI&&!x.i.enc||(Array.isArray(x.c.interacoes)&&x.c.interacoes.some(y=>y&&y.k==='etapa')); }).length, ap=g.filter(x=>fuEhCliente(x.c)||[CLIENTE_COL[fid],'entrega','apol_cancelada'].includes(x.i.d.etapa_id)).length; return [g.length,oi,ap]; };
@@ -749,7 +878,16 @@ function fuSelfTests(ok){
   L.forEach(x=>{ x.i.alta=x.c.alta_renda===true; x.i.cong=false; });
   FU.f.mx=true; const n=fuCount(L,'alta'); FU.f=_f;
   ok('FUNIL-UNICO T3: filtro conta a interseção (Mercado X + Alta Renda = 1)', n===1);
-  ok('FUNIL-UNICO T3: colunas padrão = fluxo de Funil & Etapas (9 na vida, 7 no MFO)', cfg('vi').filter(e=>!e.enc).length===9&&cfg('mfo').filter(e=>!e.enc).length===7&&colsDe('vi').ordem.length===9);
+  ok('FUNIL-UNICO T3: colunas = TODAS as etapas de Funil & Etapas (fluxo de fábrica 9 na vida, 7 no MFO; encerramentos entram como coluna no fim)', (FUNIL_FAB.fu_vi||[]).filter(x=>!x[3]).length===9&&(FUNIL_FAB.fu_mfo||[]).filter(x=>!x[3]).length===7&&colsDe('vi').ordem.length===cfg('vi').length&&cfg('vi').filter(e=>e.enc).every(e=>colsDe('vi').ordem.includes(e.id)));
+  /* GLOBAL-V1 (25/10): cara do Global — filtros na gaveta + salvos, organizar etapa no quadro, arrastar reordena */
+  ok('FUNIL-GLOBAL: todo filtro tem rótulo, teste, tom e o grupo existe', Object.values(FILTROS).every(f=>f[0]&&typeof f[1]==='function'&&f[2])&&GRUPOS.every(([g,ks])=>ks.every(k=>FILTROS[k])));
+  const _ff=FU.f, _fid=FU.fid; FU.fid='vi'; FU.f={quente:true,semprox:true,delay:false};
+  const Lt=[{c:{id:'q1'},i:{quente:true,semProx:true,cong:false,d:{}}},{c:{id:'q2'},i:{quente:true,semProx:false,cong:false,d:{}}}];
+  ok('FUNIL-GLOBAL: filtro salvo casa com o que está ligado (ignora os desligados) e conta certo', fIgual({semprox:true,quente:true})&&!fIgual({quente:true})&&contaSalvo(Lt,{quente:true,semprox:true})===1&&contaSalvo(Lt,{quente:true})===2&&salvos().length>=0);
+  FU.f=_ff; FU.fid=_fid;
+  const _o=FU.ordem; FU.ordem='livre'; const Lo=fuOrdenar([{c:{id:'a',fu_ord:2},i:{d:{}}},{c:{id:'b',fu_ord:0},i:{d:{}}},{c:{id:'c'},i:{d:{}}}]).map(x=>x.c.id).join(''); FU.ordem=_o;
+  ok('FUNIL-GLOBAL: ordem manual (arrastar) respeita a posição gravada; sem posição vai pro fim', Lo==='bac');
+  ok('FUNIL-GLOBAL: quadro tem ⋯ por coluna, alça ⠿ e Contato rápido no card (sem abrir/recolher tudo)', (()=>{ try{ const h=colHtml('vi','novo',[{c:{id:'zz1',nome:'Fulano',funil:'nn',etapa:'TA',tarefas:[],interacoes:[]},i:fuInfo({id:'zz1',nome:'Fulano',funil:'nn',etapa:'TA',tarefas:[],interacoes:[]},'vi')}]); return /fuColMenu/.test(h)&&/data-alca=/.test(h)&&/Contato rápido/.test(h)&&!/Abrir tudo|Recolher tudo/.test(h); }catch(e){ return false; } })());
   /* T4 */
   const A=x=>fuAnce(x);
   ok('FUNIL-UNICO T4: ANCE — nota das estrelas > critérios A·N·C·E > nota copiada na migração > automático', A({ance_manual:2,ance_manual_em:'2026-10-24T10:00:00Z',ance:{a:true,n:true,c:true}}).n===2&&A({ance:{a:true,n:true,c:true},ance_manual:1}).n===3&&A({ance_manual:4,ance_auto:1}).n===4&&A({ance_auto:3}).n===3&&A({ance_auto:3}).manual===false&&A({}).n===0);
@@ -767,6 +905,7 @@ function fuSelfTests(ok){
 
 Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAgendarOk,fuPainelRender,fuPainelFechar,fuPainelCheia,fuHist,fuNota,fuTarFeita,fuTarNova,fuFichaCompleta,
   fuMfoSet,fuMfoArr,fuMfoAdd,fuMfoDel,fuMfoRamo,fuMfoFecha,fuMfoReceita,fuMfoVenc,fuDobra,fuDobraTodas,fuAnce,fuRepinta});
+Object.assign(W,{fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
 Object.assign(W,{viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
   fuAbrir,fuMover,fuMotivoOk,fuMoverMenu,fuLigar,fuZap,fuRegistrar,fuDelay,fuFiltrosAbrir,fuColunas,fuColVer,fuColMover,fuColPadrao,fuMais,fuDesempenho,fuExportar,
   fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca});
