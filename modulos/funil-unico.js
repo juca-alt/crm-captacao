@@ -373,7 +373,8 @@ function fuMover(id,X,motivo){ const c=fuAcha(id); if(!c) return; const fid=fuDe
   else toast(`${nome}: ${lbl(antes)} → ${lbl(X)}${leg?'':' (só no funil novo: o antigo não tem essa etapa)'}`,true);
   salvar(); fuRepinta(); }
 /* redesenha o quadro e, se a ficha em painel estiver aberta, ela também */
-function fuRepinta(){ try{ render(); }catch(_){} if(FU.pan) fuPainelRender(); }
+function fuRepinta(){ try{ render(); }catch(_){} if(FU.pan) fuPainelRender();
+  try{ const d=document.getElementById('drawer'); if(d&&d.classList.contains('aberto')&&typeof CONTATO!=='undefined'&&CONTATO&&typeof renderDrawer==='function') renderDrawer(); }catch(_){} }   /* a ficha de sempre (aberta por cima) acompanha */
 function fuMotivoAbrir(id,X){ const c=fuAcha(id); if(!c) return; FU.motivo={id,X};
   const e=etapa(fuDestino(c).funil_id,X)||{}, opts=[...new Set([...(Array.isArray(e.status)?e.status:[]),...(()=>{ try{ const l=fuVoltaLegado(c,X); return l?((FUNIL_CFG[etCfgKey(c.funil)]||[]).find(y=>y.id===l)||{}).status||[]:[]; }catch(_){ return []; } })(),...MOTIVOS_SUGESTAO])];
   fuModal(`<h2>Encerrar ${esc(String(c.nome||'').split(' ')[0])} em “${esc(lbl(X))}”</h2><div class="sub" style="margin:0">Sem motivo não encerra. A lista vem de Funil & Etapas (motivos da perda) + sugestões.</div>
@@ -478,7 +479,7 @@ function fuAbrir(id){ let c=fuAcha(id); if(!c) return;
    ela POR CIMA do painel (todos os campos de hoje, sem duplicar formulário); ao fechar, o painel se redesenha.
    Vida Individual: qualificação ANCE + fact-find + histórico. MFO: os blocos tirados do histórico real (Cliente,
    Este negócio, Prêmio e remuneração, Coberturas, Campos do ramo, Cotações, Análise, Pendências) — dobráveis, nascem
-   fechados, lembrados por aparelho, com abrir tudo / recolher tudo. Os campos MFO novos moram em c.mfo_ficha; os que
+   fechados, lembrados por aparelho (sem abrir/recolher tudo desde 25/10). Os campos MFO novos moram em c.mfo_ficha; os que
    já existiam (ramos, fecha_por, parceiro, origem_mfo, receita_estimada, drive_pasta) continuam nas chaves de sempre. */
 const PAN_CHAVE='crmlp_fu_painel_v1';
 function panPref(){ try{ return JSON.parse(localStorage.getItem(PAN_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
@@ -634,7 +635,7 @@ function painelHtml(c){ const d=fuDestino(c), fid=d.funil_id, mfo=fid==='mfo', i
      <div class="mut">Último contato: ${i.ult?esc(ULT_LBL(i.ult.tipo)+' · '+dataBR(String(i.ult.quando).slice(0,10))):'nunca conversei'}${i.enc&&(c.motivo_perda||c.status)?' · encerrado: '+esc(c.motivo_perda||c.status):''}</div></section>
    <div class="fu-pg-cols"><div class="fu-pg-main">
      <section class="fu-pc fu-negs"><div class="fu-pch"><b>Negócios desta pessoa</b><span class="mut">${negs.length}</span></div>${negs.map(x=>negRow(x,x===c)).join('')}${negs.length===1?`<div class="mut" style="padding:0 2px">Só este por enquanto. Seguro auto, saúde, VG da empresa ou crédito entram como novo negócio no MFO.</div>`:''}</section>
-     ${mfo?`<section class="fu-pc"><div class="fu-pch"><b>Ficha do negócio (MFO)</b><span class="fu-dacts"><button type="button" class="btn btn-ghost btn-mini" onclick="fuDobraTodas(true)">▾ Abrir tudo</button><button type="button" class="btn btn-ghost btn-mini" onclick="fuDobraTodas(false)">▸ Recolher tudo</button></span></div>${mfoBlocos(c)}</section>`:viBlocos(c)}
+     ${mfo?`<section class="fu-pc"><div class="fu-pch"><b>Ficha do negócio (MFO)</b></div>${mfoBlocos(c)}</section>`:viBlocos(c)}
      ${histHtml(c)}
    </div><aside class="fu-pg-side">${tarHtml(c)}${redeHtml(c)}${cartHtml(c)}${mfo?'':planosHtml(c)}</aside></div></div>`; }
 
@@ -761,7 +762,7 @@ function fuSelfTests(ok){
        hm=painelHtml({id:'fu-tm',nome:'Beltrano Silva',funil:'mfo',etapa:'Proposta',ramos:['credito','auto'],fecha_por:'Parceiro',tarefas:[],interacoes:[],mfo_ficha:{tipo:'PJ',coberturas:[{nome:'Incêndio'}],pendencias:[{t:'PDF',ok:false}]}}); }catch(e){ erro=String(e&&e.message||e); }
   ok('FUNIL-UNICO T5: ficha em painel desenha VI e MFO sem erro, com ← Voltar e ⤢ Tela cheia'+(erro?' — '+erro:''), !erro&&/← Voltar/.test(hv)&&/Tela cheia|⤡ Painel/.test(hv)&&/Qualificação/.test(hv)&&/Fact-find/.test(hv)&&/Ligação atendida/.test(hv)&&/Ficha do negócio \(MFO\)/.test(hm));
   ok('FUNIL-UNICO T5: MFO traz os blocos do histórico (Cliente, Este negócio, Prêmio, Coberturas, Campos do ramo, Cotações, Análise, Pendências); crédito tem campos próprios; ramo sem caso avisa', ['Cliente','Este negócio','Prêmio e remuneração','Coberturas','Campos do ramo','Cotações','Análise','Pendências do cliente'].every(t=>hm.includes('<span class="t">'+t+'</span>'))&&/Banco credor/.test(hm)&&/Ainda não há caso de Auto/.test(hm)&&/Razão social/.test(hm));
-  ok('FUNIL-UNICO T5: bloco dobrável nasce fechado (sem escolha gravada não sai aberto) e a tela tem abrir tudo + recolher tudo', ab('m-sem-escolha-gravada')===''&&/Abrir tudo/.test(hm)&&/Recolher tudo/.test(hm)&&/ontoggle="fuDobra/.test(hm));
+  ok('FUNIL-UNICO T5: bloco dobrável nasce fechado (sem escolha gravada não sai aberto) e sem abrir/recolher tudo (SEM-TUDO-V1)', ab('m-sem-escolha-gravada')===''&&!/Abrir tudo|Recolher tudo/.test(hm)&&/ontoggle="fuDobra/.test(hm));
 }
 
 Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAgendarOk,fuPainelRender,fuPainelFechar,fuPainelCheia,fuHist,fuNota,fuTarFeita,fuTarNova,fuFichaCompleta,

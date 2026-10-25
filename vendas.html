@@ -1842,6 +1842,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 
 <!-- FUNIL-UNICO-V1 · T3: o quadro dos 2 funis novos mora em arquivo próprio (não briga com a sessão paralela) -->
 <script src="modulos/funil-unico.js"></script>
+<script src="modulos/ficha-ux2.js"></script>
 <script>
 /* CARD-WA-LEVE-V1 (19/10/2026): ?wa=1 = o card do CRM dentro da extensão do WhatsApp. Sabido ANTES de tudo (render e boot
    leem isto) — o MODO_WA de lá de baixo nasce tarde demais pra quem roda na carga. */
@@ -3257,7 +3258,7 @@ function iniTudo(abrir){
   });
   iniBotaoPinta();
 }
-/* DOBRA-FECHADA-V1.1: os dois botões são fixos — nada a repintar. Fica como ponto de chamada. */
+/* DOBRA-FECHADA-V1.1 · SEM-TUDO-V1 (25/10): os botões abrir/recolher tudo saíram. Fica como ponto de chamada. */
 function iniBotaoPinta(){}
 /* ═══ PAINEL-ORGANIZAR-V1 (15/09/2026) ═══════════════════════════════════════
    Fila B, item do 2.0: "organizar painel" — mudar a ordem e esconder cards do Início.
@@ -3553,7 +3554,7 @@ function viewInicio(){
   $('#main').innerHTML=`
     <h1 class="pg">Seja bem-vindo(a), ${esc(nomeAtual())}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
-    <div class="ini-tudo"><button class="btn btn-s btn-mini" id="iniTudoBtn" onclick="iniTudo(true)" title="Abre todos os cards">⌄ abrir tudo</button><button class="btn btn-s btn-mini" id="iniNadaBtn" onclick="iniTudo(false)" title="Recolhe todos os cards">⌃ recolher tudo</button>
+    <div class="ini-tudo">
       <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button></div>
     ${pordRender([['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
                   ['funil-nn',bNn],['funil-bc',bBc],['ta',bTa],['reunioes',bReun],['eventos',bEv],['lp',bLp]])}`;
@@ -6598,7 +6599,7 @@ function drwSecsTodas(abrir){
   document.querySelectorAll('#drawer .sec[data-sec]').forEach(sec=>{ st[sec.dataset.sec]=abrir; drwSecAplicar(sec,abrir); });
   drwSecsGravar(st); drwSecsBotao();
 }
-/* DOBRA-FECHADA-V1.1: dois botões fixos (Expandir / Recolher) — nada a repintar. */
+/* SEM-TUDO-V1 (25/10): sem Expandir/Recolher tudo — cada tópico abre e fecha sozinho. */
 function drwSecsBotao(){}
 /* ═══ DRW-ORDEM-V1 (18/09/2026): organizar os tópicos da gaveta ═════════════════════
    Pedido dele (print da ficha no iPad): "permite também na área do card do cliente, além de
@@ -6681,8 +6682,6 @@ function renderDrawer(){
     <div class="drawer-body">
       ${mnFaixaHtml(c)}
       <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:-4px">
-        <button class="btn btn-ghost btn-mini" id="drw-todas" onclick="drwSecsTodas(true)" title="Abre todos os tópicos desta ficha">⌄ Expandir tudo</button>
-        <button class="btn btn-ghost btn-mini" id="drw-nada" onclick="drwSecsTodas(false)" title="Recolhe todos os tópicos desta ficha">⌃ Recolher tudo</button>
         <button class="btn ${DRW_ORG?'btn-p':'btn-ghost'} btn-mini" id="drw-org" onclick="drwOrgModo(${DRW_ORG?'false':'true'})" title="Mudar a ordem dos tópicos e esconder o que você não usa nesta ficha">⋮⋮ ${DRW_ORG?'pronto':'organizar'}</button>
       </div>
       ${ehEmpresa(c)?pjDrawerHtml(c):`<div class="sec"><details>
@@ -6875,6 +6874,7 @@ function renderDrawer(){
 
     </div>`;
   drwSecsWire();
+  try{ if(typeof fichaUx2Aplicar==='function'&&novoOn('ficha-ux2')) fichaUx2Aplicar(c); else { const d=document.getElementById('drawer'); if(d) d.classList.remove('ux2'); } }catch(e){ console.warn('ficha-ux2',e); }   /* FICHA-UX2-V1: abas por cima da gaveta pronta */
   cvFichaPrep(c);   /* CONVERSAS-V1: acha a conversa pelo telefone e preenche o bloco 💬 WhatsApp */
 }
 function mudarEtapa(e){ const c=ct(); if(!c||c.etapa===e) return; const de=c.etapa; c.etapa=e; logEtapa(c,de,e); try{ funOrdemInserir(c,e,null); }catch(_){} const _auto=funAutoDelivery(c); salvar(); renderDrawer(); etFocoMotivo();   /* MOTIVO-PERDA-V1 */ toast(_auto?`${c.nome.split(' ')[0]}: apólice emitida → Delivery 🎁`:`${c.nome.split(' ')[0]}: ${de} → ${e}`,true);
@@ -7187,7 +7187,7 @@ function spDobra(k,titulo,resumo,corpo){ const ab=spSecAberta(k);
   return `<details class="card sp-dobra" data-sec="${esc(k)}" style="padding:0;margin:8px 0" ${ab?'open':''} ontoggle="spSecToggle('${esc(jsq(k))}',this.open)">
     <summary style="padding:12px 14px;cursor:pointer;font-weight:700">${titulo} <span style="font-weight:400;font-size:12px;color:var(--muted)">${resumo}</span></summary>
     <div style="padding:0 14px 14px">${corpo}</div></details>`; }
-function spBotoesHtml(){ return `<div class="hub-tudo" style="margin:0 0 6px"><button class="btn btn-s btn-mini" onclick="spSecsTodas(true)" title="Abre todos os tópicos">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="spSecsTodas(false)" title="Recolhe todos os tópicos">⌃ recolher tudo</button></div>`; }
+function spBotoesHtml(){ return ''; }   /* SEM-TUDO-V1 (25/10): abrir/recolher tudo saiu de todas as telas — palavra dele */
 let SP_REC='', SP_LISTA_AB={}, SP_Q={}, SP_SEL=new Set();
 /* SP-BUSCA-V1 (21/09): "bota campo de buscar em cada tópico, aí busco e seleciono a qual lista quero colocar" —
    cada tabela dos tópicos tem busca própria (SP_Q[chave]), caixa de marcar por linha e a barra
@@ -9538,7 +9538,7 @@ function plpSecaoHtml(){ const hoje=atHojeLocal(), S2=plpEstado(hoje,PLP.lp), c=
         <button class="btn btn-ghost btn-mini" onclick="PLP.k=0;PLP.n=0;plpRepintar()">Zerar</button>
       </div>
     </div>
-    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-ghost btn-mini" onclick="document.querySelectorAll('#plp-sec details').forEach(d=>d.open=true)">▾ Abrir tudo</button><button class="btn btn-ghost btn-mini" onclick="document.querySelectorAll('#plp-sec details').forEach(d=>d.open=false)">▸ Recolher tudo</button></div>
+
     ${tab('Pendentes do período',pendentes,r=>{ const d=emDiasProposta(r,hoje), rl=emRelogio(d); return `<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 4px">${esc(r.proposta||'—')}<br><span style="color:var(--muted)">${esc(atTitleC(r.segurado)||'')}</span></td><td>${bf(r.dt_assinatura)}</td><td style="${rl.estado==='estourou'?'color:var(--verm);font-weight:700':''}">${rl.txt}</td><td style="text-align:right">${r.pa_sem_iof!=null?brl(r.pa_sem_iof):'—'}</td></tr>`; })}
     ${tab('Emitidas que ainda podem virar Not Taken',nt,r=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 4px">${esc(r.apolice||r.proposta||'—')}<br><span style="color:var(--muted)">${esc(atTitleC(r.segurado)||'')}</span></td><td>${exRelogioNT(exDiasEmissao(r,hoje)).txt}</td><td>2ª parcela: ${r.segunda_parcela_em?'paga '+bf(r.segunda_parcela_em):'em aberto'}</td></tr>`)}
     ${tab('Não contam e por quê',nao,x=>`<tr style="border-top:1px solid var(--linha)"><td style="padding:6px 4px">${esc(x.r.proposta||x.r.apolice||'—')}<br><span style="color:var(--muted)">${esc(atTitleC(x.r.segurado)||'')}</span></td><td>${esc(x.por)}</td></tr>`)}
@@ -10704,7 +10704,7 @@ function viewPlano(){
     <div class="card pln-tab" style="padding:6px 10px;overflow-x:auto"><table class="pln-t"><thead><tr><th>Mês</th><th>Apólices</th><th>PA médio</th><th>PA total</th><th>CS médio</th><th>CS total</th><th>Comissão bruta</th><th>Realizado (apól. · PA)</th><th></th></tr></thead>
       <tbody>${linhas.join('')}</tbody>
       <tfoot><tr><td><b>Total</b></td><td><b>${edN(T.n)}</b></td><td><b>${T.pam?brlCurto(T.pam):'—'}</b></td><td><b>${T.pa?brlCurto(T.pa):'—'}</b></td><td><b>${T.csm?brlCurto(T.csm):'—'}</b></td><td><b>${T.cs?brlCurto(T.cs):'—'}</b></td><td><b>${T.com?brlCurto(T.com):'—'}</b></td><td><b>${edN(real.n)} · ${brlCurto(real.pa)}</b> ${plnPctHtml(real.pa,T.pa)}</td><td></td></tr></tfoot></table></div>
-    <div class="pln-mob"><div style="display:flex;gap:8px;margin:0 0 8px"><button class="btn btn-s btn-mini" onclick="plnTodas(true)">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="plnTodas(false)">⌃ recolher tudo</button><span style="flex:1"></span><span style="font-size:11px;color:var(--muted);align-self:center">toque no mês pra editar</span></div>${cards.join('')}</div>
+    <div class="pln-mob"><div style="display:flex;gap:8px;margin:0 0 8px"><span style="flex:1"></span><span style="font-size:11px;color:var(--muted);align-self:center">toque no mês pra editar</span></div>${cards.join('')}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:8px">Realizado = emitidas Ativas do app por mês de emissão (mesma conta do Resumo MF e da Emissão Diária). ⤓ repete o mês nos seguintes.</div>`;
 }
 window.plnSet=plnSet; window.plnTodas=plnTodas; window.plnReplicar=plnReplicar; window.plnCopiarAno=plnCopiarAno; window.plnSetAno=plnSetAno; window.viewPlano=viewPlano;
@@ -12986,7 +12986,7 @@ function viewAgenda(){
       <div class="kpi"><div class="lbl">Hoje</div><div class="num" style="font-size:19px">${cont.hoje}</div><div style="font-size:11px;color:var(--muted)">combinado para hoje</div></div>
       <div class="kpi"><div class="lbl">Em aberto</div><div class="num" style="font-size:19px">${itens.length}</div><div style="font-size:11px;color:var(--muted)">no total${pend.length?' · '+pend.length+' reuni'+(pend.length===1?'ão':'ões')+' a finalizar':''}</div></div>
     </div>
-    <div class="ini-tudo" style="margin:0 0 8px"><button class="btn btn-s btn-mini" onclick="agTudo(true)" title="Abre todas as seções">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="agTudo(false)" title="Recolhe todas as seções">⌃ recolher tudo</button><button class="btn ${AG_ORD.modo?'btn-p':'btn-s'} btn-mini" onclick="agOrdModo(${AG_ORD.modo?'false':'true'})" title="Mudar a ordem das seções e esconder o que você não usa">⋮⋮ ${AG_ORD.modo?'pronto':'organizar'}</button></div>
+    <div class="ini-tudo" style="margin:0 0 8px"><button class="btn ${AG_ORD.modo?'btn-p':'btn-s'} btn-mini" onclick="agOrdModo(${AG_ORD.modo?'false':'true'})" title="Mudar a ordem das seções e esconder o que você não usa">⋮⋮ ${AG_ORD.modo?'pronto':'organizar'}</button></div>
     ${corpo}`;
 }
 /* ── AGENDA-V2: seções dobráveis (nascem fechadas) + organizar, por aparelho ── */
@@ -15949,14 +15949,14 @@ function hubCardHtml(i,tagPadrao,fixavel){
 /* HUB-DOBRA-V1 (17/09/2026): print dele da tela Módulos no iPhone — "a área de outros módulos também
    precisa que os tópicos sejam recolhidos ou expandíveis, está ficando muito extenso." Regra da
    dobra fechada (16/09): toda seção nasce fechada, lembrada por aparelho, e o cabeçalho fechado
-   leva o que tem dentro (nome de cada card + contagem). Dois botões fixos: abrir tudo · recolher tudo. */
+   leva o que tem dentro (nome de cada card + contagem). (SEM-TUDO-V1 25/10: sem abrir/recolher tudo.) */
 const HUB_SEC_CHAVE='crmlp_hub_secs_v1';
 function hubSecsLer(){ try{ return JSON.parse(localStorage.getItem(HUB_SEC_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function hubSecAberta(k){ return dobraAberta(k, hubSecsLer()); }
 function hubSecToggle(k,aberto){ const st=hubSecsLer(); st[k]=aberto?1:0; try{ localStorage.setItem(HUB_SEC_CHAVE,JSON.stringify(st)); }catch(_){} }
 function hubSecsTodas(abrir){ document.querySelectorAll('#main details.hub-dobra').forEach(d=>{ d.open=!!abrir; }); }   /* o ontoggle de cada um grava */
 function hubSecChave(prefixo,titulo){ return 'hub:'+prefixo+':'+normKey(titulo).replace(/\s+/g,'-'); }
-function hubBotoesHtml(){ return `<div class="hub-tudo"><button class="btn btn-s btn-mini" onclick="hubSecsTodas(true)" title="Abre todas as seções">⌄ abrir tudo</button><button class="btn btn-s btn-mini" onclick="hubSecsTodas(false)" title="Recolhe todas as seções">⌃ recolher tudo</button></div>`; }
+function hubBotoesHtml(){ return ''; }   /* SEM-TUDO-V1 (25/10) */
 function hubSecoesHtml(secoes,filtro,tagPadrao,prefixo){
   prefixo=prefixo||'mod';
   return secoes.map(s=>{ const it=s.itens.filter(filtro); if(!it.length) return '';
@@ -17911,6 +17911,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
+  'ficha-ux2':{o:'🗂 Ficha UX 2.0: abas Negócio · Pessoa · Histórico, cabeçalho com 4 ações (WhatsApp, Ligar, Agendar, ⋯ Mais), Funil e etapa recolhível com trilha compacta, Tarefas logo abaixo, resumo em cada tópico fechado', desde:'2026-10-25'},
   'funil-unico':{o:'🧭 Funis novos (2): 🎯 Vida Individual e 🏢 MFO (VG + demais seguros) em Funil & Etapas + mapa de etapas legadas (kb_etapa_mapa) — T1 do PROMPT_CODE Funil Único', desde:'2026-10-24'},
   /* 'carga' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor (palavra dele: "libera a carga pro Victor também"). */
   /* 'aviso-versao' — LIBERADO pra todos em 29/09 (melhoria em algo que o Daniel já usa — regra dele: "evolução do que ele já tem acesso já deve ser estendida a ele"). */
@@ -18652,7 +18653,7 @@ function bnEditorHtml(c){
       ${(typeof taAvatar==='function'?taAvatar(c):'')}
       <div class="bne-head-t"><div class="bne-nome">${esc(c.nome||'(sem nome)')}</div>
         <div class="bne-badges">${badge(BN_EST_LABEL[c.estagio]||c.estagio,'b-'+(c.estagio||'estoque'))}${badge(c.prioridade?'P'+c.prioridade:'',c.prioridade==1?'b-verm':'b-cinza')}${badge(c.trilha==='recrutamento'?'Recrutamento':'',null)}${(()=>{ const a=bnAgendaUltima(c); return a?badge('📅 '+dataBR(a.quando)+(a.hora?' '+a.hora:'')+' · '+a.tit,'b-azul'):''; })()}${(c.recomendante||'').trim()?badge('👤 '+c.recomendante,'b-azul'):''}</div></div>
-      <div class="bne-acts">${tel?`<a class="btn btn-s btn-mini" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}${wa?`<a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(wa)}" title="WhatsApp">💬</a>`:''}<button class="btn btn-s btn-mini" onclick="bnAgendar('${esc(c.id)}')" title="Agendar atividade — vai pra sua Agenda Google (pelo negócio do funil, se houver)">📅</button><button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')" title="${c.funil_contato_id?'Abrir no funil':'Criar contato no funil'}">${c.funil_contato_id?'👤 Funil':'🚀 Funil'}</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodas(true)" title="Abre todos os tópicos desta ficha">⌄ tudo</button><button class="btn btn-ghost btn-mini" onclick="bneSecsTodas(false)" title="Recolhe todos os tópicos desta ficha">⌃ tudo</button></div>
+      <div class="bne-acts">${tel?`<a class="btn btn-s btn-mini" href="tel:${esc(tel)}" title="Ligar">📞</a>`:''}${wa?`<a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(wa)}" title="WhatsApp">💬</a>`:''}<button class="btn btn-s btn-mini" onclick="bnAgendar('${esc(c.id)}')" title="Agendar atividade — vai pra sua Agenda Google (pelo negócio do funil, se houver)">📅</button><button class="btn btn-s btn-mini" onclick="bnPromover('${esc(c.id)}')" title="${c.funil_contato_id?'Abrir no funil':'Criar contato no funil'}">${c.funil_contato_id?'👤 Funil':'🚀 Funil'}</button></div>
     </div>
     <details class="bne-grp" data-sec="pessoa" ${bneSecAberta('pessoa')?'open':''} ontoggle="bneSecToggle('pessoa',this.open)"><summary><span class="bne-grp-t">👤 Quem é a pessoa</span><span class="bne-grp-r">${esc(fichaPessoaResumo(c,'lead'))}</span><span class="bne-grp-c">▾</span></summary><div style="padding:6px 0 10px">${fichaPessoaHtml(c,'lead')}</div></details>
     ${grp('q','🎯 Qualificação do TA',qualR,
@@ -19843,8 +19844,6 @@ function viewBnRecs(){
         <option ${BNR.ord==='qtd'?'selected':''} value="qtd">Mais nomes primeiro</option>
         <option ${BNR.ord==='qtd_asc'?'selected':''} value="qtd_asc">Menos nomes primeiro</option>
         <option ${BNR.ord==='nome'?'selected':''} value="nome">Nome (A→Z)</option></select>
-      ${RECP.vis==='grupo'?`<button class="btn btn-s btn-mini" onclick="recTodos(true)">⊞ Expandir tudo</button>
-      <button class="btn btn-s btn-mini" onclick="recTodos(false)">⊟ Recolher tudo</button>`:''}
       <span style="flex:1"></span>
       <button class="btn btn-mini ${RECP.vis==='grupo'?'btn-p':'btn-s'}" onclick="recVis('grupo')" title="Agrupado por recomendante">🙌 Agrupado</button>
       <button class="btn btn-mini ${RECP.vis==='tabela'?'btn-p':'btn-s'}" onclick="recVis('tabela')" title="Planilha: edição na célula, ordenação e filtro por coluna, ações em lote">▦ Tabela</button>
@@ -21648,8 +21647,8 @@ function lpSelfCheck(){
         bneSecToggle('q',true);
         const f2=bnEditorHtml({id:'db1',nome:'Fulano De Tal',recomendante:'Beltrano',estagio:'estoque',hist:[]});
         ok('dobra: ficha do lead — o que ele abriu fica aberto na próxima vez, neste aparelho', /data-sec="q"[^>]*\sopen/.test(f2) && !/data-sec="pessoa"[^>]*\sopen/.test(f2));
-        ok('dobra: ficha do lead tem DOIS botões fixos — abrir tudo e recolher tudo (um só que trocava de nome deixava ele sem como recolher)', /bneSecsTodas\(true\)/.test(f) && /bneSecsTodas\(false\)/.test(f));
-        ok('dobra: Início e gaveta também têm os dois botões fixos', /iniTudo\(true\)/.test(String(viewInicio)) && /iniTudo\(false\)/.test(String(viewInicio)) && !!document.getElementById('drw-nada') === !!document.getElementById('drw-todas'));
+        /* SEM-TUDO-V1 (25/10, palavra dele: "tira esses botões… em todas as telas"): os tópicos seguem recolhíveis um a um; abrir/recolher tudo não volta */
+        ok('dobra: sem botões abrir/recolher tudo — ficha do lead, Início, gaveta, SitPlan, Hub e Parceiros', !/bneSecsTodas\((true|false)\)/.test(f) && !/iniTudo\((true|false)\)/.test(String(viewInicio)) && !document.getElementById('drw-nada') && !document.getElementById('drw-todas') && spBotoesHtml()==='' && hubBotoesHtml()==='' && parcDobraBotoes()==='');
         ok('dobra: nenhum details com "open" LITERAL sobrou no código — abrir só por escolha gravada (vale pro futuro)',
            (()=>{ const re=/<details(?:\s+class="[^"]*")?\s+open[\s>]/; return ![...document.scripts].some(s=>re.test(s.textContent||'')); })());
       } finally{ try{ if(_bne===null) localStorage.removeItem(BNE_SEC_CHAVE); else localStorage.setItem(BNE_SEC_CHAVE,_bne); }catch(_){} PERFIL=_p; }
@@ -21801,7 +21800,7 @@ function lpSelfCheck(){
             const tmp=document.createElement('div'); tmp.innerHTML=h; const d=tmp.querySelector('details.hub-dobra');
             const fechado=!!d && !d.open; const resumo=(tmp.querySelector('.hub-sec-r')||{}).textContent||'';
             hubSecToggle('hub:zz:teste-sec',true); const lembrou=hubSecAberta('hub:zz:teste-sec')===true && hubSecAberta('hub:zz:outra')===false;
-            return fechado && /Card Um · Card Dois \(7\)/.test(resumo) && lembrou && /hubSecsTodas\(true\)/.test(String(viewModulos)+String(hubBotoesHtml)) && /hubSecsTodas\(false\)/.test(String(hubBotoesHtml)) && /hubBotoesHtml\(\)/.test(String(viewConfig)); }
+            return fechado && /Card Um · Card Dois \(7\)/.test(resumo) && lembrou && hubBotoesHtml()===''; }   /* SEM-TUDO-V1 (25/10): sem abrir/recolher tudo */
           finally{ try{ if(bak===null) localStorage.removeItem(HUB_SEC_CHAVE); else localStorage.setItem(HUB_SEC_CHAVE,bak); }catch(_){} } })());
         /* FORM-BASE-V1 + DRW-ORDEM-V1 */
         ok('form: campo de texto e select fora da calculadora têm borda visível (o vazamento do .pl foi fechado)', (()=>{ const w=document.createElement('div'); w.style.cssText='position:absolute;left:-9999px;top:0'; w.innerHTML='<input type="text" id="zz_ft"><select id="zz_fs"><option>a</option></select><input type="email" id="zz_fe">'; document.body.appendChild(w); try{ const b=id=>{ const cs=getComputedStyle(document.getElementById(id)); return cs.borderTopStyle==='solid' && parseFloat(cs.borderTopWidth)>=1; }; return b('zz_ft') && b('zz_fs') && b('zz_fe') && ![...document.styleSheets].some(sh=>{ try{ return [...sh.cssRules].some(r=>r.selectorText && /(^|,)\s*input\[type=text\]/.test(r.selectorText) && /var\(--pl-/.test(r.style.cssText)); }catch(_){ return false; } }); } finally{ w.remove(); } })());
@@ -22005,12 +22004,12 @@ function lpSelfCheck(){
           return typeof syncPuxar==='function'&&String(syncPuxar.toString()).includes(".gt('atualizado',SYNC_DESDE)")&&/visibilitychange[^\n]*syncPuxar/.test(src)&&/'online'[^\n]*syncPuxar/.test(src)&&/setInterval\(\(\)=>\{ if\(!document\.hidden\) syncPuxar/.test(src)
             &&String((String(lpcPush)+String(lpcPushCorpo))).includes('fund3Servidor')&&String(bnPush.toString()).includes('fund3Servidor')&&String((String(lpcPush)+String(lpcPushCorpo))).includes('||PEND.lpc[k]')&&String(bnPush.toString()).includes('||PEND.bn[k]'); })());
         /* SP-LISTAS-V1 */
-        ok('SP-LISTAS: lista nomeada de TA atravessa funil + Estoque; o SitPlan tem os tópicos Listas de TA e Recortes (o MESMO TA_SMART do Painel TA), botão 📋 por linha, dois botões abrir/recolher tudo, e nasce atrás de sp-listas', (()=>{ const bakS=S.contatos, bakB=BN.contatos; try{
+        ok('SP-LISTAS: lista nomeada de TA atravessa funil + Estoque; o SitPlan tem os tópicos Listas de TA e Recortes (o MESMO TA_SMART do Painel TA), botão 📋 por linha, sem abrir/recolher tudo (SEM-TUDO-V1), e nasce atrás de sp-listas', (()=>{ const bakS=S.contatos, bakB=BN.contatos; try{
           S.contatos=[normContato({id:'zzsl1',nome:'Zz Fun',lp:S.activeUser,telefone:'81999990012',etapa:'SitPlan',listas:['SP Teste']})]; BN.contatos=[{id:'zzsl2',nome:'Zz Bn',estagio:'lista_ta',lp:S.activeUser,listas:['SP Teste'],hist:[],telefone:'81999990013'}];
           const m=taListaMembros('SP Teste'), v=String(viewSitplan.toString()), r=String(spRecortesHtml.toString());
           return m.length===2 && m.some(spEhFunil) && bnListasTodas().includes('SP Teste') && taListasDe(S.contatos[0]).join()==='📋 SP Teste' && !NOVO_SO_MEU['sp-listas']
             && v.includes('spListasTaHtml') && v.includes('spRecortesHtml') && v.includes("novoOn('sp-listas')") && r.includes('TA_SMART') && r.includes('spRecLista')
-            && v.includes('spBotoesHtml') && /spSecsTodas\(true\)/.test(String(spBotoesHtml.toString())) && /spSecsTodas\(false\)/.test(String(spBotoesHtml.toString()))
+            && spBotoesHtml()===''
             && spSecAberta('__novo__')===false && !/<details[^>]*\sopen[\s>]/.test(v) && String(spListaBtn.toString()).includes('spListaMenu') && String(taRowMenu.toString()).includes('spPorId')
             && String(viewSitplan.toString()).includes('spFunilCorpo') && String(spFunilCorpo.toString()).includes('ETAPAS_FLUXO') && String(spSelBarra.toString()).includes('spSelEtapa') && String(spNomesTabela.toString()).includes('spBuscaHtml') && String(spNomesTabela.toString()).includes('spSelBarra') && spBuscaFiltra([{nome:'Zz Fun',telefone:'81999990012'},{nome:'Outro'}],'__t').length===2 && (SP_Q.__t='fun', spBuscaFiltra([{nome:'Zz Fun'},{nome:'Outro'}],'__t').length===1) && (SP_Q.__t='99990012', spBuscaFiltra([{nome:'Zz',telefone:'81999990012'},{nome:'Outro'}],'__t').length===1) && (delete SP_Q.__t, true);
         } finally{ S.contatos=bakS; BN.contatos=bakB; } })());
@@ -22023,7 +22022,7 @@ function lpSelfCheck(){
         /* AGENDA-V2 + DELAY-SINC-V1 */
         ok('delay sincronizado: marcar delay no negócio o põe na lista de Delay do TA/WA, no chip do card e na linha do tempo; expira na data', (()=>{ const bak=S.contatos; try{ const c=normContato({id:'zzdl',nome:'Zz Delay',funil:'nn',etapa:'OI/FF',telefone:'81999990021'}); S.contatos=[c]; const antes=taDelayTipo(c); const ate=negDelayMarcar(c,isoAddDias(hojeISO(),5),'teste'); const dep=taDelayTipo(c); const chip=etStatusChip(c); const it=interacoesDe(c).slice(-1)[0]; c.delay_ate=isoAddDias(hojeISO(),-1); if(/^delay/i.test(etStatusDe(c))){ delete c.status; delete c.status_etapa; } const exp=taDelayTipo(c); return !antes && !!dep && /^Delay/i.test(dep) && /Delay/.test(chip) && it && it.k==='etstatus' && /Delay até/.test(it.l) && !exp && REUN_BY_K.delay && REUN_BY_K.delay.remarca && REUN_BY_K.delay.delay && typeof tarDelay==='function'; } finally{ S.contatos=bak; } })());
         ok('agenda V2: 3 KPIs (Atrasadas · Hoje · Em aberto), seções dobráveis que nascem fechadas e organizáveis, uma ação por linha (seletor com Feita · Delay · +1d · +7d · Editar · Remover)', (()=>{ const src=String(viewAgenda); const bak=(()=>{ try{ return localStorage.getItem(AG_SEC_CHAVE); }catch(_){ return null; } })(); try{ try{ localStorage.removeItem(AG_SEC_CHAVE); }catch(_){} const h=agBloco('zz-ag','T','r','<i>c</i>'); const sel=agAcaoSel({id:'zc'},{id:'zt'},false), selR=agAcaoSel({id:'zc'},{id:'zt'},true);
-            return !/A finalizar<\/div>/.test(src) && !/Negócios sem atividade<\/div>/.test(src) && /agTudo\(true\)/.test(src) && /agTudo\(false\)/.test(src) && /agOrdModo\(/.test(src) && /ini-bl fechado/.test(h) && /data-ag="zz-ag"/.test(h) && AG_ACOES.map(a=>a[0]).join()==='feita,delay,mais1,mais7,editar,remover' && /<select class="res-sel ag-sel"/.test(sel) && /value="delay"/.test(sel) && !/value="feita"/.test(selR) && /agAcao\('zc','zt'/.test(sel) && drwOrdCalc(['reun','atrasada','hoje'],{ordem:['hoje','reun'],ocultos:[]}).join()==='hoje,reun,atrasada'; } finally{ try{ if(bak===null) localStorage.removeItem(AG_SEC_CHAVE); else localStorage.setItem(AG_SEC_CHAVE,bak); }catch(_){} } })());
+            return !/A finalizar<\/div>/.test(src) && !/Negócios sem atividade<\/div>/.test(src) && !/agTudo\((true|false)\)/.test(src) && /agOrdModo\(/.test(src) && /ini-bl fechado/.test(h) && /data-ag="zz-ag"/.test(h) && AG_ACOES.map(a=>a[0]).join()==='feita,delay,mais1,mais7,editar,remover' && /<select class="res-sel ag-sel"/.test(sel) && /value="delay"/.test(sel) && !/value="feita"/.test(selR) && /agAcao\('zc','zt'/.test(sel) && drwOrdCalc(['reun','atrasada','hoje'],{ordem:['hoje','reun'],ocultos:[]}).join()==='hoje,reun,atrasada'; } finally{ try{ if(bak===null) localStorage.removeItem(AG_SEC_CHAVE); else localStorage.setItem(AG_SEC_CHAVE,bak); }catch(_){} } })());
         /* CICLO-V1 */
         ok('ciclo: mensal = 1º ao último dia; compensação = do corte ao dia anterior ao corte seguinte (antes do corte, começou no mês passado); período na mão ganha de tudo', (()=>{ const a=cicloPeriodo('mes','2026-09-18',21), b=cicloPeriodo('comp','2026-09-18',21), c=cicloPeriodo('comp','2026-09-25',21), d=cicloPeriodo('comp','2026-09-18',21,'2026-08-21','2026-09-18'), e=cicloPeriodo('mes','2026-02-10',21);
             return a.ini==='2026-09-01'&&a.fim==='2026-09-30' && b.ini==='2026-08-21'&&b.fim==='2026-09-20' && c.ini==='2026-09-21'&&c.fim==='2026-10-20' && d.ini==='2026-08-21'&&d.fim==='2026-09-18'&&d.custom && e.fim==='2026-02-28' && /→/.test(b.rotulo); })());
@@ -23668,6 +23667,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: cabecalho tem uma coluna por definicao', atCsv([]).split(';').length === AT_CSV_COLS.length);
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
     if(typeof fuSelfTests==='function') fuSelfTests(ok); else ok('FUNIL-UNICO T3: módulo modulos/funil-unico.js carregado',false);
+    if(typeof fichaUx2SelfTests==='function') fichaUx2SelfTests(ok); else ok('FICHA-UX2: módulo modulos/ficha-ux2.js carregado',false);
     /* FUNIL-UNICO-V1 · T1 — teste de aceite nº 1 da spec (adaptado aos 2 funis) + cobertura de todo valor real (fábrica) */
     { const M=(f,e)=>mapearEtapa(f,e), _m=ETAPA_MAPA; ETAPA_MAPA=ETAPA_MAPA_FAB;
       const is=(r,fn,et,st,rv)=>r.funil_id===fn&&r.etapa_id===et&&(st===undefined||r.status_card===st)&&r.precisa_revisao===!!rv;
@@ -24265,7 +24265,7 @@ function parcDobraTgl(k,ab){ const st=parcDobraLer(); st[k]=ab?1:0; try{ localSt
 function parcDobraTodos(ab){ const st=parcDobraLer(); document.querySelectorAll('#main details.pc-dobra').forEach(d=>{ d.open=ab; st[d.dataset.k]=ab?1:0; }); try{ localStorage.setItem(PARC_DOBRA_CHAVE,JSON.stringify(st)); }catch(_){} }
 function parcBloco(k,titulo,resumo,corpo){ const ab=dobraAberta(k,parcDobraLer());
   return `<details class="pc-dobra" data-k="${esc(k)}" ${ab?'open':''} ontoggle="parcDobraTgl('${esc(jsq(k))}',this.open)"><summary><span class="pc-dobra-t">${titulo}</span><span class="pc-dobra-r">${resumo}</span></summary><div class="pc-dobra-c">${corpo}</div></details>`; }
-function parcDobraBotoes(){ return `<div class="pc-dobra-bts"><button class="btn btn-s btn-mini" onclick="parcDobraTodos(true)">⊕ abrir tudo</button><button class="btn btn-s btn-mini" onclick="parcDobraTodos(false)">⊖ recolher tudo</button></div>`; }
+function parcDobraBotoes(){ return ''; }   /* SEM-TUDO-V1 (25/10) */
 /* ── tela ─────────────────────────────────────────────────────────────────── */
 const PARC_ABAS=[['acordo','Acordo'],['apuracao','Apuração do mês'],['historico','Histórico & pagamentos'],['prestacao','Prestação de contas'],['projecao','Projeção']];
 const PARC_ST={rateio:['no rateio','pc-st-ok'], zero:['0% (não divide)','pc-st-zero'], nao_compensou:['não compensou','pc-st-nc'], excluida:['fora do período','pc-st-zero']};
