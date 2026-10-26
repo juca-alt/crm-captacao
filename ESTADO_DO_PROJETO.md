@@ -2,6 +2,11 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## ▶️ PRÓXIMA SESSÃO — 26/10/2026 (fechamento da sessão do funil único)
+
+- **No ar (main até o PR #318, `--servido` conferido):** funil único 2 funis com cara do Global, Ficha UX 2.0 em abas (card abre direto nela), ✨ Nova recomendação. Só pra ele (`funil-unico`, `ficha-ux2` em NOVO_SO_MEU). Sem abrir/recolher tudo vale pra todos. Telas antigas do funil seguem no menu enquanto ele avalia.
+- **Fila, nessa ordem:** (1) **Copiloto** — ele vai pôr crédito no Console da API (platform.claude.com; crédito da assinatura claude.ai NÃO serve pra API) e o secret `ANTHROPIC_API_KEY` no Supabase → testar `copiloto-sugerir` (modelo via secret `COPILOTO_MODELO`, ~US$ 0,001 por sugestão). (2) Conferir a Nova recomendação com IA logado (`capturar-lead`, Gemini). (3) Decidir **T3b** (leads LinkedIn + clientes da carteira no quadro — precisa SQL que ele roda; mexe na `leads` da Captação). (4) **T7** (menu definitivo / aviso nas telas antigas) só quando ele decidir. (5) Perguntar se libera ficha nova / funil novo pro Daniel.
+
 ## 🟢 RETOMAR AQUI — 25/10/2026 — FUNIL ÚNICO (2 funis, T1–T5) + FICHA UX 2.0 NO AR (PR #314, OK dele: "c") — só pra ele (`funil-unico`, `ficha-ux2` em NOVO_SO_MEU); sem abrir/recolher tudo vale pra todos. `--servido` conferido.
 
 - **Decisões dele (24/10):** dois funis — 🎯 **Vida Individual** e 🏢 **MFO** (VG + Prud. Demais + Multi Office). Ordem PC → C2 → N → FA ("1C"); EMISSÃO/UW → N ("2B"); Oportunidade dos pipes → 1ª etapa ("3A"). Filtros **modelo A (gaveta)**; ficha **Versão 3 · painel**. MFO: crédito/passivo bancário vira ramo ("1A"); ramos sem caso ficam na lista ("2A"); ANCE automático + nota manual por cima ("3C"). Demo aprovada: `design/funil-unico-demo.html`.
