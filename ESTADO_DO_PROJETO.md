@@ -2,6 +2,16 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 26/10/2026 (tarde) — CARD COMPLETO no funil novo · IA da recomendação no Claude · Copiloto OK (branch `claude/wizardly-sagan-bwghr3`, NÃO publicado — falta o OK dele)
+
+- **Decisões dele (26/10):** "IA A · T3b A · Agenda A · Daniel não" + "unificar logo" (card novo com tudo do antigo).
+- **Copiloto:** testado ao vivo 4/4 (agendar, preço → espera do Gustavo, injeção bloqueada, documentos), Haiku, 3–5 s. Ressalva: em "documentos" o rascunho disse "recebemos" sem saber. Usuário de teste `claude-teste-24-10@exemplo.invalid` ainda existe (senha trocada) + linhas de teste em `copiloto_sugestoes` → apagar na faxina de 31/10 (o MCP pediu confirmação e expirou).
+- **capturar-lead v4 (publicada):** Gemini não tinha chave (GEMINI_API_KEY ausente) → motor trocado pro Claude (secret ANTHROPIC_API_KEY; modelo via CAPTURA_MODELO, padrão claude-opus-5-5, ~US$ 0,03/leitura). Mesma entrada/saída; testado com texto inventado (2 leads, recomendante certo, 9 s). `importar-relatorio-lp` ainda é Gemini → está parada pelo mesmo motivo (não mexido).
+- **CARD-COMPLETO-V1 (modulos/funil-unico.js, ?v=20261026a):** o card do quadro novo traz tudo do `nnCard` com as mesmas peças (status/lista, rec selo, ⏱️ tempo na etapa NOVA + dias no funil, prêmio · PA/padrão/definir, prob., previsões, próxima atividade com atraso, apólices, irmãos, temperatura, recs, → próxima etapa com desfazer que apaga o registro). Coluna: PA · pond. + "% passam" (mesma conta do nnTaxas, no recorte FUNP, Estoque fora, Revisita opcional). 4 autotestes; portão verde (53 telas × 6); prints 390/1280.
+- **T3b:** `supabase/migrations/funil_t3b_vw_funil_cards.sql` escrito e testado em transação desfeita, NÃO rodado. ⚠️ Achado: a tabela `leads` é da Captação de LIFE PLANNERS (recrutamento), não prospects de venda — 1.038 fantasmas (893 em Conexão, só 114 com telefone/e-mail). Carteira sem ficha: 3 dele + 26 do Daniel. Pergunta pra ele antes de rodar.
+- **Extensão:** login Google abre o app = Redirect URL `https://mjickkflfaghdchkbpoiefioggomfdea.chromiumapp.org/**` ainda não cadastrada no Supabase (passo a passo dado no chat; só ele faz).
+- **Agenda A:** demo `design/agenda-tarefas-demo.html` em construção.
+
 ## ▶️ PRÓXIMA SESSÃO — 26/10/2026 (fechamento da sessão do funil único)
 
 - **No ar (main até o PR #318, `--servido` conferido):** funil único 2 funis com cara do Global, Ficha UX 2.0 em abas (card abre direto nela), ✨ Nova recomendação. Só pra ele (`funil-unico`, `ficha-ux2` em NOVO_SO_MEU). Sem abrir/recolher tudo vale pra todos. Telas antigas do funil seguem no menu enquanto ele avalia.
