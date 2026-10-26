@@ -1,4 +1,4 @@
-# Como instalar a extensão "CRM · WhatsApp (Visão LP)" — v2.9.1
+# Como instalar a extensão "CRM · WhatsApp (Visão LP)" — v2.10.0
 
 Ela mostra o **card do CRM** ao lado da conversa aberta no **WhatsApp Web** e no **Umbler Talk**.
 Nunca envia mensagem sozinha: o texto pronto vai para a caixa de mensagem e você revisa e aperta Enter.
@@ -20,7 +20,7 @@ Nunca envia mensagem sozinha: o texto pronto vai para a caixa de mensagem e voc�
 2. Ligue o **Modo do desenvolvedor** (chave no canto superior direito).
 3. Clique em **Carregar sem compactação** (canto superior esquerdo).
 4. Escolha a pasta **extensao-whatsapp** (a que tem o arquivo `manifest.json` dentro) → **Selecionar pasta**.
-5. Deve aparecer o card **"CRM · WhatsApp (Visão LP)"** com a versão **2.9.1**.
+5. Deve aparecer o card **"CRM · WhatsApp (Visão LP)"** com a versão **2.10.0**.
 6. Opcional: clique no ícone de quebra-cabeça 🧩 da barra do Chrome → 📌 fixar a extensão.
 
 ## 3. Usar
@@ -32,6 +32,16 @@ Nunca envia mensagem sozinha: o texto pronto vai para a caixa de mensagem e voc�
    - **Umbler, contato salvo:** abra **Detalhes do contato** (👤 no topo da conversa) para o card achar pelo telefone.
    - Pessoa não encontrada: o card sugere nomes parecidos; ao escolher, a conversa fica ligada (📌) e da próxima vez abre direto.
 5. **💬 Mensagem pronta** no card: o texto vai para a caixa da conversa. Revise e aperte Enter.
+
+## 4. Relatórios do portal (2.10.0, no computador)
+1. Abra o portal da corretora e **entre** (login) normalmente.
+2. Clique no **ícone da extensão** na barra do Chrome. Na 1ª vez o Chrome pergunta se pode acessar aquele site → **Permitir**.
+3. No painel **📥 Relatórios do portal** (canto de baixo, à direita): **● Gravar** e baixe cada relatório **uma vez**, do jeito de
+   sempre. Cada um aparece na lista (dá pra mudar o nome clicando nele). Para sozinho em 15 minutos, ou **■ Parar**.
+4. Nas próximas vezes: portal aberto e logado → ícone da extensão → **↻ Puxar** (um) ou **⇣ Puxar todos**. Os arquivos vão
+   direto para a **Central de Importações** do CRM (se o CRM não estiver aberto, a extensão abre numa aba).
+5. A extensão **nunca guarda senha** nem a sessão do portal. Se aparecer "Sessão do portal expirou", entre de novo no portal e
+   clique em Puxar outra vez.
 
 ## Atualizar para uma versão nova
 1. Substitua o conteúdo da pasta **extensao-whatsapp** pelo do zip novo (mesma pasta, mesmo lugar).

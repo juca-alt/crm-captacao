@@ -1,4 +1,58 @@
-# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.9.1
+# Extensão Chrome — CRM · WhatsApp (Visão LP) — v2.10.0
+
+## 2.10.0 (26/10/2026) — 📥 Relatórios do portal (gravar uma vez, puxar sempre)
+- **Por quê:** o Gustavo e o Victor baixam à mão os relatórios do portal da corretora (páginas ASP.NET tipo
+  `PAG_DBClient_PesquisaCobertura.aspx`) e sobem na **Central de Importações** do CRM. Provado em 16/10: com o portal logado, um
+  POST no `.aspx` com os campos do formulário devolve o Excel inteiro sem clique. Não sabemos os endereços nem os formulários do
+  portal — então a extensão **aprende olhando**: ele baixa cada relatório UMA vez com a gravação ligada; depois é só **Puxar**.
+- **Abrir:** no portal (qualquer site que não seja WhatsApp Web/Umbler), clique no **ícone da extensão** na barra do Chrome.
+  Na 1ª vez o Chrome pergunta se a extensão pode acessar **aquele site** → **Permitir** (a permissão é só daquele endereço, pedida
+  na hora — nada de "todos os sites" na instalação). Aparece o painel **📥 Relatórios do portal** no canto inferior direito.
+  Clicar no ícone de novo fecha. **–** encolhe numa pílula. No WhatsApp Web/Umbler o ícone continua abrindo o card do CRM; numa
+  página interna do Chrome (ou no próprio CRM) continua abrindo o WhatsApp Web.
+- **Gravar:** **● Gravar** → "Baixe cada relatório normalmente — eu memorizo como foi." Ele faz login, escolhe os filtros e baixa
+  como sempre (o download acontece normal). Cada download vira um item na lista com o nome do arquivo (ex.: `Relatorio_Atraso.xls`
+  → **Atraso**; dá pra mudar o nome clicando nele). A gravação é desta aba e deste site, e **para sozinha em 15 minutos**
+  (ou **■ Parar**). Baixar o mesmo relatório de novo atualiza o item (não duplica). O painel reaparece sozinho quando a página
+  do portal recarrega.
+- **Puxar:** **↻ Puxar** em um item, ou **⇣ Puxar todos** (um de cada vez). Precisa de uma aba do portal aberta e logada.
+  A extensão abre a tela do relatório por baixo (pega o `__VIEWSTATE` FRESCO), reenvia o formulário gravado e entrega o arquivo
+  ao CRM: acha uma aba do `vendas.html` aberta (nunca a `?wa=1` do painel) ou abre uma em segundo plano, e chama
+  `window.portalReceber({nome, mime, b64, origem:'extensao', receita})` — o CRM decide o que é e importa. Cada item mostra quando
+  foi puxado e o resultado (✓ / ✕ + a mensagem do CRM).
+- **Datas andam junto:** campo `dd/mm/aaaa` (ou `aaaa-mm-dd`) é guardado como "N dias antes/depois do dia da gravação" e
+  `mm/aaaa` como "N meses" → "últimos 30 dias" continua sendo os últimos 30 dias quando puxar semana que vem.
+- **Mensagens de erro:** "Sessão do portal expirou — entre de novo no portal e tente." (a página pediu senha) · "O portal
+  devolveu uma página em vez do relatório…" (sem tabela/arquivo) · "Abra o portal neste Chrome e entre (login)…" (nenhuma aba
+  do portal) · "Atualize o CRM (⬆ Atualizar app)…" (o CRM aberto ainda não tem `window.portalReceber`).
+- **Regras de segurança (duras):**
+  - Nunca guarda **cookie, cabeçalho nem senha**. A sessão do portal fica no navegador: o "puxar" roda DENTRO da aba do portal
+    (mesmo site → o próprio Chrome manda os cookies dele; nenhum cookie passa pela extensão). Da resposta gravada só se lê o
+    **nome do arquivo** (Content-Disposition).
+  - Campo com nome `senha|password|passwd|pwd|otp|captcha|codigo sms|2fa` → o pedido é tratado como **LOGIN**: o formulário é
+    descartado na hora (nem o buffer temporário guarda) e **nunca vira receita** — o painel avisa "🔒 … não memorizei".
+  - Campo com `token` (ex.: `__RequestVerificationToken`) é **descartado** — o fresco é relido da página a cada puxada.
+    (Não marca como login: senão todo formulário com antiforgery seria recusado.) Token/senha na URL também saem.
+  - Estado do ASP.NET **não é guardado** (`__VIEWSTATE*`, `__VIEWSTATEGENERATOR`, `__EVENTVALIDATION`, `__PREVIOUSPAGE`,
+    `__REQUESTDIGEST`) — relido fresco; `__EVENTTARGET`/`__EVENTARGUMENT` ficam.
+  - A gravação só observa a aba que está gravando e só o site dela; os últimos 30 pedidos ficam em `chrome.storage.session`
+    (some ao fechar o Chrome) já limpos. Receitas em `chrome.storage.local` `portal_receitas`
+    (`{id, origem, nome, method, url, form, pagina, gravadoEm, datas:{campo:{tipo:'dia'|'mes', delta}}, ultimo:{em, ok, msg}}`).
+- **Limites conhecidos:** relatório que precisa de VÁRIOS passos com a página recarregando no meio (ex.: escolher um filtro que
+  faz a página voltar com outras opções antes de exportar) — a gravação guarda só o último passo; se o portal recusar, o item
+  mostra o erro. Relatório gerado por JavaScript na página (blob) sem pedido ao servidor não tem o que repetir.
+- **Arquivos:** `portal-sw.js` (gravação, receitas, puxar, entrega — importado pelo `sw.js`), `content/portal.js` +
+  `content/portal.css` (painel, Shadow DOM, injetado por `chrome.scripting` só depois da permissão). `config.js` ganhou
+  `CRM_RELATORIOS_URL` (o destino; teste local só aceita outro endereço se for `http://127.0.0.1`/`localhost` em
+  `chrome.storage.local.crm_url_teste`).
+- **Permissões novas:** `webRequest` (observar, sem bloquear), `downloads` (saber que um download começou), `tabs` (achar a aba
+  do portal e a do CRM) e `optional_host_permissions: https://*/*` (cada site pedido na hora, com o clique dele).
+- **Testado (26/10, Chromium com a extensão carregada, portal FALSO estilo ASP.NET + CRM falso, dados inventados):** login com
+  senha durante a gravação não vira receita nem fica no buffer · 3 relatórios gravados (nomes Atraso/Cancelados/Grande) sem
+  viewstate/token/senha · datas → delta −10 dias e −1 mês · regravar não duplica · formulário com campo de senha que baixa
+  arquivo → não memorizado + aviso · Puxar → viewstate e token frescos aceitos, data recalculada, arquivo byte a byte no CRM
+  (sha256) com nome/mime/receita certos · Puxar todos sequencial com um de 12 MB · erros: página sem tabela, sessão expirada,
+  CRM sem `portalReceber`, nenhuma aba do portal · painel do WhatsApp segue entrando. **Falta testar no portal real.**
 
 ## 2.9.1 (20/10/2026) — entrar pelo GOOGLE (sem senha)
 - Palavra dele: *"ajusta pra eu fazer login pelo Gmail também na extensão, porque lembrar senha é loucura"*.

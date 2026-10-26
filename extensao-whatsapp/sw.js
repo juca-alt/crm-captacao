@@ -1,7 +1,7 @@
 // ===== SERVICE WORKER — todo tráfego de rede da extensão passa aqui =====
 // Content script só mexe em DOM/UI; fetch fica no SW (host_permissions isenta de
 // CORS e do CSP do WhatsApp; tokens nunca tocam o contexto da página).
-importScripts('config.js','normalize.js','crm-api.js');
+importScripts('config.js','normalize.js','crm-api.js','portal-sw.js');   // 2.10.0: portal-sw.js = relatórios do portal
 
 const HANDLERS={
   'auth.status': async ()=>{ const s=await getSession(); return s?{logged:true,email:s.user_email,usuario:s.usuario}:{logged:false}; },
@@ -29,14 +29,33 @@ const HANDLERS={
   'lpc.patch':  (m)=>lpcPatch(m.id,m.acoes),        // v2.0: relê fresco, aplica a ação, grava só a linha
   'cart.perfil':(m)=>cartPerfilGet(m.ref),          // 2.8.0: Família (carteira_perfil) na aba 👤 Perfil
 };
+Object.assign(HANDLERS,PORTAL_HANDLERS);           // 2.10.0: painel 📥 Relatórios do portal (content/portal.js)
 
 /* 2.9.0: o painel volta a mostrar o CARD DO CRM (iframe content/embed.html → vendas.html?wa=1, modo leve) — e roda também
    no Umbler Talk (content/umbler-dom.js). A rede da extensão continua toda aqui; o card fala com o banco pelo próprio app. */
-/* ícone da extensão na barra do Chrome: no WhatsApp Web ou no Umbler abre o painel; fora deles, abre o WhatsApp Web */
+/* ícone da extensão na barra do Chrome: no WhatsApp Web ou no Umbler abre o painel do CRM (como sempre).
+   2.10.0: em qualquer OUTRO site (ex.: o portal da Prudential) abre o painel 📥 Relatórios do portal — antes pede ao Chrome
+   permissão SÓ para aquele site (a janelinha "Permitir"). Página interna do Chrome / o próprio CRM: abre o WhatsApp Web. */
 const SITES_RE=/^https:\/\/(web\.whatsapp\.com|app-utalk\.umbler\.com)\//;
-try{ chrome.action.onClicked.addListener(async tab=>{
-  if(tab&&SITES_RE.test(tab.url||'')){ try{ await chrome.tabs.sendMessage(tab.id,{type:'wa.abrir'}); }catch(_){} return; }
-  try{ await chrome.tabs.create({url:'https://web.whatsapp.com/'}); }catch(_){}
+const NAO_PORTAL_RE=/^https:\/\/(juca-alt\.github\.io|chromewebstore\.google\.com|chrome\.google\.com)\//;
+try{ chrome.action.onClicked.addListener(tab=>{
+  const url=String((tab&&tab.url)||'');
+  if(tab&&SITES_RE.test(url)){ chrome.tabs.sendMessage(tab.id,{type:'wa.abrir'}).catch(()=>{}); return; }
+  const origem=!NAO_PORTAL_RE.test(url)?portalOrigem(url):null;
+  if(origem){
+    // o pedido de permissão sai JÁ (sem await antes): o Chrome só mostra a janelinha durante o clique
+    let pr; try{ pr=chrome.permissions.request({origins:[origem+'/*']}); }catch(e){ pr=Promise.reject(e); }
+    pr.then(ok=>{
+      if(ok){ chrome.action.setBadgeText({tabId:tab.id,text:''}).catch(()=>{}); return portalAbrirNaAba(tab.id,origem); }
+      chrome.action.setBadgeText({tabId:tab.id,text:'!'}).catch(()=>{});
+      chrome.action.setTitle({tabId:tab.id,title:'Sem permissão neste site — clique de novo e escolha "Permitir" pra usar os relatórios do portal.'}).catch(()=>{});
+    }).catch(()=>{
+      chrome.action.setBadgeText({tabId:tab.id,text:'!'}).catch(()=>{});
+      chrome.action.setTitle({tabId:tab.id,title:'Os relatórios do portal só funcionam em sites https.'}).catch(()=>{});
+    });
+    return;
+  }
+  chrome.tabs.create({url:'https://web.whatsapp.com/'}).catch(()=>{});
 }); }catch(_){}
 
 // Extensão recarregada/atualizada → reinjeta o painel nas abas do WhatsApp já
