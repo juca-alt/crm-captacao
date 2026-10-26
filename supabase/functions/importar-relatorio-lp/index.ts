@@ -1,32 +1,28 @@
 // ============================================================================
-//  Edge Function: importar-relatorio-lp  (Supabase / Deno)  -- motor: GOOGLE GEMINI
+//  Edge Function: importar-relatorio-lp  (Supabase / Deno)  -- motor: CLAUDE (Anthropic) desde 26/10/2026 (antes: Gemini)
 //  Le o RELATORIO SEMANAL da Prudential (PDF) de um ou varios Life Planners e
 //  devolve, estruturado, as 5 secoes (Atrasos, Pendencias de Emissao, Apolices
 //  Emitidas/Status T, Aniversariantes, Aniversarios de Apolice) -- cada uma com
 //  o LP dono e suas linhas mapeadas em campos. E o "parser" do nucleo P0.
+//  O app tenta PRIMEIRO ler o texto sozinho (lpParseTexto); a IA so entra quando ele nao reconhece.
 //
-//  Usa o MESMO motor e a MESMA key da capturar-lead (Gemini, free tier) -> nao
-//  precisa de secret novo: o GEMINI_API_KEY ja existe no projeto.
+//  Troca decidida pelo Gustavo em 26/10/2026 ("IA A": um provedor so). O GEMINI_API_KEY nao existia
+//  nos secrets, entao a versao Gemini estava parada.
 //
 //  SEGURANCA (mesmas camadas da capturar-lead):
-//   1. A chave do Gemini vive AQUI, no servidor (secret). Nunca no navegador.
+//   1. A chave da Anthropic vive AQUI, no servidor (secret ANTHROPIC_API_KEY). Nunca no navegador.
 //   2. verify_jwt = ON: so usuario LOGADO chama.
 //   3. CORS travado nos dominios do app.
 //   4. Limites de tamanho no corpo.
 //
-//  Deploy: supabase functions deploy importar-relatorio-lp
-//  Secret: GEMINI_API_KEY (ja configurado p/ a capturar-lead)
+//  Saida IGUAL a da versao Gemini: { ok, dados:{secoes,confianca,avisos}, modelo } e, no erro, { ok:false, erro, motivo }.
 // ============================================================================
+import Anthropic from "npm:@anthropic-ai/sdk@0.133.0";
 
-// Modelo free tier (sem cartao), com PDF/visao. Pra trocar e so esta linha:
-//   "gemini-2.5-flash-lite" -> mais barato/rapido   |   "gemini-3.5-flash" -> mais novo/capaz
-const MODEL = "gemini-2.5-flash-lite";
-// Um relatorio real (3 LPs, ~147 linhas) gera ~6.6k-9.9k tokens de JSON de SAIDA e
-// estourava o antigo teto de 8192 -> Gemini cortava em finishReason:MAX_TOKENS -> JSON
-// nao fechava -> "JSON invalido". 32768 da ~3-4x de folga (o flash-lite aceita ate 64k
-// de saida) e cobre relatorios com mais LPs. Se um dia estourar isso tambem, a checagem
-// de finishReason abaixo devolve erro claro (dai o caminho e chunk por LP/secao).
-const MAX_OUTPUT_TOKENS = 32768;
+// Modelo: secret RELATORIO_MODELO. Padrao claude-haiku-5-5: um relatorio de 3 LPs gera ~10k tokens de JSON e a
+// Edge Function tem limite de tempo — o Haiku termina bem antes. Pra mais capricho: RELATORIO_MODELO=claude-opus-5-5.
+const MODEL = Deno.env.get("RELATORIO_MODELO") || "claude-haiku-5-5";
+const MAX_OUTPUT_TOKENS = 32000;
 
 const ALLOWED_ORIGINS = new Set([
   "https://juca-alt.github.io",
@@ -53,8 +49,7 @@ const json = (req: Request, body: unknown, status = 200) =>
     headers: { ...corsHeaders(req), "content-type": "application/json" },
   });
 
-// Sem responseSchema (ambiguo entre versoes do Gemini): descrevo o JSON no prompt
-// e forco JSON com responseMimeType. Mesma estrategia da capturar-lead.
+// O formato JSON e descrito no prompt (campo ausente = chave omitida, por isso sem schema estrito).
 const SYSTEM = [
   "Voce extrai dados do RELATORIO SEMANAL da Prudential, organizado por Life Planner (LP).",
   "O texto vem de um PDF de varias paginas com VARIAS TABELAS por LP. Um arquivo tem VARIOS LPs",
@@ -83,7 +78,7 @@ const SYSTEM = [
   "- Extraia TODAS as tabelas de TODOS os LPs. Cada (LP, tipo) vira uma entrada em 'secoes'.",
   "- Mapeie cada coluna no campo certo pela ORDEM/cabecalho. Pule linhas de cabecalho e legendas",
   "  (ex.: 'PRAZOS P/ STATUS T', '30 dias', 'JUNHO', 'JULHO') - nao sao registros.",
-  "- Nomes que quebram em 2 linhas (ex.: 'MARCUS TULIO JOSE DO PRADO\\nCUNHA'): junte num valor so.",
+  "- Nomes que quebram em 2 linhas (ex.: 'FULANO DE TAL EXEMPLO\\nSOBRENOME'): junte num valor so.",
   "- Datas: SEMPRE no formato YYYY-MM-DD (o relatorio usa DD/MM/YYYY -> converta, ex.: 30/06/1970 -> 1970-06-30).",
   "- premio: numero com ponto decimal (o relatorio usa virgula, ex.: '272,54' -> 272.54). Sem 'R$'.",
   "- dias_atraso: numero inteiro.",
@@ -112,46 +107,12 @@ function extractJson(txt: string): unknown {
   return null;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-// Equal jitter: metade fixa + metade aleatoria, com teto. Evita thundering herd e cobre janelas maiores.
-function backoffMs(attempt: number): number {
-  const base = 800, cap = 8000;
-  const ceil = Math.min(cap, base * Math.pow(2, attempt));
-  return Math.round(ceil / 2 + Math.random() * (ceil / 2));
-}
-// Classifica o erro do Gemini pelo corpo: RPD (diario) NAO adianta retentar; RPM/TPM/503 sim.
-// Le RetryInfo.retryDelay (segundos) e QuotaFailure.violations[].quotaId (contendo PerDay/PerMinute).
-function classifyGemini(status: number, body: any): { classe: string; retryDelayMs: number | null } {
-  const details = body?.error?.details || [];
-  let retryDelayMs: number | null = null, isDaily = false;
-  for (const d of details) {
-    const t = String(d?.["@type"] || "");
-    if (t.includes("RetryInfo") && d?.retryDelay) {
-      const m = String(d.retryDelay).match(/([\d.]+)s/);
-      if (m) retryDelayMs = Math.round(parseFloat(m[1]) * 1000);
-    }
-    if (t.includes("QuotaFailure")) {
-      for (const v of (d?.violations || [])) {
-        const q = String(v?.quotaId || "") + " " + String(v?.quotaMetric || "");
-        if (/PerDay/i.test(q)) isDaily = true;
-      }
-    }
-  }
-  if (status === 429 && isDaily) return { classe: "cota_diaria", retryDelayMs };
-  if (status === 429) return { classe: "cota_minuto", retryDelayMs };
-  if (status === 503 || status === 500) return { classe: "sobrecarga", retryDelayMs };
-  return { classe: "outro", retryDelayMs };
-}
-
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { ok: false, erro: "Use POST" }, 405);
 
-  // Aceita variacoes comuns do nome do secret (mesma key da capturar-lead).
-  const KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("Gemini API Key") ||
-    Deno.env.get("GEMINI_KEY") || Deno.env.get("GOOGLE_API_KEY") ||
-    Deno.env.get("GOOGLE_GEMINI_API_KEY") || Deno.env.get("GEMINI");
-  if (!KEY) return json(req, { ok: false, erro: "Nenhuma key do Gemini encontrada nos secrets (esperado: GEMINI_API_KEY)" }, 500);
+  const KEY = String(Deno.env.get("ANTHROPIC_API_KEY") || "").trim();
+  if (!KEY) return json(req, { ok: false, erro: "Chave da Anthropic nao encontrada nos secrets (esperado: ANTHROPIC_API_KEY)", motivo: "outro" }, 500);
 
   let payload: { pdf_base64?: string; texto?: string; imagem_base64?: string; media_type?: string };
   try {
@@ -160,8 +121,8 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: false, erro: "Corpo da requisicao nao e JSON valido" }, 400);
   }
 
-  const pdf = typeof payload?.pdf_base64 === "string" ? payload.pdf_base64 : "";
-  const imagem = typeof payload?.imagem_base64 === "string" ? payload.imagem_base64 : "";
+  const pdf = typeof payload?.pdf_base64 === "string" ? payload.pdf_base64.replace(/\s/g, "") : "";
+  const imagem = typeof payload?.imagem_base64 === "string" ? payload.imagem_base64.replace(/\s/g, "") : "";
   let texto = (typeof payload?.texto === "string" ? payload.texto : "").trim();
   if (!pdf && !imagem && !texto) {
     return json(req, { ok: false, erro: "Envie um PDF (pdf_base64), uma imagem ou um texto" }, 400);
@@ -172,89 +133,43 @@ Deno.serve(async (req: Request) => {
   if (texto.length > MAX_TEXT) texto = texto.slice(0, MAX_TEXT);
 
   const mt = payload?.media_type || "image/jpeg";
-  const mediaType = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mt) ? mt : "image/jpeg";
+  const mediaType = (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(mt) ? mt : "image/jpeg") as "image/jpeg";
 
-  // Monta as parts: PDF + imagem (opcional) + texto + instrucao final.
-  const parts: unknown[] = [];
-  if (pdf) parts.push({ inline_data: { mime_type: "application/pdf", data: pdf } });
-  if (imagem) parts.push({ inline_data: { mime_type: mediaType, data: imagem } });
-  if (texto) parts.push({ text: "Texto do relatorio:\n" + texto });
-  parts.push({ text: "Extraia TODAS as secoes de TODOS os LPs do relatorio acima e responda SOMENTE com o JSON pedido." });
+  const content: any[] = [];
+  if (pdf) content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf } });
+  if (imagem) content.push({ type: "image", source: { type: "base64", media_type: mediaType, data: imagem } });
+  if (texto) content.push({ type: "text", text: "Texto do relatorio:\n" + texto });
+  content.push({ type: "text", text: "Extraia TODAS as secoes de TODOS os LPs do relatorio acima e responda SOMENTE com o JSON pedido." });
 
-  const GURL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
-  const geminiBody = JSON.stringify({
-    systemInstruction: { parts: [{ text: SYSTEM }] },
-    contents: [{ role: "user", parts }],
-    generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS },
-  });
-
-  // Retry resiliente: backoff exponencial + jitter, honra Retry-After/RetryInfo, timeout por tentativa.
-  // NAO retenta 429-diario (RPD): so reseta a meia-noite PT -> abortar cedo com mensagem certa.
-  const MAX_ATTEMPTS = 4;
-  let resp: Response | null = null;
-  let lastBody: any = null, lastClasse = "";
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 30_000); // 30s por tentativa
-    try {
-      resp = await fetch(GURL, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-goog-api-key": KEY },
-        body: geminiBody,
-        signal: ctrl.signal,
-      });
-    } catch (e) {
-      clearTimeout(to);
-      console.error("gemini fetch falhou:", e);
-      if (i === MAX_ATTEMPTS - 1) return json(req, { ok: false, erro: "Falha de rede ao chamar a IA. Tente de novo.", motivo: "rede" }, 502);
-      await sleep(backoffMs(i));
-      continue;
-    }
-    clearTimeout(to);
-    if (resp.ok) break;
-    // erro HTTP: le o corpo p/ classificar (RPD vs RPM vs 503) e pegar RetryInfo
-    lastBody = await resp.clone().json().catch(() => null);
-    const cls = classifyGemini(resp.status, lastBody);
-    lastClasse = cls.classe;
-    // cota diaria -> nao adianta retentar; erros nao-transientes (400/403/404) -> tambem para
-    if (cls.classe === "cota_diaria") break;
-    if (resp.status !== 429 && resp.status !== 503 && resp.status !== 500) break;
-    if (i === MAX_ATTEMPTS - 1) break;
-    const ra = Number(resp.headers.get("retry-after")) * 1000 || 0;
-    const wait = Math.min(20_000, Math.max(backoffMs(i), cls.retryDelayMs || 0, ra));
-    await sleep(wait);
-  }
-  if (!resp) return json(req, { ok: false, erro: "Falha ao chamar a IA. Tente de novo.", motivo: "rede" }, 502);
-
-  if (!resp.ok) {
-    const body = lastBody || await resp.json().catch(() => null);
-    console.error("gemini erro:", resp.status, lastClasse, JSON.stringify(body?.error || body).slice(0, 300));
-    if (lastClasse === "cota_diaria")
-      return json(req, { ok: false, erro: "Cota diaria da IA (free tier) esgotada — so reseta amanha (meia-noite no Pacifico). Cole o texto do relatorio pra ler SEM IA agora.", motivo: "cota_diaria" }, 429);
-    if (lastClasse === "sobrecarga" || resp.status === 503 || resp.status === 500 || resp.status === 429)
+  // Saida longa (ate ~10k tokens): streaming evita o limite de tempo da requisicao HTTP do SDK.
+  const client = new Anthropic({ apiKey: KEY, timeout: 140_000, maxRetries: 1 });
+  let r: any;
+  try {
+    r = await client.messages.stream({
+      model: MODEL,
+      max_tokens: MAX_OUTPUT_TOKENS,
+      system: SYSTEM,
+      output_config: { effort: "low" },
+      messages: [{ role: "user", content }],
+    } as any).finalMessage();
+  } catch (e: any) {
+    if (e instanceof Anthropic.AuthenticationError) return json(req, { ok: false, erro: "Chave da Anthropic invalida — confira o ANTHROPIC_API_KEY.", motivo: "outro" }, 500);
+    if (e instanceof Anthropic.RateLimitError || e instanceof Anthropic.InternalServerError || (e instanceof Anthropic.APIError && (e.status === 529 || e.status === 503)))
       return json(req, { ok: false, erro: "A IA esta congestionada agora. Tente de novo em ~1 min, ou cole o texto pra ler SEM IA.", motivo: "sobrecarga" }, 503);
-    return json(req, { ok: false, erro: "A IA nao conseguiu processar agora.", motivo: "outro" }, 502);
+    if (e instanceof Anthropic.APIConnectionTimeoutError) return json(req, { ok: false, erro: "A IA demorou demais. Divida o relatorio em menos LPs, ou cole o texto pra ler SEM IA.", motivo: "sobrecarga" }, 504);
+    if (e instanceof Anthropic.APIError) { console.error("anthropic", e.status, e.message); return json(req, { ok: false, erro: "A IA nao conseguiu processar agora.", motivo: "outro", detalhe: `${e.status ?? "?"} ${String(e.message || "").slice(0, 200)}` }, 502); }
+    console.error("relatorio", e); return json(req, { ok: false, erro: "Falha ao chamar a IA. Tente de novo.", motivo: "rede" }, 502);
   }
+  if (r.stop_reason === "refusal") return json(req, { ok: false, erro: "A IA nao retornou resultado pra esse arquivo." });
 
-  const data = await resp.json().catch(() => null);
-
-  const blocked = data?.promptFeedback?.blockReason;
-  const cand = data?.candidates?.[0];
-  if (blocked || !cand) {
-    console.error("gemini sem candidato:", JSON.stringify(data?.promptFeedback || data).slice(0, 400));
-    return json(req, { ok: false, erro: "A IA nao retornou resultado pra esse arquivo." });
-  }
-
-  const txt = (cand?.content?.parts || []).map((p: { text?: string }) => p?.text || "").join("").trim();
+  const txt = (r.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
   const dados = extractJson(txt);
   if (!dados) {
-    // finishReason MAX_TOKENS = a SAIDA estourou o teto e o JSON veio cortado (nao fecha).
-    // Falha alto e claro em vez de mascarar como "JSON invalido" generico, e diz o caminho.
-    if (cand?.finishReason === "MAX_TOKENS") {
-      console.error("gemini cortou por MAX_TOKENS (subir MAX_OUTPUT_TOKENS ou dividir o relatorio). tam txt:", (txt || "").length);
+    if (r.stop_reason === "max_tokens") {
+      console.error("relatorio cortado por max_tokens. tam txt:", (txt || "").length);
       return json(req, { ok: false, erro: "O relatorio e grande demais pra ler de uma vez. Divida em menos LPs por arquivo e tente de novo." });
     }
-    console.error("gemini json invalido. finishReason:", cand?.finishReason, "| txt:", (txt || "").slice(0, 300));
+    console.error("relatorio json invalido. stop:", r.stop_reason, "| txt:", (txt || "").slice(0, 300));
     return json(req, { ok: false, erro: "A IA nao devolveu um JSON valido." });
   }
 
