@@ -550,10 +550,29 @@ function shEvento(cid,tid){ const p=parDe(cid,tid); if(!p) return {tit:'Atividad
   if(!t.feito&&t.hora) a.push(`<button type="button" class="agg-btn" onclick="aggConvite(${j})">✉️ Convite</button>`);
   a.push(`<button type="button" class="agg-btn" onclick="aggEditar(${j})">✏️ Editar</button>`);
   a.push(`<button type="button" class="agg-btn" onclick="aggFicha('${J(c.id)}')">👤 Abrir a ficha</button>`);
+  a.push(`<button type="button" class="agg-btn" onclick="aggTrocarAbrir(${j})" title="Ligar este compromisso a outro negócio (o lembrete vai junto)">🔗 Trocar o negócio</button>`);
   a.push(`<button type="button" class="agg-btn perigo" onclick="aggRemover(${j})">🗑 Remover</button>`);
   corpo+=`<div class="agg-acts">${a.join('')}</div>`;
   if(t.quando&&!t.feito) corpo+=`<div class="agg-gpar"><span class="agg-mut">Na sua agenda do Google:</span> ${tx(()=>tarGoogleParHTML(c,t))||''}</div>`;
   return {tit:`${K.ico} ${esc(K.l)}`,corpo}; }
+/* LIGAR-NEGOCIO-V1 (26/10, palavra dele: "na agenda cadê opção pra eu associar um compromisso existente a um negócio"):
+   o compromisso do CRM muda de negócio sem ser recriado — sai da ficha de um, entra na do outro (com o lembrete ligado
+   a ele), fica anotado nas duas e o evento do Google acompanha (gsync). Compromisso só do Google: "Vincular a um
+   negócio" no menu do evento (gcalMais → editor com a busca). */
+function aggTrocarAbrir(cid,tid){ AGG.X={cid:String(cid),tid:String(tid)}; abrir(()=>shTrocar()); }
+function shTrocar(){ const X=AGG.X||{}, p=parDe(X.cid,X.tid); if(!p) return {tit:'🔗 Trocar o negócio',corpo:'<div class="agg-vz">Compromisso não encontrado.</div>'};
+  const K=tx(()=>tarNomeTipo(p.t.tipo))||'Compromisso';
+  return {tit:'🔗 Trocar o negócio',corpo:`<div class="agg-dica">${esc(K)}${p.t.tit?' · '+esc(p.t.tit):''}${p.t.quando?' · '+esc(tx(()=>dataBR(p.t.quando))||p.t.quando)+(p.t.hora?' '+esc(p.t.hora):''):''}<br>Hoje ligado a <b>${esc(p.c.nome||'')}</b>. Escolha o negócio certo:</div>
+    <div class="agg-fld"><input id="agg-xbq" type="search" placeholder="Buscar lead ou cliente (nome ou telefone)…" autocomplete="off" oninput="aggBusca(this.value,'X')" aria-label="Buscar o negócio"><div id="agg-xbr" class="agg-bcr"></div></div>`}; }
+function aggTrocarPara(nid){ const X=AGG.X||{}, p=parDe(X.cid,X.tid), n=tx(()=>tarContato(nid)); if(!p||!n) return;
+  if(String(n.id)===String(p.c.id)){ toast('Já está ligado a esse negócio',false); return; }
+  const t=p.t, lt=t.lemb&&t.lemb.tid?tx(()=>tarDe(p.c,t.lemb.tid)):null, hoje=HJ(), ts=new Date().toISOString(), por=tx(()=>quemFez())||'';
+  p.c.tarefas=(p.c.tarefas||[]).filter(x=>x!==t&&x!==lt);
+  if(!Array.isArray(n.tarefas)) n.tarefas=[]; n.tarefas.push(t); if(lt) n.tarefas.push(lt);
+  const K=tx(()=>tarNomeTipo(t.tipo))||'Compromisso', q=(t.quando?' de '+(tx(()=>dataBR(t.quando))||t.quando):'');
+  try{ interacoesDe(p.c).push({id:uid(),k:'nota',l:`🔗 ${K}${q} passou pro negócio ${n.nome||''}`,dia:hoje,ts,por}); interacoesDe(n).push({id:uid(),k:'nota',l:`🔗 ${K}${q} veio do negócio ${p.c.nome||''}`,dia:hoje,ts,por}); }catch(_){}
+  tx(()=>gsyncMudou(n,t)); if(lt) tx(()=>gsyncMudou(n,lt));
+  salvar(); fecharTudo(); repinta(); toast(`${K} agora é do negócio ${n.nome||''}`,true); }
 function aggFeita(cid,tid){ fecharTudo(); tx(()=>tarConcluir(cid,tid)); repinta(); }
 function aggRemover(cid,tid){ const p=parDe(cid,tid); fecharTudo(); if(!p) return;
   const lt=p.t.lemb&&p.t.lemb.tid?tx(()=>tarDe(p.c,p.t.lemb.tid)):null;
@@ -615,10 +634,10 @@ function aggNovoLemb(k,v){ AGG.F[k]=v; AGG.F.lembMexeu=true; repintarSheet(); }
 function aggNovoCli(cid){ const F=AGG.F; F.cid=cid||''; const c=cid?tx(()=>tarContato(cid)):null; if(c&&!F.lembMexeu) F.lemb=aggLembPadrao(F.tipo,aggCat(c,{tipo:F.tipo})); repintarSheet();
   if(!cid) setTimeout(()=>{ const i=document.getElementById('agg-bq'); if(i) i.focus(); },30); }
 /* busca de cliente: a base dos dois funis (contatosDoLp, o mesmo escopo da Agenda) — nome ou telefone */
-function aggBusca(q,alvo){ const r=document.getElementById(alvo==='T'?'agg-tbr':'agg-br'); if(!r) return; const n=norm(q).trim(), dg=String(q||'').replace(/\D/g,'');
+function aggBusca(q,alvo){ const r=document.getElementById(alvo==='T'?'agg-tbr':alvo==='X'?'agg-xbr':'agg-br'); if(!r) return; const n=norm(q).trim(), dg=String(q||'').replace(/\D/g,'');
   if(!n){ r.innerHTML=''; return; }
   const l=(tx(()=>contatosDoLp())||[]).filter(c=>c&&c.nome&&(norm(c.nome).includes(n)||(dg.length>=4&&String(c.telefone||'').replace(/\D/g,'').includes(dg)))).slice(0,6);
-  r.innerHTML=l.map(c=>`<button type="button" onclick="${alvo==='T'?'aggTarCli':'aggNovoCli'}('${J(c.id)}')"><b>${esc(c.nome)}</b>${tx(()=>badgeEtapa(c.etapa))||''}</button>`).join('')
+  r.innerHTML=l.map(c=>`<button type="button" onclick="${alvo==='T'?'aggTarCli':alvo==='X'?'aggTrocarPara':'aggNovoCli'}('${J(c.id)}')"><b>${esc(c.nome)}</b>${tx(()=>badgeEtapa(c.etapa))||''}</button>`).join('')
     ||'<div class="agg-vz">Ninguém com esse nome nos funis. Cadastre o negócio primeiro (➕ no menu).</div>'; }
 
 /* ── tarefa ── */
@@ -1017,6 +1036,7 @@ body.agg-trava{overflow:hidden}
 
 /* ═══════════ autotestes (rodam no lpSelfCheck do portão) ═══════════ */
 function agendaGlobalSelfTests(ok){
+  ok('LIGAR-NEGOCIO-V1: compromisso do CRM tem "🔗 Trocar o negócio" com busca, e o menu do Google oferece vincular/trocar negócio', typeof aggTrocarPara==='function'&&/aggTrocarAbrir\(/.test(String(shEvento))&&/agg-xbq/.test(String(shTrocar))&&(typeof gcalMais!=='function'||/Vincular a um negócio/.test(String(gcalMais))&&/Trocar o negócio/.test(String(gcalMais))));
   ok('AGENDA-GLOBAL: situação padrão — feito ⇒ Concluída; sem campo ⇒ Pendente; t.st andamento vale; "concluida" sem feito volta a Pendente',
     aggStatus({feito:'2026-10-01T10:00:00Z'})==='concluida'&&aggStatus({})==='pendente'&&aggStatus({st:'andamento'})==='andamento'&&aggStatus({st:'concluida',feito:null})==='pendente'&&aggStatus({feito:'x',st:'andamento'})==='concluida');
   ok('AGENDA-GLOBAL: a semana começa na SEGUNDA (qua 28/10 → seg 26/10; dom 01/11 → seg 26/10; seg fica seg)',
@@ -1067,7 +1087,7 @@ Object.assign(W,{viewAgendaGlobal,agendaGlobalSelfTests,aggCss,
   aggEvAbrir,aggTarAbrir,aggMandarAbrir,aggConectar,aggAvulsaFeita,aggClickEv,aggSlot,aggFantasma,aggFantasmaSai,aggCliqueMes,
   aggTarSt,aggTarFeita,aggCkTg,aggKStart,aggKEnd,aggKOver,aggKLeave,aggKDrop,
   aggLembSet,aggLembModo,aggLembResp,aggReagSalvar,aggCopiar,aggMandou,aggNovoSalvar,aggSemCliente,aggTarSalvar,aggTarExcluir,
-  aggAbrir,aggFechar:fechar,aggFecharTudo:fecharTudo,aggFeita,aggRemover,aggConvite,aggReagendarAbrir,aggMsgTxt,aggRg,
+  aggTrocarAbrir,aggTrocarPara,aggAbrir,aggFechar:fechar,aggFecharTudo:fecharTudo,aggFeita,aggRemover,aggConvite,aggReagendarAbrir,aggMsgTxt,aggRg,
   aggF,aggNovoTipo,aggNovoDur,aggNovoLemb,aggNovoCli,aggBusca,aggT,aggTarCli,aggTck,aggTckDel,aggTckAdd,aggMoverPara,aggIrPara,aggTrocarTarNova,
   aggStatus,aggStatusPlano,aggPrio,aggResp,aggLembEstado,aggLembPadrao,aggCat});
 })();
