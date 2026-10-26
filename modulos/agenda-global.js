@@ -242,8 +242,8 @@ function gradeHTML(dias){ const mob=M(), hpx=mob?60:48, nh=H1-H0, hoje=AGG.D.hoj
   const cols=dias.map(d=>{ const ls=lanes(doDia(d).timed);
     const evs=ls.map(x=>{ const e=x.e, top=(x.s-H0*60)/60*hpx, h=Math.max((x.f-x.s)/60*hpx-2,mob?44:18), w=100/x.nl, curto=!mob&&(x.f-x.s)<=30;
       const drag=!mob&&!e.feito&&(e.kind==='c'||gOn());
-      const cls=['agg-ev',e.feito?'feito':'',e.afin?'afin':'',e.kind==='g'?'google':'',curto?'curto':''].join(' ').replace(/\s+/g,' ');
       const li=lembIco(e);
+      const cls=['agg-ev',e.feito?'feito':'',e.afin?'afin':'',e.kind==='g'?'google':'',curto?'curto':'',li?'temlb':''].join(' ').replace(/\s+/g,' ');
       return `<button type="button" class="${cls}" data-k="${esc(e.k)}" data-d="${d}" data-min="${m2(e.h)}" data-dur="${e.dur}"${drag?' data-drag="1"':''} style="${sty(e.cat)};top:${top}px;height:${h}px;left:calc(${x.lane*w}% + 2px);width:calc(${w}% - 4px)" onclick="aggClickEv(event,'${J(e.k)}')" aria-label="${esc(CAT[e.cat].l)} · ${esc(nomeM(e))} · ${e.h}">
         <span class="eh">${e.h}${!curto&&!mob?'–'+hm(Math.min(24*60-1,m2(e.h)+e.dur)):''}</span><b>${evTitulo(e,mob)}</b>${curto?'':`<span class="et">${evSub(e)}</span>`}${li?`<span class="elb">${li}</span>`:''}</button>`; }).join('');
     const agora=d===hoje&&agMin>=H0*60&&agMin<=H1*60?`<div class="agg-agora" style="top:${(agMin-H0*60)/60*hpx}px"></div>`:'';
@@ -787,6 +787,7 @@ function aggCss(){ if(document.getElementById('agg-css')) return; const s=docume
 .agg-ev b{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:var(--ink)}
 .agg-ev .et{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:#334155}
 .agg-ev .elb{position:absolute;top:2px;right:4px;font-size:12px}
+.agg-ev.temlb .eh{padding-right:15px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .agg-ev.curto{flex-direction:row;gap:5px;align-items:center}
 .agg-ev.feito{opacity:.5}.agg-ev.feito b{text-decoration:line-through}
 .agg-ev.afin{outline:2px dashed var(--verm);outline-offset:-2px}
@@ -964,7 +965,7 @@ body.agg-trava{overflow:hidden}
   .agg input,.agg select,.agg textarea,.agg-ov input,.agg-ov select,.agg-ov textarea{font-size:16px!important;min-height:44px}
   .agg-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
   .agg-kpi{padding:8px 10px}.agg-kpi .ks{display:none}
-  .agg-gst{font-size:12.5px}.agg-gst .agg-sp{display:none}.agg-gst .agg-eb{white-space:normal;text-align:left;justify-content:flex-start}
+  .agg-gst{font-size:12.5px}.agg-gst .agg-sp,.agg-gst>.agg-mut{display:none}.agg-gst .agg-eb{white-space:normal;text-align:left;justify-content:flex-start}
   .agg-alertas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-12px;padding-inline:12px}
   .agg-alertas::-webkit-scrollbar{display:none}.agg-chip{flex:0 0 auto}
   .agg-tb .agg-modos{display:grid;grid-template-columns:repeat(4,1fr);width:100%}
