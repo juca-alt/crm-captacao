@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 26/10/2026 (tarde) — CARD COMPLETO no funil novo · IA da recomendação no Claude · Copiloto OK (branch `claude/wizardly-sagan-bwghr3`, NÃO publicado — falta o OK dele)
+## 🟢 RETOMAR AQUI — 26/10/2026 (noite) — v8.82 PUBLICADA (OK dele: "publica · T3b A · menu A · agenda ok"): card completo + menu A + T3b (código) · IA da recomendação no Claude · Copiloto OK
 
 - **Decisões dele (26/10):** "IA A · T3b A · Agenda A · Daniel não" + "unificar logo" (card novo com tudo do antigo).
 - **Copiloto:** testado ao vivo 4/4 (agendar, preço → espera do Gustavo, injeção bloqueada, documentos), Haiku, 3–5 s. Ressalva: em "documentos" o rascunho disse "recebemos" sem saber. Usuário de teste `claude-teste-24-10@exemplo.invalid` ainda existe (senha trocada) + linhas de teste em `copiloto_sugestoes` → apagar na faxina de 31/10 (o MCP pediu confirmação e expirou).
@@ -10,7 +10,9 @@
 - **CARD-COMPLETO-V1 (modulos/funil-unico.js, ?v=20261026a):** o card do quadro novo traz tudo do `nnCard` com as mesmas peças (status/lista, rec selo, ⏱️ tempo na etapa NOVA + dias no funil, prêmio · PA/padrão/definir, prob., previsões, próxima atividade com atraso, apólices, irmãos, temperatura, recs, → próxima etapa com desfazer que apaga o registro). Coluna: PA · pond. + "% passam" (mesma conta do nnTaxas, no recorte FUNP, Estoque fora, Revisita opcional). 4 autotestes; portão verde (53 telas × 6); prints 390/1280.
 - **T3b:** `supabase/migrations/funil_t3b_vw_funil_cards.sql` escrito e testado em transação desfeita, NÃO rodado. ⚠️ Achado: a tabela `leads` é da Captação de LIFE PLANNERS (recrutamento), não prospects de venda — 1.038 fantasmas (893 em Conexão, só 114 com telefone/e-mail). Carteira sem ficha: 3 dele + 26 do Daniel. Pergunta pra ele antes de rodar.
 - **Extensão:** login Google abre o app = Redirect URL `https://mjickkflfaghdchkbpoiefioggomfdea.chromiumapp.org/**` ainda não cadastrada no Supabase (passo a passo dado no chat; só ele faz).
-- **Agenda A:** demo `design/agenda-tarefas-demo.html` em construção.
+- **Agenda A ("agenda ok", defaults confirmados: abre na Semana; celular 3 dias + faixa de 7; reunião → pedir confirmação na véspera, entrega → só lembrar, ligação → nada; 7h–21h; semana na segunda):** demo aprovada `design/agenda-tarefas-demo.html`; construção em `modulos/agenda-global.js` atrás de `novoOn('agenda-global')` (em andamento).
+- **MENU-ANTIGO-V1 (v8.82, "menu A"):** com `funil-unico` ligado, os 4 pipes antigos saem do lugar e vivem no grupo fechado "🗄️ Telas antigas do funil" (depois de Módulos); barra de baixo do celular troca Novos Neg./Base Clientes por Vida Ind./MFO (`bnavTroca`). Quem não tem a chave: menu de sempre. Autoteste novo.
+- **T3b A (v8.82, código):** só a CARTEIRA (LinkedIn fora: é recrutamento de LP). SQL `supabase/migrations/funil_t3b_vw_funil_cards.sql` reescrito só pra carteira, testado (SELECT) = 3 dele + 26 do Daniel; **ELE PRECISA RODAR no SQL editor**. Quadro lê `vw_funil_cards` (sem view/sem login → nada aparece), card fantasma tracejado em Apólice Emitida com "＋ Criar ficha" (`cartNovoNegocio` → Base de Clientes). 2 autotestes.
 
 ## ▶️ PRÓXIMA SESSÃO — 26/10/2026 (fechamento da sessão do funil único)
 

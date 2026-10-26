@@ -38,6 +38,7 @@ const corDe=(fid,id)=>{ const e=etapa(fid,id); return COR[(e&&e.cor)||'cinza']||
 /* ── onde o card mora no funil novo ── */
 function fuDestino(c){
   if(!c) return {funil_id:'vi',etapa_id:'novo',revisao:true};
+  if(c.funil==='fx') return {funil_id:'vi',etapa_id:(c._fx&&c._fx.etapa_id)||'emitida',revisao:false};   /* T3b: card fantasma (cliente da carteira sem ficha) */
   if(c.etapa_id_fonte==='manual'&&c.etapa_id&&c.funil_id&&etapa(c.funil_id,c.etapa_id)) return {funil_id:c.funil_id,etapa_id:c.etapa_id,revisao:false};
   const f=c.funil||'nn';
   if(f==='bn'&&!c.etapa) return {funil_id:'vi',etapa_id:'novo',revisao:false};   /* Estoque que já foi pra lista de TA */
@@ -55,14 +56,50 @@ function fuVoltaLegado(c,X){ const f=(c&&c.funil)||'nn'; if(f==='bn') return nul
   return ids.find(id=>{ const m=mapearEtapa(f,id); return m.etapa_id===X&&!m.precisa_revisao; })||null; }
 
 /* ── quem aparece ── */
-function fuAcha(id){ id=String(id); return (S.contatos||[]).find(x=>x&&String(x.id)===id)||((typeof BN!=='undefined'&&BN.contatos)||[]).find(x=>x&&String(x.id)===id)||null; }
+function fuAcha(id){ id=String(id); return (S.contatos||[]).find(x=>x&&String(x.id)===id)||((typeof BN!=='undefined'&&BN.contatos)||[]).find(x=>x&&String(x.id)===id)||FX.cards.find(x=>String(x.id)===id)||null; }
 function fuPopulacao(fid){ const out=[], noFunil=new Set((S.contatos||[]).map(x=>x&&String(x.id)));
   (S.contatos||[]).forEach(c=>{ if(!c||c.merged_into||!escVisivel(c)) return; if(fuDestino(c).funil_id===fid) out.push(c); });
   if(fid==='vi'&&typeof BN!=='undefined') (BN.contatos||[]).forEach(b=>{ if(!b||b.merged_into||!escVisivel(b)) return;
     if(b.funil_contato_id&&noFunil.has(String(b.funil_contato_id))) return;   /* já virou contato do funil: o card é o do funil */
     if(b.estagio==='descartado'||b.estagio==='fundido') return;
     if(!(b.etapa||(b.ta_dia&&b.ta_dia!=='null'))) return; out.push(b); });
+  if(fid==='vi') FX.cards.forEach(x=>{ if(fxVisivel(x)) out.push(x); });   /* T3b */
   return out; }
+/* ═══ T3b · CARDS FANTASMA (26/10, decisão dele "T3b A"): cliente da carteira com apólice viva e SEM ficha aparece na
+   coluna Apólice Emitida, só leitura, com "＋ Criar ficha" (cartNovoNegocio → Base de Clientes). Vem da view
+   vw_funil_cards (security_invoker: RLS de quem consulta). Sem login, ou view ainda não criada: não aparece nada. ── */
+const FX={cards:[],em:0,carregando:false,erro:'',chave:''};
+function fxVisivel(x){ try{ return !logado()||escRegOk({_dono:x._dono,lp:x.lp}); }catch(_){ return true; } }
+function fxDeLinha(r){ const cc=((typeof CART!=='undefined'&&CART.clientes)||[]).find(k=>String(k.ref)===String(r.ref_id)&&(!k._dono||k._dono===r.dono));
+  return {id:'fx:'+r.ref_id, funil:'fx', _fx:r, _dono:r.dono, lp:cc&&cc.lp, nome:r.nome||'—', telefone:r.telefone||'', email:r.email||'', idade:(r.extra&&r.extra.idade)||null,
+    origem_tipo:'carteira', cliente_ativo:true, tarefas:[], interacoes:[]}; }
+async function fxCarregar(forca){ if(typeof sb==='undefined'||!sb||typeof logado!=='function'||!logado()||FX.carregando) return;
+  const k=(typeof escEu==='function'?escEu():'')+'|'+((typeof delegAtivo==='function'&&delegAtivo())||'');
+  if(!forca&&FX.chave===k&&Date.now()-FX.em<10*60e3) return;
+  FX.carregando=true;
+  try{ const {data,error}=await sb.from('vw_funil_cards').select('fonte,ref_id,dono,nome,telefone,email,funil_id,etapa_id,origem_tipo,extra,criado_em').eq('fonte','carteira').limit(2000);
+    if(error) throw error; FX.cards=(data||[]).map(fxDeLinha); FX.erro=''; }
+  catch(e){ FX.cards=[]; FX.erro=String((e&&e.message)||e); }   /* view ainda não criada (o SQL é ele que roda) → quadro segue sem fantasmas */
+  FX.em=Date.now(); FX.chave=k; FX.carregando=false;
+  try{ if(typeof VIEW!=='undefined'&&VIEW==='fu-vi') render(); }catch(_){} }
+function fxCriarFicha(id){ fuFecharMenu(); fuFechar(); const x=FX.cards.find(k=>k.id===String(id)); if(!x) return;
+  const ref=x._fx.ref_id; let n=null;
+  if(typeof cartNovoNegocio==='function'&&((typeof CART!=='undefined'&&CART.clientes)||[]).some(k=>String(k.ref)===String(ref))) n=cartNovoNegocio(ref,'bc');
+  if(!n){ n={id:uid(),lp:(typeof escLpNovo==='function'?escLpNovo():undefined),nome:x.nome,sexo:'—',idade:x.idade,profissao:'—',telefone:x.telefone,email:x.email,estrelas:0,ance:null,
+    etapa:'Clientes Ativos',funil:'bc',origem:'carteira',criadoEm:hojeISO(),taStatus:'—',taTentativas:0,notas:'',infoclient:{pessoais:false,familiar:false,financeiro:false,saude:false},recs:[],eventos:[],planos:[],interacoes:[],sitplan:null,pessoaId:ref};
+    S.contatos.push(n); }
+  n.origem_tipo='carteira'; n.cliente_ativo=true; try{ fuSincLegado(n); }catch(_){}
+  FX.cards=FX.cards.filter(k=>k!==x); salvar(); toast(`${pn(n)}: ficha criada na Base de Clientes`,true); fuRepinta(); fuAbrir(n.id); }
+function fxInfo(id){ const x=FX.cards.find(k=>k.id===String(id)); if(!x) return; const e=x._fx.extra||{}, j=esc(jsq(x.id));
+  fuModal(`<h2>🛡 ${esc(x.nome)}</h2><div class="sub" style="margin:0 0 8px">Cliente da carteira <b>sem ficha</b> no CRM. Aparece aqui pra você não esquecer dele; vira negócio de verdade quando você criar a ficha.</div>
+    <div class="fu-tw"><table style="min-width:0"><tbody>
+      <tr><td>Apólices vivas</td><td class="num">${esc(e.n_apolices||'—')}</td></tr>
+      <tr><td>Prêmio mensal</td><td class="num">${e.premio_mensal?esc(brlCurto(+e.premio_mensal)):'—'}${e.apolices_sem_premio?` <span class="sub">(${esc(e.apolices_sem_premio)} sem prêmio no relatório)</span>`:''}</td></tr>
+      ${e.produtos?`<tr><td>Produtos</td><td>${esc(e.produtos)}</td></tr>`:''}
+      ${x.telefone?`<tr><td>Telefone</td><td>${esc(tx(()=>telBR(x.telefone))||x.telefone)}</td></tr>`:''}
+      ${x.idade?`<tr><td>Idade</td><td>${esc(x.idade)}</td></tr>`:''}
+    </tbody></table></div>
+    <div class="acts"><button type="button" class="btn btn-s" onclick="fuFechar()">Fechar</button><button type="button" class="btn btn-p" onclick="fxCriarFicha('${j}')">＋ Criar ficha</button></div>`); }
 
 /* ── o que o card mostra (vivo, a partir do que já existe no app) ── */
 const ABERTA=t=>t&&!t.feito;
@@ -364,6 +401,7 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
 .fu-av:hover{border-style:solid}
 .fu-taxa{font-weight:700;font-size:11.5px}
 .fu-col-s .pd{font-weight:500;color:#5b6770}
+.fu-fx{border-style:dashed;background:#fbfdfb}.fu-fx .fu-meta2,.fu-fx .fu-cr,.fu-fx .fu-ft{margin-left:0}
 .fu-col-s{flex-wrap:wrap;row-gap:1px}.fu-col-s>span:first-child{white-space:nowrap}.fu-col-s .fu-taxa{flex-basis:100%}
 @media (max-width:760px){
   .fu-oq,.fu-pills,.fu-cr,.fu-prev,.fu-cli,.fu-ft,.fu-card .bc-rev{margin-left:0}
@@ -413,7 +451,8 @@ function fuAvancar(id,ev){ if(ev){ ev.stopPropagation(); ev.preventDefault(); } 
     /* apaga o registro em vez de empilhar a volta: a % que passa lê o histórico — toque errado não é história do negócio */
     if(Array.isArray(v.interacoes)) v.interacoes.splice(snap.n);
     salvar(); fuRepinta(); toast('Desfeito',true); }); }
-function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn', leg=!bn;
+function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn', fx=c.funil==='fx', leg=!bn&&!fx;
+  if(fx) return fxCardHtml(c,i);
   const pj=leg&&!!tx(()=>ehEmpresa(c)), mfo=leg&&!!tx(()=>mfoEh(c));
   const st=i.delay?'⏳ Delay':i.ta?'📋 Fazer TA':i.ult?ULT_LBL(i.ult.tipo)+(i.ult.quando?' · '+(diasEntre(i.ult.quando)===0?'hoje':diasEntre(i.ult.quando)+'d'):''):'';
   const cli=leg&&!pj?tx(()=>cliChipsHtml(clienteDe(c,{semNegocios:true}))):'';
@@ -449,10 +488,18 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
     ${temp||recs||irm||px?`<div class="fu-ft" onclick="event.stopPropagation()">${temp}${recs}${irm}${px?`<button type="button" class="fu-av" onclick="fuAvancar('${j}',event)" title="Avançar para ${esc(lbl(px))} — dá pra desfazer">→ ${esc(lbl(px))}</button>`:''}</div>`:''}
     <div class="fu-cf" onclick="event.stopPropagation()"><span class="lb">Contato rápido</span>${i.prox?`<button type="button" onclick="fuFeito('${j}')" title="Feito (conclui o próximo passo)" aria-label="Feito">✓</button>`:''}<button type="button" onclick="fuDelay('${j}')" title="Delay (remarcou)" aria-label="Delay">✕</button><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp">💬</button><button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover de etapa">⇄</button></div>
   </article>`; }
+function fxCardHtml(c,i){ const j=esc(jsq(c.id)), e=c._fx.extra||{}, tel=fuTel(c);
+  return `<article class="fu-card fu-fx" data-id="${esc(c.id)}" onclick="fuAbrir('${j}')">
+    <div class="fu-l1"><div class="fu-nome"><span class="nm">${esc(c.nome)}</span></div></div>
+    <div class="fu-meta2">${c.idade?`<span>${esc(c.idade)}a</span>`:''}${tel?`<span class="tel">${esc(tx(()=>telBR(tel))||tel)}</span>`:''}</div>
+    <div class="fu-cr"><span class="fu-bd v">🛡 ${esc(e.n_apolices||1)} apólice${+e.n_apolices>1?'s':''}${e.premio_mensal?' · '+esc(brlCurto(+e.premio_mensal))+'/mês':''}</span><span class="fu-bd lj">sem ficha no CRM</span></div>
+    <div class="fu-ft" onclick="event.stopPropagation()"><button type="button" class="fu-av" onclick="fxCriarFicha('${j}')" title="Cria a ficha na Base de Clientes (cliente ativo)">＋ Criar ficha</button></div>
+    <div class="fu-cf" onclick="event.stopPropagation()"><span class="lb">Contato rápido</span>${tel?`<button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp">💬</button>`:''}</div>
+  </article>`; }
 /* % que passa de uma etapa pra seguinte no funil NOVO: quem alcançou (etapa atual + histórico) — mesma conta do quadro antigo
    (nnTaxas), no mesmo recorte de período (FUNP). Estoque fica fora (não entrou no funil ainda). */
 function fuTaxas(fid,lista){ const fl=cfg(fid).filter(e=>!e.enc&&!/revisita/i.test(e.id)).map(e=>e.id), out={};
-  let cs=lista.map(x=>x.c).filter(c=>c&&c.funil!=='bn'); try{ if(typeof funRecorte==='function') cs=funRecorte(cs).lista; }catch(_){}
+  let cs=lista.map(x=>x.c).filter(c=>c&&c.funil!=='bn'&&c.funil!=='fx'); try{ if(typeof funRecorte==='function') cs=funRecorte(cs).lista; }catch(_){}
   const maxI=c=>{ let m=fl.indexOf(fuDestino(c).etapa_id); (Array.isArray(c.interacoes)?c.interacoes:[]).forEach(x=>{ const k=fl.indexOf(fuParaNovo(c,x)); if(k>m) m=k; }); return m; };
   const mx=cs.map(maxI), alc=fl.map((e,k)=>mx.filter(m=>m>=k).length);
   fl.slice(0,-1).forEach((e,k)=>{ if(alc[k]) out[e]={de:e,para:fl[k+1],n1:alc[k],n2:alc[k+1],pct:Math.round(alc[k+1]/alc[k]*100)}; });
@@ -460,7 +507,7 @@ function fuTaxas(fid,lista){ const fl=cfg(fid).filter(e=>!e.enc&&!/revisita/i.te
 function taxaHtml(t){ if(!t||t.pct==null) return ''; const cor=t.pct<40?'var(--verm)':t.pct<70?'#b45309':'#15803d';
   return `<span class="fu-taxa" style="color:${cor}" title="${t.n1} alcançaram ${esc(lbl(t.de))} · ${t.n2} chegaram em ${esc(lbl(t.para))} (posição atual + histórico)">${t.pct}% passam →</span>`; }
 function colHtml(fid,id,itens){ const enc=ehEnc(fid,id), cs=itens.map(x=>x.c);
-  const sp=itens.filter(x=>x.i.semProx).length, pa=(typeof somaPA==='function')?somaPA(cs):0, pd=(typeof paPonderado==='function')?Math.round(paPonderado(cs.filter(c=>c.funil!=='bn'))):0, pos=id==='entrega', j=esc(jsq(id));
+  const sp=itens.filter(x=>x.i.semProx).length, pa=(typeof somaPA==='function')?somaPA(cs):0, pd=(typeof paPonderado==='function')?Math.round(paPonderado(cs.filter(c=>c.funil!=='bn'&&c.funil!=='fx'))):0, pos=id==='entrega', j=esc(jsq(id));
   return `<section class="fu-col${enc?' enc':''}${(FU.tab[fid]||colsVis(fid)[0])===id?' vis':''}" data-etapa="${esc(id)}" aria-label="${esc(lbl(id))}">
     <div class="fu-col-h"><span class="fu-alca fu-alca-col" draggable="true" data-alca="${esc(id)}" title="Arraste pra mudar a ordem das colunas" aria-hidden="true">⠿</span><span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:${corDe(fid,id)}"></span><b>${esc(lbl(id))}</b><span class="qt">${itens.length}</span><button type="button" class="fu-colx" onclick="fuColMenu(event,'${j}')" aria-label="Organizar a etapa ${esc(lbl(id))}" title="Organizar esta etapa">⋯</button></div>
     <div class="fu-col-s">${enc?'<span>encerramento · fora do funil</span>':pos?'<span>📦 pós-venda · não soma no funil</span>':`<span>prob. ${prob(id)}%${sp?` · ⚠ ${sp}`:''}</span>${pa?`<span class="pa">PA ${esc(brlCurto(pa))}${pd?` <span class="pd">· pond. ${esc(brlCurto(pd))}</span>`:''}</span>`:''}${taxaHtml((FU._tx||{})[id])}`}</div>
@@ -489,6 +536,7 @@ function tabelaHtml(fid,vis){ const l=fuOrdenar(vis);
 function viewFunilNovo(fid){ fuCss(); if(fid) FU.fid=fid; fid=FU.fid;
   const lista=fuLista(fid), vis=lista.filter(x=>fuPassa(x.c,x.i)), cols=colsVis(fid), adm=podeEditarEtapa();
   FU._tx=tx(()=>fuTaxas(fid,lista))||{};
+  if(fid==='vi') fxCarregar();
   if(!cols.includes(FU.tab[fid])) FU.tab[fid]=cols[0];
   const busca=`<div class="fu-bq"><label class="fu-busca" for="fu-q">🔎 <input id="fu-q" type="search" placeholder="Buscar em qualquer coluna (nome, cidade, profissão, etapa…)" autocomplete="off" value="${esc(FU.q)}" oninput="fuBusca(this.value)"></label><span class="fu-res">${vis.length} de ${lista.filter(x=>FU.cong?x.i.cong:!x.i.cong).length} resultados</span></div>`;
   let body;
@@ -523,7 +571,7 @@ function fuOrdInserir(fid,X,c,antes){ const pop=fuOrdenar(fuLista(fid).filter(x=
   let k=antes?pop.findIndex(x=>String(x.id)===String(antes)):-1; if(k<0) k=pop.length; pop.splice(k,0,c); pop.forEach((x,n)=>{ x.fu_ord=n; }); }
 
 /* ── mover (com sincronia pro funil antigo) ── */
-function fuMover(id,X,motivo,quieto){ const c=fuAcha(id); if(!c) return; const fid=fuDestino(c).funil_id; if(!etapa(fid,X)) return;   /* o funil é o do card (a ficha em painel abre negócio do outro funil) */
+function fuMover(id,X,motivo,quieto){ const c=fuAcha(id); if(!c) return; if(c.funil==='fx'){ toast('Crie a ficha primeiro (＋ Criar ficha no card)',false); return; } const fid=fuDestino(c).funil_id; if(!etapa(fid,X)) return;   /* o funil é o do card (a ficha em painel abre negócio do outro funil) */
   const antes=fuDestino(c).etapa_id; if(antes===X) return;
   if(ehEnc(fid,X)&&!motivo){ fuMotivoAbrir(id,X); return; }
   const nome=String(c.nome||'').split(' ')[0]||'Card';
@@ -636,6 +684,7 @@ function fuInfoPop(ev,id){ const c=fuAcha(id); if(!c) return; const fid=fuDestin
 
 /* ── abrir a ficha: T5 = ficha em painel (Versão 3 aprovada) — Estoque sem ficha pergunta antes ── */
 function fuAbrir(id){ let c=fuAcha(id); if(!c) return;
+  if(c.funil==='fx'){ fxInfo(id); return; }
   if(c.funil==='bn'){
     if(c.funil_contato_id&&(S.contatos||[]).some(x=>String(x.id)===String(c.funil_contato_id))){ c=fuAcha(c.funil_contato_id); }
     else { const j=esc(jsq(id));
@@ -997,6 +1046,11 @@ function fuSelfTests(ok){
     ok('CARD-COMPLETO-V1: → próxima etapa pula a Revisita (opcional) e não existe depois do fim', fuProxCol('vi','oi')==='pc'&&fuProxCol('vi',cfg('vi').filter(e=>!e.enc).slice(-1)[0].id)===null);
     const tt=fuTaxas('vi',[{c:{id:'t1',funil:'nn',etapa:'OI/FF',interacoes:[]}},{c:{id:'t2',funil:'nn',etapa:'TA',interacoes:[]}},{c:{id:'t3',funil:'bn'}}]);
     ok('CARD-COMPLETO-V1: % que passa conta quem alcançou (Novo → OI = 1 de 2; Estoque fora)', !!tt.novo&&tt.novo.n1===2&&tt.novo.n2===1&&tt.novo.pct===50); }
+  /* T3b (26/10): cliente da carteira sem ficha = card fantasma em Apólice Emitida, só leitura */
+  { const g=fxDeLinha({fonte:'carteira',ref_id:'r-teste',dono:'x@exemplo.invalid',nome:'Beltrano Carteira',telefone:'81900000009',etapa_id:'emitida',extra:{n_apolices:2,premio_mensal:300}});
+    let h=''; try{ h=cardHtml({c:g,i:fuInfo(g,'vi')},'vi'); }catch(e){ h='ERRO '+e.message; }
+    ok('T3b: fantasma da carteira mora em Apólice Emitida, sem ⚠, com "＋ Criar ficha" e sem arrastar/mover', fuDestino(g).etapa_id==='emitida'&&fuInfo(g,'vi').semProx===false&&/fxCriarFicha/.test(h)&&!/draggable="true"/.test(h)&&!/fuMoverMenu/.test(h));
+    ok('T3b: fantasma não entra na % que passa', Object.keys(fuTaxas('vi',[{c:g}])).length===0); }
   /* T4 */
   const A=x=>fuAnce(x);
   ok('FUNIL-UNICO T4: ANCE — nota das estrelas > critérios A·N·C·E > nota copiada na migração > automático', A({ance_manual:2,ance_manual_em:'2026-10-24T10:00:00Z',ance:{a:true,n:true,c:true}}).n===2&&A({ance:{a:true,n:true,c:true},ance_manual:1}).n===3&&A({ance_manual:4,ance_auto:1}).n===4&&A({ance_auto:3}).n===3&&A({ance_auto:3}).manual===false&&A({}).n===0);
@@ -1015,7 +1069,7 @@ function fuSelfTests(ok){
 Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAgendarOk,fuPainelRender,fuPainelFechar,fuPainelCheia,fuHist,fuNota,fuTarFeita,fuTarNova,fuFichaCompleta,
   fuMfoSet,fuMfoArr,fuMfoAdd,fuMfoDel,fuMfoRamo,fuMfoFecha,fuMfoReceita,fuMfoVenc,fuDobra,fuDobraTodas,fuAnce,fuRepinta});
 Object.assign(W,{fuStarsHtml:starsHtml,fuMfoBlocosHtml:mfoBlocos,fuCss,fuModal,fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
-Object.assign(W,{fuAvancar,fuCiclo,fuTaxas,viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
+Object.assign(W,{fxCriarFicha,fxCarregar,FX_STATE:FX,fuAvancar,fuCiclo,fuTaxas,viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
   fuAbrir,fuMover,fuMotivoOk,fuMoverMenu,fuLigar,fuZap,fuRegistrar,fuDelay,fuFiltrosAbrir,fuColunas,fuColVer,fuColMover,fuColPadrao,fuMais,fuDesempenho,fuExportar,
   fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca});
 })();
