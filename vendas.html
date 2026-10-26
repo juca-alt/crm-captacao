@@ -1687,7 +1687,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
     <button class="nav-btn ativo" data-view="inicio" onclick="irPara('inicio')"><span class="ic">🏠</span><span class="lbl">Início</span></button>
     <button class="nav-btn" data-view="agenda" onclick="irPara('agenda')"><span class="ic">📅</span><span class="lbl">Agenda &amp; Tarefas</span><span class="cnt" id="cnt-agenda"></span></button>
     <!-- AGENDA-GLOBAL-V1 (26/10): a Agenda nova (padrão Global) — só na base dele (data-novo="agenda-global") até ele liberar. A Agenda de hoje segue igual. -->
-    <button class="nav-btn" data-view="ag-global" data-novo="agenda-global" onclick="irPara('ag-global')"><span class="ic">🗓️</span><span class="lbl">Agenda &amp; Tarefas · nova</span></button>
+    <button class="nav-btn" data-view="ag-global" data-novo="agenda-global" onclick="irPara('ag-global')"><span class="ic">🗓️</span><span class="lbl">Agenda &amp; Tarefas · nova</span><span class="cnt" id="cnt-ag-global"></span></button>
 
     <div class="sep"></div>
     <!-- FUNIL-UNICO-V1 (24/10): os 2 funis novos — só na base dele (data-novo="funil-unico") até ele liberar. -->
@@ -1779,6 +1779,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
       <button class="nav-btn sub" data-view="prud-bc-funil" data-novo="pipes" onclick="irPara('prud-bc-funil')"><span class="ic">🧩</span><span class="lbl">Prud. Demais · Base</span></button>
       <button class="nav-btn sub" data-view="mfo-funil" data-novo="pipes" onclick="irPara('mfo-funil')"><span class="ic">🏦</span><span class="lbl">MFO · Novos</span></button>
       <button class="nav-btn sub" data-view="mfo-bc-funil" data-novo="pipes" onclick="irPara('mfo-bc-funil')"><span class="ic">🏦</span><span class="lbl">MFO · Base</span></button>
+      <button class="nav-btn sub" data-view="agenda-antiga" data-novo="agenda-global" onclick="irPara('agenda-antiga')"><span class="ic">📅</span><span class="lbl">Agenda antiga</span></button>
     </div>
 
     <div class="sep"></div>
@@ -3009,7 +3010,12 @@ function renderTopo(){
 
 /* ═══════════════════ NAVEGAÇÃO ═══════════════════ */
 let VIEW='inicio';
-function irPara(v){ VIEW=v; NN_FOCUS=''; BC_FOCUS='';
+/* AGENDA-NOVA-MANDA-V1 (26/10, palavra dele: "sobre tarefas pode substituir a antiga já"): com a Agenda nova ligada,
+   TODO caminho pra "agenda" (menu, Início, atalhos, barra de baixo, #view=agenda) abre a nova. A antiga só pelo item
+   "Agenda antiga" do grupo de telas antigas (irPara('agenda-antiga')). Sem a chave: tudo como antes. */
+function agNovaManda(){ try{ return typeof viewAgendaGlobal==='function'&&novoOn('agenda-global'); }catch(_){ return false; } }
+function agDesvio(v){ if(v==='agenda-antiga') return 'agenda'; if(v==='agenda'&&agNovaManda()) return 'ag-global'; return v; }
+function irPara(v){ v=agDesvio(v); VIEW=v; NN_FOCUS=''; BC_FOCUS='';
   /* HUB-CONFIG: o item do hub segue aceso enquanto se está numa tela DELE
      (Módulos -> Carteira; Configurações -> Metas). Antes isso era um `if`
      só do 'modulos'; agora é uma tabela, pra não esquecer o próximo hub. */
@@ -18161,6 +18167,8 @@ function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) 
   /* NOVO-SO-MEU no menu: item com data-novo só aparece pra quem a chave libera (depois do MODS, que pode ter ligado) */
   document.querySelectorAll('.nav-btn[data-novo]').forEach(b=>{ const k=b.dataset.novo; if(!(k==='pipes'?modOn('funis_extra'):novoOn(k))) b.style.display='none'; });
   document.querySelectorAll('.nav-btn[data-novo="agenda-global"]').forEach(b=>{ b.style.display=novoOn('agenda-global')?'':'none'; });   /* AGENDA-GLOBAL-V1: segue a chave nos dois sentidos */
+  { const on=agNovaManda(), velho=document.querySelector('nav.sidebar .nav-btn[data-view="agenda"]:not(.sub)'), novo=document.querySelector('.nav-btn[data-view="ag-global"] .lbl');   /* AGENDA-NOVA-MANDA-V1 */
+    if(velho) velho.style.display=on?'none':''; if(novo) novo.textContent=on?'Agenda & Tarefas':'Agenda & Tarefas · nova'; }
   document.querySelectorAll('.nav-btn[data-novo="funil-unico"]').forEach(b=>{ b.style.display=novoOn('funil-unico')?'':'none'; });   /* FUNIL-UNICO-V1: segue a chave nos dois sentidos (o perfil pode chegar depois) */   /* LIBERA-VICTOR-V1: os pipes seguem o módulo funis_extra (liga por usuário) */
   /* PIPES-V1: o cabeçalho de um pipe só aparece se sobrou algum item visível dentro dele */
   document.querySelectorAll('.nav-grp-btn[data-pipe]').forEach(t=>{ const g=document.getElementById(t.id.replace('-toggle','-group')); if(!g) return;
@@ -20299,7 +20307,7 @@ function render(){
   renderTopo(); lpCounts(); renderNnEtapas(); renderBcEtapas(); renderTituloTopo();
   { const cc=$('#cnt-cart'); if(cc) cc.textContent=CART.clientes.length||'';
     const co=$('#cnt-cart-op'); if(co) co.textContent=CART.clientes.length?(cartNiverProx(JANELA_DIAS).length+cartRadarLista().length)||'':''; }
-  { const ca=$('#cnt-agenda'); if(ca){ const n=agendaContagem(); ca.textContent=n.total||''; ca.style.color=n.atrasadas?'var(--verm)':''; } }
+  { const n=agendaContagem(); ['#cnt-agenda','#cnt-ag-global'].forEach(s=>{ const ca=$(s); if(ca){ ca.textContent=n.total||''; ca.style.color=n.atrasadas?'var(--verm)':''; } }); }
   { const cs=$('#cnt-sitplan'); if(cs){ const l=spListaDoDia(hojeISO()); cs.textContent=([...l.fun,...l.bn].filter(c=>!taResHoje(c)).length)||''; } }
   { const csp=$('#cnt-sp'); if(csp) csp.textContent=''; }   /* 11/09: número ao lado de 'SitPlan & TA' era o total do Estoque — redundante */
   if(VIEW==='bn-estoque'||VIEW==='bn-recs'||VIEW==='bn-dups'){ ['est-toggle','est-group'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('fechado'); }); const c=$('#est-caret'); if(c) c.textContent='▴'; }
@@ -23697,6 +23705,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
     if(typeof fuSelfTests==='function') fuSelfTests(ok); else ok('FUNIL-UNICO T3: módulo modulos/funil-unico.js carregado',false);
     if(typeof agendaGlobalSelfTests==='function') agendaGlobalSelfTests(ok); else ok('AGENDA-GLOBAL: módulo modulos/agenda-global.js carregado',false);
+    ok('AGENDA-NOVA-MANDA-V1: com a Agenda nova ligada, todo "ir pra agenda" abre a nova; a antiga só por "agenda-antiga"; sem a chave, nada muda', agDesvio('agenda-antiga')==='agenda'&&agDesvio('agenda')===(agNovaManda()?'ag-global':'agenda')&&bnavTroca('agenda')===(agNovaManda()?'ag-global':'agenda')&&agDesvio('inicio')==='inicio');
     ok('MENU-ANTIGO-V1: com o funil novo ligado, os 4 pipes antigos saem do lugar e vivem no grupo "Telas antigas do funil"; sem ele, menu de sempre', (()=>{ const at=document.getElementById('antigo-toggle'), pt=document.getElementById('pipe-toggle'); if(!at||!pt||typeof menuAntigoAplicar!=='function') return false; menuAntigoAplicar(); return novoOn('funil-unico') ? (at.style.display!=='none'&&pt.style.display==='none'&&document.querySelectorAll('#antigo-group .nav-btn[data-view="nn-funil"]').length===1) : at.style.display==='none'; })());
     if(typeof fichaUx2SelfTests==='function') fichaUx2SelfTests(ok); else ok('FICHA-UX2: módulo modulos/ficha-ux2.js carregado',false);
     if(typeof nrSelfTests==='function') nrSelfTests(ok); else ok('NOVA-REC: módulo modulos/nova-rec.js carregado',false);
@@ -25249,7 +25258,7 @@ window.viewConversas=viewConversas; window.cvAbrir=cvAbrir; window.cvFechar=cvFe
 window.cvSincronizar=cvSincronizar; window.cvCopiar=cvCopiar; window.cvAbrirFicha=cvAbrirFicha;
 window.cvRecarregar=cvRecarregar; window.cvExemplo=cvExemplo;
 const VIEWS_CONHECIDAS=['inicio','sitplan','metas','plano','cart-visao','cart-clientes','cart-oportunidades',
-  'nn-funil','bc-funil','fu-vi','fu-mfo','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','ag-global','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
+  'nn-funil','bc-funil','fu-vi','fu-mfo','vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil','agenda','ag-global','agenda-antiga','contatos','planos','montagem','placed','emissao-diaria','apolices-detalhado','subst','pc-simulador','persistencia','lp-atrasos','lp-pendencias','solicitacoes','beneficios','lp-statust','modulos','config',
   'lp-aniversario','lp-datas','revisao','bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs','lp-adm','config-funil','mapa','consolidado','parceiros','embaixadores','importacoes','conversas'];
 /* ═══ MODO-WA-V1 (28/09/2026) ════════════════════════════════════════════════════════
    Palavra dele (extensão do WhatsApp): "abre algo como o próprio card da oportunidade que abro no CRM — ali tem tudo,
@@ -25447,11 +25456,13 @@ const BNAV_OPCOES=[
   ['nn-funil','🎯','Novos Neg.'], ['bc-funil','💼','Base Clientes'], ['agenda','📅','Agenda'],
   ['bn-estoque','📦','Estoque'], ['bn-ta','☎️','Lista TA'],
   ['cart-clientes','👥','Clientes'], ['lp-atrasos','⏰','Atrasos'], ['lp-pendencias','📌','Emissão'], ['solicitacoes','📨','Solicit.'],
-  ['fu-vi','🎯','Vida Ind.'], ['fu-mfo','🏢','MFO'],
+  ['fu-vi','🎯','Vida Ind.'], ['fu-mfo','🏢','MFO'], ['ag-global','📅','Agenda'],
 ];
 /* MENU-ANTIGO-V1 (26/10, "unificar logo"): com o funil novo ligado, a barra de baixo troca os funis antigos pelos novos
    (Novos Neg. → Vida Ind. · Base Clientes → MFO). Sem a chave, os novos nem aparecem como opção. */
-function bnavTroca(v){ const on=typeof novoOn==='function'&&novoOn('funil-unico'); if(!on) return /^fu-/.test(v)?({'fu-vi':'nn-funil','fu-mfo':'bc-funil'})[v]:v; return ({'nn-funil':'fu-vi','bc-funil':'fu-mfo'})[v]||v; }
+function bnavTroca(v){ const on=typeof novoOn==='function'&&novoOn('funil-unico'), ag=typeof agNovaManda==='function'&&agNovaManda();
+  if(v==='agenda'&&ag) return 'ag-global'; if(v==='ag-global'&&!ag) return 'agenda';   /* AGENDA-NOVA-MANDA-V1 */
+  if(!on) return /^fu-/.test(v)?({'fu-vi':'nn-funil','fu-mfo':'bc-funil'})[v]:v; return ({'nn-funil':'fu-vi','bc-funil':'fu-mfo'})[v]||v; }
 const BNAV_PADRAO=['sitplan','nn-funil','bc-funil'];
 const BNAV_CHAVE='crmlp_bnav_v2';   // v1 tinha 4 destinos (Início/Contatos viraram Menu/➕) — preferência antiga cai no padrão
 function bnavLer(){
@@ -25484,7 +25495,7 @@ function bnavConfigurar(){
   document.body.insertAdjacentHTML('beforeend','<div class="sheet-bd" id="bnav-bd" onclick="if(event.target===this)this.remove()">'+
     '<div class="sheet" onclick="event.stopPropagation()">'+
     '<div class="sheet-tit">Barra inferior · escolha '+BNAV_N+' (Menu e ➕ são fixos)</div>'+
-    '<div id="bnav-lista">'+BNAV_OPCOES.filter(o=>!/^fu-/.test(o[0])||novoOn('funil-unico')).map(linha).join('')+'</div>'+
+    '<div id="bnav-lista">'+BNAV_OPCOES.filter(o=>(!/^fu-/.test(o[0])||novoOn('funil-unico'))&&(o[0]!=='ag-global'||agNovaManda())&&(o[0]!=='agenda'||!agNovaManda())).map(linha).join('')+'</div>'+
     '<div id="bnav-aviso" style="font-size:12.5px;color:var(--muted);padding:4px 12px 10px"></div>'+
     '<div style="display:flex;gap:8px"><button class="btn btn-s" style="flex:1;justify-content:center;min-height:48px" onclick="bnavRestaurar()">Padrão</button>'+
     '<button class="btn btn-p" style="flex:2;justify-content:center;min-height:48px" onclick="bnavAplicar()">Salvar</button></div></div></div>');
