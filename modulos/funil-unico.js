@@ -401,6 +401,12 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
 .fu-av:hover{border-style:solid}
 .fu-taxa{font-weight:700;font-size:11.5px}
 .fu-col-s .pd{font-weight:500;color:#5b6770}
+@media (min-width:761px){.fu-board>.fu-col{flex:0 0 284px;width:284px;min-width:0;max-width:284px}}   /* COL-LARGURA-V1 (26/10, print dele: "uns cards largos, outros estreitos… mantém padrão"): toda coluna com a mesma largura */
+.fu-card{min-width:0;max-width:100%;overflow-wrap:anywhere}
+.fu-card .vneg,.fu-card .tarchip,.fu-card .nc-pill,.fu-card .rec-selo,.fu-card .fu-ciclo,.fu-card .badge,.fu-card .fu-bd,.fu-card .nnrec{white-space:normal;max-width:100%}
+.fu-card .nc-pills,.fu-card .fu-cr,.fu-card .fu-ft{min-width:0;max-width:100%}
+.fu-card .fu-l1{flex-wrap:wrap}.fu-card .fu-l1 .fu-nome{flex:1 1 150px}.fu-card .fu-l1 .nm{white-space:normal;overflow:visible}
+.fu-card .fu-l1 .fu-avc{margin-left:auto}
 .fu-fx{border-style:dashed;background:#fbfdfb}.fu-fx .fu-meta2,.fu-fx .fu-cr,.fu-fx .fu-ft{margin-left:0}
 .fu-col-s{flex-wrap:wrap;row-gap:1px}.fu-col-s>span:first-child{white-space:nowrap}.fu-col-s .fu-taxa{flex-basis:100%}
 @media (max-width:760px){
