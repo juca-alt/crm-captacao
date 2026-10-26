@@ -11277,7 +11277,7 @@ const IMP_CATALOGO=[
   {k:'consolidado', fontes:['persistencia'],                         nome:'Extrato Consolidado',    vai:'Persistência / Comissionamento',fresc:{tipo:'mensal',dia:10}, view:'persistencia'},
   {k:'detalhado',   fontes:['comissao_direta'],                      nome:'Extrato Detalhado',      vai:'Comissionamento / Parceiros',  fresc:{tipo:'mensal',dia:20}, view:'parceiros'},
   {k:'resgate',     fontes:[],                                       nome:'Valor de Resgate / RPU', vai:'Revisão de Proteção',          fresc:{tipo:'dias',n:30}, semImportador:true}];
-let IMP={hist:{}, carregado:false, txt:'', tipo:null, msg:''};
+let IMP={hist:{}, carregado:false, txt:'', tipo:null, msg:'', chegou:[]};
 (function impCss(){ if(document.getElementById('imp-css')) return; const s=document.createElement('style'); s.id='imp-css'; s.textContent=`
   .imp-cards{display:none;flex-direction:column;gap:8px}
   .imp-card{padding:12px;display:flex;flex-direction:column;gap:5px}
@@ -11320,6 +11320,7 @@ async function viewImportacoes(){ const m=$('#main'); if(!m) return;
       <div class="kpi"><div class="lbl">Desatualizados</div><div class="num" style="color:${desat?'var(--verm)':'var(--ink)'}">${desat}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">vencendo, atrasados ou nunca</div></div>
       <div class="kpi"><div class="lbl">Última mudança</div><div class="num" style="font-size:16px">${recente?esc(recente.c.nome):'—'}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">${recente?dt(recente.u.em)+(impDiffTxt(recente.d)?' · '+esc(impDiffTxt(recente.d)):''):'nenhuma importação registrada'}</div></div>
     </div>
+    ${portalChegouHtml()}
     <div class="card imp-drop" id="imp-drop" style="padding:14px;margin:12px 0;border:2px dashed var(--azul-borda,#cddffb);display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b style="flex:1;min-width:200px">📥 Subir arquivo à mão</b>
         <button class="btn btn-p btn-mini" onclick="document.getElementById('imp-file').click()">Escolher arquivo</button>
@@ -11361,6 +11362,41 @@ async function impArquivo(f){ if(!f) return; IMP.msg='';
 async function impImportar(){ const tipo=IMP.tipo, bruto=IMP.txt; if(!tipo||!bruto) return; IMP.txt=''; IMP.tipo=null; IMP.carregado=false;
   await relRotear(tipo,bruto); }
 window.impArquivo=impArquivo; window.impTexto=impTexto; window.impImportar=impImportar;
+/* ═══ PORTAL-RECEBER-V1 (26/10/2026) — a "Gabi própria": a extensão 2.10 grava como cada relatório é baixado no portal da
+   Prudential e, no "Puxar relatórios", baixa de novo com a sessão dele e entrega AQUI (window.portalReceber). O arquivo vira
+   texto (PDF → lpPdfText · .xlsx → tabela · .xls/HTML/CSV → texto), o tipo é reconhecido pela mesma assinatura do "subir à
+   mão" (relDetectarOu) e entra na lista "📥 Chegaram do portal" da Central de Importações — ele confere e clica Importar
+   (nada é gravado sozinho; vários relatórios de uma vez não empilham janelas). Senha e cookies nunca passam por aqui. */
+function portalB64Buf(b64){ const s=atob(String(b64||'')); const u=new Uint8Array(s.length); for(let i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u.buffer; }
+async function portalTexto(nome,mime,buf){ const n=String(nome||'').toLowerCase(), u=new Uint8Array(buf.slice(0,4));
+  if(/pdf/.test(mime||'')||/\.pdf$/.test(n)||(u[0]===0x25&&u[1]===0x50&&u[2]===0x44&&u[3]===0x46)) return await lpPdfText(buf.slice(0));
+  if(u[0]===0x50&&u[1]===0x4b){ const rows=await xlsxLer(buf); const e=v=>String(v==null?'':v).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+    return '<table>'+(rows||[]).map(r=>'<tr>'+(r||[]).map(v=>'<td>'+e(v)+'</td>').join('')+'</tr>').join('')+'</table>'; }
+  const utf=new TextDecoder('utf-8',{fatal:false}).decode(buf); return /�/.test(utf.slice(0,20000))?new TextDecoder('iso-8859-1').decode(buf):utf; }
+async function portalReceber(o){ o=o||{}; try{
+    const nome=String(o.nome||'relatorio'), buf=portalB64Buf(o.b64); if(!buf.byteLength) return {ok:false,msg:'Arquivo vazio'};
+    let txt=''; try{ txt=await portalTexto(nome,o.mime,buf); }catch(e){ return {ok:false,msg:'Não consegui abrir '+nome+': '+(e&&e.message||e)}; }
+    if(!txt||txt.replace(/\s/g,'').length<40) return {ok:false,msg:nome+' veio vazio ou é PDF escaneado — suba pelo 📄 Subir relatório'};
+    const tipo=relDetectarOu(txt,null);
+    IMP.chegou=(IMP.chegou||[]).filter(x=>!(x.nome===nome&&x.receita===(o.receita||''))); IMP.chegou.unshift({id:uid(),nome,receita:String(o.receita||''),tipo,txt,em:new Date().toISOString(),tam:buf.byteLength});
+    if(IMP.chegou.length>12) IMP.chegou.length=12;
+    if(VIEW!=='importacoes') irPara('importacoes'); else render();
+    const rot=tipo?((REL_TIPOS[tipo]||{}).nome||tipo):'';
+    toast(tipo?`📥 Chegou do portal: ${rot} — confira e importe`:`📥 Chegou do portal: ${nome} — não reconheci o tipo, escolha na Central`,!!tipo);
+    return {ok:true,tipo:tipo||null,msg:tipo?'Na Central: '+rot:'Na Central (tipo não reconhecido)'}; }
+  catch(e){ console.error('portalReceber',e); return {ok:false,msg:String(e&&e.message||e)}; } }
+function portalChegouImportar(id){ const x=(IMP.chegou||[]).find(k=>k.id===id); if(!x) return; const tipo=x.tipo||(document.getElementById('pc-tipo-'+id)||{}).value; if(!tipo) return;
+  IMP.chegou=IMP.chegou.filter(k=>k!==x); IMP.carregado=false; relRotear(tipo,x.txt); }
+function portalChegouTirar(id){ IMP.chegou=(IMP.chegou||[]).filter(k=>k.id!==id); render(); }
+function portalChegouHtml(){ const l=IMP.chegou||[]; if(!l.length) return '';
+  const hh=iso=>{ const d=new Date(iso); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); };
+  return `<div class="card" style="padding:12px 14px;margin:12px 0;border:1.5px solid #bbf7d0;background:#f0fdf4"><b>📥 Chegaram do portal (${l.length})</b>
+    <div style="font-size:12.5px;color:var(--muted);margin:2px 0 8px">Puxados pela extensão com a sua sessão do portal. Confira e importe um por um.</div>
+    ${l.map(x=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid #dcfce7;padding:8px 0">
+      <span style="flex:1;min-width:180px"><b>${esc(x.tipo?((REL_TIPOS[x.tipo]||{}).nome||x.tipo):'Não reconhecido')}</b><br><span style="font-size:12px;color:var(--muted)">${esc(x.nome)}${x.receita?' · '+esc(x.receita):''} · ${hh(x.em)}</span></span>
+      ${x.tipo?'':`<select id="pc-tipo-${esc(x.id)}" aria-label="Tipo do relatório" style="padding:6px 8px;border:1px solid var(--linha);border-radius:9px;font-size:16px">${Object.keys(REL_TIPOS).map(k=>`<option value="${k}">${esc(REL_TIPOS[k].nome)}</option>`).join('')}</select>`}
+      <button class="btn btn-p btn-mini" onclick="portalChegouImportar('${esc(jsq(x.id))}')">Importar</button><button class="btn btn-s btn-mini" onclick="portalChegouTirar('${esc(jsq(x.id))}')" aria-label="Descartar ${esc(x.nome)}">✕</button></div>`).join('')}</div>`; }
+window.portalReceber=portalReceber; window.portalChegouImportar=portalChegouImportar; window.portalChegouTirar=portalChegouTirar;
 /* REL-BENEF-V1 (05/09): texto de aviso de sinistro → módulo Benefícios com o caso pré-preenchido (segurado/apólice/protocolo/data) */
 function relExtrairBeneficio(txt){ const t=String(txt||''); const n=normKey(t); const o={segurado:'',apolice:'',protocolo:'',data:''};
   const ap=t.match(/ap[oó]lice[^0-9]{0,12}(\d{6,9})/i); if(ap) o.apolice=ap[1];
@@ -23710,6 +23746,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('export: uma linha por apolice mais o cabecalho', atCsv([{apolice:'1',premio:10},{apolice:'2',premio:20}]).split(String.fromCharCode(13)+String.fromCharCode(10)).length === 3);
     if(typeof fuSelfTests==='function') fuSelfTests(ok); else ok('FUNIL-UNICO T3: módulo modulos/funil-unico.js carregado',false);
     if(typeof agendaGlobalSelfTests==='function') agendaGlobalSelfTests(ok); else ok('AGENDA-GLOBAL: módulo modulos/agenda-global.js carregado',false);
+    ok('PORTAL-RECEBER-V1: a extensão entrega o arquivo do portal em window.portalReceber; ele vira texto e cai na lista "Chegaram do portal" da Central (importar é com ele)', typeof window.portalReceber==='function'&&portalB64Buf(btoa('abc')).byteLength===3&&/Chegaram do portal/.test(String(portalChegouHtml))&&/portalChegouHtml\(\)/.test(String(viewImportacoes))&&/relDetectarOu\(txt,null\)/.test(String(portalReceber)));
     ok('AGENDA-NOVA-MANDA-V1: com a Agenda nova ligada, todo "ir pra agenda" abre a nova; a antiga só por "agenda-antiga"; sem a chave, nada muda', agDesvio('agenda-antiga')==='agenda'&&agDesvio('agenda')===(agNovaManda()?'ag-global':'agenda')&&bnavTroca('agenda')===(agNovaManda()?'ag-global':'agenda')&&agDesvio('inicio')==='inicio');
     ok('MENU-ANTIGO-V1: com o funil novo ligado, os 4 pipes antigos saem do lugar e vivem no grupo "Telas antigas do funil"; sem ele, menu de sempre', (()=>{ const at=document.getElementById('antigo-toggle'), pt=document.getElementById('pipe-toggle'); if(!at||!pt||typeof menuAntigoAplicar!=='function') return false; menuAntigoAplicar(); return novoOn('funil-unico') ? (at.style.display!=='none'&&pt.style.display==='none'&&document.querySelectorAll('#antigo-group .nav-btn[data-view="nn-funil"]').length===1) : at.style.display==='none'; })());
     if(typeof fichaUx2SelfTests==='function') fichaUx2SelfTests(ok); else ok('FICHA-UX2: módulo modulos/ficha-ux2.js carregado',false);
