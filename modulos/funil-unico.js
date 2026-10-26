@@ -412,8 +412,10 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
 .fu-toca{width:26px;height:26px;border-radius:50%;border:0;color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.02em;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;cursor:pointer;padding:0}
 .fu-toca.vazio{background:#fff;color:#94a3b8;border:1.5px dashed #cbd5e1;font-size:13px}
 .fu-toca.mini{width:22px;height:22px;font-size:9.5px;margin-right:8px;vertical-align:middle;cursor:inherit}
-.fu-card .fu-l1 .fu-toca{margin-left:auto}
-@media (max-width:760px){.fu-card .fu-l1 .fu-toca{width:44px;height:44px;font-size:13px}}
+.fu-toca.sug{background:#fff;color:var(--tc,#64748b);border:1.5px dashed var(--tc,#cbd5e1);opacity:.85}
+.fu-card{position:relative}.fu-card:has(.fu-l1 .fu-toca) .fu-l1{padding-right:34px}
+.fu-card .fu-l1 .fu-toca{position:absolute;top:8px;right:8px}   /* QUEM-TOCA-V2 (26/10, print dele "cadê a bolinha"): sempre no canto, como no Umbler */
+@media (max-width:760px){.fu-card .fu-l1 .fu-toca{width:44px;height:44px;font-size:13px;top:4px;right:4px}.fu-card:has(.fu-l1 .fu-toca) .fu-l1{padding-right:50px}}
 .fu-fx{border-style:dashed;background:#fbfdfb}.fu-fx .fu-meta2,.fu-fx .fu-cr,.fu-fx .fu-ft{margin-left:0}
 .fu-col-s{flex-wrap:wrap;row-gap:1px}.fu-col-s>span:first-child{white-space:nowrap}.fu-col-s .fu-taxa{flex-basis:100%}
 @media (max-width:760px){
@@ -524,7 +526,8 @@ function eqCor(e){ const m=EQ.m[e]; if(m&&m.cor) return m.cor; const pal=['#2563
 function eqTime(c){ const dono=(c&&c._dono)||eqEu(); return [...new Set([dono].concat(EQ.times[dono]||[]).concat([eqEu(), c&&c.toca]).filter(Boolean))]; }
 function tocaHtml(c){ if(!c||c.funil==='fx'||c.funil==='bn') return ''; const j=esc(jsq(c.id)), e=c.toca;
   return e?`<button type="button" class="fu-toca" style="background:${eqCor(e)}" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Quem toca: ${esc(eqNome(e))} — toque pra trocar" aria-label="Quem toca: ${esc(eqNome(e))}">${esc(eqSigla(e))}</button>`
-    :`<button type="button" class="fu-toca vazio" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Ninguém marcado — toque pra dizer quem toca este negócio" aria-label="Marcar quem toca">＋</button>`; }
+    :(()=>{ const d=(c&&c._dono)||eqEu(); return d?`<button type="button" class="fu-toca sug" style="--tc:${eqCor(d)}" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Ninguém marcado ainda (a base é de ${esc(eqNome(d))}) — toque pra dizer quem toca" aria-label="Marcar quem toca">${esc(eqSigla(d))}</button>`
+      :`<button type="button" class="fu-toca vazio" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Ninguém marcado — toque pra dizer quem toca este negócio" aria-label="Marcar quem toca">＋</button>`; })(); }
 function fuTocaMenu(ev,id){ const c=fuAcha(id); if(!c) return; const j=esc(jsq(id)), at=c.toca||'', t=eqTime(c);
   fuMenu(ev,`<div class="mh">Quem toca ${esc(pn(c))}</div>${t.length?t.map(e=>`<button type="button" onclick="fuToca('${j}','${esc(jsq(e))}')"><span class="fu-toca mini" style="background:${eqCor(e)}">${esc(eqSigla(e))}</span>${esc(eqNome(e))}${e===at?' ✓':''}</button>`).join(''):'<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Entre com a sua conta pra marcar.</div>'}${at?`<button type="button" onclick="fuToca('${j}','')">✕ Ninguém</button>`:''}`); }
 function fuToca(id,e){ fuFecharMenu(); const c=fuAcha(id); if(!c||c.funil==='bn'||c.funil==='fx') return; const antes=c.toca||''; if(antes===e) return;
@@ -1093,7 +1096,7 @@ function fuSelfTests(ok){
   { const cc={id:'fu-tq',nome:'Fulano Toca',funil:'nn',etapa:'TA',tarefas:[],interacoes:[],_dono:'d@exemplo.invalid'}; const _m=EQ.m, _t=EQ.times;
     EQ.m={'d@exemplo.invalid':{nome:'Dono Exemplo',sigla:'DE',cor:'#123456'},'v@exemplo.invalid':{nome:'Victor Exemplo'}}; EQ.times={'d@exemplo.invalid':['v@exemplo.invalid']};
     const h0=tocaHtml(cc); cc.toca='v@exemplo.invalid'; const h1=tocaHtml(cc), t=eqTime(cc);
-    ok('QUEM-TOCA-V1: card sem marcação mostra ＋; marcado mostra a sigla (VE) da equipe; o time da base = dono + quem trabalha nela', /fu-toca vazio/.test(h0)&&/>VE</.test(h1)&&t[0]==='d@exemplo.invalid'&&t.includes('v@exemplo.invalid')&&eqSigla('d@exemplo.invalid')==='DE');
+    ok('QUEM-TOCA-V1: card sem marcação mostra a sigla do dono em contorno (DE); marcado mostra a sigla (VE) cheia; o time da base = dono + quem trabalha nela', /fu-toca sug/.test(h0)&&/>DE</.test(h0)&&/>VE</.test(h1)&&t[0]==='d@exemplo.invalid'&&t.includes('v@exemplo.invalid')&&eqSigla('d@exemplo.invalid')==='DE');
     ok('QUEM-TOCA-V1: filtros "Comigo / Com outra pessoa / Ninguém marcado" existem e Estoque não conta como "ninguém"', !!FILTROS.toca_eu&&!!FILTROS.toca_outro&&FILTROS.toca_sem[1]({funil:'nn'})===true&&FILTROS.toca_sem[1]({funil:'bn'})===false&&FILTROS.toca_outro[1](cc)===(cc.toca!==eqEu()));
     EQ.m=_m; EQ.times=_t; }
   /* T4 */
