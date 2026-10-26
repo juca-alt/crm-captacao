@@ -55,9 +55,20 @@ function resumo(n,c){ const t=tx(()=>proxTarefa(c));
    funil mostra os funis NOVOS (🎯 Vida Individual · 🏢 MFO por linha) no lugar dos 8 funis antigos. */
 function cicloChip(c){ try{ if(typeof fuCiclo!=='function'||typeof fuInfo!=='function'||typeof fuDestino!=='function') return ''; const d=fuDestino(c), i=fuInfo(c,d.funil_id), k=fuCiclo(c,i); if(!k) return '';
   return `<span class="u2-chip${k.d>=30?' al':''}" title="Na etapa desde ${esc(tx(()=>dataBR(k.desde))||k.desde)}">⏱️ ${k.d===0?'entrou hoje':k.d+'d'} na etapa${k.tot!=null&&k.tot>k.d?' · '+k.tot+'d no funil':''}</span>`; }catch(_){ return ''; } }
-const novoFunilDe=c=>{ try{ if(fuDestino(c).funil_id!=='mfo') return 'vi'; }catch(_){ return 'vi'; } return ({vg:'vg','vg-bc':'vg',prud:'prud','prud-bc':'prud',mfo:'mfo','mfo-bc':'mfo'})[c.funil]||'mfo'; };
+const novoFunilDe=c=>{ try{ return fuDestino(c).funil_id==='mfo'?'mfo':'vi'; }catch(_){ return 'vi'; } };
 function u2TrocaFunil(id,v){ const c=(S.contatos||[]).find(x=>String(x.id)===String(id)); if(!c||typeof drwPedirFunil!=='function') return;
-  if(v==='vi'){ if(['nn','bc'].includes(c.funil||'nn')) return; drwPedirFunil('nn'); } else drwPedirFunil(v); }
+  if(v===novoFunilDe(c)) return; drwPedirFunil(v==='vi'?'nn':'mfo'); }
+/* OUTROS-NEGOCIOS-V1 (26/10, print dele: "a Sheyla tá no Multi Office e não aparece"): a ficha aberta (no CRM ou no painel do
+   WhatsApp, que acha a pessoa pelo telefone) mostra no topo os OUTROS negócios da mesma pessoa — ligados como a mesma pessoa
+   OU com o mesmo telefone — e abre qualquer um num toque. */
+const dig8=t=>{ const d=String(t||'').replace(/\D/g,''); return d.length>=8?d.slice(-8):''; };
+function outrosNegocios(c){ const vis=x=>{ try{ return !x.merged_into&&(typeof escVisivel!=='function'||escVisivel(x)); }catch(_){ return true; } };
+  const a=tx(()=>pessoaIrmaos(c))||[], t=dig8(c.telefone), b=t?(S.contatos||[]).filter(x=>x&&x!==c&&String(x.id)!==String(c.id)&&dig8(x.telefone)===t):[];
+  const out=[]; a.concat(b).forEach(x=>{ if(x&&vis(x)&&!out.includes(x)) out.push(x); }); return out; }
+const LINHA_U2={vg:'VG',prud_demais:'Prud. Demais',mo:'Multi Office'};
+function negChip(x){ let fid='vi', lb=''; try{ const d=fuDestino(x); fid=d.funil_id; lb=(typeof ET_LABEL!=='undefined'&&ET_LABEL[d.etapa_id])||d.etapa_id; }catch(_){ lb=x.etapa||''; }
+  const lin=fid==='mfo'&&x.linha&&LINHA_U2[x.linha]?' · '+LINHA_U2[x.linha]:'';
+  return `<button type="button" class="u2-chip neg" onclick="abrirContato('${esc(jsq(x.id))}')" title="Abrir este negócio">${fid==='mfo'?'🏢 MFO':'🎯 Vida'}${esc(lin)} · ${esc(lb)}</button>`; }
 /* ── cabeçalho ── */
 function cabecalho(c){ const j=esc(jsq(c.id));
   const quem=[tx(()=>pProfissao(c))||c.profissao,(tx(()=>pIdade(c))||c.idade)?(tx(()=>pIdade(c))||c.idade)+' anos':'',tx(()=>pCidade(c))||c.cidade,c.telefone?tx(()=>telBR(c.telefone))||c.telefone:''].filter(x=>!vazio(x)&&!/^[—\-\s]+ anos$/.test(String(x)));
@@ -68,6 +79,7 @@ function cabecalho(c){ const j=esc(jsq(c.id));
     <div class="nome">${tx(()=>ehEmpresa(c))?'🏢 ':''}${esc(c.nome||'—')}</div>
     ${quem.length?`<div class="u2-quem">${quem.map(x=>esc(String(x))).join(' · ')}</div>`:''}
     <div class="u2-l3">${ehMfo(c)?'':(typeof fuStarsHtml==='function'?tx(()=>fuStarsHtml(c)):tx(()=>estrelasHtml(estrelasDe(c))))}${chips}</div>
+    ${(()=>{ const o=outrosNegocios(c); return o.length?`<div class="u2-negs"><span>Também:</span>${o.slice(0,4).map(negChip).join('')}${o.length>4?`<span>+${o.length-4}</span>`:''}</div>`:''; })()}
     ${r&&r.nome?`<div class="u2-rec">🙌 Recomendado por <b>${esc(r.nome)}</b>${r.cliente?' · <span class="cli">cliente</span>':''}</div>`:''}
     <div class="u2-acoes"><button type="button" class="p" onclick="u2Menu(event,'zap','${j}')">💬 WhatsApp</button><button type="button" onclick="u2Menu(event,'lig','${j}')">☏ Ligar</button><button type="button" onclick="u2Agendar('${j}')">📅 Agendar</button><button type="button" onclick="u2Menu(event,'mais','${j}')">⋯ Mais</button></div>`; }
 
@@ -104,7 +116,7 @@ function fichaUx2Aplicar(c){ const dr=document.getElementById('drawer'); if(!dr|
     if(sel){ const w=document.createElement('div'); w.className='u2-esteira';
       const fuOn=typeof novoOn==='function'&&novoOn('funil-unico');
       if(fuOn){   /* FICHA-CARD-NOVO-V1: só os funis novos; o motor da troca segue o de sempre (drwPedirFunil: histórico e valor vão junto) */
-        const ops=[['vi','🎯 Vida Individual']].concat((typeof fuMfoOn==='function'&&fuMfoOn())?[['vg','🏢 MFO · Vida em Grupo'],['prud','🏢 MFO · Prud. Demais'],['mfo','🏢 MFO · Multi Office']]:[]), cur=novoFunilDe(c), j=esc(jsq(c.id));
+        const ops=[['vi','🎯 Vida Individual']].concat((typeof fuMfoOn==='function'&&fuMfoOn())?[['mfo','🏢 MFO']]:[]), cur=novoFunilDe(c), j=esc(jsq(c.id));   /* FUNIL-2-V1 (26/10, "ainda aparece múltiplos funis do MFO"): MFO é UM funil; a linha (VG/Prud/MO) é detalhe do negócio */
         sel.hidden=true;
         w.innerHTML=ops.length>1?`<label for="u2Funil">Funil</label><select id="u2Funil" class="drw-funil-sel" onchange="u2TrocaFunil('${j}',this.value)">${ops.map(([k,t])=>`<option value="${k}" ${k===cur?'selected':''}>${t}</option>`).join('')}</select>`
           :`<span>Funil</span><b style="color:var(--texto,#0f172a)">${esc((ops.find(o=>o[0]===cur)||ops[0])[1])}</b>`;
@@ -176,6 +188,10 @@ function css(){ if(document.getElementById('u2-css')) return; const s=document.c
 .u2-chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);white-space:nowrap}
 .u2-chip.et{background:var(--primary,#2563eb);border-color:var(--primary,#2563eb)}
 .u2-chip.al{background:rgba(220,38,38,.22);border-color:rgba(248,113,113,.55)}
+.u2-negs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;opacity:.95}
+.u2-chip.neg{cursor:pointer;background:rgba(167,139,250,.22);border-color:rgba(196,181,253,.55);color:#fff;font-family:inherit}
+.u2-chip.neg:hover{background:rgba(167,139,250,.38)}
+@media (max-width:760px){.u2-chip.neg{min-height:44px}}
 .u2-l3 .fu-toca{margin-left:auto}
 .u2-rec{font-size:12.5px;opacity:.85}.u2-rec .cli{color:#86efac;font-weight:600}
 .u2-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
@@ -223,6 +239,7 @@ html.modo-wa #drawer.ux2 .drawer-head .nome{font-size:16px;padding-right:40px}
 html.modo-wa #drawer.ux2 .drawer-head .fechar{width:32px;height:32px;min-height:32px;top:8px;right:8px}
 html.modo-wa .u2-quem,html.modo-wa .u2-rec{font-size:12px}
 html.modo-wa .u2-chip{font-size:11px;padding:1px 8px}
+html.modo-wa .u2-chip.neg{min-height:26px!important}
 html.modo-wa .u2-acoes{display:flex!important;gap:5px}
 html.modo-wa .u2-acoes button{min-height:30px!important;padding:0 10px!important;font-size:12px!important;flex:1 1 auto;justify-content:center}
 html.modo-wa .u2-tabs button{min-height:36px!important;font-size:13px;flex:1;padding:0 8px}
@@ -240,6 +257,9 @@ html.modo-wa .u2-esteira{flex-wrap:wrap}
 html.modo-wa .u2-menu button,html.modo-wa .u2-menu a{min-height:34px!important}`; document.head.appendChild(s); }
 
 function fichaUx2SelfTests(ok){
+  { const _c=S.contatos; try{ const a={id:'u2n-a',nome:'Fulano A',funil:'nn',etapa:'TA',telefone:'(81) 90000-7777'}, b={id:'u2n-b',nome:'Fulano B',funil:'mfo',etapa:'Proposta',linha:'mo',telefone:'81900007777'}, z={id:'u2n-z',nome:'Outro',funil:'nn',etapa:'TA',telefone:'81900001111'};
+      S.contatos=[a,b,z]; const o=outrosNegocios(a);
+      ok('OUTROS-NEGOCIOS-V1: a ficha acha o outro negócio da mesma pessoa pelo telefone (Vida → MFO · Multi Office) e não pega quem tem outro número', o.length===1&&o[0].id==='u2n-b'&&/MFO · Multi Office/.test(negChip(b))); } finally{ S.contatos=_c; } }
   ok('FICHA-CARD-NOVO-V1: a troca de funil da ficha mostra os funis novos (Vida Individual; MFO por linha VG/Prud/Multi Office) e o painel da extensão quebra as etapas em vez de cortar', novoFunilDe({funil:'nn',etapa:'TA'})==='vi'&&novoFunilDe({funil:'bc',etapa:'Clientes Ativos'})==='vi'&&typeof u2TrocaFunil==='function'&&/html\.modo-wa \.u2-tri\{flex-wrap:wrap/.test(document.getElementById('u2-css')?document.getElementById('u2-css').textContent:(css(),document.getElementById('u2-css').textContent)));
   ok('FICHA-UX2: cada tópico de hoje tem aba (Funil e etapa → Tarefas no topo de Negócio; ANCE em Pessoa; Jornada em Histórico; Excluir vai pro ⋯ Mais)',
     ['etapa de comercializacao','tarefas & atividades','valor do negocio','planos & simulacoes','sitplan / lista de discagem','quem e a pessoa','qualificacao ance','recomendacoes','infoclient (fact finding)','registrar contato','jornada','notas','excluir esta oportunidade']
