@@ -158,7 +158,7 @@ function msgCompromisso(c,t){ return tx(()=>tarWaMsg(c,t))||msgLembrete(c,t,'con
 /* ═══════════ pintura ═══════════ */
 const MODO_INICIAL='semana';   /* decisão dele (26/10): a tela abre em Semana */
 function entrar(){ AGG.aba='agenda'; AGG.modo=MODO_INICIAL; AGG.cur=HJ(); AGG.viu=true; }
-function viewAgendaGlobal(){ aggCss(); arrInstalar(); obsInstalar(); camRegistrar();
+function viewAgendaGlobal(){ aggCss(); arrInstalar(); obsInstalar();
   const main=document.getElementById('main'); if(!main) return;
   /* ENTRAR na tela (vindo de outra) = Semana · hoje · aba Agenda; repintar dentro dela (ação, Google chegando) mantém onde ele está */
   if(!AGG.viu||!main.querySelector(':scope > .agg')) entrar();
@@ -508,7 +508,7 @@ function fechar(){ if(!AGG.pilha.length) return; AGG.pilha.pop(); pintarSheet(tr
 function fecharTudo(){ if(!AGG.pilha.length&&!document.getElementById('agg-ov')) return; AGG.pilha=[]; pintarSheet(); }
 function repintarSheet(){ if(AGG.pilha.length) pintarSheet(false); }
 function pintarSheet(novo){ let ov=document.getElementById('agg-ov');
-  if(!AGG.pilha.length){ if(ov){ ov.remove(); document.body.classList.remove('agg-trava'); camSinc(); } return; }
+  if(!AGG.pilha.length){ if(ov){ ov.remove(); document.body.classList.remove('agg-trava'); camTirar(); camSinc(); } return; }
   if(!ov){ ov=document.createElement('div'); ov.id='agg-ov'; ov.className='agg-ov'; ov.addEventListener('click',e=>{ if(e.target===ov) fechar(); }); document.body.appendChild(ov); document.body.classList.add('agg-trava'); camRegistrar(); }
   const b0=ov.querySelector('.agg-shb'), sc=b0&&!novo?b0.scrollTop:0, top=AGG.pilha[AGG.pilha.length-1]; AGG.shk=top.k;
   let r; try{ r=top.fn()||{}; }catch(e){ console.warn('[agenda-global] folha',e); r={tit:'Ops',corpo:'<div class="agg-vz">Não consegui abrir isto — atualize a tela.</div>'}; }
@@ -681,9 +681,11 @@ function gcalGarantir(){ if(typeof GCAL==='undefined'||!GCAL) return;
   const ym=(AGG.modo==='semana'&&!M()?segDa(AGG.cur):AGG.cur).slice(0,7);
   if(GCAL.mes&&GCAL.mes.ym===ym) return; if(AGG.gPedido===ym) return; AGG.gPedido=ym;
   try{ Promise.resolve(gcalCarregarMes(ym)).then(()=>{ AGG.gPedido=''; repinta(); },()=>{ AGG.gPedido=''; }); }catch(_){ AGG.gPedido=''; } }
-/* camada do "voltar" do Android: a folha daqui fecha antes da ficha/modal (mesmo jeito do funil-unico) */
+/* camada do "voltar" do Android: a folha daqui fecha antes da ficha/modal (mesmo jeito do funil-unico). Só fica na lista
+   ENQUANTO há folha aberta — fechou a última, sai (o invariante "ordem das camadas" do app segue valendo com a tela parada). */
 function camRegistrar(){ try{ if(typeof CAM_ORDEM==='undefined'||CAM_ORDEM.some(x=>x.n==='agg-folha')) return;
   const i=CAM_ORDEM.findIndex(x=>x.n==='modal'); CAM_ORDEM.splice(i<0?0:i,0,{n:'agg-folha',aberta:()=>!!document.getElementById('agg-ov'),fechar:()=>fechar()}); }catch(_){} }
+function camTirar(){ try{ if(typeof CAM_ORDEM==='undefined') return; const i=CAM_ORDEM.findIndex(x=>x.n==='agg-folha'); if(i>=0) CAM_ORDEM.splice(i,1); }catch(_){} }
 function camSinc(){ try{ if(typeof camSincronizar==='function') camSincronizar(); }catch(_){} }
 /* arrastar o bloco pra mudar dia/hora — só mouse (no toque, toque abre; remarcar é pela folha) */
 let ARR=null, ARR_FIM=0;
