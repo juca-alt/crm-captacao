@@ -6873,7 +6873,7 @@ function renderDrawer(){
         </div>
         ${(()=>{ const its=interacoesDe(c); if(!its.length) return '<div class="vazio" style="padding:12px">Nenhum contato registrado ainda — o primeiro toque começa a jornada.</div>';
           const mostra=JORNADA_TUDO?its.slice().reverse():its.slice(-8).reverse();
-          const ico=k=>k==='etapa'?'🔀':k==='nota'?'📝':k==='reuniao'?'📅':k==='tarefa'?'✅':k==='emissao'?'📄':'📞';
+          const ico=k=>k==='etapa'?'🔀':k==='nota'?'📝':k==='reuniao'?'📅':k==='tarefa'?'✅':k==='emissao'?'📄':k==='anexo'?'':'📞';   /* anexo: o 📎 já vem no texto (ANEXOS-CARD-V1) */
           return mostra.map(i=>`<div class="evento"><span class="dt">${esc(dataBR(i.dia))}${i.ts?(' '+esc(new Date(i.ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))):''}</span>
             <span>${ico(i.k)} <b>${esc(i.l)}</b>${i.por&&isMaster()?' <span style="color:var(--muted);font-size:11px">· '+esc(lpNome(i.por))+'</span>':''}</span></div>`).join('')
             + (its.length>8?`<div style="margin-top:6px"><button class="btn btn-ghost btn-mini" onclick="JORNADA_TUDO=${JORNADA_TUDO?'false':'true'};renderDrawer()">${JORNADA_TUDO?'▴ mostrar só os 8 últimos':'▾ ver todos os '+its.length}</button></div>`:''); })()}
@@ -15291,13 +15291,16 @@ async function drvPasta(nome,pai){ pai=pai||DRV_RAIZ; const k=pai+'/'+nome; if(_
   if(!id){ const c=await drvApi('POST','https://www.googleapis.com/drive/v3/files?fields=id',JSON.stringify({name:nome,mimeType:'application/vnd.google-apps.folder',parents:[pai]}),{'Content-Type':'application/json'}); id=c.id; }
   _drvPastas[k]=id; return id; }
 function drvNomeArq(prefixo,orig){ const d=new Date(),z=n=>String(n).padStart(2,'0'); const o=drvSlug(orig||'colado'); return d.getFullYear()+'-'+z(d.getMonth()+1)+'-'+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+'_'+(prefixo||'anexo')+'_'+o; }
-async function drvUpload(file,cliente,prefixo){ const pasta=(await drvPastaCliente(cliente,true)).id; let nome=file.name||''; if(!nome||/^image\.(png|jpe?g|gif|webp)$/i.test(nome)) nome='print.'+(String(file.type||'image/png').split('/')[1]||'png');
-  const meta=new Blob([JSON.stringify({name:drvNomeArq(prefixo,nome),parents:[pasta]})],{type:'application/json'}); const fd=new FormData(); fd.append('metadata',meta); fd.append('file',file,nome);
+async function drvUpload(file,cliente,prefixo,props){ const pasta=(await drvPastaCliente(cliente,true)).id; const nome=anxNomeDe(file);
+  const md={name:drvNomeArq(prefixo,nome),parents:[pasta]}; if(props) md.properties=props;   /* ANEXOS-CARD-V1: tipo/ref/card ficam no próprio arquivo */
+  const meta=new Blob([JSON.stringify(md)],{type:'application/json'}); const fd=new FormData(); fd.append('metadata',meta); fd.append('file',file,nome);
   const j=await drvApi('POST','https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,mimeType',fd);
   return {id:j.id,name:j.name,url:j.webViewLink,mime:j.mimeType,ts:new Date().toISOString()}; }
+function anxNomeDe(f){ let n=(f&&f.name)||''; if(!n||/^image\.(png|jpe?g|gif|webp)$/i.test(n)) n='print.'+(String((f&&f.type)||'image/png').split('/')[1]||'png'); return n; }
 function anxArquivosDe(ev){ const l=[]; if(ev&&ev.clipboardData){ [...(ev.clipboardData.items||[])].forEach(it=>{ if(it.kind==='file'){ const f=it.getAsFile(); if(f) l.push(f); } }); } return l; }
 function anxEscolher(cb){ const i=document.createElement('input'); i.type='file'; i.multiple=true; i.onchange=()=>{ const l=[...(i.files||[])]; if(l.length) cb(l); }; i.click(); }
-function anxLinkHtml(a){ return `<a href="${esc(urlSegura(a.url))}" target="_blank" rel="noopener" class="ta-lchip" style="text-decoration:none" title="${esc(a.name||'')}">📎 ${esc(String(a.name||'anexo').replace(/^\d{4}-\d{2}-\d{2}_\d{4}_(solicitacao|atividade)_/,''))}</a>`; }
+function anxNomeLimpo(n){ return String(n||'anexo').replace(/^\d{4}-\d{2}-\d{2}_\d{4}_(solicitacao|atividade|card|negocio|cliente|beneficio)_/,''); }
+function anxLinkHtml(a){ return `<a href="${esc(urlSegura(a.url))}" target="_blank" rel="noopener" class="ta-lchip" style="text-decoration:none" title="${esc(a.name||'')}">📎 ${esc(anxNomeLimpo(a.name))}</a>`; }
 /* ── solicitação: anexo = evento 'anexo' na linha do tempo ── */
 function soAnexos(s){ return soEventos(s).filter(e=>e.tipo==='anexo').map(e=>{ const m=String(e.texto||'').match(/^📎\s*(.*?)\s+—\s+(https?:\S+)$/); return m?{name:m[1],url:m[2],ts:e.ocorrido_em}:null; }).filter(Boolean); }
 function soAnexosChip(s){ if(!anxOn()) return ''; const n=soAnexos(s).length; return n?`<span title="${n} anexo(s) no Drive">📎 ${n}</span>`:''; }
@@ -15343,7 +15346,7 @@ async function drvPastaCliente(nome,criar){ const idx=await drvIndice(); const v
   const c=await drvApi('POST','https://www.googleapis.com/drive/v3/files?fields=id,name',JSON.stringify({name:nm,mimeType:'application/vnd.google-apps.folder',parents:[DRV_RAIZ]}),{'Content-Type':'application/json'});
   const o={id:c.id,name:c.name||nm}; idx.set(drvChave(o.name),o); return o; }
 async function drvListar(pastaId){ const q=encodeURIComponent("'"+pastaId+"' in parents and trashed = false");
-  const j=await drvApi('GET','https://www.googleapis.com/drive/v3/files?q='+q+'&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,webViewLink,mimeType,modifiedTime)'); return j.files||[]; }
+  const j=await drvApi('GET','https://www.googleapis.com/drive/v3/files?q='+q+'&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,webViewLink,webContentLink,mimeType,modifiedTime,createdTime,properties)'); return j.files||[]; }
 function drvTemToken(){ return !!(GCAL.tok&&Date.now()<GCAL.exp-60000&&/auth\/drive(\s|$)/.test(String(GCAL.escopos||''))); }
 /* ── a área "Solte o arquivo aqui": soltar (desktop) ou tocar pra escolher (celular); o botão de importar continua onde estava ── */
 const ANX_ALVOS={};
@@ -15362,8 +15365,8 @@ document.addEventListener('drop',ev=>{ const z=ev.target&&ev.target.closest&&ev.
   const l=[...((ev.dataTransfer&&ev.dataTransfer.files)||[])]; if(l.length) anxZonaEnviar(z,l); });
 /* ── bloco "📁 Arquivos no Drive" (ficha do cliente da carteira e do negócio): lista a pasta + área de soltar ── */
 const _drvCont={};
-function drvBlocoCorpo(chave,nome,fn){ const k=drvChave(nome); if(!_drvCont[k]&&drvTemToken()) setTimeout(drvBlocosAutocarregar,60);   /* já conectado ao Google: lista sozinha, sem pop-up */
-  return `<div class="drv-bloco" data-drv="${esc(k)}" data-nome="${esc(nome||'')}"><div class="drv-lista">${_drvCont[k]?drvListaHtml(_drvCont[k]):`<div class="drv-vazio">${drvTemToken()?'Carregando a pasta…':`<button class="btn btn-s btn-mini" style="min-height:40px" onclick="drvBlocoCarregar(this.closest('.drv-bloco'),true)">📂 Ver os arquivos da pasta</button>`}</div>`}</div>
+function drvBlocoCorpo(chave,nome,fn,cid){ const k=drvChave(nome); if(!_drvCont[k]&&drvTemToken()) setTimeout(drvBlocosAutocarregar,60);   /* já conectado ao Google: lista sozinha, sem pop-up */
+  return `<div class="drv-bloco" data-drv="${esc(k)}" data-nome="${esc(nome||'')}"${cid!=null?` data-cid="${esc(String(cid))}"`:''}><div class="drv-lista">${_drvCont[k]?drvListaDe(_drvCont[k],cid,k):`<div class="drv-vazio">${drvTemToken()?'Carregando a pasta…':`<button class="btn btn-s btn-mini" style="min-height:40px" onclick="drvBlocoCarregar(this.closest('.drv-bloco'),true)">📂 Ver os arquivos da pasta</button>`}</div>`}</div>
     ${anxZona('drv:'+k,nome,fn)}</div>`; }
 function drvResumo(nome){ const o=_drvCont[drvChave(nome)]; return !o?'pasta no Drive':o.semPasta?'sem pasta ainda · nasce no 1º arquivo':o.files.length+' arquivo'+(o.files.length===1?'':'s')+' no Drive'; }
 function drvListaHtml(o){ if(o.erro) return `<div class="drv-vazio">Não consegui ler a pasta (${esc(o.erro)}). <button class="btn btn-s btn-mini" onclick="drvBlocoCarregar(this.closest('.drv-bloco'),true,true)">tentar de novo</button></div>`;
@@ -15374,8 +15377,9 @@ async function drvBlocoCarregar(el,interativo,forcar){ if(!el) return; const nom
   const lst=el.querySelector('.drv-lista'); if(lst&&!_drvCont[k]) lst.innerHTML='<div class="drv-vazio">Carregando a pasta…</div>';
   try{ if(forcar) await drvIndice(true); const p=await drvPastaCliente(nome,false); _drvCont[k]=p?{id:p.id,files:await drvListar(p.id)}:{semPasta:true}; }
   catch(e){ _drvCont[k]={erro:String(e&&e.message||e)}; }
-  document.querySelectorAll('.drv-bloco[data-drv="'+k+'"] .drv-lista').forEach(x=>{ x.innerHTML=drvListaHtml(_drvCont[k]); });
-  document.querySelectorAll('[data-drv-res="'+k+'"]').forEach(x=>{ x.textContent=drvResumo(nome); }); }
+  document.querySelectorAll('.drv-bloco[data-drv="'+k+'"]').forEach(b=>{ const x=b.querySelector('.drv-lista'); if(x) x.innerHTML=drvListaDe(_drvCont[k],b.dataset.cid,k); });
+  document.querySelectorAll('[data-drv-res="'+k+'"]').forEach(x=>{ x.textContent=x.dataset.cid!=null?anxCardResumo(nome,x.dataset.cid):drvResumo(nome); }); }
+function drvListaDe(o,cid,k){ return cid!=null&&cid!==''?anxCardListaHtml(o,cid,k):drvListaHtml(o); }
 function drvBlocosAutocarregar(){ if(!anxOn()||!drvTemToken()) return; document.querySelectorAll('.drv-bloco').forEach(el=>{ if(!_drvCont[el.dataset.drv]) drvBlocoCarregar(el,false); }); }
 async function drvSoltarCliente(nome,files,prefixo,depois){ let ok=0, ult=null;
   for(const f of files){ try{ toast('Enviando '+(f.name||'arquivo')+' pro Drive…',true); ult=await drvUpload(f,nome,prefixo); ok++; if(depois) await depois(ult); }catch(e){ console.warn('[drive]',e); toast('Não subiu: '+(e&&e.message||e),false); } }
@@ -15389,8 +15393,102 @@ function drvNegSoltar(id){ return files=>{ const c=(S.contatos||[]).find(x=>Stri
   return drvSoltarCliente(c.nome,files,'negocio',a=>{ interacoesDe(c).push({id:uid(),k:'nota',l:'📎 Arquivo no Drive: '+a.name+' — '+a.url,dia:hojeISO(),ts:a.ts,por:quemFez()}); salvar(); }).then(n=>{ if(n&&CONTATO===c.id&&document.getElementById('drawer').classList.contains('aberto')) renderDrawer(); }); }; }
 /* benefício (sinistro): pasta do segurado; o link entra no diário do caso */
 function drvBfSoltar(id){ return files=>{ const r=bfAcha(id); if(!r) return; return drvSoltarCliente(atTitleC(r.segurado||'Sem nome'),files,'beneficio',a=>bfEvento(r,'nota','📎 '+a.name+' — '+a.url)); }; }
-function drvNegBloco(c){ if(!anxOn()||!c) return ''; const k=drvChave(c.nome);   /* seção nativa da gaveta (dobra/ordem do drawer cuidam dela) */
-  return `<div class="sec"><h3><span>📁 Arquivos no Drive</span><span class="drv-res" data-drv-res="${esc(k)}" style="text-transform:none;letter-spacing:0">${esc(drvResumo(c.nome))}</span></h3>${drvBlocoCorpo(c.nome,c.nome,drvNegSoltar(c.id))}</div>`; }
+/* ═══ ANEXOS-CARD-V1 (02/11/2026) ═══ PROMPT_CODE_ANEXOS_CARDS + ADENDO (T2). Anexo direto no card do negócio, na MESMA pasta
+   do cliente no Drive (Histórico de Clientes / <cliente>), nome AAAA-MM-DD_HHMM_card_<arquivo>. Fonte ÚNICA = o arquivo no
+   Drive: crm/contato_id/tipo_doc/referencia ficam nas `properties` do próprio arquivo (editar = PATCH). A linha do tempo só
+   guarda {k:'anexo', anexo_id}. Decisão dele (02/11, "1A 2A"): exclusão = Lixeira do Drive (T3); lista do card = anexos
+   DESTE card (tipo/ref editáveis) + "outros arquivos da pasta" só pra consulta. Sem bucket/tabela (docs/anexos-card.md).
+   Mesmo portão do módulo que já existe (anxOn = 'anexos-drive'). */
+const ANX_TIPOS=[['proposta','Proposta'],['recibo','Recibo'],['apolice_extrato','Extrato de apólice'],['alteracao','Alteração'],['exame','Exame'],['documento_pessoal','Documento pessoal'],['outro','Outro']];
+const ANX_TIPO_ROT=Object.fromEntries(ANX_TIPOS);
+const ANX_MAX=20*1024*1024;
+const ANX_EXT=['pdf','jpg','jpeg','png','heic','webp','docx','xlsx','csv'];
+function anxExt(n){ const m=/\.([a-z0-9]+)$/i.exec(String(n||'')); return m?m[1].toLowerCase():''; }
+function anxValidar(f){ const n=anxNomeDe(f), e=anxExt(n), sz=(f&&f.size)||0;
+  if(!ANX_EXT.includes(e)) return n+': .'+(e||'sem extensão')+' não é aceito (vale PDF, JPG, PNG, HEIC, WEBP, DOCX, XLSX, CSV)';
+  if(sz>ANX_MAX) return n+': '+(sz/1048576).toFixed(1).replace('.',',')+' MB passa do limite de 20 MB';
+  if(!sz) return n+': arquivo vazio'; return ''; }
+/* sugestão (editável): referência = 1º pedaço do nome que é proposta (6–9 dígitos + letra) ou apólice (9 dígitos);
+   tipo = 1ª palavra-chave achada, nesta ordem. Palavra curta (rg/cnh/cpf/psa) só casa inteira; as outras pelo começo. */
+function anxSugerir(nome){ const toks=String(nome||'').replace(/\.[a-z0-9]+$/i,'').normalize('NFD').replace(/[̀-ͯ]/g,'').split(/[^A-Za-z0-9]+/).filter(Boolean);
+  let ref=null; for(const t of toks){ const u=t.toUpperCase(); if(/^\d{6,9}[A-Z]$/.test(u)||/^\d{9}$/.test(u)){ ref=u; break; } }
+  const w=toks.map(t=>t.toLowerCase()), tem=(...ks)=>w.some(x=>ks.some(k=>k.length<=3?x===k:x.startsWith(k)));
+  const tipo=tem('recibo')?'recibo':tem('proposta')?'proposta':tem('alteracao')?'alteracao':tem('relatorio','demonstrativo','detalhe','apolice')?'apolice_extrato'
+    :tem('exame','laudo','psa','biopsia','ressonancia','ultra')?'exame':tem('rg','cnh','cpf','comprovante')?'documento_pessoal':'outro';
+  return {tipo,ref}; }
+/* separa o que sobe do que é barrado — nada barrado chega no Drive nem na linha do tempo */
+function anxPreparar(files,cid){ const ok=[], bloq=[];
+  (files||[]).forEach(f=>{ const m=anxValidar(f); if(m){ bloq.push(m); return; } const nome=anxNomeDe(f), s=anxSugerir(nome);
+    const props={crm:'card',contato_id:String(cid),tipo_doc:s.tipo}; if(s.ref) props.referencia=s.ref; ok.push({f,nome,tipo:s.tipo,ref:s.ref,props}); });
+  return {ok,bloq}; }
+function anxInteracao(nome,tipo,ref,anexoId,ts){ return {id:uid(),k:'anexo',l:'📎 '+nome+' · '+(ANX_TIPO_ROT[tipo]||'Outro')+(ref?' · '+ref:''),dia:hojeISO(),ts:ts||new Date().toISOString(),por:quemFez(),anexo_id:anexoId}; }
+async function cardAnexar(cid,files){ const c=(S.contatos||[]).find(x=>String(x.id)===String(cid)); if(!c||!files||!files.length) return 0;
+  const {ok,bloq}=anxPreparar(files,c.id); if(bloq.length) toast('Não anexado — '+bloq.join(' · '),false); if(!ok.length) return 0;
+  let n=0; for(const it of ok){ try{ toast('Enviando '+it.nome+' pro Drive…',true); const a=await drvUpload(it.f,c.nome,'card',it.props);
+      interacoesDe(c).push(anxInteracao(it.nome,it.tipo,it.ref,a.id,a.ts)); n++; }catch(e){ console.warn('[anexo card]',e); toast('Não subiu: '+it.nome+' — '+(e&&e.message||e),false); } }
+  if(n){ salvar(); delete _drvCont[drvChave(c.nome)]; toast(n+' anexo(s) no card · Histórico de Clientes / '+(((await drvPastaCliente(c.nome,false))||{}).name||drvNomePasta(c.nome)),true);
+    if(CONTATO===c.id&&document.getElementById('drawer').classList.contains('aberto')) renderDrawer();
+    else document.querySelectorAll('.drv-bloco[data-drv="'+drvChave(c.nome)+'"]').forEach(el=>drvBlocoCarregar(el,true)); }
+  return n; }
+function anxDoCard(o,cid){ return ((o&&o.files)||[]).filter(f=>f.properties&&f.properties.crm==='card'&&f.properties.contato_id===String(cid))
+  .sort((a,b)=>String(b.createdTime||'').localeCompare(String(a.createdTime||''))); }
+function anxCardResumo(nome,cid){ const o=_drvCont[drvChave(nome)]; if(!o||o.erro) return 'arquivo, arrastar ou Ctrl+V'; if(o.semPasta) return 'nenhum · pasta nasce no 1º';
+  const n=anxDoCard(o,cid).length, r=o.files.length-n; return (n?n+' anexo'+(n===1?'':'s'):'nenhum')+(r?' · '+r+' outro'+(r===1?'':'s')+' na pasta':''); }
+function anxIco(f){ return /pdf/.test(f.mimeType)?'📄':/image/.test(f.mimeType)?'🖼️':/sheet|csv/.test(f.mimeType)?'📊':/word/.test(f.mimeType)?'📝':'📎'; }
+function anxCardLinhaHtml(f,k){ const p=f.properties||{}, tipo=ANX_TIPO_ROT[p.tipo_doc]?p.tipo_doc:'outro', d=` data-fid="${esc(f.id)}" data-k="${esc(k)}"`;
+  const baixar=f.webContentLink||('https://drive.google.com/uc?export=download&id='+encodeURIComponent(f.id));
+  return `<div class="anx-l"><span class="anx-l-i">${anxIco(f)}</span>
+    <span class="anx-l-n"><b title="${esc(f.name)}">${esc(anxNomeLimpo(f.name))}</b><span>${esc(dataBR(String(f.createdTime||f.modifiedTime||'').slice(0,10)))}</span></span>
+    <select class="anx-l-t" aria-label="Tipo do documento"${d} data-campo="tipo_doc" onchange="anxCardEditar(this)">${ANX_TIPOS.map(([v,r])=>`<option value="${v}"${v===tipo?' selected':''}>${esc(r)}</option>`).join('')}</select>
+    <input type="text" class="anx-l-r" aria-label="Referência (proposta/apólice)" placeholder="referência"${d} data-campo="referencia" value="${esc(p.referencia||'')}" onchange="anxCardEditar(this)" onkeydown="if(event.key==='Enter')this.blur()">
+    <span class="anx-l-a"><a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(urlSegura(f.webViewLink||''))}">Ver</a><a class="btn btn-s btn-mini" target="_blank" rel="noopener" href="${esc(urlSegura(baixar))}">Baixar</a></span></div>`; }
+function anxCardListaHtml(o,cid,k){ if(!o||o.erro||o.semPasta) return drvListaHtml(o||{semPasta:true});
+  const meus=anxDoCard(o,cid), outros=o.files.filter(f=>!meus.includes(f)), ab=dobraAberta('anx-outros',drwSecsLer());
+  return `<div class="anx-ls">${meus.map(f=>anxCardLinhaHtml(f,k)).join('')||'<div class="drv-vazio">Nenhum anexo neste card ainda.</div>'}</div>`
+    +(outros.length?`<details class="anx-outros" ${ab?'open':''} ontoggle="anxOutrosToggle(this.open)"><summary>Outros arquivos da pasta <span class="drv-res">${outros.length} · só consulta</span></summary>${drvListaHtml({id:o.id,files:outros})}</details>`
+      :`<div style="margin-top:6px"><a class="btn btn-s btn-mini" style="min-height:36px;text-decoration:none" target="_blank" rel="noopener" href="https://drive.google.com/drive/folders/${esc(o.id)}">📂 Abrir pasta no Drive ↗</a></div>`); }
+function anxOutrosToggle(v){ const st=drwSecsLer(); st['anx-outros']=!!v; drwSecsGravar(st); }
+async function anxCardEditar(el){ const fid=el.dataset.fid, k=el.dataset.k, campo=el.dataset.campo; let v=String(el.value||'').trim();
+  if(campo==='referencia') v=v.toUpperCase().slice(0,40); else if(campo!=='tipo_doc'||!ANX_TIPO_ROT[v]) return;
+  const f=((_drvCont[k]&&_drvCont[k].files)||[]).find(x=>x.id===fid); if(f&&String((f.properties||{})[campo]||'')===v) return; el.disabled=true;
+  try{ await drvApi('PATCH','https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fid)+'?fields=id,properties',JSON.stringify({properties:{[campo]:v||null}}),{'Content-Type':'application/json'});
+    if(f){ f.properties=Object.assign({},f.properties); if(v) f.properties[campo]=v; else delete f.properties[campo]; } if(campo==='referencia') el.value=v;
+    toast('Anexo atualizado no Drive',true); }
+  catch(e){ toast('Não salvou no Drive: '+(e&&e.message||e),false); if(f) el.value=(f.properties||{})[campo]||(campo==='tipo_doc'?'outro':''); }
+  finally{ el.disabled=false; } }
+/* Ctrl/⌘+V com a ficha do negócio aberta → anexa no card (a solicitação aberta por cima tem o colar dela) */
+document.addEventListener('paste',ev=>{ if(!anxOn()||document.getElementById('at-ov')) return; const dr=document.getElementById('drawer');
+  if(!dr||!dr.classList.contains('aberto')||!CONTATO||!dr.querySelector('.drv-bloco[data-cid]')) return; const l=anxArquivosDe(ev); if(!l.length) return; ev.preventDefault(); cardAnexar(CONTATO,l); });
+(function(){ const st=document.createElement('style'); st.textContent=`
+  .anx-ls{display:flex;flex-direction:column;gap:6px}
+  .anx-l{display:grid;grid-template-columns:24px minmax(0,1.2fr) minmax(0,1fr) auto;grid-template-areas:"i n n n" ". t r a";align-items:center;gap:6px 8px;padding:8px 4px;border-bottom:1px solid var(--linha)}
+  .anx-l-i{grid-area:i;font-size:18px;text-align:center}
+  .anx-l-n{grid-area:n;display:flex;flex-direction:row;align-items:baseline;gap:8px;min-width:0}
+  .anx-l-t{grid-area:t}.anx-l-r{grid-area:r}.anx-l-a{grid-area:a}
+  .anx-l-r{border:1px solid var(--linha);border-radius:8px;padding:0 10px;background:var(--card,#fff);color:var(--ink)}
+  .anx-outros>summary{list-style:none}.anx-outros>summary::-webkit-details-marker{display:none}
+  .anx-outros>summary::before{content:'▸';color:var(--muted);font-size:12px}.anx-outros[open]>summary::before{content:'▾'}
+  .anx-l-n b{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .anx-l-n span{font-size:11.5px;color:var(--muted)}
+  .anx-l-t,.anx-l-r{min-height:34px;font-size:13px;width:100%;min-width:0}
+  .anx-l-a{display:flex;gap:4px}
+  .anx-l-a .btn{text-decoration:none}
+  .anx-outros{margin-top:8px}
+  .anx-outros>summary{cursor:pointer;font-size:12.5px;font-weight:600;min-height:32px;display:flex;align-items:center;gap:8px}
+  .anx-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+  @media (pointer:coarse){ .anx-dica-dk{display:none} }
+  @media (max-width:640px){
+    .anx-l{grid-template-columns:24px minmax(0,1fr);grid-template-areas:"i n" "t t" "r r" "a a";row-gap:6px}
+    .anx-l-n{flex-direction:column;gap:0}
+    .anx-l-t,.anx-l-r{font-size:16px;min-height:44px;height:44px;box-sizing:border-box}
+    .drv-bloco[data-cid] a.btn{min-height:44px!important;display:inline-flex;align-items:center}
+    .anx-l-a .btn{flex:1;min-height:44px;display:flex;align-items:center;justify-content:center}
+    .anx-outros>summary{min-height:44px}
+    .anx-acts .btn{min-height:44px} }`; document.head.appendChild(st); })();
+window.cardAnexar=cardAnexar; window.anxCardEditar=anxCardEditar; window.anxOutrosToggle=anxOutrosToggle;
+function drvNegBloco(c){ if(!anxOn()||!c) return ''; const k=drvChave(c.nome), id=esc(jsq(String(c.id)));   /* seção nativa da gaveta (dobra/ordem do drawer cuidam dela); "drive" no título mantém o lugar na ficha nova */
+  return `<div class="sec"><h3><span>📎 Anexos · Drive</span><span class="drv-res" data-drv-res="${esc(k)}" data-cid="${esc(String(c.id))}" style="text-transform:none;letter-spacing:0">${esc(anxCardResumo(c.nome,c.id))}</span></h3>${drvBlocoCorpo(c.nome,c.nome,l=>cardAnexar(c.id,l),c.id)}
+    <div class="anx-acts"><button class="btn btn-s btn-mini" onclick="anxEscolher(l=>cardAnexar('${id}',l))">＋ Anexar</button><span class="anx-dica-dk" style="font-size:12px;color:var(--muted)">ou cole um print com <b>Ctrl+V</b> (⌘V) com esta ficha aberta · até 20 MB · PDF, imagem, DOCX, XLSX, CSV</span></div></div>`; }
 /* ═══ MFO-FICHA-V1 (13/10/2026) ═══ PROMPT_CODE "Funil MFO · Passo A" (validado por ele). Ficha só nos funis mfo*:
    ramos · fecha por (+ parceiro) · origem · receita estimada · próxima atividade (= Tarefas, sem campo novo) ·
    próximo passo legado (só leitura) · pasta do Drive · apólices externas (só o vencimento é editável).
@@ -21895,6 +21993,21 @@ function lpSelfCheck(){
           return /auth\/drive/.test(GCAL_SCOPE)&&l.length===1&&l[0].url==='https://drive.google.com/file/d/abc/view'&&/^\d{4}-\d{2}-\d{2}_\d{4}_solicitacao_boleto\.pdf$/.test(nm)&&/📎 1/.test(soAnexosChip(s))&&/>📎 boleto\.pdf</.test(anxLinkHtml(l[0]))
             &&String(tarBlocoDrawer.toString()).includes('tarAnexosHtml(c,t)')&&String(agSolicBloco.toString()).includes('soAnexosChip(s)')&&String(soKanbanHtml.toString()).includes('soAnexosChip(s)')&&String(soAbrirV2.toString()).includes('soAnexosHtml(s)')&&DRV_RAIZ.length>10;
         } finally{ SO_EV=bak; } })());
+        ok('ANEXOS-CARD-V1: tipo/referência sugeridos pelo nome; 25 MB e .exe barrados antes do Drive; interação k=anexo com anexo_id; nome _card_; lista separa os do card (recentes 1º) dos outros da pasta (dobra fechada); ícone da Jornada; upload grava properties', (()=>{ try{
+          const s1=anxSugerir('Recibo_Proposta_000123456E_Fulano_Beltrano.pdf'), s2=anxSugerir('alteracao 001234567.pdf'), s3=anxSugerir('CamScanner_26-10-2026_19.19.pdf'),
+                s4=anxSugerir('print.png'), s5=anxSugerir('Laudo PSA Fulano.pdf'), s6=anxSugerir('RG frente.jpg'), s7=anxSugerir('Demonstrativo 123456789.pdf'), s8=anxSugerir('cargo.pdf');
+          const sug=s1.tipo==='recibo'&&s1.ref==='000123456E'&&s2.tipo==='alteracao'&&s2.ref==='001234567'&&s3.tipo==='outro'&&s3.ref===null&&s4.tipo==='outro'&&s5.tipo==='exame'&&s6.tipo==='documento_pessoal'&&s7.tipo==='apolice_extrato'&&s7.ref==='123456789'&&s8.tipo==='outro';
+          const MB=1048576, fs=[{name:'a.pdf',size:50*1024},{name:'b.PNG',size:10},{name:'c.docx',size:10},{name:'grande.pdf',size:25*MB},{name:'virus.exe',size:10},{name:'image.png',type:'image/png',size:500}];
+          const p=anxPreparar(fs,'zanx1'); const val=p.ok.length===4&&p.bloq.length===2&&/20 MB/.test(p.bloq[0])&&/\.exe/.test(p.bloq[1])&&p.ok[3].nome==='print.png'&&p.ok[0].props.contato_id==='zanx1'&&p.ok[0].props.crm==='card'&&!('referencia' in p.ok[0].props);
+          const it=anxInteracao('a.pdf','recibo','000123456E','DRVID1'); const int=it.k==='anexo'&&it.anexo_id==='DRVID1'&&it.l==='📎 a.pdf · Recibo · 000123456E'&&!!it.id&&!!it.dia;
+          const nm=/^\d{4}-\d{2}-\d{2}_\d{4}_card_a\.pdf$/.test(drvNomeArq('card','a.pdf'))&&anxNomeLimpo('2026-11-02_1015_card_a.pdf')==='a.pdf';
+          const o={id:'P',files:[{id:'1',name:'2026-11-01_0900_card_x.pdf',mimeType:'application/pdf',createdTime:'2026-11-01T09:00:00Z',properties:{crm:'card',contato_id:'zanx1',tipo_doc:'exame'}},
+            {id:'2',name:'2026-11-02_0900_card_y.pdf',mimeType:'application/pdf',createdTime:'2026-11-02T09:00:00Z',properties:{crm:'card',contato_id:'zanx1',tipo_doc:'recibo',referencia:'000123456E'}},
+            {id:'3',name:'2026-10-01_0900_solicitacao_z.pdf',mimeType:'application/pdf'},{id:'4',name:'w.pdf',mimeType:'application/pdf',properties:{crm:'card',contato_id:'outro'}}]};
+          const meus=anxDoCard(o,'zanx1'), h=anxCardListaHtml(o,'zanx1','k'), ab=dobraAberta('anx-outros',drwSecsLer());
+          const lis=meus.map(f=>f.id).join()==='2,1'&&(h.match(/class="anx-l"/g)||[]).length===2&&/Outros arquivos da pasta/.test(h)&&/2 · só consulta/.test(h)&&(/<details class="anx-outros" open/.test(h)===ab)&&/value="recibo" selected/.test(h)&&/value="000123456E"/.test(h)&&/>Ver</.test(h)&&/>Baixar</.test(h);
+          const liga=[...document.scripts].some(x=>x.textContent.includes("k==='anexo'?'':'📞'"))&&String(drvNegBloco.toString()).includes('cardAnexar(c.id,l)')&&String(drvUpload.toString()).includes('md.properties=props');
+          return sug&&val&&int&&nm&&lis&&liga; }catch(e){ console.warn('[ANEXOS-CARD-V1]',e); return false; } })());
         ok('MFO-FICHA-V1: Ficha só em funil mfo*; ramos/fecha por de UMA constante; receita aceita 1.500 e 1500,5; vencimento muda só esse campo; parceiro só com fecha_por=Parceiro', (()=>{
           const c={id:'zmfx',nome:'Fulano',funil:'mfo',etapa:'Proposta',fecha_por:'Parceiro',apolices_externas:[{seguradora:'X',premio_bruto:10}]};
           const h=mfoFichaHTML(c), hb=mfoFichaHTML({id:'zb',funil:'bc'}), h2=mfoFichaHTML(Object.assign({},c,{fecha_por:'Outliers'}));

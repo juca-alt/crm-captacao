@@ -43,3 +43,14 @@ conecta com a conta Google dele, upload e leitura dão 404 nessa pasta. Isso nã
   `appProperties` (o arquivo fica na pasta, some só no CRM; reversível sempre).
 - **Lista do card:** só os anexos do card (`appProperties.contato_id`) com tipo/ref editáveis + "outros arquivos da pasta"
   em leitura (o bloco 📁 de hoje) · ou tudo da pasta editável.
+
+## T2 · upload + lista (02/11/2026) — no branch, NÃO publicado
+Decisão dele: **1A 2A** (exclusão = Lixeira do Drive, no T3; lista = anexos do card editáveis + outros da pasta só consulta).
+- Seção da gaveta **"📎 Anexos · Drive"** (no lugar do "📁 Arquivos no Drive"; nasce fechada; resumo "N anexos · M outros na pasta").
+- Soltar vários / tocar e escolher / **＋ Anexar** / **Ctrl+⌘V** com a ficha aberta → `cardAnexar` → arquivo `AAAA-MM-DD_HHMM_card_<nome>`
+  na pasta do cliente, com `properties` {crm:'card', contato_id, tipo_doc, referencia}; interação `{k:'anexo', l, anexo_id}`.
+- Barrado antes do Drive: > 20 MB, extensão fora de pdf/jpg/jpeg/png/heic/webp/docx/xlsx/csv, arquivo vazio (toast com o motivo).
+- Linha: ícone · nome · data · **tipo (select)** · **referência (campo)** — editar = PATCH nas `properties` · **Ver** · **Baixar**.
+- Funções: `anxSugerir`, `anxValidar`, `anxPreparar`, `anxInteracao`, `cardAnexar`, `anxDoCard`, `anxCardListaHtml`, `anxCardEditar`.
+- Testes: autoteste `ANEXOS-CARD-V1`; portão verde (55 telas × 6); simulação no navegador com Drive simulado (drop de 5 → 3 sobem,
+  25 MB e .exe barrados; colar print → `print.png · Outro`); prints 390/1280. **Falta o teste com o Drive real (precisa do login Google dele).**
