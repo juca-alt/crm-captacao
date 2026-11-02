@@ -15347,6 +15347,26 @@ async function drvPastaCliente(nome,criar){ const idx=await drvIndice(); const v
   const o={id:c.id,name:c.name||nm}; idx.set(drvChave(o.name),o); return o; }
 async function drvListar(pastaId){ const q=encodeURIComponent("'"+pastaId+"' in parents and trashed = false");
   const j=await drvApi('GET','https://www.googleapis.com/drive/v3/files?q='+q+'&orderBy=modifiedTime desc&pageSize=100&fields=files(id,name,webViewLink,webContentLink,mimeType,modifiedTime,createdTime,properties)'); return j.files||[]; }
+/* ═══ DRIVE-ACESSO-ASSISTENTE-V1 (02/11/2026) ═══ palavra dele: "compartilha a pasta com o Victor e usuários que add como
+   assistente". Assistente = quem tem delegação na base do admin (lp_delegacoes dono=ele). Marcar a delegação no Painel
+   Master · Acessos compartilha a pasta Histórico de Clientes (DRV_RAIZ, dele) como EDITOR, com o token Google DELE;
+   tirar a delegação tira o acesso. Botão "📂 dar acesso à pasta do Drive" na linha refaz (idempotente). Nunca cria link
+   público: só permissão nominal (type:user). Só o admin (dono da pasta) faz. */
+function drvAcessoPodeDar(){ return !!(PERFIL&&PERFIL.papel==='admin'&&anxOn()); }
+const DRV_PERM_URL='https://www.googleapis.com/drive/v3/files/'+DRV_RAIZ+'/permissions';
+function drvAcessoErro(email,e){ const m=String(e&&e.message||e);
+  toast('O Google recusou dar acesso à pasta pra '+email+': '+m+(/domain|domínio|outside|fora|policy|polític|not allowed|403/i.test(m)?' — se a sua conta Google Workspace bloqueia compartilhar fora do domínio, libere em admin.google.com → Apps → Google Workspace → Drive e Documentos → Compartilhamento':''),false); }
+async function drvAcessoDar(email){ email=String(email||'').trim().toLowerCase(); if(!email||!drvAcessoPodeDar()) return false;
+  try{ await drvApi('POST',DRV_PERM_URL+'?sendNotificationEmail=true&fields=id',JSON.stringify({type:'user',role:'writer',emailAddress:email}),{'Content-Type':'application/json'});
+    toast('📂 '+email+' agora edita a pasta Histórico de Clientes (anexos)',true); return true; }
+  catch(e){ drvAcessoErro(email,e); return false; } }
+async function drvAcessoTirar(email){ email=String(email||'').trim().toLowerCase(); if(!email||!drvAcessoPodeDar()) return false;
+  try{ const j=await drvApi('GET',DRV_PERM_URL+'?fields=permissions(id,emailAddress,role)');
+    const p=(j.permissions||[]).find(x=>String(x.emailAddress||'').toLowerCase()===email&&x.role!=='owner'); if(!p) return true;
+    const tok=await drvToken(); const r=await fetch(DRV_PERM_URL+'/'+encodeURIComponent(p.id),{method:'DELETE',headers:{Authorization:'Bearer '+tok}}); if(!r.ok) throw new Error('HTTP '+r.status);
+    toast('📂 '+email+' saiu da pasta Histórico de Clientes',true); return true; }
+  catch(e){ toast('Não tirei o acesso de '+email+' à pasta do Drive: '+(e&&e.message||e)+' — tire à mão em Compartilhar',false); return false; } }
+window.drvAcessoDar=drvAcessoDar; window.drvAcessoTirar=drvAcessoTirar;
 function drvTemToken(){ return !!(GCAL.tok&&Date.now()<GCAL.exp-60000&&/auth\/drive(\s|$)/.test(String(GCAL.escopos||''))); }
 /* ── a área "Solte o arquivo aqui": soltar (desktop) ou tocar pra escolher (celular); o botão de importar continua onde estava ── */
 const ANX_ALVOS={};
@@ -20265,7 +20285,7 @@ function admHtml(){
       </div>
       <div class="adm-lin"><b>Vê</b>${m.liga.length?m.liga.map(l=>`<span class="chipm on">${esc(l)}</span>`).join(''):'<span class="adm-nada">só o funil e a agenda</span>'}</div>
       ${m.desliga.length?`<div class="adm-lin"><b>Não vê</b>${m.desliga.map(l=>`<span class="chipm">${esc(l)}</span>`).join('')}</div>`:''}
-      ${donos.length?`<div class="adm-lin">🤝 Trabalha na carteira de <b style="text-transform:none;font-size:12.5px;letter-spacing:0">${donos.map(d=>esc(d.dono_email)).join(', ')}</b> — o que ele grava no BackOffice fica sendo do dono.${donos.some(d=>d.dono_email===eu)?` <button class="btn btn-ghost btn-mini" style="padding:1px 8px;font-size:11px" onclick="admDesdelegar('${esc(eu)}','${esc(p.email)}')">tirar</button>`:''}</div>`:''}
+      ${donos.length?`<div class="adm-lin">🤝 Trabalha na carteira de <b style="text-transform:none;font-size:12.5px;letter-spacing:0">${donos.map(d=>esc(d.dono_email)).join(', ')}</b> — o que ele grava no BackOffice fica sendo do dono.${donos.some(d=>d.dono_email===eu)?` <button class="btn btn-ghost btn-mini" style="padding:1px 8px;font-size:11px" onclick="admDesdelegar('${esc(eu)}','${esc(p.email)}')">tirar</button>${drvAcessoPodeDar()?` <button class="btn btn-ghost btn-mini" style="padding:1px 8px;font-size:11px" title="Compartilha a pasta Histórico de Clientes (anexos) com ele como Editor" onclick="drvAcessoDar('${esc(p.email)}')">📂 dar acesso à pasta do Drive</button>`:''}`:''}</div>`:''}
       ${assist.length?`<div class="adm-lin">👥 Tem assistente: <b style="text-transform:none;font-size:12.5px;letter-spacing:0">${assist.map(d=>esc(d.delegado_email)).join(', ')}</b></div>`:''}
       ${!donos.length&&p.email!==eu&&p.papel!=='admin'?`<div class="adm-lin" style="color:var(--amarelo)">⚠️ Sem delegação: ele entra e abre as telas <b style="text-transform:none;font-size:12.5px;letter-spacing:0">vazias</b>, porque o dado é do dono.</div>`:''}
       <div class="adm-acoes">
@@ -20366,8 +20386,8 @@ async function admSalvarFicha(){
   if(dl&&eu&&email!==eu){
     const tinha=admDonosDe(email).some(d=>d.dono_email===eu);
     try{
-      if(dl.checked&&!tinha){ const r=await sb.from('lp_delegacoes').upsert({dono_email:eu,delegado_email:email},{onConflict:'dono_email,delegado_email'}); if(r.error) throw r.error; }
-      if(!dl.checked&&tinha){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:eu,delegado_email:email}); if(r.error) throw r.error; }
+      if(dl.checked&&!tinha){ const r=await sb.from('lp_delegacoes').upsert({dono_email:eu,delegado_email:email},{onConflict:'dono_email,delegado_email'}); if(r.error) throw r.error; if(drvAcessoPodeDar()) drvAcessoDar(email); }
+      if(!dl.checked&&tinha){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:eu,delegado_email:email}); if(r.error) throw r.error; if(drvAcessoPodeDar()) drvAcessoTirar(email); }
     }catch(e){ toast('Perfil salvo, mas a delegação falhou: '+(e.message||e),false); admFechar(); viewLpAdm(); return; }
   }
   admFechar(); toast(email+' salvo',true); viewLpAdm();
@@ -20394,7 +20414,8 @@ function admVerComo(email){
     <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btn-p" onclick="atClose()">Fechar</button></div>`);
 }
 async function admUpsert(row){ const r=await sb.from('lp_perfis').upsert(row,{onConflict:'email'}); if(r.error){ toast('Falhou: '+r.error.message,false); return false; } return true; }
-async function admDesdelegar(dono,para){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:dono,delegado_email:para}); if(r.error){ toast('Falhou: '+r.error.message,false); return; } toast('Delegação removida',true); viewLpAdm(); }
+async function admDesdelegar(dono,para){ const r=await sb.from('lp_delegacoes').delete().match({dono_email:dono,delegado_email:para}); if(r.error){ toast('Falhou: '+r.error.message,false); return; } toast('Delegação removida',true);
+  if(drvAcessoPodeDar()&&dono===((PERFIL&&PERFIL.email)||'')) drvAcessoTirar(para); viewLpAdm(); }
 
 const TITULO_VIEW={inicio:'Início',consolidado:'Visão Consolidada',modulos:'Módulos',config:'Configurações',sitplan:'SitPlan',metas:'Metas',contatos:'Contatos',
   'bn-estoque':'Estoque de Nomes','bn-ta':'Painel TA','bn-wa':'Painel WA',mapa:'Mapa de locais','bn-dups':'Fila de Duplicatas','bn-recs':'Recomendações','lp-adm':'Acessos & Módulos',
@@ -22054,6 +22075,9 @@ function lpSelfCheck(){
           const exc=/anxExcluirPedir\(this,true\)/.test(h)&&/class="anx-conf"/.test(h)&&/anxCardExcluir\(this\)/.test(h)&&/Lixeira do Drive/.test(h)&&String(anxCardExcluir.toString()).includes('{trashed:true}')&&!/\bconfirm\(/.test(String(anxCardExcluir.toString())+String(anxExcluirPedir.toString()));
           const ligado=String(nnCard.toString()).includes('anxSeloHtml(c)')&&[...document.scripts].some(x=>x.textContent.includes('recomendanteChip(c,true)} ${anxSeloHtml(c)}'))&&[...document.scripts].some(x=>x.textContent.includes("i.k==='anexo'?anxIntHtml(c,i)"));
           return at&&sel&&abre&&naoAbre&&remTxt&&exc&&ligado; }catch(e){ console.warn('[ANEXOS-CARD-T3]',e); return false; } })());
+        ok('DRIVE-ACESSO-ASSISTENTE-V1: delegar na base do admin compartilha a pasta dos anexos como Editor (permissão nominal, nunca link público); tirar a delegação tira o acesso; só o admin faz', (()=>{ const d=String(drvAcessoDar.toString()), t=String(drvAcessoTirar.toString());
+          return /type:'user',role:'writer'/.test(d)&&!/anyone|domain'/.test(d+t)&&/DELETE/.test(t)&&/x\.role!=='owner'/.test(t)&&/papel==='admin'/.test(String(drvAcessoPodeDar.toString()))
+            &&String(admSalvarFicha.toString()).includes('drvAcessoDar(email)')&&String(admSalvarFicha.toString()).includes('drvAcessoTirar(email)')&&String(admDesdelegar.toString()).includes('drvAcessoTirar(para)')&&DRV_PERM_URL.includes(DRV_RAIZ); })());
         ok('MFO-FICHA-V1: Ficha só em funil mfo*; ramos/fecha por de UMA constante; receita aceita 1.500 e 1500,5; vencimento muda só esse campo; parceiro só com fecha_por=Parceiro', (()=>{
           const c={id:'zmfx',nome:'Fulano',funil:'mfo',etapa:'Proposta',fecha_por:'Parceiro',apolices_externas:[{seguradora:'X',premio_bruto:10}]};
           const h=mfoFichaHTML(c), hb=mfoFichaHTML({id:'zb',funil:'bc'}), h2=mfoFichaHTML(Object.assign({},c,{fecha_por:'Outliers'}));

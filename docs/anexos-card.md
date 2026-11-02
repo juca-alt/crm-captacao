@@ -54,8 +54,15 @@ A linha do tempo **só referencia**: `dados.interacoes += {k:'anexo', l:'📎 no
   então não ganhou trava nova.
 - Quem vê o arquivo = quem tem permissão na pasta do Drive. A raiz *Histórico de Clientes* tem **uma permissão só (dono)**,
   conferido 02/11. O app nunca cria link público (não chama `/permissions`).
-- ⚠️ Victor tem o módulo ligado, mas a pasta não é compartilhada com ele: com a conta Google dele, o upload/leitura deve
-  falhar. Não testado; decisão do Gustavo.
+- **DRIVE-ACESSO-ASSISTENTE-V1 (02/11, palavra dele: "compartilha a pasta com o Victor e usuários que add como
+  assistente"):** assistente = quem tem delegação na base do admin (`lp_delegacoes` dono = ele). Marcar a delegação em
+  Painel Master · Acessos compartilha *Histórico de Clientes* como **Editor** (permissão nominal, com o token Google do
+  admin); tirar a delegação tira o acesso. Botão **📂 dar acesso à pasta do Drive** na linha do assistente refaz.
+  `drvAcessoPodeDar/drvAcessoDar/drvAcessoTirar`. O conector do Drive desta sessão foi recusado ao compartilhar
+  ("caller does not have permission") — por isso o caminho é o botão no app, com o login Google dele.
+- Limite do Google (Meu Drive): quem é Editor só manda pra Lixeira o que ele mesmo subiu; arquivo do dono, só o dono.
+- Daniel também está com `anexos-drive` ligado, mas a pasta é do Gustavo e ele não é assistente dela: anexo pela base
+  dele não sobe (erro claro na tela). Decisão do Gustavo se/como atender a base do Daniel.
 
 ## Testes de aceite → status
 
