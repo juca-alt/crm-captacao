@@ -2,6 +2,16 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 03/11/2026 — v8.84 no branch `claude/busy-galileo-dh6sti` (NÃO publicada — falta o OK dele): ajustes do quadro "Vida Individual · novo"
+
+- **Pedido (print dele, "demais ajustes e correções"):** no PC a 1ª coluna aparecia cortada pela metade, os títulos das colunas sumiam ao rolar, sobrava branco onde a coluna era curta, "paga p/ K." aparecia 2× no mesmo card e os ícones do Contato rápido mudavam de lugar de um card pro outro.
+- **QUADRO-ALTURA-V1 (modulos/funil-unico.js, ?v=20261103a):** só no PC (≥761px): o quadro ocupa a altura da tela entre a barra do topo e o rodapé (mín. 420 px); cada coluna rola sozinha com o título parado; a barra de rolar de lado fica sempre à vista; a rolagem de lado encaixa no começo de uma coluna (scroll-snap proximity). Repintar (mover, ✓, delay, filtro) guarda a posição de lado e a de cada coluna. Celular igual (uma coluna por vez, pelas abas).
+- **PAGA-AGRUPA-V1 (vendas.html, `cartGrupo`):** quem paga 2+ apólices da mesma pessoa vira UM chip com os prêmios somados e "· N apólices" — vale no card novo, no antigo e na ficha.
+- **CF-ALINHA-V1:** card sem próximo passo guarda o lugar do ✓ (sem botão morto).
+- **Gate:** melhoria em módulo já liberado → sem trava nova (regra 29/09).
+- **Testes:** autotestes `QUADRO-ALTURA-V1`, `CF-ALINHA-V1`, `PAGA-AGRUPA-V1`; portão verde (55 telas × 6); guard ok; prints 390/1220/1600.
+- **Falta dele:** validar na prévia e dar o OK pra publicar.
+
 ## 🟢 RETOMAR AQUI — 02/11/2026 — v8.83 PUBLICADA (PR #328, OK dele: "faz tudo aí, já autorizo"; Pages conferido por hash `d8579d8d6151`): 📎 Anexos no card (ANEXOS-CARD-V1)
 
 - **O quê:** PROMPT_CODE_ANEXOS_CARDS + ADENDO, T1→T4. Anexo direto no card do negócio: arrastar / ＋ Anexar / Ctrl+⌘V → arquivo `AAAA-MM-DD_HHMM_card_<nome>` na pasta do cliente no Drive (Histórico de Clientes / <cliente>). Tipo e referência sugeridos pelo nome e editáveis (gravados nas `properties` do arquivo = fonte única); linha do tempo `k:'anexo'` + `anexo_id`, clicável enquanto ativo; selo 📎 N no cabeçalho da ficha, no card antigo e no do quadro novo; excluir = confirmação na página → Lixeira do Drive + "🗑️ Anexo removido" + desfazer. Barra > 20 MB e extensão fora da lista antes de subir.

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.83 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.84 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1858,7 +1858,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <div id="toasts"></div>
 
 <!-- FUNIL-UNICO-V1 · T3: o quadro dos 2 funis novos mora em arquivo próprio (não briga com a sessão paralela) -->
-<script src="modulos/funil-unico.js?v=20261102a"></script>
+<script src="modulos/funil-unico.js?v=20261103a"></script>
 <!-- AGENDA-GLOBAL-V1 (26/10): Agenda & Tarefas no padrão do Global mora em arquivo próprio -->
 <script src="modulos/agenda-global.js?v=20261026c"></script>
 <script src="modulos/ficha-ux2.js?v=20261102a"></script>
@@ -11007,7 +11007,8 @@ function cartGrupo(cli){
   const aps=(typeof cartApVis==='function'?cartApVis():(CART.apolices||[])).filter(a=>!/cancel/i.test(a.status||''));
   const paga=[], pagoPor=new Map();
   aps.forEach(a=>{ const seg=nk(a.segurado), resp=nk(a.respPagto); if(!resp) return;
-    if(resp===ref&&seg&&seg!==ref) paga.push({nome:a.segurado,premio:Number(a.premio)||0});
+    if(resp===ref&&seg&&seg!==ref){ const ja=paga.find(x=>nk(x.nome)===seg);   /* PAGA-AGRUPA-V1 (03/11, print dele: "paga p/ K." 2x no card): uma pessoa = um chip, prêmios somados */
+      if(ja){ ja.premio+=Number(a.premio)||0; ja.n++; } else paga.push({nome:a.segurado,premio:Number(a.premio)||0,n:1}); }
     if(seg===ref&&resp!==ref&&resp!==nk(cli.nome)) pagoPor.set(resp,a.respPagto); });
   const mesmo=[]; const em=nk(cli.email), tel=telKey(cli.celular||cli.telefone);
   (typeof cartVis==='function'?cartVis():(CART.clientes||[])).forEach(o=>{ if(o.ref===ref) return; if((em&&nk(o.email)===em)||(tel&&telKey(o.celular||o.telefone)===tel)) mesmo.push(o.nome); });
@@ -11028,7 +11029,7 @@ function cartPessoaBtn(nome,cls,ico,pre){ const ref=cartRefDe(nome); const p1=at
             :`<span class="nc-cli" style="background:#eef2ff;color:#3730a3" title="${esc(atTitleC(nome))} — não está na carteira">${ico} ${esc(pre)}${esc(p1)}</span>`; }
 function cartGrupoChips(cli){ const g=cartGrupo(cli); if(!g||!g.tem) return '';
   const ch=[];
-  g.paga.forEach(x=>ch.push(cartPessoaBtn(x.nome,'','👨‍👩‍👧','paga p/ ')+(x.premio?`<span class="nc-cli" style="background:transparent;padding-left:0">${brlCurto(x.premio)}/mês</span>`:'')));
+  g.paga.forEach(x=>ch.push(cartPessoaBtn(x.nome,'','👨‍👩‍👧','paga p/ ')+(x.premio?`<span class="nc-cli" style="background:transparent;padding-left:0">${brlCurto(x.premio)}/mês${x.n>1?` · ${x.n} apólices`:''}</span>`:'')));
   g.pagoPor.forEach(n=>ch.push(cartPessoaBtn(n,'','💳','pago por ')));
   g.mesmo.forEach(n=>ch.push(cartPessoaBtn(n,'','👥','c/ ')));
   (g.familia||[]).forEach(f=>ch.push(cartPessoaBtn(f.nome,'',f.papel==='cônjuge'?'💍':/filh/.test(f.papel)?'👶':/pai|mae|mãe/.test(f.papel)?'👪':'👥',f.papel+' ')));
@@ -23566,6 +23567,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('grupo familiar: quem paga a apólice do outro aparece dos dois lados', ga.paga.length===1&&ga.paga[0].premio===400&&gr.pagoPor.length===1);
         ok('grupo familiar: mesmo e-mail amarra as duas pessoas', ga.mesmo.length===1&&gr.mesmo.length===1);
         ok('grupo familiar: vira chip no card', cartGrupoChips(CART.clientes[0]).indexOf('paga p/ Ricardo')>=0 && cartGrupoChips(CART.clientes[1]).indexOf('pago por Amanda')>=0);
+        { CART.apolices.push(cartNormApolice({apolice:'R2',segurado:'Ricardo Teste',ref:'ricardo teste',cli_ref:'ricardo teste',respPagto:'AMANDA TESTE',premio:100,status:'Ativa'})); cartIdxInvalidar&&cartIdxInvalidar();
+          const g2=cartGrupo(CART.clientes[0]), h2=cartGrupoChips(CART.clientes[0]);
+          ok('PAGA-AGRUPA-V1: quem paga 2 apólices da mesma pessoa vira UM chip, prêmios somados', g2.paga.length===1&&g2.paga[0].premio===500&&g2.paga[0].n===2&&h2.split('paga p/ ').length===2&&h2.indexOf('2 apólices')>=0);
+          CART.apolices.pop(); cartIdxInvalidar&&cartIdxInvalidar(); }
         { const _p=CART.perfis; try{ CART.perfis={'amanda teste':{conjuge:'Ricardo Teste',filhos:[{nome:'Gael Teste',idade:5}]}};
             CART.clientes.push(cartNormCliente({nome:'Gael Teste',ref:'gael teste',cob:{pm:1}})); cartIdxInvalidar&&cartIdxInvalidar();
             const fa=cartGrupo(CART.clientes[0]).familia, fr=cartGrupo(CART.clientes[1]).familia, fg=cartGrupo(CART.clientes[2]).familia;
