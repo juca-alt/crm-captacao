@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.83 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.84 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1858,10 +1858,10 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <div id="toasts"></div>
 
 <!-- FUNIL-UNICO-V1 · T3: o quadro dos 2 funis novos mora em arquivo próprio (não briga com a sessão paralela) -->
-<script src="modulos/funil-unico.js?v=20261102a"></script>
+<script src="modulos/funil-unico.js?v=20261103a"></script>
 <!-- AGENDA-GLOBAL-V1 (26/10): Agenda & Tarefas no padrão do Global mora em arquivo próprio -->
 <script src="modulos/agenda-global.js?v=20261026c"></script>
-<script src="modulos/ficha-ux2.js?v=20261102a"></script>
+<script src="modulos/ficha-ux2.js?v=20261103a"></script>
 <script src="modulos/nova-rec.js?v=20261025i"></script>
 <script>
 /* CARD-WA-LEVE-V1 (19/10/2026): ?wa=1 = o card do CRM dentro da extensão do WhatsApp. Sabido ANTES de tudo (render e boot
@@ -2859,7 +2859,11 @@ const PA_MESES=12;
 const PM_PADRAO=250;
 function pmInformado(c){ const n=Number(c&&c.pm); return isFinite(n)&&n>0? n : 0; }
 const PM_PADRAO_DESDE='TA';   /* "a partir de TA/RCP já pode atribuir valor": SitPlan (antes do TA) ainda não vale */
-function pmPadraoVale(c){ if(!c||pmInformado(c)||!c.etapa||ETAPAS_ENCERR.includes(c.etapa)||ETAPAS_BC_ENCERR.includes(c.etapa)||!novoOn('pm-padrao')) return false;
+/* PM-ZERO-V1 (03/11, palavra dele: "esse valor mínimo é referência… mas quando vejo que não sai negócio posso botar zero
+   pra não ficar somando no funil"): digitar 0 no prêmio grava c.pm_zero=true → o padrão de R$ 250 deixa de valer pra esse
+   negócio, o card mostra "R$ 0 · sem negócio" e nada soma (PA, ponderado, coluna). Informar um valor ou Limpar desfaz. */
+function pmZerado(c){ return !!(c&&c.pm_zero&&!pmInformado(c)); }
+function pmPadraoVale(c){ if(!c||pmInformado(c)||pmZerado(c)||!c.etapa||ETAPAS_ENCERR.includes(c.etapa)||ETAPAS_BC_ENCERR.includes(c.etapa)||!novoOn('pm-padrao')) return false;
   const L=ETAPAS_FLUXO.includes(c.etapa)?ETAPAS_FLUXO:(ETAPAS_BC_FLUXO.includes(c.etapa)?ETAPAS_BC_FLUXO:null);
   if(L){ const ta=L.indexOf(PM_PADRAO_DESDE); if(ta>=0&&L.indexOf(c.etapa)<ta) return false;
     if(L===ETAPAS_BC_FLUXO&&L.indexOf(c.etapa)<1) return false; }   /* na Base, a 1ª etapa (Clientes Ativos) é a carteira parada, não negociação */
@@ -2869,11 +2873,13 @@ function paDe(c){ return pmDe(c)*PA_MESES; }
 function somaPM(lista){ return (lista||[]).reduce((t,c)=>t+pmDe(c),0); }
 function somaPA(lista){ return somaPM(lista)*PA_MESES; }
 /* aceita "600", "600,50", "1.200,00" e "R$ 1.200" */
+function pmEhZero(txt){ return /^\s*(r\$)?\s*0+([.,]0+)?\s*$/i.test(String(txt==null?'':txt)); }   /* PM-ZERO-V1: "0", "0,00", "R$ 0" */
 function parsePM(txt){
   const s=String(txt==null?'':txt).replace(/[^\d,.-]/g,'').replace(/\.(?=\d{3}(\D|$))/g,'').replace(',','.');
   const n=parseFloat(s); return isFinite(n)&&n>0? Math.round(n*100)/100 : 0;
 }
 function valorTag(c){
+  if(pmZerado(c)) return `<span class="vneg" style="background:#f1f5f9;color:#64748b;cursor:pointer" onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" title="Você zerou o prêmio: este negócio não soma no funil — toque pra informar um valor">R$ 0 · sem negócio</span>`;
   const pm=pmDe(c); if(!pm) return '';
   const pad=pmPadraoVale(c);   /* PM-PADRAO-V1: o padrão aparece marcado e continua clicável pra informar o negociado */
   return `<span class="vneg${pad?' vneg-pad':''}"${pad?` onclick="event.stopPropagation();abrirContatoPM('${esc(c.id)}')" style="cursor:pointer"`:''} title="${pad?'Prêmio padrão (mínimo base da Prudential, R$ 250/mês) — toque pra informar o negociado':'Prêmio mensal × '+PA_MESES+' = prêmio anual (PA)'}">${brlCurto(pm)}/mês · <b>PA ${brlCurto(paDe(c))}</b>${pad?' · <i>padrão</i>':''}</span>`;
@@ -6750,12 +6756,12 @@ function renderDrawer(){
         ${(()=>{ const t=negTitulo(c); return (t&&!String(c.titulo||'').trim())?`<div style="font-size:11.5px;color:var(--muted);margin:-4px 0 8px">Vindo da simulação ativada: <b>${esc(t)}</b>. Escreva acima para usar outro título.</div>`:''; })()}
         <div class="linha-form" style="align-items:center">
           <span style="font-size:12.5px;color:var(--muted);flex:0 0 auto">Prêmio mensal R$</span>
-          <input id="drwPM" type="text" inputmode="decimal" placeholder="${pmPadraoVale(c)?'250 · padrão (mínimo Prudential)':'600'}" value="${pmInformado(c)? String(pmInformado(c)).replace('.',','):''}"
+          <input id="drwPM" type="text" inputmode="decimal" placeholder="${pmPadraoVale(c)?'250 · padrão (mínimo Prudential)':'600'}" value="${pmInformado(c)? String(pmInformado(c)).replace('.',','):(pmZerado(c)?'0':'')}"
                  style="flex:0 0 120px;min-width:100px" oninput="drwPMPreview()" onblur="drwSalvarPM(true)" onkeydown="if(event.key==='Enter')drwSalvarPM()">
           <button class="btn btn-p btn-mini" onclick="drwSalvarPM()">Salvar</button>
-          ${pmDe(c)? `<button class="btn btn-ghost btn-mini" onclick="drwLimparPM()">Limpar</button>`:''}
+          ${pmDe(c)||pmZerado(c)? `<button class="btn btn-ghost btn-mini" onclick="drwLimparPM()">Limpar</button>`:''}
         </div>
-        <div id="drwPApreview" class="pa-box">${pmDe(c)? `PA <b>${brl(totalDe(c))}</b> <span style="color:var(--muted)">${c.premio_total_manual?'(total ajustado à mão · 12× seria '+brl(paDe(c))+')':'('+brl(pmDe(c))+' × '+PA_MESES+')'}</span> <button class="btn btn-ghost btn-mini" onclick="drwAjustarTotal()">ajustar total</button>` : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`}</div>
+        <div id="drwPApreview" class="pa-box">${pmZerado(c)?`<span style="color:var(--muted)">R$ 0 · sem negócio — não soma no funil. Limpar volta ao padrão.</span>`:pmDe(c)? `PA <b>${brl(totalDe(c))}</b> <span style="color:var(--muted)">${c.premio_total_manual?'(total ajustado à mão · 12× seria '+brl(paDe(c))+')':'('+brl(pmDe(c))+' × '+PA_MESES+')'}</span> <button class="btn btn-ghost btn-mini" onclick="drwAjustarTotal()">ajustar total</button>` : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`}</div>
         <div class="linha-form" style="align-items:center;margin-top:10px;gap:8px;flex-wrap:wrap">
           <label style="font-size:12.5px;color:var(--muted)">🎯 Previsão de fechamento
             <input id="drwPrevF" type="date" value="${esc(prevDe(c,'fech')||'')}" onchange="drwSalvarPrev('fech',this.value)" style="margin-left:5px"></label>
@@ -6937,7 +6943,7 @@ function drwRegistrar(){ const sel=$('#drwRes'); const k=sel&&sel.value; if(!k){
 function drwPMPreview(){
   const el=$('#drwPM'), box=$('#drwPApreview'); if(!el||!box) return;
   const pm=parsePM(el.value);
-  box.innerHTML = pm
+  box.innerHTML = pmEhZero(el.value) ? `<span style="color:var(--muted)">R$ 0 · sem negócio — ao salvar, deixa de somar no funil.</span>` : pm
     ? `PA <b>${brl(pm*PA_MESES)}</b> <span style="color:var(--muted)">(${brl(pm)} × ${PA_MESES})</span>`
     : `<span style="color:var(--muted)">Informe o prêmio mensal — o PA (anual) é calculado sozinho.</span>`;
 }
@@ -6947,9 +6953,13 @@ function drwPMPreview(){
    `auto` = veio do blur: não repete toast quando nada mudou. */
 function drwSalvarPM(auto){
   const c=ct(), el=$('#drwPM'); if(!c||!el) return;
-  const pm=parsePM(el.value);
-  if(String(el.value).trim() && !pm){ toast('Valor inválido — use só números (ex.: 600 ou 1.200,50)'); return; }
-  if(auto && pm===pmInformado(c)) return;   /* PM-PADRAO-V1: compara com o INFORMADO, senão o padrão nunca daria pra sobrescrever */
+  const pm=parsePM(el.value), zero=pmEhZero(el.value);
+  if(String(el.value).trim() && !pm && !zero){ toast('Valor inválido — use só números (ex.: 600 ou 1.200,50)'); return; }
+  if(zero){ if(auto&&pmZerado(c)) return;   /* PM-ZERO-V1 */
+    c.pm=null; c.premio_mes=null; c.premio_total=null; c.premio_total_manual=false; c.pm_zero=true;
+    salvar(); render(); try{ if(CONTATO) renderDrawer(); }catch(_){ } toast('R$ 0 · sem negócio — não soma mais no funil',true); return; }
+  if(auto && pm===pmInformado(c) && !(pm===0&&c.pm_zero)) return;   /* PM-PADRAO-V1: compara com o INFORMADO, senão o padrão nunca daria pra sobrescrever */
+  c.pm_zero=false;
   c.pm = pm || null;                       // salvar() carimba o _upd do sync sozinho
   c.premio_mes = c.pm;                     // campos canônicos (regra_premio): espelham o pm
   if(c.pm) c.premio_total = c.premio_total_manual? c.premio_total : Math.round(c.pm*PA_MESES*100)/100;
@@ -6977,7 +6987,7 @@ function drwSalvarPrev(k,v){
   prevSet(c,k,v||null); salvar(); render();
   toast(v? (k==='fech'?'Previsão de fechamento: ':'Previsão de emissão: ')+dataBR(v) : 'Previsão removida', true);
 }
-function drwLimparPM(){ const c=ct(); if(!c) return; c.pm=null; c.premio_mes=null; c.premio_total=null; c.premio_total_manual=false; salvar(); render(); toast('Valor do negócio removido',true); }
+function drwLimparPM(){ const c=ct(); if(!c) return; c.pm=null; c.pm_zero=false; c.premio_mes=null; c.premio_total=null; c.premio_total_manual=false; salvar(); render(); toast('Valor do negócio removido',true); }
 function toggleAnce(k){ const c=ct(); if(!c) return; if(!c.ance) c.ance={a:false,n:false,c:false,e:false,avisado:false}; c.ance[k]=!c.ance[k]; salvar(); renderDrawer(); }
 function setSitplan(iso){ const c=ct(); if(!c) return; c.sitplan=iso||null; salvar(); renderDrawer(); toast(iso? `Na lista de ${dataBR(iso)}` : 'Removido da lista de discagem',true); }
 function toggleIC(b){ const c=ct(); if(!c) return; c.infoclient[b]=!c.infoclient[b]; salvar(); renderDrawer(); }
@@ -11007,7 +11017,8 @@ function cartGrupo(cli){
   const aps=(typeof cartApVis==='function'?cartApVis():(CART.apolices||[])).filter(a=>!/cancel/i.test(a.status||''));
   const paga=[], pagoPor=new Map();
   aps.forEach(a=>{ const seg=nk(a.segurado), resp=nk(a.respPagto); if(!resp) return;
-    if(resp===ref&&seg&&seg!==ref) paga.push({nome:a.segurado,premio:Number(a.premio)||0});
+    if(resp===ref&&seg&&seg!==ref){ const ja=paga.find(x=>nk(x.nome)===seg);   /* PAGA-AGRUPA-V1 (03/11, print dele: "paga p/ K." 2x no card): uma pessoa = um chip, prêmios somados */
+      if(ja){ ja.premio+=Number(a.premio)||0; ja.n++; } else paga.push({nome:a.segurado,premio:Number(a.premio)||0,n:1}); }
     if(seg===ref&&resp!==ref&&resp!==nk(cli.nome)) pagoPor.set(resp,a.respPagto); });
   const mesmo=[]; const em=nk(cli.email), tel=telKey(cli.celular||cli.telefone);
   (typeof cartVis==='function'?cartVis():(CART.clientes||[])).forEach(o=>{ if(o.ref===ref) return; if((em&&nk(o.email)===em)||(tel&&telKey(o.celular||o.telefone)===tel)) mesmo.push(o.nome); });
@@ -11028,7 +11039,7 @@ function cartPessoaBtn(nome,cls,ico,pre){ const ref=cartRefDe(nome); const p1=at
             :`<span class="nc-cli" style="background:#eef2ff;color:#3730a3" title="${esc(atTitleC(nome))} — não está na carteira">${ico} ${esc(pre)}${esc(p1)}</span>`; }
 function cartGrupoChips(cli){ const g=cartGrupo(cli); if(!g||!g.tem) return '';
   const ch=[];
-  g.paga.forEach(x=>ch.push(cartPessoaBtn(x.nome,'','👨‍👩‍👧','paga p/ ')+(x.premio?`<span class="nc-cli" style="background:transparent;padding-left:0">${brlCurto(x.premio)}/mês</span>`:'')));
+  g.paga.forEach(x=>ch.push(cartPessoaBtn(x.nome,'','👨‍👩‍👧','paga p/ ')+(x.premio?`<span class="nc-cli" style="background:transparent;padding-left:0">${brlCurto(x.premio)}/mês${x.n>1?` · ${x.n} apólices`:''}</span>`:'')));
   g.pagoPor.forEach(n=>ch.push(cartPessoaBtn(n,'','💳','pago por ')));
   g.mesmo.forEach(n=>ch.push(cartPessoaBtn(n,'','👥','c/ ')));
   (g.familia||[]).forEach(f=>ch.push(cartPessoaBtn(f.nome,'',f.papel==='cônjuge'?'💍':/filh/.test(f.papel)?'👶':/pai|mae|mãe/.test(f.papel)?'👪':'👥',f.papel+' ')));
@@ -21094,6 +21105,9 @@ function lpSelfCheck(){
     ok('prêmio: 1.250,50 vira 1250.5', parsePM('1.250,50')===1250.5);
     ok('prêmio: R$ 600 vira 600', parsePM('R$ 600')===600);
     ok('prêmio: texto não vira valor', parsePM('abc')===0);
+    ok('PM-ZERO-V1: "0" / "0,00" / "R$ 0" são zero de propósito; vazio e 600 não', pmEhZero('0')&&pmEhZero('0,00')&&pmEhZero('R$ 0')&&!pmEhZero('')&&!pmEhZero('600')&&!pmEhZero('10'));
+    ok('PM-ZERO-V1: negócio zerado não ganha o padrão, não soma e o card diz "sem negócio"; valor informado desfaz', (()=>{ const z={id:'pz1',etapa:'P/C',funil:'nn',pm:null,pm_zero:true}, v={id:'pz2',etapa:'P/C',funil:'nn',pm:400,pm_zero:true};
+      return pmDe(z)===0&&!pmPadraoVale(z)&&somaPA([z])===0&&valorTag(z).indexOf('sem negócio')>0&&pmDe(v)===400&&!pmZerado(v); })());
     /* funil: negócio encerrado não conta como PA em jogo, mas o histórico dele
        ainda conta na taxa de passagem (12/08: a régua e o chip antigo davam
        números diferentes pro mesmo conceito na mesma tela) */
@@ -23566,6 +23580,10 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
         ok('grupo familiar: quem paga a apólice do outro aparece dos dois lados', ga.paga.length===1&&ga.paga[0].premio===400&&gr.pagoPor.length===1);
         ok('grupo familiar: mesmo e-mail amarra as duas pessoas', ga.mesmo.length===1&&gr.mesmo.length===1);
         ok('grupo familiar: vira chip no card', cartGrupoChips(CART.clientes[0]).indexOf('paga p/ Ricardo')>=0 && cartGrupoChips(CART.clientes[1]).indexOf('pago por Amanda')>=0);
+        { CART.apolices.push(cartNormApolice({apolice:'R2',segurado:'Ricardo Teste',ref:'ricardo teste',cli_ref:'ricardo teste',respPagto:'AMANDA TESTE',premio:100,status:'Ativa'})); cartIdxInvalidar&&cartIdxInvalidar();
+          const g2=cartGrupo(CART.clientes[0]), h2=cartGrupoChips(CART.clientes[0]);
+          ok('PAGA-AGRUPA-V1: quem paga 2 apólices da mesma pessoa vira UM chip, prêmios somados', g2.paga.length===1&&g2.paga[0].premio===500&&g2.paga[0].n===2&&h2.split('paga p/ ').length===2&&h2.indexOf('2 apólices')>=0);
+          CART.apolices.pop(); cartIdxInvalidar&&cartIdxInvalidar(); }
         { const _p=CART.perfis; try{ CART.perfis={'amanda teste':{conjuge:'Ricardo Teste',filhos:[{nome:'Gael Teste',idade:5}]}};
             CART.clientes.push(cartNormCliente({nome:'Gael Teste',ref:'gael teste',cob:{pm:1}})); cartIdxInvalidar&&cartIdxInvalidar();
             const fa=cartGrupo(CART.clientes[0]).familia, fr=cartGrupo(CART.clientes[1]).familia, fg=cartGrupo(CART.clientes[2]).familia;
