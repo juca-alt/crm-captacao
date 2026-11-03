@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 RETOMAR AQUI — 03/11/2026 — v8.84 no branch `claude/busy-galileo-dh6sti` (NÃO publicada — falta o OK dele): ajustes do quadro "Vida Individual · novo"
+## 🟢 RETOMAR AQUI — 03/11/2026 — v8.84 PUBLICADA (OK dele: "A, pode publicar"): ajustes do quadro "Vida Individual · novo" + R$ 0 = sem negócio
 
 - **Pedido (print dele, "demais ajustes e correções"):** no PC a 1ª coluna aparecia cortada pela metade, os títulos das colunas sumiam ao rolar, sobrava branco onde a coluna era curta, "paga p/ K." aparecia 2× no mesmo card e os ícones do Contato rápido mudavam de lugar de um card pro outro.
 - **QUADRO-ALTURA-V1 (modulos/funil-unico.js, ?v=20261103a):** só no PC (≥761px): o quadro ocupa a altura da tela entre a barra do topo e o rodapé (mín. 420 px); cada coluna rola sozinha com o título parado; a barra de rolar de lado fica sempre à vista; a rolagem de lado encaixa no começo de uma coluna (scroll-snap proximity). Repintar (mover, ✓, delay, filtro) guarda a posição de lado e a de cada coluna. Celular igual (uma coluna por vez, pelas abas).
@@ -10,7 +10,8 @@
 - **CF-ALINHA-V1:** card sem próximo passo guarda o lugar do ✓ (sem botão morto).
 - **Gate:** melhoria em módulo já liberado → sem trava nova (regra 29/09).
 - **Testes:** autotestes `QUADRO-ALTURA-V1`, `CF-ALINHA-V1`, `PAGA-AGRUPA-V1`; portão verde (55 telas × 6); guard ok; prints 390/1220/1600.
-- **Falta dele:** validar na prévia e dar o OK pra publicar.
+- **PM-ZERO-V1 (pedido dele no meio da sessão: "esse valor mínimo é referência… mas quando vejo que não sai negócio posso botar zero pra não ficar somando no funil"):** digitar 0 (ou 0,00 / R$ 0) no Prêmio mensal da ficha grava `c.pm_zero=true` → o padrão de R$ 250 não vale pra esse negócio, o card mostra "R$ 0 · sem negócio" (clicável pra informar valor), nada soma (PA, ponderado, coluna) e o resumo da ficha diz "R$ 0 · sem negócio". Informar valor ou Limpar desfaz (Limpar volta ao padrão). Antes, digitar 0 dava "Valor inválido". Sem trava nova (correção da regra `pm-padrao`, que segue por usuário). Testado: Carla do fixture PA 58.560 → 55.560 ao zerar. ficha-ux2.js ?v=20261103a.
+- **Falta dele:** zerar na prática os negócios que não vão sair (ex.: os que estão no padrão sem chance).
 
 ## 🟢 RETOMAR AQUI — 02/11/2026 — v8.83 PUBLICADA (PR #328, OK dele: "faz tudo aí, já autorizo"; Pages conferido por hash `d8579d8d6151`): 📎 Anexos no card (ANEXOS-CARD-V1)
 
