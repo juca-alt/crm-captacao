@@ -2,6 +2,23 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🔴 RETOMAR AQUI — 06/11/2026 — DIAGNÓSTICO UMBLER (só leitura) + PROMPT PRÉ-VIAGEM (ele viaja 12–30/11)
+
+- **Relatório:** `docs/umbler-diagnostico-2026-11-06.md`. **Prompt pra próxima sessão:** `docs/PROMPT_CODE_UMBLER_PRE_VIAGEM_2026-11-06.md` (5 tickets até 11/11: vigia mínimo, Rebeca no CRM, autor por membro, bug de datas do sync + timeout do cron, lista de canais permitidos). Cópias no Drive e no Notion (LOG 06/11).
+- **Queda do QR Code de novo:** canal do Gustavo sem mensagem desde 05/11 14h30 (Recife); ele confirmou por print às 12:07 de 06/11 → reler o QR. É a 2ª queda na semana (a 1ª foi de 31/10 a 03/11). Nada no CRM detecta queda.
+- **Achados:**
+  - (1) o sync compara datas como texto (`…Z` × `…+00:00`), então toda rodada relê ~110 chats, gasta 100 s e grava 0;
+  - (2) 7 das 36 chamadas do cron estouraram os 5 s do pg_net;
+  - (3) o webhook nunca foi cadastrado na Umbler (`umbler_eventos` = 0);
+  - (4) o autor das mensagens enviadas pelo Talk fica nulo (214), porque `mapMensagem` não usa o mapa de membros;
+  - (5) o sync grava tudo, inclusive as notas internas (36) e qualquer canal novo, sem filtro;
+  - (6) a Rebeca não existe no CRM;
+  - (7) o copiloto nunca foi usado de verdade (11 sugestões, todas de teste) e o código dele está só no branch `claude/copiloto-t1`;
+  - (8) colisão de versão: o 2.11 supõe a 2.10.0 = copiloto, mas a 2.10.0 da main é a do portal;
+  - (9) a tabela `wa_historico` existe vazia, sem código no repo;
+  - (10) telefone completo num comentário do `umbler-dom.js` (mascarar).
+- **Nada foi alterado** (código, banco, cron, secret).
+
 ## 🟢 RETOMAR AQUI — 03/11/2026 — v8.84 PUBLICADA (OK dele: "A, pode publicar"): ajustes do quadro "Vida Individual · novo" + R$ 0 = sem negócio
 
 - **Pedido (print dele, "demais ajustes e correções"):** no PC a 1ª coluna aparecia cortada pela metade, os títulos das colunas sumiam ao rolar, sobrava branco onde a coluna era curta, "paga p/ K." aparecia 2× no mesmo card e os ícones do Contato rápido mudavam de lugar de um card pro outro.
