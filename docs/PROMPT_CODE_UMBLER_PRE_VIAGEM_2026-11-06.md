@@ -1,7 +1,8 @@
 # PROMPT_CODE — Umbler pré-viagem (06/11/2026) · vigia de queda, Rebeca, autor, sync, canal privado
 
 > Cole este texto inteiro numa sessão nova do Claude Code (repo `juca-alt/crm-captacao`).
-> Fonte do diagnóstico: `docs/umbler-diagnostico-2026-11-06.md`, no repo. Cópias no Drive (pasta *Pipe X - Captacao Life Planner*) e no Notion (LOG DE SESSÕES, 06/11). **Leia o diagnóstico antes de tudo.**
+> Fonte do diagnóstico: `docs/umbler-diagnostico-2026-11-06.md`. Cópias no Drive (pasta *Pipe X - Captacao Life Planner*) e no Notion (LOG DE SESSÕES, 06/11). **Leia o diagnóstico antes de tudo.**
+> Se o arquivo ainda não estiver na main, ele está no branch `claude/wizardly-sagan-bwghr3`: `git fetch origin claude/wizardly-sagan-bwghr3 && git show origin/claude/wizardly-sagan-bwghr3:docs/umbler-diagnostico-2026-11-06.md`. Se não der, use a cópia do Drive ou do Notion.
 
 ## 0. Objetivo
 O Gustavo viaja de **12 a 30/11** e o atendimento fica com o **Vitor** e a **Rebeca** (3ª atendente nova na Umbler, pelo número do Gustavo, foco em revisão da base e backoffice). O QR Code do canal do Gustavo caiu **2 vezes numa semana**: de 31/10 a 03/11, e de novo desde 05/11 às 14h30, confirmado em 06/11. Nada no CRM avisa quando isso acontece.
