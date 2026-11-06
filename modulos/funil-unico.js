@@ -423,6 +423,20 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
   .fu-card .nc-pill,.fu-card .tarchip,.fu-card .vneg[onclick],.fu-card .fu-ft .badge,.fu-av{min-height:44px;display:inline-flex;align-items:center}
   .fu-av{flex:1 0 100%;justify-content:center;font-size:14px}
 }
+/* QUADRO-ALTURA-V1 (03/11, print dele: coluna cortada no meio, títulos das colunas sumindo ao rolar, branco onde a coluna
+   é curta e a barra de rolar de lado lá no fim da coluna mais comprida). Só no PC: o quadro ocupa a altura da tela, cada
+   coluna rola sozinha com o título parado, a barra de lado fica sempre à vista e a rolagem de lado encaixa no começo de uma
+   coluna. No celular nada muda (lá é uma coluna por vez, pelas abas). */
+@media (min-width:761px){
+  .fu-board.alt{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-padding-left:12px}
+  .fu-board.alt>.fu-col{max-height:100%;scroll-snap-align:start}
+  .fu-board.alt>.fu-nova-col{scroll-snap-align:start}
+  .fu-board.alt .fu-col-h,.fu-board.alt .fu-col-s{flex:0 0 auto}
+  .fu-board.alt .fu-cards{overflow-y:auto;min-height:0;flex:1 1 auto;scrollbar-width:thin}
+}
+/* CF-ALINHA-V1 (03/11): sem próximo passo o ✓ some, mas o lugar dele fica — os ícones do Contato rápido não pulam de card pra card */
+.fu-cf .fu-cf-v{display:inline-block;min-width:28px;min-height:30px}
+@media (max-width:760px){.fu-cf .fu-cf-v{min-width:44px;min-height:44px}}
 `; document.head.appendChild(s); }
 
 /* ── desenho ── */
@@ -493,7 +507,7 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
     ${fid==='vi'?starsHtml(c,i.ance):''}
     <div class="fu-meta2">${fid==='mfo'&&c.produto?`<b>${esc(c.produto)}</b>`:''}${sub?`<span>${sub}</span>`:''}${c.cidade||rv?`<span class="r"><span>${esc(c.cidade||'')}</span>${rv?`<span class="val" title="Renda">R$ ${rv} mil</span>`:''}</span>`:''}${tel?`<span class="tel">${esc(tx(()=>telBR(tel))||tel)}</span>`:''}</div>
     ${pills?`<div class="fu-pills">${pills}</div>`:''}
-    ${leg?`<div class="fu-cr">${tx(()=>recSeloHtml(c,true))}${cicloHtml(c,i)}</div>`:''}
+    ${leg?`<div class="fu-cr">${tx(()=>recSeloHtml(c,true))}${cicloHtml(c,i)}${tx(()=>typeof anxSeloHtml==='function'?anxSeloHtml(c):'')}</div>`:''}
     ${valor||prob?`<div class="fu-cr fu-val">${valor}${prob}</div>`:''}
     ${prev}${leg?tx(()=>bcRevisitaHtml(c)):''}
     ${tar?`<div class="fu-cr fu-tar">${tar}</div>`:''}
@@ -501,7 +515,7 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
     ${st?`<span class="fu-st">${esc(st)}</span>`:''}
     ${bds?`<div class="fu-bds">${bds}</div>`:''}
     ${temp||recs||irm||px?`<div class="fu-ft" onclick="event.stopPropagation()">${temp}${recs}${irm}${px?`<button type="button" class="fu-av" onclick="fuAvancar('${j}',event)" title="Avançar para ${esc(lbl(px))} — dá pra desfazer">→ ${esc(lbl(px))}</button>`:''}</div>`:''}
-    <div class="fu-cf" onclick="event.stopPropagation()"><span class="lb">Contato rápido</span>${i.prox?`<button type="button" onclick="fuFeito('${j}')" title="Feito (conclui o próximo passo)" aria-label="Feito">✓</button>`:''}<button type="button" onclick="fuDelay('${j}')" title="Delay (remarcou)" aria-label="Delay">✕</button><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp">💬</button><button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover de etapa">⇄</button></div>
+    <div class="fu-cf" onclick="event.stopPropagation()"><span class="lb">Contato rápido</span>${i.prox?`<button type="button" onclick="fuFeito('${j}')" title="Feito (conclui o próximo passo)" aria-label="Feito">✓</button>`:'<span class="fu-cf-v" aria-hidden="true"></span>'}<button type="button" onclick="fuDelay('${j}')" title="Delay (remarcou)" aria-label="Delay">✕</button><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp">💬</button><button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover de etapa">⇄</button></div>
   </article>`; }
 function fxCardHtml(c,i){ const j=esc(jsq(c.id)), e=c._fx.extra||{}, tel=fuTel(c);
   return `<article class="fu-card fu-fx" data-id="${esc(c.id)}" onclick="fuAbrir('${j}')">
@@ -583,8 +597,26 @@ function viewFunilNovo(fid){ fuCss(); if(fid) FU.fid=fid; fid=FU.fid;
   if(FU.modo==='tabela') body=tabelaHtml(fid,vis);
   else body=`<div class="fu-tabs">${cols.map(id=>`<button type="button" class="${FU.tab[fid]===id?'on':''}" onclick="fuTab('${esc(jsq(id))}')">${esc(lbl(id))} · ${vis.filter(x=>x.i.d.etapa_id===id).length}</button>`).join('')}</div>
     <div class="fu-board" id="fu-board">${cols.map(id=>colHtml(fid,id,fuOrdenar(vis.filter(x=>x.i.d.etapa_id===id)))).join('')}${adm?'<button type="button" class="fu-nova-col" onclick="fuEtapaNova()">＋ Nova etapa</button>':''}</div>`;
+  const rol=fuRolGuardar(fid);
   $('#main').innerHTML=`<div class="fu">${topoHtml()}${barraHtml()}${filtroBarHtml(lista)}<div class="fu-qd">${busca}${body}</div></div>`;
-  if(FU.modo==='kanban') fuWire(); }
+  if(FU.modo==='kanban'){ fuWire(); fuAltura(); fuRolRepor(rol); } }
+/* QUADRO-ALTURA-V1: altura do quadro = o que sobra da tela entre a barra do topo (fixa) e o rodapé. Mínimo 420 px. */
+function fuAltura(){ const b=document.getElementById('fu-board'); if(!b) return;
+  if(!(W.matchMedia&&W.matchMedia('(min-width:761px)').matches)){ b.classList.remove('alt'); b.style.height=''; return; }
+  const tb=document.querySelector('.topbar'), topo=tb?tb.getBoundingClientRect().height:0;
+  /* o que vem abaixo do quadro (borda do bloco + rodapé) também precisa caber: rolando a página até o fim, o título das
+     colunas para logo abaixo da barra do topo, nunca escondido atrás dela */
+  const abaixo=Math.max(0,document.documentElement.scrollHeight-(b.getBoundingClientRect().bottom+W.scrollY));
+  b.style.height=Math.max(420,Math.round(W.innerHeight-topo-abaixo-8))+'px'; b.classList.add('alt'); }
+let _altT=null; W.addEventListener('resize',()=>{ clearTimeout(_altT); _altT=setTimeout(fuAltura,120); });
+/* repintar (mover, ✓, delay, filtro) não joga o quadro pro começo nem a coluna pro topo */
+function fuRolGuardar(fid){ const b=document.getElementById('fu-board'); if(!b||b.dataset.fid!==fid) return null;
+  const col={}; b.querySelectorAll('.fu-col').forEach(c=>{ const k=c.querySelector('.fu-cards'); if(k&&k.scrollTop) col[c.dataset.etapa]=k.scrollTop; });
+  return {x:b.scrollLeft,col}; }
+function fuRolRepor(r){ const b=document.getElementById('fu-board'); if(!b) return; b.dataset.fid=FU.fid; if(!r) return;
+  const por=()=>{ const bb=document.getElementById('fu-board'); if(!bb) return; bb.scrollLeft=r.x;
+    bb.querySelectorAll('.fu-col').forEach(c=>{ const v=r.col[c.dataset.etapa], k=c.querySelector('.fu-cards'); if(v&&k) k.scrollTop=v; }); };
+  por(); setTimeout(por,0); }
 
 /* ── arrastar (desktop) ── */
 function fuWire(){ const b=document.getElementById('fu-board'); if(!b) return; let dragId=null, dragCol=null;
@@ -1084,6 +1116,8 @@ function fuSelfTests(ok){
     const k=fuCiclo(cc,ic);
     ok('CARD-COMPLETO-V1: card novo traz profissão · idade, telefone, status/lista, ⏱️ tempo na etapa, prêmio · PA, próxima atividade e → próxima etapa'+(er?' — '+er:''), !er&&/Médico · 30a/.test(h)&&/fu-ciclo/.test(h)&&/PA /.test(h)&&/tarchip/.test(h)&&/fuAvancar\(/.test(h)&&/tel/.test(h));
     ok('CARD-COMPLETO-V1: TA → SitPlan (os dois viram "Novo") não zera o relógio da etapa nova', !!k&&k.d>=39);
+    ok('CF-ALINHA-V1: card sem próximo passo guarda o lugar do ✓ (ícones do Contato rápido não pulam)', (()=>{ const sem=Object.assign({},ic,{prox:null}); let hh=''; try{ hh=cardHtml({c:cc,i:sem},'vi'); }catch(_){ } return hh.indexOf('fu-cf-v')>0&&hh.indexOf('aria-label="Feito"')<0; })());
+    ok('QUADRO-ALTURA-V1: no PC o quadro tem altura da tela e a coluna rola sozinha; no celular fica como era', (()=>{ const css=[...document.querySelectorAll('style')].map(x=>x.textContent).join(''); return css.indexOf('.fu-board.alt .fu-cards{overflow-y:auto')>=0&&typeof fuAltura==='function'&&/\(min-width:761px\)\{\s*\.fu-board\.alt\{/.test(css); })());
     ok('CARD-COMPLETO-V1: → próxima etapa pula a Revisita (opcional) e não existe depois do fim', fuProxCol('vi','oi')==='pc'&&fuProxCol('vi',cfg('vi').filter(e=>!e.enc).slice(-1)[0].id)===null);
     const tt=fuTaxas('vi',[{c:{id:'t1',funil:'nn',etapa:'OI/FF',interacoes:[]}},{c:{id:'t2',funil:'nn',etapa:'TA',interacoes:[]}},{c:{id:'t3',funil:'bn'}}]);
     ok('CARD-COMPLETO-V1: % que passa conta quem alcançou (Novo → OI = 1 de 2; Estoque fora)', !!tt.novo&&tt.novo.n1===2&&tt.novo.n2===1&&tt.novo.pct===50); }

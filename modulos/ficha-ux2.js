@@ -40,7 +40,7 @@ function resumo(n,c){ const t=tx(()=>proxTarefa(c));
   switch(n){
     case 'etapa': { const st=tx(()=>etStatusDe(c)); let ci=''; try{ const k=fuCiclo(c,fuInfo(c,fuDestino(c).funil_id)); if(k) ci=' · ⏱️ '+k.d+'d'; }catch(_){} return `● ${etapaInfo(c).lbl}${st?' · '+st:''}${ci}${t&&t.quando?' · próx. '+ddmm(t.quando):''}`; }
     case 'tarefas': { const n2=tx(()=>tarAbertas(c).length)||0; return n2?`${n2} aberta${n2>1?'s':''}${t&&t.quando?' · '+ddmm(t.quando):''}`:'⚠ sem próxima atividade'; }
-    case 'valor': { const pm=tx(()=>pmDe(c)), pr=tx(()=>probDe(c)); return pm?`${brl(pm)}/mês · PA ${brl(tx(()=>totalDe(c))||tx(()=>paDe(c))||0)}${pr!==''?' · '+pr+'%':''}`:'sem prêmio'; }
+    case 'valor': { const pm=tx(()=>pmDe(c)), pr=tx(()=>probDe(c)); return pm?`${brl(pm)}/mês · PA ${brl(tx(()=>totalDe(c))||tx(()=>paDe(c))||0)}${pr!==''?' · '+pr+'%':''}`:(tx(()=>pmZerado(c))?'R$ 0 · sem negócio':'sem prêmio'); }
     case 'planos': { const l=Array.isArray(c.planos)?c.planos:[]; return l.length?`${l.length}${l.some(p=>p&&p.status==='Ativado')?' · 1 ativada':''}`:'nenhuma'; }
     case 'sitplan': return c.sitplan?'na lista de '+ddmm(c.sitplan):'fora da lista';
     case 'ance': { const e=tx(()=>estrelasDe(c))||0; return `${e}/5${e>=4?' · 🔥 quente':''}${c.mercado?' · Mercado '+c.mercado:''}`; }
@@ -74,7 +74,7 @@ function cabecalho(c){ const j=esc(jsq(c.id));
   const quem=[tx(()=>pProfissao(c))||c.profissao,(tx(()=>pIdade(c))||c.idade)?(tx(()=>pIdade(c))||c.idade)+' anos':'',tx(()=>pCidade(c))||c.cidade,c.telefone?tx(()=>telBR(c.telefone))||c.telefone:''].filter(x=>!vazio(x)&&!/^[—\-\s]+ anos$/.test(String(x)));
   const st=tx(()=>etStatusDe(c)), r=tx(()=>recomendanteDe(c)), et=etapaInfo(c);
   const chips=[`<span class="u2-chip et">● ${esc(et.lbl)}</span>`, st?`<span class="u2-chip">${esc(st)}</span>`:'', tx(()=>isQuente(c))?'<span class="u2-chip">🔥 quente</span>':'',
-    tx(()=>congEh(c))?'<span class="u2-chip">❄️ congelado</span>':'', tx(()=>negDelayAtivo(c))?'<span class="u2-chip">⏳ delay</span>':'', (typeof isMaster==='function'&&isMaster()&&c.lp)?`<span class="u2-chip">LP: ${esc(tx(()=>lpNome(c.lp)))}</span>`:'', cicloChip(c), tx(()=>fuTocaHtml(c))].join('');
+    tx(()=>congEh(c))?'<span class="u2-chip">❄️ congelado</span>':'', tx(()=>negDelayAtivo(c))?'<span class="u2-chip">⏳ delay</span>':'', (typeof isMaster==='function'&&isMaster()&&c.lp)?`<span class="u2-chip">LP: ${esc(tx(()=>lpNome(c.lp)))}</span>`:'', cicloChip(c), tx(()=>{ if(typeof anxQtd!=='function'||!anxOn()) return ''; const n=anxQtd(c); return n?`<span class="u2-chip" title="${n} anexo${n===1?'':'s'} no Drive (ANEXOS-CARD-V1)">📎 ${n}</span>`:''; }), tx(()=>fuTocaHtml(c))].join('');
   return `<button class="fechar" onclick="fecharDrawer()" aria-label="Fechar ficha">✕</button>
     <div class="nome">${tx(()=>ehEmpresa(c))?'🏢 ':''}${esc(c.nome||'—')}</div>
     ${quem.length?`<div class="u2-quem">${quem.map(x=>esc(String(x))).join(' · ')}</div>`:''}

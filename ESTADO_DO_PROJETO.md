@@ -2,7 +2,28 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 26/10/2026 (noite) — v8.82 PUBLICADA (OK dele: "publica · T3b A · menu A · agenda ok"): card completo + menu A + T3b (código) · IA da recomendação no Claude · Copiloto OK
+## 🟢 RETOMAR AQUI — 03/11/2026 — v8.84 PUBLICADA (OK dele: "A, pode publicar"): ajustes do quadro "Vida Individual · novo" + R$ 0 = sem negócio
+
+- **Pedido (print dele, "demais ajustes e correções"):** no PC a 1ª coluna aparecia cortada pela metade, os títulos das colunas sumiam ao rolar, sobrava branco onde a coluna era curta, "paga p/ K." aparecia 2× no mesmo card e os ícones do Contato rápido mudavam de lugar de um card pro outro.
+- **QUADRO-ALTURA-V1 (modulos/funil-unico.js, ?v=20261103a):** só no PC (≥761px): o quadro ocupa a altura da tela entre a barra do topo e o rodapé (mín. 420 px); cada coluna rola sozinha com o título parado; a barra de rolar de lado fica sempre à vista; a rolagem de lado encaixa no começo de uma coluna (scroll-snap proximity). Repintar (mover, ✓, delay, filtro) guarda a posição de lado e a de cada coluna. Celular igual (uma coluna por vez, pelas abas).
+- **PAGA-AGRUPA-V1 (vendas.html, `cartGrupo`):** quem paga 2+ apólices da mesma pessoa vira UM chip com os prêmios somados e "· N apólices" — vale no card novo, no antigo e na ficha.
+- **CF-ALINHA-V1:** card sem próximo passo guarda o lugar do ✓ (sem botão morto).
+- **Gate:** melhoria em módulo já liberado → sem trava nova (regra 29/09).
+- **Testes:** autotestes `QUADRO-ALTURA-V1`, `CF-ALINHA-V1`, `PAGA-AGRUPA-V1`; portão verde (55 telas × 6); guard ok; prints 390/1220/1600.
+- **PM-ZERO-V1 (pedido dele no meio da sessão: "esse valor mínimo é referência… mas quando vejo que não sai negócio posso botar zero pra não ficar somando no funil"):** digitar 0 (ou 0,00 / R$ 0) no Prêmio mensal da ficha grava `c.pm_zero=true` → o padrão de R$ 250 não vale pra esse negócio, o card mostra "R$ 0 · sem negócio" (clicável pra informar valor), nada soma (PA, ponderado, coluna) e o resumo da ficha diz "R$ 0 · sem negócio". Informar valor ou Limpar desfaz (Limpar volta ao padrão). Antes, digitar 0 dava "Valor inválido". Sem trava nova (correção da regra `pm-padrao`, que segue por usuário). Testado: Carla do fixture PA 58.560 → 55.560 ao zerar. ficha-ux2.js ?v=20261103a.
+- **Falta dele:** zerar na prática os negócios que não vão sair (ex.: os que estão no padrão sem chance).
+
+## 🟢 RETOMAR AQUI — 02/11/2026 — v8.83 PUBLICADA (PR #328, OK dele: "faz tudo aí, já autorizo"; Pages conferido por hash `d8579d8d6151`): 📎 Anexos no card (ANEXOS-CARD-V1)
+
+- **O quê:** PROMPT_CODE_ANEXOS_CARDS + ADENDO, T1→T4. Anexo direto no card do negócio: arrastar / ＋ Anexar / Ctrl+⌘V → arquivo `AAAA-MM-DD_HHMM_card_<nome>` na pasta do cliente no Drive (Histórico de Clientes / <cliente>). Tipo e referência sugeridos pelo nome e editáveis (gravados nas `properties` do arquivo = fonte única); linha do tempo `k:'anexo'` + `anexo_id`, clicável enquanto ativo; selo 📎 N no cabeçalho da ficha, no card antigo e no do quadro novo; excluir = confirmação na página → Lixeira do Drive + "🗑️ Anexo removido" + desfazer. Barra > 20 MB e extensão fora da lista antes de subir.
+- **Decisões dele:** reaproveitar o Drive (ADENDO; **sem bucket/tabela no Supabase** — a migração `lp-anexos` foi escrita, nunca aplicada e descartada; banco conferido limpo) · **1A** exclusão = Lixeira do Drive · **2A** lista = anexos do card editáveis + "outros arquivos da pasta" só consulta.
+- **Testes:** autotestes `ANEXOS-CARD-V1` e `ANEXOS-CARD-T3`; portão verde (55 telas × 6); simulação no navegador com Drive simulado (soltar 5 → 3 sobem, 25 MB/.exe barrados; colar print; excluir/desfazer; mudar etapa+tarefa e recarregar não perde anexo); prints 390/1280. **Falta:** teste com o Drive real (login Google dele) na prévia.
+- **Acesso à pasta (DRIVE-ACESSO-ASSISTENTE-V1, palavra dele: "compartilha a pasta com o Victor e usuários que add como assistente"):** delegação na base dele (Painel Master · Acessos) → o app compartilha *Histórico de Clientes* como Editor; tirar a delegação tira o acesso; botão "📂 dar acesso à pasta do Drive" na linha do Victor. O conector do Drive da sessão foi RECUSADO ao compartilhar → **falta ele clicar o botão pro Victor** depois do merge (ou compartilhar à mão). Daniel também tem `anexos-drive` ligado, mas a pasta não atende a base dele — decisão dele.
+- **Daniel:** `anexos-drive` DESLIGADO no `lp_perfis` (decisão dele, 02/11: "A, desliga pro Daniel").
+- **Falta dele:** (1) 1º anexo real numa ficha = teste com o Drive de verdade; (2) Victor: compartilhar a pasta à mão (opção A dele) ou pelo botão "📂 dar acesso à pasta do Drive" em Painel Master · Acessos.
+- **Doc do módulo:** `docs/anexos-card.md`. Portão de acesso = `anexos-drive` (sem trava nova: melhoria em módulo já liberado).
+
+## 🟢 26/10/2026 (noite) — v8.82 PUBLICADA (OK dele: "publica · T3b A · menu A · agenda ok"): card completo + menu A + T3b (código) · IA da recomendação no Claude · Copiloto OK
 
 - **Decisões dele (26/10):** "IA A · T3b A · Agenda A · Daniel não" + "unificar logo" (card novo com tudo do antigo).
 - **Copiloto:** testado ao vivo 4/4 (agendar, preço → espera do Gustavo, injeção bloqueada, documentos), Haiku, 3–5 s. Ressalva: em "documentos" o rascunho disse "recebemos" sem saber. Usuário de teste `claude-teste-24-10@exemplo.invalid` ainda existe (senha trocada) + linhas de teste em `copiloto_sugestoes` → apagar na faxina de 31/10 (o MCP pediu confirmação e expirou).
