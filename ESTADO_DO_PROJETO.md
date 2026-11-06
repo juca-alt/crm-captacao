@@ -2,6 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 06/11/2026 — v8.85 NO BRANCH `claude/vigia-queda-t1` (aguardando OK dele): T1 do PROMPT_CODE_UMBLER_PRE_VIAGEM — 🚦 vigia de queda
+
+- **Por quê:** o QR do canal do Gustavo caiu 2× numa semana (31/10→03/11; 05/11 14h30→06/11) sem aviso. Viagem 12–30/11: Victor e Rebeca precisam ver a queda.
+- **VIGIA-QUEDA-V1 (vendas.html):** por canal, última mensagem de `umbler_chats` (só SELECT, 2 colunas, cache 5 min). 🔴 >3 h ÚTEIS sem mensagem (seg–sex 8h–20h Recife, só conta horas dentro da janela) · ⚪ 7+ dias = inativo · ⚠️ leitura parada (`ultimo_ok` > 30 min). Topo de 💬 Conversas (semáforo inteiro) + faixa no Início só com alerta. Só pra quem tem `conversas`. Sem tabela, sem cron, sem gravar. Feriado não tratado.
+- **Gate:** melhoria em módulo já liberado (Conversas) → sem trava nova (regra 29/09). Pergunta em aberto pra ele: a faixa no Início vale pra todos com `conversas` (hoje: ele + Victor; Rebeca no T2).
+- **Testes:** self-check `VIGIA-QUEDA-V1` (15 checagens; quebrando a regra, 5 acusam); portão verde (55 telas × 6); prints 390/1280 (Início com faixa, Conversas com semáforo).
+- **Próximo:** T2 (Rebeca no CRM) depois do OK do T1. Doc: `docs/conversas.md` (seção Vigia), diagnóstico `docs/umbler-diagnostico-2026-11-06.md` (branch `claude/wizardly-sagan-bwghr3`).
+
 ## 🟢 RETOMAR AQUI — 03/11/2026 — v8.84 PUBLICADA (OK dele: "A, pode publicar"): ajustes do quadro "Vida Individual · novo" + R$ 0 = sem negócio
 
 - **Pedido (print dele, "demais ajustes e correções"):** no PC a 1ª coluna aparecia cortada pela metade, os títulos das colunas sumiam ao rolar, sobrava branco onde a coluna era curta, "paga p/ K." aparecia 2× no mesmo card e os ícones do Contato rápido mudavam de lugar de um card pro outro.
