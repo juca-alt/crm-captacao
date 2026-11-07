@@ -40,7 +40,7 @@ Deixar a equipe nova rodando no CRM e na Umbler, e o Gustavo conseguir **ver na 
   - `ainda_sem_autor = 0`;
   - em 6 h, nenhum `timed_out` novo em `net._http_response`.
 
-### B — Rebeca no CRM (login e acesso) · 1 h
+### B — Rebeca no CRM (login e acesso) · 1 h · **ela começa segunda, 10/11** (mês de teste até 10/12; alinhamento toda sexta às 12h30)
 - **Antes, perguntar a ele:** o **e-mail** dela (ele está pedindo a ela), a sigla e a cor (sugestão: **RC, laranja**).
 - **Módulos:** proponha uma tabela com o que o Victor tem hoje. Recomendação: o pacote de backoffice + Carteira + Conversas + Solicitações + Agenda nova + Funil novo; **sem** Parceiros e Plano. Peça A/B.
 - **SQL pra ele rodar:**
@@ -88,6 +88,24 @@ Entregue esta lista pronta pra ele, na ordem:
    - o vigia (T1) mostra o canal novo em 💬 Conversas.
 4. Em 14/11: remover o Vitor como membro e desconectar o canal "Vitor - Corporativo". O vigia passa a mostrar o canal como ⚪ inativo depois de 7 dias.
 5. No celular, manter **no máximo 3 dispositivos conectados** (hoje: Umbler, Mac e o Global CRM, que faz a transcrição de áudio).
+
+### F — Agenda da Rebeca: "quem marcou" + tipo alinhado ao funil · 2 a 3 h
+**Decisões dele (07/11, etapas 1 a 6):**
+- A Rebeca **edita a agenda principal dele** (Agenda Jucá, Google). Opção escolhida por ele; o risco de ela ver eventos pessoais foi avisado.
+- **Janelas em que ela pode marcar:** seg 12h–20h · ter a qui 9h30–20h · sex 9h30–13h. Fora disso, nunca.
+- **Formato:** online = 45 min + 15 min de folga; presencial = 45 min + 30 min de deslocamento antes e depois. **Sem limite** de reuniões por dia.
+- **Tipos que ela marca (todos):** Revisão (base), OI (1ª reunião, indicação), P/C (proposta/fechamento), Delivery (entrega de apólice). O tipo vira a **etiqueta do evento** na Agenda Jucá, **alinhada com a etapa do funil no CRM**.
+- **O que construir (sem gravar nada no Google sem o OK dele; leia antes o que a Agenda & Tarefas nova já faz com o Google):**
+  - **Padrão do título do evento**, legível pelo CRM: `[TIPO] Nome do cliente · RC` (RC = sigla de quem marcou). Proponha a cor de cada tipo dentro da convenção dele (COMERCIAL 🔴, PIPELINE 🔵…), sem usar as cores de GAEL+FAMÍLIA 🟢, PESSOAL 🟣 e CAMILA 🩷.
+  - **"Quem marcou"** em cada reunião do CRM (Rebeca, Vitor, Gustavo), lido do título ou do campo próprio.
+  - **Validador de janela:** ao marcar pelo CRM, avisar se o horário cai fora das janelas acima ou se choca com outro evento, contando o deslocamento no presencial.
+  - **Relatório do mês por quem marcou:** marcadas, realizadas, não compareceu, por tipo. No 1º mês **não há meta de número** (é teste); é só medir.
+- Aceite: self-check `AGENDA-EQUIPE-V1` (janelas, folga e deslocamento, parse do título); prints 390/1280; portão verde.
+
+### G — Fila de revisões da Rebeca · 2 a 3 h
+- Antes, leia o que já existe (Aniversário de Apólice `lp-datas`, revisão anual do Lote Global 2) e proponha o **mínimo**: uma fila diária de quem chamar, com estado por cliente (a convidar · convidado · agendado · recusou · retomar em…) e atalho pra abrir a conversa em 💬 Conversas e marcar na agenda.
+- Inclui a carteira adotada da Rebeca (adoção/substituição) como origem da fila.
+- Pergunte A/B a ele antes de construir.
 
 ## 4. Fora do escopo (agora)
 - T5 (canais permitidos); API oficial / coexistência; copiloto 2.11 (fila, tom, voz por remetente) e transcrição de áudio própria, que ficam para depois de a operação rodar; `wa_historico`.
