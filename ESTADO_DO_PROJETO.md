@@ -2,7 +2,10 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 RETOMAR AQUI — 06/11/2026 — v8.85 NO BRANCH `claude/vigia-queda-t1` (aguardando OK dele): T1 do PROMPT_CODE_UMBLER_PRE_VIAGEM — 🚦 vigia de queda
+## 🟢 RETOMAR AQUI — 07/11/2026 — v8.85 NO AR (OK dele no chat 07/11 19:35): T1 do PROMPT_CODE_UMBLER_PRE_VIAGEM — 🚦 vigia de queda
+
+- **Decisões 07/11 (palavra dele):** "publica T1 pra vigiar queda e vamos deixar tudo pronto **sem API**… caso não [rode bem], avalio; não quero ter esse custo agora sem ter operação rodando". **T5 (canais permitidos) SAI do escopo**: número pessoal fica fora da Umbler; no lugar entra um 2º número dele de **prospecção** (sem conversa pessoal). Rebeca assume o atendimento/backoffice; número do Vitor deve sair (aguardando confirmação 1A/2A/3A).
+- **Queda 06/11 13:38 → 07/11 ~19:18** (3ª em 8 dias; o selo "Online" da Umbler mentia). Reconectado com "Reiniciar sessão"; sync conferido 19:31.
 
 - **Por quê:** o QR do canal do Gustavo caiu 2× numa semana (31/10→03/11; 05/11 14h30→06/11) sem aviso. Viagem 12–30/11: Victor e Rebeca precisam ver a queda.
 - **VIGIA-QUEDA-V1 (vendas.html):** por canal, última mensagem de `umbler_chats` (só SELECT, 2 colunas, cache 5 min). 🔴 >3 h ÚTEIS sem mensagem (seg–sex 8h–20h Recife, só conta horas dentro da janela) · ⚪ 7+ dias = inativo · ⚠️ leitura parada (`ultimo_ok` > 30 min). Topo de 💬 Conversas (semáforo inteiro) + faixa no Início só com alerta. Só pra quem tem `conversas`. Sem tabela, sem cron, sem gravar. Feriado não tratado.
