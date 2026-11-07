@@ -1,6 +1,6 @@
 // deno test supabase/functions/umbler/nucleo_test.ts --allow-read
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { coletarMembros, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, pick, quemEnviou, soDigitos } from "./nucleo.ts";
+import { cmpData, coletarMembros, emDia, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, pick, quemEnviou, soDigitos, tData } from "./nucleo.ts";
 
 const DONO = "dono@teste";
 
@@ -110,4 +110,39 @@ Deno.test("TRAVA: a função nunca envia mensagem (só GET na API do Talk)", asy
   assert(!/\/v1\/messages/i.test(codigo), "não pode existir rota /v1/messages");
   assert(!/method:\s*["'](POST|PUT|PATCH|DELETE)["']/i.test(codigo), "fetch à API só com GET");
   assertEquals((codigo.match(/await fetch\(/g) || []).length, 1, "um único fetch, o do apiGet");
+});
+
+// ---------- UMBLER-T3 (07/11): autor pelo mapa de membros ----------
+Deno.test("T3: autor vem do mapa de membros quando a API manda só o id", () => {
+  const membros = { "mbr-zz-1": "Fulano Atendente", "mbr-zz-2": "Beltrana Atendente" };
+  const soId = mapMensagem({ id: "m1", source: "Member", sentByOrganizationMember: { id: "mbr-zz-2" }, eventAtUTC: "2026-11-07T12:00:00Z" }, "c1", DONO, membros)!;
+  assertEquals(soId.autor, "Beltrana Atendente");
+  const comNome = mapMensagem({ id: "m2", source: "Member", sentByOrganizationMember: { id: "mbr-zz-1", displayName: "Nome Do Payload" } }, "c1", DONO, membros)!;
+  assertEquals(comNome.autor, "Nome Do Payload"); // nome no payload vence
+  const desconhecido = mapMensagem({ id: "m3", source: "Member", sentByOrganizationMember: { id: "mbr-fora" } }, "c1", DONO, membros)!;
+  assertEquals(desconhecido.autor, null);
+  const celular = mapMensagem({ id: "m4", source: "External" }, "c1", DONO, membros)!;
+  assertEquals(celular.autor, "pelo celular");
+  const cliente = mapMensagem({ id: "m5", source: "Contact" }, "c1", DONO, membros)!;
+  assertEquals(cliente.autor, null);
+  assertEquals(mapMensagem({ id: "m6", source: "Member", sentByOrganizationMember: { id: "mbr-zz-1" } }, "c1", DONO)!.autor, null); // sem mapa: como antes
+});
+
+// ---------- UMBLER-T4 (07/11): datas comparadas por número ----------
+Deno.test("T4: 'Z' e '+00:00' do mesmo instante são iguais (antes, como texto, Z > +)", () => {
+  const js = "2026-11-07T22:19:52.815Z", pg = "2026-11-07T22:19:52.815+00:00";
+  assert(js > pg); // o bug: comparação de texto achava o JS "mais novo"
+  assertEquals(cmpData(js, pg), 0);
+  assert(emDia(js, pg));
+  assert(emDia("2026-11-07T22:00:00Z", pg));
+  assert(!emDia("2026-11-07T22:30:00Z", pg));
+  assertEquals(cmpData("2026-11-07T22:30:00Z", pg), 1);
+  assertEquals(cmpData("2026-11-07T19:19:52-03:00", pg), -1);
+});
+Deno.test("T4: sem msgs_ate nunca está em dia; sem última do chat está; data ilegível não decide", () => {
+  assert(!emDia("2026-11-07T22:00:00Z", null));
+  assert(emDia(null, "2026-11-07T22:00:00+00:00"));
+  assertEquals(cmpData("lixo", "2026-11-07T22:00:00Z"), null);
+  assert(!emDia("lixo", "2026-11-07T22:00:00+00:00"));
+  assertEquals(tData(null), NaN);
 });
