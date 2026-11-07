@@ -7,7 +7,7 @@ Deixar a equipe nova rodando no CRM e na Umbler, e o Gustavo conseguir **ver na 
 
 ## 1. Decisões já tomadas (palavra dele, 07/11)
 - **Rebeca entra** no atendimento e no backoffice (no lugar do backoffice da LM). Ela já foi assistente dele. Atende pelos números do Gustavo, na Umbler, com assinatura própria. Foco: revisão da base, carteira, atrasos e pós-venda.
-- **Vitor fica por enquanto, só na parte Multi Office e Vida em Grupo (VG).** Ele tem outro trabalho e não entrega no tempo do atendimento do WhatsApp. **Sai da Umbler**, e a Rebeca fica com a vaga dele (2 usuários: Gustavo e Rebeca).
+- **Vitor fica por enquanto, só no CRM, na parte Multi Office e Vida em Grupo (VG)** (confirmado 07/11 19:53: "vamos deixar Vitor só no CRM mesmo por hora"). Ele tem outro trabalho e não entrega no tempo do atendimento do WhatsApp. **Sai da Umbler**, e a Rebeca fica com a vaga dele (2 usuários: Gustavo e Rebeca).
 - **Números na Umbler, no máximo 2, ambos do Gustavo:** (1) o WhatsApp Business principal (clientes); (2) um número de **prospecção** (chip de outro telefone, sem conversa pessoal). O **número do Vitor sai** depois de avisar os clientes (aviso com data de 14/11). O número pessoal do Gustavo **fica fora** da Umbler.
 - **T5 (lista de canais permitidos) SAI do escopo:** não há número pessoal entrando.
 - **Sem API oficial por enquanto.** Palavra dele: "vamos deixar tudo pronto sem API… caso não [rode bem], avalio; não quero ter esse custo agora sem ter operação rodando".
@@ -24,7 +24,7 @@ Deixar a equipe nova rodando no CRM e na Umbler, e o Gustavo conseguir **ver na 
 
 ## 3. Tickets
 
-### A — Publicar o T3 + T4 da função `umbler` (pronto no branch `claude/umbler-t3-t4`) · 30 min
+### A — ✅ FEITO 07/11 19:54 (umbler v5 no ar; falta ele rodar o SQL) — Publicar o T3 + T4 da função `umbler` · 30 min
 - **O que tem lá:**
   - **T3:** `mapMensagem` recebe o mapa de membros e preenche o autor quando a API manda só o id.
   - **T4:** helper `cmpData`/`emDia` no `nucleo.ts`. Antes, as datas eram comparadas como texto (`…Z` contra `…+00:00`), e nenhuma conversa ficava "em dia".

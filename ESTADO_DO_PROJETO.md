@@ -2,6 +2,12 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 07/11/2026 (noite) — função `umbler` v5 NO AR (T3 autor por membro + T4 datas por número), OK dele no chat 19:52
+
+- **Deploy 19:54:** `umbler` v5 (verify_jwt false). Falta ELE rodar `supabase/migrations/umbler_t3_t4_2026-11-07.sql` (backfill de autor: 141 Gustavo + 74 Victor; cron com timeout 20 s). Antes: rodada 95,7 s / 500 req.
+- **Decisões (palavra dele):** Vitor fica **só no CRM** (Multi Office e VG), fora da Umbler; Rebeca entra na vaga dele. **Viagem corrigida: 12 a 30/12/2026.**
+- **Próximo:** `docs/PROMPT_CODE_EQUIPE_ACESSOS_2026-11-07.md` — tickets B (Rebeca no CRM, falta o e-mail), C (recorte do Vitor), D ("usar o app como"), E (checklist Umbler).
+
 ## 🟢 RETOMAR AQUI — 07/11/2026 — v8.85 NO AR (OK dele no chat 07/11 19:35): T1 do PROMPT_CODE_UMBLER_PRE_VIAGEM — 🚦 vigia de queda
 
 - **Decisões 07/11 (palavra dele):** "publica T1 pra vigiar queda e vamos deixar tudo pronto **sem API**… caso não [rode bem], avalio; não quero ter esse custo agora sem ter operação rodando". **T5 (canais permitidos) SAI do escopo**: número pessoal fica fora da Umbler; no lugar entra um 2º número dele de **prospecção** (sem conversa pessoal). Rebeca assume o atendimento/backoffice; número do Vitor deve sair (aguardando confirmação 1A/2A/3A).
