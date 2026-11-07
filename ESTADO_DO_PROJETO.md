@@ -2,7 +2,21 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🔴 RETOMAR AQUI — 06/11/2026 — DIAGNÓSTICO UMBLER (só leitura) + PROMPT PRÉ-VIAGEM (ele viaja 12–30/11)
+## 🟢 RETOMAR AQUI — 07/11/2026 (noite) — TICKET A FECHADO · TICKET B COM SQL PRONTO
+
+- **A (umbler v5, T3+T4): ✅ fechado.** Ele rodou o SQL às 19:59. Resultados:
+  - autor preenchido em 215 mensagens (GUSTAVO JUCA 141 · Victor Figueiredo 74), 0 sem autor;
+  - cron com 20 s de folga;
+  - 1ª rodada da v5 (20:00): **11,4 s, 18 requisições, 4 mensagens gravadas** (antes: 96 s, 500 requisições, 1 mensagem); chamada das 20:00 = 200.
+- **QR Code reconectado em 07/11** (canal do Gustavo com mensagem às 19:42). O período de 05/11 14h30 até a reconexão ficou fora da Umbler e do CRM.
+- **B (Rebeca):** decisão dele "RC laranja, A". O e-mail dela ainda não chegou. SQL em `supabase/migrations/equipe_rebeca_2026-11-07.sql`:
+  - usa o e-mail provisório `rebeca@pendente.invalid` (não loga em nada);
+  - bloco 5 troca pelo e-mail real em um passo;
+  - depois, no Painel, clicar em "📂 dar acesso à pasta do Drive".
+  - Ele pediu pra "ver na prática a visão dela" → **ticket D (Usar o app como…) é o próximo**, assim que ele confirmar que rodou o SQL do B.
+- **C (Vitor só MFO/VG):** falta o A/B dele.
+
+## 🔴 06/11/2026 — DIAGNÓSTICO UMBLER (só leitura) + PROMPT PRÉ-VIAGEM (ele viaja 12–30/11)
 
 - **Relatório:** `docs/umbler-diagnostico-2026-11-06.md`. **Prompt pra próxima sessão:** `docs/PROMPT_CODE_UMBLER_PRE_VIAGEM_2026-11-06.md` (5 tickets até 11/11: vigia mínimo, Rebeca no CRM, autor por membro, bug de datas do sync + timeout do cron, lista de canais permitidos). Cópias no Drive e no Notion (LOG 06/11).
 - **Queda do QR Code de novo:** canal do Gustavo sem mensagem desde 05/11 14h30 (Recife); ele confirmou por print às 12:07 de 06/11 → reler o QR. É a 2ª queda na semana (a 1ª foi de 31/10 a 03/11). Nada no CRM detecta queda.
