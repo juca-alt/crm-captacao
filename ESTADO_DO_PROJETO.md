@@ -33,6 +33,23 @@
   - (10) telefone completo num comentário do `umbler-dom.js` (mascarar).
 - **Nada foi alterado** (código, banco, cron, secret).
 
+## 🟢 RETOMAR AQUI — 07/11/2026 (noite) — função `umbler` v5 NO AR (T3 autor por membro + T4 datas por número), OK dele no chat 19:52
+
+- **Deploy 19:54:** `umbler` v5 (verify_jwt false). Falta ELE rodar `supabase/migrations/umbler_t3_t4_2026-11-07.sql` (backfill de autor: 141 Gustavo + 74 Victor; cron com timeout 20 s). Antes: rodada 95,7 s / 500 req.
+- **Decisões (palavra dele):** Vitor fica **só no CRM** (Multi Office e VG), fora da Umbler; Rebeca entra na vaga dele. **Viagem corrigida: 12 a 30/12/2026.**
+- **Próximo:** `docs/PROMPT_CODE_EQUIPE_ACESSOS_2026-11-07.md` — tickets B (Rebeca no CRM, falta o e-mail), C (recorte do Vitor), D ("usar o app como"), E (checklist Umbler).
+
+## 🟢 RETOMAR AQUI — 07/11/2026 — v8.85 NO AR (OK dele no chat 07/11 19:35): T1 do PROMPT_CODE_UMBLER_PRE_VIAGEM — 🚦 vigia de queda
+
+- **Decisões 07/11 (palavra dele):** "publica T1 pra vigiar queda e vamos deixar tudo pronto **sem API**… caso não [rode bem], avalio; não quero ter esse custo agora sem ter operação rodando". **T5 (canais permitidos) SAI do escopo**: número pessoal fica fora da Umbler; no lugar entra um 2º número dele de **prospecção** (sem conversa pessoal). Rebeca assume o atendimento/backoffice; número do Vitor deve sair (aguardando confirmação 1A/2A/3A).
+- **Queda 06/11 13:38 → 07/11 ~19:18** (3ª em 8 dias; o selo "Online" da Umbler mentia). Reconectado com "Reiniciar sessão"; sync conferido 19:31.
+
+- **Por quê:** o QR do canal do Gustavo caiu 2× numa semana (31/10→03/11; 05/11 14h30→06/11) sem aviso. Viagem 12–30/11: Victor e Rebeca precisam ver a queda.
+- **VIGIA-QUEDA-V1 (vendas.html):** por canal, última mensagem de `umbler_chats` (só SELECT, 2 colunas, cache 5 min). 🔴 >3 h ÚTEIS sem mensagem (seg–sex 8h–20h Recife, só conta horas dentro da janela) · ⚪ 7+ dias = inativo · ⚠️ leitura parada (`ultimo_ok` > 30 min). Topo de 💬 Conversas (semáforo inteiro) + faixa no Início só com alerta. Só pra quem tem `conversas`. Sem tabela, sem cron, sem gravar. Feriado não tratado.
+- **Gate:** melhoria em módulo já liberado (Conversas) → sem trava nova (regra 29/09). Pergunta em aberto pra ele: a faixa no Início vale pra todos com `conversas` (hoje: ele + Victor; Rebeca no T2).
+- **Testes:** self-check `VIGIA-QUEDA-V1` (15 checagens; quebrando a regra, 5 acusam); portão verde (55 telas × 6); prints 390/1280 (Início com faixa, Conversas com semáforo).
+- **Próximo:** T2 (Rebeca no CRM) depois do OK do T1. Doc: `docs/conversas.md` (seção Vigia), diagnóstico `docs/umbler-diagnostico-2026-11-06.md` (branch `claude/wizardly-sagan-bwghr3`).
+
 ## 🟢 RETOMAR AQUI — 03/11/2026 — v8.84 PUBLICADA (OK dele: "A, pode publicar"): ajustes do quadro "Vida Individual · novo" + R$ 0 = sem negócio
 
 - **Pedido (print dele, "demais ajustes e correções"):** no PC a 1ª coluna aparecia cortada pela metade, os títulos das colunas sumiam ao rolar, sobrava branco onde a coluna era curta, "paga p/ K." aparecia 2× no mesmo card e os ícones do Contato rápido mudavam de lugar de um card pro outro.

@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.84 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.85 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3586,11 +3586,13 @@ function viewInicio(){
   $('#main').innerHTML=`
     <h1 class="pg">Seja bem-vindo(a), ${esc(nomeAtual())}</h1>
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
+    <div id="cv-vigia-ini">${(()=>{ try{ return cvVigiaHtml('inicio'); }catch(_){ return ''; } })()}</div>
     <div class="ini-tudo">
       <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button></div>
     ${pordRender([['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
                   ['funil-nn',bNn],['funil-bc',bBc],['ta',bTa],['reunioes',bReun],['eventos',bEv],['lp',bLp]])}`;
   iniBotaoPinta();
+  try{ cvVigiaChutar(false); }catch(_){}   /* VIGIA-QUEDA-V1: o WhatsApp caiu? (faixa só quando há alerta) */
 }
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
 /* Espelha o padrão da Captação: módulo (colapsável) → submódulo Funil → lista de Etapas.
@@ -21969,6 +21971,48 @@ function lpSelfCheck(){
              return i>0 && i>n.indexOf('ficha') && i<n.indexOf('gaveta'); })());
       } finally{ CV.chats=_c; CV.msgs=_m; CV.aberto=_ab; CV.f=_f; CV.estado=_e; CV.exemplo=_ex; CV.carregado=_car; CV.porContato=_pc; CV.erro=_er; S.contatos=_s; PERFIL=_p; }
     }
+    /* ═══ VIGIA-QUEDA-V1 (06/11) — semáforo por canal: horas ÚTEIS sem mensagem, seg–sex 8h–20h Recife ═══ */
+    { const _vg={...CV_VG}, _ex=CV.exemplo, _p=PERFIL;
+      try{
+        PERFIL=null; CV.exemplo=false;
+        const R=(dd,h,mi)=>Date.UTC(2026,10,dd,h+3,mi||0);   /* hora de Recife → ms (nov/2026: dia 7 sáb, 9 seg, 10 ter) */
+        const iso=ms=>new Date(ms).toISOString();
+        const ter14=R(10,14);
+        const av=(ult,agora,est)=>cvVigiaAvaliar({C:iso(ult)},est||null,agora).canais[0].st;
+        ok('vigia: canal parado 3 h 01 min às 14h de uma terça → VERMELHO', av(ter14-181*6e4,ter14)==='verm');
+        ok('vigia: 2 h 59 min parado → ainda verde', av(ter14-179*6e4,ter14)==='verde');
+        ok('vigia: sábado → nada acende', av(R(7,14)-181*6e4,R(7,14))==='verde' && !cvNoHorario(R(7,14)));
+        ok('vigia: 21h → nada acende', av(R(10,21)-181*6e4,R(10,21))==='verde' && !cvNoHorario(R(10,21)));
+        ok('vigia: mensagem nova → verde', av(ter14-10*6e4,ter14)==='verde');
+        ok('vigia: segunda 9h com a última na sexta 19h = 2 h úteis (fim de semana não é queda)',
+           Math.abs(cvHorasUteis(R(6,19),R(9,9))-2)<1e-6 && av(R(6,19),R(9,9))==='verde');
+        ok('vigia: canal sem mensagem há 7+ dias = inativo (ex.: canal removido), não alarma', av(ter14-8*864e5,ter14)==='inativo');
+        ok('vigia: leitura parada quando ultimo_ok passa de 30 min',
+           cvVigiaAvaliar({},{ultimo_ok:iso(ter14-31*6e4)},ter14).leituraParada===true
+           && cvVigiaAvaliar({},{ultimo_ok:iso(ter14-29*6e4)},ter14).leituraParada===false);
+        ok('vigia: a última mensagem por canal sai da lista de conversas',
+           (()=>{ const m=cvVigiaCanaisDe([{canal:'A',ultima_msg_em:iso(ter14-5e5)},{canal:'A',ultima_msg_em:iso(ter14-1e5)},{canal:'B',ultima_msg_em:iso(ter14-9e5)},{canal:'',ultima_msg_em:iso(ter14)}]);
+             return Object.keys(m).join(',')==='A,B' && m.A===iso(ter14-1e5); })());
+        CV_VG={canais:{'Canal Zz':iso(ter14-181*6e4),'Outro Zz':iso(ter14-5*6e4)},estado:{ultimo_ok:iso(ter14-5*6e4)},em:Date.now(),carregando:null};
+        const hi=cvVigiaHtml('inicio',ter14), hc=cvVigiaHtml('conversas',ter14);
+        ok('vigia: no Início a faixa só aparece com alerta, com o texto de ação e o atalho pra Conversas',
+           /Canal «Canal Zz» sem mensagem há 3 h/.test(hi) && /Abra a Umbler → Canais/.test(hi) && /releia o QR Code/.test(hi)
+           && /irPara\('conversas'\)/.test(hi) && !/Outro Zz/.test(hi));
+        ok('vigia: em Conversas aparece o semáforo inteiro (vermelho + verde)',
+           /Canal «Canal Zz»/.test(hc) && /✅ Outro Zz: última mensagem há 5 min/.test(hc));
+        CV_VG.canais={'Outro Zz':iso(ter14-5*6e4)};
+        ok('vigia: tudo verde → nada no Início (faixa vazia não ensina a ignorar)', cvVigiaHtml('inicio',ter14)==='');
+        PERFIL={email:'zz@x.com',papel:'lp',modulos:{conversas:false}};
+        CV_VG.canais={'Canal Zz':iso(ter14-181*6e4)};
+        ok('vigia: quem não tem o módulo conversas não vê a faixa', cvVigiaHtml('inicio',ter14)==='');
+        PERFIL=null;
+        ok('vigia: só lê — nada grava nem envia',
+           !/\.(insert|upsert|update|delete)\(/.test(String(cvVigiaCarregar)+String(cvVigiaHtml)+String(cvVigiaPintar))
+           && !/\/v1\/messages/.test(String(cvVigiaCarregar)));
+        ok('vigia: os dois lugares têm o ponto de pintura (Início e Conversas)',
+           String(viewInicio).includes('cv-vigia-ini') && String(cvTelaHtml).includes('cv-vigia-cv'));
+      } finally{ CV_VG=_vg; CV.exemplo=_ex; PERFIL=_p; }
+    }
     /* ═══ NIVER-FEITO-V1 (17/09) ═══ */
     { const _c=CART.clientes, _s=S.contatos, _b=BN.contatos, _f={...NIVER_F}, _nf=NIVER_FEITO, _ls=(()=>{ try{ return localStorage.getItem(NIVER_FEITO_CHAVE); }catch(_){ return null; } })(), _p=PERFIL, _v=NIVER_VER_FEITOS;
       try{
@@ -25124,7 +25168,15 @@ let CV={chats:[],carregado:false,carregando:null,estado:null,erro:'',msgs:{},por
     .cv-pane.aberto{display:block;position:fixed;inset:0;z-index:96;background:var(--fundo);overflow-y:auto;
       padding-bottom:calc(24px + env(safe-area-inset-bottom))}
     .cv-b{max-width:88%}
-  }`; document.head.appendChild(s); })();
+  }
+  /* VIGIA-QUEDA-V1 */
+  .cv-vg{padding:10px 12px;margin:10px 0;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.45}
+  .cv-vg-alerta{border:1px solid var(--verm);background:#fdecec}
+  .cv-vg-l{overflow-wrap:anywhere}
+  .cv-vg-verm{color:var(--verm);font-weight:600}
+  .cv-vg-cinza{color:var(--muted)}
+  .cv-vg-pe{font-size:11.5px;color:var(--muted)}
+  .cv-vg-bt{min-height:44px;align-self:flex-start}`; document.head.appendChild(s); })();
 
 /* ── chave de telefone: a MESMA do servidor (crm-mcp telChave/telScore) ───────────────
    telKey() do app exige DDD (10+ dígitos); a conversa do Talk às vezes chega sem DDD.
@@ -25269,11 +25321,101 @@ async function cvSincronizar(){
     if(!r.ok||j.ok===false) throw new Error(j.motivo||('servidor respondeu '+r.status));
     CV.msgs={}; CV.porContato={};
     await cvCarregar(true);
+    try{ await cvVigiaCarregar(true); }catch(_){}   /* VIGIA-QUEDA-V1 */
     toast('💬 Leitura em dia'+(j.mensagens!=null?' · '+j.mensagens+' mensagens guardadas':''),true);
   }catch(e){ console.warn('[conversas sinc]',e); toast('Não sincronizou: '+((e&&e.message)||e),false); }
   CV.sinc=false; if(VIEW==='conversas') viewConversas(); }
 
 /* ── a tela ─────────────────────────────────────────────────────────────────── */
+/* ═══ VIGIA-QUEDA-V1 (06/11/2026) — semáforo por canal: "o WhatsApp caiu?" ═════════════════
+   Por quê: o QR Code do canal do Gustavo caiu 2× numa semana (31/10→03/11 e 05/11 14h30→06/11) e
+   NADA avisava — a API da Umbler segue respondendo, só que sem mensagem nova, e a "Última leitura"
+   fica verde. Na viagem (12 a 30/11) quem atende é o Victor e a Rebeca: eles precisam ver a queda.
+   Regra: por canal, a última mensagem (max ultima_msg_em de umbler_chats, que a RLS já deixa ler).
+     • VERMELHO quando passam mais de 3 h ÚTEIS sem mensagem — seg a sex, 8h às 20h (Recife) — e é
+       horário útil agora. Conta só as horas dentro da janela: segunda 9h com a última na sexta 19h
+       = 2 h úteis (não é queda; é o fim de semana).
+     • canal sem mensagem há 7+ dias = inativo (cinza, fora do vigia) — ex.: canal removido.
+     • "leitura parada" quando umbler_estado.ultimo_ok passa de 30 min (o servidor lê a cada 10).
+   NÃO faz: não chama a Umbler, não grava nada, não recupera mensagem. Feriado não é tratado.
+   Onde: topo da tela 💬 Conversas (sempre) e faixa no Início (só quando há alerta), pra quem tem
+   o módulo `conversas`. Melhoria em módulo já liberado → sem trava nova (regra 29/09). */
+const CV_VIGIA={limH:3,iniH:8,fimH:20,leituraMin:30,inativoD:7,ttlMs:5*6e4};
+let CV_VG={canais:null,estado:null,em:0,carregando:null};
+const CV_RECIFE_OFF=3*36e5;   /* Recife = UTC−3 o ano todo (sem horário de verão desde 2019) */
+function cvNoHorario(ms){ const d=new Date(ms-CV_RECIFE_OFF), w=d.getUTCDay(), h=d.getUTCHours()+d.getUTCMinutes()/60;
+  return w>=1&&w<=5&&h>=CV_VIGIA.iniH&&h<CV_VIGIA.fimH; }
+/* horas de [de, ate] que caem dentro de seg–sex, 8h–20h (Recife) */
+function cvHorasUteis(de,ate){ if(!(isFinite(de)&&isFinite(ate))||ate<=de) return 0;
+  const a=de-CV_RECIFE_OFF, b=ate-CV_RECIFE_OFF; let tot=0;
+  for(let dia=Math.floor(a/864e5)*864e5, i=0; dia<b&&i<400; dia+=864e5, i++){
+    const w=new Date(dia).getUTCDay(); if(w===0||w===6) continue;
+    const s=Math.max(a,dia+CV_VIGIA.iniH*36e5), e=Math.min(b,dia+CV_VIGIA.fimH*36e5);
+    if(e>s) tot+=e-s; }
+  return tot/36e5; }
+/* linhas de umbler_chats → {canal: última mensagem} */
+function cvVigiaCanaisDe(rows){ const m={};
+  (rows||[]).forEach(r=>{ const c=String((r&&r.canal)||''), t=Date.parse((r&&r.ultima_msg_em)||'');
+    if(!c||!isFinite(t)) return; if(!m[c]||t>Date.parse(m[c])) m[c]=r.ultima_msg_em; });
+  return m; }
+/* a regra inteira, pura (testada no self-check) */
+function cvVigiaAvaliar(canais,estado,agora){ agora=agora||Date.now();
+  const out={leituraParada:false,leituraEm:null,noHorario:cvNoHorario(agora),canais:[]};
+  if(estado){ const lu=estado.ultimo_ok||estado.ultimo_sync, t=Date.parse(lu||'');
+    out.leituraEm=lu||null; out.leituraParada=!isFinite(t)||(agora-t)>CV_VIGIA.leituraMin*6e4; }
+  Object.keys(canais||{}).sort().forEach(n=>{ const t=Date.parse(canais[n]||''); if(!isFinite(t)) return;
+    const uteis=cvHorasUteis(t,agora);
+    const st=(agora-t)>=CV_VIGIA.inativoD*864e5? 'inativo' : (out.noHorario&&uteis>CV_VIGIA.limH)? 'verm' : 'verde';
+    out.canais.push({canal:n,ultima:canais[n],uteis,st}); });
+  return out; }
+/* leitura leve (2 colunas), com cache de 5 min. Só SELECT — nada aqui escreve. */
+async function cvVigiaCarregar(forcar){
+  if(CV_VG.carregando) return CV_VG.carregando;
+  if(!forcar&&CV_VG.canais&&(Date.now()-CV_VG.em)<CV_VIGIA.ttlMs) return;
+  if(!sb||!logado()) return;
+  CV_VG.carregando=(async()=>{
+    try{
+      const {data,error}=await sb.from('umbler_chats').select('canal,ultima_msg_em')
+        .order('ultima_msg_em',{ascending:false,nullsFirst:false}).limit(CV_CHATS_LIM);
+      if(error) throw error;
+      const e=await sb.from('umbler_estado').select('ultimo_sync,ultimo_ok,ultimo_erro').limit(1);
+      CV_VG.canais=cvVigiaCanaisDe(data); CV_VG.estado=(e.data&&e.data[0])||null; CV_VG.em=Date.now();
+    }catch(e){ console.warn('Vigia: leitura falhou',e); }
+    CV_VG.carregando=null; })();
+  return CV_VG.carregando; }
+function cvVigiaFonte(){
+  if(CV_VG.canais&&!CV.exemplo) return {canais:CV_VG.canais,estado:CV_VG.estado};
+  if((CV.chats||[]).length) return {canais:cvVigiaCanaisDe(CV.chats),estado:CV.estado};
+  return null; }
+function cvVigiaHtml(onde,agora){
+  if(onde==='inicio'&&!modOn('conversas')) return '';
+  const f=cvVigiaFonte(); if(!f) return '';
+  agora=agora||Date.now();
+  const av=cvVigiaAvaliar(f.canais,f.estado,agora);
+  const alertas=[];
+  if(av.leituraParada) alertas.push(`⚠️ Leitura parada: o CRM não lê a Umbler ${av.leituraEm?esc(cvHa(av.leituraEm,agora)):'há mais de '+CV_VIGIA.leituraMin+' min'}. Toque em 🔄 Sincronizar agora (💬 Conversas); se continuar, avise o Gustavo.`);
+  av.canais.filter(c=>c.st==='verm').forEach(c=>alertas.push(`⚠️ Canal «${esc(c.canal)}» sem mensagem ${esc(cvHa(c.ultima,agora))}. Abra a Umbler → Canais e confira se está conectado (releia o QR Code).`));
+  if(onde==='inicio'){
+    if(!alertas.length) return '';
+    return `<div class="card cv-vg cv-vg-alerta" role="alert">${alertas.map(t=>`<div class="cv-vg-l">${t}</div>`).join('')}
+      <button class="btn btn-p btn-mini cv-vg-bt" onclick="irPara('conversas')">💬 Abrir Conversas</button></div>`; }
+  if(!av.canais.length&&!av.leituraParada) return '';
+  const linhas=av.canais.map(c=> c.st==='verm'? `<div class="cv-vg-l cv-vg-verm">⚠️ Canal «${esc(c.canal)}» sem mensagem ${esc(cvHa(c.ultima,agora))}. Abra a Umbler → Canais e confira se está conectado (releia o QR Code).</div>`
+    : c.st==='inativo'? `<div class="cv-vg-l cv-vg-cinza">⚪ ${esc(c.canal)}: sem mensagem ${esc(cvHa(c.ultima,agora))} — canal parado, fora do vigia.</div>`
+    : `<div class="cv-vg-l">✅ ${esc(c.canal)}: última mensagem ${esc(cvHa(c.ultima,agora))}</div>`).join('');
+  const topo=av.leituraParada? `<div class="cv-vg-l cv-vg-verm">${alertas[0]}</div>` : '';
+  const pe=av.noHorario? '' : `<div class="cv-vg-pe">🌙 Fora do horário do vigia (seg a sex, 8h às 20h) — o alerta de canal só acende dentro dele.</div>`;
+  return `<div class="card cv-vg${alertas.length?' cv-vg-alerta':''}">${topo}${linhas}${pe}</div>`; }
+/* pinta os dois lugares sem redesenhar a tela inteira (não perde rolagem nem o que está aberto) */
+function cvVigiaPintar(){
+  try{ const a=document.getElementById('cv-vigia-ini'); if(a) a.innerHTML=cvVigiaHtml('inicio'); }catch(e){ console.warn('Vigia: pintar Início',e); }
+  try{ const b=document.getElementById('cv-vigia-cv'); if(b) b.innerHTML=cvVigiaHtml('conversas'); }catch(e){ console.warn('Vigia: pintar Conversas',e); } }
+function cvVigiaChutar(forcar){
+  try{ if(!modOn('conversas')||!sb||!logado()) return; const p=cvVigiaCarregar(forcar); if(p&&p.then) p.then(cvVigiaPintar); }catch(_){} }
+/* com o app aberto no Início ou em Conversas, relê a cada 5 min (aba escondida não gasta) */
+(function cvVigiaRelogio(){ try{ setInterval(()=>{ if(document.hidden) return;
+  if(VIEW==='inicio'||VIEW==='conversas'){ cvVigiaChutar(true); cvVigiaPintar(); } }, CV_VIGIA.ttlMs); }catch(_){} })();
+
 async function viewConversas(){
   const m=$('#main'); if(!m) return;
   if(!CV.carregado){
@@ -25281,6 +25423,7 @@ async function viewConversas(){
     await cvCarregar(); if(VIEW!=='conversas') return;
   }
   m.innerHTML=cvTelaHtml();
+  cvVigiaChutar(false);   /* VIGIA-QUEDA-V1 */
   const ch=CV.aberto&&(CV.chats||[]).find(x=>x.id===CV.aberto);
   if(ch&&!CV.msgs[ch.id]) cvMsgsCarregar(ch.id).then(()=>{ if(VIEW==='conversas'&&CV.aberto===ch.id) viewConversas(); }); }
 
@@ -25300,6 +25443,7 @@ function cvTelaHtml(){
   return `<h1 class="pg">💬 Conversas</h1>
   <div class="sub">O WhatsApp do Umbler Talk aqui dentro, <b>só pra ler</b>. Responder é sempre você ou o Victor, no WhatsApp ou no Talk — este módulo não envia nada.</div>
   ${aviso}
+  <div id="cv-vigia-cv">${cvVigiaHtml('conversas')}</div>
   <div class="kpis" style="margin-top:10px">
     <div class="kpi"><div class="lbl">Aguardando resposta</div><div class="num" style="color:${hoje.length?'var(--verm)':'var(--ink)'}">${hoje.length}</div>
       <div class="kpi-sub" style="font-size:11px;color:var(--muted)">nas últimas 24 h · ${aguard.length} no total</div></div>

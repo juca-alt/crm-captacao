@@ -15,7 +15,7 @@
 //  Limite da API: 100 req / 5 s → espaçamos 60 ms e, no 429, esperamos 5 s.
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { chatUltimoEvento, coletarMembros, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, type Obj } from "./nucleo.ts";
+import { chatUltimoEvento, cmpData, coletarMembros, emDia, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, type Obj } from "./nucleo.ts";
 
 const API = "https://app-utalk.umbler.com/api";
 const DONO = "juca@segurocomjuca.com";          // dono da conta Umbler (RLS por dono; Victor lê como delegado)
@@ -105,13 +105,13 @@ type ChatRow = { id: string; msgs_ate: string | null; msgs_desde: string | null;
 let msgsGravadas = 0;
 
 async function gravarMsgs(lista: unknown[], chatId: string): Promise<{ min: string | null; max: string | null; n: number }> {
-  const rows = lista.map((m) => mapMensagem(m, chatId, DONO)).filter(Boolean) as Obj[];
+  const rows = lista.map((m) => mapMensagem(m, chatId, DONO, MEMBROS)).filter(Boolean) as Obj[];
   let min: string | null = null, max: string | null = null;
   for (const r of rows) {
     const t = r.enviada_em as string | null;
     if (!t) continue;
-    if (!min || t < min) min = t;
-    if (!max || t > max) max = t;
+    if (!min || cmpData(t, min) === -1) min = t;
+    if (!max || cmpData(t, max) === 1) max = t;
   }
   if (rows.length) {
     const { error } = await db.from("umbler_mensagens").upsert(rows, { onConflict: "id" });
@@ -138,14 +138,16 @@ async function sincChat(chatId: string, org: string, tk: string, atual: ChatRow 
     for (let i = 0; i < 20 && Date.now() < prazo; i++) {
       const antes: string = ate;
       const pg = await gravarMsgs(await lerPagina(chatId, org, antes, "TakeAfter", tk), chatId);
-      if (pg.max && pg.max > antes) ate = pg.max;
-      if (pg.n < TAKE_MSGS || !pg.max || pg.max <= antes) break; // página curta ou sem avanço = em dia
+      const avancou = !!pg.max && cmpData(pg.max, antes) === 1;   // UMBLER-T4: por número, não por texto
+      if (avancou) ate = pg.max;
+      if (pg.n < TAKE_MSGS || !avancou) break; // página curta ou sem avanço = em dia
     }
   }
   if (comHistorico && !completo && desde) {
     for (let i = 0; i < PAGINAS_HIST_POR_CHAT && Date.now() < prazo; i++) {
       const pg = await gravarMsgs(await lerPagina(chatId, org, desde, "TakeBefore", tk), chatId);
-      if (pg.n < TAKE_MSGS || !pg.min || pg.min >= desde) { completo = true; if (pg.min && pg.min < desde) desde = pg.min; break; }
+      const recuou = !!pg.min && cmpData(pg.min, desde) === -1;   // UMBLER-T4
+      if (pg.n < TAKE_MSGS || !recuou) { completo = true; if (recuou) desde = pg.min; break; }
       desde = pg.min;
     }
   }
@@ -175,16 +177,16 @@ async function processarPagina(lista: unknown[], org: string, tk: string, prazo:
     const { error } = await db.from("umbler_chats").upsert(rows, { onConflict: "id" });
     if (error) throw new Error("gravar chats: " + error.message);
   }
-  let emDia = 0;
+  let nEmDia = 0;
   for (const c of lista) {
     if (Date.now() > prazo) break;
     const r = mapChat(c, DONO, org, MEMBROS); if (!r) continue;
     const at = atuais.get(r.id as string) ?? null;
     const ult = chatUltimoEvento(c);
-    if (at?.msgs_ate && (!ult || ult <= at.msgs_ate)) { emDia++; continue; }
+    if (emDia(ult, at?.msgs_ate)) { nEmDia++; continue; }
     await sincChat(r.id as string, org, tk, at, prazo, false);
   }
-  return emDia;
+  return nEmDia;
 }
 
 async function sincronizar(origem: string) {
@@ -203,9 +205,9 @@ async function sincronizar(origem: string) {
     while (Date.now() < prazo && paginas < 20) {
       const lista = await listarChats(org, skip, tk);
       const novos = novosNa(lista);
-      const emDia = await processarPagina(lista, org, tk, prazo);
+      const nEmDia = await processarPagina(lista, org, tk, prazo);
       paginas++; skip += TAKE_CHATS;
-      if (lista.length < TAKE_CHATS || emDia === lista.length || !novos) break; // !novos = página repetida
+      if (lista.length < TAKE_CHATS || nEmDia === lista.length || !novos) break; // !novos = página repetida
     }
     passos.cabeca_paginas = paginas;
     // 2) varredura completa (1ª vez): todos os chats, inclusive fechados. Cursor sobrevive entre rodadas.
@@ -258,7 +260,7 @@ async function webhook(body: unknown) {
     const est = await lerEstado();
     if (x.chat) { const r = mapChat(x.chat, DONO, est.org_id, (est.stats?.membros as Record<string, string>) ?? {}); if (r) await db.from("umbler_chats").upsert(r, { onConflict: "id" }); }
     if (x.mensagem && x.chatId) {
-      const r = mapMensagem(x.mensagem, x.chatId, DONO);
+      const r = mapMensagem(x.mensagem, x.chatId, DONO, (est.stats?.membros as Record<string, string>) ?? {});
       if (r) {
         // o chat pode não existir ainda: cria o mínimo pra mensagem não ficar órfã
         await db.from("umbler_chats").upsert({ id: x.chatId, dono: DONO, ultima_msg_em: r.enviada_em, ultima_msg_de: r.de }, { onConflict: "id", ignoreDuplicates: true });

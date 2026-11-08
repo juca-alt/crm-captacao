@@ -86,3 +86,23 @@ chega sem DDD.
 ## Depois
 - Copiloto lendo de `umbler_mensagens` no servidor (em vez de raspar a tela) — Tarefa 2.
 - Webhook do Talk (opcional): deixa em tempo real; sem ele o atraso é de até 10 min.
+
+## 🚦 Vigia de queda (VIGIA-QUEDA-V1 · 06/11/2026 · v8.85)
+O QR Code do canal do Gustavo caiu 2× numa semana e nada avisava (a API da Umbler segue respondendo,
+só que sem mensagem nova). Agora, por canal, o app olha a **última mensagem** (`max(ultima_msg_em)` de
+`umbler_chats`, que a RLS já deixa ler) — sem tabela nova, sem cron, sem chamar a Umbler, sem gravar nada.
+
+| Estado | Quando |
+|---|---|
+| 🔴 **Vermelho** | mais de **3 h úteis** sem mensagem, e agora é horário útil (**seg a sex, 8h às 20h**, Recife). Só contam as horas dentro da janela: segunda 9h com a última na sexta 19h = 2 h úteis → verde. |
+| ✅ Verde | dentro do limite, ou fora do horário |
+| ⚪ Inativo | canal sem mensagem há **7+ dias** (ex.: canal removido) — fora do vigia |
+| ⚠️ Leitura parada | `umbler_estado.ultimo_ok` com mais de **30 min** (o servidor lê a cada 10) |
+
+- **Onde:** topo da tela 💬 Conversas (semáforo inteiro) e faixa vermelha no **Início só quando há alerta**,
+  com o atalho "💬 Abrir Conversas". Só pra quem tem o módulo `conversas`.
+- **Texto:** "⚠️ Canal «{canal}» sem mensagem há {X} h. Abra a Umbler → Canais e confira se está conectado (releia o QR Code)."
+- Relê a cada 5 min com o app aberto no Início ou em Conversas (aba escondida não gasta); o 🔄 Sincronizar também relê.
+- Limites numa constante só: `CV_VIGIA` (limH 3, iniH 8, fimH 20, leituraMin 30, inativoD 7).
+- **Não trata feriado** (num feriado de semana, um canal parado pode acender).
+- Self-check `VIGIA-QUEDA-V1` (15 checagens, com datas fixas de nov/2026).

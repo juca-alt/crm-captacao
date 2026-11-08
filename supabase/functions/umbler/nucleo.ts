@@ -54,7 +54,29 @@ export function msgQuando(m: unknown): string | null {
   return quando(pick(m, "eventAtUTC")) ?? quando(pick(m, "createdAtUTC"));
 }
 
-export function mapMensagem(m: unknown, chatId: string, dono: string): Obj | null {
+/** UMBLER-T4 (07/11): datas vêm em formatos diferentes — "…Z" (JavaScript) e "…+00:00" (PostgREST).
+ *  Comparar como TEXTO dava "Z" > "+" e nenhuma conversa ficava "em dia" (a rodada relia tudo, ~100 s).
+ *  Sempre comparar por NÚMERO. Data ilegível = NaN = não decide nada (cmpData devolve null). */
+export function tData(v: unknown): number {
+  const s = str(v);
+  return s ? Date.parse(s) : NaN;
+}
+export function cmpData(a: unknown, b: unknown): number | null {
+  const x = tData(a), y = tData(b);
+  if (!isFinite(x) || !isFinite(y)) return null;
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+/** o chat já está em dia quando a última mensagem dele não é mais nova que a última que já gravamos */
+export function emDia(ultimaDoChat: unknown, msgsAte: unknown): boolean {
+  if (!str(msgsAte)) return false;
+  if (!str(ultimaDoChat)) return true;
+  const c = cmpData(ultimaDoChat, msgsAte);
+  return c !== null && c <= 0;
+}
+
+/** UMBLER-T3 (07/11): a API às vezes manda o remetente só com o id → o nome sai do mapa de membros
+ *  (o mesmo do atendente do chat). Antes, 214 mensagens nossas ficavam sem autor ("nós"). */
+export function mapMensagem(m: unknown, chatId: string, dono: string, membros: Record<string, string> = {}): Obj | null {
   const id = str(pick(m, "id"));
   if (!id) return null;
   const arq = pick(m, "file");
@@ -69,6 +91,7 @@ export function mapMensagem(m: unknown, chatId: string, dono: string): Obj | nul
     arquivo_nome: str(pick(arq, "originalName", "name", "fileName")),
     arquivo_url: str(pick(arq, "url", "publicUrl", "downloadUrl")),
     autor: nome(pick(m, "sentByOrganizationMember")) ??
+      membros[str(pick(pick(m, "sentByOrganizationMember"), "id")) ?? ""] ??
       (String(str(pick(m, "source")) ?? "").toLowerCase() === "external" ? "pelo celular" : null),
     enviada_em: msgQuando(m),
     estado: str(pick(m, "messageState")),
