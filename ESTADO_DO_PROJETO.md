@@ -2,6 +2,50 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 08/11/2026 — TICKET D (v8.86 · VER-COMO-V3) PRONTO NO BRANCH `claude/wizardly-sagan-bwghr3`, AGUARDA OK
+
+- **Ticket B rodado por ele** (07/11 20:46): `rebeca@pendente.invalid` · papel lp · 19 módulos (pacote A) · delegação da base do Gustavo · RC laranja no time dele. Falta só o e-mail real → bloco 5 do `supabase/migrations/equipe_rebeca_2026-11-07.sql`.
+- **D — "👁️ Usar o app como {nome}"** (Painel Master · Acessos, só admin, só pra quem não é admin). Arquivo próprio `modulos/ver-como.js`, que carrega ANTES do script principal porque o cliente Supabase captura o `fetch` quando é criado.
+  - O app inteiro passa a usar o perfil da pessoa: `modOn` → módulos dela; `novoOn` → NOVO_SO_MEU escondido; `souAdm` e `isMaster` → falso, então o painel admin some.
+  - O seletor de base só mostra os donos dela (a base do Daniel some pra Rebeca); se a seleção era "tudo" ou a base do Daniel, cai em "meu".
+  - **Nada é gravado:** o localStorage vira rascunho em memória; POST/PATCH/PUT/DELETE pro Supabase, Edge Functions e Google são barrados no navegador (403 + aviso). Passam o GET, o `/auth/v1/` e 4 RPCs de leitura (`emb_eu`, `emb_leads`, `emb_leads_notas`, `emb_jornada_lead`).
+  - "Sair do modo" recarrega a página e descarta tudo.
+  - Faixa: no PC fica embaixo; no celular fica acima da barra inferior; o conteúdo e os avisos sobem pra não cobrir nada.
+  - Mudanças no `vendas.html`: tag do script, ganchos em souAdm/modOn/novoOn/escOpcoes/isMaster, botão no Acessos, `eqCarregar` no admCarregar, autoteste, v8.86.
+  - Autoteste `VER-COMO-V1` (10 checagens); portão verde (55 telas × 6); prints 390/1280 como Rebeca e como Victor; console limpo; 0 estouro.
+  - ⚠️ A sessão `busy-galileo` (FORMS-NEG-V1) também chamou a versão dela de v8.85 → precisa virar **v8.87** ao juntar.
+
+## 🟢 07/11/2026 (noite) — TICKET A FECHADO · TICKET B COM SQL PRONTO
+
+- **A (umbler v5, T3+T4): ✅ fechado.** Ele rodou o SQL às 19:59. Resultados:
+  - autor preenchido em 215 mensagens (GUSTAVO JUCA 141 · Victor Figueiredo 74), 0 sem autor;
+  - cron com 20 s de folga;
+  - 1ª rodada da v5 (20:00): **11,4 s, 18 requisições, 4 mensagens gravadas** (antes: 96 s, 500 requisições, 1 mensagem); chamada das 20:00 = 200.
+- **QR Code reconectado em 07/11** (canal do Gustavo com mensagem às 19:42). O período de 05/11 14h30 até a reconexão ficou fora da Umbler e do CRM.
+- **B (Rebeca):** decisão dele "RC laranja, A". O e-mail dela ainda não chegou. SQL em `supabase/migrations/equipe_rebeca_2026-11-07.sql`:
+  - usa o e-mail provisório `rebeca@pendente.invalid` (não loga em nada);
+  - bloco 5 troca pelo e-mail real em um passo;
+  - depois, no Painel, clicar em "📂 dar acesso à pasta do Drive".
+  - Ele pediu pra "ver na prática a visão dela" → **ticket D (Usar o app como…) é o próximo**, assim que ele confirmar que rodou o SQL do B.
+- **C (Vitor só MFO/VG):** falta o A/B dele.
+
+## 🔴 06/11/2026 — DIAGNÓSTICO UMBLER (só leitura) + PROMPT PRÉ-VIAGEM (ele viaja 12–30/11)
+
+- **Relatório:** `docs/umbler-diagnostico-2026-11-06.md`. **Prompt pra próxima sessão:** `docs/PROMPT_CODE_UMBLER_PRE_VIAGEM_2026-11-06.md` (5 tickets até 11/11: vigia mínimo, Rebeca no CRM, autor por membro, bug de datas do sync + timeout do cron, lista de canais permitidos). Cópias no Drive e no Notion (LOG 06/11).
+- **Queda do QR Code de novo:** canal do Gustavo sem mensagem desde 05/11 14h30 (Recife); ele confirmou por print às 12:07 de 06/11 → reler o QR. É a 2ª queda na semana (a 1ª foi de 31/10 a 03/11). Nada no CRM detecta queda.
+- **Achados:**
+  - (1) o sync compara datas como texto (`…Z` × `…+00:00`), então toda rodada relê ~110 chats, gasta 100 s e grava 0;
+  - (2) 7 das 36 chamadas do cron estouraram os 5 s do pg_net;
+  - (3) o webhook nunca foi cadastrado na Umbler (`umbler_eventos` = 0);
+  - (4) o autor das mensagens enviadas pelo Talk fica nulo (214), porque `mapMensagem` não usa o mapa de membros;
+  - (5) o sync grava tudo, inclusive as notas internas (36) e qualquer canal novo, sem filtro;
+  - (6) a Rebeca não existe no CRM;
+  - (7) o copiloto nunca foi usado de verdade (11 sugestões, todas de teste) e o código dele está só no branch `claude/copiloto-t1`;
+  - (8) colisão de versão: o 2.11 supõe a 2.10.0 = copiloto, mas a 2.10.0 da main é a do portal;
+  - (9) a tabela `wa_historico` existe vazia, sem código no repo;
+  - (10) telefone completo num comentário do `umbler-dom.js` (mascarar).
+- **Nada foi alterado** (código, banco, cron, secret).
+
 ## 🟢 RETOMAR AQUI — 07/11/2026 (noite) — função `umbler` v5 NO AR (T3 autor por membro + T4 datas por número), OK dele no chat 19:52
 
 - **Deploy 19:54:** `umbler` v5 (verify_jwt false). Falta ELE rodar `supabase/migrations/umbler_t3_t4_2026-11-07.sql` (backfill de autor: 141 Gustavo + 74 Victor; cron com timeout 20 s). Antes: rodada 95,7 s / 500 req.
@@ -52,6 +96,9 @@
 - **LIBERA-FUNIL-NOVO-V1 (26/10, palavra dele: "libera agenda nova e funil novo para Victor e Daniel e cards novos; no caso do Victor também MFO; Daniel só individual"):** `funil-unico`, `ficha-ux2`, `agenda-global` saíram do NOVO_SO_MEU → MODS def:false (+ `fu-mfo` novo, MFO no quadro novo). Banco: `lp_perfis.modulos` Victor = os 4 ligados; Daniel = funil-unico/ficha-ux2/agenda-global ligados, fu-mfo **false**. Conferido via RLS como cada um: lê kb_etapa_mapa (72), funil_cfg, equipe; Victor vê os 29 fantasmas. Pra eles também vale: menu com telas antigas no grupo, Agenda nova no lugar da antiga, barra de baixo nos funis novos (Daniel: Base Clientes continua, sem MFO).
 - **QUEM-TOCA-V1 (26/10, print do Umbler Talk: "um campo pra eu marcar as que o Victor vai andar ou eu assumo"):** bolinha com a sigla no card do quadro novo (＋ quando vazio); toque escolhe quem toca (`c.toca` = e-mail, histórico `k:'toca'`). Filtros "Comigo / Com outra pessoa / Ninguém marcado" + seletor "Quem toca" em Mais + coluna na tabela. Equipe em `app_settings.equipe` (membros: GJ azul, VF roxo, DC verde; times: base do Gustavo = Gustavo+Victor; base do Daniel = Daniel+Gustavo+Victor) — só admin edita.
 - **GABI PRÓPRIA (26/10, "pega lá o prompt e facilita minha vida, já traz aí"):** o PROMPT_CODE_GABI_PROPRIA_PORTAL ficou só no Projeto do Claude (não está no Drive nem no Notion) → construído por GRAVAR-E-REPETIR, sem mapear o portal: **extensão 2.10.0** (`portal-sw.js`, `content/portal.js/.css`; permissões webRequest/downloads/tabs + optional_host_permissions pedidas na hora, só pro site do portal): ● Gravar → ele baixa cada relatório uma vez → vira receita (`portal_receitas`, sem senha/cookie/viewstate, datas como deslocamento); ↻ Puxar / Puxar todos repete DENTRO da aba do portal (sessão dele) com viewstate novo e datas de hoje e entrega em `window.portalReceber` do CRM. **CRM (PORTAL-RECEBER-V1):** arquivo vira texto (PDF/.xlsx/.xls/HTML), tipo pela assinatura do subir à mão, lista "📥 Chegaram do portal" na Central — importar é com ele. Testado contra portal de mentira (~55 checagens) + porta no CRM (390/1280). **Falta: ele testar no portal real** (o pedido de permissão do Chrome não dá pra clicar no teste). Zip: downloads/extensao-whatsapp-2.10.0.zip.
+- **EXTENSÃO 2.10.0 NO CHROME DELE (30/10):** ele cadastrou a Redirect URL do Google no Supabase (passos 1–3 feitos). No Chrome dele a extensão ainda era **2.9.1** (ID certo `mjick…`) → passo dado: baixar `https://juca-alt.github.io/crm-captacao/downloads/extensao-whatsapp.zip` (conferido: é 2.10.0), descompactar em Documentos, Remover o card antigo, "Carregar sem compactação". Depois: testar "Entrar com Google" e o portal (● Gravar). Resultado ainda não confirmado.
+- **PRÓXIMA SESSÃO — deixar o Claude assumir o Mac dele (30/10, palavra dele: "nas próximas já vamos organizar pra você poder assumir sempre que eu precisar"):** desta sessão na nuvem não deu — as 3 pastas do Mac (`crm-captacao`, `crm-captacao-main`, `Teste Claude Code`) aparecem no Remote Control mas bloqueadas pra sessão da nuvem (causa provável: app do Claude no Mac desatualizado, ou pasta que não é raiz de repositório git). E clique em tela (Chrome) só numa conversa do app do Claude no Mac com uso do computador ligado. Organizar: atualizar o app, conferir as pastas, ligar uso do computador.
+- **FAXINA ADIADA (27/10, palavra dele: "vamos deixar pra quando eu assinar o Pro do Supabase"; Pro: "não agora"):** escolha era B (8 backups antigos + restos de teste). NADA foi apagado nem copiado. Fica pronto pra quando ele assinar: (1) Edge Function `faxina-backup` JÁ publicada (verify_jwt off, só roda com header `x-faxina` = chave de uso único guardada fora do repo — se a chave se perder, republicar com outra) — copia as 8 tabelas (`lp_contatos_bkp_20260812` 5.306 · `lp_contatos_bkp2_20260812` 5.203 · `_bkp_20260928_contato_porta` 372 · `leads_bkp_20260615` 576 · `_bkp_20261013_mfo` 9 · `_bkp_20261013_funcfg` 1 · `_bkp_20260929_vg_amanda` 1 · `_bkp_20260921_ta` 7) pro bucket privado `arquivo-backups` (gzip, baixa de volta e confere sha/linhas); (2) depois o drop das 8 (SQL pra ele rodar) + restos de teste: usuário `claude-teste-24-10@exemplo.invalid`, 9 linhas em `copiloto_sugestoes` desse usuário, 1 sessão de teste em `lp_mcp_sessions`, função `emb_teste_x()`, Edge Function `bn-import-temp` (virar stub). **Manter** `_bkp_20261024_funil` (volta do funil novo). Drive não serve pra cópia grande (o conector só aceita o arquivo inteiro numa mensagem).
 - **AGENDA-NOVA-MANDA-V1 (palavra dele 26/10: "sobre tarefas pode substituir a antiga já"):** com `agenda-global` ligada, `irPara('agenda')` vira `ag-global` em TODO caminho (menu, Início, atalhos, barra de baixo, #view); o item antigo some do menu e o novo vira "Agenda & Tarefas" com o contador; a antiga só em 🗄️ Telas antigas → "Agenda antiga" (`irPara('agenda-antiga')`). `agenda-antiga` entrou em VIEWS_CONHECIDAS pra o portão seguir medindo a antiga (Victor/Daniel usam). Portão 55 telas × 6 verde.
 - **COL-LARGURA-V1 (NO AR, PR #320):** print dele "uns cards largos, outros estreitos" → toda coluna do quadro novo com 284px no PC, chips quebram linha, nome não corta.
 - **importar-relatorio-lp v4 (publicada):** Gemini → Claude (Haiku via RELATORIO_MODELO), mesmas mensagens/motivos; testada com relatório inventado (atrasos + aniversariantes, 5 s).
