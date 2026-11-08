@@ -2,7 +2,20 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 07/11/2026 (noite) — TICKET A FECHADO · TICKET B COM SQL PRONTO
+## 🟡 RETOMAR AQUI — 08/11/2026 — TICKET D (v8.86 · VER-COMO-V3) PRONTO NO BRANCH `claude/wizardly-sagan-bwghr3`, AGUARDA OK
+
+- **Ticket B rodado por ele** (07/11 20:46): `rebeca@pendente.invalid` · papel lp · 19 módulos (pacote A) · delegação da base do Gustavo · RC laranja no time dele. Falta só o e-mail real → bloco 5 do `supabase/migrations/equipe_rebeca_2026-11-07.sql`.
+- **D — "👁️ Usar o app como {nome}"** (Painel Master · Acessos, só admin, só pra quem não é admin). Arquivo próprio `modulos/ver-como.js`, que carrega ANTES do script principal porque o cliente Supabase captura o `fetch` quando é criado.
+  - O app inteiro passa a usar o perfil da pessoa: `modOn` → módulos dela; `novoOn` → NOVO_SO_MEU escondido; `souAdm` e `isMaster` → falso, então o painel admin some.
+  - O seletor de base só mostra os donos dela (a base do Daniel some pra Rebeca); se a seleção era "tudo" ou a base do Daniel, cai em "meu".
+  - **Nada é gravado:** o localStorage vira rascunho em memória; POST/PATCH/PUT/DELETE pro Supabase, Edge Functions e Google são barrados no navegador (403 + aviso). Passam o GET, o `/auth/v1/` e 4 RPCs de leitura (`emb_eu`, `emb_leads`, `emb_leads_notas`, `emb_jornada_lead`).
+  - "Sair do modo" recarrega a página e descarta tudo.
+  - Faixa: no PC fica embaixo; no celular fica acima da barra inferior; o conteúdo e os avisos sobem pra não cobrir nada.
+  - Mudanças no `vendas.html`: tag do script, ganchos em souAdm/modOn/novoOn/escOpcoes/isMaster, botão no Acessos, `eqCarregar` no admCarregar, autoteste, v8.86.
+  - Autoteste `VER-COMO-V1` (10 checagens); portão verde (55 telas × 6); prints 390/1280 como Rebeca e como Victor; console limpo; 0 estouro.
+  - ⚠️ A sessão `busy-galileo` (FORMS-NEG-V1) também chamou a versão dela de v8.85 → precisa virar **v8.87** ao juntar.
+
+## 🟢 07/11/2026 (noite) — TICKET A FECHADO · TICKET B COM SQL PRONTO
 
 - **A (umbler v5, T3+T4): ✅ fechado.** Ele rodou o SQL às 19:59. Resultados:
   - autor preenchido em 215 mensagens (GUSTAVO JUCA 141 · Victor Figueiredo 74), 0 sem autor;

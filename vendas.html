@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.85 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.86 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1858,6 +1858,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <div id="toasts"></div>
 
 <!-- FUNIL-UNICO-V1 · T3: o quadro dos 2 funis novos mora em arquivo próprio (não briga com a sessão paralela) -->
+<!-- VER-COMO-V3 (08/11): "usar o app como" — carrega ANTES do script principal (o filtro de rede tem que existir antes do cliente Supabase) -->
+<script src="modulos/ver-como.js?v=20261108b"></script>
 <script src="modulos/funil-unico.js?v=20261103a"></script>
 <!-- AGENDA-GLOBAL-V1 (26/10): Agenda & Tarefas no padrão do Global mora em arquivo próprio -->
 <script src="modulos/agenda-global.js?v=20261026c"></script>
@@ -2789,7 +2791,7 @@ function user(){ return S.users.find(u=>u.id===S.activeUser)||S.users[0]; }
 function nomeAtual(){ return logado()?(PERFIL.nome||PERFIL.email||'Você'):user().nome; }
 /* logado = sessão real (RLS já isola a base por dono). Deslogado = modo demo local. */
 function logado(){ return (typeof PERFIL!=='undefined') && !!PERFIL; }
-function isMaster(){ if(logado()) return PERFIL.papel==='admin'; return user().papel.startsWith('Master'); }
+function isMaster(){ if(logado()) return souAdm(); return user().papel.startsWith('Master'); }
 /* Logado: mostra tudo que carregou (a RLS já trouxe só o do dono). Deslogado: filtro demo por LP. */
 /* ESCOPO-TUDO-V1 (11/09): 'tarefas de leads do Daniel no meu perfil' — Agenda/Início/Metas/busca/funis extras liam
    S.contatos com 'master ou logado' (= todo mundo). UMA porta: escVisivel(c). Nada se mistura. */
@@ -18178,6 +18180,7 @@ const NOVO_SO_MEU={
 };
 function novoOn(k){
   if(!NOVO_SO_MEU[k]) return MODS[k]? modOn(k) : true;   /* não listado = liberado; se virou módulo em MODS, obedece ao mapa do usuário (pessoa a pessoa) */
+  if(window.VC&&VC.on) return !!(VC.p&&VC.p.papel==='admin');   /* VER-COMO-V3: novidade só na base dele não aparece pra assistente */
   if(!PERFIL) return true;                          /* sem login = base local dele */
   /* vendo como outro dono, a tela mostra o que O OUTRO enxerga — inclusive a
      ausência da novidade. É assim que ele confere antes de liberar. */
@@ -18281,7 +18284,7 @@ function escMeuLpDe(eu, rotulos, nome){ const meus=(rotulos||[]).filter(r=>r.don
   if(!meus.length) return null; if(meus.length===1) return meus[0];
   const p=String(nome||'').trim().split(/\s+/)[0]||''; const m=meus.find(r=>escLpNorm(r)===escLpNorm(p)); return m||null; }
 function escMeuLp(){ return escMeuLpDe(escEu(), ESC.rotulos, (PERFIL&&PERFIL.nome)||''); }
-function escOpcoes(){ return escOpcoesDe(escEu(), DELEG.donos, ESC.rotulos, escMeuLp()); }
+function escOpcoes(){ return escOpcoesDe(escEu(), (typeof escOpcoesVc==='function'?escOpcoesVc(DELEG.donos):DELEG.donos), ESC.rotulos, escMeuLp()); }   /* VER-COMO-V3: no modo, só os donos da pessoa */
 let _escMemo=null;
 function escAtual(){ const k=[ESC,DELEG,PERFIL,ESC&&ESC.sel,ESC&&ESC.rotulos,DELEG&&DELEG.donos,DELEG&&DELEG.eu]; if(_escMemo&&Date.now()-_escMemo.t<30&&_escMemo.k.every((x,i)=>x===k[i])) return _escMemo.v;   /* PERF: escRegOk por registro reconstruía as opções 6k vezes por render; memo cai se ESC/DELEG/PERFIL mudarem */
   const v=escAtualCalc(); _escMemo={t:Date.now(),v,k}; return v; }
@@ -18332,8 +18335,10 @@ function delegDono(email){ return delegAtivo()||email||DELEG.eu; }
 function delegTrocar(d){ if(!DELEG.donos.includes(d)) return; escSet('dono:'+d); }
 function delegFaixa(){ const a=delegAtivo(); if(!a) return ''; const o=escAtual(); return `<div class="imp-faixa" style="margin-bottom:8px">🤝 Você está vendo e operando a base de <b>${esc(o.nome)}</b> (${esc(a)}) — o que você gravar aqui é dele. <button class="btn btn-s btn-mini" onclick="escSet('meu')">Voltar pra minha</button></div>`; }
 let PERFIL=null; // {email,papel,modulos} — null = deslogado/sem linha → defaults
-function souAdm(){ return !!(PERFIL&&PERFIL.papel==='admin'); }
-function modOn(k){ if(!PERFIL) return true;              // sem login = modo local do dono: tudo visível
+function souAdm(){ if(window.VC&&VC.on) return !!(VC.p&&VC.p.papel==='admin');   /* VER-COMO-V3: usando o app como outra pessoa */
+  return !!(PERFIL&&PERFIL.papel==='admin'); }
+function modOn(k){ if(window.VC&&VC.on) return VC.modOn(k);   /* VER-COMO-V3: os módulos da pessoa vigiada */
+  if(!PERFIL) return true;              // sem login = modo local do dono: tudo visível
   /* VER-COMO-V2 (11/09): operando como outro dono, a tela mostra os MÓDULOS DELE (o que ele enxerga), não os do admin */
   const alvo=(typeof delegAtivo==='function'&&delegAtivo())? (ESC.perfis||{})[delegAtivo()] : null;
   if(alvo){ if(alvo.papel==='admin') return true; const m=alvo.modulos; if(m&&k in m) return !!m[k]; return MODS[k]?MODS[k].def:true; }
@@ -20250,6 +20255,7 @@ function bnDesfazerDup(idA,idB){
 let ADM={lista:[],deleg:[],erro:'',temNome:false,temAtivo:false};
 async function admCarregar(){
   ADM.erro=''; if(!(LPC_REMOTE&&sb)){ ADM.erro='Faça login pra gerenciar acessos.'; return; }
+  try{ if(typeof eqCarregar==='function') await eqCarregar(); }catch(_){}   /* VER-COMO-V3: nome da equipe no botão "Usar o app como" */
   try{ const {data,error}=await sb.from('lp_perfis').select('*').order('email'); if(error) throw error; ADM.lista=data||[];
     const amostra=ADM.lista[0]||{}; ADM.temNome=('nome' in amostra); ADM.temAtivo=('ativo' in amostra);
     const dg=await sb.from('lp_delegacoes').select('dono_email,delegado_email,criado_em').order('dono_email'); ADM.deleg=dg.error?[]:(dg.data||[]); }
@@ -20304,6 +20310,7 @@ function admHtml(){
       <div class="adm-acoes">
         <button class="btn btn-s btn-mini" onclick="admFicha('${esc(p.email)}')">✏️ Editar</button>
         <button class="btn btn-ghost btn-mini" onclick="admVerComo('${esc(p.email)}')">👁️ Ver o que ele enxerga</button>
+        ${(p.email!==eu&&p.papel!=='admin')?`<button class="btn btn-p btn-mini" onclick="vcEntrarPorEmail('${esc(p.email)}')" title="Navega no app inteiro com o perfil dele, só leitura — nada é gravado">👁️ Usar o app como ${esc(typeof vcNomeCurto==='function'?vcNomeCurto(p):admNome(p).split(' ')[0])}</button>`:''}
         ${(ADM.temAtivo&&p.email!==eu)?`<button class="btn btn-ghost btn-mini" onclick="admPausar('${esc(p.email)}',${ativo?'false':'true'})">${ativo?'⏸️ Pausar':'▶️ Reativar'}</button>`:''}
       </div>
     </div>`; };
@@ -23996,6 +24003,7 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
     ok('MENU-ANTIGO-V1: com o funil novo ligado, os 4 pipes antigos saem do lugar e vivem no grupo "Telas antigas do funil"; sem ele, menu de sempre', (()=>{ const at=document.getElementById('antigo-toggle'), pt=document.getElementById('pipe-toggle'); if(!at||!pt||typeof menuAntigoAplicar!=='function') return false; menuAntigoAplicar(); return novoOn('funil-unico') ? (at.style.display!=='none'&&pt.style.display==='none'&&document.querySelectorAll('#antigo-group .nav-btn[data-view="nn-funil"]').length===1) : at.style.display==='none'; })());
     if(typeof fichaUx2SelfTests==='function') fichaUx2SelfTests(ok); else ok('FICHA-UX2: módulo modulos/ficha-ux2.js carregado',false);
     if(typeof nrSelfTests==='function') nrSelfTests(ok); else ok('NOVA-REC: módulo modulos/nova-rec.js carregado',false);
+    if(typeof vcSelfTests==='function') vcSelfTests(ok); else ok('VER-COMO-V1: módulo modulos/ver-como.js carregado',false);
     /* FUNIL-UNICO-V1 · T1 — teste de aceite nº 1 da spec (adaptado aos 2 funis) + cobertura de todo valor real (fábrica) */
     { const M=(f,e)=>mapearEtapa(f,e), _m=ETAPA_MAPA; ETAPA_MAPA=ETAPA_MAPA_FAB;
       const is=(r,fn,et,st,rv)=>r.funil_id===fn&&r.etapa_id===et&&(st===undefined||r.status_card===st)&&r.precisa_revisao===!!rv;
