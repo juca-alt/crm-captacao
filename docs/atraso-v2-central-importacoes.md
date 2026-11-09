@@ -16,7 +16,7 @@ Lote Global 1 · Parte A. Branch `feat/atraso-v2-central-importacoes`. Migraçõ
 ## Derivados (calculados na leitura, nunca gravados — `atV2Der` / `atV2Kpis` no vendas.html)
 | Derivado | Regra |
 |---|---|
-| dias de atraso | hoje − vencido_em; 0 se `pago_ate ≥ vencido_em` ou resolvido |
+| dias de atraso | hoje − vencido_em; 0 se resolvido (data OU status "Resolvido"). `pago_ate ≥ vencido_em` NÃO zera — conferido com o Global em 09/11 (PARIDADE-ATRASO-V1) |
 | crítica | dias ≥ 50 e não resolvida |
 | cancela em | `prazo_cancelamento_dias` − dias (negativo = "cancelamento vencido") |
 | em persistência | emissão (`emissao_emitidas.emissao`) há ≤ `janela_meses`; sem data = "sem data" (não conta dentro nem fora) |

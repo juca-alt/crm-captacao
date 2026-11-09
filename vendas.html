@@ -3252,6 +3252,12 @@ function inicioAgoraHtml(){
    o card mostra "falta data", nunca um número inventado (decisão pendente com ele: de onde vem a data). */
 function iniAtrasoCrit(){ try{ if(typeof AT==='undefined'||!AT.itens||typeof atV2Kpis!=='function') return {n:0,v:0};
   const l=AT.itens.filter(escLinhaOk).filter(r=>!r.resolvido_em&&r.status!==AT_STATUS.SUMIU); const k=atV2Kpis(l,atV2Ctx()); return {n:k.crit.n,v:k.crit.v}; }catch(_){ return {n:0,v:0}; } }
+/* SAUDACAO-V1 (09/11, pedido dele: "lá aparece Bom dia, Gustavo"): saudação pela hora + 1º nome de quem está usando
+   (no "ver como", o nome da pessoa — antes aparecia GUSTAVO JUCA na tela da Rebeca) + a data por extenso, como no Global. */
+function iniPrimeiroNome(n){ const s=String(n||'').split('@')[0].trim().split(/[\s._-]+/)[0]||''; return s?s.charAt(0).toUpperCase()+s.slice(1).toLowerCase():''; }
+function iniSaudacao(agora){ const h=(agora||new Date()).getHours(), s=h<12?'Bom dia':h<18?'Boa tarde':'Boa noite';
+  const n=iniPrimeiroNome((window.VC&&VC.on&&VC.nome)||nomeAtual()); return n?s+', '+n+'.':s+'.'; }
+function iniDataLonga(agora){ const t=(agora||new Date()).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'}); return t.charAt(0).toUpperCase()+t.slice(1); }
 function iniDiaDados(){ const hj=hojeISO(), lim72=isoAddDias(hj,3);
   const ag=(typeof agendaItens==='function')?agendaItens():[];
   const reun=ag.filter(x=>x.t.tipo==='reuniao'&&x.t.quando===hj&&!x.t.feito);
@@ -3661,13 +3667,13 @@ function viewInicio(){
   }
 
   $('#main').innerHTML=`
-    <h1 class="pg">Seja bem-vindo(a), ${esc(nomeAtual())}</h1>
-    <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
+    <h1 class="pg">${esc(iniSaudacao())}</h1>
+    <div class="sub">${esc(iniDataLonga())}${isMaster()? ' · visão consolidada da unidade (todos os LPs)' : ' · sua carteira e seu funil'}</div>
     <div id="cv-vigia-ini">${(()=>{ try{ return cvVigiaHtml('inicio'); }catch(_){ return ''; } })()}</div>
     <div class="ini-tudo">
       <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button>
-      <button class="btn btn-s btn-mini ini-olho" onclick="olhoToggle()" title="${olhoFechado()?'Mostrar os valores em R$':'Esconder todos os valores em R$ do Início (vale neste aparelho)'}" aria-pressed="${olhoFechado()}">${olhoFechado()?'🙈 valores escondidos':'👁 valores'}</button></div>
-    ${pordRender([['dia',iniDiaBloco()],['dia-cards',iniDiaCardsBloco()],['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
+      ${novoOn('inicio-dia')?'':'<!--'}<button class="btn btn-s btn-mini ini-olho" onclick="olhoToggle()" title="${olhoFechado()?'Mostrar os valores em R$':'Esconder todos os valores em R$ do Início (vale neste aparelho)'}" aria-pressed="${olhoFechado()}">${olhoFechado()?'🙈 valores escondidos':'👁 valores'}</button>${novoOn('inicio-dia')?'':'-->'}</div>
+    ${pordRender([...(novoOn('inicio-dia')?[['dia',iniDiaBloco()],['dia-cards',iniDiaCardsBloco()]]:[]),['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
                   ['funil-nn',bNn],['funil-bc',bBc],['ta',bTa],['reunioes',bReun],['eventos',bEv],['lp',bLp]])}`;
   iniBotaoPinta();
   try{ olhoAplicar($('#main')); }catch(_){}   /* INICIO-GLOBAL-V1: olho global */
@@ -13976,7 +13982,12 @@ function atV2Ctx(hoje){ return {hoje:hoje||atHojeLocal(), prazo:Number(ATV2.cfg.
 /* status legado (texto) → chave oficial; "Sem tratativa" do relatório antigo vira sem_tratativa na LEITURA (sem migrar dado) */
 function atV2StatusChave(st){ const k=normKey(st||''); if(!k||k==='sem tratativa') return 'sem_tratativa';
   const o=(ATV2.status||[]).find(s=>normKey(s.rotulo)===k||s.chave===st); return o?o.chave:k.replace(/\s+/g,'_'); }
-function atV2Dias(r,ctx){ if(!r||r.resolvido_em) return 0; if(r.pago_ate&&r.vencido_em&&r.pago_ate>=r.vencido_em) return 0; return atDiasAtraso(r.vencido_em,ctx.hoje)||0; }
+/* PARIDADE-ATRASO-V1 (09/11, conferido apólice a apólice com o Global): (a) "pago até" ≥ vencimento NÃO quer dizer pago — no relatório
+   da Prudential o "pago até" costuma ser igual ou depois do vencimento da parcela em aberto (Cinthia 001494417, George 001596270 e 001856664
+   estão na lista do Global com 59–60 dias). Essa regra escondia 15 apólices da Lista. (b) status "Resolvido" sem data também é resolvido
+   (Felipe 001685046 contava como crítica e não está no Global). Resultado na base dele: 6 críticas · R$ 2.692,44 = Global. */
+function atV2Resolvido(r){ return !!(r&&(r.resolvido_em||r.status===AT_STATUS.RESOLV)); }
+function atV2Dias(r,ctx){ if(!r||atV2Resolvido(r)) return 0; return atDiasAtraso(r.vencido_em,ctx.hoje)||0; }
 /* persistência: true (≤ janela da emissão) · false (fora) · null (sem data em lugar nenhum — não conta nem pra dentro nem pra fora) */
 function atV2Persist(r,ctx){ const e=ctx.emissao[atNormApolice(r&&r.apolice)]; if(!e) return null; const d=atParseISO(e); if(!d) return null;
   const lim=new Date(ctx.hoje); lim.setMonth(lim.getMonth()-ctx.janela); return d>=lim; }
@@ -18261,6 +18272,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
+  'inicio-dia':{o:'☀️ Início com paridade Global: "O seu dia · para resolver hoje", "Hoje em 6 números" e o olho que esconde os R$',desde:'2026-11-09'},
   'etiquetas-gcal':{o:'🏷️ Etiquetas do Google Agenda: todo evento que o CRM cria sai com a etiqueta certa (OI/FF, P/C, C2, RCP/FF, RCP/PC, DELIVERY, TA/PIPE, LEMBRETE, URGENTE, OUTROS)',desde:'2026-11-09'},   /* ETIQUETAS-V1 */
   'forms-neg':{o:'📝 Formulários ligados ao negócio: modelos (checklist de emissão, roteiro da OI, dados pra proposta…) preenchidos na ficha, com selo no card e registro no histórico',desde:'2026-11-07'},   /* FORMS-NEG-V1 (07/11) — decisão dele: "B) Interno, na ficha" */
   /* 'funil-unico', 'fu-mfo', 'ficha-ux2', 'agenda-global' — saíram daqui em 26/10 pra MODS (def:false). Palavra dele: "libera agenda nova e funil novo para Victor e Daniel e cards novos; no caso do Victor também MFO; Daniel só individual". */
@@ -22599,6 +22611,15 @@ function lpSelfCheck(){
              AT.itens=[{apolice:'900000001',vencido_em:dd(55),premio:100,status:'Sem tratativa'},{apolice:'900000002',vencido_em:dd(20),premio:50,status:'Sem tratativa'},
                        {apolice:'900000003',vencido_em:dd(70),premio:999,status:AT_STATUS.SUMIU},{apolice:'900000004',vencido_em:dd(80),premio:10,resolvido_em:hj.toISOString?hj.toISOString():String(hj)}];
              const c=iniAtrasoCrit(); return c.n===1&&c.v===100; } finally{ AT.itens=_i; } })());
+        ok('PARIDADE-ATRASO-V1: "pago até" igual ou depois do vencimento CONTINUA em atraso (como no Global); status "Resolvido" sem data sai de tudo',
+           (()=>{ const ctx=atV2Ctx(), hj=ctx.hoje, dd=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.getFullYear()+'-'+('0'+(x.getMonth()+1)).slice(-2)+'-'+('0'+x.getDate()).slice(-2); };
+             const igual={apolice:'900000011',vencido_em:dd(60),pago_ate:dd(60),premio:464.79,status:'Sem tratativa'}, depois={apolice:'900000012',vencido_em:dd(59),pago_ate:dd(52),premio:1209.93,status:'Sem tratativa'},
+                   resSemData={apolice:'900000013',vencido_em:dd(66),pago_ate:dd(81),premio:142.71,status:AT_STATUS.RESOLV};
+             const k=atV2Kpis([igual,depois,resSemData],ctx);
+             return atV2Dias(igual,ctx)===60&&atV2Dias(depois,ctx)===59&&atV2Dias(resSemData,ctx)===0&&k.crit.n===2&&Math.abs(k.crit.v-1674.72)<0.01&&atV2Resolvido(resSemData)&&!atV2Resolvido(igual); })());
+        ok('SAUDACAO-V1: Bom dia/Boa tarde/Boa noite pela hora + 1º nome (maiúsculas viram nome próprio; e-mail vira nome) + data por extenso com maiúscula',
+           (()=>{ const m=new Date(2026,10,9,9,0), t=new Date(2026,10,9,15,0), n=new Date(2026,10,9,20,0);
+             const s=iniSaudacao(t); return /^Bom dia/.test(iniSaudacao(m))&&/^Boa tarde/.test(s)&&/^Boa noite/.test(iniSaudacao(n))&&iniPrimeiroNome('GUSTAVO JUCA')==='Gustavo'&&iniPrimeiroNome('rebeca.ayla@x.com')==='Rebeca'&&iniPrimeiroNome('')===''&&/^Segunda-feira, 9 de novembro$/.test(iniDataLonga(m)); })());
         ok('INICIO-GLOBAL-V1 (T1): os 2 blocos novos entram no organizar painel com nome e nascem fechados (resumo no cabeçalho)',
            !!PORD_NOMES.dia&&!!PORD_NOMES['dia-cards']&&/data-ini="dia"/.test(iniDiaBloco())&&/data-ini="dia-cards"/.test(iniDiaCardsBloco())&&!/class="ini-bl"[^>]*data-ini="dia"/.test(iniLer().dia?'':iniDiaBloco()));
         const pecas=[['agora','<i>A</i>'],['numeros','<i>N</i>'],['ta','<i>T</i>'],['funil-bc','']];   /* funil-bc não existe hoje */
