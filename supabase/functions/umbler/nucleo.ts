@@ -74,6 +74,40 @@ export function emDia(ultimaDoChat: unknown, msgsAte: unknown): boolean {
   return c !== null && c <= 0;
 }
 
+// ── SENSIVEL-V1 (09/11/2026) — palavra dele: "clientes mandam número de cartão e CPF no WhatsApp… mascarar na entrada" ──
+// Cartão: sequência INTEIRA de 13–19 dígitos (pode ter espaço/ponto/traço entre eles), começando com 3–6 e válida no
+// Luhn → "•••• 1234". CPF: 000.000.000-00 ou 11 dígitos soltos com os dígitos verificadores certos → "***.***.***-**".
+// "Inteira" = não pode ser pedaço de um número maior (boleto, protocolo): nem dígito colado antes nem depois.
+// Só nos campos de TEXTO (content, headerContent, caption, text, body) — telefone, id e datas ficam como vieram.
+const RX_CARTAO = /(?<!\d[ .\-]?)(?:\d[ .\-]?){12,18}\d(?![ .\-]?\d)/g;
+const RX_CPF = /(?<!\d[ .\-]?)(?:\d{3}\.\d{3}\.\d{3}-\d{2}|\d{11})(?![ .\-]?\d)/g;
+export const CARTAO_MASCARA = "•••• ", CPF_MASCARA = "***.***.***-**";
+export function luhnOk(d: string): boolean {
+  let s = 0, dobra = false;
+  for (let i = d.length - 1; i >= 0; i--) { let n = d.charCodeAt(i) - 48; if (dobra) { n *= 2; if (n > 9) n -= 9; } s += n; dobra = !dobra; }
+  return s % 10 === 0;
+}
+export function cpfOk(d: string): boolean {
+  if (!/^\d{11}$/.test(d) || /^(\d)\1{10}$/.test(d)) return false;
+  const dv = (n: number) => { let s = 0; for (let i = 0; i < n; i++) s += (d.charCodeAt(i) - 48) * (n + 1 - i); return (s * 10) % 11 % 10; };
+  return dv(9) === d.charCodeAt(9) - 48 && dv(10) === d.charCodeAt(10) - 48;
+}
+export function mascararSensivel(t: string): string {
+  if (!t) return t;
+  return String(t)
+    .replace(RX_CARTAO, (m) => { const d = m.replace(/\D/g, ""); return d.length >= 13 && d.length <= 19 && /^[3-6]/.test(d) && !(d.length === 13 && d.startsWith("55")) && luhnOk(d) ? CARTAO_MASCARA + d.slice(-4) : m; })   // 13 dígitos com 55 = telefone com DDI
+    .replace(RX_CPF, (m) => cpfOk(m.replace(/\D/g, "")) ? CPF_MASCARA : m);
+}
+const CHAVES_TEXTO = /^(content|headercontent|caption|text|body|_texto)$/i;
+/** cópia do objeto com os campos de texto mascarados (em qualquer profundidade; o resto fica idêntico) */
+export function mascararObj(o: unknown, prof = 0): unknown {
+  if (!o || typeof o !== "object" || prof > 8) return o;
+  if (Array.isArray(o)) return o.map((x) => mascararObj(x, prof + 1));
+  const r: Obj = {};
+  for (const [k, v] of Object.entries(o as Obj)) r[k] = typeof v === "string" && CHAVES_TEXTO.test(k) ? mascararSensivel(v) : mascararObj(v, prof + 1);
+  return r;
+}
+
 /** UMBLER-T3 (07/11): a API às vezes manda o remetente só com o id → o nome sai do mapa de membros
  *  (o mesmo do atendente do chat). Antes, 214 mensagens nossas ficavam sem autor ("nós"). */
 export function mapMensagem(m: unknown, chatId: string, dono: string, membros: Record<string, string> = {}): Obj | null {
@@ -87,7 +121,7 @@ export function mapMensagem(m: unknown, chatId: string, dono: string, membros: R
     dono,
     de: quemEnviou(m),
     tipo: str(pick(m, "messageType")),
-    texto: texto ? texto.slice(0, 20000) : null,
+    texto: texto ? mascararSensivel(texto).slice(0, 20000) : null,
     arquivo_nome: str(pick(arq, "originalName", "name", "fileName")),
     arquivo_url: str(pick(arq, "url", "publicUrl", "downloadUrl")),
     autor: nome(pick(m, "sentByOrganizationMember")) ??
@@ -96,7 +130,7 @@ export function mapMensagem(m: unknown, chatId: string, dono: string, membros: R
     enviada_em: msgQuando(m),
     estado: str(pick(m, "messageState")),
     privada: pick(m, "isPrivate") === true,
-    bruto: m as Obj,
+    bruto: mascararObj(m) as Obj,
   };
 }
 
@@ -115,7 +149,7 @@ export function mapChat(c: unknown, dono: string, orgId: string | null, membros:
     (Array.isArray(tels) ? str(tels[0]) ?? str(pick(tels[0], "number", "phoneNumber")) : null);
   const lm = pick(c, "lastMessage", "message");
   const tags = pick(c, "tags");
-  const previa = str(pick(lm, "content"));
+  const previa = str(pick(lm, "content")) ? mascararSensivel(str(pick(lm, "content"))!) : null;
   return {
     id,
     dono,
@@ -138,7 +172,7 @@ export function mapChat(c: unknown, dono: string, orgId: string | null, membros:
     criado_em: quando(pick(c, "createdAtUTC")),
     fechado_em: quando(pick(c, "closedAtUTC")),
     sincronizado_em: new Date().toISOString(),
-    bruto: c as Obj,
+    bruto: mascararObj(c) as Obj,
   };
 }
 

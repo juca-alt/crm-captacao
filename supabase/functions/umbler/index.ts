@@ -15,7 +15,7 @@
 //  Limite da API: 100 req / 5 s → espaçamos 60 ms e, no 429, esperamos 5 s.
 // ============================================================================
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { chatUltimoEvento, cmpData, coletarMembros, emDia, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, type Obj } from "./nucleo.ts";
+import { mascararObj, chatUltimoEvento, cmpData, coletarMembros, emDia, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, type Obj } from "./nucleo.ts";
 
 const API = "https://app-utalk.umbler.com/api";
 const DONO = "juca@segurocomjuca.com";          // dono da conta Umbler (RLS por dono; Victor lê como delegado)
@@ -254,7 +254,7 @@ async function sincronizar(origem: string) {
 async function webhook(body: unknown) {
   const x = extrairDoWebhook(body);
   const { data: ev } = await db.from("umbler_eventos")
-    .insert({ dono: DONO, tipo: x.tipo, chat_id: x.chatId, bruto: body as Obj }).select("id").single();
+    .insert({ dono: DONO, tipo: x.tipo, chat_id: x.chatId, bruto: mascararObj(body) as Obj })   /* SENSIVEL-V1 */.select("id").single();
   const evId = (ev as { id: number } | null)?.id;
   try {
     const est = await lerEstado();

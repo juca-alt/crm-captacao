@@ -2,6 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89), AGUARDA 3 OKs
+
+- **B ✅ (rodado por ele):** Rebeca = `rebeccaayla00@…` (e-mail só no banco). Conferido: papel lp, 19 módulos, recs=false, sem MFO, base do Gustavo, RC no time dele. Ela ainda NÃO entrou no CRM.
+- **H ✅ SENSIVEL-V1:** `umbler` v6 no ar (cartão → •••• 1234; CPF → ***; Luhn/DV; telefone com DDI fora). Limpeza rodada por ele: 7 mensagens + 1 prévia; conferência = 0. SQL: `supabase/migrations/umbler_sensivel_2026-11-09.sql`.
+- **I (branch, v8.89, portão verde 55 × 6, prints 390/1280):**
+  - parte 1 CV-ID-V1: nome e selo pelo telefone (Cliente · No funil · Recomendação · Estoque · Desconhecido) + filtro "Quem é";
+  - parte 2 TRIAGEM-V1: Edge Function `triagem` (Haiku, só classifica; cortesia sem IA; cache por última mensagem; nunca chama a Umbler) + tabela `copiloto_fila_cache` + cron `triagem-sync` às :05 (`supabase/migrations/triagem_v1_2026-11-09.sql`, ELE roda) + selo 🔴🟡🔵⚪ e filtro "Para quem" em Conversas;
+  - passo 0 COPILOTO NO APP: `copiloto-sugerir` entra na main (era só do branch `copiloto-t1`) com a trava 5 (nunca afirmar recebimento sem dado) e `log_ok`; botão ✨ Sugerir resposta → rascunho pra ler e copiar (sem campo, sem enviar).
+  - **Falta (OK dele):** publicar v8.89 · deploy `triagem` (nova) + `copiloto-sugerir` (prompt) · rodar o SQL da triagem.
+- **K (transcrição de áudio): NO RADAR, decisão dele.** K0 feito: 350 áudios/30 d (145 dele pelo celular, 196 de clientes); URL S3 pública que não expira; `file.transcription` sempre vazio; mp3 ~90 KB. **Bloqueio:** não há GEMINI_API_KEY (o Claude não lê áudio). Ajustes propostos: cron próprio; não gravar em lp_interacoes (a ficha busca pelo telefone); limite por tamanho; backfill do mês possível. ⚠️ Gemini grátis pode usar os áudios pra treino → ligar faturamento.
+- **Extensão:** I não exige atualizar a extensão (o card é o próprio CRM). Só o J (reconciliação no WhatsApp Web) vai virar versão nova (2.11.0).
+- **Próximos:** J → G → F → C (A/B do Victor) → D ✅ (já no ar). Linhas de teste em `copiloto_sugestoes` (11) só saem com o OK dele.
+
 ## 🟢 RETOMAR AQUI — 09/11/2026 — v8.88 (OK dele: "A, faz e publica"; a v8.87 é a das etiquetas/formulários da outra sessão): equipe Rebeca no app
 
 - **BASE-INTEIRA-V1:** assistente (delegado) vê a base INTEIRA do dono, com qualquer rótulo. Palavra dele: "no funil individual ela pode e deve ver todos os clientes e oportunidades". A opção `dono:X` do escopo ganhou `toda:true`; o rótulo só batiza o que ela cria. O "ver como" usa a mesma base (`id:'vc'`), sem a base do Daniel.
