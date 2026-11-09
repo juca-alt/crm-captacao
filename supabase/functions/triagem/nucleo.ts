@@ -1,12 +1,13 @@
 // ============================================================================
 //  triagem · NÚCLEO PURO (sem rede, sem banco) — TRIAGEM-V1 (ticket I, parte 2 · 09/11/2026)
 //  Decide para quem vai cada conversa em que o cliente falou por último:
-//    gustavo 🔴 (ele decide) · rebeca 🟡 (backoffice/pós-venda) · vitor 🔵 (Multi Office/VG/outros seguros) · sem_acao ⚪
+//    gustavo 🔴 (ele decide) · rebeca 🟡 (backoffice/pós-venda) · sem_acao ⚪
+//  C' (09/11/2026): o Victor saiu — Multi Office/VG/outros seguros passam a ser do Gustavo (🔴). Sem destino "vitor".
 //  A IA só CLASSIFICA. Não escreve resposta, não envia nada, não grava texto de conversa.
 // ============================================================================
 
 export type Msg = { de: string; tipo?: string | null; texto?: string | null };
-export const DESTINOS = ["gustavo", "rebeca", "vitor", "sem_acao"] as const;
+export const DESTINOS = ["gustavo", "rebeca", "sem_acao"] as const;
 export type Destino = typeof DESTINOS[number];
 export type Classe = { destino: Destino; motivo: string; urgencia: 1 | 2 | 3 };
 
@@ -52,9 +53,8 @@ export const SYSTEM = `Você faz a triagem do WhatsApp da equipe do Gustavo Juc�
 Leia a conversa e decida PARA QUEM vai a próxima resposta. Você não responde ao cliente e não escreve rascunho.
 
 Destinos:
-- "gustavo" 🔴 — só o Gustavo resolve: proposta, preço, valor, cotação, plano novo, venda nova, indicação/recomendação de alguém, cliente pensando em cancelar ou reduzir (retenção), reclamação, cliente preocupado ou insatisfeito, saúde/declaração/sinistro com dúvida de cobertura, assunto pessoal com ele.
+- "gustavo" 🔴 — só o Gustavo resolve: proposta, preço, valor, cotação, plano novo, venda nova, indicação/recomendação de alguém, cliente pensando em cancelar ou reduzir (retenção), reclamação, cliente preocupado ou insatisfeito, saúde/declaração/sinistro com dúvida de cobertura, assunto pessoal com ele; e também Multi Office: seguro de vida em grupo (VG) de empresa, outros seguros (auto, residencial, empresarial, viagem, plano de saúde), consórcio, crédito.
 - "rebeca" 🟡 — backoffice e pós-venda: marcar, confirmar ou remarcar reunião; documento (enviar/pedir); pagamento, boleto, segunda via, link, atraso, débito; cadastro e dados; status de proposta/apólice; dúvida operacional de cliente que já é da carteira.
-- "vitor" 🔵 — Multi Office: seguro de vida em grupo (VG) de empresa, outros seguros (auto, residencial, empresarial, viagem, plano de saúde), consórcio, crédito.
 - "sem_acao" ⚪ — não precisa de resposta: agradecimento, "ok", confirmação final, emoji, figurinha, corrente, propaganda, mensagem automática.
 
 Regras:
@@ -83,11 +83,12 @@ const RX_PESSOAL = /\d{4,}|R\$|@/;
 export function validar(x: unknown): Classe | null {
   const o = x as Record<string, unknown> | null;
   if (!o || typeof o !== "object") return null;
-  if (!DESTINOS.includes(o.destino as Destino)) return null;
+  const dest = o.destino === "vitor" ? "gustavo" : o.destino;   // C': destino antigo do Victor vira do Gustavo
+  if (!DESTINOS.includes(dest as Destino)) return null;
   const u = Number(o.urgencia); const urg = (u === 1 || u === 2 || u === 3 ? u : 2) as 1 | 2 | 3;
   let motivo = String(o.motivo ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
   if (RX_PESSOAL.test(motivo)) motivo = "";            // nada de número/valor/e-mail no motivo gravado
-  return { destino: o.destino as Destino, motivo, urgencia: urg };
+  return { destino: dest as Destino, motivo, urgencia: urg };
 }
 
 /** a conversa precisa (re)classificar? (nunca classificada, ou chegou mensagem depois da última leitura) */

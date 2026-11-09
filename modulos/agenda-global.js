@@ -12,7 +12,7 @@
      t.st     'pendente' | 'andamento'          (t.feito ⇒ Concluída; sem campo ⇒ Pendente)
      t.prio   'alta' | 'media' | 'baixa'        (sem campo ⇒ média)
      t.check  [{t:'texto', ok:false}]           checklist curto
-     t.resp   'eu' | 'victor'                   (sem campo ⇒ quem marcou: marcado pelo delegado ⇒ Victor; senão eu)
+     t.resp   'eu' | 'victor'                   (sem campo ⇒ quem marcou: marcado pelo delegado ⇒ assistente (Rebeca); senão eu — a chave 'victor' ficou por compatibilidade)
      t.lemb   {modo:'lembrar'|'confirmar', quando:'vespera'|'dia', estado:null|'aguardando'|'confirmou'|'remarcar'|'enviado', tid}
               tid = a atividade-lembrete do GC-25 (tarAgendarLembrete), que leva o lembrete pro Google Tarefas e pra
               Agenda antiga; ela ganha t.lembDe (id da reunião) e some das listas daqui (o selo na reunião a representa).
@@ -171,7 +171,7 @@ function topoHTML(){ const c=tx(()=>agendaContagem())||{atrasadas:0,aFinalizar:0
   const al=(c.atrasadas||0)+(c.aFinalizar||0);
   return `<h1 class="pg">Agenda &amp; Tarefas</h1>
     <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
-    ${gstHTML()}
+    ${tx(()=>gcalDonoAvisoHTML())||''}${gstHTML()}
     <div class="agg-abas" role="tablist">
       <button type="button" role="tab" aria-selected="${AGG.aba==='agenda'}" class="${AGG.aba==='agenda'?'on':''}" onclick="aggAba('agenda')">📅 Agenda${al?` <span class="n r">${al}</span>`:''}</button>
       <button type="button" role="tab" aria-selected="${AGG.aba==='tarefas'}" class="${AGG.aba==='tarefas'?'on':''}" onclick="aggAba('tarefas')">☑️ Tarefas <span class="n">${nT}</span></button>
@@ -330,7 +330,7 @@ function tarefasHTML(){ const vis=tarVis(), ab=vis.filter(x=>!x.t.feito), at=ab.
     <div class="agg-kpi"><div class="lbl">Vencem hoje</div><div class="num">${hj}</div><div class="ks">pra resolver hoje</div></div>
     <div class="agg-kpi"><div class="lbl">Abertas</div><div class="num">${ab.length}</div><div class="ks">${ab.filter(x=>aggStatus(x.t)==='andamento').length} em andamento</div></div></div>`;
   const tb=`<div class="agg-tb">
-    <div class="agg-seg" role="group" aria-label="De quem">${[['todas','Todas'],['minhas','Minhas'],['victor','Do Victor']].map(x=>`<button type="button" aria-pressed="${AGG.tarResp===x[0]}" class="${AGG.tarResp===x[0]?'on':''}" onclick="aggTarResp('${x[0]}')">${x[1]}</button>`).join('')}</div>
+    <div class="agg-seg" role="group" aria-label="De quem">${[['todas','Todas'],['minhas','Minhas'],['victor','Da Rebeca']].map(x=>`<button type="button" aria-pressed="${AGG.tarResp===x[0]}" class="${AGG.tarResp===x[0]?'on':''}" onclick="aggTarResp('${x[0]}')">${x[1]}</button>`).join('')}</div>
     <div class="agg-seg" role="group" aria-label="Como ver">${[['lista','☰ Lista'],['quadro','▦ Quadro']].map(x=>`<button type="button" aria-pressed="${AGG.tarModo===x[0]}" class="${AGG.tarModo===x[0]?'on':''}" onclick="aggTarModo('${x[0]}')">${x[1]}</button>`).join('')}</div>
     <span class="agg-sp"></span><button type="button" class="agg-btn p agg-novo" onclick="aggTarNova()">＋ Nova tarefa</button></div>`;
   return k+tb+(AGG.tarModo==='lista'?tarListaHTML(vis):tarQuadroHTML(vis)); }
@@ -339,7 +339,7 @@ function tarLinha(x,naAgenda){ const {c,t}=x, st=aggStatus(t), pr=aggPrio(t), ck
   return `<div class="agg-trow${at?' at':''}${t.feito?' feita':''}" style="--pc:${PRIO[pr][1]}">
     <button type="button" class="agg-ckb${t.feito?' on':''}" role="checkbox" aria-checked="${!!t.feito}" aria-label="Concluir: ${esc(t.tit||'')}" onclick="aggTarFeita('${J(c.id)}','${J(t.id)}')">✓</button>
     <div class="agg-tm"><button type="button" class="agg-tnome" onclick="aggTarAbrir('${J(c.id)}','${J(t.id)}')">${tx(()=>tarIco(t.tipo))||''} ${esc(t.tit||tx(()=>tarNomeTipo(t.tipo))||'Tarefa')}</button>
-      <div class="agg-tmeta"><span class="agg-pr ${pr}">${PRIO[pr][0]}</span><span class="agg-tvenc${at?' at':t.quando===AGG.D.hoje?' hj':''}">${vencTxt(t)}</span><button type="button" class="agg-lnk" onclick="aggFicha('${J(c.id)}')">👤 ${esc(c.nome||'')}</button><span class="agg-av${resp==='victor'?' v':''}" title="${resp==='victor'?'Victor':'Você'}">${resp==='victor'?'V':(esc(assin().charAt(0))||'G')}</span>${naAgenda?'':`<span>${TST.find(s=>s[0]===st)[1]}</span>`}</div></div>
+      <div class="agg-tmeta"><span class="agg-pr ${pr}">${PRIO[pr][0]}</span><span class="agg-tvenc${at?' at':t.quando===AGG.D.hoje?' hj':''}">${vencTxt(t)}</span><button type="button" class="agg-lnk" onclick="aggFicha('${J(c.id)}')">👤 ${esc(c.nome||'')}</button><span class="agg-av${resp==='victor'?' v':''}" title="${resp==='victor'?'Rebeca':'Você'}">${resp==='victor'?'R':(esc(assin().charAt(0))||'G')}</span>${naAgenda?'':`<span>${TST.find(s=>s[0]===st)[1]}</span>`}</div></div>
     <div class="agg-tact">${wa?`<a class="agg-btn ico" href="${esc(wa)}" target="_blank" rel="noopener" title="Lembrete pro cliente no WhatsApp (texto pronto)" aria-label="WhatsApp">💬</a>`:''}${n?`<button type="button" class="agg-btn" aria-expanded="${ab}" onclick="aggCkAb('${J(x.k)}')" title="Checklist"><span class="agg-prog" style="--p:${Math.round(ok/n*100)}%">☑ ${ok}/${n} <i></i></span></button>`:''}</div>
     ${n&&ab?`<div class="agg-ckl">${ck.map((i,j)=>`<button type="button" class="agg-cki${i.ok?' ok':''}" role="checkbox" aria-checked="${!!i.ok}" onclick="aggCkTg('${J(c.id)}','${J(t.id)}',${j})"><span class="bx">${i.ok?'✓':''}</span><span>${esc(i.t)}</span></button>`).join('')}</div>`:''}</div>`; }
 function tarListaHTML(vis){ const ab=vis.filter(x=>!x.t.feito).sort(tarOrd), fe=vis.filter(x=>x.t.feito).sort((a,b)=>String(b.t.feito).localeCompare(String(a.t.feito)));
@@ -354,7 +354,7 @@ function tarQuadroHTML(vis){ const mob=M(), drag=!mob, avs=AGG.tarResp==='victor
         <button type="button" class="kt" onclick="aggTarAbrir('${J(c.id)}','${J(t.id)}')">${esc(t.tit||tx(()=>tarNomeTipo(t.tipo))||'Tarefa')}</button>
         <div class="kf"><span>👤 ${esc(c.nome||'')}</span></div>
         <div class="kf"><span class="agg-pr ${pr}">${PRIO[pr][0]}</span><span class="agg-tvenc${tarAt(t)?' at':t.quando===AGG.D.hoje?' hj':''}">${vencTxt(t)}</span></div>
-        <div class="kf"><span class="agg-av${resp==='victor'?' v':''}" title="${resp==='victor'?'Victor':'Você'}">${resp==='victor'?'V':(esc(assin().charAt(0))||'G')}</span>${n?`<span class="agg-prog" style="--p:${Math.round(ok/n*100)}%">☑ ${ok}/${n} <i></i></span>`:''}<span class="agg-sp"></span><button type="button" class="agg-btn" onclick="aggAbrir('mover','${J(c.id)}','${J(t.id)}')" title="Mover pra outra coluna">Mover ▸</button></div></div>`; }).join('')
+        <div class="kf"><span class="agg-av${resp==='victor'?' v':''}" title="${resp==='victor'?'Rebeca':'Você'}">${resp==='victor'?'R':(esc(assin().charAt(0))||'G')}</span>${n?`<span class="agg-prog" style="--p:${Math.round(ok/n*100)}%">☑ ${ok}/${n} <i></i></span>`:''}<span class="agg-sp"></span><button type="button" class="agg-btn" onclick="aggAbrir('mover','${J(c.id)}','${J(t.id)}')" title="Mover pra outra coluna">Mover ▸</button></div></div>`; }).join('')
       +(k==='pendente'?avs.map(g=>`<div class="agg-kcard g" style="--pc:#94a3b8"><span class="kt">${esc(g.title||'(sem título)')}</span><div class="kf"><span class="agg-bd">só no Google</span><span class="agg-sp"></span><button type="button" class="agg-btn" onclick="aggAvulsaFeita('${J(g.id)}')">✓ feita</button></div></div>`).join(''):'');
     return `<div class="agg-kc${AGG.ktab===k?' vis':''}" data-st="${k}" ondragover="aggKOver(event,this)" ondragleave="aggKLeave(this)" ondrop="aggKDrop(event,'${k}')">
       <div class="agg-kch"><span class="dot" style="background:${cor}"></span><b>${l}</b><span class="q">${ts.length+(k==='pendente'?avs.length:0)}</span></div>
@@ -650,7 +650,7 @@ function shTarefa(cid,tid,pre){ const p=cid&&tid?parDe(cid,tid):null;
       `<input id="agg-tbq" type="search" placeholder="Buscar lead ou cliente…" autocomplete="off" oninput="aggBusca(this.value,'T')" aria-label="Buscar lead ou cliente"><div id="agg-tbr" class="agg-bcr"></div><div class="agg-dica">Sem contato, a tarefa vai pras suas Tarefas do Google (sem prioridade nem checklist).</div>`}</div>
     ${T.tid?'':`<div class="agg-fld"><label for="agg-ttipo">Tipo</label><select id="agg-ttipo" onchange="aggT('tipo',this.value)">${tipos.map(x=>`<option value="${x[0]}"${T.tipo===x[0]?' selected':''}>${x[1]} ${esc(x[2])}</option>`).join('')}</select></div>`}
     <div class="agg-g2"><div class="agg-fld"><label for="agg-tven">Vencimento</label><input id="agg-tven" type="date" value="${esc(T.venc)}" onchange="aggT('venc',this.value)"></div>
-      <div class="agg-fld"><span class="fl">Responsável</span><div class="agg-seg f">${[['eu','Eu'],['victor','Victor']].map(x=>`<button type="button" class="${T.resp===x[0]?'on':''}" aria-pressed="${T.resp===x[0]}" onclick="aggT('resp','${x[0]}',1)">${x[1]}</button>`).join('')}</div></div></div>
+      <div class="agg-fld"><span class="fl">Responsável</span><div class="agg-seg f">${[['eu','Eu'],['victor','Rebeca']].map(x=>`<button type="button" class="${T.resp===x[0]?'on':''}" aria-pressed="${T.resp===x[0]}" onclick="aggT('resp','${x[0]}',1)">${x[1]}</button>`).join('')}</div></div></div>
     <div class="agg-fld"><span class="fl">Prioridade</span><div class="agg-seg f">${Object.keys(PRIO).map(k=>`<button type="button" class="${T.prio===k?'on':''}" aria-pressed="${T.prio===k}" onclick="aggT('prio','${k}',1)">${PRIO[k][0]}</button>`).join('')}</div></div>
     <div class="agg-fld"><span class="fl">Situação</span><div class="agg-seg f">${TST.map(s=>`<button type="button" class="${T.st===s[0]?'on':''}" aria-pressed="${T.st===s[0]}" onclick="aggT('st','${s[0]}',1)">${s[1]}</button>`).join('')}</div></div>
     <div class="agg-box"><h3>☑ Checklist <span class="agg-mut">${T.ck.filter(x=>x.ok).length}/${T.ck.length}</span></h3>

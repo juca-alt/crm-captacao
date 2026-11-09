@@ -1,6 +1,6 @@
 // deno test supabase/functions/triagem/nucleo_test.ts --allow-read   (conversas INVENTADAS, nenhum dado real)
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { montarConversa, precisa, redact, soCortesia, ultimasDoCliente, validar } from "./nucleo.ts";
+import { DESTINOS, montarConversa, precisa, redact, soCortesia, SYSTEM, TOOL, ultimasDoCliente, validar } from "./nucleo.ts";
 
 Deno.test("TRIAGEM-V1: cortesia do cliente vira sem_acao sem chamar IA", () => {
   assert(soCortesia([{ de: "nos", texto: "segue o boleto" }, { de: "cliente", texto: "Obrigado!! 🙏" }]));
@@ -17,11 +17,16 @@ Deno.test("TRIAGEM-V1: conversa que vai pra IA sai sem dado sensível e com míd
   assert(!/111\.444/.test(t) && !/fulano@/.test(t) && /\[áudio\]/.test(t) && /^\[cliente\]/.test(t));
   assertEquals(redact("cep 50000-000"), "cep [dado removido]");
 });
-Deno.test("TRIAGEM-V1: validar aceita só os 4 destinos e limpa o motivo", () => {
+Deno.test("TRIAGEM-V1: validar aceita só os 3 destinos e limpa o motivo", () => {
   assertEquals(validar({ destino: "rebeca", motivo: "pede segunda via do boleto", urgencia: 2 }), { destino: "rebeca", motivo: "pede segunda via do boleto", urgencia: 2 });
   assertEquals(validar({ destino: "qualquer", motivo: "x", urgencia: 2 }), null);
   assertEquals(validar({ destino: "gustavo", motivo: "quer cotação de R$ 500", urgencia: 3 })!.motivo, "");   // valor não fica gravado
-  assertEquals(validar({ destino: "vitor", motivo: "vg da empresa", urgencia: 9 })!.urgencia, 2);
+  assertEquals(validar({ destino: "rebeca", motivo: "x", urgencia: 9 })!.urgencia, 2);
+});
+Deno.test("C': sem Victor — destino antigo 'vitor' vira 'gustavo' e o prompt manda Multi Office/VG pro Gustavo", () => {
+  assertEquals(validar({ destino: "vitor", motivo: "vg da empresa", urgencia: 2 })!.destino, "gustavo");
+  assert(!DESTINOS.includes("vitor" as never) && !/"vitor"/.test(SYSTEM) && /vida em grupo \(VG\)/.test(SYSTEM));
+  assert(!(TOOL.input_schema.properties.destino.enum as readonly string[]).includes("vitor"));
 });
 Deno.test("TRIAGEM-V1: reclassifica só quando chega mensagem nova (datas por número)", () => {
   assert(precisa("2026-11-09T10:00:00Z", null));
