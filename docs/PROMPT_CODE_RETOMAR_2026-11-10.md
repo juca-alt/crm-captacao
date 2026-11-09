@@ -5,7 +5,7 @@ Cole numa sessão nova do Claude Code (repo `juca-alt/crm-captacao`).
 ---
 
 Retomar o CRM Visão LP. Antes de tudo:
-1. `git fetch origin main` e leia o topo do `ESTADO_DO_PROJETO.md` (bloco "RETOMAR AQUI — 10/11/2026") e o `CLAUDE.md`.
+1. `git fetch origin main claude/wizardly-sagan-bwghr3`. O ESTADO mais novo está no branch `claude/wizardly-sagan-bwghr3` (só docs à frente da main): leia o topo do `ESTADO_DO_PROJETO.md` de lá (`git show origin/claude/wizardly-sagan-bwghr3:ESTADO_DO_PROJETO.md | head -40`, bloco "RETOMAR AQUI — 10/11/2026") e o `CLAUDE.md`. Trabalhe a partir da main atualizada.
 2. Confira se a main ainda está em v8.92 ou se outra sessão publicou por cima (o `<title>` do `vendas.html`). Se publicou, confirme que C' (v8.90), L1 (v8.91) e MENU-POR-PESSOA-V1 (v8.92) continuam lá — autotestes `C' (Victor saiu)`, `L1:`, `MENU-POR-PESSOA-V1`, `AGENDA-LIVRE-V1`.
 
 Hoje: **L2 — parceiros nas Conversas.** Me pergunte primeiro: **A** (botão "🤝 Marcar como parceiro" na conversa, admin escolhe Joint/Embaixador/Keyman, telefone vem do chat) ou **B** (telefone + tipo keyman no cadastro de parceiros, com SQL). Recomende A.
