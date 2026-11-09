@@ -12,7 +12,7 @@ let TAB='neg', ULT_ID=null, MENU=null;
 
 /* ── em que aba mora cada tópico (pela chave do tópico, a mesma do "organizar"); o que não casar fica em Negócio ── */
 const REGRAS=[
-  ['neg','etapa',/etapa de comercial/],['neg','tarefas',/^tarefas/],['neg','mfo2',/ficha do negocio/],['neg','mfo',/^@mfo$/],['neg','valor',/valor do negocio/],['neg','planos',/planos|simulac/],
+  ['neg','etapa',/etapa de comercial/],['neg','tarefas',/^tarefas/],['neg','mfo2',/ficha do negocio/],['neg','mfo',/^@mfo$/],['neg','valor',/valor do negocio/],['neg','forms',/formular/],['neg','planos',/planos|simulac/],
   ['neg','sitplan',/sitplan/],['neg','solic',/solicitac/],['neg','drive',/drive/],
   ['pes','negs',/^@negs$/],['pes','quem',/quem e a pessoa/],['pes','dados',/dados da pessoa|^@pj$/],['pes','ance',/qualificacao/],['pes','recdata',/^@recdata$/],
   ['pes','recs',/^recomendac/],['pes','info',/infoclient/],['pes','cart',/^@cart$/],
@@ -41,6 +41,7 @@ function resumo(n,c){ const t=tx(()=>proxTarefa(c));
     case 'etapa': { const st=tx(()=>etStatusDe(c)); let ci=''; try{ const k=fuCiclo(c,fuInfo(c,fuDestino(c).funil_id)); if(k) ci=' · ⏱️ '+k.d+'d'; }catch(_){} return `● ${etapaInfo(c).lbl}${st?' · '+st:''}${ci}${t&&t.quando?' · próx. '+ddmm(t.quando):''}`; }
     case 'tarefas': { const n2=tx(()=>tarAbertas(c).length)||0; return n2?`${n2} aberta${n2>1?'s':''}${t&&t.quando?' · '+ddmm(t.quando):''}`:'⚠ sem próxima atividade'; }
     case 'valor': { const pm=tx(()=>pmDe(c)), pr=tx(()=>probDe(c)); return pm?`${brl(pm)}/mês · PA ${brl(tx(()=>totalDe(c))||tx(()=>paDe(c))||0)}${pr!==''?' · '+pr+'%':''}`:(tx(()=>pmZerado(c))?'R$ 0 · sem negócio':'sem prêmio'); }
+    case 'forms': return tx(()=>frmResumo(c));   /* FORMS-NEG-V1 */
     case 'planos': { const l=Array.isArray(c.planos)?c.planos:[]; return l.length?`${l.length}${l.some(p=>p&&p.status==='Ativado')?' · 1 ativada':''}`:'nenhuma'; }
     case 'sitplan': return c.sitplan?'na lista de '+ddmm(c.sitplan):'fora da lista';
     case 'ance': { const e=tx(()=>estrelasDe(c))||0; return `${e}/5${e>=4?' · 🔥 quente':''}${c.mercado?' · Mercado '+c.mercado:''}`; }

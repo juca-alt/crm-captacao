@@ -507,7 +507,7 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
     ${fid==='vi'?starsHtml(c,i.ance):''}
     <div class="fu-meta2">${fid==='mfo'&&c.produto?`<b>${esc(c.produto)}</b>`:''}${sub?`<span>${sub}</span>`:''}${c.cidade||rv?`<span class="r"><span>${esc(c.cidade||'')}</span>${rv?`<span class="val" title="Renda">R$ ${rv} mil</span>`:''}</span>`:''}${tel?`<span class="tel">${esc(tx(()=>telBR(tel))||tel)}</span>`:''}</div>
     ${pills?`<div class="fu-pills">${pills}</div>`:''}
-    ${leg?`<div class="fu-cr">${tx(()=>recSeloHtml(c,true))}${cicloHtml(c,i)}${tx(()=>typeof anxSeloHtml==='function'?anxSeloHtml(c):'')}</div>`:''}
+    ${leg?`<div class="fu-cr">${tx(()=>recSeloHtml(c,true))}${cicloHtml(c,i)}${tx(()=>typeof anxSeloHtml==='function'?anxSeloHtml(c):'')}${tx(()=>typeof frmSeloHtml==='function'?frmSeloHtml(c):'')}</div>`:''}
     ${valor||prob?`<div class="fu-cr fu-val">${valor}${prob}</div>`:''}
     ${prev}${leg?tx(()=>bcRevisitaHtml(c)):''}
     ${tar?`<div class="fu-cr fu-tar">${tar}</div>`:''}
