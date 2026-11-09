@@ -139,7 +139,7 @@ function fuInfo(c,fid){ const d=fuDestino(c), enc=ehEnc(fid,d.etapa_id), cli=CLI
 
 /* ── filtros (faceta: o número diz quantos sobram somando com os ligados) ── */
 const FILTROS={   /* chave: [rótulo, teste, tom do chip, ícone] */
-  toca_eu:['Comigo',c=>!!c.toca&&c.toca===eqEu(),'azul','👤'], toca_outro:['Com outra pessoa',c=>!!c.toca&&c.toca!==eqEu(),'roxo','👥'], toca_sem:['Ninguém marcado',c=>!c.toca&&c.funil!=='bn'&&c.funil!=='fx','cinza','○'],
+  toca_eu:['Comigo',c=>tocaLista(c).includes(eqEu()),'azul','👤'], toca_outro:['Com outra pessoa',c=>{ const l=tocaLista(c); return !!l.length&&!l.includes(eqEu()); },'roxo','👥'], toca_sem:['Ninguém marcado',c=>!tocaLista(c).length&&c.funil!=='bn'&&c.funil!=='fx','cinza','○'],
   semprox:['Sem próximo passo',(c,i)=>i.semProx,'lj','⚠'], nunca:['Nunca conversei',(c,i)=>!i.ult,'verde','✆'], ta:['Fazer TA',(c,i)=>i.ta,'azul','☏'], delay:['Delay',(c,i)=>i.delay,'verm','⏳'], esfriando:['Esfriando (30d+)',(c,i)=>i.esfriando,'azul','❄'],
   quente:['Quentes',(c,i)=>i.quente,'amar','☆'], alta:['Alta Renda',(c,i)=>i.alta,'cinza','✦'], niver:['Aniversariantes do mês',(c,i)=>i.niver,'rosa','🎂'], cliente:['Já é cliente',c=>fuEhCliente(c),'verde','🛡'], revisar:['Pra revisar (mapa)',(c,i)=>i.d.revisao,'amar','?'],
   mx:['Mercado X',c=>c.mercado==='X','verde',''], my:['Mercado Y',c=>c.mercado==='Y','amar',''], mz:['Mercado Z',c=>c.mercado==='Z','cinza',''], msem:['Sem mercado',c=>!c.mercado,'cinza',''],
@@ -150,7 +150,7 @@ function fuPassa(c,i,ignora){ if(!fuBate(c,FU.q)) return false;
   for(const k of Object.keys(FU.f)){ if(!FU.f[k]||k===ignora||!FILTROS[k]) continue; if(!FILTROS[k][1](c,i)) return false; }
   if(FU.origem&&c.origem_tipo!==FU.origem) return false;
   if(FU.dono&&(c._dono||'')!==FU.dono) return false;
-  if(FU.toca&&(FU.toca==='@sem'?!!c.toca:(c.toca||'')!==FU.toca)) return false;
+  if(FU.toca&&(FU.toca==='@sem'?!!tocaLista(c).length:!tocaLista(c).includes(FU.toca))) return false;
   if(FU.linha&&c.linha!==FU.linha) return false;
   if(!FU.cong&&i.cong) return false;
   if(FU.cong&&!i.cong) return false;
@@ -412,6 +412,8 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
 .fu-toca{width:26px;height:26px;border-radius:50%;border:0;color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.02em;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;cursor:pointer;padding:0}
 .fu-toca.vazio{background:#fff;color:#94a3b8;border:1.5px dashed #cbd5e1;font-size:13px}
 .fu-toca.mini{width:22px;height:22px;font-size:9.5px;margin-right:8px;vertical-align:middle;cursor:inherit}
+.fu-toca{position:relative}   /* QUEM-TOCA-V2 (09/11): selo +N quando mais de uma pessoa toca */
+.fu-toca-mais{position:absolute;right:-7px;bottom:-6px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#fff;color:#1e293b;border:1px solid #cbd5e1;font-size:9.5px;font-weight:800;line-height:14px;text-align:center;pointer-events:none}
 .fu-toca.sug{background:#fff;color:var(--tc,#64748b);border:1.5px dashed var(--tc,#cbd5e1);opacity:.85}
 .fu-card{position:relative}.fu-card:has(.fu-l1 .fu-toca) .fu-l1{padding-right:34px}
 .fu-card .fu-l1 .fu-toca{position:absolute;top:8px;right:8px}   /* QUEM-TOCA-V2 (26/10, print dele "cadê a bolinha"): sempre no canto, como no Umbler */
@@ -537,17 +539,25 @@ async function eqCarregar(){ if(EQ.em||typeof sb==='undefined'||!sb||typeof loga
 function eqNome(e){ const m=EQ.m[e]; if(m&&m.nome) return m.nome; try{ if(PERFIL&&PERFIL.email===e&&PERFIL.nome) return PERFIL.nome; }catch(_){} return String(e||'').split('@')[0]; }
 function eqSigla(e){ const m=EQ.m[e]; if(m&&m.sigla) return m.sigla; const p=String(eqNome(e)).replace(/[._-]+/g,' ').trim().split(/\s+/); return (((p[0]||'?')[0]||'?')+((p[1]||'')[0]||'')).toUpperCase(); }
 function eqCor(e){ const m=EQ.m[e]; if(m&&m.cor) return m.cor; const pal=['#2563eb','#7c3aed','#0d9488','#c2410c','#be185d']; let h=0; for(const ch of String(e)) h=(h*31+ch.charCodeAt(0))>>>0; return pal[h%pal.length]; }
-function eqTime(c){ const dono=(c&&c._dono)||eqEu(); return [...new Set([dono].concat(EQ.times[dono]||[]).concat([eqEu(), c&&c.toca]).filter(Boolean))]; }
-function tocaHtml(c){ if(!c||c.funil==='fx'||c.funil==='bn') return ''; const j=esc(jsq(c.id)), e=c.toca;
-  return e?`<button type="button" class="fu-toca" style="background:${eqCor(e)}" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Quem toca: ${esc(eqNome(e))} — toque pra trocar" aria-label="Quem toca: ${esc(eqNome(e))}">${esc(eqSigla(e))}</button>`
+/* QUEM-TOCA-V2 (09/11/2026): palavra dele "deixa eu marcar mais de um usuário — ela e o Victor, ou ela e alguém".
+   c.tocas = lista completa (e-mails, na ordem em que foram marcados); c.toca continua = o 1º da lista (compatível com
+   tudo que já lia c.toca). Card antigo sem c.tocas vale [c.toca]. */
+function tocaLista(c){ if(!c) return []; const l=Array.isArray(c.tocas)?c.tocas:(c.toca?[c.toca]:[]); return [...new Set(l.map(x=>String(x||'').toLowerCase()).filter(Boolean))]; }
+function eqTime(c){ const dono=(c&&c._dono)||eqEu(); return [...new Set([dono].concat(EQ.times[dono]||[]).concat([eqEu()]).concat(tocaLista(c)).filter(Boolean))]; }
+function tocaHtml(c){ if(!c||c.funil==='fx'||c.funil==='bn') return ''; const j=esc(jsq(c.id)), l=tocaLista(c), e=l[0], nomes=l.map(eqNome).join(' + ');
+  return e?`<button type="button" class="fu-toca" style="background:${eqCor(e)}" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Quem toca: ${esc(nomes)} — toque pra mudar" aria-label="Quem toca: ${esc(nomes)}">${esc(eqSigla(e))}${l.length>1?`<span class="fu-toca-mais">+${l.length-1}</span>`:''}</button>`
     :(()=>{ const d=(c&&c._dono)||eqEu(); return d?`<button type="button" class="fu-toca sug" style="--tc:${eqCor(d)}" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Ninguém marcado ainda (a base é de ${esc(eqNome(d))}) — toque pra dizer quem toca" aria-label="Marcar quem toca">${esc(eqSigla(d))}</button>`
       :`<button type="button" class="fu-toca vazio" onclick="event.stopPropagation();fuTocaMenu(event,'${j}')" title="Ninguém marcado — toque pra dizer quem toca este negócio" aria-label="Marcar quem toca">＋</button>`; })(); }
-function fuTocaMenu(ev,id){ const c=fuAcha(id); if(!c) return; const j=esc(jsq(id)), at=c.toca||'', t=eqTime(c);
-  fuMenu(ev,`<div class="mh">Quem toca ${esc(pn(c))}</div>${t.length?t.map(e=>`<button type="button" onclick="fuToca('${j}','${esc(jsq(e))}')"><span class="fu-toca mini" style="background:${eqCor(e)}">${esc(eqSigla(e))}</span>${esc(eqNome(e))}${e===at?' ✓':''}</button>`).join(''):'<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Entre com a sua conta pra marcar.</div>'}${at?`<button type="button" onclick="fuToca('${j}','')">✕ Ninguém</button>`:''}`); }
-function fuToca(id,e){ fuFecharMenu(); const c=fuAcha(id); if(!c||c.funil==='bn'||c.funil==='fx') return; const antes=c.toca||''; if(antes===e) return;
-  if(e) c.toca=e; else delete c.toca; c.toca_em=new Date().toISOString();
-  try{ interacoesDe(c).push({id:uid(),k:'toca',l:e?`Quem toca: ${eqNome(e)}`:'Quem toca: ninguém',toca_de:antes,toca_para:e||'',dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }catch(_){}
-  salvar(); fuRepinta(); toast(e?`${pn(c)}: quem toca é ${eqNome(e)}`:`${pn(c)}: sem ninguém marcado`,true); }
+function fuTocaMenu(ev,id){ const c=fuAcha(id); if(!c) return; const j=esc(jsq(id)), at=tocaLista(c), t=eqTime(c);
+  fuMenu(ev,`<div class="mh">Quem toca ${esc(pn(c))}<small style="display:block;font-weight:400;color:var(--muted)">toque pra marcar ou desmarcar — pode ser mais de um</small></div>${t.length?t.map(e=>`<button type="button" onclick="fuToca('${j}','${esc(jsq(e))}')"><span class="fu-toca mini" style="background:${eqCor(e)}">${esc(eqSigla(e))}</span>${esc(eqNome(e))}${at.includes(e)?' ✓':''}</button>`).join(''):'<div style="padding:6px 10px;font-size:12px;color:var(--muted)">Entre com a sua conta pra marcar.</div>'}${at.length?`<button type="button" onclick="fuToca('${j}','')">✕ Ninguém</button>`:''}`); }
+/* fuToca(id,e): e vazio = ninguém; e já marcado = desmarca; e novo = soma à lista (não tira os outros) */
+function fuToca(id,e){ fuFecharMenu(); const c=fuAcha(id); if(!c||c.funil==='bn'||c.funil==='fx') return; e=String(e||'').toLowerCase();
+  const antes=tocaLista(c), depois=!e?[]:(antes.includes(e)?antes.filter(x=>x!==e):antes.concat([e]));
+  if(depois.join()===antes.join()) return;
+  if(depois.length){ c.tocas=depois; c.toca=depois[0]; } else { delete c.tocas; delete c.toca; } c.toca_em=new Date().toISOString();
+  const nomes=depois.map(eqNome).join(' + ');
+  try{ interacoesDe(c).push({id:uid(),k:'toca',l:depois.length?`Quem toca: ${nomes}`:'Quem toca: ninguém',toca_de:antes.join(','),toca_para:depois.join(','),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()}); }catch(_){}
+  salvar(); fuRepinta(); toast(depois.length?`${pn(c)}: quem toca é ${nomes}`:`${pn(c)}: sem ninguém marcado`,true); }
 /* % que passa de uma etapa pra seguinte no funil NOVO: quem alcançou (etapa atual + histórico) — mesma conta do quadro antigo
    (nnTaxas), no mesmo recorte de período (FUNP). Estoque fica fora (não entrou no funil ainda). */
 function fuTaxas(fid,lista){ const fl=cfg(fid).filter(e=>!e.enc&&!/revisita/i.test(e.id)).map(e=>e.id), out={};
@@ -583,7 +593,7 @@ function filtroBarHtml(lista){ const at=ativos(), S2=salvos(), algum=S2.some(x=>
 function tabelaHtml(fid,vis){ const l=fuOrdenar(vis);
   return `<div class="fu-tw"><table><thead><tr><th><button type="button" class="btn-ghost" onclick="fuOrdem('nome')">Nome</button></th><th>Criado em</th><th><button type="button" class="btn-ghost" onclick="fuOrdem('prob')">Prob. ↓</button></th><th>Etapa</th><th>Recomendante</th><th>Profissão</th><th>Renda</th><th>Cidade</th><th>SitPlan</th><th>Tags</th><th>Observação</th><th>Mercado</th><th>Quem toca</th><th>Ações</th></tr></thead><tbody>
   ${l.map(({c,i})=>{ const j=esc(jsq(c.id)); let ent=''; try{ ent=entradaFunil(c).iso||''; }catch(_){}
-    return `<tr><td><button type="button" class="btn-ghost" style="font-weight:600;text-align:left" onclick="fuAbrir('${j}')">${esc(c.nome||'—')}</button></td><td>${esc(dataBR(ent))}</td><td class="num">${prob(i.d.etapa_id)}%</td><td><span class="fu-bd" style="color:${corDe(fid,i.d.etapa_id)}">● ${esc(lbl(i.d.etapa_id))}</span></td><td>${esc(c.recomendante||'—')}</td><td>${esc(c.profissao||'—')}</td><td class="num">${esc(c.renda||c.renda_estimada||'—')}</td><td>${esc(c.cidade||'—')}</td><td>${esc(c.sitplan?dataBR(String(c.sitplan).slice(0,10)):'—')}</td><td>${esc(c.tags||'—')}</td><td>${esc(String(c.notas||'').slice(0,60)||'—')}</td><td>${esc(c.mercado||'—')}</td><td>${esc(c.toca?eqNome(c.toca):'—')}</td><td><button type="button" class="btn btn-ghost btn-mini" onclick="fuLigar(event,'${j}')">☏</button> <button type="button" class="btn btn-ghost btn-mini" onclick="fuZap(event,'${j}')">💬</button></td></tr>`; }).join('')}
+    return `<tr><td><button type="button" class="btn-ghost" style="font-weight:600;text-align:left" onclick="fuAbrir('${j}')">${esc(c.nome||'—')}</button></td><td>${esc(dataBR(ent))}</td><td class="num">${prob(i.d.etapa_id)}%</td><td><span class="fu-bd" style="color:${corDe(fid,i.d.etapa_id)}">● ${esc(lbl(i.d.etapa_id))}</span></td><td>${esc(c.recomendante||'—')}</td><td>${esc(c.profissao||'—')}</td><td class="num">${esc(c.renda||c.renda_estimada||'—')}</td><td>${esc(c.cidade||'—')}</td><td>${esc(c.sitplan?dataBR(String(c.sitplan).slice(0,10)):'—')}</td><td>${esc(c.tags||'—')}</td><td>${esc(String(c.notas||'').slice(0,60)||'—')}</td><td>${esc(c.mercado||'—')}</td><td>${esc(c.toca?tocaLista(c).map(eqNome).join(' + '):'—')}</td><td><button type="button" class="btn btn-ghost btn-mini" onclick="fuLigar(event,'${j}')">☏</button> <button type="button" class="btn btn-ghost btn-mini" onclick="fuZap(event,'${j}')">💬</button></td></tr>`; }).join('')}
   </tbody></table></div><div class="sub" style="margin-top:8px">${l.length} card(s) · mesmos filtros do Kanban · ⋯ exporta a planilha</div>`; }
 
 function viewFunilNovo(fid){ fuCss(); if(fid) FU.fid=fid; fid=FU.fid;
@@ -968,7 +978,7 @@ function camSinc(){ try{ if(typeof camSincronizar==='function') camSincronizar()
 
 /* ── gaveta de filtros, colunas, mais ── */
 function filtrosHtml(){ const lista=fuLista(FU.fid), v=lista.filter(x=>fuPassa(x.c,x.i)).length, at=fAtivos().length;
-  const donos=[...new Set(lista.map(x=>x.c._dono).filter(Boolean))], nCong=lista.filter(x=>x.i.cong).length, tocas=[...new Set(lista.map(x=>x.c.toca).filter(Boolean))];
+  const donos=[...new Set(lista.map(x=>x.c._dono).filter(Boolean))], nCong=lista.filter(x=>x.i.cong).length, tocas=[...new Set(lista.flatMap(x=>tocaLista(x.c)))];
   const sel=(id,lab,opts,val,fn)=>`<select class="fu-sel" id="${id}" aria-label="${lab}" onchange="${fn}(this.value)"><option value="">${lab}: todas</option>${opts.map(([k,t])=>`<option value="${esc(k)}" ${k===val?'selected':''}>${lab}: ${esc(t)}</option>`).join('')}</select>`;
   return `<h2>⚙ Filtros</h2>${GRUPOS.map(([g,ks])=>`<div class="fu-grp"><h3>${g}</h3><div class="fu-grid">${ks.filter(k=>FU.fid==='vi'||!SO_VI.includes(k)).map(k=>fcHtml(lista,k)).join('')}</div></div>`).join('')}
     <div class="fu-grp"><h3>Mais</h3><div class="fu-grid">${FU.fid==='mfo'?sel('fu-flin','Linha',['vg','prud_demais','mo'].map(k=>[k,LINHA[k]]),FU.linha,'fuLinha'):''}${sel('fu-forig','Origem',Object.entries(ORIGEM),FU.origem,'fuOrigem')}${donos.length>1?sel('fu-fdono','Dono',donos.map(d=>[d,donoNome(d)]),FU.dono,'fuDono'):''}${tocas.length?sel('fu-ftoca','Quem toca',tocas.map(e=>[e,eqNome(e)]).concat([['@sem','ninguém marcado']]),FU.toca,'fuTocaF'):''}${nCong||FU.cong?`<button type="button" class="fu-fc t-azul${FU.cong?' on':''}" onclick="fuCong();fuRefiltros()">❄️ Só congelados <span class="cn">${nCong}</span></button>`:''}</div></div>
@@ -1132,6 +1142,14 @@ function fuSelfTests(ok){
     const h0=tocaHtml(cc); cc.toca='v@exemplo.invalid'; const h1=tocaHtml(cc), t=eqTime(cc);
     ok('QUEM-TOCA-V1: card sem marcação mostra a sigla do dono em contorno (DE); marcado mostra a sigla (VE) cheia; o time da base = dono + quem trabalha nela', /fu-toca sug/.test(h0)&&/>DE</.test(h0)&&/>VE</.test(h1)&&t[0]==='d@exemplo.invalid'&&t.includes('v@exemplo.invalid')&&eqSigla('d@exemplo.invalid')==='DE');
     ok('QUEM-TOCA-V1: filtros "Comigo / Com outra pessoa / Ninguém marcado" existem e Estoque não conta como "ninguém"', !!FILTROS.toca_eu&&!!FILTROS.toca_outro&&FILTROS.toca_sem[1]({funil:'nn'})===true&&FILTROS.toca_sem[1]({funil:'bn'})===false&&FILTROS.toca_outro[1](cc)===(cc.toca!==eqEu()));
+    /* QUEM-TOCA-V2: mais de uma pessoa */
+    const cm={id:'fu-tq2',nome:'Beltrano Toca',funil:'nn',etapa:'TA',tarefas:[],interacoes:[],_dono:'d@exemplo.invalid',toca:'v@exemplo.invalid'};
+    let lm, hm, ok3; const _s=window.salvar; S.contatos=S.contatos||[]; S.contatos.push(cm); window.salvar=()=>{};   /* card de teste na lista real; nada é gravado */
+    try{ fuToca('fu-tq2','r@exemplo.invalid'); lm=tocaLista(cm).join(); hm=tocaHtml(cm); fuToca('fu-tq2','v@exemplo.invalid'); ok3=tocaLista(cm).join()==='r@exemplo.invalid'&&cm.toca==='r@exemplo.invalid'; fuToca('fu-tq2',''); }
+    finally{ window.salvar=_s; const ix=S.contatos.indexOf(cm); if(ix>=0) S.contatos.splice(ix,1); }
+    ok('QUEM-TOCA-V2: marca mais de uma pessoa (soma sem tirar), card mostra +1, desmarcar tira só aquela, "ninguém" limpa; c.toca segue = 1º da lista',
+      lm==='v@exemplo.invalid,r@exemplo.invalid'&&/fu-toca-mais">\+1</.test(hm)&&ok3&&!cm.toca&&!cm.tocas&&tocaLista({toca:'X@a.b'}).join()==='x@a.b'
+      &&FILTROS.toca_eu[1]({tocas:['zz@a.b',String(eqEu()||'eu@x').toLowerCase()]})===!!eqEu());
     EQ.m=_m; EQ.times=_t; }
   /* T4 */
   const A=x=>fuAnce(x);
