@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.89 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.90 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1862,7 +1862,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <script src="modulos/ver-como.js?v=20261109a"></script>
 <script src="modulos/funil-unico.js?v=20261109b"></script>
 <!-- AGENDA-GLOBAL-V1 (26/10): Agenda & Tarefas no padrão do Global mora em arquivo próprio -->
-<script src="modulos/agenda-global.js?v=20261026c"></script>
+<script src="modulos/agenda-global.js?v=20261109c"></script>
 <script src="modulos/ficha-ux2.js?v=20261107a"></script>
 <script src="modulos/forms-negocio.js?v=20261107a"></script>
 <script src="modulos/nova-rec.js?v=20261025i"></script>
@@ -12350,10 +12350,21 @@ function gcalDonoEscrevivel(email){ const e=String(email||'').toLowerCase(), x=G
 async function gcalDonoChecar(tok){ try{
   const donos=((typeof DELEG!=='undefined'&&DELEG&&DELEG.donos)||[]).map(d=>String(d||'').toLowerCase()).filter(Boolean);
   for(const e of donos){ const x=GDELEG[e]; if(x&&Date.now()-x.ts<30*60e3) continue;
-    let ok=false;
+    let ok=false, role='';
     try{ const r=await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList/'+encodeURIComponent(e),{headers:{Authorization:'Bearer '+tok}});
-      if(r.ok){ const j=await r.json(); ok=j.accessRole==='writer'||j.accessRole==='owner'; } }catch(_){ continue; }
-    GDELEG[e]={ok,ts:Date.now()}; } }catch(_){} }
+      if(r.ok){ const j=await r.json(); role=String(j.accessRole||''); ok=role==='writer'||role==='owner'; } else if(r.status===404) role='nenhum'; }catch(_){ continue; }
+    GDELEG[e]={ok,role,ts:Date.now()}; }
+  if(typeof VIEW!=='undefined'&&VIEW==='agenda'&&donos.some(e=>gcalDonoSoLivre(e))) try{ viewAgenda(); }catch(_){} }catch(_){} }
+/* AGENDA-LIVRE-V1 (09/11/2026): o Workspace dele só compartilha "disponibilidade" com conta de fora. Nesse estado a agenda do
+   dono não aparece pro delegado (o Google só mostra "ocupado") — em vez de confundir, um aviso claro do que pedir. */
+function gcalDonoSoLivre(e){ const x=GDELEG[String(e||'').toLowerCase()]; return !!(x&&!x.ok&&/^(freeBusyReader|reader|nenhum)$/.test(x.role||'')); }
+function gcalDonoAvisoHTML(){ try{
+  if(typeof souAdm==='function'&&souAdm()) return '';
+  const donos=((typeof DELEG!=='undefined'&&DELEG&&DELEG.donos)||[]).map(d=>String(d||'').toLowerCase()).filter(gcalDonoSoLivre);
+  if(!donos.length) return '';
+  const nm=donos.map(e=>(typeof lpNome==='function'?lpNome(e):e)).join(' e ');
+  return `<div class="card" role="status" style="border-left:4px solid var(--amarelo,#d97706);margin:8px 0;padding:10px 12px;font-size:13px">📅 <b>Agenda de ${esc(nm)} compartilhada só com disponibilidade</b> — peça ao Gustavo a permissão de edição (“Fazer alterações nos eventos”). Até lá, o que você marcar aqui fica guardado e vai pra agenda dele quando o CRM dele abrir.</div>`;
+}catch(_){ return ''; } }
 /* deu errado escrever na agenda do dono (tiraram o acesso): volta pro V1 sem perder nada */
 function gcalDonoRecuar(it){ try{ const e=String(it.calId||'').toLowerCase(); if(e) GDELEG[e]={ok:false,ts:Date.now()};
   const c=tarContato(it.cid); if(!c) return;
@@ -13093,7 +13104,7 @@ function viewAgenda(){
   setTimeout(()=>{ try{ soGtSync(); }catch(_){} },800);   /* SOLIC-TAREFAS-V1: ponte com o Google Tarefas (silenciosa, no máx. 1×/min) */
   $('#main').innerHTML=`<h1 class="pg">Agenda &amp; Tarefas</h1>
     <div class="sub">Sua agenda do Google + o que está combinado com cada pessoa nos dois funis. Tudo num lugar só.</div>
-    ${gcalBlocoHTML()}
+    ${gcalDonoAvisoHTML()}${gcalBlocoHTML()}
     ${gsyncAvisoHTML()}
     <div class="kpis" style="margin-bottom:12px">
       <div class="kpi"${cont.atrasadas?' style="border:1.5px solid #f3c9c9"':''}><div class="lbl">Atrasadas</div><div class="num" style="font-size:19px">${cont.atrasadas}</div><div class="kpi-sub" style="font-size:11px;color:var(--muted)">venceram e seguem abertas</div></div>
@@ -14844,7 +14855,7 @@ window.emCcbAbrir=emCcbAbrir; window.exEntregarAbrir=exEntregarAbrir; window.exD
 function viewLpPendencias(){
   const hoje=atHojeLocal();
   if(FEM.aba==='emit'&&!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${uwAbas()}${exAbaHtml()}`; return; }
-  if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${uwAbas()}${cargaLinha([['pendências',EM.carregadoEm]])}<div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; o Victor mantém o estado de cada caso.</div>
+  if(!EM.itens.length){ $('#main').innerHTML=`<h1 class="pg">Pendências de Emissão</h1>${uwAbas()}${cargaLinha([['pendências',EM.carregadoEm]])}<div class="sub">Propostas pendentes de emissão (Underwriting e Emissão, portal Prudential). Grava no Supabase; a equipe (backoffice) mantém o estado de cada caso.</div>
     <div class="card" style="text-align:center;padding:34px">Nenhuma proposta ainda. Cole o relatório de Propostas Pendentes pra montar a lista.<br><br>
       <button class="btn btn-p" onclick="emColarRelatorio()">📋 Colar relatório</button>
       <button class="btn btn-s" onclick="exColar()" style="margin-left:8px">✅ Colar emitidas</button>
@@ -14984,12 +14995,12 @@ const SO_AREAS=[
   ['prudential_subscricao',  'Prudential · Subscrição',   15],
   ['prudential_sinistro',    'Prudential · Sinistro',     30],
   ['outro',                  'Outro',                      7]];
-const SO_BOLA=[['nos','Nós (Gustavo/Victor)'],['area','A área'],['cliente','O cliente']];
+const SO_BOLA=[['nos','Nós (Gustavo/Rebeca)'],['area','A área'],['cliente','O cliente']];
 /* ═══ SO-COM-V1 (28/09/2026) ═══ Palavra dele: "tira isso de prazos sugeridos por área — deixa somente com quem está:
    Gustavo, Victor, LM, Cliente". UM campo (grava em bola_com) no lugar de "Bola com" + "área com prazo". O Kanban vira
    uma coluna por pessoa. Prazo = só o que ele digitar (a régua por área saiu). Registro antigo: 'nos' → quem abriu,
    'area' → LM, 'cliente' → Cliente. */
-const SO_COM=[['gustavo','Gustavo'],['victor','Victor'],['lm','LM (Assessoria)'],['prudential','Prudential'],['cliente','Cliente']];   /* Prudential: pedido dele 28/09 — "alterações que estamos aguardando a Prudential atualizar no sistema" */
+const SO_COM=[['gustavo','Gustavo'],['rebeca','Rebeca'],['lm','LM (Assessoria)'],['prudential','Prudential'],['cliente','Cliente']];   /* Prudential: pedido dele 28/09 — "alterações que estamos aguardando a Prudential atualizar no sistema" */
 const SO_COM_IC={gustavo:'🙋',victor:'🧑‍💼',lm:'🏢',prudential:'🏛️',cliente:'🙍'};
 function soComDe(s){ const b=s&&s.bola_com; if(SO_COM.some(c=>c[0]===b)) return b;
   if(b&&b!=='nos'&&b!=='area') return String(b).toLowerCase();   /* AUDIT G3: 'daniel' (ou outro rótulo) gravado volta igual — antes caía em LM */
@@ -15049,12 +15060,12 @@ function soBuscaBate(s,q){ const n=normKey(q||''); if(!n) return true; const d=S
   let neg=''; try{ const c=s.contato_id&&tarContato(s.contato_id); neg=c?c.nome:''; }catch(_){}
   return [s.segurado,neg,s.proxima_acao,s.contexto,s.protocolo,s.apolice].some(x=>x&&normKey(String(x)).includes(n)); }
 function soComOpcoes(extras){ const o=SO_COM.slice(); (extras||[]).forEach(v=>{ if(v&&!o.some(x=>x[0]===v)) o.push([v,String(v).charAt(0).toUpperCase()+String(v).slice(1)]); }); return o; }   /* AUDIT D2 */
-function soPorOpcoes(){ const o=[['victor','Victor'],['gustavo','Gustavo']], q=soQuemSou(); if(q&&!o.some(x=>x[0]===q)) o.push([q,q[0].toUpperCase()+q.slice(1)]); return o; }   /* AUDIT A7 */
+function soPorOpcoes(){ const o=[['rebeca','Rebeca'],['gustavo','Gustavo']],   /* C' (09/11): Victor saiu; o que ele abriu continua aparecendo como 'Victor' (boRot) */ q=soQuemSou(); if(q&&!o.some(x=>x[0]===q)) o.push([q,q[0].toUpperCase()+q.slice(1)]); return o; }   /* AUDIT A7 */
 function soQuemSou(){ if(typeof souAdm==='function'&&souAdm()) return 'gustavo';
   const eu=String((typeof escEu==='function'&&escEu())||'').toLowerCase();
   if(!eu){ const e=(SO_EMAIL||AT_EMAIL||'').toLowerCase(); return e.indexOf('victor')>=0?'victor':'gustavo'; }   /* deslogado: comportamento antigo */
   const r=(ESC.rotulos||[]).find(x=>String(x.dono_email||'').toLowerCase()===eu);
-  return r&&r.rotulo? normKey(r.rotulo) : 'victor'; }
+  return r&&r.rotulo? normKey(r.rotulo) : (/victor/.test(eu)?'victor':'rebeca'); }   /* C': a assistente agora é a Rebeca */
 function soDiasSemRetorno(s,hoje){ if(s.status!=='aberta'||!s.aberta_em) return 0; return Math.max(0,Math.round(((hoje||atHojeLocal())-atParseISO(String(s.aberta_em).slice(0,10)))/864e5)); }
 /* ITEM 4 — formato obrigatório. Sem improviso. */
 function soTexto(s){
@@ -15794,7 +15805,7 @@ function viewSolicitacoes(){
   const SOV=SO.itens.filter(escLinhaOk);   /* ESCOPO-UNICO */
   const abertas=SOV.filter(s=>s.status==='aberta'), semRet=abertas.filter(s=>soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS);
   const doMes=SOV.filter(s=>String(s.aberta_em||'').slice(0,7)===mes);
-  const porV=doMes.filter(s=>s.aberta_por==='victor').length, porG=doMes.filter(s=>s.aberta_por==='gustavo').length;
+  const porV=doMes.filter(s=>s.aberta_por&&s.aberta_por!=='gustavo').length, porG=doMes.filter(s=>s.aberta_por==='gustavo').length;
   const kpi=(l,n,s)=>`<div class="kpi"><div class="lbl">${l}</div><div class="num">${n}</div>${s?`<div class="kpi-sub" style="font-size:11px;color:var(--muted)">${s}</div>`:''}</div>`;
   const kpiLente=(on,liga,l,n,sb)=>`<button class="kpi kpi-lente${on?' on':''}" onclick="${liga}"><div class="lbl">${l}</div><div class="num">${n}</div><div class="kpi-sub${on?' kpi-sub-on':''}" style="font-size:11px;color:var(--muted)">${on?'✕ vendo só estas':sb}</div></button>`;
   const lista=SOV.filter(s=>{ if(FSO.status==='aberta'&&s.status!=='aberta') return false; if(FSO.status==='sem_retorno'&&!(s.status==='aberta'&&soDiasSemRetorno(s,hoje)>SO_SEM_RETORNO_DIAS)) return false; if(FSO.status&&FSO.status!=='aberta'&&FSO.status!=='sem_retorno'&&FSO.status!=='todas'&&s.status!==FSO.status) return false;
@@ -15805,8 +15816,8 @@ function viewSolicitacoes(){
     <div class="kpis" style="margin-top:10px">
       ${kpiLente(FSO.status==='aberta',"FSO.status=FSO.status==='aberta'?'todas':'aberta';viewSolicitacoes()",'Em aberto',abertas.length,'ordenadas por prazo')}
       ${kpiLente(FSO.status==='sem_retorno',"FSO.status=FSO.status==='sem_retorno'?'aberta':'sem_retorno';viewSolicitacoes()",'⏰ Sem retorno há +'+SO_SEM_RETORNO_DIAS+'d',semRet.length,'régua de cobrança')}
-      ${kpi('Abertas por Victor (mês)',porV,'indicador da migração')}
-      ${kpi('Abertas por Gustavo (mês)',porG,porV+porG?Math.round(100*porV/(porV+porG))+'% já com o Victor':'nenhuma no mês')}
+      ${kpi('Abertas pela equipe (mês)',porV,'Rebeca e backoffice')}
+      ${kpi('Abertas por Gustavo (mês)',porG,porV+porG?Math.round(100*porV/(porV+porG))+'% já com a equipe':'nenhuma no mês')}
     </div>
     <div class="toolbar" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input id="so-q" placeholder="Buscar segurado ou apólice…" value="${esc(FSO.q)}" oninput="FSO.q=this.value;viewSolicitacoes();atFocus('so-q')" style="flex:1;min-width:200px;padding:8px 11px;border:1px solid var(--linha);border-radius:9px">
@@ -18144,11 +18155,11 @@ const MODS={
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
   backoffice:{label:'BackOffice Prudential',              def:true,  views:['lp-atrasos','lp-pendencias','solicitacoes','lp-statust','subst']},
   'solic-v2':{label:'Solicitações · acompanhamento v2 (área, prazo, próximo passo, linha do tempo)', def:false, views:[]},   /* 17/09: saiu do "só na minha base"; liga por usuário (Victor ligado) */
-  'carga':{label:'Data da última carga (📥 carteira / emitidas / relatório da semana / atraso / pendências · há N dias) nos módulos que o Victor alimenta — Início › Aniversariantes, Emissão Diária, Detalhado, Status T, Aniversariantes, Aniversário de Apólice, Atrasos, Pendências', def:false, views:[]},   /* LIBERA-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'carga':{label:'Data da última carga (📥 carteira / emitidas / relatório da semana / atraso / pendências · há N dias) nos módulos que o backoffice alimenta — Início › Aniversariantes, Emissão Diária, Detalhado, Status T, Aniversariantes, Aniversário de Apólice, Atrasos, Pendências', def:false, views:[]},   /* LIBERA-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
   'painel-wa':{label:'Painel WA (WhatsApp Approach): irmão do Painel TA pra quem está em fluxo no funil, com resultado do Zap (beta que ele vai lapidando)', def:false, views:[]},   /* LIBERA-VICTOR-V1 (29/09): módulo novo — liga por usuário */
   'plano':{label:'Plano Prudential (Planejamento Financeiro por mês: apólices, PA médio, CS médio, comissão) + realizado × plano nos cards do ciclo, Metas, Resumo MF e Emissão Diária', def:false, views:[]},   /* LIBERA-VICTOR-V1 (29/09): módulo novo — liga por usuário */
   'pm-padrao':{label:'Negócio aberto sem prêmio informado vale R$ 250/mês por padrão (mínimo base da Prudential) nos cards, somas e PA — desde TA/RCP; informar o valor na ficha substitui', def:false, views:[]},   /* LIBERA-VICTOR-V1 (29/09): módulo novo — liga por usuário */
-  'ini-acomp':{label:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o Victor na onda das tratativas', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
+  'ini-acomp':{label:'Início: cards "Solicitações em acompanhamento" e "Benefícios em regulação" — pra estar com o backoffice na onda das tratativas', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
   'solic-tarefas':{label:'Solicitações viram tarefas em andamento na Agenda & Tarefas (o card sai do Início): lista estilo Google Tarefas — ○ conclui, título e próximo passo editáveis na linha, campo "＋ Adicionar" que aceita várias em sequência — e cada solicitação aberta vira uma Tarefa do Google (conclui lá, conclui aqui)', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
   'solic-agenda':{label:'Solicitações: botão 📅 que agenda a atividade (do negócio do segurado, ou direto na Agenda Google) e registra o andamento', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
   'solic-negocio':{label:'Solicitação vinculada ao cliente/oportunidade do funil (🎯): chip na Agenda, no Kanban e na ficha da solicitação; sugestão automática pelo nome do segurado; a ficha do negócio ganha o bloco 📨 Solicitações (o que está destravando a emissão dele). Precisa da migration solicitacoes_v3_contato.sql (coluna contato_id)', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
@@ -18156,10 +18167,10 @@ const MODS={
   'anexos-drive':{label:'📎 Anexos em solicitações e atividades: arquivo ou Ctrl+V (print/imagem) vai pro Google Drive em Pipe X / CRM Life Planner / Histórico de Clientes / <cliente> com nome datado; o link fica na linha do tempo da solicitação e na atividade; contador 📎 na Agenda e no Kanban. Pede o escopo Drive na conexão Google (reconectar 1×)', def:false, views:[]},   /* SOLIC-VICTOR-V1 (29/09): liga por usuário (Victor ligado) */
   beneficios:{label:'Benefícios (sinistro)',               def:true,  views:['beneficios']},
   planos:   {label:'Planos & Simulações',                 def:true,  views:['planos','montagem']},
-  embaixadores:{label:'🌟 Embaixadores da Proteção (importar a lista Mercado X do embaixador, selecionar quem ele esquenta, acompanhar até fechar) — você e o seu backoffice (Victor) importam e selecionam; os leads ficam sempre na SUA base', def:false, views:['embaixadores']},
+  embaixadores:{label:'🌟 Embaixadores da Proteção (importar a lista Mercado X do embaixador, selecionar quem ele esquenta, acompanhar até fechar) — você e o seu backoffice (Rebeca) importam e selecionam; os leads ficam sempre na SUA base', def:false, views:['embaixadores']},
   parceiros:{label:'🤝 Parceiros (comissão dividida com LP parceiro: acordo por cliente, importação do Extrato Detalhado, apuração, histórico, prestação de contas, projeção) — só o admin fecha competência e edita %', def:false, views:['parceiros']},   /* PARCEIROS-V1 (30/09): módulo novo — liga por usuário (Victor ligado no banco) */
   'congelar-pa':{label:'❄️ Congelado sai do PA: oportunidade congelada não soma no PA/ponderado da coluna nem no PA em jogo (sem isto ela só sai do quadro do dia a dia)', def:false, views:[]},   /* CONGELAR-V1 (23/10): regra que muda número — liga por usuário */
-  conversas:{label:'💬 Conversas (o WhatsApp do Umbler Talk dentro do CRM, SÓ LEITURA: quem está aguardando resposta, histórico da conversa e o bloco 💬 WhatsApp na ficha. Não envia mensagem — responder é sempre você ou o Victor)', def:false, views:['conversas']},   /* CONVERSAS-V1 (24/10): tela nova — Victor ligado; Daniel quando ele disser */
+  conversas:{label:'💬 Conversas (o WhatsApp do Umbler Talk dentro do CRM, SÓ LEITURA: quem está aguardando resposta, histórico da conversa e o bloco 💬 WhatsApp na ficha. Não envia mensagem — responder é sempre você ou a Rebeca)', def:false, views:['conversas']},   /* CONVERSAS-V1 (24/10): tela nova — Victor ligado; Daniel quando ele disser */
   importacoes:{label:'📥 Relatórios do portal (Central de Importações: semáforo do que está em dia/vencido e subir arquivo à mão)', def:false, views:['importacoes']},   /* ATRASO-V2 T3 (23/10): tela nova — Victor liga por usuário */
   placed:   {label:'Controle de PLACED (MFB)',            def:true,  views:['placed']},
   /* LIBERA-FUNIL-NOVO-V1 (26/10): saíram do "só na minha base" — liga por usuário (Victor: tudo; Daniel: sem o MFO) */
@@ -20355,7 +20366,7 @@ function admHtml(){
       <div class="adm-acoes">
         <button class="btn btn-s btn-mini" onclick="admFicha('${esc(p.email)}')">✏️ Editar</button>
         <button class="btn btn-ghost btn-mini" onclick="admVerComo('${esc(p.email)}')">👁️ Ver o que ele enxerga</button>
-        ${(p.email!==eu&&p.papel!=='admin')?`<button class="btn btn-p btn-mini" onclick="vcEntrarPorEmail('${esc(p.email)}')" title="Navega no app inteiro com o perfil dele, só leitura — nada é gravado">👁️ Usar o app como ${esc(typeof vcNomeCurto==='function'?vcNomeCurto(p):admNome(p).split(' ')[0])}</button>`:''}
+        ${(p.email!==eu&&p.papel!=='admin'&&donos.length)?`<button class="btn btn-p btn-mini" onclick="vcEntrarPorEmail('${esc(p.email)}')" title="Navega no app inteiro com o perfil dele, só leitura — nada é gravado">👁️ Usar o app como ${esc(typeof vcNomeCurto==='function'?vcNomeCurto(p):admNome(p).split(' ')[0])}</button>`:''}
         ${(ADM.temAtivo&&p.email!==eu)?`<button class="btn btn-ghost btn-mini" onclick="admPausar('${esc(p.email)}',${ativo?'false':'true'})">${ativo?'⏸️ Pausar':'▶️ Reativar'}</button>`:''}
       </div>
     </div>`; };
@@ -22019,7 +22030,21 @@ function lpSelfCheck(){
                cvDest(A).destino==='rebeca' && cvDest(B)===null && cvDest(C2)===null && /🟡 Rebeca/.test(cvRowHtml(A,Date.now(),false))
                && cvFiltrar(base,{modo:'todas',dest:'rebeca'}).map(x=>x.id).join('')==='a' && cvFiltrar(base,{modo:'todas',dest:'gustavo'}).length===0
                && !/textarea|contenteditable/i.test(cvDestHtml(cvDest(A))));
+            CV.tri={a:{chat_id:'a',ultima_msg_em:A.ultima_msg_em,destino:'vitor',motivo:'vg da empresa',urgencia:2}};
+            const vg=cvVigiaAvaliar({'Vitor - Corporativo':new Date(Date.now()-30*864e5).toISOString(),'Canal Zz':new Date().toISOString()},null,Date.now());
+            ok("C' (Victor saiu): triagem antiga 'vitor' vira 🔴 Gustavo; sem destino Victor; canal do Victor encerrado (cinza, nunca vermelho) e escondido por padrão",
+               cvDest(A).destino==='gustavo' && !('vitor' in CV_DEST) && /🔴/.test(cvRowHtml(A,Date.now(),false))
+               && vg.canais.find(x=>x.canal==='Vitor - Corporativo').st==='encerrado' && vg.canais.find(x=>x.canal==='Canal Zz').st!=='encerrado'
+               && cvFiltrar([{...A,canal:'Vitor - Corporativo'}],{modo:'todas'}).length===0 && cvFiltrar([{...A,canal:'Vitor - Corporativo'}],{modo:'todas',canal:'Vitor - Corporativo'}).length===1);
           } finally{ CV.tri=_t; } }
+        { const _d=Object.assign({},GDELEG), _dl=DELEG.donos, _sa=window.souAdm, _cn=GCAL.conectado; try{
+            DELEG.donos=['dono@exemplo.invalid']; window.souAdm=()=>false;
+            GDELEG['dono@exemplo.invalid']={ok:false,role:'freeBusyReader',ts:Date.now()}; const h1=gcalDonoAvisoHTML();
+            GDELEG['dono@exemplo.invalid']={ok:true,role:'writer',ts:Date.now()}; const h2=gcalDonoAvisoHTML();
+            window.souAdm=()=>true; GDELEG['dono@exemplo.invalid']={ok:false,role:'freeBusyReader',ts:Date.now()}; const h3=gcalDonoAvisoHTML();
+            ok('AGENDA-LIVRE-V1: agenda do dono compartilhada só com disponibilidade → aviso claro pro delegado pedir a edição (some com edição; admin não vê)',
+               /só com disponibilidade/.test(h1) && /permissão de edição/.test(h1) && h2==='' && h3==='');
+          } finally{ Object.keys(GDELEG).forEach(k=>delete GDELEG[k]); Object.assign(GDELEG,_d); DELEG.donos=_dl; window.souAdm=_sa; GCAL.conectado=_cn; } }
         { const _sg=CV.sug; try{
             CV.sug={id:'a',sug:{categoria:'documentos',precisa_gustavo:false,motivo:'pediu o formulário',rascunho:'Oi, Fulano! Obrigado, vou conferir e te retorno.'}};
             const hs=cvSugHtml(A), ia=cvMsgsParaIA([{de:'cliente',tipo:'Text',texto:'oi'},{de:'nos',tipo:'Text',texto:'nota',privada:true},{de:'cliente',tipo:'Audio',texto:''}]);
@@ -22151,8 +22176,8 @@ function lpSelfCheck(){
       const pri=REL_CATALOGO.filter(r=>r.pri).map(r=>r.k).join()==='emitidas,pendencias,atraso,aniversariantes';
       const log=String(exAplicarUI).includes("relLog('emitidas'")&&String(emAplicarUI).includes("relLog('pendencias'")&&String(atAplicarOficialUI).includes("relLog('atraso'")&&String(relRotear).includes("relLog('aniversariantes'");
       return ks===tipos&&pri&&log&&String(openLpImport).includes('relSuportadosAbrir()'); })());
-    ok('SO-COM-V1 + SO-ETAPAS-V1: com quem está = Gustavo/Victor/LM/Cliente (etiqueta/filtro), Kanban pelas ETAPAS de resolução, sem prazo sugerido, legado mapeado, Em andamento conta como aberta', (()=>{
-          const a=SO_COM.map(c=>c[0]).join()==='gustavo,victor,lm,prudential,cliente' && soComDe({bola_com:'area',area:'prudential_cobranca'})==='prudential' && SO_KB_COLS.map(c=>c[0]).join()==='aberta,a_fazer,em_andamento,executada';
+    ok('SO-COM-V1 + SO-ETAPAS-V1: com quem está = Gustavo/Rebeca/LM/Cliente (etiqueta/filtro), Kanban pelas ETAPAS de resolução, sem prazo sugerido, legado mapeado, Em andamento conta como aberta', (()=>{
+          const a=SO_COM.map(c=>c[0]).join()==='gustavo,rebeca,lm,prudential,cliente' && soComDe({bola_com:'area',area:'prudential_cobranca'})==='prudential' && SO_KB_COLS.map(c=>c[0]).join()==='aberta,a_fazer,em_andamento,executada';
           const b=soComDe({bola_com:'nos',aberta_por:'victor'})==='victor'&&soComDe({bola_com:'nos'})==='gustavo'&&soComDe({bola_com:'area'})==='lm'&&soComDe({bola_com:'cliente'})==='cliente'&&soComDe({bola_com:'victor'})==='victor';
           const c=soPrazoEfetivo({aberta_em:'2026-09-01',area:'lm'})===null && soPrazoEfetivo({prazo:'2026-10-01'})==='2026-10-01';
           const d=soAberta({status:'em_andamento'}) && SO_STATUS.some(x=>x[0]==='em_andamento') && soKbColDe({status:'em_andamento',bola_com:'lm'})==='em_andamento';
@@ -22586,12 +22611,12 @@ function lpSelfCheck(){
     }
     ok('AUTORIA-V1: o rastro é de QUEM está logado (o Victor operando a base delegada fica registrado como Victor)',
        (()=>{ const P=PERFIL;   /* restaura SEMPRE (era `if(P!==null)`, e deslogado o app ficava logado como Victor — livro de erros #17) */
-         try{ PERFIL={email:'vfigueiredo.solucoes@gmail.com',nome:'Victor',papel:'lp'};
+         try{ PERFIL={email:'fulano.assist@exemplo.invalid',nome:'Fulano',papel:'lp'};
            const eu=quemFez();
-           const okNome=/^(Vfigueiredo|Victor)$/.test(lpNome('vfigueiredo.solucoes@gmail.com'));
+           const okNome=/^Fulano/i.test(lpNome('fulano.assist@exemplo.invalid'));
            const src=[...document.scripts].map(x=>x.textContent).join('');
            const semAntigo=!src.includes('por:S.'+'activeUser');
-           return semAntigo&&okNome&&eu==='vfigueiredo.solucoes@gmail.com';
+           return semAntigo&&okNome&&eu==='fulano.assist@exemplo.invalid';
          } finally{ PERFIL=P; } })());
     /* TA-LISTAS-V2 (14/09): Delay é SÓ status de etapa; não atendeu e ficou pra trás têm fila própria */
     ok('TA-LISTAS-V2: o Estoque não entra mais no Delay (não tem etapa) e as três filas não se misturam', (()=>{
@@ -23387,9 +23412,9 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c2={id:'ce2',nome:'Zz2',funil:'nn',etapa:'TA',criadoEm:isoAddDias(h,-3),interacoes:[]};
       const enc={id:'ce3',nome:'Zz3',funil:'nn',etapa:(ETAPAS_ENCERR[0]||'Não'),criadoEm:isoAddDias(h,-3),interacoes:[]};
       return cicloDiasNaEtapa(c)===12&&cicloDiasNaEtapa(c2)===3&&cicloChipHtml(enc)===''&&/12d em/.test(cicloChipHtml(c))&&nnCard(c).includes('nc-ciclo'); })());
-    ok('SOLIC-VICTOR-V1: autor = quem está LOGADO (Victor operando a base do Gustavo grava "victor"); editar não troca o dono (lp_email); evento vai com o dono da solicitação; as 6 chaves do módulo viraram MODS def:false (liga por pessoa)', (()=>{ const P=PERFIL, SE=SO_EMAIL, D={...DELEG}; try{
+    ok('SOLIC-VICTOR-V1: autor = quem está LOGADO (assistente operando a base do Gustavo grava "rebeca" — o Victor saiu); editar não troca o dono (lp_email); evento vai com o dono da solicitação; as 6 chaves do módulo viraram MODS def:false (liga por pessoa)', (()=>{ const P=PERFIL, SE=SO_EMAIL, D={...DELEG}; try{
       const RB=ESC.rotulos; ESC.rotulos=[{rotulo:'gustavo',dono_email:'g@x'},{rotulo:'daniel',dono_email:'d@x'}]; PERFIL={email:'v@x',papel:'lp',modulos:{}}; DELEG.eu='v@x'; SO_EMAIL='g@x';
-      const a=soQuemSou()==='victor'; DELEG.eu='d@x'; const a3=soQuemSou()==='daniel'; ESC.rotulos=RB;
+      const a=soQuemSou()==='rebeca'; DELEG.eu='d@x'; const a3=soQuemSou()==='daniel'; ESC.rotulos=RB;
       PERFIL={email:'g@x',papel:'admin',modulos:{}}; DELEG.eu='g@x'; const a2=soQuemSou()==='gustavo';
       SO_EMAIL='v@x'; const r=soRow({id:'123',segurado:'Zz',lp_email:'g@x',base_lp:null}); const b=r.lp_email==='g@x';
       const r2=soRow({id:'loc_1',segurado:'Zz',base_lp:null}); const b2=r2.lp_email==='v@x';
@@ -25332,6 +25357,7 @@ function cvFiltrar(chats,f,agora){
   return (chats||[]).filter(ch=>{
     if(f&&f.abertas&&ch.aberto===false) return false;
     if(f&&f.canal&&String(ch.canal||'')!==f.canal) return false;
+    if(!(f&&f.canal)&&cvCanalEncerrado(ch.canal)) return false;   /* C': canal encerrado só aparece escolhendo ele no filtro */
     if(f&&f.modo==='aguardando'&&!cvAguardando(ch)) return false;
     if(f&&f.modo==='esfriando'&&!cvEsfriando(ch,agora)) return false;
     if(f&&f.selo&&cvIdent(ch).selo!==f.selo) return false;   /* CV-ID-V1 */
@@ -25393,8 +25419,9 @@ function cvIdent(ch){
 /* ── TRIAGEM-V1 (ticket I, parte 2) — a IA (Edge Function `triagem`, a cada 10 min) diz pra quem vai cada conversa em que o
    cliente falou por último. Aqui só LÊ copiloto_fila_cache (destino + motivo curto, nunca o texto). Selo só aparece se a
    classificação é da mensagem mais recente (chegou mensagem nova → some até a próxima rodada). */
-const CV_DEST={gustavo:['Gustavo decide','b-verm','🔴'],rebeca:['Rebeca','b-amarelo','🟡'],vitor:['Victor','b-azul','🔵'],sem_acao:['Sem ação','b-cinza','⚪']};
-function cvDest(ch){ if(!ch||!cvAguardando(ch)) return null; const t=(CV.tri||{})[ch.id]; if(!t||!CV_DEST[t.destino]) return null;
+const CV_DEST={gustavo:['Gustavo decide','b-verm','🔴'],rebeca:['Rebeca','b-amarelo','🟡'],sem_acao:['Sem ação','b-cinza','⚪']};   /* C' (09/11): o Victor saiu — Multi Office/VG/outros seguros vão pro Gustavo */
+function cvDest(ch){ if(!ch||!cvAguardando(ch)) return null; let t=(CV.tri||{})[ch.id]; if(t&&t.destino==='vitor') t={...t,destino:'gustavo'};   /* C': classificação antiga do Victor conta como do Gustavo */
+  if(!t||!CV_DEST[t.destino]) return null;
   const a=Date.parse(ch.ultima_msg_em||''), l=Date.parse(t.ultima_msg_em||''); if(isFinite(a)&&isFinite(l)&&a>l) return null; return t; }
 function cvDestHtml(t){ if(!t) return ''; const d=CV_DEST[t.destino]; return `<span class="badge ${d[1]}" style="white-space:nowrap" title="${esc('Triagem do copiloto: '+d[0]+(t.motivo?' — '+t.motivo:''))}">${d[2]} ${esc(d[0])}${t.urgencia===3?' · urgente':''}</span>`; }
 /* ── COPILOTO NO APP (ticket I, passo 0 · 09/11) — o rascunho que existia só no branch copiloto-t1 chega à tela.
@@ -25515,6 +25542,9 @@ async function cvSincronizar(){
    Onde: topo da tela 💬 Conversas (sempre) e faixa no Início (só quando há alerta), pra quem tem
    o módulo `conversas`. Melhoria em módulo já liberado → sem trava nova (regra 29/09). */
 const CV_VIGIA={limH:3,iniH:8,fimH:20,leituraMin:30,inativoD:7,ttlMs:5*6e4};
+/* C' (09/11): canal desativado na Umbler = encerrado — cinza, nunca alerta; some da lista de Conversas por padrão (o histórico fica no banco) */
+const CV_CANAIS_ENCERRADOS=['Vitor - Corporativo'];
+function cvCanalEncerrado(n){ return CV_CANAIS_ENCERRADOS.includes(String(n||'').trim()); }
 let CV_VG={canais:null,estado:null,em:0,carregando:null};
 const CV_RECIFE_OFF=3*36e5;   /* Recife = UTC−3 o ano todo (sem horário de verão desde 2019) */
 function cvNoHorario(ms){ const d=new Date(ms-CV_RECIFE_OFF), w=d.getUTCDay(), h=d.getUTCHours()+d.getUTCMinutes()/60;
@@ -25539,7 +25569,7 @@ function cvVigiaAvaliar(canais,estado,agora){ agora=agora||Date.now();
     out.leituraEm=lu||null; out.leituraParada=!isFinite(t)||(agora-t)>CV_VIGIA.leituraMin*6e4; }
   Object.keys(canais||{}).sort().forEach(n=>{ const t=Date.parse(canais[n]||''); if(!isFinite(t)) return;
     const uteis=cvHorasUteis(t,agora);
-    const st=(agora-t)>=CV_VIGIA.inativoD*864e5? 'inativo' : (out.noHorario&&uteis>CV_VIGIA.limH)? 'verm' : 'verde';
+    const st=cvCanalEncerrado(n)? 'encerrado' : (agora-t)>=CV_VIGIA.inativoD*864e5? 'inativo' : (out.noHorario&&uteis>CV_VIGIA.limH)? 'verm' : 'verde';
     out.canais.push({canal:n,ultima:canais[n],uteis,st}); });
   return out; }
 /* leitura leve (2 colunas), com cache de 5 min. Só SELECT — nada aqui escreve. */
@@ -25575,6 +25605,7 @@ function cvVigiaHtml(onde,agora){
       <button class="btn btn-p btn-mini cv-vg-bt" onclick="irPara('conversas')">💬 Abrir Conversas</button></div>`; }
   if(!av.canais.length&&!av.leituraParada) return '';
   const linhas=av.canais.map(c=> c.st==='verm'? `<div class="cv-vg-l cv-vg-verm">⚠️ Canal «${esc(c.canal)}» sem mensagem ${esc(cvHa(c.ultima,agora))}. Abra a Umbler → Canais e confira se está conectado (releia o QR Code).</div>`
+    : c.st==='encerrado'? `<div class="cv-vg-l cv-vg-cinza">⚪ ${esc(c.canal)}: canal encerrado — fora do vigia (o histórico continua guardado).</div>`
     : c.st==='inativo'? `<div class="cv-vg-l cv-vg-cinza">⚪ ${esc(c.canal)}: sem mensagem ${esc(cvHa(c.ultima,agora))} — canal parado, fora do vigia.</div>`
     : `<div class="cv-vg-l">✅ ${esc(c.canal)}: última mensagem ${esc(cvHa(c.ultima,agora))}</div>`).join('');
   const topo=av.leituraParada? `<div class="cv-vg-l cv-vg-verm">${alertas[0]}</div>` : '';
@@ -25615,7 +25646,7 @@ function cvTelaHtml(){
   const aviso=CV.erro? `<div class="card" style="padding:14px;margin-top:10px;color:var(--verm);font-size:13.5px">Não consegui ler as conversas: ${esc(CV.erro)}</div>`
     : (!logado()&&!CV.exemplo)? `<div class="card" style="padding:14px;margin-top:10px;font-size:13.5px">Entre com a sua conta pra ver as conversas — elas ficam no servidor, visíveis só pra você e pra quem você delegou.</div>` : '';
   return `<h1 class="pg">💬 Conversas</h1>
-  <div class="sub">O WhatsApp do Umbler Talk aqui dentro, <b>só pra ler</b>. Responder é sempre você ou o Victor, no WhatsApp ou no Talk — este módulo não envia nada.</div>
+  <div class="sub">O WhatsApp do Umbler Talk aqui dentro, <b>só pra ler</b>. Responder é sempre você ou a Rebeca, no WhatsApp ou no Talk — este módulo não envia nada.</div>
   ${aviso}
   <div id="cv-vigia-cv">${cvVigiaHtml('conversas')}</div>
   <div class="kpis" style="margin-top:10px">
@@ -25631,7 +25662,7 @@ function cvTelaHtml(){
     ${chip(f.modo==='esfriando','⏰ Esfriando',"cvFiltro('modo','esfriando')",'Cliente esperando de 1 a 7 dias — o mais parado na frente. É a lista curta de bola caída.')}
     ${chip(f.modo!=='aguardando'&&f.modo!=='esfriando','Todas',"cvFiltro('modo','todas')",'Todas as conversas')}
     ${chip(!!f.abertas,'Só abertas',"cvFiltro('abertas',"+(f.abertas?'false':'true')+")",'Esconde as conversas já fechadas no Talk')}
-    ${canais.length>1?`<select aria-label="Canal" onchange="cvFiltro('canal',this.value)"><option value="">Todos os canais</option>${canais.map(c=>`<option value="${esc(c)}" ${f.canal===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`:''}
+    ${canais.length>1?`<select aria-label="Canal" onchange="cvFiltro('canal',this.value)"><option value="">Todos os canais</option>${canais.map(c=>`<option value="${esc(c)}" ${f.canal===c?'selected':''}>${esc(c)}${cvCanalEncerrado(c)?' (encerrado)':''}</option>`).join('')}</select>`:''}
     <select aria-label="Quem é" onchange="cvFiltro('selo',this.value)"><option value="">Quem é: todos</option>${Object.entries(CV_SELO).map(([k,s])=>`<option value="${k}" ${f.selo===k?'selected':''}>${s[2]} ${esc(s[0])}</option>`).join('')}</select>
     <input type="search" placeholder="🔎 nome ou telefone" value="${esc(f.busca)}" aria-label="Buscar conversa" oninput="cvFiltro('busca',this.value)">
     <button class="btn btn-s btn-mini" style="min-height:44px" onclick="cvSincronizar()" ${CV.sinc?'disabled':''} title="Pede ao servidor pra ler o Talk agora (ele já lê sozinho a cada 10 min)">${CV.sinc?'⏳ lendo…':'🔄 Sincronizar agora'}</button>
@@ -25682,7 +25713,7 @@ function cvPainelHtml(ch){
         <button class="btn btn-ghost btn-mini" onclick="cvRecarregar('${esc(jsq(ch.id))}')" title="Relê as mensagens desta conversa">↻</button>
       </div>
       ${cvSugHtml(ch)}
-      <div style="font-size:11px;color:var(--muted)">Só leitura: responder é sempre você ou o Victor, pelo WhatsApp ou pelo Talk.</div>
+      <div style="font-size:11px;color:var(--muted)">Só leitura: responder é sempre você ou a Rebeca, pelo WhatsApp ou pelo Talk.</div>
     </div>
     ${msgs? (msgs.length? `<div class="cv-msgs">${cvMsgsHtml(msgs)}</div>`
       : `<div style="padding:16px;color:var(--muted);font-size:13px">Nenhuma mensagem guardada desta conversa ainda.</div>`)
