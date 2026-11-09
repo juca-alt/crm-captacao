@@ -2,7 +2,15 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — C' (Victor saiu) PRONTO NO BRANCH · v8.90 · aguardando OK dele
+## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.91 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
+
+- **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
+- **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
+- **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
+- **Ele:** ligar 🌟 Embaixadores pra Rebeca no Painel Master e revisar com "Usar o app como"; mandar a mensagem de boas-vindas; ajustar o compartilhamento externo da agenda no Google Workspace.
+- **Próximo no Code:** L2 → J → G → F (com L3).
+
+## (anterior) 09/11/2026 (noite) — C' (Victor saiu) pronto no branch
 
 - **Ordem dele:** C' → L (L0 primeiro) → J → G → F (com o L3). K (transcrição) parado.
 - **App (v8.90, portão verde 6/6):** triagem sem 🔵 (MO/VG/outros seguros → 🔴 Gustavo; classificação antiga "vitor" conta como 🔴); "Para quem" sem Victor; "Usar o app como" só pra quem é delegado (Rebeca); Solicitações e Agenda & Tarefas com Rebeca no lugar do Victor (chave interna `victor` mantida por compatibilidade); canal "Vitor - Corporativo" = ⚪ encerrado no vigia (nunca vermelho) e escondido em Conversas por padrão; aviso **AGENDA-LIVRE-V1**: agenda do dono compartilhada só com disponibilidade → "peça ao Gustavo a permissão de edição".

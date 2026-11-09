@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.90 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.91 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -22042,6 +22042,8 @@ function lpSelfCheck(){
             GDELEG['dono@exemplo.invalid']={ok:false,role:'freeBusyReader',ts:Date.now()}; const h1=gcalDonoAvisoHTML();
             GDELEG['dono@exemplo.invalid']={ok:true,role:'writer',ts:Date.now()}; const h2=gcalDonoAvisoHTML();
             window.souAdm=()=>true; GDELEG['dono@exemplo.invalid']={ok:false,role:'freeBusyReader',ts:Date.now()}; const h3=gcalDonoAvisoHTML();
+            { const s1=embSubtitulo(); window.souAdm=()=>false; const s2=embSubtitulo(); window.souAdm=()=>true;
+              ok('L1: Embaixadores — o quanto o embaixador recebe (50% da comissão) só aparece pro admin', /50%/.test(s1) && !/50%|comiss|R\$|receb/i.test(s2)); }
             ok('AGENDA-LIVRE-V1: agenda do dono compartilhada só com disponibilidade → aviso claro pro delegado pedir a edição (some com edição; admin não vê)',
                /só com disponibilidade/.test(h1) && /permissão de edição/.test(h1) && h2==='' && h3==='');
           } finally{ Object.keys(GDELEG).forEach(k=>delete GDELEG[k]); Object.assign(GDELEG,_d); DELEG.donos=_dl; window.souAdm=_sa; GCAL.conectado=_cn; } }
@@ -24990,8 +24992,11 @@ async function embCarregar(forca){ if(EMB.carregado&&!forca) return; if(!sb||!lo
     await Promise.all(EMB.lista.map(async p=>{ const c=await sb.from('lp_contatos').select('id',{count:'exact',head:true}).eq('dados->>embaixador_id',String(p.id)); EMB.qtd[p.id]=c.count||0; }));
     EMB.erro=''; EMB.carregado=true; }catch(e){ console.warn('embaixadores',e); EMB.erro=String(e&&e.message||e); } }
 /* ── tela ── */
+/* L1 (09/11/2026): a Rebeca acompanha os embaixadores, mas o quanto o embaixador recebe é só do admin (palavra dele: "valor a receber oculto pra ela"). */
+function embSubtitulo(){ return (typeof souAdm==='function'&&souAdm())? 'Quem indica contatos (normalmente clientes). Você atende; ele recebe 50% da comissão líquida do 1º ano.'
+  : 'Quem indica contatos (normalmente clientes). Você acompanha cada nome até a reunião com o Gustavo.'; }
 async function viewEmbaixadores(){ const m=$('#main'); if(!m) return;
-  const topo=`<h1 class="pg">🌟 Embaixadores da Proteção</h1><div class="sub">Quem indica contatos (normalmente clientes). Você atende; ele recebe 50% da comissão líquida do 1º ano.</div>`;
+  const topo=`<h1 class="pg">🌟 Embaixadores da Proteção</h1><div class="sub">${embSubtitulo()}</div>`;
   if(!logado()){ m.innerHTML=topo+`<div class="card pc-vazio">Entre com a sua conta pra ver os embaixadores.</div>`; return; }
   if(!EMB.carregado){ m.innerHTML=topo+`<div class="sub">Carregando…</div>`; await embCarregar(); if(VIEW!=='embaixadores') return; }
   if(EMB.erro&&EMB.erro!=='login'){ m.innerHTML=topo+`<div class="card pc-vazio">Não consegui ler os embaixadores (${esc(EMB.erro)}). <button class="btn btn-s btn-mini" onclick="embCarregar(true).then(viewEmbaixadores)">Tentar de novo</button></div>`; return; }
@@ -25000,7 +25005,7 @@ async function viewEmbaixadores(){ const m=$('#main'); if(!m) return;
   m.innerHTML=topo+(EMB.lista.length?`<div class="emb-grade">${EMB.lista.map(p=>`<div class="card emb-card">
       <div class="emb-nome">🌟 ${esc(p.nome)}</div>
       <div class="emb-mut">${embEmailOk(p)?esc(p.email):'⚠️ e-mail pendente (o login dele no portal precisa)'}</div>
-      <div class="emb-mini"><button class="btn btn-ghost" onclick="embEmail(${p.id})">✏️ E-mail</button><button class="btn btn-ghost" ${embEmailOk(p)?'':'disabled'} onclick="embConvidar(${p.id})">✉️ Convidar pro portal</button><button class="btn btn-ghost" ${embEmailOk(p)?'':'disabled'} onclick="embLinkAcesso(${p.id})">🔗 Link de acesso</button></div>
+      <div class="emb-mini">${souAdm()?`<button class="btn btn-ghost" onclick="embEmail(${p.id})">✏️ E-mail</button>`:''}<button class="btn btn-ghost" ${embEmailOk(p)?'':'disabled'} onclick="embConvidar(${p.id})">✉️ Convidar pro portal</button><button class="btn btn-ghost" ${embEmailOk(p)?'':'disabled'} onclick="embLinkAcesso(${p.id})">🔗 Link de acesso</button></div>
       <div class="emb-num"><b>${EMB.qtd[p.id]||0}</b> nome(s) importado(s)</div>
       ${EMB.qtd[p.id]?`<button class="btn btn-s" style="min-height:44px;margin-top:10px;width:100%" onclick="embAbrir(${p.id})">📋 Ver a lista e escolher quem esquentar</button>`:''}
       <button class="btn btn-s" style="min-height:44px;margin-top:8px;width:100%" onclick="embAdicionar(${p.id})">➕ Adicionar um nome</button>
@@ -25064,7 +25069,7 @@ function embDetalheHTML(p){ const L=EMB.leads, f=EMB.f||{};
   if(!L.length) return topo+`<div class="card pc-vazio">Nenhum nome importado ainda. Use 📥 Importar planilha.</div>`;
   const ce=embContar(L), cg=embContar(L,'gi'), cp=embContar(L,'pessoa_chave');
   const chip=(g,v,rot,n)=>`<button class="emb-chip${f[g]===v?' on':''}" onclick="embFiltro('${g}','${v}')">${rot} <b>${n||0}</b></button>`;
-  return topo+`<div class="sub"><span class="emb-so-cel">🌟 <b>${esc(p.nome)}</b> · </span>${L.length} nome(s) · ordem: renda estimada, maior primeiro · tocar numa etapa filtra a lista</div>
+  return topo+`<div class="sub"><span class="emb-so-cel">🌟 <b>${esc(p.nome)}</b> · </span>${L.length} nome(s) · ordem: ${souAdm()?'renda estimada, maior primeiro':'maior potencial primeiro'} · tocar numa etapa filtra a lista</div>
     <div class="emb-etps">${EMB_ETAPAS.map(([k,r])=>`<button class="emb-etp etq-${k}${f.etapa===k?' on':''}" onclick="embFiltro('etapa','${k}')"><b>${ce[k]||0}</b><span>${r}</span></button>`).join('')}</div>
     <div class="emb-filtros">
       <div class="emb-fgrp"><span class="emb-mut">GI</span>${['A','B','C'].map(g=>chip('gi',g,g,cg[g])).join('')}</div>
@@ -25081,7 +25086,7 @@ function embCorpoHTML(){ const L=EMB.leads||[], vis=embFiltrar(L,EMB.f), lim=EMB
     const ns=(EMB.notas||{})[l.id]||[], un=ns.length?ns[ns.length-1]:null;
     const miolo=`<span class="emb-r-nome"><b>${esc(l.nome||'')}</b>${sub?`<span class="emb-mut">${esc(sub)}</span>`:''}${un?`<span class="emb-nota-ult">${un.por==='equipe'?'💼':'🗨️'} ${esc(un.texto||((un.anexos||[]).length?'📎 anexo':''))}</span>`:''}</span>
       <span class="emb-r-tags">${ns.length||l.etapa!=='mapeado'?`<button class="emb-nota-bt" title="Jornada (linha do tempo com o embaixador)" onclick="event.preventDefault();event.stopPropagation();embJornadaVer('${esc(l.id)}')">🕓${ns.length?' '+ns.length:''}</button>`:''}${l.gi?`<span class="emb-gi gi-${esc(l.gi)}">GI ${esc(l.gi)}</span>`:''}${l.pessoa_chave?`<span class="emb-pc">PC ${esc(l.pessoa_chave)}</span>`:''}<span class="emb-etq etq-${esc(l.etapa)}">${esc(ETQ[l.etapa]||l.etapa||'')}</span></span>
-      <span class="emb-renda">${brl0(l.renda)}</span>`;
+      ${souAdm()?`<span class="emb-renda">${brl0(l.renda)}</span>`:''}`;
     return pode?`<label class="emb-row${sel.has(l.id)?' on':''}"><input type="checkbox" ${sel.has(l.id)?'checked':''} onchange="embMarcar('${esc(l.id)}',this.checked)">${miolo}</label>`
       :`<div class="emb-row emb-row-fixa"><span class="emb-ck-vazio"></span>${miolo}</div>`; };
   return `<div class="emb-acoes">
@@ -25137,7 +25142,7 @@ function embAdicionar(id){ const p=EMB.lista.find(x=>x.id===id); if(!p) return;
     <div class="emb-form">
       <label class="emb-f-full">Nome *<input id="emb-a-nome" autocomplete="off"></label>
       <label>Telefone<input id="emb-a-telefone" inputmode="tel" autocomplete="off"></label>
-      <label>Renda estimada (R$)<input id="emb-a-renda" inputmode="numeric" autocomplete="off"></label>
+      ${souAdm()?`<label>Renda estimada (R$)<input id="emb-a-renda" inputmode="numeric" autocomplete="off"></label>`:''}
       <label>Grau de intimidade${sel('gi',['','A','B','C'])}</label>
       <label>Pessoa-chave${sel('pessoa_chave',['','A','B'])}</label>
       <label>Profissão<input id="emb-a-profissao" autocomplete="off"></label>
