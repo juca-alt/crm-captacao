@@ -1,6 +1,6 @@
 // deno test supabase/functions/umbler/nucleo_test.ts --allow-read
 import { assert, assertEquals } from "jsr:@std/assert@1";
-import { cmpData, coletarMembros, emDia, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, pick, quemEnviou, soDigitos, tData } from "./nucleo.ts";
+import { cmpData, coletarMembros, cpfOk, luhnOk, mascararObj, mascararSensivel, emDia, extrairDoWebhook, itens, mapChat, mapMensagem, orgDoMe, pick, quemEnviou, soDigitos, tData } from "./nucleo.ts";
 
 const DONO = "dono@teste";
 
@@ -145,4 +145,40 @@ Deno.test("T4: sem msgs_ate nunca está em dia; sem última do chat está; data 
   assertEquals(cmpData("lixo", "2026-11-07T22:00:00Z"), null);
   assert(!emDia("lixo", "2026-11-07T22:00:00+00:00"));
   assertEquals(tData(null), NaN);
+});
+
+// ── SENSIVEL-V1 (09/11/2026): cartão e CPF mascarados na entrada (números de teste públicos, nenhum dado real) ──
+Deno.test("SENSIVEL-V1: cartão válido vira •••• + 4 últimos; com espaço, traço ou colado", () => {
+  assertEquals(mascararSensivel("meu cartão 4111 1111 1111 1111 ok"), "meu cartão •••• 1111 ok");
+  assertEquals(mascararSensivel("5555-5555-5555-4444"), "•••• 4444");
+  assertEquals(mascararSensivel("cartao:4111111111111111."), "cartao:•••• 1111.");
+});
+Deno.test("SENSIVEL-V1: número que não é cartão fica intacto (Luhn falha, começa com 1/2/7–9, pedaço de boleto, telefone)", () => {
+  assertEquals(mascararSensivel("4111 1111 1111 1112"), "4111 1111 1111 1112");            // Luhn falha
+  assertEquals(mascararSensivel("apólice 1234567890123452"), "apólice 1234567890123452");   // começa com 1
+  const boleto = "34191.79001 01043.510047 91020.150008 1 98170000010000";
+  assertEquals(mascararSensivel(boleto), boleto);                                             // sequência maior que 19 dígitos
+  assertEquals(mascararSensivel("+55 81 99999-0000"), "+55 81 99999-0000");
+  assertEquals(mascararSensivel("+55 81 99000-0006"), "+55 81 99000-0006");                // telefone com DDI que passaria no Luhn (inventado)
+});
+Deno.test("SENSIVEL-V1: CPF formatado ou solto com dígitos verificadores certos vira ***", () => {
+  assertEquals(mascararSensivel("cpf 111.444.777-35"), "cpf ***.***.***-**");
+  assertEquals(mascararSensivel("11144477735"), "***.***.***-**");
+  assertEquals(mascararSensivel("111.444.777-36"), "111.444.777-36");                        // dígito errado
+  assertEquals(mascararSensivel("11111111111"), "11111111111");                              // repetido não é CPF
+  assert(cpfOk("11144477735") && !cpfOk("11144477736") && luhnOk("4111111111111111") && !luhnOk("4111111111111112"));
+});
+Deno.test("SENSIVEL-V1: mapMensagem e mapChat gravam texto, prévia e bruto já mascarados; telefone e id intactos", () => {
+  const m = { id: "m9", source: "Contact", messageType: "Text", content: "segue 4111 1111 1111 1111 e cpf 111.444.777-35", file: { caption: "cpf 11144477735" }, chat: { id: "c9" } };
+  const r = mapMensagem(m, "c9", DONO)!;
+  assertEquals(r.texto, "segue •••• 1111 e cpf ***.***.***-**");
+  assertEquals((r.bruto as any).content, "segue •••• 1111 e cpf ***.***.***-**");
+  assertEquals((r.bruto as any).file.caption, "cpf ***.***.***-**");
+  assertEquals(m.content, "segue 4111 1111 1111 1111 e cpf 111.444.777-35");   // não altera o objeto original
+  const c = { id: "c9", contact: { phoneNumber: "5581999990000" }, lastMessage: { id: "m9", content: "cartão 5555555555554444" } };
+  const rc = mapChat(c, DONO, "org")!;
+  assertEquals(rc.ultima_msg_previa, "cartão •••• 4444");
+  assertEquals((rc.bruto as any).lastMessage.content, "cartão •••• 4444");
+  assertEquals((rc.bruto as any).contact.phoneNumber, "5581999990000");
+  assertEquals(mascararObj({ _texto: "11144477735", n: 4111111111111111 }), { _texto: "***.***.***-**", n: 4111111111111111 });
 });
