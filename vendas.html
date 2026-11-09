@@ -3263,27 +3263,29 @@ function iniDiaDados(){ const hj=hojeISO(), lim72=isoAddDias(hj,3);
   /* mensagem programada = lembrete pro cliente que o CRM agendou (véspera/dia da reunião) e sai nas próximas 72 h */
   const msgs=ag.filter(x=>x.t.lembrarReuniao&&!x.t.feito&&x.t.quando&&x.t.quando<=lim72);
   return {hj,reun,niver,lig:[...lig.values()],crit,msgs}; }
-function iniPendDia(){ const l=(typeof inicioAgora==='function')?inicioAgora().filter(i=>i.k!=='dup'):[];
-  const tot=l.reduce((a,i)=>a+i.n,0), passou=l.filter(i=>i.k==='reun'||i.k==='atras'||i.k==='venc').reduce((a,i)=>a+i.n,0);
+/* PARIDADE (print do Global 09/11: "6 pendências abertas, sendo 6 que já passaram da hora" = os 6 atrasos críticos):
+   apólice em atraso entra como pendência só quando é CRÍTICA, e crítica já passou da hora. O resto vem do Agora. */
+function iniPendDia(crit){ crit=crit||iniAtrasoCrit(); const l=(typeof inicioAgora==='function')?inicioAgora().filter(i=>i.k!=='dup'&&i.k!=='cob'):[];
+  const tot=l.reduce((a,i)=>a+i.n,0)+crit.n, passou=l.filter(i=>i.k==='reun'||i.k==='atras'||i.k==='venc').reduce((a,i)=>a+i.n,0)+crit.n;
   return {l,tot,passou}; }
 /* UMA ação: atraso crítico manda (dinheiro saindo da carteira); senão a pendência mais urgente do Agora */
 function iniAcaoDia(p,crit){ if(crit.n) return {txt:`Comece pelos ${crit.n} ${crit.n===1?'atraso crítico':'atrasos críticos'}: ${brl(crit.v)} em risco`,bt:'Abrir a Lista de Atraso',acao:"FAT.lente='crit';irPara('lp-atrasos')"};
   const i=p.l[0]; return i?{txt:`Comece por: ${i.n} ${i.txt}`,bt:'Abrir',acao:i.acao}:null; }
-function iniDiaBloco(){ const p=iniPendDia(), d=iniDiaDados(), a=iniAcaoDia(p,d.crit);
+function iniDiaBloco(){ const d=iniDiaDados(), p=iniPendDia(d.crit), a=iniAcaoDia(p,d.crit);
   const resumo=p.tot?`${p.tot} ${p.tot===1?'pendência':'pendências'}${p.passou?` · <b style="color:var(--verm)">${p.passou} passa${p.passou===1?'ou':'ram'} da hora</b>`:''}`:'tudo em dia ✓';
   const corpo=!p.tot&&!d.crit.n?`<div class="dia-ok"><span class="ag-ic">✓</span><div><b>Nada pra resolver hoje.</b><span>Sem pendência aberta e sem atraso crítico.</span></div></div>`
-    :`<div class="dia-hd"><div class="dia-n"><b>${p.tot}</b><span>${p.tot===1?'pendência aberta':'pendências abertas'}</span></div><div class="dia-n${p.passou?' ruim':''}"><b>${p.passou}</b><span>${p.passou===1?'passou da hora':'passaram da hora'}</span></div></div>
+    :`<div class="dia-hd"><div class="dia-n"><b>${p.tot}</b><span>${p.tot===1?'pendência aberta':'pendências abertas'}${p.passou&&p.passou===p.tot?', todas já passaram da hora':''}</span></div><div class="dia-n${p.passou?' ruim':''}"><b>${p.passou}</b><span>${p.passou===1?'passou da hora':'passaram da hora'}</span></div></div>
       ${a?`<button class="dia-acao" onclick="${a.acao}"><span>👉 ${esc(a.txt)}</span><b>${esc(a.bt)} ›</b></button>`:''}`;
   return iniBloco('dia','☀️ O seu dia · para resolver hoje',resumo,corpo); }
 function iniDiaCardsBloco(){ const d=iniDiaDados(); const cards=[
     ['🤝','Reuniões hoje',d.reun.length,d.reun.slice(0,2).map(x=>(x.t.hora?x.t.hora+' ':'')+String(x.c.nome||'').split(' ')[0]).join(' · ')||'nenhuma marcada',"irPara('agenda')"],
-    ['🎂','Aniversários hoje',d.niver.length,d.niver.slice(0,2).map(p=>String(p.nome||'').split(' ')[0]).join(' · ')||'ninguém hoje',"irPara('lp-aniversario')"],
-    ['📞','Ligar depois vencidos',d.lig.length,d.lig.length?'pediu retorno ou ligação atrasada':'nada vencido',"irPara('agenda')"],
+    ['🎂','Aniversários hoje',d.niver.length,d.niver.slice(0,2).map(p=>String(p.nome||'').split(' ')[0]).join(' · ')||'ninguém faz hoje',"irPara('lp-aniversario')"],
+    ['📞','Ligar depois vencidos',d.lig.length,d.lig.length?'pediu retorno ou ligação atrasada':'nenhum vencido',"irPara('agenda')"],
     ['🔴','Atrasos críticos',d.crit.n,d.crit.n?brl(d.crit.v)+' em risco':'nenhum ≥ 50 dias',"FAT.lente='crit';irPara('lp-atrasos')"],
     ['🔁','Renovações em 30 dias',null,'falta data na carteira',"irPara('cart-clientes')"],
-    ['💬','Mensagens programadas · 72 h',d.msgs.length,d.msgs.length?'lembretes de reunião pro cliente':'nenhuma nas próximas 72 h',"irPara('agenda')"]];
+    ['💬','Mensagens programadas · 72 h',d.msgs.length,d.msgs.length?'lembretes de reunião · saem em 72 horas':'nenhuma sai em 72 horas',"irPara('agenda')"]];
   const resumo=[d.reun.length?d.reun.length+' reuni'+(d.reun.length===1?'ão':'ões'):'',d.niver.length?d.niver.length+' 🎂':'',d.crit.n?d.crit.n+' crític'+(d.crit.n===1?'o':'os'):''].filter(Boolean).join(' · ')||'dia tranquilo';
-  return iniBloco('dia-cards','📋 Hoje em 6 números',resumo,`<div class="dia-g">${cards.map(([ic,t,n,sub,ac])=>`<button class="dia-c${n?' on':''}${n==null?' sd':''}" onclick="${ac}" title="Abrir ${esc(t)}"><span class="dia-c-ic">${ic}</span><b>${n==null?'—':n}</b><span class="dia-c-t">${esc(t)}</span><span class="dia-c-s">${esc(sub)}</span></button>`).join('')}</div>`); }
+  return iniBloco('dia-cards','📋 Hoje em 6 números',resumo,`<div class="dia-g">${cards.map(([ic,t,n,sub,ac])=>`<button class="dia-c${n?' on':''}${n==null?' sd':''}${n&&t==='Atrasos críticos'?' crit':''}" onclick="${ac}" title="Abrir ${esc(t)}"><span class="dia-c-ic">${ic}</span><b>${n==null?'—':n}</b><span class="dia-c-t">${esc(t)}</span><span class="dia-c-s">${esc(sub)}</span></button>`).join('')}</div>`); }
 /* ── OLHO GLOBAL: esconde todo R$ do Início (por aparelho). Mascara na saída, então vale pra qualquer bloco, de hoje e do futuro ── */
 const OLHO_CHAVE='crmlp_olho_v1';
 function olhoFechado(){ try{ return localStorage.getItem(OLHO_CHAVE)==='0'; }catch(_){ return false; } }
@@ -3305,7 +3307,7 @@ window.olhoToggle=olhoToggle;
 .dia-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .dia-c{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"i n" "t t" "s s";gap:2px 8px;align-items:center;text-align:left;border:1px solid var(--linha);background:#fff;border-radius:12px;padding:10px 12px;cursor:pointer;color:inherit;font:inherit;min-width:0}
 .dia-c:hover{border-color:#cbd5e1;background:#f8fafc}.dia-c-ic{grid-area:i;font-size:18px}.dia-c b{grid-area:n;font-size:24px;line-height:1;font-variant-numeric:tabular-nums;justify-self:end}
-.dia-c.on b{color:var(--primary,#2563eb)}.dia-c.sd b{color:var(--muted)}
+.dia-c.on b{color:var(--primary,#2563eb)}.dia-c.sd b{color:var(--muted)}.dia-c.crit{border-color:#fca5a5;background:#fffafa}.dia-c.crit b,.dia-c.crit .dia-c-s{color:#dc2626}
 .dia-c-t{grid-area:t;font-size:13px;font-weight:650}.dia-c-s{grid-area:s;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ini-olho{min-width:44px}
 @media (max-width:760px){ .dia-g{grid-template-columns:1fr 1fr}.dia-c{min-height:92px}.dia-acao{min-height:52px} }`; document.head.appendChild(st); })();
@@ -22584,6 +22586,8 @@ function lpSelfCheck(){
            (()=>{ const p={l:[{k:'atras',n:3,txt:'tarefas atrasadas',acao:"irPara('agenda')"}],tot:3,passou:3};
              const a1=iniAcaoDia(p,{n:6,v:2692}), a2=iniAcaoDia(p,{n:0,v:0}), a3=iniAcaoDia({l:[],tot:0,passou:0},{n:0,v:0});
              return /6 atrasos críticos/.test(a1.txt)&&/2\.692/.test(a1.txt)&&/FAT\.lente='crit'/.test(a1.acao)&&/lp-atrasos/.test(a1.acao)&&a2.acao==="irPara('agenda')"&&a3===null; })());
+        ok('INICIO-GLOBAL-V1 (T1): paridade com o Global — atraso crítico conta como pendência que JÁ passou da hora (e o total do atraso não entra em dobro)',
+           (()=>{ const p=iniPendDia({n:6,v:2692}), p0=iniPendDia({n:0,v:0}); return p.tot-p0.tot===6&&p.passou-p0.passou===6; })());
         ok('INICIO-GLOBAL-V1 (T1): atraso crítico = o MESMO cálculo da Lista de Atraso (atV2Kpis, ≥ 50 dias, sumidas e resolvidas fora)',
            (()=>{ const _i=AT.itens; try{ const hj=atHojeLocal(), dd=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10); };
              AT.itens=[{apolice:'900000001',vencido_em:dd(55),premio:100,status:'Sem tratativa'},{apolice:'900000002',vencido_em:dd(20),premio:50,status:'Sem tratativa'},
