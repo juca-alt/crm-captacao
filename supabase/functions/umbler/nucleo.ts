@@ -74,8 +74,6 @@ export function emDia(ultimaDoChat: unknown, msgsAte: unknown): boolean {
   return c !== null && c <= 0;
 }
 
-/** UMBLER-T3 (07/11): a API às vezes manda o remetente só com o id → o nome sai do mapa de membros
- *  (o mesmo do atendente do chat). Antes, 214 mensagens nossas ficavam sem autor ("nós"). */
 // ── SENSIVEL-V1 (09/11/2026) — palavra dele: "clientes mandam número de cartão e CPF no WhatsApp… mascarar na entrada" ──
 // Cartão: sequência INTEIRA de 13–19 dígitos (pode ter espaço/ponto/traço entre eles), começando com 3–6 e válida no
 // Luhn → "•••• 1234". CPF: 000.000.000-00 ou 11 dígitos soltos com os dígitos verificadores certos → "***.***.***-**".
@@ -110,6 +108,8 @@ export function mascararObj(o: unknown, prof = 0): unknown {
   return r;
 }
 
+/** UMBLER-T3 (07/11): a API às vezes manda o remetente só com o id → o nome sai do mapa de membros
+ *  (o mesmo do atendente do chat). Antes, 214 mensagens nossas ficavam sem autor ("nós"). */
 export function mapMensagem(m: unknown, chatId: string, dono: string, membros: Record<string, string> = {}): Obj | null {
   const id = str(pick(m, "id"));
   if (!id) return null;
