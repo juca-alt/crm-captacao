@@ -2,6 +2,22 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — INÍCIO COM PARIDADE GLOBAL · T1 PRONTO NO BRANCH `claude/busy-galileo-dh6sti` (v8.90, NÃO publicado) · **a sessão do Mac assume T2→T7** (decisão dele: "A, a do Mac assume")
+
+- **Spec:** PROMPT_CODE "Início (painel) com paridade Global CRM · 09/11/2026" (backlog Notion "MELHORIAS DO CRM · por setor", linha "Início completo (paridade Global)"). Tickets: T1 olho global + blocos 1–2 · T2 bloco 3 (confirmar saídas do atraso 60+) · T3 blocos 4 e 10 · T4 bloco 5 · T5 blocos 6–7 (7 só se existir motor de cotação no main) · T6 blocos 8–9 · T7 bloco 11 (mapa, só sem chave). Um ticket por vez, para pra revisão com print lado a lado do Global, nada publicado sem OK dele.
+- **Por que mudou de sessão:** a sessão da nuvem não alcança o Chrome dele; a do Mac (Claude Code local, pasta `crm-captacao-main`, Remote Control ligado) usa o Claude in Chrome com o Global logado. **Global = SÓ LEITURA** (nunca "Pagamento confirmado", "Cancelada por inadimplência", "Importar extratos").
+- **T1 (INICIO-GLOBAL-V1, vendas.html, perto de `inicioAgora`):**
+  - `iniDiaBloco()` "☀️ O seu dia · para resolver hoje" e `iniDiaCardsBloco()` "📋 Hoje em 6 números", 1º e 2º no `pordRender` (chaves `dia`, `dia-cards` em PORD_NOMES/INI_PADRAO; nascem fechados).
+  - Fonte única: atrasos críticos = `iniAtrasoCrit()` → `atV2Kpis` da Lista de Atraso (≥ 50 dias, sumidas e resolvidas fora); reuniões/ligar depois/mensagens = `agendaItens()` (ligar depois = tarefa ligar/whats atrasada ∪ `taDelayTipo==='Retornar'`; mensagens = tarefas `lembrarReuniao` em ≤ 72 h); aniversários = `niverItens`.
+  - **PARIDADE-V2** (base real dele deu 126 · 74 contra 6 · 6 do Global): "para resolver hoje" = SOMA DOS CARDS do dia; "passou da hora" = críticos + ligar depois. Ação única: crítico → `FAT.lente='crit';irPara('lp-atrasos')`; senão o 1º card com número.
+  - **Olho global:** botão "👁 valores" ao lado de "organizar painel"; `olhoAplicar()` mascara todo `R$ …` (texto e title) do #main do Início; `localStorage crmlp_olho_v1`.
+  - Visual aprovado por ele ("gostei do VISUAL T1"). Card crítico com borda vermelha. 5 autotestes `INICIO-GLOBAL-V1 (T1)`; portão verde (55 telas × 6).
+- **Abertos do T1:**
+  1. **Críticos 4 (nosso) × 6 (Global, R$ 2.692)** — listar apólice a apólice no Global (Lista de Atraso › críticos) e no nosso (🔴 Críticas): corte de dias? relatório de atraso mais antigo? apólice faltando? Ajustar só com o porquê na mão.
+  2. **Renovações em 30 dias:** a carteira importada não traz data de emissão/aniversário (conferido 23/10) → card mostra "—" + "falta data na carteira". O Global tem o número (0 em 09/11). **Decisão pendente dele:** de qual relatório vem a data.
+  3. Carteira importada é de 09/09 — paridade numérica completa só depois de importar a carteira atual.
+- **Próximo:** fechar os 2 primeiros abertos → OK dele → T2 (o bloco amarelo do Global "N apólice(s) saíram da lista com 60+ dias… pagamento confirmado ou cancelada?" com contadores resolvidas · canceladas · a confirmar).
+
 ## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89), AGUARDA 3 OKs
 
 - **B ✅ (rodado por ele):** Rebeca = `rebeccaayla00@…` (e-mail só no banco). Conferido: papel lp, 19 módulos, recs=false, sem MFO, base do Gustavo, RC no time dele. Ela ainda NÃO entrou no CRM.
