@@ -9,6 +9,7 @@
 - **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
 - **Ele:** ligar 🌟 Embaixadores pra Rebeca no Painel Master e revisar com "Usar o app como"; mandar a mensagem de boas-vindas; ajustar o compartilhamento externo da agenda no Google Workspace.
 - **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
+- **v8.92 no ar (PR #337) — MENU-POR-PESSOA-V1:** 5 chaves de menu no Painel de Acessos (Solicitações, Estoque, SitPlan & TA, Módulos, Telas antigas), nascem ligadas. Rebeca (SQL rodado por ele): sem Revisão, Solicitações, Estoque, SitPlan & TA e Telas antigas; **Módulos religado** porque sem ele ela ficava sem caminho pra Conversas/Carteira/Lista de Atraso (ela não tem 📌 fixados — o "Usar o app como" mostra os 📌 DELE). Ideia guardada: "menu fixo por pessoa" (admin escolhe os 📌 de cada um).
 - **Próximo no Code:** L2 → J → G → F (com L3).
 
 ## (anterior) 09/11/2026 (noite) — C' (Victor saiu) pronto no branch
