@@ -19,8 +19,36 @@
 - **Próximo:** fechar os 2 primeiros abertos → OK dele → T2 (o bloco amarelo do Global "N apólice(s) saíram da lista com 60+ dias… pagamento confirmado ou cancelada?" com contadores resolvidas · canceladas · a confirmar).
 
 ## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89), AGUARDA 3 OKs
+## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.91 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
 
-- **B ✅ (rodado por ele):** Rebeca = `rebeccaayla00@…` (e-mail só no banco). Conferido: papel lp, 19 módulos, recs=false, sem MFO, base do Gustavo, RC no time dele. Ela ainda NÃO entrou no CRM.
+- **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
+- **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
+- **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
+- **Ele:** ligar 🌟 Embaixadores pra Rebeca no Painel Master e revisar com "Usar o app como"; mandar a mensagem de boas-vindas; ajustar o compartilhamento externo da agenda no Google Workspace.
+- **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
+- **Próximo no Code:** L2 → J → G → F (com L3).
+
+## (anterior) 09/11/2026 (noite) — C' (Victor saiu) pronto no branch
+
+- **Ordem dele:** C' → L (L0 primeiro) → J → G → F (com o L3). K (transcrição) parado.
+- **App (v8.90, portão verde 6/6):** triagem sem 🔵 (MO/VG/outros seguros → 🔴 Gustavo; classificação antiga "vitor" conta como 🔴); "Para quem" sem Victor; "Usar o app como" só pra quem é delegado (Rebeca); Solicitações e Agenda & Tarefas com Rebeca no lugar do Victor (chave interna `victor` mantida por compatibilidade); canal "Vitor - Corporativo" = ⚪ encerrado no vigia (nunca vermelho) e escondido em Conversas por padrão; aviso **AGENDA-LIVRE-V1**: agenda do dono compartilhada só com disponibilidade → "peça ao Gustavo a permissão de edição".
+- **Edge `triagem`:** sem destino `vitor` (7 testes ok) — **deploy só com OK dele**.
+- **SQL `supabase/migrations/victor_suspenso_2026-11-09.sql`** (e-mail de exemplo no repo; o real só no chat): foto do antes em `app_settings`, módulos todos false, delegações Gustavo/Daniel suspensas por UPDATE (`#suspenso-2026-11-09`), ban no auth até 2999, fora dos times, triagem 🔵→🔴. Nada de DELETE. Religar comentado no fim. **Ele roda.**
+- "💼 Victor" fixo em Embaixadores: não existe no código — o autor do post sai do nome do login; com o ban ele não posta mais. Não havia posts gravados.
+- Lembrete de 17/11 (Umbler/Victor) **apagado da agenda** (feito pela Umbler já).
+- À mão (ele): tirar o acesso do Victor à pasta do Drive e à agenda, se houver.
+- Autoteste antigo tinha o e-mail real do Victor → trocado por e-mail inventado.
+
+## 🟢 RETOMAR AQUI — 09/11/2026 (fim de tarde) — v8.89 NO AR (PR #334, OK dele; Pages conferido por hash `b26e5ae7ef68`) · triagem rodando
+
+- Funções no ar: `umbler` v6, `copiloto-sugerir` v7, `triagem` v1. SQL da triagem rodado por ele (tabela + cron às :05).
+- 1ª rodada (15:15): 25 conversas → 🔴 5 · 🟡 9 · 🔵 2 · ⚪ 9 (2 por regra, sem IA). Máx. 25 por rodada; o resto entra nas próximas.
+- Prompt de fluxo entregue pra sessão de organização (onboarding da Rebeca, Umbler, decisões C e K).
+- Próximo no Code: J → G → F → C.
+
+## 🟡 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89)
+
+- **B ✅ (rodado por ele):** Rebeca = `rebeca@…` (e-mail só no banco). Conferido: papel lp, 19 módulos, recs=false, sem MFO, base do Gustavo, RC no time dele. Ela ainda NÃO entrou no CRM.
 - **H ✅ SENSIVEL-V1:** `umbler` v6 no ar (cartão → •••• 1234; CPF → ***; Luhn/DV; telefone com DDI fora). Limpeza rodada por ele: 7 mensagens + 1 prévia; conferência = 0. SQL: `supabase/migrations/umbler_sensivel_2026-11-09.sql`.
 - **I (branch, v8.89, portão verde 55 × 6, prints 390/1280):**
   - parte 1 CV-ID-V1: nome e selo pelo telefone (Cliente · No funil · Recomendação · Estoque · Desconhecido) + filtro "Quem é";

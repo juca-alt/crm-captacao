@@ -1,7 +1,7 @@
 // ============================================================================
 //  Edge Function: triagem  (Supabase / Deno) — TRIAGEM-V1 (ticket I, parte 2 · 09/11/2026)
 //  Para cada conversa em que o CLIENTE falou por último (7 dias), decide o destino:
-//    gustavo 🔴 · rebeca 🟡 · vitor 🔵 · sem_acao ⚪  → grava em copiloto_fila_cache (só destino + motivo curto).
+//    gustavo 🔴 · rebeca 🟡 · sem_acao ⚪ (C': sem Victor)  → grava em copiloto_fila_cache (só destino + motivo curto).
 //  Só LÊ umbler_chats/umbler_mensagens; NUNCA escreve na Umbler nem envia mensagem (não há chamada à Umbler aqui).
 //  Reclassifica só quando chega mensagem nova (cache por ultima_msg_em). Cortesia ("ok", "obrigado") = sem IA.
 //  Entradas (verify_jwt OFF; cada uma com trava própria):
