@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.91 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.92 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -16251,7 +16251,7 @@ function hubSecoesHtml(secoes,filtro,tagPadrao,prefixo){
 const MOD_FIX_CHAVE='crmlp_mod_fixados_v1';
 function modFixKey(i){ return i&&(i.view||i.href)||''; }
 function modFixados(){ try{ const a=JSON.parse(localStorage.getItem(MOD_FIX_CHAVE)||'[]'); return Array.isArray(a)?a.map(String):[]; }catch(_){ return []; } }
-function modFixItens(){ const todos=HUB_SECOES.flatMap(s=>s.itens).filter(i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)));
+function modFixItens(){ const todos=HUB_SECOES.flatMap(s=>s.itens).filter(i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo))&&viewNoMenu(i.view));
   return modFixados().map(k=>todos.find(i=>modFixKey(i)===k)).filter(Boolean); }
 function modFixToggle(k){ const a=modFixados(); const ix=a.indexOf(k); if(ix>=0) a.splice(ix,1); else a.push(k);
   try{ localStorage.setItem(MOD_FIX_CHAVE,JSON.stringify(a)); }catch(_){}
@@ -16379,7 +16379,7 @@ function navOrdSalvar(){ const pins=NAV_ED.tirarPin||[];
 window.navOrdEditar=navOrdEditar; window.navOrdMover=navOrdMover; window.navOrdTirar=navOrdTirar; window.navOrdSepNovo=navOrdSepNovo; window.navOrdPadraoVolta=navOrdPadraoVolta; window.navOrdSalvar=navOrdSalvar;
 window.modFixToggle=modFixToggle; window.navFixRender=navFixRender;
 function viewModulos(){
-  const secs=hubSecoesHtml(HUB_SECOES,i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo)),'● módulo','mod');   /* PLANO-V1: card com `novo` só aparece pra quem a chave libera */
+  const secs=hubSecoesHtml(HUB_SECOES,i=>(!i.mod||modOn(i.mod))&&(!i.novo||novoOn(i.novo))&&viewNoMenu(i.view),'● módulo','mod');   /* PLANO-V1: card com `novo` só aparece pra quem a chave libera */
   $('#main').innerHTML=`<h1 class="pg">Módulos</h1><div class="sub">Tudo o que não é o dia a dia do funil, num lugar só. Abra a seção e toque no card. O <b>📌</b> do card põe (ou tira) o módulo do menu lateral — e em <b>↕️ Organizar menu</b> você põe tudo na ordem que quiser.</div>${hubBotoesHtml()}${secs}`;
 }
 
@@ -18177,7 +18177,15 @@ const MODS={
   'funil-unico':{label:'🎯 Funil novo — Vida Individual (quadro estilo Global, card completo, filtros salvos, "quem toca"). As telas antigas do funil vão pro grupo 🗄️ Telas antigas', def:false, views:['fu-vi']},
   'fu-mfo':{label:'🏢 Funil novo — MFO (VG + Prud. Demais + Multi Office) no mesmo quadro (precisa do Funil novo ligado)', def:false, views:['fu-mfo']},
   'ficha-ux2':{label:'🗂 Ficha nova (abas Negócio · Pessoa · Histórico, 4 ações no topo, estrelas e blocos MFO) — o card do funil novo abre direto nela', def:false, views:[]},
-  'agenda-global':{label:'🗓️ Agenda & Tarefas nova (Dia · Semana · Mês + Lista, lembrete pro cliente, Tarefas em lista/quadro) — substitui a Agenda de sempre pra quem tem', def:false, views:['ag-global']}
+  'agenda-global':{label:'🗓️ Agenda & Tarefas nova (Dia · Semana · Mês + Lista, lembrete pro cliente, Tarefas em lista/quadro) — substitui a Agenda de sempre pra quem tem', def:false, views:['ag-global']},
+  /* MENU-POR-PESSOA-V1 (09/11/2026): palavra dele (vendo como a Rebeca) "tira da Rebeca: Revisão de Proteção, Solicitações, Estoque de
+     Nomes, SitPlan & TA, Módulos, Telas antigas". Só MENU (o dado não muda; o Vida Individual continua puxando o Estoque). Nascem ligadas
+     (def:true) → ninguém perde nada; desliga por pessoa no Painel Master · Acessos. Grupo = ids do menu lateral. */
+  'menu-solicitacoes':{label:'Menu: 📨 Solicitações', def:true, views:['solicitacoes']},
+  'menu-estoque':{label:'Menu: 📦 Estoque de Nomes (o funil novo continua mostrando os nomes com TA)', def:true, views:['bn-estoque','bn-recs','bn-dups'], ids:['est-toggle','est-group']},
+  'menu-sitplan':{label:'Menu: 📞 SitPlan & TA', def:true, views:['bn-ta','bn-wa'], ids:['sp-toggle','sp-group']},
+  'menu-modulos':{label:'Menu: 🧩 Módulos (a central de todos os módulos)', def:true, views:['modulos']},
+  'menu-antigo':{label:'Menu: 🗄️ Telas antigas do funil', def:true, views:[], ids:['antigo-toggle','antigo-group']},
 };
 /* ═══ NOVO-PRIMEIRO-NA-MINHA-BASE-V1 (16/09/2026) ══════════════════════════════
    Regra fixa dele: "tudo que eu for criando primeiro fica na MINHA base. E só
@@ -18428,8 +18436,8 @@ async function perfilCarregar(){
 function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) b.style.display=logado()?'':'none'; const s=document.getElementById('tb-senha'); if(s) s.style.display=logado()?'':'none'; }catch(_){}   /* MINHA-SENHA-V2: 🔑 à vista no topo */
   const adm=$('#nav-lpadm'); if(adm) adm.style.display=(souAdm()&&!(typeof delegAtivo==='function'&&delegAtivo()))?'':'none';   /* vendo como outro: painel admin some da tela */
   Object.keys(MODS).forEach(k=>{
-    const on=modOn(k)&&(!MODS[k].requer||modOn(MODS[k].requer));   /* recs só aparece se o Base de Nomes estiver ligado */
-    (MODS[k].views||[]).forEach(v=>{ document.querySelectorAll(`.nav-btn[data-view="${v}"]`).forEach(b=>b.style.display=on?'':'none'); });
+    (MODS[k].views||[]).forEach(v=>{ const on=viewNoMenu(v);   /* recs só aparece se o Base de Nomes estiver ligado; MENU-POR-PESSOA-V1: e se o menu dela não esconde */
+      document.querySelectorAll(`.nav-btn[data-view="${v}"]`).forEach(b=>b.style.display=on?'':'none'); });
     if(MODS[k].grp){ const t=$('#'+MODS[k].grp+'-toggle'); if(t){ /* grupo SitPlan fica: a lista do dia é core */ } }
   });
   /* NOVO-SO-MEU no menu: item com data-novo só aparece pra quem a chave libera (depois do MODS, que pode ter ligado) */
@@ -18443,10 +18451,18 @@ function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) 
   document.querySelectorAll('.nav-grp-btn[data-pipe]').forEach(t=>{ const g=document.getElementById(t.id.replace('-toggle','-group')); if(!g) return;
     const vivo=[...g.querySelectorAll('.nav-btn[data-view]')].some(b=>b.style.display!=='none'); t.style.display=vivo?'':'none'; if(!vivo) g.style.display='none'; else g.style.display=''; });
   menuAntigoAplicar();
+  menuPorPessoaAplicar();
 }
+/* MENU-POR-PESSOA-V1: grupo inteiro do menu lateral some quando a chave de menu dela está desligada */
+function menuPorPessoaAplicar(){ Object.keys(MODS).forEach(k=>{ const ids=MODS[k].ids; if(!ids) return; const on=modOn(k);
+  ids.forEach(id=>{ const e=document.getElementById(id); if(!e) return;
+    if(!on){ e.dataset.mpp='1'; e.style.display='none'; e.hidden=true; }
+    else if(e.dataset.mpp){ delete e.dataset.mpp; if(k!=='menu-antigo'){ e.style.display=''; e.hidden=false; } } }); });   /* religou: volta (o antigo segue a regra própria dele) */
+  if(modOn('menu-antigo')) menuAntigoAplicarSo(); }
 /* MENU-ANTIGO-V1 (26/10, "menu A"): funil novo ligado → os 4 pipes antigos somem do lugar e aparecem no grupo
    "🗄️ Telas antigas do funil" (fechado, no fim). Desligado → menu de sempre. Segue a chave nos dois sentidos. */
-function menuAntigoAplicar(){ const on=novoOn('funil-unico'), at=document.getElementById('antigo-toggle'), ag=document.getElementById('antigo-group'); if(!at||!ag) return;
+function menuAntigoAplicar(){ menuAntigoAplicarSo(); }
+function menuAntigoAplicarSo(){ const on=novoOn('funil-unico'), at=document.getElementById('antigo-toggle'), ag=document.getElementById('antigo-group'); if(!at||!ag) return;
   if(on) document.querySelectorAll('.nav-grp-btn[data-pipe]').forEach(t=>{ t.style.display='none'; const g=document.getElementById(t.id.replace('-toggle','-group')); if(g) g.style.display='none'; });
   const vivo=on&&[...ag.querySelectorAll('.nav-btn[data-view]')].some(x=>x.style.display!=='none');
   at.hidden=!vivo; ag.hidden=!vivo; at.style.display=vivo?'':'none'; ag.style.display=vivo?'':'none'; }
@@ -22047,6 +22063,15 @@ function lpSelfCheck(){
             ok('AGENDA-LIVRE-V1: agenda do dono compartilhada só com disponibilidade → aviso claro pro delegado pedir a edição (some com edição; admin não vê)',
                /só com disponibilidade/.test(h1) && /permissão de edição/.test(h1) && h2==='' && h3==='');
           } finally{ Object.keys(GDELEG).forEach(k=>delete GDELEG[k]); Object.assign(GDELEG,_d); DELEG.donos=_dl; window.souAdm=_sa; GCAL.conectado=_cn; } }
+        { const _p=PERFIL; try{
+            PERFIL={email:'fulano@exemplo.invalid',papel:'lp',modulos:{backoffice:true,bn:true,'menu-solicitacoes':false,'menu-estoque':false,'menu-sitplan':false,'menu-modulos':false,'menu-antigo':false,revisao:false}};
+            const r1=!viewNoMenu('solicitacoes')&&viewNoMenu('lp-atrasos')&&!viewNoMenu('bn-estoque')&&!viewNoMenu('bn-ta')&&!viewNoMenu('modulos')&&!viewNoMenu('revisao')&&viewNoMenu('inicio');
+            aplicarGates(); const est=document.getElementById('est-toggle'), sp=document.getElementById('sp-toggle'), mo=document.querySelector('.sidebar .nav-btn[data-view="modulos"]');
+            const r2=(!est||est.style.display==='none')&&(!sp||sp.style.display==='none')&&(!mo||mo.style.display==='none');
+            PERFIL={email:'fulano@exemplo.invalid',papel:'lp',modulos:{backoffice:true,bn:true}};
+            const r3=viewNoMenu('solicitacoes')&&viewNoMenu('modulos')&&viewNoMenu('bn-ta');
+            ok('MENU-POR-PESSOA-V1: menu desligado por pessoa some (Solicitações sem derrubar a Lista de Atraso; grupos Estoque/SitPlan/Antigas; Módulos); sem a chave, nasce ligado', r1&&r2&&r3);
+          } finally{ PERFIL=_p; try{ aplicarGates(); }catch(_){} } }
         { const _sg=CV.sug; try{
             CV.sug={id:'a',sug:{categoria:'documentos',precisa_gustavo:false,motivo:'pediu o formulário',rascunho:'Oi, Fulano! Obrigado, vou conferir e te retorno.'}};
             const hs=cvSugHtml(A), ia=cvMsgsParaIA([{de:'cliente',tipo:'Text',texto:'oi'},{de:'nos',tipo:'Text',texto:'nota',privada:true},{de:'cliente',tipo:'Audio',texto:''}]);
@@ -24399,7 +24424,9 @@ function mapaDesenhar(gr){ if(!document.getElementById('mapa-el')) return; mapaL
     setTimeout(()=>{ try{ _mapa.invalidateSize(); const sel=pts.find(g=>g.k===MAPA_F.sel); if(sel) _mapa.setView([sel.lat,sel.lng],16); else if(b.length===1) _mapa.setView(b[0],15); else _mapa.fitBounds(b,{padding:[30,30],maxZoom:16}); }catch(_){} },60);
   }catch(e){ console.warn('mapa',e); } }); }
 function maisRapidoFechar(){ const b=document.getElementById('mais-rapido-bd'); if(b) b.remove(); }
-function maisModDe(view){ const k=Object.keys(MODS||{}).find(k=>(MODS[k].views||[]).includes(view)); return k?modOn(k):true; }
+function maisModDe(view){ return viewNoMenu(view); }
+/* MENU-POR-PESSOA-V1: a tela aparece só se todas as chaves que a citam estão ligadas (módulo + menu) */
+function viewNoMenu(view){ if(!view) return true; return Object.keys(MODS||{}).every(k=>!(MODS[k].views||[]).includes(view)||(modOn(k)&&(!MODS[k].requer||modOn(MODS[k].requer)))); }
 function maisRapidoItens(){
   const it=(ic,tt,ds,fn,view)=>({ic,tt,ds,fn,ok:view?maisModDe(view):true});
   return [
