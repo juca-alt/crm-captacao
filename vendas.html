@@ -3263,17 +3263,22 @@ function iniDiaDados(){ const hj=hojeISO(), lim72=isoAddDias(hj,3);
   /* mensagem programada = lembrete pro cliente que o CRM agendou (véspera/dia da reunião) e sai nas próximas 72 h */
   const msgs=ag.filter(x=>x.t.lembrarReuniao&&!x.t.feito&&x.t.quando&&x.t.quando<=lim72);
   return {hj,reun,niver,lig:[...lig.values()],crit,msgs}; }
-/* PARIDADE (print do Global 09/11: "6 pendências abertas, sendo 6 que já passaram da hora" = os 6 atrasos críticos):
-   apólice em atraso entra como pendência só quando é CRÍTICA, e crítica já passou da hora. O resto vem do Agora. */
-function iniPendDia(crit){ crit=crit||iniAtrasoCrit(); const l=(typeof inicioAgora==='function')?inicioAgora().filter(i=>i.k!=='dup'&&i.k!=='cob'):[];
-  const tot=l.reduce((a,i)=>a+i.n,0)+crit.n, passou=l.filter(i=>i.k==='reun'||i.k==='atras'||i.k==='venc').reduce((a,i)=>a+i.n,0)+crit.n;
+/* PARIDADE-V2 (09/11, base real dele: nosso 126 · 74 contra 6 · 6 do Global). No Global "para resolver hoje" é a SOMA DOS CARDS
+   do dia (reuniões hoje + aniversários hoje + ligar depois vencidos + atrasos críticos + mensagens em 72 h) e "passou da hora" =
+   atrasos críticos + ligar depois vencidos. O bloco Agora segue com a lista completa (tarefas antigas, negócio parado…). */
+function iniPendDia(d){ d=d||iniDiaDados();
+  const l=[['crit',d.crit.n,'atraso crítico','atrasos críticos',"FAT.lente='crit';irPara('lp-atrasos')"],['lig',d.lig.length,'ligação pra retornar','ligações pra retornar',"irPara('agenda')"],
+           ['reun',d.reun.length,'reunião hoje','reuniões hoje',"irPara('agenda')"],['niver',d.niver.length,'aniversário hoje','aniversários hoje',"irPara('lp-aniversario')"],
+           ['msg',d.msgs.length,'mensagem pra sair em 72 h','mensagens pra sair em 72 h',"irPara('agenda')"]]
+    .filter(x=>x[1]).map(([k,n,s1,sp,acao])=>({k,n,txt:n===1?s1:sp,acao}));
+  const tot=l.reduce((a,i)=>a+i.n,0), passou=d.crit.n+d.lig.length;
   return {l,tot,passou}; }
 /* UMA ação: atraso crítico manda (dinheiro saindo da carteira); senão a pendência mais urgente do Agora */
 function iniAcaoDia(p,crit){ if(crit.n) return {txt:`Comece pelos ${crit.n} ${crit.n===1?'atraso crítico':'atrasos críticos'}: ${brl(crit.v)} em risco`,bt:'Abrir a Lista de Atraso',acao:"FAT.lente='crit';irPara('lp-atrasos')"};
   const i=p.l[0]; return i?{txt:`Comece por: ${i.n} ${i.txt}`,bt:'Abrir',acao:i.acao}:null; }
-function iniDiaBloco(){ const d=iniDiaDados(), p=iniPendDia(d.crit), a=iniAcaoDia(p,d.crit);
+function iniDiaBloco(){ const d=iniDiaDados(), p=iniPendDia(d), a=iniAcaoDia(p,d.crit);
   const resumo=p.tot?`${p.tot} ${p.tot===1?'pendência':'pendências'}${p.passou?` · <b style="color:var(--verm)">${p.passou} passa${p.passou===1?'ou':'ram'} da hora</b>`:''}`:'tudo em dia ✓';
-  const corpo=!p.tot&&!d.crit.n?`<div class="dia-ok"><span class="ag-ic">✓</span><div><b>Nada pra resolver hoje.</b><span>Sem pendência aberta e sem atraso crítico.</span></div></div>`
+  const corpo=!p.tot&&!d.crit.n?`<div class="dia-ok"><span class="ag-ic">✓</span><div><b>Nada pra resolver hoje.</b><span>Sem reunião, aniversário, retorno vencido, atraso crítico ou mensagem pra sair hoje. O bloco Agora tem a lista completa.</span></div></div>`
     :`<div class="dia-hd"><div class="dia-n"><b>${p.tot}</b><span>${p.tot===1?'pendência aberta':'pendências abertas'}${p.passou&&p.passou===p.tot?', todas já passaram da hora':''}</span></div><div class="dia-n${p.passou?' ruim':''}"><b>${p.passou}</b><span>${p.passou===1?'passou da hora':'passaram da hora'}</span></div></div>
       ${a?`<button class="dia-acao" onclick="${a.acao}"><span>👉 ${esc(a.txt)}</span><b>${esc(a.bt)} ›</b></button>`:''}`;
   return iniBloco('dia','☀️ O seu dia · para resolver hoje',resumo,corpo); }
@@ -22586,8 +22591,9 @@ function lpSelfCheck(){
            (()=>{ const p={l:[{k:'atras',n:3,txt:'tarefas atrasadas',acao:"irPara('agenda')"}],tot:3,passou:3};
              const a1=iniAcaoDia(p,{n:6,v:2692}), a2=iniAcaoDia(p,{n:0,v:0}), a3=iniAcaoDia({l:[],tot:0,passou:0},{n:0,v:0});
              return /6 atrasos críticos/.test(a1.txt)&&/2\.692/.test(a1.txt)&&/FAT\.lente='crit'/.test(a1.acao)&&/lp-atrasos/.test(a1.acao)&&a2.acao==="irPara('agenda')"&&a3===null; })());
-        ok('INICIO-GLOBAL-V1 (T1): paridade com o Global — atraso crítico conta como pendência que JÁ passou da hora (e o total do atraso não entra em dobro)',
-           (()=>{ const p=iniPendDia({n:6,v:2692}), p0=iniPendDia({n:0,v:0}); return p.tot-p0.tot===6&&p.passou-p0.passou===6; })());
+        ok('INICIO-GLOBAL-V1 (T1): PARIDADE-V2 — "para resolver hoje" = soma dos cards do dia; "passou da hora" = críticos + ligar depois (6 críticos e nada mais = 6 · 6, como no Global)',
+           (()=>{ const z={reun:[],niver:[],lig:[],msgs:[],crit:{n:0,v:0}}; const p=iniPendDia(Object.assign({},z,{crit:{n:6,v:2692}})), q=iniPendDia(Object.assign({},z,{reun:[1],niver:[1,2],lig:[1],msgs:[1]})), v=iniPendDia(z);
+             return p.tot===6&&p.passou===6&&q.tot===5&&q.passou===1&&v.tot===0&&iniAcaoDia(v,{n:0,v:0})===null&&iniAcaoDia(q,{n:0,v:0}).acao==="irPara('agenda')"; })());
         ok('INICIO-GLOBAL-V1 (T1): atraso crítico = o MESMO cálculo da Lista de Atraso (atV2Kpis, ≥ 50 dias, sumidas e resolvidas fora)',
            (()=>{ const _i=AT.itens; try{ const hj=atHojeLocal(), dd=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10); };
              AT.itens=[{apolice:'900000001',vencido_em:dd(55),premio:100,status:'Sem tratativa'},{apolice:'900000002',vencido_em:dd(20),premio:50,status:'Sem tratativa'},
