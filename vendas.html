@@ -11759,6 +11759,7 @@ function gcalClasse(e){ if(!e) return 'trabalho';
    ganha a cor do Google (evento → cor da agenda), e no ⚙ ele nomeia cada cor e diz se é trabalho ou
    pessoal — a cor passa a classificar antes do nome/palavra. */
 const GCAL_CORES_PADRAO={'1':'#a4bdfc','2':'#7ae7bf','3':'#dbadff','4':'#ff887c','5':'#fbd75b','6':'#ffb878','7':'#46d6db','8':'#e1e1e1','9':'#5484ed','10':'#51b749','11':'#dc2127'};
+function gcalCorIdsTodos(){ const ks=new Set(Object.keys(GCAL_CORES_PADRAO)); Object.keys((GCAL&&GCAL.cores)||{}).forEach(k=>ks.add(String(k))); return [...ks].sort((a,b)=>(Number(a)||999)-(Number(b)||999)||a.localeCompare(b)); }   /* ETIQUETAS-V1: a paleta nova do Google (24 cores) aparece toda */
 function gcalCorHexId(id){ id=String(id||''); if(!id) return ''; const c=GCAL.cores&&GCAL.cores[id]; return (c&&c.background)||GCAL_CORES_PADRAO[id]||''; }
 function gcalCorHex(e){ if(!e) return ''; const h=gcalCorHexId(e.colorId); if(h) return h; const cal=(GCAL.cals||[]).find(c=>(c.primary?'primary':c.id)===(e._cal||'primary')); return (cal&&cal.cor)||''; }
 function gcalCorCfg(id){ const c=gcalCfg(); if(!c.cores||typeof c.cores!=='object') c.cores={}; return c.cores[String(id)]||{}; }
@@ -11770,14 +11771,14 @@ function gcalCorDot(e){ const h=gcalCorHex(e); const nm=gcalCorNome(e); if(!h&&!
 /* CATEGORIAS-V1: as 12 categorias que ele usa no Google (print do seletor de cor), com a classe padrão.
    O nome da cor não vem pela API, então o ⚙ mostra EXEMPLOS de evento por cor, oferece estes nomes na lista
    e sugere sozinho pelos títulos ([OI/FF] → OI/FF, [RCP/PC] → RCP/PC, Gym → CORPORE SANO, Gael → GAEL + FAMÍLIA…). */
-const GCAL_CATS=[['RCP/FF','trabalho'],['RCP/PC','trabalho'],['GAEL + FAMÍLIA','pessoal'],['CORPORE SANO','pessoal'],['STRATEGIC','pessoal'],['TA/PIPE','trabalho'],['URGENTE',''],['LEMBRETE',''],['OI/FF','trabalho'],['P/C','trabalho'],['C2','trabalho'],['DELIVERY','trabalho']];
+const GCAL_CATS=[['RCP/FF','trabalho'],['RCP/PC','trabalho'],['GAEL + FAMÍLIA','pessoal'],['CORPORE SANO','pessoal'],['STRATEGIC','pessoal'],['TA/PIPE','trabalho'],['URGENTE',''],['LEMBRETE',''],['OI/FF','trabalho'],['P/C','trabalho'],['C2','trabalho'],['DELIVERY','trabalho'],['OUTROS',''],['ROTINA','pessoal']];   /* ETIQUETAS-V1 (09/11): + OUTROS e ROTINA (print do seletor dele) */
 function gcalCatClasse(nome){ const k=normKey(nome); const c=GCAL_CATS.find(x=>normKey(x[0])===k); return c?c[1]:''; }
 /* categoria que o TÍTULO de um evento sugere (prefixo canônico do CRM ou palavra) */
 function gcalCatDoTitulo(t){ t=String(t||''); const m=t.match(/\[(RCP\/FF|RCP\/PC|OI\/FF|PC|P\/C|C2|DELIVERY)\]/i); if(m){ const p=m[1].toUpperCase(); return p==='PC'?'P/C':p; }
   const k=normKey(t); if(/\b(gym|academia|treino|movimento|along|corrida|natacao|pilates)\b/.test(k)) return 'CORPORE SANO';
   if(/\b(gael|escola|colegio|camila|familia|pediatra|terapia)\b/.test(k)) return 'GAEL + FAMÍLIA';
   if(/\b(ta|ligar|ligacao|sitplan|pipe)\b/.test(k)) return 'TA/PIPE'; if(/\burgente\b/.test(k)) return 'URGENTE'; if(/\blembrete\b/.test(k)) return 'LEMBRETE';
-  if(/\bdelivery\b|\bentrega\b/.test(k)) return 'DELIVERY'; return ''; }
+  if(/\bdelivery\b|\bentrega\b/.test(k)) return 'DELIVERY'; if(/\[revisita\]/.test(k)) return 'RCP/FF'; if(/\b(sono|rotina|dormir)\b/.test(k)) return 'ROTINA'; return ''; }
 function gcalCorExemplos(id,max){ const vis={}, out=[]; (GCAL.eventos||[]).forEach(e=>{ if(String(e.colorId||'')!==String(id)) return; const t=String(e.summary||'').trim(); const k=normKey(t); if(!k||vis[k]) return; vis[k]=1; out.push(t); }); return out.slice(0,max||3); }
 /* sugere nome (e classe) pra cada cor pelos títulos dos eventos carregados — só preenche o que está vazio */
 function gcalCoresSugerir(){ const cfg=gcalCfg(); if(!cfg.cores) cfg.cores={}; const votos={};
@@ -11788,6 +11789,36 @@ function gcalCoresSugerir(){ const cfg=gcalCfg(); if(!cfg.cores) cfg.cores={}; c
 function gcalCorIdPorNome(nome){ const k=normKey(nome); if(!k) return ''; const cfg=gcalCfg(); const cores=cfg.cores||{}; const id=Object.keys(cores).find(i=>normKey(cores[i].nome||'')===k); return id||''; }
 function gcalCorIdReuniao(c){ if(typeof gcalClasseOn!=='function'||!gcalClasseOn()) return ''; const p=reuniaoPrefixoDe(c); if(!p) return ''; const nome=p.pfx==='[PC]'?'P/C':p.pfx.replace(/[\[\]]/g,''); return gcalCorIdPorNome(nome); }
 window.gcalCoresSugerir=gcalCoresSugerir;
+/* ═══ ETIQUETAS-V1 (09/11/2026) — todo evento que o CRM cria sai com a etiqueta certa ═══════════════════════════════
+   Palavra dele (print do seletor de cor do Google): "ajustes para quando os eventos forem criados estarem coloridos com
+   etiquetas corretas… se tiver faltando algo vamos bater e deixar em linha… to tendo retrabalho de reorganizar tudo".
+   Antes: só a REUNIÃO ganhava cor (e, sem a cor nomeada no ⚙, tudo caía no Pavão = a cor da etiqueta DELIVERY dele).
+   Agora: TODA atividade que vira evento ganha a etiqueta pela regra abaixo; a cor de cada etiqueta vem do nome que ele deu
+   no ⚙ (salvo no servidor, vale em todo aparelho) e, sem nome, do padrão das cores clássicas do Google conferido nos
+   eventos dele (OI/FF=5 Banana · P/C=10 Manjericão · DELIVERY=7 Pavão · ROTINA=8 Grafite · URGENTE=11 Tomate).
+   RCP/FF, RCP/PC, GAEL, CORPORE SANO e OUTROS usam cores novas do Google (paleta de 24, jun/2026): só saem com cor depois
+   que ele nomear no ⚙ — o ⚙ agora lista TODAS as cores que a API devolve e diz quais etiquetas ainda estão sem cor.
+   Cor trocada à mão no Google é respeitada: o CRM só repinta quando a etiqueta calculada MUDA (t.gCor guarda a última).
+   Só na base dele por enquanto (NOVO_SO_MEU 'etiquetas-gcal'); sem a chave, segue a regra antiga (reunião → cor da etapa). */
+const GCAL_ETIQUETAS=['RCP/FF','RCP/PC','GAEL + FAMÍLIA','CORPORE SANO','STRATEGIC','TA/PIPE','URGENTE','LEMBRETE','OI/FF','P/C','C2','DELIVERY','OUTROS','ROTINA'];
+const GCAL_ETQ_PADRAO={'OI/FF':'5','P/C':'10','C2':'2','DELIVERY':'7','TA/PIPE':'4','LEMBRETE':'6','URGENTE':'11','ROTINA':'8','STRATEGIC':'9'};
+function etqOn(){ try{ return novoOn('etiquetas-gcal'); }catch(_){ return false; } }
+function gcalCorIdEtiqueta(nome){ return gcalCorIdPorNome(nome)||GCAL_ETQ_PADRAO[nome]||''; }
+/* a regra (uma só, a mesma que o Pietro segue — docs/etiquetas-agenda.md) */
+function gcalEtiquetaDe(c,t){ if(!t) return '';
+  if(t.tipo==='reuniao'){ const p=reuniaoPrefixoDe(c); if(!p) return 'OUTROS';
+    if(p.pfx==='[PC]') return (c&&c.etapa==='C2')?'C2':'P/C'; return p.pfx.replace(/[\[\]]/g,''); }
+  if(t.prio==='alta') return 'URGENTE';
+  if(t.tipo==='ligar'||t.tipo==='whats') return 'TA/PIPE';
+  if(t.tipo==='proposta') return 'P/C';
+  if(t.tipo==='follow') return 'LEMBRETE';
+  return 'OUTROS'; }
+function gcalEtqFaltando(){ return GCAL_ETIQUETAS.filter(n=>!gcalCorIdEtiqueta(n)); }
+/* põe a cor no corpo do evento: na criação sempre; na edição só se a etiqueta mudou (respeita cor trocada à mão) */
+function gcalEtqAplicar(body,c,t){ const et=gcalEtiquetaDe(c,t), cor=et?gcalCorIdEtiqueta(et):'';
+  body.extendedProperties.private.crmEtiqueta=et||'';
+  if(cor&&!(t.gcalId&&String(t.gCor||'')===cor)) body.colorId=cor; return body; }
+window.gcalEtiquetaDe=gcalEtiquetaDe; window.gcalEtqFaltando=gcalEtqFaltando;
 function gcalFeito(e){ return gcalPriv(e).crmFeito==='1'; }
 /* grava marcas no próprio evento (classe, feito) — sobrevive a renomear e vale em todo aparelho */
 async function gcalPatchPriv(e,obj){ const priv=Object.assign({},gcalPriv(e)); Object.keys(obj).forEach(k=>{ if(obj[k]==null) delete priv[k]; else priv[k]=String(obj[k]); }); priv.crmApp=priv.crmApp||GSYNC_APP;
@@ -11840,7 +11871,8 @@ function gcalRegras(){ gcalMaisFechar(); const cfg=gcalCfg(); const cals=(GCAL.c
     <div class="gm-sec">Cores do Google (as suas listas)</div><div class="gm-txt" style="margin-bottom:6px">Dê a cada cor o nome que ela tem no seu Google (RCP/FF, TA/PIPE, GAEL + FAMÍLIA…) e diga se é trabalho ou pessoal. A cor passa a classificar o compromisso antes do nome.</div>
     <div class="gm-grid" style="margin-bottom:8px"><button type="button" class="btn btn-s gm-btn" onclick="gcalCoresSugerir()" title="Lê os títulos dos eventos carregados ([OI/FF], [RCP/PC], Gym, Gael…) e nomeia as cores que ainda estão vazias">✨ Sugerir pelos títulos</button></div>
     <datalist id="gm-cats">${GCAL_CATS.map(c=>`<option value="${esc(c[0])}">`).join('')}</datalist>
-    <div class="gm-cores">${Object.keys(GCAL_CORES_PADRAO).map(id=>{ const cc=gcalCorCfg(id); const hex=gcalCorHexId(id); const ex=gcalCorExemplos(id,3); return `<div class="gm-cor"><span class="gm-cal-dot" style="background:${esc(hex)}"></span><div class="gm-cor-mid"><input class="gm-cor-nome" list="gm-cats" placeholder="nome da cor ${id}" value="${esc(cc.nome||'')}" onchange="gcalRegraCor('${id}','nome',this.value);gcalRegrasPintarClasse('${id}')"><div class="gm-cor-ex">${ex.length?'ex.: '+esc(ex.join(' · ')):'<span style="opacity:.6">sem evento com esta cor nos próximos dias</span>'}</div></div><select id="gm-cor-cl-${id}" onchange="gcalRegraCor('${id}','classe',this.value)"><option value="" ${!cc.classe?'selected':''}>auto</option><option value="trabalho" ${cc.classe==='trabalho'?'selected':''}>Trabalho</option><option value="pessoal" ${cc.classe==='pessoal'?'selected':''}>Pessoal</option></select></div>`; }).join('')}</div>
+    ${(typeof etqOn==='function'&&etqOn())?(()=>{ const f=gcalEtqFaltando(); return `<div class="gm-txt" style="margin-bottom:6px;${f.length?'color:#b45309;font-weight:600':''}">${f.length?'⚠ Etiquetas ainda SEM cor (o CRM cria sem cor até você nomear): '+esc(f.join(' · ')):'✓ As 14 etiquetas têm cor — todo evento do CRM sai etiquetado'}</div>`; })():''}
+    <div class="gm-cores">${gcalCorIdsTodos().map(id=>{ const cc=gcalCorCfg(id); const hex=gcalCorHexId(id); const ex=gcalCorExemplos(id,3); return `<div class="gm-cor"><span class="gm-cal-dot" style="background:${esc(hex)}" title="colorId ${esc(id)} — é este número que o Pietro usa"></span><small style="font-size:11px;color:var(--muted);min-width:18px;text-align:center;font-variant-numeric:tabular-nums">${esc(id)}</small><div class="gm-cor-mid"><input class="gm-cor-nome" list="gm-cats" placeholder="${(()=>{ const pd=(typeof GCAL_ETQ_PADRAO!=='undefined')?Object.keys(GCAL_ETQ_PADRAO).find(n=>GCAL_ETQ_PADRAO[n]===id):''; return pd?esc(pd)+' (padrão do CRM)':'nome da cor '+id; })()}" value="${esc(cc.nome||'')}" onchange="gcalRegraCor('${id}','nome',this.value);gcalRegrasPintarClasse('${id}')"><div class="gm-cor-ex">${ex.length?'ex.: '+esc(ex.join(' · ')):'<span style="opacity:.6">sem evento com esta cor nos próximos dias</span>'}</div></div><select id="gm-cor-cl-${id}" onchange="gcalRegraCor('${id}','classe',this.value)"><option value="" ${!cc.classe?'selected':''}>auto</option><option value="trabalho" ${cc.classe==='trabalho'?'selected':''}>Trabalho</option><option value="pessoal" ${cc.classe==='pessoal'?'selected':''}>Pessoal</option></select></div>`; }).join('')}</div>
     <div class="gm-sec">Palavras que marcam PESSOAL (só ocupado)</div><textarea id="gm-kw-pess" rows="2" placeholder="gym, escola, dentista…">${esc(cfg.pessoal.join(', '))}</textarea>
     <div class="gm-sec">Palavras que marcam TRABALHO</div><textarea id="gm-kw-trab" rows="2" placeholder="RCP, OI, ponto de apoio…">${esc(cfg.trabalho.join(', '))}</textarea>
     <label class="check-row" style="margin-top:10px"><input type="checkbox" id="gm-ocultar" ${cfg.ocultar?'checked':''}> Na lista, recolher os pessoais num bloco só ("🔒 ocupados")</label>
@@ -12388,7 +12420,8 @@ function gsyncCorpoEvento(c,t){
     extendedProperties:{private:{crmApp:GSYNC_APP,crmTarefa:String(t.id),crmContato:String(c.id)}} };
   if(t.hora){ const iv=tarReuniaoInterval(t); body.start={dateTime:iv.ini,timeZone:GCAL_TZ}; body.end={dateTime:iv.fim,timeZone:GCAL_TZ}; }
   else { const d=t.quando||hojeISO(); body.start={date:d}; body.end={date:isoAddDias(d,1)}; }   /* sem hora = dia inteiro */
-  if(t.tipo==='reuniao'&&reuniaoTituloAlvo(c)) body.colorId=(typeof gcalCorIdReuniao==='function'&&gcalCorIdReuniao(c))||REUNIAO_COLOR_ID;   /* CATEGORIAS-V1: cor da etapa que ele nomeou; senão Pavão */
+  if(typeof etqOn==='function'&&etqOn()) gcalEtqAplicar(body,c,t);   /* ETIQUETAS-V1: toda atividade ganha a etiqueta certa */
+  else if(t.tipo==='reuniao'&&reuniaoTituloAlvo(c)) body.colorId=(typeof gcalCorIdReuniao==='function'&&gcalCorIdReuniao(c))||REUNIAO_COLOR_ID;   /* CATEGORIAS-V1: cor da etapa que ele nomeou; senão Pavão */
   return body;
 }
 function gsyncSumiu(e){ return /404|410|not ?found|deleted|has been deleted|resource has been/i.test(String(e&&e.message||e)); }
@@ -12443,7 +12476,7 @@ async function gsyncAplicarItem(it){
     catch(e){ if(!gsyncSumiu(e)) throw e;
       delete t.gcalId; ev=await gcalApi('POST','',body,{sendUpdates:'none'}); criou=true; }   /* sumiu lá → recria */
   }else{ ev=await gcalApi('POST','',body,{sendUpdates:'none'}); criou=true; }
-  if(ev&&ev.id){ t.gcalId=ev.id; t.gcalUpd=ev.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; t.gcalLink=ev.htmlLink||t.gcalLink||''; }
+  if(ev&&ev.id){ t.gcalId=ev.id; t.gcalUpd=ev.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; t.gcalLink=ev.htmlLink||t.gcalLink||''; if(body.colorId) t.gCor=body.colorId; }
   if(criou) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na Agenda Google: '+(body.summary||gsyncTitulo(c,t)),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar();
   return {ok:true,titulo:body.summary||gsyncTitulo(c,t),criou:criou};
@@ -12463,7 +12496,7 @@ async function gsyncAplicarNoDono(it){
       /* 404 pode ser "evento sumiu" OU "agenda sem acesso": o POST tira a dúvida; se falhar, o vínculo antigo fica (o dono decide) */
       try{ ev=await gcalApi('POST','',body,{sendUpdates:'none'},cal); criou=true; } catch(e2){ t.gcalId=id; throw e2; } } }
   else { ev=await gcalApi('POST','',body,{sendUpdates:'none'},cal); criou=true; }
-  if(ev&&ev.id){ t.gcalId=ev.id; t.gcalUpd=ev.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; t.gcalLink=ev.htmlLink||t.gcalLink||''; delete t.gcalPend; }
+  if(ev&&ev.id){ t.gcalId=ev.id; t.gcalUpd=ev.updated||new Date().toISOString(); t.gcalSync=true; t.gcalFora=false; t.gcalLink=ev.htmlLink||t.gcalLink||''; delete t.gcalPend; if(body.colorId) t.gCor=body.colorId; }
   if(criou) interacoesDe(c).push({id:uid(),k:'tarefa',l:'Na Agenda Google de '+lpNome(cal)+': '+(body.summary||gsyncTitulo(c,t)),dia:hojeISO(),ts:new Date().toISOString(),por:quemFez()});
   salvar();
   return {ok:true,titulo:body.summary||gsyncTitulo(c,t),criou:criou};
@@ -18149,6 +18182,7 @@ const MODS={
    Início, um campo da ficha, uma coluna — que é onde a maior parte do que ele
    pede nasce. */
 const NOVO_SO_MEU={
+  'etiquetas-gcal':{o:'🏷️ Etiquetas do Google Agenda: todo evento que o CRM cria sai com a etiqueta certa (OI/FF, P/C, C2, RCP/FF, RCP/PC, DELIVERY, TA/PIPE, LEMBRETE, URGENTE, OUTROS)',desde:'2026-11-09'},   /* ETIQUETAS-V1 */
   'forms-neg':{o:'📝 Formulários ligados ao negócio: modelos (checklist de emissão, roteiro da OI, dados pra proposta…) preenchidos na ficha, com selo no card e registro no histórico',desde:'2026-11-07'},   /* FORMS-NEG-V1 (07/11) — decisão dele: "B) Interno, na ficha" */
   /* 'funil-unico', 'fu-mfo', 'ficha-ux2', 'agenda-global' — saíram daqui em 26/10 pra MODS (def:false). Palavra dele: "libera agenda nova e funil novo para Victor e Daniel e cards novos; no caso do Victor também MFO; Daniel só individual". */
   /* 'carga' — saiu daqui em 29/09 pra MODS (def:false), ligado pro Victor (palavra dele: "libera a carga pro Victor também"). */
@@ -21465,8 +21499,23 @@ function lpSelfCheck(){
            bS.start.date==='2026-10-21'&&bS.end.date==='2026-10-22'&&!bS.start.dateTime);
         ok('gsync: todo evento sai carimbado (crmApp/crmTarefa/crmContato) — é o que permite a volta',
            bH.extendedProperties.private.crmApp==='crmlp'&&bH.extendedProperties.private.crmTarefa==='th'&&bH.extendedProperties.private.crmContato==='gb1');
-        ok('gsync: reunião com etapa mapeada leva prefixo + cor Pavão',
-           bR.summary===reuniaoTituloAlvo(c)&&bR.colorId===REUNIAO_COLOR_ID&&/\[OI\/FF\]/.test(bR.summary));
+        ok('gsync: reunião com etapa mapeada leva prefixo + cor (ETIQUETAS-V1: a da etiqueta OI/FF; sem a chave, Pavão)',
+           bR.summary===reuniaoTituloAlvo(c)&&bR.colorId===(etqOn()?gcalCorIdEtiqueta('OI/FF'):REUNIAO_COLOR_ID)&&/\[OI\/FF\]/.test(bR.summary));
+        ok('ETIQUETAS-V1: a regra — reunião pela etapa (OI/FF · P/C · C2 separado · RCP/FF · RCP/PC · DELIVERY), ligar/WhatsApp = TA/PIPE, proposta = P/C, follow-up = LEMBRETE, prioridade alta = URGENTE, resto = OUTROS',
+           (()=>{ const R=(f,e,tp,pr)=>gcalEtiquetaDe({funil:f,etapa:e},{tipo:tp,prio:pr});
+             return R('nn','OI/FF','reuniao')==='OI/FF'&&R('nn','P/C','reuniao')==='P/C'&&R('nn','C2','reuniao')==='C2'&&R('nn','N','reuniao')==='P/C'&&R('nn','DELIVERY','reuniao')==='DELIVERY'
+               &&R('bc','Agendada Revisita','reuniao')==='RCP/FF'&&R('bc','N/Emissão','reuniao')==='RCP/PC'&&R('nn','ETAPA-X','reuniao')==='OUTROS'
+               &&R('nn','OI/FF','ligar')==='TA/PIPE'&&R('nn','OI/FF','whats')==='TA/PIPE'&&R('nn','P/C','proposta')==='P/C'&&R('nn','P/C','follow')==='LEMBRETE'&&R('nn','P/C','ligar','alta')==='URGENTE'&&R('nn','P/C','reuniao','alta')==='P/C'&&R('nn','P/C','outro')==='OUTROS'; })());
+        ok('ETIQUETAS-V1: cor trocada à mão no Google é respeitada (edição só repinta quando a etiqueta muda); criação sempre leva a cor; a etiqueta vai carimbada no evento',
+           (()=>{ if(!etqOn()) return true; const cc={id:'ge1',nome:'Fulano Exemplo',funil:'nn',etapa:'OI/FF',tarefas:[],interacoes:[]};
+             const novo=gsyncCorpoEvento(cc,{id:'g1',tipo:'reuniao',tit:'R',quando:'2026-11-10',hora:'09:00',dur:60});
+             const igual=gsyncCorpoEvento(cc,{id:'g2',tipo:'reuniao',tit:'R',quando:'2026-11-10',hora:'09:00',dur:60,gcalId:'x',gCor:gcalCorIdEtiqueta('OI/FF')});
+             const mudou=gsyncCorpoEvento(Object.assign({},cc,{etapa:'P/C'}),{id:'g3',tipo:'reuniao',tit:'R',quando:'2026-11-10',hora:'09:00',dur:60,gcalId:'x',gCor:gcalCorIdEtiqueta('OI/FF')});
+             return novo.colorId===gcalCorIdEtiqueta('OI/FF')&&!('colorId' in igual)&&mudou.colorId===gcalCorIdEtiqueta('P/C')&&novo.extendedProperties.private.crmEtiqueta==='OI/FF'; })());
+        ok('ETIQUETAS-V1: 14 etiquetas do print; as 9 de cor clássica têm padrão; as de cor nova (RCP/FF, RCP/PC, GAEL, CORPORE SANO, OUTROS) aparecem como faltando até ele nomear no ⚙; o ⚙ lista também as cores novas que a API devolver',
+           (()=>{ const _pl=JSON.stringify(PL.gcalCfg||{}), _k=GCAL.cores; try{ PL.gcalCfg={}; GCAL.cores={'1':{background:'#a4bdfc'},'24':{background:'#795548'}};
+             const f=gcalEtqFaltando(); return GCAL_ETIQUETAS.length===14&&f.join('|')==='RCP/FF|RCP/PC|GAEL + FAMÍLIA|CORPORE SANO|OUTROS'&&gcalCorIdsTodos().includes('24')&&gcalCorIdsTodos().includes('11'); }
+             finally{ PL.gcalCfg=JSON.parse(_pl); GCAL.cores=_k; } })());
         ok('gsync: etapa fora do mapa = título cru, sem cor',
            (()=>{ const cx=Object.assign({},c,{etapa:'ETAPA-QUE-NAO-EXISTE'}); const b=gsyncCorpoEvento(cx,tR); return !b.colorId&&b.summary.indexOf('Reunião')===0; })());
         ok('gsync: fila persiste por contato|tarefa e o apagar guarda o gcalId',
