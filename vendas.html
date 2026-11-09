@@ -22000,6 +22000,17 @@ function lpSelfCheck(){
            cvFiltrar(base,{modo:'todas',busca:'beltrana'}).map(x=>x.id).join('')==='b'
            && cvFiltrar(base,{modo:'todas',busca:'(81) 90000-9103'}).map(x=>x.id).join('')==='c'
            && cvFiltrar(base,{modo:'todas',busca:'(82) 90000-9103'}).length===0);
+        { const _cc=CART.clientes, _ss=S.contatos; try{
+            S.contatos=[{id:'zf1',nome:'Fulano Zz do Funil',telefone:'(81) 90000-9101',funil:'nn',etapa:'TA',origem_tipo:'recomendacao',recomendante:'Beltrano Zz'},
+                        {id:'zf3',nome:'Ciclano Zz do Funil',telefone:'(81) 90000-9103',funil:'nn',etapa:'TA'}];
+            CART.clientes=[{ref:'zc2',nome:'Beltrana Zz Cliente',celular:'(81) 90000-9102'}]; _cvIdx=null;
+            const ia=cvIdent(A), ib=cvIdent(B), ic=cvIdent(C2), idd=cvIdent({id:'d',contato_nome:'.',contato_tel_norm:'81900009199'});
+            ok('CV-ID-V1: a conversa ganha o nome e o selo que o CRM conhece pelo telefone (carteira > funil > Umbler); "." vira o telefone',
+               ia.selo==='rec'&&ia.nome==='Fulano Zz do Funil' && ib.selo==='cli'&&ib.nome==='Beltrana Zz Cliente' && ic.selo==='fun'&&ic.cid==='zf3'
+               && idd.selo==='desc'&&idd.nome!=='.' && /Cliente/.test(cvRowHtml(B,Date.now(),false)));
+            ok('CV-ID-V1: filtro "Quem é" e busca pelo nome do CRM',
+               cvFiltrar(base,{modo:'todas',selo:'cli'}).map(x=>x.id).join('')==='b' && cvFiltrar(base,{modo:'todas',busca:'do funil'}).map(x=>x.id).sort().join('')==='ac'); }
+          finally{ CART.clientes=_cc; S.contatos=_ss; _cvIdx=null; } }
         ok('conversas: "há quanto tempo" em linguagem de gente', cvHa(hh(0))==='agora' && cvHa(hh(2))==='há 2 h' && cvHa(hh(30))==='há 1 d' && cvHa(hh(50))==='há 2 d');
         CV.chats=base; CV.f={modo:'todas',busca:'',canal:'',abertas:false}; CV.erro=''; CV.carregado=true; CV.exemplo=false;
         CV.estado={ultimo_ok:hh(0.1)}; CV.aberto='a';
@@ -25193,7 +25204,7 @@ const CV_TIPOS={Text:'',Image:'🖼️ imagem',Audio:'🎧 áudio',Video:'🎬 v
   Contact:'👤 contato',Location:'📍 localização',Poll:'📊 enquete',CallAttempt:'📞 tentativa de chamada'};
 function cvTipoRot(t){ return Object.prototype.hasOwnProperty.call(CV_TIPOS,String(t||''))? CV_TIPOS[t] : String(t||''); }
 let CV={chats:[],carregado:false,carregando:null,estado:null,erro:'',msgs:{},porContato:{},aberto:null,sinc:false,exemplo:false,
-  f:{modo:'aguardando',busca:'',canal:'',abertas:false}};
+  f:{modo:'aguardando',busca:'',canal:'',abertas:false,selo:''}};
 
 (function cvCss(){ if(document.getElementById('cv-css')) return; const s=document.createElement('style'); s.id='cv-css'; s.textContent=`
   .cv-wrap{display:block}
@@ -25301,10 +25312,11 @@ function cvFiltrar(chats,f,agora){
     if(f&&f.canal&&String(ch.canal||'')!==f.canal) return false;
     if(f&&f.modo==='aguardando'&&!cvAguardando(ch)) return false;
     if(f&&f.modo==='esfriando'&&!cvEsfriando(ch,agora)) return false;
+    if(f&&f.selo&&cvIdent(ch).selo!==f.selo) return false;   /* CV-ID-V1 */
     if(!b) return true;
     if(dig.length>=8&&cvTelScore(dig,cvChatTel(ch))>0) return true;                /* telefone: confere o DDD */
     if(dig.length>=4&&String(cvChatTel(ch)).indexOf(dig)>=0) return true;          /* pedaço do número */
-    return normKey(String(ch.contato_nome||'')).indexOf(b)>=0;
+    return normKey(String(ch.contato_nome||'')).indexOf(b)>=0 || normKey(String(cvIdent(ch).nome||'')).indexOf(b)>=0;   /* CV-ID-V1: acha pelo nome que o CRM conhece */
   }); }
 function cvOrdenar(l,modo){
   const t=x=>Date.parse((x&&x.ultima_msg_em)||'')||0;
@@ -25326,6 +25338,36 @@ function cvCasar(ch){
     if(bn.length) return {tipo:'bn',id:bn[0].id,nome:bn[0].nome,n:bn.length};
   }catch(e){ console.warn('Conversas: casar com o CRM',e); }
   return null; }
+/* ── CV-ID-V1 (09/11/2026, ticket I parte 1) — palavra dele: "quero você [copiloto] resolvendo; foco dela nas interações".
+   Na Umbler as conversas do mês estão SEM etiqueta e 22 sem nome (ou "."). O CRM enriquece pelo telefone, sem gravar nada
+   na Umbler: nome = carteira > funil > Estoque > nome da Umbler > telefone; selo = Cliente (carteira, nº de apólices) ·
+   No funil (etapa) · Recomendação (origem) · Estoque · Desconhecido. Índice por 8 últimos dígitos, montado 1× (não por linha). */
+const CV_SELO={cli:['Cliente','b-verde','🛡️'],fun:['No funil','b-azul','🎯'],rec:['Recomendação','b-roxo','🙌'],est:['Estoque','b-cinza','📦'],desc:['Desconhecido','b-amarelo','❔']};
+let _cvIdx=null;
+function cvIdx(){
+  const k=[(S.contatos||[]).length,(typeof CART!=='undefined'?(CART.clientes||[]).length:0),(typeof BN!=='undefined'&&BN&&BN.contatos?BN.contatos.length:0),(typeof ESC!=='undefined'&&ESC?ESC.sel:''),(window.VC&&VC.on)?1:0].join('|');
+  if(_cvIdx&&_cvIdx.k===k&&Date.now()-_cvIdx.t<60000) return _cvIdx;
+  const m={}, add=(tel,o)=>{ const d=String(tel==null?'':tel).replace(/\D/g,''); if(d.length<8) return; const k8=d.slice(-8); (m[k8]=m[k8]||[]).push({tel,o}); };
+  const tels=c=>(typeof pTels==='function'?pTels(c):[c&&c.telefone]);
+  try{ (typeof cartVis==='function'?cartVis():[]).forEach(c=>[c.celular,c.telefone,c.telComercial].forEach(t=>add(t,{tipo:'cart',c}))); }catch(_){}
+  (S.contatos||[]).filter(c=>c&&(typeof escVisivel!=='function'||escVisivel(c))).forEach(c=>tels(c).forEach(t=>add(t,{tipo:'funil',c})));
+  try{ (typeof bnVivos==='function'?bnVivos():[]).forEach(c=>tels(c).forEach(t=>add(t,{tipo:'bn',c}))); }catch(_){}
+  _cvIdx={k,t:Date.now(),m}; return _cvIdx; }
+function cvIdent(ch){
+  const tel=cvChatTel(ch), d=String(tel==null?'':tel).replace(/\D/g,''), nu=String((ch&&ch.contato_nome)||'').trim();
+  const out={nome:(/[A-Za-zÀ-ÿ]/.test(nu)?nu:'')||cvTelFmt(tel)||'sem nome',selo:'desc',det:'',cid:null};
+  if(d.length<8) return out;
+  const cand=(cvIdx().m[d.slice(-8)]||[]).filter(x=>cvTelScore(tel,x.tel)>0);
+  const enc=c=>{ const mm=ETAPAS_MAP[c.funil||'nn']; return !!(mm&&mm.enc&&mm.enc.includes(c.etapa)); };
+  const fun=cand.filter(x=>x.o.tipo==='funil').map(x=>x.o.c).sort((a,b)=>(enc(a)-enc(b))||String(b._upd||'').localeCompare(String(a._upd||'')));
+  const cart=cand.find(x=>x.o.tipo==='cart'), bn=cand.find(x=>x.o.tipo==='bn'), f=fun[0];
+  if(cart){ const c=cart.o.c, n=(typeof cartApolicesDoCliente==='function'&&c.ref?cartApolicesDoCliente(c.ref).length:0);
+    return {...out,nome:c.nome||out.nome,selo:'cli',det:n?n+' apólice'+(n>1?'s':''):'',cid:f?f.id:null}; }
+  if(f){ const rec=f.origem_tipo==='recomendacao'||!!f.recomendante;
+    return {...out,nome:f.nome||out.nome,selo:rec?'rec':'fun',det:(ET_LABEL[f.etapa]||f.etapa||''),cid:f.id}; }
+  if(bn){ const c=bn.o.c, rec=!!c.recomendante; return {...out,nome:c.nome||out.nome,selo:rec?'rec':'est',det:rec?'Estoque':'',cid:c.id}; }
+  return out; }
+function cvSeloHtml(id){ const s=CV_SELO[id.selo]||CV_SELO.desc; return `<span class="badge ${s[1]}" style="white-space:nowrap" title="${esc(s[0]+(id.det?' · '+id.det:''))}">${s[2]} ${esc(s[0])}${id.det?' · '+esc(id.det):''}</span>`; }
 /* o caminho inverso (ficha → conversas), a partir do índice já carregado */
 function cvChatsDoContato(c){
   const tels=(typeof pTels==='function'?pTels(c):[c&&c.telefone]).filter(Boolean); if(!tels.length) return [];
@@ -25527,6 +25569,7 @@ function cvTelaHtml(){
     ${chip(f.modo!=='aguardando'&&f.modo!=='esfriando','Todas',"cvFiltro('modo','todas')",'Todas as conversas')}
     ${chip(!!f.abertas,'Só abertas',"cvFiltro('abertas',"+(f.abertas?'false':'true')+")",'Esconde as conversas já fechadas no Talk')}
     ${canais.length>1?`<select aria-label="Canal" onchange="cvFiltro('canal',this.value)"><option value="">Todos os canais</option>${canais.map(c=>`<option value="${esc(c)}" ${f.canal===c?'selected':''}>${esc(c)}</option>`).join('')}</select>`:''}
+    <select aria-label="Quem é" onchange="cvFiltro('selo',this.value)"><option value="">Quem é: todos</option>${Object.entries(CV_SELO).map(([k,s])=>`<option value="${k}" ${f.selo===k?'selected':''}>${s[2]} ${esc(s[0])}</option>`).join('')}</select>
     <input type="search" placeholder="🔎 nome ou telefone" value="${esc(f.busca)}" aria-label="Buscar conversa" oninput="cvFiltro('busca',this.value)">
     <button class="btn btn-s btn-mini" style="min-height:44px" onclick="cvSincronizar()" ${CV.sinc?'disabled':''} title="Pede ao servidor pra ler o Talk agora (ele já lê sozinho a cada 10 min)">${CV.sinc?'⏳ lendo…':'🔄 Sincronizar agora'}</button>
   </div>
@@ -25541,12 +25584,12 @@ function cvRowHtml(ch,agora,sel){
   const esperando=cvAguardando(ch);
   const quando=cvHa(ch.ultima_msg_em,agora);
   const quem=esperando?'':(ch.ultima_msg_de==='bot'?'robô: ':'você: ');
-  const previa=String(ch.ultima_msg_previa||'—').replace(/\s+/g,' ');
+  const previa=String(ch.ultima_msg_previa||'—').replace(/\s+/g,' '), idt=cvIdent(ch);   /* CV-ID-V1 */
   return `<button class="cv-row${sel?' sel':''}" onclick="cvAbrir('${esc(jsq(ch.id))}')" title="Abrir a conversa">
-    <span class="cv-row-t"><span class="cv-row-n">${esc(ch.contato_nome||cvTelFmt(cvChatTel(ch))||'sem nome')}</span>
+    <span class="cv-row-t"><span class="cv-row-n">${esc(idt.nome)}</span>
       ${esperando? `<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(quando)}</span>` : `<span class="cv-row-h">${esc(quando)}</span>`}</span>
     <span class="cv-row-p">${esc(quem+previa)}</span>
-    <span class="cv-row-m">${ch.atendente?'<span>👤 '+esc(ch.atendente)+'</span>':''}${ch.canal?'<span>📡 '+esc(ch.canal)+'</span>':''}${ch.aberto===false?'<span>✔️ fechada</span>':''}${ch.nao_lidas?'<span>🔵 '+ch.nao_lidas+'</span>':''}</span>
+    <span class="cv-row-m">${cvSeloHtml(idt)}${ch.atendente?'<span>👤 '+esc(ch.atendente)+'</span>':''}${ch.canal?'<span>📡 '+esc(ch.canal)+'</span>':''}${ch.aberto===false?'<span>✔️ fechada</span>':''}${ch.nao_lidas?'<span>🔵 '+ch.nao_lidas+'</span>':''}</span>
   </button>`; }
 
 function cvPainelHtml(ch){
@@ -25558,7 +25601,7 @@ function cvPainelHtml(ch){
     <div class="cv-head">
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-ghost btn-mini cv-volta" style="min-height:44px" onclick="cvFechar()" title="Voltar pra lista">← voltar</button>
-        <b style="flex:1;min-width:0;font-size:15px">${esc(ch.contato_nome||cvTelFmt(tel)||'sem nome')}</b>
+        <b style="flex:1;min-width:0;font-size:15px">${esc(cvIdent(ch).nome)}</b>${cvSeloHtml(cvIdent(ch))}
         ${cvAguardando(ch)?`<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(cvHa(ch.ultima_msg_em))}</span>`:''}
       </div>
       <div style="font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
