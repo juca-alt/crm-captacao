@@ -2,7 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 RETOMAR AQUI — 08/11/2026 — TICKET D (v8.86 · VER-COMO-V3) PRONTO NO BRANCH `claude/wizardly-sagan-bwghr3`, AGUARDA OK
+## 🟢 RETOMAR AQUI — 08/11/2026 — v8.86 NO AR (PR #331, OK dele: "A, publica"; Pages conferido por hash `e5c5c43a51df`)
+
+- **Publicado:** ticket D (VER-COMO-V3) + diagnóstico Umbler + SQL da Rebeca. Detalhes no bloco de baixo.
+- **Agenda Google (tarefas dele, cor verde-sálvia, "CRM · sessão Claude Code"):**
+  - seg 09/11 16:15 — e-mail da Rebeca + convite na Umbler + aviso do número do Vitor;
+  - ter 10/11 10:00 — testar "Usar o app como" + decidir o ticket C (A/B);
+  - ter 10/11 15:15 — extensão 2.10.0: portal + Google;
+  - qua 11/11 10:00 — 13 perguntas pra Umbler + número de prospecção;
+  - ter 17/11 09:30 — tirar o Victor da Umbler (o corte de 14/11 cai no Club Island, 13–16/11).
+- **⚠️ A conferir com ele:** o prompt de equipe diz "Rebeca começa segunda, 10/11", mas segunda é 09/11.
+- **Próximos tickets (prompt `docs/PROMPT_CODE_EQUIPE_ACESSOS_2026-11-07.md`):**
+  - B: falta só o e-mail real → bloco 5 do SQL;
+  - C: A/B dele;
+  - E: checklist da Umbler (na agenda);
+  - F/G: agenda e fila de revisões da Rebeca (outra sessão escreveu).
+- **Pergunta em aberto:** quer o botão "Usar o app como" também dentro da ficha da pessoa?
+
+## 🟡 08/11/2026 — TICKET D (v8.86 · VER-COMO-V3) — detalhes
 
 - **Ticket B rodado por ele** (07/11 20:46): `rebeca@pendente.invalid` · papel lp · 19 módulos (pacote A) · delegação da base do Gustavo · RC laranja no time dele. Falta só o e-mail real → bloco 5 do `supabase/migrations/equipe_rebeca_2026-11-07.sql`.
 - **D — "👁️ Usar o app como {nome}"** (Painel Master · Acessos, só admin, só pra quem não é admin). Arquivo próprio `modulos/ver-como.js`, que carrega ANTES do script principal porque o cliente Supabase captura o `fetch` quando é criado.
