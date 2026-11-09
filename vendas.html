@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.89 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.90 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -3243,6 +3243,73 @@ function inicioAgoraHtml(){
   </div>`);
 }
 
+/* ═══ INICIO-GLOBAL-V1 · T1 (09/11/2026) — Início com paridade Global CRM: olho global + "O seu dia" + 6 cards do dia ═══
+   PROMPT_CODE "Início (painel) com paridade Global CRM" (09/11), ticket T1. Nada aqui é cálculo novo: cada número lê a MESMA
+   fonte da tela de origem — atrasos críticos = atV2Kpis da Lista de Atraso (≥ 50 dias, sumidas fora); pendências = inicioAgora
+   (o bloco Agora); reuniões/ligar depois/mensagens = agendaItens da Agenda; aniversários = niverItens. Tudo respeita o escopo
+   (filtro de carteira e "vendo como"), porque essas fontes já respeitam.
+   Renovações em 30 dias: a carteira importada NÃO traz data de emissão/aniversário da apólice (conferido 23/10, ATRASO-V2) —
+   o card mostra "falta data", nunca um número inventado (decisão pendente com ele: de onde vem a data). */
+function iniAtrasoCrit(){ try{ if(typeof AT==='undefined'||!AT.itens||typeof atV2Kpis!=='function') return {n:0,v:0};
+  const l=AT.itens.filter(escLinhaOk).filter(r=>!r.resolvido_em&&r.status!==AT_STATUS.SUMIU); const k=atV2Kpis(l,atV2Ctx()); return {n:k.crit.n,v:k.crit.v}; }catch(_){ return {n:0,v:0}; } }
+function iniDiaDados(){ const hj=hojeISO(), lim72=isoAddDias(hj,3);
+  const ag=(typeof agendaItens==='function')?agendaItens():[];
+  const reun=ag.filter(x=>x.t.tipo==='reuniao'&&x.t.quando===hj&&!x.t.feito);
+  const niver=(()=>{ try{ return niverItens(1).filter(p=>p.d===0); }catch(_){ return []; } })();
+  /* ligar depois vencido = tarefa de ligar/WhatsApp atrasada OU "pediu pra retornar" sem nova data (o mesmo "Retornar" do Painel TA) — uma vez por pessoa */
+  const lig=new Map(); ag.forEach(x=>{ if((x.t.tipo==='ligar'||x.t.tipo==='whats')&&!x.t.lembrarReuniao&&tarSituacao(x.t)==='atrasada') lig.set(String(x.c.id),x.c); });
+  (typeof contatosDoLp==='function'?contatosDoLp():[]).forEach(c=>{ try{ if(taDelayTipo(c)==='Retornar') lig.set(String(c.id),c); }catch(_){ } });
+  const crit=iniAtrasoCrit();
+  /* mensagem programada = lembrete pro cliente que o CRM agendou (véspera/dia da reunião) e sai nas próximas 72 h */
+  const msgs=ag.filter(x=>x.t.lembrarReuniao&&!x.t.feito&&x.t.quando&&x.t.quando<=lim72);
+  return {hj,reun,niver,lig:[...lig.values()],crit,msgs}; }
+function iniPendDia(){ const l=(typeof inicioAgora==='function')?inicioAgora().filter(i=>i.k!=='dup'):[];
+  const tot=l.reduce((a,i)=>a+i.n,0), passou=l.filter(i=>i.k==='reun'||i.k==='atras'||i.k==='venc').reduce((a,i)=>a+i.n,0);
+  return {l,tot,passou}; }
+/* UMA ação: atraso crítico manda (dinheiro saindo da carteira); senão a pendência mais urgente do Agora */
+function iniAcaoDia(p,crit){ if(crit.n) return {txt:`Comece pelos ${crit.n} ${crit.n===1?'atraso crítico':'atrasos críticos'}: ${brl(crit.v)} em risco`,bt:'Abrir a Lista de Atraso',acao:"FAT.lente='crit';irPara('lp-atrasos')"};
+  const i=p.l[0]; return i?{txt:`Comece por: ${i.n} ${i.txt}`,bt:'Abrir',acao:i.acao}:null; }
+function iniDiaBloco(){ const p=iniPendDia(), d=iniDiaDados(), a=iniAcaoDia(p,d.crit);
+  const resumo=p.tot?`${p.tot} ${p.tot===1?'pendência':'pendências'}${p.passou?` · <b style="color:var(--verm)">${p.passou} passa${p.passou===1?'ou':'ram'} da hora</b>`:''}`:'tudo em dia ✓';
+  const corpo=!p.tot&&!d.crit.n?`<div class="dia-ok"><span class="ag-ic">✓</span><div><b>Nada pra resolver hoje.</b><span>Sem pendência aberta e sem atraso crítico.</span></div></div>`
+    :`<div class="dia-hd"><div class="dia-n"><b>${p.tot}</b><span>${p.tot===1?'pendência aberta':'pendências abertas'}</span></div><div class="dia-n${p.passou?' ruim':''}"><b>${p.passou}</b><span>${p.passou===1?'passou da hora':'passaram da hora'}</span></div></div>
+      ${a?`<button class="dia-acao" onclick="${a.acao}"><span>👉 ${esc(a.txt)}</span><b>${esc(a.bt)} ›</b></button>`:''}`;
+  return iniBloco('dia','☀️ O seu dia · para resolver hoje',resumo,corpo); }
+function iniDiaCardsBloco(){ const d=iniDiaDados(); const cards=[
+    ['🤝','Reuniões hoje',d.reun.length,d.reun.slice(0,2).map(x=>(x.t.hora?x.t.hora+' ':'')+String(x.c.nome||'').split(' ')[0]).join(' · ')||'nenhuma marcada',"irPara('agenda')"],
+    ['🎂','Aniversários hoje',d.niver.length,d.niver.slice(0,2).map(p=>String(p.nome||'').split(' ')[0]).join(' · ')||'ninguém hoje',"irPara('lp-aniversario')"],
+    ['📞','Ligar depois vencidos',d.lig.length,d.lig.length?'pediu retorno ou ligação atrasada':'nada vencido',"irPara('agenda')"],
+    ['🔴','Atrasos críticos',d.crit.n,d.crit.n?brl(d.crit.v)+' em risco':'nenhum ≥ 50 dias',"FAT.lente='crit';irPara('lp-atrasos')"],
+    ['🔁','Renovações em 30 dias',null,'falta data na carteira',"irPara('cart-clientes')"],
+    ['💬','Mensagens programadas · 72 h',d.msgs.length,d.msgs.length?'lembretes de reunião pro cliente':'nenhuma nas próximas 72 h',"irPara('agenda')"]];
+  const resumo=[d.reun.length?d.reun.length+' reuni'+(d.reun.length===1?'ão':'ões'):'',d.niver.length?d.niver.length+' 🎂':'',d.crit.n?d.crit.n+' crític'+(d.crit.n===1?'o':'os'):''].filter(Boolean).join(' · ')||'dia tranquilo';
+  return iniBloco('dia-cards','📋 Hoje em 6 números',resumo,`<div class="dia-g">${cards.map(([ic,t,n,sub,ac])=>`<button class="dia-c${n?' on':''}${n==null?' sd':''}" onclick="${ac}" title="Abrir ${esc(t)}"><span class="dia-c-ic">${ic}</span><b>${n==null?'—':n}</b><span class="dia-c-t">${esc(t)}</span><span class="dia-c-s">${esc(sub)}</span></button>`).join('')}</div>`); }
+/* ── OLHO GLOBAL: esconde todo R$ do Início (por aparelho). Mascara na saída, então vale pra qualquer bloco, de hoje e do futuro ── */
+const OLHO_CHAVE='crmlp_olho_v1';
+function olhoFechado(){ try{ return localStorage.getItem(OLHO_CHAVE)==='0'; }catch(_){ return false; } }
+function olhoToggle(){ try{ localStorage.setItem(OLHO_CHAVE,olhoFechado()?'1':'0'); }catch(_){ } if(typeof VIEW!=='undefined'&&VIEW==='inicio') viewInicio(); }
+const OLHO_RE=/R\$\s?-?[\d.,]+(?:\s?(?:mil|mi|bi|k|M)\b)?/g;
+function olhoMascara(txt){ return String(txt).replace(OLHO_RE,'R$ •••'); }
+function olhoAplicar(raiz){ if(!raiz||!olhoFechado()) return 0; let n=0; const w=document.createTreeWalker(raiz,NodeFilter.SHOW_TEXT); const ns=[]; while(w.nextNode()) ns.push(w.currentNode);
+  ns.forEach(t=>{ if(OLHO_RE.test(t.nodeValue)){ OLHO_RE.lastIndex=0; t.nodeValue=olhoMascara(t.nodeValue); n++; } OLHO_RE.lastIndex=0; });
+  raiz.querySelectorAll('[title]').forEach(e=>{ const v=e.getAttribute('title'); if(OLHO_RE.test(v)){ e.setAttribute('title',olhoMascara(v)); } OLHO_RE.lastIndex=0; });
+  raiz.classList.add('olho-off'); return n; }
+window.olhoToggle=olhoToggle;
+(function(){ const st=document.createElement('style'); st.textContent=`
+.dia-hd{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.dia-n{flex:1 1 140px;background:var(--fundo,#f1f5f9);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.dia-n b{font-size:26px;line-height:1;font-variant-numeric:tabular-nums}.dia-n span{font-size:12.5px;color:var(--muted)}.dia-n.ruim b{color:var(--verm,#dc2626)}
+.dia-acao{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;border:1px solid #fecaca;background:#fef2f2;color:#7f1d1d;border-radius:12px;padding:12px 14px;font-size:14px;cursor:pointer;flex-wrap:wrap}
+.dia-acao b{white-space:nowrap;color:#b91c1c}.dia-acao:hover{border-color:#f87171}
+.dia-ok{display:flex;gap:10px;align-items:center;padding:6px 2px}.dia-ok b{display:block}.dia-ok span{font-size:12.5px;color:var(--muted)}
+.dia-g{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.dia-c{display:grid;grid-template-columns:auto 1fr;grid-template-areas:"i n" "t t" "s s";gap:2px 8px;align-items:center;text-align:left;border:1px solid var(--linha);background:#fff;border-radius:12px;padding:10px 12px;cursor:pointer;color:inherit;font:inherit;min-width:0}
+.dia-c:hover{border-color:#cbd5e1;background:#f8fafc}.dia-c-ic{grid-area:i;font-size:18px}.dia-c b{grid-area:n;font-size:24px;line-height:1;font-variant-numeric:tabular-nums;justify-self:end}
+.dia-c.on b{color:var(--primary,#2563eb)}.dia-c.sd b{color:var(--muted)}
+.dia-c-t{grid-area:t;font-size:13px;font-weight:650}.dia-c-s{grid-area:s;font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ini-olho{min-width:44px}
+@media (max-width:760px){ .dia-g{grid-template-columns:1fr 1fr}.dia-c{min-height:92px}.dia-acao{min-height:52px} }`; document.head.appendChild(st); })();
+
 /* == INICIO EM TOPICOS DOBRAVEIS (INICIO-BLOCOS-V1, 01/09) ================
    Pedido dele: a mesma dinamica que ja usamos na ficha do negocio e nos blocos
    da Revisao de Protecao -- topico que encolhe e estende, com a escolha
@@ -3269,7 +3336,7 @@ const DOBRA_PADRAO=false;
 function dobraAberta(chave, st){ return (st && Object.prototype.hasOwnProperty.call(st,chave)) ? !!st[chave] : DOBRA_PADRAO; }
 const INI_CHAVE='crmlp_inicio_secs_v1';
 /* DOBRA-FECHADA-V1: a lista fica pela ORDEM/existência dos blocos; o padrão de todos é fechado */
-const INI_PADRAO={agora:0,solic:0,benef:0,numeros:0,aniv:0,'funil-nn':0,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':0,'cf-neg':0,'cf-perfil':0,'cf-cob':0,'cf-aps':0};
+const INI_PADRAO={dia:0,'dia-cards':0,agora:0,solic:0,benef:0,numeros:0,aniv:0,'funil-nn':0,'funil-bc':0,ta:0,reunioes:0,eventos:0,lp:0, 'cf-radar':0,'cf-neg':0,'cf-perfil':0,'cf-cob':0,'cf-aps':0};
 function iniLer(){ try{ return JSON.parse(localStorage.getItem(INI_CHAVE)||'{}')||{}; }catch(_){ return {}; } }
 function iniGravar(o){ try{ localStorage.setItem(INI_CHAVE,JSON.stringify(o)); }catch(_){} }
 function iniAberto(k){ return dobraAberta(k, iniLer()); }   /* DOBRA-FECHADA-V1 */
@@ -3309,7 +3376,7 @@ function iniBotaoPinta(){}
    1) card escondido continua na lista do modo organizar, com o botão de trazer de volta;
    2) card NOVO do app entra no fim sozinho — nunca nasce escondido. */
 const PORD_CHAVE='crmlp_painel_v1';
-const PORD_NOMES={agora:'Agora',solic:'📨 Solicitações',benef:'🩹 Benefícios',mf:'Resumo MF',numeros:'Números',aniv:'🎂 Aniversariantes','funil-nn':'Funil · Novos Negócios','funil-bc':'Funil · Base de Clientes',ta:'Telephone Approach',reunioes:'Reuniões',eventos:'Compromissos',lp:'Por LP'};
+const PORD_NOMES={dia:'☀️ O seu dia',  'dia-cards':'📋 Hoje em 6 números',agora:'Agora',solic:'📨 Solicitações',benef:'🩹 Benefícios',mf:'Resumo MF',numeros:'Números',aniv:'🎂 Aniversariantes','funil-nn':'Funil · Novos Negócios','funil-bc':'Funil · Base de Clientes',ta:'Telephone Approach',reunioes:'Reuniões',eventos:'Compromissos',lp:'Por LP'};
 let PORD_MODO=false, _PORD_CH=[];
 function pordLer(){ try{ const o=JSON.parse(localStorage.getItem(PORD_CHAVE)||'{}')||{};
   return {ordem:Array.isArray(o.ordem)?o.ordem.map(String):[], ocultos:Array.isArray(o.ocultos)?o.ocultos.map(String):[]}; }catch(_){ return {ordem:[],ocultos:[]}; } }
@@ -3591,10 +3658,12 @@ function viewInicio(){
     <div class="sub">${isMaster()? 'Visão consolidada da unidade (todos os LPs).' : 'Sua carteira e seu funil.'}</div>
     <div id="cv-vigia-ini">${(()=>{ try{ return cvVigiaHtml('inicio'); }catch(_){ return ''; } })()}</div>
     <div class="ini-tudo">
-      <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button></div>
-    ${pordRender([['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
+      <button class="btn ${PORD_MODO?'btn-p':'btn-s'} btn-mini" onclick="pordModo(${PORD_MODO?'false':'true'})" title="Mudar a ordem dos cards e esconder o que você não usa">⋮⋮ ${PORD_MODO?'pronto':'organizar painel'}</button>
+      <button class="btn btn-s btn-mini ini-olho" onclick="olhoToggle()" title="${olhoFechado()?'Mostrar os valores em R$':'Esconder todos os valores em R$ do Início (vale neste aparelho)'}" aria-pressed="${olhoFechado()}">${olhoFechado()?'🙈 valores escondidos':'👁 valores'}</button></div>
+    ${pordRender([['dia',iniDiaBloco()],['dia-cards',iniDiaCardsBloco()],['agora',inicioAgoraHtml()],['solic',iniSolicBloco()],['benef',iniBenefBloco()],['mf',mfBlocoHTML()],['numeros',bNumeros],['aniv',bAniv],
                   ['funil-nn',bNn],['funil-bc',bBc],['ta',bTa],['reunioes',bReun],['eventos',bEv],['lp',bLp]])}`;
   iniBotaoPinta();
+  try{ olhoAplicar($('#main')); }catch(_){}   /* INICIO-GLOBAL-V1: olho global */
   try{ cvVigiaChutar(false); }catch(_){}   /* VIGIA-QUEDA-V1: o WhatsApp caiu? (faixa só quando há alerta) */
 }
 /* ═══════════════════ MÓDULO: NOVOS NEGÓCIOS ═══════════════════ */
@@ -22504,6 +22573,24 @@ function lpSelfCheck(){
     /* ═══ PAINEL-ORGANIZAR-V1 (15/09): a ordem e o que aparece no Início são dele ═══ */
     { const _p=localStorage.getItem(PORD_CHAVE), _m=PORD_MODO;   /* self-check NÃO deixa lixo salvo (livro de erros #17) */
       try{
+        ok('INICIO-GLOBAL-V1 (T1): olho global mascara TODO valor em R$ (texto e title), com qualquer formato; sem olho fechado não mexe',
+           (()=>{ const d=document.createElement('div'); d.innerHTML='<b>R$ 2.692,00</b> em risco · <span title="PA R$ 7,8 mil">x</span> R$ 300/mês · R$12'; let fech, abr;
+             const _o=(()=>{ try{ return localStorage.getItem(OLHO_CHAVE); }catch(_){ return null; } })();
+             try{ localStorage.setItem(OLHO_CHAVE,'1'); abr=olhoAplicar(d)===0&&/2\.692/.test(d.textContent);
+               localStorage.setItem(OLHO_CHAVE,'0'); olhoAplicar(d); fech=!/R\$\s?\d/.test(d.textContent)&&!/R\$\s?\d/.test(d.querySelector('span').title)&&(d.textContent.match(/R\$ •••/g)||[]).length===3; }
+             finally{ try{ if(_o==null) localStorage.removeItem(OLHO_CHAVE); else localStorage.setItem(OLHO_CHAVE,_o); }catch(_){ } }
+             return abr&&fech; })());
+        ok('INICIO-GLOBAL-V1 (T1): "O seu dia" — atraso crítico manda a ação pra Lista de Atraso filtrada (Críticas); sem crítico, a pendência mais urgente; nada pendente = sem ação',
+           (()=>{ const p={l:[{k:'atras',n:3,txt:'tarefas atrasadas',acao:"irPara('agenda')"}],tot:3,passou:3};
+             const a1=iniAcaoDia(p,{n:6,v:2692}), a2=iniAcaoDia(p,{n:0,v:0}), a3=iniAcaoDia({l:[],tot:0,passou:0},{n:0,v:0});
+             return /6 atrasos críticos/.test(a1.txt)&&/2\.692/.test(a1.txt)&&/FAT\.lente='crit'/.test(a1.acao)&&/lp-atrasos/.test(a1.acao)&&a2.acao==="irPara('agenda')"&&a3===null; })());
+        ok('INICIO-GLOBAL-V1 (T1): atraso crítico = o MESMO cálculo da Lista de Atraso (atV2Kpis, ≥ 50 dias, sumidas e resolvidas fora)',
+           (()=>{ const _i=AT.itens; try{ const hj=atHojeLocal(), dd=n=>{ const x=new Date(hj); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10); };
+             AT.itens=[{apolice:'900000001',vencido_em:dd(55),premio:100,status:'Sem tratativa'},{apolice:'900000002',vencido_em:dd(20),premio:50,status:'Sem tratativa'},
+                       {apolice:'900000003',vencido_em:dd(70),premio:999,status:AT_STATUS.SUMIU},{apolice:'900000004',vencido_em:dd(80),premio:10,resolvido_em:hj.toISOString?hj.toISOString():String(hj)}];
+             const c=iniAtrasoCrit(); return c.n===1&&c.v===100; } finally{ AT.itens=_i; } })());
+        ok('INICIO-GLOBAL-V1 (T1): os 2 blocos novos entram no organizar painel com nome e nascem fechados (resumo no cabeçalho)',
+           !!PORD_NOMES.dia&&!!PORD_NOMES['dia-cards']&&/data-ini="dia"/.test(iniDiaBloco())&&/data-ini="dia-cards"/.test(iniDiaCardsBloco())&&!/class="ini-bl"[^>]*data-ini="dia"/.test(iniLer().dia?'':iniDiaBloco()));
         const pecas=[['agora','<i>A</i>'],['numeros','<i>N</i>'],['ta','<i>T</i>'],['funil-bc','']];   /* funil-bc não existe hoje */
         pordGravar({ordem:[],ocultos:[]}); PORD_MODO=false;
         ok('painel: sem preferência salva, a ordem é a natural do app e ninguém some',
