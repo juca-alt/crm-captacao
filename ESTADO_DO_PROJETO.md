@@ -8,6 +8,7 @@
 - **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
 - **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
 - **Ele:** ligar 🌟 Embaixadores pra Rebeca no Painel Master e revisar com "Usar o app como"; mandar a mensagem de boas-vindas; ajustar o compartilhamento externo da agenda no Google Workspace.
+- **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
 - **Próximo no Code:** L2 → J → G → F (com L3).
 
 ## (anterior) 09/11/2026 (noite) — C' (Victor saiu) pronto no branch
