@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.88 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.89 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -22020,6 +22020,14 @@ function lpSelfCheck(){
                && cvFiltrar(base,{modo:'todas',dest:'rebeca'}).map(x=>x.id).join('')==='a' && cvFiltrar(base,{modo:'todas',dest:'gustavo'}).length===0
                && !/textarea|contenteditable/i.test(cvDestHtml(cvDest(A))));
           } finally{ CV.tri=_t; } }
+        { const _sg=CV.sug; try{
+            CV.sug={id:'a',sug:{categoria:'documentos',precisa_gustavo:false,motivo:'pediu o formulário',rascunho:'Oi, Fulano! Obrigado, vou conferir e te retorno.'}};
+            const hs=cvSugHtml(A), ia=cvMsgsParaIA([{de:'cliente',tipo:'Text',texto:'oi'},{de:'nos',tipo:'Text',texto:'nota',privada:true},{de:'cliente',tipo:'Audio',texto:''}]);
+            ok('COPILOTO NO APP: rascunho aparece só pra ler e copiar (sem campo, sem enviar); nota interna não vai pra IA; mídia vira rótulo',
+               /vou conferir/.test(hs) && /cvSugCopiar\(\)/.test(hs) && !/<textarea|contenteditable|<input/i.test(hs) && !/>\s*(Enviar|Responder|Mandar)\b/i.test(hs)
+               && ia.length===2 && ia[1].texto==='[áudio]' && !ia.some(m=>m.texto==='nota') && cvSugHtml(B)===''
+               && !/\.(insert|upsert|update|delete)\(/.test(String(cvSugerir)) && !/umbler\.com/.test(String(cvSugerir)));
+          } finally{ CV.sug=_sg; } }
         ok('conversas: "há quanto tempo" em linguagem de gente', cvHa(hh(0))==='agora' && cvHa(hh(2))==='há 2 h' && cvHa(hh(30))==='há 1 d' && cvHa(hh(50))==='há 2 d');
         CV.chats=base; CV.f={modo:'todas',busca:'',canal:'',abertas:false}; CV.erro=''; CV.carregado=true; CV.exemplo=false;
         CV.estado={ultimo_ok:hh(0.1)}; CV.aberto='a';
@@ -25213,7 +25221,7 @@ const CV_TIPOS={Text:'',Image:'🖼️ imagem',Audio:'🎧 áudio',Video:'🎬 v
   Contact:'👤 contato',Location:'📍 localização',Poll:'📊 enquete',CallAttempt:'📞 tentativa de chamada'};
 function cvTipoRot(t){ return Object.prototype.hasOwnProperty.call(CV_TIPOS,String(t||''))? CV_TIPOS[t] : String(t||''); }
 let CV={chats:[],carregado:false,carregando:null,estado:null,erro:'',msgs:{},porContato:{},aberto:null,sinc:false,exemplo:false,
-  f:{modo:'aguardando',busca:'',canal:'',abertas:false,selo:'',dest:''},tri:{}};
+  f:{modo:'aguardando',busca:'',canal:'',abertas:false,selo:'',dest:''},tri:{},sug:null};
 
 (function cvCss(){ if(document.getElementById('cv-css')) return; const s=document.createElement('style'); s.id='cv-css'; s.textContent=`
   .cv-wrap{display:block}
@@ -25225,6 +25233,11 @@ let CV={chats:[],carregado:false,carregando:null,estado:null,erro:'',msgs:{},por
   .cv-row-n{font-weight:700;font-size:14px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .cv-row-h{font-size:11px;color:var(--muted);white-space:nowrap;flex:0 0 auto}
   .cv-row-p{display:block;width:100%;min-width:0;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cv-sug{margin-top:10px;padding:10px 12px;border:1px solid #c7d2fe;background:#eef2ff;border-radius:12px;font-size:13.5px;line-height:1.5}
+  .cv-sug-erro{border-color:#fecaca;background:#fef2f2;color:var(--verm)}
+  .cv-sug-t{font-size:12.5px;color:#3730a3;margin-bottom:6px}
+  .cv-sug-r{white-space:pre-wrap;background:#fff;border:1px solid #e0e7ff;border-radius:10px;padding:8px 10px;user-select:text}
+  .cv-sug-m{font-size:11.5px;color:var(--muted);margin-top:6px}
   .cv-row-m{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
   .cv-pane{display:none}
   .cv-head{display:flex;flex-direction:column;gap:6px;padding:12px;border-bottom:1px solid var(--linha)}
@@ -25384,6 +25397,37 @@ const CV_DEST={gustavo:['Gustavo decide','b-verm','🔴'],rebeca:['Rebeca','b-am
 function cvDest(ch){ if(!ch||!cvAguardando(ch)) return null; const t=(CV.tri||{})[ch.id]; if(!t||!CV_DEST[t.destino]) return null;
   const a=Date.parse(ch.ultima_msg_em||''), l=Date.parse(t.ultima_msg_em||''); if(isFinite(a)&&isFinite(l)&&a>l) return null; return t; }
 function cvDestHtml(t){ if(!t) return ''; const d=CV_DEST[t.destino]; return `<span class="badge ${d[1]}" style="white-space:nowrap" title="${esc('Triagem do copiloto: '+d[0]+(t.motivo?' — '+t.motivo:''))}">${d[2]} ${esc(d[0])}${t.urgencia===3?' · urgente':''}</span>`; }
+/* ── COPILOTO NO APP (ticket I, passo 0 · 09/11) — o rascunho que existia só no branch copiloto-t1 chega à tela.
+   O copiloto (Edge Function copiloto-sugerir, Claude Haiku) lê as últimas mensagens (sem nota interna; mídia vira [áudio]…)
+   e devolve um rascunho. Aqui ele só APARECE pra ler e copiar: nada de campo de digitar, nada de enviar, nada na Umbler.
+   Quem manda é sempre gente, pelo WhatsApp. Assunto de preço/plano/saúde → "fala com o Gustavo" (trava do servidor). */
+const CV_SUG_CAT={agendamento:'Agendamento',confirmacao_remarcacao:'Confirmação / remarcação',primeiro_contato:'Primeiro contato',followup:'Retomar contato',documentos:'Documentos',assunto_gustavo:'Assunto do Gustavo',outro:'Outro'};
+function cvMsgsParaIA(msgs){ const rot={Audio:'[áudio]',Image:'[imagem]',File:'[arquivo]',Video:'[vídeo]',Sticker:'[figurinha]',CallAttempt:'[tentou ligar]',Contact:'[contato]',Location:'[localização]'};
+  return (msgs||[]).filter(m=>m&&!m.privada).slice(-20).map(m=>({de:m.de==='cliente'?'cliente':'nos',texto:String(m.texto||'').trim()||rot[m.tipo]||'[mídia]',hora:cvHora(m.enviada_em)})); }
+async function cvSugerir(id){
+  const ch=(CV.chats||[]).find(x=>x.id===id); if(!ch||!sb) return;
+  CV.sug={id,carregando:true}; if(VIEW==='conversas') viewConversas();
+  try{
+    if(!CV.msgs[id]) await cvMsgsCarregar(id);
+    const casa=cvCasar(ch), idt=cvIdent(ch);
+    const r=await sb.functions.invoke('copiloto-sugerir',{body:{mensagens:cvMsgsParaIA(CV.msgs[id]),contato_id:(casa&&casa.tipo==='funil'?casa.id:(idt.cid||null))}});
+    const d=r.data||{}; if(r.error&&!d.mensagem) throw r.error;
+    CV.sug=d.ok?{id,sug:d.sugestao}:{id,erro:d.mensagem||'O copiloto não respondeu agora.'};
+  }catch(e){ CV.sug={id,erro:'O copiloto não respondeu agora: '+String((e&&e.message)||e).slice(0,120)}; }
+  if(VIEW==='conversas') viewConversas(); }
+function cvSugHtml(ch){ const s=CV.sug; if(!s||!ch||s.id!==ch.id) return '';
+  if(s.carregando) return `<div class="cv-sug" role="status">✨ O copiloto está lendo a conversa…</div>`;
+  if(s.erro) return `<div class="cv-sug cv-sug-erro" role="status">⚠️ ${esc(s.erro)}</div>`;
+  const g=s.sug||{}, gus=!!g.precisa_gustavo;
+  return `<div class="cv-sug" role="status">
+    <div class="cv-sug-t">✨ Rascunho do copiloto · <b>${esc(CV_SUG_CAT[g.categoria]||'Sugestão')}</b>${gus?' · <span class="badge b-verm">🔴 precisa do Gustavo</span>':''}</div>
+    <div class="cv-sug-r">${esc(g.rascunho||'')}</div>
+    ${g.motivo?`<div class="cv-sug-m">por quê: ${esc(g.motivo)}</div>`:''}
+    <div class="cv-acts"><button class="btn btn-p btn-mini" onclick="cvSugCopiar()" title="Copia o rascunho pra você colar no WhatsApp, revisar e mandar">📋 Copiar rascunho</button>
+      <button class="btn btn-ghost btn-mini" onclick="cvSugerir('${esc(jsq(ch.id))}')" title="Pede outra sugestão">↻ outra</button></div>
+    <div class="cv-sug-m">Revise antes de mandar. O copiloto não envia nada e não fala de preço, plano ou saúde.</div></div>`; }
+async function cvSugCopiar(){ const t=CV.sug&&CV.sug.sug&&CV.sug.sug.rascunho; if(!t) return;
+  try{ await navigator.clipboard.writeText(t); toast('Rascunho copiado — cole no WhatsApp, revise e mande',true); }catch(_){ toast('Não consegui copiar — selecione o texto e copie',false); } }
 function cvSeloHtml(id){ const s=CV_SELO[id.selo]||CV_SELO.desc; return `<span class="badge ${s[1]}" style="white-space:nowrap" title="${esc(s[0]+(id.det?' · '+id.det:''))}">${s[2]} ${esc(s[0])}${id.det?' · '+esc(id.det):''}</span>`; }
 /* o caminho inverso (ficha → conversas), a partir do índice já carregado */
 function cvChatsDoContato(c){
@@ -25620,9 +25664,9 @@ function cvPainelHtml(ch){
   const wa=(typeof waHref==='function'&&tel)?waHref(tel):'';
   return `<div class="card" style="padding:0;overflow:hidden">
     <div class="cv-head">
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="display:flex;gap:6px 8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-ghost btn-mini cv-volta" style="min-height:44px" onclick="cvFechar()" title="Voltar pra lista">← voltar</button>
-        <b style="flex:1;min-width:0;font-size:15px">${esc(cvIdent(ch).nome)}</b>${cvSeloHtml(cvIdent(ch))}${cvDestHtml(cvDest(ch))}
+        <b style="flex:1 1 150px;min-width:0;font-size:15px;overflow-wrap:anywhere">${esc(cvIdent(ch).nome)}</b>${cvSeloHtml(cvIdent(ch))}${cvDestHtml(cvDest(ch))}
         ${cvAguardando(ch)?`<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(cvHa(ch.ultima_msg_em))}</span>`:''}
       </div>
       <div style="font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
@@ -25631,11 +25675,13 @@ function cvPainelHtml(ch){
       </div>
       <div class="cv-acts">
         ${casa?`<button class="btn btn-p btn-mini" onclick="cvAbrirFicha('${esc(jsq(ch.id))}')" title="Abre a ficha dessa pessoa no CRM">📂 Abrir ficha</button>`:''}
+        ${logado()?`<button class="btn btn-p btn-mini" onclick="cvSugerir('${esc(jsq(ch.id))}')" ${CV.sug&&CV.sug.id===ch.id&&CV.sug.carregando?'disabled':''} title="O copiloto lê a conversa e sugere um rascunho — você revisa, copia e manda pelo WhatsApp">✨ Sugerir resposta</button>`:''}
         <button class="btn btn-s btn-mini" onclick="cvCopiar('${esc(jsq(ch.id))}')" title="Copia a conversa como texto, pra colar onde você quiser">📋 Copiar texto</button>
         ${wa?`<a class="btn btn-s btn-mini" href="${esc(wa)}" target="_blank" rel="noopener" title="Abre o WhatsApp nessa conversa — a resposta é sua">💬 Abrir no WhatsApp</a>`:''}
         <a class="btn btn-s btn-mini" href="${esc(CV_TALK+encodeURIComponent(ch.id))}" target="_blank" rel="noopener" title="Abre o Umbler Talk; se não cair direto na conversa, ela está na lista do Talk">🔗 Abrir no Talk</a>
         <button class="btn btn-ghost btn-mini" onclick="cvRecarregar('${esc(jsq(ch.id))}')" title="Relê as mensagens desta conversa">↻</button>
       </div>
+      ${cvSugHtml(ch)}
       <div style="font-size:11px;color:var(--muted)">Só leitura: responder é sempre você ou o Victor, pelo WhatsApp ou pelo Talk.</div>
     </div>
     ${msgs? (msgs.length? `<div class="cv-msgs">${cvMsgsHtml(msgs)}</div>`
