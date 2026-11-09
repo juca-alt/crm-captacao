@@ -2,7 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89), AGUARDA 3 OKs
+## 🟢 RETOMAR AQUI — 09/11/2026 (fim de tarde) — v8.89 NO AR (PR #334, OK dele; Pages conferido por hash `b26e5ae7ef68`) · triagem rodando
+
+- Funções no ar: `umbler` v6, `copiloto-sugerir` v7, `triagem` v1. SQL da triagem rodado por ele (tabela + cron às :05).
+- 1ª rodada (15:15): 25 conversas → 🔴 5 · 🟡 9 · 🔵 2 · ⚪ 9 (2 por regra, sem IA). Máx. 25 por rodada; o resto entra nas próximas.
+- Prompt de fluxo entregue pra sessão de organização (onboarding da Rebeca, Umbler, decisões C e K).
+- Próximo no Code: J → G → F → C.
+
+## 🟡 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89)
 
 - **B ✅ (rodado por ele):** Rebeca = `rebeccaayla00@…` (e-mail só no banco). Conferido: papel lp, 19 módulos, recs=false, sem MFO, base do Gustavo, RC no time dele. Ela ainda NÃO entrou no CRM.
 - **H ✅ SENSIVEL-V1:** `umbler` v6 no ar (cartão → •••• 1234; CPF → ***; Luhn/DV; telefone com DDI fora). Limpeza rodada por ele: 7 mensagens + 1 prévia; conferência = 0. SQL: `supabase/migrations/umbler_sensivel_2026-11-09.sql`.
