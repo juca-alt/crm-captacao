@@ -2,6 +2,37 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 09/11/2026 (noite) — T1 do Início PRONTO PRA SUBIR (v8.93, branch `claude/busy-galileo-dh6sti`, NÃO publicado) · aguarda OK dele
+
+- **Críticos fechados (PARIDADE-ATRASO-V1):** conferido apólice a apólice com o Global (Lista de Atraso › Críticas ≥ 50 d = 6 · R$ 2.692,44). O nosso dava 4 · R$ 866,58 por 2 erros em `atV2Dias`, que valem pra Lista de Atraso inteira, não só pro Início:
+  1. a regra "`pago_ate ≥ vencido_em` → em dia" estava ERRADA: no relatório da Prudential o "pago até" é igual ou depois do vencimento da parcela em aberto. Escondia 15 apólices abertas (Cinthia 001494417, George 001596270 e 001856664 entre as críticas; Marcus 001636859, Flavio, Nathalia, Cristiane ×2, Nivaldo, Maria Aparecida, Rafael… todas na lista do Global).
+  2. status "Resolvido" com `resolvido_em` vazio contava como ativa (Felipe 001685046, R$ 142,71, que não está no Global). Há 5 linhas assim na tabela.
+  - Depois do ajuste, a base dele dá 6 · R$ 2.692,44, igual ao Global. Novo `atV2Resolvido(r)`; doc `docs/atraso-v2-central-importacoes.md` corrigido. A Lista de Atraso passa a mostrar MAIS apólices em atraso (as 15) — é o esperado.
+  - Obs.: o Vendas LP usa o Supabase `cjieobmdpqcupzdpckef` (tabela `vendas_atrasos`), não o `kbiinf…` da Captação.
+- **Renovações em 30 dias — sem fonte no banco:** a carteira (353 apólices) não tem data de emissão; `emissao_emitidas` só tem 37 (ago–out/26) e cobre 8 da carteira. O Global tem a data (mostra "Emissão 05/10/2023"). Caminhos pra ele decidir: (A) relatório de Carteira da Prudential com a coluna de emissão/início de vigência, se o export tiver; (B) ler a emissão dos demonstrativos PDF (a skill /apolices já baixa pro Drive); (C) conector do Global (`listar_carteira`), que precisa ser reconectado com o código do celular. Até lá o card segue "—" + "falta data na carteira".
+- **SAUDACAO-V1 (pedido dele):** cabeçalho do Início = "Bom dia/Boa tarde/Boa noite, {1º nome}." + data por extenso, como no Global. No "Usar o app como" sai o nome da pessoa (antes saía GUSTAVO JUCA na tela da Rebeca). Vale pra todos (ajuste do que já existe).
+- **Trava:** os blocos "O seu dia" + "Hoje em 6 números" + o olho agora estão em `NOVO_SO_MEU['inicio-dia']` (só a base dele). Por isso a Rebeca não vê. Liberar pra ela, Daniel ou Victor só com a palavra dele.
+- **Merge da main (v8.92) no branch → v8.93.** Portão verde (55 telas × 6, lpSelfCheck 0). 2 autotestes novos (PARIDADE-ATRASO-V1, SAUDACAO-V1).
+- **Preview com dados reais:** o Google só volta pra endereços liberados no Supabase (localhost não está). O preview foi feito carregando o código da branch num iframe dentro da aba do github.io já logada (só leitura; recarregar volta à produção).
+- **Falta:** OK dele pra publicar a v8.93 · decisão da fonte de Renovações · depois T2→T7.
+
+## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — INÍCIO COM PARIDADE GLOBAL · T1 PRONTO NO BRANCH `claude/busy-galileo-dh6sti` (v8.90, NÃO publicado) · **a sessão do Mac assume T2→T7** (decisão dele: "A, a do Mac assume")
+
+- **Spec:** PROMPT_CODE "Início (painel) com paridade Global CRM · 09/11/2026" (backlog Notion "MELHORIAS DO CRM · por setor", linha "Início completo (paridade Global)"). Tickets: T1 olho global + blocos 1–2 · T2 bloco 3 (confirmar saídas do atraso 60+) · T3 blocos 4 e 10 · T4 bloco 5 · T5 blocos 6–7 (7 só se existir motor de cotação no main) · T6 blocos 8–9 · T7 bloco 11 (mapa, só sem chave). Um ticket por vez, para pra revisão com print lado a lado do Global, nada publicado sem OK dele.
+- **Por que mudou de sessão:** a sessão da nuvem não alcança o Chrome dele; a do Mac (Claude Code local, pasta `crm-captacao-main`, Remote Control ligado) usa o Claude in Chrome com o Global logado. **Global = SÓ LEITURA** (nunca "Pagamento confirmado", "Cancelada por inadimplência", "Importar extratos").
+- **T1 (INICIO-GLOBAL-V1, vendas.html, perto de `inicioAgora`):**
+  - `iniDiaBloco()` "☀️ O seu dia · para resolver hoje" e `iniDiaCardsBloco()` "📋 Hoje em 6 números", 1º e 2º no `pordRender` (chaves `dia`, `dia-cards` em PORD_NOMES/INI_PADRAO; nascem fechados).
+  - Fonte única: atrasos críticos = `iniAtrasoCrit()` → `atV2Kpis` da Lista de Atraso (≥ 50 dias, sumidas e resolvidas fora); reuniões/ligar depois/mensagens = `agendaItens()` (ligar depois = tarefa ligar/whats atrasada ∪ `taDelayTipo==='Retornar'`; mensagens = tarefas `lembrarReuniao` em ≤ 72 h); aniversários = `niverItens`.
+  - **PARIDADE-V2** (base real dele deu 126 · 74 contra 6 · 6 do Global): "para resolver hoje" = SOMA DOS CARDS do dia; "passou da hora" = críticos + ligar depois. Ação única: crítico → `FAT.lente='crit';irPara('lp-atrasos')`; senão o 1º card com número.
+  - **Olho global:** botão "👁 valores" ao lado de "organizar painel"; `olhoAplicar()` mascara todo `R$ …` (texto e title) do #main do Início; `localStorage crmlp_olho_v1`.
+  - Visual aprovado por ele ("gostei do VISUAL T1"). Card crítico com borda vermelha. 5 autotestes `INICIO-GLOBAL-V1 (T1)`; portão verde (55 telas × 6).
+- **Abertos do T1:**
+  1. **Críticos 4 (nosso) × 6 (Global, R$ 2.692)** — listar apólice a apólice no Global (Lista de Atraso › críticos) e no nosso (🔴 Críticas): corte de dias? relatório de atraso mais antigo? apólice faltando? Ajustar só com o porquê na mão.
+  2. **Renovações em 30 dias:** a carteira importada não traz data de emissão/aniversário (conferido 23/10) → card mostra "—" + "falta data na carteira". O Global tem o número (0 em 09/11). **Decisão pendente dele:** de qual relatório vem a data.
+  3. Carteira importada é de 09/09 — paridade numérica completa só depois de importar a carteira atual.
+- **Próximo:** fechar os 2 primeiros abertos → OK dele → T2 (o bloco amarelo do Global "N apólice(s) saíram da lista com 60+ dias… pagamento confirmado ou cancelada?" com contadores resolvidas · canceladas · a confirmar).
+
+## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89), AGUARDA 3 OKs
 ## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.91 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
 
 - **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
