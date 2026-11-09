@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.87 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.88 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1859,8 +1859,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 
 <!-- FUNIL-UNICO-V1 · T3: o quadro dos 2 funis novos mora em arquivo próprio (não briga com a sessão paralela) -->
 <!-- VER-COMO-V3 (08/11): "usar o app como" — carrega ANTES do script principal (o filtro de rede tem que existir antes do cliente Supabase) -->
-<script src="modulos/ver-como.js?v=20261108b"></script>
-<script src="modulos/funil-unico.js?v=20261107a"></script>
+<script src="modulos/ver-como.js?v=20261109a"></script>
+<script src="modulos/funil-unico.js?v=20261109b"></script>
 <!-- AGENDA-GLOBAL-V1 (26/10): Agenda & Tarefas no padrão do Global mora em arquivo próprio -->
 <script src="modulos/agenda-global.js?v=20261026c"></script>
 <script src="modulos/ficha-ux2.js?v=20261107a"></script>
@@ -11732,7 +11732,9 @@ function gcalCfg(){ if(typeof PL==='undefined'||!PL) return {cals:{},pessoal:GCA
   if(!c.cals||typeof c.cals!=='object') c.cals={}; if(!Array.isArray(c.pessoal)){ c.pessoal=GCAL_PESSOAL_SEED.slice(); } if(!Array.isArray(c.trabalho)) c.trabalho=[]; if(c.ocultar==null) c.ocultar=true; return c; }
 function gcalCfgSalvar(){ if(typeof PL_DIRTY!=='undefined') PL_DIRTY=true; if(typeof plSalvar==='function') plSalvar(); }
 /* modo da agenda do Google: auto (classifica pelo evento) · trabalho · pessoal · off (não puxa). Principal nasce em auto; as outras em off até ele ligar. */
-function gcalCalModo(calId){ const c=gcalCfg(); const m=c.cals[calId||'primary']; if(m) return m; const ehPrim=!calId||calId==='primary'||(GCAL.cals||[]).some(x=>x.id===calId&&x.primary); return ehPrim?'auto':'off'; }
+function gcalCalModo(calId){ const c=gcalCfg(); const m=c.cals[calId||'primary']; if(m) return m; const ehPrim=!calId||calId==='primary'||(GCAL.cals||[]).some(x=>x.id===calId&&x.primary);
+  const ehDono=(typeof DELEG!=='undefined'&&DELEG&&(DELEG.donos||[]).some(d=>String(d||'').toLowerCase()===String(calId||'').toLowerCase()));   /* AGENDA-DONO-LIGADA-V1 (09/11): assistente vê a agenda do dono sem ter que ligar à mão */
+  return (ehPrim||ehDono)?'auto':'off'; }
 function gcalKwBate(txt,lista){ const k=normKey(txt); if(!k) return false; return (lista||[]).some(w=>{ const nw=normKey(w); return nw&&k.includes(nw); }); }
 function gcalPriv(e){ return (e&&e.extendedProperties&&e.extendedProperties.private)||{}; }
 function gcalClasse(e){ if(!e) return 'trabalho';
@@ -18135,7 +18137,8 @@ async function bnPush(){
    lp_perfis: papel admin|lp + modulos jsonb {chave:bool}. Chave ausente segue
    o default abaixo. A blindagem de DADOS é o RLS; aqui é visibilidade de UI. */
 const MODS={
-  bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-ta','bn-wa','bn-dups','bn-recs'], grp:'sp'},
+  bn:       {label:'Base de Nomes / SitPlan / TA (beta)', def:false, views:['bn-estoque','bn-ta','bn-wa','bn-dups'], grp:'sp'},
+  recs:     {label:'🙌 Recomendações (a lista geral do Estoque) — depende do Base de Nomes', def:true, views:['bn-recs'], requer:'bn'},   /* EQUIPE-REBECA (09/11): palavra dele "recomendações geral não precisa ela ver — as que vou priorizar já vão estar no funil"; ligado pra todos, desliga por pessoa */
   funis_extra:{label:'Pipes Vida em Grupo · Prud. Demais · MFO (Consolidada, Novos Negócios, Negócios na Base)', def:false, views:['vg-funil','prud-funil','mfo-funil','consol-vg','consol-prud','consol-mfo','vg-bc-funil','prud-bc-funil','mfo-bc-funil']},   /* 11/09: desligado por padrão pro LP (Daniel) */
   revisao:  {label:'Revisão de Proteção (beta)',          def:false, views:['revisao']},
   carteira: {label:'Carteira de Clientes',                def:true,  views:['cart-visao','cart-clientes','cart-oportunidades']},
@@ -18305,12 +18308,16 @@ function impGapJuntavel(gap){ const g=String(gap||'').replace(/[\s\/]/g,''); ret
 function impFalhasMsg(falhas){ return falhas.map(f=>`${escRotuloDe({_dono:f.dono})||f.dono}: ${f.n} linha(s) não subiram (${/row-level security|policy/i.test(f.erro)?'sem permissão pra gravar nesse dono':f.erro})`).join(' · '); }
 function escCap(r){ r=String(r||'').trim(); return r? r[0].toUpperCase()+r.slice(1) : r; }
 function escLpNorm(v){ return String(v||'').trim().toLowerCase(); }
+/* EQUIPE-REBECA (09/11): o rótulo antigo "Rebeca" (nomes que eram dela dentro da base dele) aparece com apelido no seletor,
+   pra não confundir com a Rebeca assistente. Só o nome exibido muda; o filtro e os dados seguem pelo rótulo. */
+const ROTULO_APELIDO={rebeca:'Rebeca (base antiga)'};
+function escApelido(r){ return ROTULO_APELIDO[escLpNorm(r)]||escCap(r); }
 function escOpcoesDe(eu, donos, rotulos, meuLp){ /* PURA */
   const out=[{id:'meu',nome:'Meu · '+escCap(meuLp||'minha base'),dono:eu,lp:meuLp?escCap(meuLp):null,padrao:true,eu}];   /* padrao: linha SEM rótulo é minha; sem meuLp = sem filtro de rótulo */
   (rotulos||[]).filter(r=>r.dono_email===eu && escLpNorm(r.rotulo)!==escLpNorm(meuLp))
-    .forEach(r=>out.push({id:'lp:'+escLpNorm(r.rotulo),nome:escCap(r.rotulo),dono:eu,lp:escCap(r.rotulo),padrao:false,eu}));  /* só o que tem o rótulo dela */
+    .forEach(r=>out.push({id:'lp:'+escLpNorm(r.rotulo),nome:escApelido(r.rotulo),dono:eu,lp:escCap(r.rotulo),padrao:false,eu}));  /* só o que tem o rótulo dela */
   (donos||[]).filter(d=>d&&d!==eu).forEach(d=>{ const r=(rotulos||[]).find(x=>x.dono_email===d);
-    out.push({id:'dono:'+d,nome:r?escCap(r.rotulo):d.split('@')[0],dono:d,lp:r?escCap(r.rotulo):null,padrao:true,eu}); });
+    out.push({id:'dono:'+d,nome:r?escCap(r.rotulo):d.split('@')[0],dono:d,lp:r?escCap(r.rotulo):null,padrao:true,toda:true,eu}); });   /* BASE-INTEIRA-V1 (09/11): "ela pode e deve ver todos os clientes e oportunidades" — o rótulo só batiza o que ela cria */
   if(out.length>1) out.push({id:'todos',nome:'Pipe X · tudo que vejo',dono:null,lp:null});
   return out; }
 function escEu(){ return DELEG.eu||(PERFIL&&PERFIL.email)||''; }   /* v7.35.1: a sessão pode chegar depois do loader de delegações */
@@ -18325,7 +18332,8 @@ function escOpcoes(){ return escOpcoesDe(escEu(), (typeof escOpcoesVc==='functio
 let _escMemo=null;
 function escAtual(){ const k=[ESC,DELEG,PERFIL,ESC&&ESC.sel,ESC&&ESC.rotulos,DELEG&&DELEG.donos,DELEG&&DELEG.eu]; if(_escMemo&&Date.now()-_escMemo.t<30&&_escMemo.k.every((x,i)=>x===k[i])) return _escMemo.v;   /* PERF: escRegOk por registro reconstruía as opções 6k vezes por render; memo cai se ESC/DELEG/PERFIL mudarem */
   const v=escAtualCalc(); _escMemo={t:Date.now(),v,k}; return v; }
-function escAtualCalc(){ const ops=escOpcoes();
+function escAtualCalc(){ if(window.VC&&VC.on){ const eu=escEu(), lp=escMeuLp(); return {id:'vc',nome:'Base de '+escCap(lp||String(eu).split('@')[0]),dono:eu,lp:lp?escCap(lp):null,padrao:true,toda:true,eu}; }   /* VER-COMO-V3: igual ao que o assistente vê (dono:você, todos os rótulos) */
+  const ops=escOpcoes();
   let sel=ESC.sel; if(!sel||!ops.some(o=>o.id===sel)) sel=(souAdm()||!DELEG.donos.length)?'meu':'dono:'+DELEG.donos[0];  /* Victor cai direto na base delegada */
   return ops.find(o=>o.id===sel)||ops[0]; }
 function escRegOkDe(o, rec){ /* PURA: registro (com _dono e talvez lp) cabe no escopo? */
@@ -18333,7 +18341,7 @@ function escRegOkDe(o, rec){ /* PURA: registro (com _dono e talvez lp) cabe no e
   const d=(rec&&rec._dono)||o.eu||null;                                  /* DONO-V1: sem dono gravado = MEU (criado local, ainda não confirmado) — nunca vaza pra outro escopo */
   if(d&&o.dono&&d!==o.dono) return false;                                 /* linha de outro dono (dono do escopo desconhecido = não exclui; v7.35.1: eu vazio escondia 5.139 nomes) */
   const lp=rec&&rec.lp;
-  if(o.lp && lp && escLpNorm(lp)!==escLpNorm(o.lp)) return false;       /* rótulo contradiz (Rebeca × Gustavo sob juca) */
+  if(o.lp && lp && !o.toda && escLpNorm(lp)!==escLpNorm(o.lp)) return false;   /* BASE-INTEIRA-V1: base de outro dono = todos os rótulos dele */       /* rótulo contradiz (Rebeca × Gustavo sob juca) */
   if(o.lp && !lp && !o.padrao) return false;                            /* sub-rótulo (Rebeca): só o que tem o rótulo dela */
   return true; }
 function escRegOk(rec){ return escRegOkDe(escAtual(),rec); }
@@ -18409,7 +18417,7 @@ async function perfilCarregar(){
 function aplicarGates(){ try{ const b=document.getElementById('tb-sair'); if(b) b.style.display=logado()?'':'none'; const s=document.getElementById('tb-senha'); if(s) s.style.display=logado()?'':'none'; }catch(_){}   /* MINHA-SENHA-V2: 🔑 à vista no topo */
   const adm=$('#nav-lpadm'); if(adm) adm.style.display=(souAdm()&&!(typeof delegAtivo==='function'&&delegAtivo()))?'':'none';   /* vendo como outro: painel admin some da tela */
   Object.keys(MODS).forEach(k=>{
-    const on=modOn(k);
+    const on=modOn(k)&&(!MODS[k].requer||modOn(MODS[k].requer));   /* recs só aparece se o Base de Nomes estiver ligado */
     (MODS[k].views||[]).forEach(v=>{ document.querySelectorAll(`.nav-btn[data-view="${v}"]`).forEach(b=>b.style.display=on?'':'none'); });
     if(MODS[k].grp){ const t=$('#'+MODS[k].grp+'-toggle'); if(t){ /* grupo SitPlan fica: a lista do dia é core */ } }
   });

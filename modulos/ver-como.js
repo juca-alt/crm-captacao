@@ -160,9 +160,22 @@
         && vcBloqueia('https://www.googleapis.com/calendar/v3/calendars/primary/events','POST') && vcBloqueia('https://x.supabase.co/rest/v1/rpc/lp_varredura_diaria','POST')
         && !vcBloqueia('https://x.supabase.co/rest/v1/lp_contatos?select=*','GET') && !vcBloqueia('https://x.supabase.co/rest/v1/rpc/emb_eu','POST')
         && !vcBloqueia('https://x.supabase.co/auth/v1/token?grant_type=refresh_token','POST'));
+      { _escMemo=null; const cur=escAtual();
+        ok('BASE-INTEIRA-V1: no modo, a base é a do dono inteira (todos os rótulos, inclusive o antigo da Rebeca) e a do Daniel fica fora',
+          cur.id==='vc' && cur.toda===true && escRegOkDe(cur,{_dono:escEu(),lp:'Rebeca'}) && escRegOkDe(cur,{_dono:escEu(),lp:'Gustavo'}) && !escRegOkDe(cur,{_dono:'daniel@x.invalid',lp:'Daniel'})); }
+      { const pr={email:'zz@x.invalid',papel:'lp',modulos:{bn:true,recs:false}}; VC.p={papel:'lp',modulos:pr.modulos};
+        ok('EQUIPE-REBECA: Recomendações é módulo próprio (depende do Base de Nomes) e desliga por pessoa', MODS.recs&&MODS.recs.requer==='bn'&&!MODS.bn.views.includes('bn-recs')&&MODS.recs.views.includes('bn-recs')&&modOn('bn')===true&&modOn('recs')===false); }
       vcSair(false);
       ok('VER-COMO-V1: sair restaura (admin de novo, faixa some, rascunho descartado)',
         VC.on===false && souAdm()===true && !document.getElementById('vc-faixa') && !document.body.classList.contains('vc-on') && localStorage.getItem(kS)===null);
+      { const ops=escOpcoesDe('reb@x.invalid',['juca@x.invalid'],[{rotulo:'gustavo',dono_email:'juca@x.invalid'},{rotulo:'rebeca',dono_email:'juca@x.invalid'}],null), od=ops.find(o=>o.id==='dono:juca@x.invalid');
+        const opA=escOpcoesDe('juca@x.invalid',[],[{rotulo:'gustavo',dono_email:'juca@x.invalid'},{rotulo:'rebeca',dono_email:'juca@x.invalid'}],'Gustavo');
+        ok('BASE-INTEIRA-V1: assistente vê TODOS os clientes e oportunidades da base do dono (qualquer rótulo), nunca os de outro dono',
+          !!od && escRegOkDe(od,{_dono:'juca@x.invalid',lp:'Rebeca'}) && escRegOkDe(od,{_dono:'juca@x.invalid',lp:'Gustavo'}) && escRegOkDe(od,{_dono:'juca@x.invalid'}) && !escRegOkDe(od,{_dono:'daniel@x.invalid',lp:'Daniel'}));
+        ok('EQUIPE-REBECA: o rótulo antigo aparece como "Rebeca (base antiga)" no seletor (o filtro continua pelo rótulo)', (opA.find(o=>o.id==='lp:rebeca')||{}).nome==='Rebeca (base antiga)' && (opA.find(o=>o.id==='lp:rebeca')||{}).lp==='Rebeca'); }
+      { const _d=DELEG.donos; try{ DELEG.donos=['dono-zz@x.invalid'];
+          ok('AGENDA-DONO-LIGADA-V1: a agenda do dono (compartilhada com a assistente) já nasce visível; outra agenda compartilhada segue desligada', gcalCalModo('dono-zz@x.invalid')==='auto' && gcalCalModo('outra-zz@x.invalid')==='off'); }
+        finally{ DELEG.donos=_d; } }
       const h=(typeof admHtml==='function')?String(admHtml):'';
       ok('VER-COMO-V1: botão "Usar o app como" no Painel Master · Acessos', /vcEntrarPorEmail\(/.test(h));
     }catch(e){ ok('VER-COMO-V1: autoteste rodou sem exceção ('+(e&&e.message||e)+')',false); }
