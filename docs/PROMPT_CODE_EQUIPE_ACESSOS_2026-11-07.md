@@ -119,10 +119,32 @@ Entregue esta lista pronta pra ele, na ordem:
    Classificação pela IA (Haiku, o mesmo cliente Anthropic do copiloto, dados sensíveis tirados antes com `redact()`), com cache por conversa e reclassificação só quando chega mensagem nova. Sem texto de conversa nos logs.
 3. **Onde aparece:** a fila 🟡 abre a tela da Rebeca (junto com a fila de revisões do ticket G); a 🔴 vira o filtro "Gustavo decide" dele; a 🔵 vai pro Vitor.
 - Aceite: self-check `TRIAGEM-V1` com conversas inventadas para cada destino; prints 390/1280; portão verde; nenhuma escrita na Umbler.
-- Ordem sugerida: B → I → G → F → C → D (I e G são o que tira trabalho da Rebeca no dia 1).
+- Ordem sugerida: B → I → J → H → G → F → C → D (I e G tiram trabalho da Rebeca no dia 1; J fecha o gap das quedas; H é segurança).
+
+### H — Segurança: mascarar cartão e CPF que chegam pelo WhatsApp · 2 h
+- **Achado (09/11):** clientes mandam número de cartão, CPF e endereço no WhatsApp (ex.: proposta em andamento em 04/11). O sync grava o texto cru em `umbler_mensagens.texto` e em `bruto`.
+- **Fazer:** mascarar **na entrada** (`nucleo.ts`, antes do upsert): cartão (13–19 dígitos, com ou sem separador) → só os 4 últimos; CPF → `***.***.***-NN`. Valer para `texto`, `ultima_msg_previa` e os campos de texto dentro de `bruto`.
+- **Limpar o que já está gravado:** entregar o SQL com contagem antes/depois e **esperar o OK dele** antes de gravar.
+- Testes deno com números inventados (nunca reais). Deploy da função só com o OK dele.
+
+### J — Reconciliação WhatsApp × Umbler (o "gap" das quedas) · 1 a 2 dias
+- **Achado (09/11, conferência no WhatsApp Web × CRM):** desde a reconexão de 07/11 ~19:18 tudo bate (fora grupos e ligações de voz, que a Umbler não espelha). Na queda de 06/11 13:38 → 07/11 ~19:18, **~20 conversas com atividade no WhatsApp tiveram só 1 no CRM**. A Umbler nunca recupera o período de queda (nem pela API).
+- **Decisão dele:** resolver sem pagar a implementação da API agora. Caminho escolhido: **a extensão do CRM, rodando no WhatsApp Web do Mac, confere e importa sozinha** (retoma o T5 da 2.11, `wa_historico`).
+- **Desenho mínimo (propor antes de construir):**
+  - a cada 2 h, com o WhatsApp Web aberto: para as conversas com atividade nas últimas 48 h, compara a última mensagem do WhatsApp com a última do CRM (por telefone ou nome) e importa **só o que falta** para `wa_historico`;
+  - **nunca** abre conversa não lida de um jeito que marque como lida (se precisar abrir, remarcar como não lida, como na varredura de 26/10), **nunca** envia nada;
+  - em 💬 Conversas, essas mensagens entram na linha do tempo com o selo **"veio do WhatsApp (queda)"**, e o vigia mostra "N conversas recuperadas da queda de …";
+  - sem conversa pessoal: só conversas que casam com a carteira/funil ou que já existem na Umbler.
+- Aceite: teste com conversa inventada; relatório "o que foi importado" sem texto de cliente nos logs; prints 390/1280.
+
+### Outros achados de 09/11 (sem ticket próprio; considerar dentro do I)
+- As etiquetas do WhatsApp Business (CLIENTE, PROSPECT, ESTRATÉGICO…) **não passam para a Umbler**: as 143 conversas do mês estão sem etiqueta. O selo do ticket I substitui isso no CRM.
+- **22 conversas sem nome** ou com "." na Umbler: o ticket I mostra o nome que o CRM conhece.
+- **Ligação de voz** não vira mensagem na Umbler (só às vezes um `CallAttempt`): mostrar na conversa quando houver `CallAttempt` como "📞 tentou ligar".
+- Alguns **grupos** não espelham: sem impacto (grupos ficam com o Gustavo).
 
 ## 4. Fora do escopo (agora)
-- T5 (canais permitidos); API oficial / coexistência; copiloto 2.11 (fila, tom, voz por remetente) e transcrição de áudio própria, que ficam para depois de a operação rodar; `wa_historico`.
+- T5 (canais permitidos); API oficial / coexistência (ele vai perguntar à Umbler se dá pra ativar sozinho, sem o pacote de R$ 899); copiloto 2.11 (fila, tom, voz por remetente) e transcrição de áudio própria, que ficam para depois de a operação rodar; `wa_historico`.
 
 ## 5. Entrega
 Por ticket: diff, testes que rodaram, prints (D), SQL pronto (A, B, C) e a pergunta de liberação. No fim: ESTADO atualizado, LOG no Notion, cópia no Drive.
