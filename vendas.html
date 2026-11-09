@@ -22011,6 +22011,15 @@ function lpSelfCheck(){
             ok('CV-ID-V1: filtro "Quem é" e busca pelo nome do CRM',
                cvFiltrar(base,{modo:'todas',selo:'cli'}).map(x=>x.id).join('')==='b' && cvFiltrar(base,{modo:'todas',busca:'do funil'}).map(x=>x.id).sort().join('')==='ac'); }
           finally{ CART.clientes=_cc; S.contatos=_ss; _cvIdx=null; } }
+        { const _t=CV.tri; try{
+            CV.tri={a:{chat_id:'a',ultima_msg_em:A.ultima_msg_em,destino:'rebeca',motivo:'pede segunda via',urgencia:2},
+                    b:{chat_id:'b',ultima_msg_em:new Date(Date.parse(B.ultima_msg_em)-6e5).toISOString(),destino:'gustavo',motivo:'quer cotação',urgencia:3},
+                    c:{chat_id:'c',ultima_msg_em:C2.ultima_msg_em,destino:'sem_acao',motivo:'',urgencia:1}};
+            ok('TRIAGEM-V1: selo de destino só em quem espera resposta e só se a triagem é da última mensagem; filtro "Para quem"',
+               cvDest(A).destino==='rebeca' && cvDest(B)===null && cvDest(C2)===null && /🟡 Rebeca/.test(cvRowHtml(A,Date.now(),false))
+               && cvFiltrar(base,{modo:'todas',dest:'rebeca'}).map(x=>x.id).join('')==='a' && cvFiltrar(base,{modo:'todas',dest:'gustavo'}).length===0
+               && !/textarea|contenteditable/i.test(cvDestHtml(cvDest(A))));
+          } finally{ CV.tri=_t; } }
         ok('conversas: "há quanto tempo" em linguagem de gente', cvHa(hh(0))==='agora' && cvHa(hh(2))==='há 2 h' && cvHa(hh(30))==='há 1 d' && cvHa(hh(50))==='há 2 d');
         CV.chats=base; CV.f={modo:'todas',busca:'',canal:'',abertas:false}; CV.erro=''; CV.carregado=true; CV.exemplo=false;
         CV.estado={ultimo_ok:hh(0.1)}; CV.aberto='a';
@@ -25204,7 +25213,7 @@ const CV_TIPOS={Text:'',Image:'🖼️ imagem',Audio:'🎧 áudio',Video:'🎬 v
   Contact:'👤 contato',Location:'📍 localização',Poll:'📊 enquete',CallAttempt:'📞 tentativa de chamada'};
 function cvTipoRot(t){ return Object.prototype.hasOwnProperty.call(CV_TIPOS,String(t||''))? CV_TIPOS[t] : String(t||''); }
 let CV={chats:[],carregado:false,carregando:null,estado:null,erro:'',msgs:{},porContato:{},aberto:null,sinc:false,exemplo:false,
-  f:{modo:'aguardando',busca:'',canal:'',abertas:false,selo:''}};
+  f:{modo:'aguardando',busca:'',canal:'',abertas:false,selo:'',dest:''},tri:{}};
 
 (function cvCss(){ if(document.getElementById('cv-css')) return; const s=document.createElement('style'); s.id='cv-css'; s.textContent=`
   .cv-wrap{display:block}
@@ -25313,6 +25322,7 @@ function cvFiltrar(chats,f,agora){
     if(f&&f.modo==='aguardando'&&!cvAguardando(ch)) return false;
     if(f&&f.modo==='esfriando'&&!cvEsfriando(ch,agora)) return false;
     if(f&&f.selo&&cvIdent(ch).selo!==f.selo) return false;   /* CV-ID-V1 */
+    if(f&&f.dest){ const t=cvDest(ch); if(!t||t.destino!==f.dest) return false; }   /* TRIAGEM-V1 */
     if(!b) return true;
     if(dig.length>=8&&cvTelScore(dig,cvChatTel(ch))>0) return true;                /* telefone: confere o DDD */
     if(dig.length>=4&&String(cvChatTel(ch)).indexOf(dig)>=0) return true;          /* pedaço do número */
@@ -25367,6 +25377,13 @@ function cvIdent(ch){
     return {...out,nome:f.nome||out.nome,selo:rec?'rec':'fun',det:(ET_LABEL[f.etapa]||f.etapa||''),cid:f.id}; }
   if(bn){ const c=bn.o.c, rec=!!c.recomendante; return {...out,nome:c.nome||out.nome,selo:rec?'rec':'est',det:rec?'Estoque':'',cid:c.id}; }
   return out; }
+/* ── TRIAGEM-V1 (ticket I, parte 2) — a IA (Edge Function `triagem`, a cada 10 min) diz pra quem vai cada conversa em que o
+   cliente falou por último. Aqui só LÊ copiloto_fila_cache (destino + motivo curto, nunca o texto). Selo só aparece se a
+   classificação é da mensagem mais recente (chegou mensagem nova → some até a próxima rodada). */
+const CV_DEST={gustavo:['Gustavo decide','b-verm','🔴'],rebeca:['Rebeca','b-amarelo','🟡'],vitor:['Victor','b-azul','🔵'],sem_acao:['Sem ação','b-cinza','⚪']};
+function cvDest(ch){ if(!ch||!cvAguardando(ch)) return null; const t=(CV.tri||{})[ch.id]; if(!t||!CV_DEST[t.destino]) return null;
+  const a=Date.parse(ch.ultima_msg_em||''), l=Date.parse(t.ultima_msg_em||''); if(isFinite(a)&&isFinite(l)&&a>l) return null; return t; }
+function cvDestHtml(t){ if(!t) return ''; const d=CV_DEST[t.destino]; return `<span class="badge ${d[1]}" style="white-space:nowrap" title="${esc('Triagem do copiloto: '+d[0]+(t.motivo?' — '+t.motivo:''))}">${d[2]} ${esc(d[0])}${t.urgencia===3?' · urgente':''}</span>`; }
 function cvSeloHtml(id){ const s=CV_SELO[id.selo]||CV_SELO.desc; return `<span class="badge ${s[1]}" style="white-space:nowrap" title="${esc(s[0]+(id.det?' · '+id.det:''))}">${s[2]} ${esc(s[0])}${id.det?' · '+esc(id.det):''}</span>`; }
 /* o caminho inverso (ficha → conversas), a partir do índice já carregado */
 function cvChatsDoContato(c){
@@ -25385,6 +25402,8 @@ async function cvCarregar(forcar){
         .order('ultima_msg_em',{ascending:false,nullsFirst:false}).limit(CV_CHATS_LIM);
       if(error) throw error;
       CV.chats=data||[]; CV.erro=''; CV.exemplo=false;
+      try{ const t=await sb.from('copiloto_fila_cache').select('chat_id,ultima_msg_em,destino,motivo,urgencia').limit(CV_CHATS_LIM);   /* TRIAGEM-V1: sem a tabela ainda, segue sem selo */
+        CV.tri={}; (t.data||[]).forEach(r=>{ CV.tri[r.chat_id]=r; }); }catch(_){ CV.tri={}; }
       const e=await sb.from('umbler_estado').select('dono,ultimo_sync,ultimo_ok,ultimo_erro').limit(1);
       CV.estado=(e.data&&e.data[0])||null;
     }catch(e){ console.warn('Conversas: leitura falhou',e); CV.erro=String((e&&e.message)||e); }
@@ -25573,6 +25592,8 @@ function cvTelaHtml(){
     <input type="search" placeholder="🔎 nome ou telefone" value="${esc(f.busca)}" aria-label="Buscar conversa" oninput="cvFiltro('busca',this.value)">
     <button class="btn btn-s btn-mini" style="min-height:44px" onclick="cvSincronizar()" ${CV.sinc?'disabled':''} title="Pede ao servidor pra ler o Talk agora (ele já lê sozinho a cada 10 min)">${CV.sinc?'⏳ lendo…':'🔄 Sincronizar agora'}</button>
   </div>
+  ${(()=>{ const n={}; aguard.forEach(ch=>{ const t=cvDest(ch); if(t) n[t.destino]=(n[t.destino]||0)+1; }); if(!Object.keys(n).length) return '';
+     return `<div class="cv-chips" aria-label="Para quem"><span style="font-size:12px;color:var(--muted);align-self:center">Para quem:</span>${Object.entries(CV_DEST).map(([k,d])=>chip(f.dest===k,`${d[2]} ${esc(d[0])} ${n[k]||0}`,`cvFiltro('dest','${f.dest===k?'':k}')`,'Triagem do copiloto — toque de novo pra tirar o filtro')).join('')}</div>`; })()}
   <div class="cv-wrap${CV.aberto?' cv-abr':''}">
     ${lista.length? `<div class="cv-lista">${lista.map(ch=>cvRowHtml(ch,agora,!!sel&&sel.id===ch.id)).join('')}</div>`
       : `<div class="card cv-vazia" style="padding:16px;color:var(--muted);font-size:13.5px">${todos.length?'Nenhuma conversa com esses filtros.':'Nenhuma conversa guardada ainda.'}</div>`}
@@ -25589,7 +25610,7 @@ function cvRowHtml(ch,agora,sel){
     <span class="cv-row-t"><span class="cv-row-n">${esc(idt.nome)}</span>
       ${esperando? `<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(quando)}</span>` : `<span class="cv-row-h">${esc(quando)}</span>`}</span>
     <span class="cv-row-p">${esc(quem+previa)}</span>
-    <span class="cv-row-m">${cvSeloHtml(idt)}${ch.atendente?'<span>👤 '+esc(ch.atendente)+'</span>':''}${ch.canal?'<span>📡 '+esc(ch.canal)+'</span>':''}${ch.aberto===false?'<span>✔️ fechada</span>':''}${ch.nao_lidas?'<span>🔵 '+ch.nao_lidas+'</span>':''}</span>
+    <span class="cv-row-m">${cvDestHtml(cvDest(ch))}${cvSeloHtml(idt)}${ch.atendente?'<span>👤 '+esc(ch.atendente)+'</span>':''}${ch.canal?'<span>📡 '+esc(ch.canal)+'</span>':''}${ch.aberto===false?'<span>✔️ fechada</span>':''}${ch.nao_lidas?'<span>🔵 '+ch.nao_lidas+'</span>':''}</span>
   </button>`; }
 
 function cvPainelHtml(ch){
@@ -25601,7 +25622,7 @@ function cvPainelHtml(ch){
     <div class="cv-head">
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-ghost btn-mini cv-volta" style="min-height:44px" onclick="cvFechar()" title="Voltar pra lista">← voltar</button>
-        <b style="flex:1;min-width:0;font-size:15px">${esc(cvIdent(ch).nome)}</b>${cvSeloHtml(cvIdent(ch))}
+        <b style="flex:1;min-width:0;font-size:15px">${esc(cvIdent(ch).nome)}</b>${cvSeloHtml(cvIdent(ch))}${cvDestHtml(cvDest(ch))}
         ${cvAguardando(ch)?`<span class="badge b-verm" style="white-space:nowrap">⏳ ${esc(cvHa(ch.ultima_msg_em))}</span>`:''}
       </div>
       <div style="font-size:12px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
