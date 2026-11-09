@@ -2,7 +2,7 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 RETOMAR AQUI — 09/11/2026 — v8.87 no branch `claude/busy-galileo-dh6sti` (NÃO publicada — falta o OK dele): 🏷️ Etiquetas do Google Agenda (ETIQUETAS-V1) + 📝 Formulários (abaixo)
+## 🟢 RETOMAR AQUI — 09/11/2026 — v8.87 PUBLICADA (OK dele: "A, pode publicar"): 🏷️ Etiquetas do Google Agenda (ETIQUETAS-V1) + 📝 Formulários (abaixo)
 
 - **Pedido (09/11, print do seletor de cor do Google):** "ajustes para quando os eventos forem criados estarem coloridos com etiquetas corretas… se tiver faltando algo vamos bater e deixar em linha… quando o Pietro cria pra mim no chat e atualiza CRM, tô tendo retrabalho".
 - **Diagnóstico (eventos dele 20/10–20/11 lidos pelo conector do Calendar):** a API só manda o número da cor. OI/FF=5, P/C=10, DELIVERY=7, ROTINA=8, URGENTE=11 batem com o seletor. O CRM pintava TODA reunião de 7 (Pavão = a etiqueta DELIVERY dele) quando a cor não estava nomeada no ⚙ → [RCP/PC], [PC], [REVISITA] saíam como DELIVERY. Ligar/follow/proposta saíam sem cor. 63 de 203 eventos (muitos do Pietro: "Ligar · …", "P/C …") sem cor. O CRM não conhecia OUTROS/ROTINA e tratava C2 como P/C.
@@ -10,9 +10,9 @@
 - **Gate:** `NOVO_SO_MEU['etiquetas-gcal']` (só a base dele; sem a chave, regra antiga). Victor escrevendo direto na agenda dele (AGENDA-DELEGADO-V2) ainda não colore — liberar pro Victor é decisão dele.
 - **Pietro:** `docs/etiquetas-agenda.md` = tabela única + **bloco pronto pra colar no Pietro** (5 números "[número do ⚙]" a preencher depois que ele nomear as cores novas).
 - **Testes:** 3 autotestes `ETIQUETAS-V1` + o de gsync atualizado; prova no navegador (reunião C2 → cor 2, ligar → cor 4 · TA/PIPE, faltando = as 5 de cor nova); ⚙ em 390 sem estouro; portão verde (55 telas × 6); guard ok.
-- **Falta dele:** (1) OK pra publicar a v8.87 (etiquetas + formulários); (2) no ⚙ da Agenda, dar nome às 5 cores novas (RCP/FF, RCP/PC, GAEL + FAMÍLIA, CORPORE SANO, OUTROS) e me passar os números → eu completo o bloco do Pietro; (3) colar o bloco no Pietro.
+- **Falta dele:** (1) ~~publicar~~ feito 09/11; (2) no ⚙ da Agenda, dar nome às 5 cores novas (RCP/FF, RCP/PC, GAEL + FAMÍLIA, CORPORE SANO, OUTROS) e me passar os números → eu completo o bloco do Pietro; (3) colar o bloco no Pietro.
 
-## 🟡 RETOMAR AQUI — 07/11/2026 — v8.87 no branch `claude/busy-galileo-dh6sti` (NÃO publicada — falta o OK dele): 📝 Formulários ligados aos negócios (FORMS-NEG-V1)
+## 🟢 07/11/2026 — publicada junto na v8.87: 📝 Formulários ligados aos negócios (FORMS-NEG-V1)
 
 - **Pedido (07/11):** "criação de formulários ligados aos negócios" → decisão dele no chat: **"B) Interno, na ficha"** (ele/Victor preenchem; link pro cliente fica pra depois).
 - **Módulo próprio `modulos/forms-negocio.js` (?v=20261107a; renumerada v8.87 depois do merge da v8.86).** Gate: `NOVO_SO_MEU['forms-neg']` (só ele vê até liberar).
