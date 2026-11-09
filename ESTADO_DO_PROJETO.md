@@ -2,7 +2,18 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.92 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
+## 🟢 RETOMAR AQUI — 10/11/2026 (começo do dia) — v8.92 no ar · Rebeca LOGADA · próximo: L2 (aguarda A/B dele)
+
+- **Rebeca entrou (09/11 16h35, pelo Google).** O Supabase não deixa conta nova se criar sozinha ("Signups not allowed"): ele criou a conta dela em Authentication › Users › Add user (auto-confirm) e o "Entrar com Google" ligou na mesma conta. **Regra pra próximos usuários: criar a conta no painel antes.**
+- **Acesso dela conferido no banco (simulando o JWT dela):** vê a base inteira do Gustavo (6.437 nomes, 146 clientes, 238 apólices). Funil: **só Vida Individual** (decisão dele) — `fu-mfo` e `funis_extra` desligados. Menu: sem Revisão, Solicitações, Estoque, SitPlan & TA, Telas antigas; Módulos ligado (é o caminho dela pra Conversas/Carteira/Lista de Atraso). Embaixadores desligado até ele revisar.
+- **L2 — decisão pendente dele (A ou B):** achado: `parceiros` NÃO tem coluna de telefone (1 LP parceiro + 3 embaixadores, nenhum com telefone) e não existe tipo "keyman" (check `tipo in ('lp','embaixador')`). Sem isso a conversa não tem como ser reconhecida como de parceiro.
+  - **A (recomendado):** botão "🤝 Marcar como parceiro" na conversa (admin escolhe LP parceiro/Joint · Embaixador · Keyman); o telefone vem do próprio chat; lista guardada pelo admin; a triagem lê e aplica as regras (parceiro → 🔴; agenda/horário → 🟡; nova indicação de keyman/embaixador → 🟡 com aviso pro Gustavo).
+  - **B:** coluna telefone + tipo keyman em `parceiros` (SQL dele) e campo nas telas Parceiros/Embaixadores.
+- **Outra sessão (local, "O seu dia" / regra de atraso / saudação)** estava mexendo no vendas.html no Mac dele em cima de base velha — foi avisada pra dar `git pull` da main (v8.92) antes de publicar. Conferir se publicou e se não desfez v8.90–v8.92.
+- **Ordem do Code:** L2 → J (detecção na extensão, só leitura, versão nova) → G → F (com L3: títulos `[TIPO] Nome · RC` + `· EMB`/`· KEY`/`· Joint <LP>`). K (transcrição) parado.
+- **Pendências dele:** Google Workspace — liberar compartilhamento externo da agenda com edição pra Rebeca; tirar o Victor da pasta do Drive/agenda; revisar o fluxo do Embaixadores (buracos: sem aviso no "Esquentei", sem botão Agendar na linha).
+
+## (anterior) 09/11/2026 (noite) — v8.92 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
 
 - **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
 - **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
