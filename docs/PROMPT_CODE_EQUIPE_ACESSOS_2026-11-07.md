@@ -107,6 +107,20 @@ Entregue esta lista pronta pra ele, na ordem:
 - Inclui a carteira adotada da Rebeca (adoção/substituição) como origem da fila.
 - Pergunte A/B a ele antes de construir.
 
+### I — Copiloto faz o trabalho de bastidor, a Rebeca só conversa · 1 dia
+**Pedido dele (09/11):** "quero você [copiloto] resolvendo; foco dela nas interações". Nada de etiquetar nem renomear à mão na Umbler.
+**Dado que sustenta (conferido em 09/11, 30 dias):** de 152 conversas com telefone, **61 casam com cliente da carteira** e **116 com contato do funil** pelos 8 últimos dígitos. Sobram **35**, quase todas da equipe, de grupos ou pessoais. Na Umbler, as 143 conversas do mês estão **sem etiqueta** e 22 estão **sem nome** (ou ".").
+1. **Identificar pelo telefone, no CRM, sem gravar nada na Umbler:** em 💬 Conversas, cada conversa ganha o nome que o CRM conhece (carteira > funil > nome da Umbler) e um selo: **Cliente** (carteira, com a apólice), **No funil** (etapa), **Recomendação** (origem) ou **Desconhecido**. A Umbler continua como está; o CRM é quem enriquece.
+2. **Triagem do copiloto** (antecipa o T2 da 2.11, `copiloto_fila`): cada conversa aguardando resposta cai num destino:
+   - 🔴 **Gustavo decide** (proposta, preço, recomendação, venda nova, retenção/cancelamento, cliente preocupado);
+   - 🟡 **Rebeca** (agenda, confirmação, documento, pagamento, atraso, pós-venda, carteira adotada);
+   - 🔵 **Vitor** (Multi Office, VG, outros seguros);
+   - ⚪ **Sem ação** (agradecimento, "ok", grupo).
+   Classificação pela IA (Haiku, o mesmo cliente Anthropic do copiloto, dados sensíveis tirados antes com `redact()`), com cache por conversa e reclassificação só quando chega mensagem nova. Sem texto de conversa nos logs.
+3. **Onde aparece:** a fila 🟡 abre a tela da Rebeca (junto com a fila de revisões do ticket G); a 🔴 vira o filtro "Gustavo decide" dele; a 🔵 vai pro Vitor.
+- Aceite: self-check `TRIAGEM-V1` com conversas inventadas para cada destino; prints 390/1280; portão verde; nenhuma escrita na Umbler.
+- Ordem sugerida: B → I → G → F → C → D (I e G são o que tira trabalho da Rebeca no dia 1).
+
 ## 4. Fora do escopo (agora)
 - T5 (canais permitidos); API oficial / coexistência; copiloto 2.11 (fila, tom, voz por remetente) e transcrição de áudio própria, que ficam para depois de a operação rodar; `wa_historico`.
 
