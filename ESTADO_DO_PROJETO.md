@@ -41,6 +41,7 @@
 - **Ele:** ligar 🌟 Embaixadores pra Rebeca no Painel Master e revisar com "Usar o app como"; mandar a mensagem de boas-vindas; ajustar o compartilhamento externo da agenda no Google Workspace.
 - **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
 - **Próximo no Code:** L2 → J → G → F (com L3).
+- **Anexos no card (v8.83, sessão de 02/11 — fechamento 09/11):** falta só ele: 1º anexo real numa ficha + dar a pasta à Rebeca (botão 📂 em Acessos; ela entrou por SQL e o automático não disparou). Victor nunca teve a pasta. Prompt da sessão GUIADA (Supabase Pro + créditos da API, agora que triagem/copiloto rodam sozinhos): `docs/PROMPT_GUIADO_SUPABASE_PRO_E_CREDITOS.md`.
 
 ## (anterior) 09/11/2026 (noite) — C' (Victor saiu) pronto no branch
 
@@ -200,7 +201,7 @@
 - **Testes:** autotestes `ANEXOS-CARD-V1` e `ANEXOS-CARD-T3`; portão verde (55 telas × 6); simulação no navegador com Drive simulado (soltar 5 → 3 sobem, 25 MB/.exe barrados; colar print; excluir/desfazer; mudar etapa+tarefa e recarregar não perde anexo); prints 390/1280. **Falta:** teste com o Drive real (login Google dele) na prévia.
 - **Acesso à pasta (DRIVE-ACESSO-ASSISTENTE-V1, palavra dele: "compartilha a pasta com o Victor e usuários que add como assistente"):** delegação na base dele (Painel Master · Acessos) → o app compartilha *Histórico de Clientes* como Editor; tirar a delegação tira o acesso; botão "📂 dar acesso à pasta do Drive" na linha do Victor. O conector do Drive da sessão foi RECUSADO ao compartilhar → **falta ele clicar o botão pro Victor** depois do merge (ou compartilhar à mão). Daniel também tem `anexos-drive` ligado, mas a pasta não atende a base dele — decisão dele.
 - **Daniel:** `anexos-drive` DESLIGADO no `lp_perfis` (decisão dele, 02/11: "A, desliga pro Daniel").
-- **Falta dele:** (1) 1º anexo real numa ficha = teste com o Drive de verdade; (2) Victor: compartilhar a pasta à mão (opção A dele) ou pelo botão "📂 dar acesso à pasta do Drive" em Painel Master · Acessos.
+- **Falta dele (atualizado 09/11):** (1) 1º anexo real numa ficha = teste com o Drive de verdade (até 09/11 nenhum arquivo `_card_` no Drive); (2) **Rebeca** (assistente da base dele, `anexos-drive` ligado) ainda SEM acesso à pasta — ela entrou por SQL, então o compartilhamento automático não disparou: Painel Master · Acessos → linha dela → "📂 dar acesso à pasta do Drive" (ou Compartilhar à mão, Editor). Victor: nunca teve acesso à pasta (conferido 09/11) — nada a tirar.
 - **Doc do módulo:** `docs/anexos-card.md`. Portão de acesso = `anexos-drive` (sem trava nova: melhoria em módulo já liberado).
 
 ## 🟢 26/10/2026 (noite) — v8.82 PUBLICADA (OK dele: "publica · T3b A · menu A · agenda ok"): card completo + menu A + T3b (código) · IA da recomendação no Claude · Copiloto OK
