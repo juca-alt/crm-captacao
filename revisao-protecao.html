@@ -2968,13 +2968,21 @@ function simLinhas(at, corridos){
     for (let a2 = antAno + 1; a2 <= ano; a2++) acum += premDoAno(a2);
     antAno = ano;
     const premAno = premDoAno(ano);
-    const f = curva[ano];
-    return {ano, n, passado, agora, idadeNo: idade ? idade + n : null, capSim: cap,
+    let f = curva[ano], aprox = false;
+    /* RESGATE-ENTRE-ANOS-V1: nos anos que a tabela oficial salta (11, 13, 14, 16...) o
+       percentual é interpolado em linha reta entre os dois anos oficiais vizinhos e sai
+       marcado como aproximado (≈). Depois do último ano da tabela não há o que estimar. */
+    if (corridos && f == null){
+      let a0 = null, a1 = null;
+      anosTab.forEach(t => { if (curva[t] != null){ if (t < ano) a0 = t; else if (t > ano && a1 == null) a1 = t; } });
+      if (a0 != null && a1 != null){ f = curva[a0] + (curva[a1]-curva[a0]) * (ano-a0)/(a1-a0); aprox = true; }
+    }
+    return {ano, n, passado, agora, aprox, idadeNo: idade ? idade + n : null, capSim: cap,
             premAno, acum, pagoReal: pago0Real(at),
             fator: f == null ? null : f,
             resgSim: f == null ? null : cap * f,
             resgHoje: f == null ? null : at.cap * f,
-            virou: f != null ? (cap * f) > acum : false};
+            virou: (f != null && !aprox) ? (cap * f) > acum : false};
   });
 }
 
@@ -3043,7 +3051,7 @@ function simulacaoHTML(at){
     <td><b>${fmt0(x.capSim)}</b></td>
     <td>${x.premAno?fmt0(x.premAno):'<span class="mini" style="color:var(--verde);font-weight:800">não paga mais</span>'}</td>
     <td>${(!x.premAno && x.acum>0)?'<span class="mini" style="color:var(--verde);font-weight:800">quitado</span>':fmt0(x.acum)}</td>
-    <td>${x.fator!=null?`<b>${fmt0(x.resgSim)}</b> <span class="mini">${(x.fator*100).toFixed(1).replace('.',',')}%</span>`:'—'}</td>
+    <td>${x.fator!=null?`${x.aprox?'<span class="mini" title="aproximado: interpolado entre os anos oficiais da tabela">≈</span> ':''}<b>${fmt0(x.resgSim)}</b> <span class="mini">${(x.fator*100).toFixed(1).replace('.',',')}%</span>`:'—'}</td>
   </tr>`;}).join('');
   return `<div class="sim">
     <div class="sim-h" onclick="simTog(this)">
@@ -3079,7 +3087,7 @@ function simulacaoHTML(at){
         o IPCA de cada ano só se conhece depois. A tabela acima repete ${i.toFixed(2).replace('.',',')}% ao ano do começo ao fim, o que nunca acontece na vida real.
         <br><b>Tudo aqui está em base anual</b>, com IOF — inclusive o prêmio, para poder ser comparado com o capital.
         ${L[0] && L[0].pagoReal ? 'O total pago parte do valor informado na apólice.' : 'O total pago antes de hoje é reconstruído com o IPCA real do período (o prêmio sobe junto com o capital, na mesma proporção).'}
-        <br>A tabela traz <b>todos os anos, um a um, até os 100 anos de idade</b>. O resgate aparece só nos anos que a tabela oficial informa (do 1º ao 10º, depois 12º, 15º, 20º, 25º, 30º, 35º e 40º); nos demais a coluna fica com traço, porque não existe percentual oficial para eles.
+        <br>A tabela traz <b>todos os anos, um a um, até os 100 anos de idade</b>. A tabela oficial de resgate informa o percentual do 1º ao 10º ano e depois no 12º, 15º, 20º, 25º, 30º, 35º e 40º; nos anos entre eles o valor é <b>aproximado</b> (marcado com ≈), calculado em linha reta entre os dois anos oficiais vizinhos. Depois do 40º ano a tabela oficial termina, e a coluna fica com traço.
         <br>A coluna de resgate mostra o <b>percentual oficial da tabela</b> e o valor que ele representa <b>sobre o capital simulado daquele ano</b> — mesma premissa de IPCA da coluna do capital, nada além dela.
         <br><b>Sobre projetar o resgate:</b> as Condições Gerais dizem, literalmente, que
         <i>“não é adequado simular sobre esses valores quaisquer projeções de índices inflacionários ou rentabilidade financeira”</i>
