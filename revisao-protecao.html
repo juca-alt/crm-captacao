@@ -2918,7 +2918,7 @@ function pagoAteHoje(at){
   return {v: soma, real: false};
 }
 function pago0Real(at){ return at.totalPago > 0; }
-function simLinhas(at){
+function simLinhas(at, corridos){
   /* CG: capital e prêmio sobem só pelo IPCA. A taxa de 3% a.a. é técnica e já está
      dentro da tabela de resgate — não entra aqui. */
   const i = simIpca()/100, base = at.anos != null ? at.anos : 0;
@@ -2948,7 +2948,15 @@ function simLinhas(at){
     if (a2 < emCurso) return baseAnual / fatReal(a2);          /* passado: medido */
     return baseAnual * Math.pow(1+i, Math.max(0, a2 - base - _d0));   /* futuro: simulado */
   };
-  const todos = ((RESG && RESG.anos) || []).slice();
+  let todos = ((RESG && RESG.anos) || []).slice();
+  /* ANOS-CORRIDOS-V1: a tabela da simulação mostra TODOS os anos, sem saltos, até o
+     cliente fazer 100 anos. Capital, prêmio e total pago existem em qualquer ano; o
+     resgate só nos anos que a tabela oficial traz (nos outros a coluna fica em traço —
+     não se interpola valor de resgate). Sem idade, vai até o último ano da tabela. */
+  if (corridos && todos.length){
+    const fim = idade ? Math.max(emCurso, base + (100 - idade)) : todos[todos.length-1];
+    todos = []; for (let a = 1; a <= fim; a++) todos.push(a);
+  }
   let acum = 0, antAno = 0;
   return todos.map(ano => {
     const passado = ano < emCurso, agora = ano === emCurso;
@@ -3028,13 +3036,13 @@ function simulacaoHTML(at){
   const ed = _edit();
   const temTab = L.some(x => x.fator != null);
   let jaVirou = false;
-  const linhas = L.map(x => {
+  const linhas = simLinhas(at, true).map(x => {
     const virada = x.virou && !jaVirou && !x.passado; if (x.virou) jaVirou = true;
     return `<tr class="${x.passado?'pass ':''}${x.agora?'hoje ':''}${virada?'virada':''}">
     <td>${x.ano}º ano${x.idadeNo?` <span class="mini">· ${x.idadeNo} anos</span>`:''}${x.agora?' <span class="taghoje">você está aqui</span>':(x.passado?' <span class="tagpass">já passou</span>':'')}${virada?' <span class="tagvira">passou o que você pagou</span>':''}</td>
     <td><b>${fmt0(x.capSim)}</b></td>
     <td>${x.premAno?fmt0(x.premAno):'<span class="mini" style="color:var(--verde);font-weight:800">não paga mais</span>'}</td>
-    <td>${fmt0(x.acum)}</td>
+    <td>${fmt0(x.acum)}${(!x.premAno && x.acum>0)?' <span class="mini" style="color:var(--verde);font-weight:800">quitado</span>':''}</td>
     <td>${x.fator!=null?`<b>${fmt0(x.resgSim)}</b> <span class="mini">${(x.fator*100).toFixed(1).replace('.',',')}%</span>`:'—'}</td>
   </tr>`;}).join('');
   return `<div class="sim">
@@ -3071,6 +3079,7 @@ function simulacaoHTML(at){
         o IPCA de cada ano só se conhece depois. A tabela acima repete ${i.toFixed(2).replace('.',',')}% ao ano do começo ao fim, o que nunca acontece na vida real.
         <br><b>Tudo aqui está em base anual</b>, com IOF — inclusive o prêmio, para poder ser comparado com o capital.
         ${L[0] && L[0].pagoReal ? 'O total pago parte do valor informado na apólice.' : 'O total pago antes de hoje é reconstruído com o IPCA real do período (o prêmio sobe junto com o capital, na mesma proporção).'}
+        <br>A tabela traz <b>todos os anos, um a um, até os 100 anos de idade</b>. O resgate aparece só nos anos que a tabela oficial informa (do 1º ao 10º, depois 12º, 15º, 20º, 25º, 30º, 35º e 40º); nos demais a coluna fica com traço, porque não existe percentual oficial para eles.
         <br>A coluna de resgate mostra o <b>percentual oficial da tabela</b> e o valor que ele representa <b>sobre o capital simulado daquele ano</b> — mesma premissa de IPCA da coluna do capital, nada além dela.
         <br><b>Sobre projetar o resgate:</b> as Condições Gerais dizem, literalmente, que
         <i>“não é adequado simular sobre esses valores quaisquer projeções de índices inflacionários ou rentabilidade financeira”</i>
