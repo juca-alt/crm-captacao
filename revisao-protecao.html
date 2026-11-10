@@ -2214,6 +2214,12 @@ function lookupLegado(cod){
   if (k === 'INV' && cod.toUpperCase().startsWith('PI')) k = 'INVT';
   return {grupo:k, nome:LEG.de[row[6]], risco, dur, decresc:LEG.cs[row[3]], premioAte:row[4], csAte:row[5]};
 }
+function ehRendaFamiliar(cod){
+  const c = String(cod||'').trim().toUpperCase();
+  if (/^FR\d/.test(c)) return true;
+  if (!/^FI\d/.test(c)) return false;
+  const L = lookupLegado(c); return !!(L && /renda familiar/i.test(L.nome||''));
+}
 /* itens: [{grupo, cap, pre, cod}] → mapa consolidado por sinistro */
 function consolidar(itens){
   const c = {}; SIN.forEach(s => c[s.k] = {cap:0, pre:0, has:false, inc:false, vig:[], prod:[], proprio:0});
@@ -2223,6 +2229,13 @@ function consolidar(itens){
     g.proprio += (it.cap||0);
     if (it.vig && g.vig.indexOf(it.vig) < 0) g.vig.push(it.vig);
     if (it.prod && g.prod.indexOf(it.prod) < 0) g.prod.push(it.prod);
+    /* RENDA-FAM-LINHA-V1: a Renda Familiar (FR/FI) classificada como morte temporária
+       continua somada no Temporário; aqui só se guarda quanto dele é Renda Familiar,
+       para o quadro mostrar a linha com nome próprio. Não muda nenhum total. */
+    if (it.grupo === 'MQC_TEMP' && ehRendaFamiliar(it.cod)){
+      g.rf = g.rf || {cap:0, pre:0};
+      g.rf.cap += (it.cap||0); g.rf.pre += (it.pre||0);
+    }
   });
   /* Invalidez Total e Parcial (PI) também cobre a invalidez parcial */
   if (c.INVT.has){ c.INV.cap += c.INVT.cap; c.INV.has = true; }
@@ -3343,6 +3356,8 @@ function tabelaConsolidado(c, tot){
     } else nat = '<span class="pill p-no">—</span>';
     const extra = (s.k === 'DG' && tem && nomeDG()) ? nomeDG() : (s.d || '');
     h += `<tr class="${cls}"><td><b>${esc(s.n)}</b>${extra ? `<div class="mini">${esc(extra)}</div>` : ''}</td><td class="num">${val}</td><td class="num">${pre}</td><td>${nat}</td></tr>`;
+    if (s.k === 'MQC_TEMP' && g.rf && g.rf.cap > 0)
+      h += `<tr class="sub"><td style="padding-left:34px"><b>Renda Familiar</b><div class="mini">já somada no Temporário acima · paga em renda mensal à família</div></td><td class="num">${fmt0(g.rf.cap)}</td><td class="num">${g.rf.pre > 0 ? fmt(vper(g.rf.pre)) : '—'}</td><td><span class="pill p-temp">temporário</span></td></tr>`;
   });
   const liq = tot/(1+IOF);
   h += `<tr class="tot"><td>Total</td><td class="num"></td><td class="num">${fmt(vper(tot))}</td><td class="mini">prêmios ${fmt(vper(liq))} + IOF ${fmt(vper(tot-liq))}</td></tr></tbody>`;
