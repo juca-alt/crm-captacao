@@ -2174,6 +2174,27 @@ function selfTest(){
         const ok13 = getComputedStyle(av).display === 'none'; av.remove(); chk2('A13 aviso de teto some quando hidden', ok13); } }
     chk2('T2 CLT não tem "Impostos" (chips de regime somem)', !CX_PRESETS.clt.d.some(d => /Impostos/.test(d[1])));
   }
+  /* RESGATE-QUITADO-EXATO-V1: o valor "exato" tem de reproduzir os anos oficiais da própria
+     linha (se divergir, a tabela mudou e a regra da idade atingida caiu) e não pode valer
+     para WV, WL100 nem para ano ainda em pagamento. */
+  { let conf = 0, div = 0;
+    if (RESG && RESG.fatores) ['WL5','WL10','WL20','WL30','WL65','WL80'].forEach(p => ['M','F'].forEach(sx => {
+      const fam = (RESG.fatores[p]||{})[sx] || {};
+      Object.keys(fam).forEach(k => { const v = String(fam[k]).split(',');
+        RESG.anos.forEach((t,i) => { const q = resgQuitadoExato(p, sx, k, t); if (q == null) return;
+          conf++; if (Math.round(q*10000) !== (Number(v[i])||0)) div++; }); }); }));
+    total++; if (conf > 1000 && div === 0) ok++; else bad.push('RESGATE-QUITADO-EXATO-V1: '+div+' de '+conf+' anos oficiais não batem com a regra da idade atingida');
+    total++; if (resgQuitadoExato('WL10G','M',40,13) === (resgCurva('WL10','M',43).find(z => z.ano === 10)||{}).f
+        && resgQuitadoExato('WL10','M',40,45) > 0 && resgQuitadoExato('WL10','M',40,61) == null
+        && resgQuitadoExato('WL10','M',40,9) == null && resgQuitadoExato('WV10','M',40,13) == null
+        && resgQuitadoExato('WL100','M',40,13) == null && resgQuitadoExato('WL65','M',40,24) == null
+        && resgQuitadoExato('WL65','M',40,26) > 0) ok++;
+    else bad.push('RESGATE-QUITADO-EXATO-V1: limites errados (só WL quitado, até os 100 anos)');
+    total++; if (anosPagAt({cod:'WL65G', idadeEmissao:40}) === 25 && anosPagAt({cod:'WL10G', idadeEmissao:40}) === 10
+        && anosPagAt({cod:'WL65G'}) == null && anosPagAt({cod:'WL100G', idadeEmissao:40}) == null
+        && anosPagAt({cod:'WV10G', idadeEmissao:40}) === 10) ok++;
+    else bad.push('PAGA-ATE-IDADE-V1: WL65 emitido aos 40 tem de pagar 25 anos (e parar)');
+  }
   return {ok, total, bad};
 }
 
@@ -2528,6 +2549,46 @@ function resgCurva(cod, sexo, idadeEmissao){
   if (!linha) return null;
   const v = String(linha).split(',').map(x => (Number(x)||0)/10000);
   return RESG.anos.map((a,i) => ({ano:a, f:v[i]||0})).filter(x => x.f > 0);
+}
+/* ═══ RESGATE-QUITADO-EXATO-V1 (10/11/2026) ════════════════════════════════════
+   No Vida Inteira (WL) DEPOIS de quitado, o percentual de resgate da tabela oficial depende
+   só do SEXO e da IDADE ATINGIDA (idade na emissão + anos de apólice) — não do prazo de
+   pagamento nem da idade em que foi emitido. Conferido na própria tabela: 184 combinações
+   de sexo × idade atingida, todas com mais de uma linha oficial, ZERO divergência (WL5, 10,
+   20, 30, 60, 65, 70, 75 e 80). Então o ano que a tabela salta (11, 13, 14, 16... e do 41º
+   em diante) não precisa ser estimado: o valor oficial está em outra linha da mesma tabela
+   (ex.: WL10 emitido aos 40, ano 13 = WL10 emitido aos 43, ano 10). Vale até os 100 anos
+   (aos 100 a tabela traz 100% do capital; depois disso o contrato acabou).
+   NÃO vale para Vida e Saúde (WV — a tabela diverge, tem componente de saúde) nem para o
+   WL100 (nunca quita) nem para anos ainda em pagamento: esses seguem interpolados (≈). */
+let _RESG_QUIT = null;
+function resgPrazoPag(p, idadeEmissao){
+  const m = /^WL(\d{1,3})$/.exec(p || ''); if (!m) return null;
+  const n = parseInt(m[1],10);
+  if (n >= 100) return null;                       /* WL100 paga a vida toda */
+  return n <= 40 ? n : n - idadeEmissao;           /* WL65... = paga até essa idade */
+}
+function resgQuitadoExato(cod, sexo, idadeEmissao, ano){
+  if (!RESG || !RESG.fatores) return null;
+  const x = parseInt(idadeEmissao,10); if (!(x >= 0) || !(ano > 0)) return null;
+  const n = resgPrazoPag(resgProduto(cod), x);
+  if (n == null || ano < n || x + ano > 100) return null;
+  if (!_RESG_QUIT){
+    _RESG_QUIT = {M:{}, F:{}};
+    Object.keys(RESG.fatores).forEach(p => {
+      ['M','F'].forEach(sx => { const fam = RESG.fatores[p][sx] || {};
+        Object.keys(fam).forEach(k => { const xi = parseInt(k,10), ni = resgPrazoPag(p, xi);
+          if (ni == null) return;
+          const v = String(fam[k]).split(',');
+          RESG.anos.forEach((t,i) => { const f = Number(v[i])||0;
+            if (t >= ni && f > 0 && xi + t <= 100) _RESG_QUIT[sx][xi+t] = f/10000; });
+        });
+      });
+    });
+  }
+  const sx = String(sexo||'M').toUpperCase().charAt(0) === 'F' ? 'F' : 'M';
+  const f = _RESG_QUIT[sx][x + ano];
+  return f == null ? null : f;
 }
 function ipcaHist(){ return (RESG && RESG.ipca) || []; }
 function ipcaMedia(n){
@@ -2940,7 +3001,7 @@ function simLinhas(at, corridos){
   const alvos = anosTab.filter(a => a > base);
   if (!alvos.length) return [];
   const curva = {}; (at.curva || []).forEach(p => { curva[p.ano] = p.f; });
-  const _pg = anosPagamento(at.cod);
+  const _pg = anosPagAt(at);
   const baseAnual = premioAnualHoje(at);
   const emCurso = base + 1;                     /* ano de vigência de hoje */
   const hoje = new Date();
@@ -2986,6 +3047,12 @@ function simLinhas(at, corridos){
        percentual é interpolado em linha reta entre os dois anos oficiais vizinhos e sai
        marcado como aproximado (≈). Depois do último ano da tabela não há o que estimar. */
     if (corridos && f == null){
+      /* RESGATE-QUITADO-EXATO-V1: Vida Inteira já quitado tem o valor oficial em outra linha
+         da tabela (mesmo sexo, mesma idade atingida) — sai exato, sem ≈, inclusive após o 40º ano. */
+      const fq = resgQuitadoExato(at.cod, at.sexoTab, at.idadeEmissao != null ? at.idadeEmissao : at.emissaoIdade, ano);
+      if (fq != null) f = fq;
+    }
+    if (corridos && f == null){
       let a0 = null, a1 = null;
       anosTab.forEach(t => { if (curva[t] != null){ if (t < ano) a0 = t; else if (t > ano && a1 == null) a1 = t; } });
       if (a0 != null && a1 != null){ f = curva[a0] + (curva[a1]-curva[a0]) * (ano-a0)/(a1-a0); aprox = true; }
@@ -3006,9 +3073,21 @@ function anosPagamento(cod){
   const n = parseInt(m[1],10);
   return (n >= 5 && n <= 40) ? n : null;   /* WL65/WL70... são idade-limite, não prazo */
 }
+/* PAGA-ATE-IDADE-V1: WL65/WL70/WL75/WL80 pagam até essa IDADE. Com a idade na emissão
+   do ativo dá para saber em que ano de contrato o pagamento termina; sem isso a simulação
+   seguia cobrando prêmio (e somando no total pago) até os 100 anos. */
+function anosPagAt(at){
+  const pg = anosPagamento(at && at.cod);
+  if (pg != null || !at) return pg;
+  const m = /^WL(\d{2,3})/.exec(String(at.cod||'').toUpperCase());
+  const lim = m ? parseInt(m[1],10) : 0;
+  const ie = at.idadeEmissao != null ? parseInt(at.idadeEmissao,10) : NaN;
+  if (!(lim > 40 && lim < 100) || !(ie >= 0) || lim - ie < 1) return null;
+  return lim - ie;
+}
 function graficoCapitalHTML(at, L){
   if (!L.length) return '';
-  const pg = anosPagamento(at.cod);
+  const pg = anosPagAt(at);
   const mx = Math.max.apply(null, L.map(x => x.capSim).concat([at.cap]));
   const linha = (rot, v, pos, quit) => `<div class="gl${quit?' quit':''}">
     <div class="ga">${rot}</div>
@@ -3033,7 +3112,7 @@ function graficoCapitalHTML(at, L){
   return h;
 }
 function augeHTML(at, L){
-  const pg = anosPagamento(at.cod);
+  const pg = anosPagAt(at);
   if (pg == null || !L.length) return '';
   const depois = L.filter(x => x.ano > pg);
   if (!depois.length) return '';
@@ -3100,7 +3179,7 @@ function simulacaoHTML(at){
         o IPCA de cada ano só se conhece depois. A tabela acima repete ${i.toFixed(2).replace('.',',')}% ao ano do começo ao fim, o que nunca acontece na vida real.
         <br><b>Tudo aqui está em base anual</b>, com IOF — inclusive o prêmio, para poder ser comparado com o capital.
         ${L[0] && L[0].pagoReal ? 'O total pago parte do valor informado na apólice.' : 'O total pago antes de hoje é reconstruído com o IPCA real do período (o prêmio sobe junto com o capital, na mesma proporção).'}
-        <br>A tabela traz <b>todos os anos, um a um, até os 100 anos de idade</b>. A tabela oficial de resgate informa o percentual do 1º ao 10º ano e depois no 12º, 15º, 20º, 25º, 30º, 35º e 40º; nos anos entre eles o valor é <b>aproximado</b> (marcado com ≈), calculado em linha reta entre os dois anos oficiais vizinhos. Depois do 40º ano a tabela oficial termina, e a coluna fica com traço.
+        <br>A tabela traz <b>todos os anos, um a um, até os 100 anos de idade</b>. A tabela oficial de resgate informa o percentual do 1º ao 10º ano e depois no 12º, 15º, 20º, 25º, 30º, 35º e 40º; nos anos entre eles o valor é <b>aproximado</b> (marcado com ≈), calculado em linha reta entre os dois anos oficiais vizinhos. No <b>Vida Inteira já quitado</b> não há aproximação: o percentual depende só do sexo e da idade atingida, então o valor oficial vem de outra linha da mesma tabela — sem ≈ e também depois do 40º ano, até os 100 anos. Nos demais casos, depois do 40º ano a tabela oficial termina e a coluna fica com traço.
         <br>A coluna de resgate mostra o <b>percentual oficial da tabela</b> e o valor que ele representa <b>sobre o capital simulado daquele ano</b> — mesma premissa de IPCA da coluna do capital, nada além dela.
         <br><b>Sobre projetar o resgate:</b> as Condições Gerais dizem, literalmente, que
         <i>“não é adequado simular sobre esses valores quaisquer projeções de índices inflacionários ou rentabilidade financeira”</i>
@@ -3149,7 +3228,7 @@ function ativoCardHTML(at){
         <div class="as-n forte"><div class="k">${at.novo?'Capital contratado':'Capital de hoje'}</div><div class="v">${fmt0(at.cap)}</div><div class="d">não vence</div></div>
         ${rh?`<div class="as-n"><div class="k">Resgate já disponível</div><div class="v">${fmt0(rh.v)}</div><div class="d">${(rh.f*100).toFixed(1).replace('.',',')}% · ${rh.ano}º aniversário</div></div>`:''}
         ${(at.novo && !rh)?(()=>{ const rp=_resgProx(at); return rp?`<div class="as-n"><div class="k">1º resgate</div><div class="v">${fmt0(rp.v)}</div><div class="d">${(rp.f*100).toFixed(1).replace('.',',')}% · a partir do ${rp.ano}º ano</div></div>`:''; })():''}
-        ${at.novo?`<div class="as-n"><div class="k">Prêmio</div><div class="v">${fmt(at.preExib||at.pre)}<span style="font-size:.7rem;font-weight:500">/mês</span></div><div class="d">${anosPagamento(at.cod)?'paga por '+anosPagamento(at.cod)+' anos':'enquanto vigorar'}</div></div>`:''}
+        ${at.novo?`<div class="as-n"><div class="k">Prêmio</div><div class="v">${fmt(at.preExib||at.pre)}<span style="font-size:.7rem;font-weight:500">/mês</span></div><div class="d">${anosPagAt(at)?'paga por '+anosPagAt(at)+' anos':'enquanto vigorar'}</div></div>`:''}
         ${evr?`<div class="as-n"><div class="k">Em vida</div><div class="v">${evr.v}</div><div class="d">${esc(evr.d)}</div></div>`:''}
         ${(()=>{const r=atualizacaoCapital(at); return (r&&r.ganho>0)?`<div class="as-n"><div class="k">Já subiu</div><div class="v">+${fmt0(r.ganho)}</div><div class="d">+${(r.pctTotal*100).toFixed(1).replace('.',',')}% desde ${_mesTxt(r.de)}</div></div>`:'';})()}
       </div>

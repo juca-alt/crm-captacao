@@ -2,6 +2,15 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR ABERTO, NÃO mergeado — aguarda OK dele)
+
+- **O que era pra ser feito e NÃO foi:** simular no LP Business e ler a tabela de resgate ano a ano. **Bloqueado:** o LP Business é app nativo do Mac (`com.prudential.growsales`), não site — o Chrome não alcança; e o acesso de controle de tela ao app **não pode ser aprovado numa execução agendada** (precisa dele presente no chat, ou do app adicionado nas configurações da tarefa agendada). **Zero simulações feitas, nenhum CSV gerado.**
+- **O que saiu no lugar (só com a tabela oficial que já está no repo):** no **Vida Inteira (WL) já quitado** o percentual de resgate depende só de sexo + idade atingida. Conferido: 184 combinações sexo × idade atingida com mais de uma linha oficial, **zero divergência** (WL5/10/20/30/60/65/70/75/80, inclusive entre produtos). Logo o ano saltado (11, 13, 14, 16… e 41º em diante, até os 100 anos) tem valor OFICIAL em outra linha da tabela — `resgQuitadoExato()` (bloco `RESGATE-QUITADO-EXATO-V1`), sem ≈.
+- **Erro medido da interpolação reta nesses anos** (10.610 anos conferidos contra o valor exato): de −0,17% a +1,69% do valor, mediana −0,02%. Era pequeno; o ganho real é tirar o ≈ e preencher do 41º ano até os 100.
+- **Continua estimado (≈) / traço:** Vida e Saúde (WV10/20/30 — a regra da idade atingida NÃO vale, a tabela diverge), WL100, e qualquer WL ainda em pagamento (ex.: WL20 anos 11, 13, 14, 16–19). Referência do erro da reta nesses casos, tirando um ano oficial e reestimando pelos vizinhos (teste mais duro que o uso real, porque o vão dobra): mediana ~2%, até ~25–28% no 3º ano e 50–60% em pontos isolados do WL20/WL30/WL100 — **é aí que a simulação do LP Business faz falta**.
+- **Sem resposta:** se o LP Business mostra resgate depois do 40º ano (não deu pra abrir). Pela tabela, aos 100 anos o resgate é 100% do capital.
+- **Verificação feita:** sintaxe do script da página e a lógica nova (2 invariantes novos do `selfTest`) rodadas no JavaScriptCore do macOS — verdes. **NÃO verificado:** `selfTest()` completo na página, telas 390/1280 e console (o servidor de preview foi recusado na execução agendada). Fazer isso antes do merge.
+
 ## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.93 NO AR (PR #338, OK dele: "Pode publicar"; Pages conferido por hash `d078d47372b6`) · Início com paridade Global · T1
 
 - **Críticos fechados (PARIDADE-ATRASO-V1):** conferido apólice a apólice com o Global (Lista de Atraso › Críticas ≥ 50 d = 6 · R$ 2.692,44). O nosso dava 4 · R$ 866,58 por 2 erros em `atV2Dias`, que valem pra Lista de Atraso inteira, não só pro Início:
