@@ -2190,6 +2190,10 @@ function selfTest(){
         && resgQuitadoExato('WL100','M',40,13) == null && resgQuitadoExato('WL65','M',40,24) == null
         && resgQuitadoExato('WL65','M',40,26) > 0) ok++;
     else bad.push('RESGATE-QUITADO-EXATO-V1: limites errados (só WL quitado, até os 100 anos)');
+    total++; if (anosPagAt({cod:'WL65G', idadeEmissao:40}) === 25 && anosPagAt({cod:'WL10G', idadeEmissao:40}) === 10
+        && anosPagAt({cod:'WL65G'}) == null && anosPagAt({cod:'WL100G', idadeEmissao:40}) == null
+        && anosPagAt({cod:'WV10G', idadeEmissao:40}) === 10) ok++;
+    else bad.push('PAGA-ATE-IDADE-V1: WL65 emitido aos 40 tem de pagar 25 anos (e parar)');
   }
   return {ok, total, bad};
 }
@@ -2997,7 +3001,7 @@ function simLinhas(at, corridos){
   const alvos = anosTab.filter(a => a > base);
   if (!alvos.length) return [];
   const curva = {}; (at.curva || []).forEach(p => { curva[p.ano] = p.f; });
-  const _pg = anosPagamento(at.cod);
+  const _pg = anosPagAt(at);
   const baseAnual = premioAnualHoje(at);
   const emCurso = base + 1;                     /* ano de vigência de hoje */
   const hoje = new Date();
@@ -3069,9 +3073,21 @@ function anosPagamento(cod){
   const n = parseInt(m[1],10);
   return (n >= 5 && n <= 40) ? n : null;   /* WL65/WL70... são idade-limite, não prazo */
 }
+/* PAGA-ATE-IDADE-V1: WL65/WL70/WL75/WL80 pagam até essa IDADE. Com a idade na emissão
+   do ativo dá para saber em que ano de contrato o pagamento termina; sem isso a simulação
+   seguia cobrando prêmio (e somando no total pago) até os 100 anos. */
+function anosPagAt(at){
+  const pg = anosPagamento(at && at.cod);
+  if (pg != null || !at) return pg;
+  const m = /^WL(\d{2,3})/.exec(String(at.cod||'').toUpperCase());
+  const lim = m ? parseInt(m[1],10) : 0;
+  const ie = at.idadeEmissao != null ? parseInt(at.idadeEmissao,10) : NaN;
+  if (!(lim > 40 && lim < 100) || !(ie >= 0) || lim - ie < 1) return null;
+  return lim - ie;
+}
 function graficoCapitalHTML(at, L){
   if (!L.length) return '';
-  const pg = anosPagamento(at.cod);
+  const pg = anosPagAt(at);
   const mx = Math.max.apply(null, L.map(x => x.capSim).concat([at.cap]));
   const linha = (rot, v, pos, quit) => `<div class="gl${quit?' quit':''}">
     <div class="ga">${rot}</div>
@@ -3096,7 +3112,7 @@ function graficoCapitalHTML(at, L){
   return h;
 }
 function augeHTML(at, L){
-  const pg = anosPagamento(at.cod);
+  const pg = anosPagAt(at);
   if (pg == null || !L.length) return '';
   const depois = L.filter(x => x.ano > pg);
   if (!depois.length) return '';
@@ -3212,7 +3228,7 @@ function ativoCardHTML(at){
         <div class="as-n forte"><div class="k">${at.novo?'Capital contratado':'Capital de hoje'}</div><div class="v">${fmt0(at.cap)}</div><div class="d">não vence</div></div>
         ${rh?`<div class="as-n"><div class="k">Resgate já disponível</div><div class="v">${fmt0(rh.v)}</div><div class="d">${(rh.f*100).toFixed(1).replace('.',',')}% · ${rh.ano}º aniversário</div></div>`:''}
         ${(at.novo && !rh)?(()=>{ const rp=_resgProx(at); return rp?`<div class="as-n"><div class="k">1º resgate</div><div class="v">${fmt0(rp.v)}</div><div class="d">${(rp.f*100).toFixed(1).replace('.',',')}% · a partir do ${rp.ano}º ano</div></div>`:''; })():''}
-        ${at.novo?`<div class="as-n"><div class="k">Prêmio</div><div class="v">${fmt(at.preExib||at.pre)}<span style="font-size:.7rem;font-weight:500">/mês</span></div><div class="d">${anosPagamento(at.cod)?'paga por '+anosPagamento(at.cod)+' anos':'enquanto vigorar'}</div></div>`:''}
+        ${at.novo?`<div class="as-n"><div class="k">Prêmio</div><div class="v">${fmt(at.preExib||at.pre)}<span style="font-size:.7rem;font-weight:500">/mês</span></div><div class="d">${anosPagAt(at)?'paga por '+anosPagAt(at)+' anos':'enquanto vigorar'}</div></div>`:''}
         ${evr?`<div class="as-n"><div class="k">Em vida</div><div class="v">${evr.v}</div><div class="d">${esc(evr.d)}</div></div>`:''}
         ${(()=>{const r=atualizacaoCapital(at); return (r&&r.ganho>0)?`<div class="as-n"><div class="k">Já subiu</div><div class="v">+${fmt0(r.ganho)}</div><div class="d">+${(r.pctTotal*100).toFixed(1).replace('.',',')}% desde ${_mesTxt(r.de)}</div></div>`:'';})()}
       </div>
