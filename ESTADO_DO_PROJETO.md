@@ -2,6 +2,22 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR ABERTO, aguarda OK dele)
+
+- **No ar desde hoje (PR 343 mergeado com OK dele):** resgate oficial do Vida Inteira quitado ano a ano até os 100 (`RESGATE-QUITADO-EXATO-V1`) + WL65/70/75/80 param de pagar na idade-limite (`PAGA-ATE-IDADE-V1`). PRs 340, 341 e 342 (anos corridos, "quitado", linha da Renda Familiar) já estavam no ar em 10/11. O bloco de 10/11 abaixo dizia "PR aberto": está mergeado.
+- **Fonte desta calibragem:** cotação ao vivo no LP Business em 11/11/2026, cliente F, 44 anos, Standard, mensal com IOF (mais uma M 36 para o 360).
+- **`CALIBRA-LPB-V1`:**
+  - **DG Plus opcional (DDP):** fator mensal 0,0868 → **0,0856**. F44 140k = 79,57 · 200k = 113,67 (antes 80,68 / 115,26). DIMR, DDR, DD3M e os 5H seguem em 0,0868 (sem cotação que comprove).
+  - **Temporário Decrescente:** BASE = série DT, OPCIONAL = série DR. Nenhuma série mudou; mudou a nota do DT. A "divergência de 25%" de 04/09 era base × opcional: R$ 36,75 é exatamente DR20 M41.
+  - **Vida e Saúde 360 (`WH`):** produto base novo no catálogo, 70 mil a 10 mi, comissão 30%, **sem tabela própria** = WV10 × 1,0318, selo `aproximado`. Diferença medida nas 3 cotações: até R$ 0,17.
+  - **Morte Acidental até 75 anos pago em 10 anos (`ABP`):** produto opcional novo, separado. **Sem tabela própria** = série AB × 2,0279, calibrado em UMA cotação (F44 350k = 69,25). Em outra idade o fator pode não valer — selo `aproximado`, confirmar no app.
+  - Mecanismo novo no catálogo: `serie` (empresta a série de outro produto), `fator` (multiplica a taxa) e `vig` (texto de vigência próprio). Selo novo `aproximado`.
+- **`LIMITE-MQC-AVISO-V1`:** na aba Nova proposta o limite pelo MQC da apólice (Invalidez e Morte Acidental 5×, Perda de Autonomia 2×) **avisa e não mexe mais no capital digitado**. Doenças Graves 2× vira só "Conferir". Na Mudança de Seguro (MS) o teto de 5×/2× **continua aplicado** (é o que a prévia real fez, e há autoteste disso); entrou só o aviso "Conferir" de DG acima de 2× o vitalício novo.
+- **Capturas:** 11 cotações de 11/11 registradas em `capturas` (o pedido falava em 15; só 11 valores vieram escritos). Autoteste 73/73.
+- **Achado, NÃO alterado:** as "divergências" de 04/09 do Temporário (TM30) e da Renda Familiar (FI30) também são base × opcional — TR30 M41 dá 127,28 e FR30 M41 dá 131,23, exatos. As notas/selos de TM e FI seguem como estavam.
+- **Verificado:** autoteste 73/73, 1280 e 390 sem estouro, campos ≥16px no celular, console limpo. **Não verificado:** com cliente real carregado; `portao.py` não cobre esta página.
+- **Pendente:** PROMPT_CODE de menor 0–17 / segurado por plano / produto livre + prêmio manual (T1–T3) — o documento com os 9 testes de aceite ainda não chegou.
+
 ## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR ABERTO, NÃO mergeado — aguarda OK dele)
 
 - **O que era pra ser feito e NÃO foi:** simular no LP Business e ler a tabela de resgate ano a ano. **Bloqueado:** o LP Business é app nativo do Mac (`com.prudential.growsales`), não site — o Chrome não alcança; e o acesso de controle de tela ao app **não pode ser aprovado numa execução agendada** (precisa dele presente no chat, ou do app adicionado nas configurações da tarefa agendada). **Zero simulações feitas, nenhum CSV gerado.**
