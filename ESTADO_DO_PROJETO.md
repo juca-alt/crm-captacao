@@ -2,6 +2,16 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · branch `fix/funil-ordem-etapas-joint-filtro` (commit local, aguarda OK dele pra subir)
+
+- **Queixa dele (print):** "UW EMISSAO é após o N — já mudei nas configurações e tentei arrastar, não muda."
+- **Causa 1 — `COLS-SEGUE-CFG-V1`:** a ordem pessoal das colunas (`lp_user_prefs.fu_cols`, gravada em 26/10) ganhava SEMPRE da ordem do Funil & Etapas. Ele arrumou lá em 15/11 (N → FA → UW EMISSAO → Apólice Emitida) e o quadro seguia na ordem velha (FA → UW EMISSAO → N). Agora a ordem pessoal guarda a `base` (ordem do Funil & Etapas de quando foi feita): mudou lá → o quadro segue a de lá; ordem pessoal antiga sem `base` também cede (as ocultas ficam). Etapa nova entra depois da vizinha dela, não no fim.
+- **Causa 2 — `COL-ARRASTO-V2`:** só a alça ⠿ de 14px era arrastável; segurar no nome da coluna não fazia nada. Agora o cabeçalho inteiro pega (só no PC), com barra azul do lado em que vai cair, e soltar no vão entre colunas vale. No celular segue por ⋯ / ▥ Colunas.
+- **Rede:** `fu_cols._ts` — cópia do servidor mais velha que a do aparelho não volta por cima; o aparelho sobe de novo.
+- **`TOCA-PESSOAS-V1` (pedido dele: Rodrigo nos casos de joint):** em Filtros · Quem toca, um chip por pessoa marcada, com contagem (substitui o select "Quem toca" do bloco Mais). Parceiro de fora da equipe (sem conta) entra pelo nome em "quem toca" do card → "＋ Parceiro de fora (joint)…"; marcado uma vez, aparece no menu dos outros cards. O Rodrigo NÃO está em `app_settings.equipe`; os cards joint precisam ser marcados com ele (ninguém marcou em lote).
+- **Achado, não mexido:** em `lp_funil_cfg.fu_vi` a etapa de código `emitida` está com o rótulo "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e os clientes da carteira caem em `emitida`. Perguntar a ele se é isso mesmo.
+- **Verificado:** portão aberto (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 4 autotestes novos; chips e modal conferidos em 390 e 1280.
+
 ## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR ABERTO, aguarda OK dele)
 
 - **No ar desde hoje (PR 343 mergeado com OK dele):** resgate oficial do Vida Inteira quitado ano a ano até os 100 (`RESGATE-QUITADO-EXATO-V1`) + WL65/70/75/80 param de pagar na idade-limite (`PAGA-ATE-IDADE-V1`). PRs 340, 341 e 342 (anos corridos, "quitado", linha da Renda Familiar) já estavam no ar em 10/11. O bloco de 10/11 abaixo dizia "PR aberto": está mergeado.
