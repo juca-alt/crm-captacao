@@ -2,7 +2,15 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 23/11/2026 — Baixa das reuniões (Reuniões a finalizar) revisada · v8.98 · branch `feat/baixa-reunioes-v2` (PR aberto, aguarda OK dele)
+## 🟡 23/11/2026 — Conversas mais compacta (cabeçalho baixo, botões menores) · v8.99 · branch `feat/conversas-compacto` (PR aberto, aguarda OK dele)
+
+- **Pedido dele (print da v8.97 numa janela de ~1160×720):** "ainda com erros, deixa isso mais ajustado à tela e clean, botões menores". No print o cabeçalho da conversa tomava quase metade do painel (botões de 44px em duas linhas + aviso do copiloto + nota "só leitura") e o nome ficava fora de vista.
+- **`CV-WEB-V2` (só no PC; o celular mantém os alvos de 44px):** botões da conversa com 30px numa linha; cabeçalho sem rolagem própria e sem espremer os filhos (era o que escondia o nome); a nota "Só leitura" sai do cabeçalho no PC (a regra continua escrita no topo da tela); a sugestão/erro do copiloto fica numa caixa de até 26% da altura, com rolagem dela. Lista com 34% da largura (250 a 370px), linha em 3 linhas fixas (72px, antes ~115), selos numa linha só. Balão até 76% da largura.
+- **Medido no preview (1163×717, conversas de exemplo):** cabeçalho 116px sem aviso e 158px com o erro do copiloto (antes 228px e mais), linhas de 72px, nenhuma cortada, 0 estouro. No celular (390): alvos 44px, cabeçalho sem espremer.
+- **Verificado:** portão aberto (55 telas × 6), 1 autoteste novo. **NÃO verificado:** com as conversas reais.
+- **Achado à parte (não corrigido):** no print dele o copiloto respondeu "Edge Function returned a non-2xx status code" no ✨ Sugerir resposta. Causa não investigada; o crédito da API segue pendente na lista "à mão".
+
+## ✅ 23/11/2026 — Baixa das reuniões (Reuniões a finalizar) revisada · **v8.98 NO AR** (PR 352, main `5668e31`)
 
 - **Pedido dele (print da lista "Reuniões a finalizar"):** "revisa e melhora esse sistema de baixa".
 - **O que a fila real mostrou (23/11, só leitura):** 33 reuniões sem desfecho; 4 com até 7 dias, 22 de 8 a 30, 7 de 31 a 60; **29 das 33 já tinham registro na ficha depois da data** (o funil andou e a reunião ficou pra trás); 6 pessoas com mais de uma; nomes repetidos são cards duplicados, não a mesma tarefa duas vezes.
@@ -12,7 +20,7 @@
   - Filtros: Todas · Mais de 30 dias · Com movimento depois · Nome repetido.
   - No formulário, se a pessoa **já tem próximo passo marcado** na agenda, ele aparece ("Usar esse, sem criar outro", marcado por padrão) e não se cria tarefa repetida.
 - **Regra mantida:** "todo desfecho exige próximo passo ou remarcação" (invariante do self-check) segue intacta. **Decisão pendente dele:** criar ou não uma baixa SEM próximo passo ("já resolvida" / "não era reunião"), inclusive em lote — isso muda a regra e a conta de comparecimento, então não entrou.
-- **Verificado:** portão aberto (55 telas × 6, 0 problema), 2 autotestes novos; no preview com a base de exemplo em 1280 e 390: finalizar pela lista e voltar pra ela, filtros, reaproveitar o próximo passo existente (0 tarefa criada), 0 estouro, alvos 44px. **NÃO verificado:** na base real.
+- **Verificado:** portão aberto (55 telas × 6, 0 problema), 2 autotestes novos; no preview com a base de exemplo em 1280 e 390: finalizar pela lista e voltar pra ela, filtros, reaproveitar o próximo passo existente (0 tarefa criada), 0 estouro, alvos 44px. **No ar (23/11, noite):** OK dele → merge do PR 352; `portao.py --servido` bateu (v8.98, hash `6b4c10df6b1a`). Na base real, só leitura: a lista abre com 33, filtros 7 / 29 / 3, selos de contexto aparecem. **NÃO verificado:** finalizar uma reunião real.
 
 ## ✅ 23/11/2026 — Conversas com cara de WhatsApp Web + correção da linha espremida · **v8.97 NO AR** (PR 351, main `125e8f3`)
 
@@ -47,7 +55,7 @@
 
 ## 🟢 RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS (todas as sessões fechadas em 23/11, num lugar só)
 
-**Estado em 30 segundos:** Vendas LP **v8.97 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `30180e55afab`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
+**Estado em 30 segundos:** Vendas LP **v8.98 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `6b4c10df6b1a`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
 
 **Por que este bloco existe:** em 23/11 cada sessão gravou o próprio fechamento no próprio branch (`docs/estado-2026-11-23`, `claude/wizardly-sagan-bwghr3`, `claude/modest-allen-v64kpu`) e só o dos Anexos chegou à main (PR 346). Aqui estão os quatro juntos. **Regra daqui pra frente:** fechamento de sessão entra na main por PR de docs no mesmo dia; ESTADO parado em branch é ESTADO que a próxima sessão não lê.
 
@@ -84,7 +92,7 @@
 ```
 Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
 1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS").
-2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.97 ou mais novo).
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.98 ou mais novo).
 3. Perguntar ao Gustavo o que ele puxa: a fila do Code começa no L2 (A ou B; recomendar A).
 Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat,
 fechamento de sessão entra na main no mesmo dia. Estilo: veredito primeiro, curto, A/B, um passo por vez.
