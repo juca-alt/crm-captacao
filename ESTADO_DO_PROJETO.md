@@ -12,6 +12,21 @@
 - Perguntar a ele: em `lp_funil_cfg.fu_vi` a etapa `emitida` está rotulada "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e a carteira caem em `emitida`. É isso mesmo?
 - Da Revisão (bloco de 11/11): PROMPT_CODE menor 0–17 / segurado por plano / produto livre; 4 das 15 cotações de 11/11; Morte Acidental pago em 10 calibrada numa cotação só.
 
+**Aberto da Revisão de Proteção (sessão de 10–15/11, fechada em 23/11):**
+- **T1–T3 (menor 0–17 · segurado por plano · produto livre + prêmio manual):** NÃO começou. O `claude/PROMPT_CODE_REVISAO_MENOR_PREMIO_MANUAL_2026-11-10.md` não existe no repo, no Mac, no Drive nem no Notion; ele disse "vou colar aqui" e não colou. Sem os 9 testes de aceite do doc, não commitar.
+- **Cotações de 11/11:** 11 registradas em `capturas`; o pedido falava em 15. Pedir as 4 que faltam.
+- **Morte Acidental até 75 pago em 10 (`ABP`):** fator 2,0279 calibrado em UMA cotação (F44). Pedir uma cotação em outra idade pra confirmar ou trocar o fator.
+- **Decisões minhas que ele ainda não confirmou:** DG Plus opcional passou de selo "planilha" pra "validado"; na Mudança de Seguro o teto 5×/2× continua APLICADO (só a Nova proposta virou aviso).
+- **Selos de TM e FI:** seguem "divergente" com a nota antiga de 04/09, mas a diferença é base × opcional (TR30 e FR30 batem exato). Não mexi porque ele mandou não alterar outra série. Perguntar se corrige o texto.
+- **Resgate ano a ano do Vida e Saúde (WV) e depois do 40º ano:** segue ≈ / traço. Só sai com ele presente pra liberar o LP Business (app nativo do Mac) ou exportando a tabela.
+
+**Lições da sessão da Revisão (erro → causa → regra):**
+- Simulação do WL65/70/75/80 cobrava prêmio até os 100 anos → `anosPagamento(cod)` só conhecia prazo em anos → prazo "até a idade X" depende da idade de emissão: usar `anosPagAt(at)`.
+- "Divergência de 25%" do Decrescente durou 2 meses como selo vermelho → a cotação de 04/09 era o produto OPCIONAL comparado com a série BASE → antes de carimbar "divergente", testar a série irmã (DT×DR, TM×TR, FI×FR).
+- O JSON `<script id="DATA">` não regrava idêntico por `json.dumps` → editar por substituição pontual de texto, nunca regravar o bloco inteiro.
+- `revisao-protecao.html` não é coberto pelo `portao.py` → o portão dela é `selfTest()` na página (hoje 73 checks) + 390/1280 à mão.
+- Merge de PR: o OK dele vale por PR. OK do 340 não valeu pro 341.
+
 **Lições desta sessão (erro → causa → regra):**
 - Quadro ignorava a ordem do Funil & Etapas → ordem pessoal gravada ganhava sempre → preferência pessoal que deriva de uma configuração guarda a `base` de quando foi feita e cede quando a configuração muda.
 - "Arrastei e não mudou" → só a alça de 14px era arrastável → área de pegar é o cabeçalho inteiro, com marca de onde cai.
@@ -52,7 +67,7 @@ Regras: branch a partir de origin/main, portão verde antes de subir, merge na m
 - **Verificado:** autoteste 73/73, 1280 e 390 sem estouro, campos ≥16px no celular, console limpo. **Não verificado:** com cliente real carregado; `portao.py` não cobre esta página.
 - **Pendente:** PROMPT_CODE de menor 0–17 / segurado por plano / produto livre + prêmio manual (T1–T3) — o documento com os 9 testes de aceite ainda não chegou.
 
-## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR ABERTO, NÃO mergeado — aguarda OK dele)
+## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR 343 MERGEADO em 11/11 com OK dele, no ar — junto com `PAGA-ATE-IDADE-V1`)
 
 - **O que era pra ser feito e NÃO foi:** simular no LP Business e ler a tabela de resgate ano a ano. **Bloqueado:** o LP Business é app nativo do Mac (`com.prudential.growsales`), não site — o Chrome não alcança; e o acesso de controle de tela ao app **não pode ser aprovado numa execução agendada** (precisa dele presente no chat, ou do app adicionado nas configurações da tarefa agendada). **Zero simulações feitas, nenhum CSV gerado.**
 - **O que saiu no lugar (só com a tabela oficial que já está no repo):** no **Vida Inteira (WL) já quitado** o percentual de resgate depende só de sexo + idade atingida. Conferido: 184 combinações sexo × idade atingida com mais de uma linha oficial, **zero divergência** (WL5/10/20/30/60/65/70/75/80, inclusive entre produtos). Logo o ano saltado (11, 13, 14, 16… e 41º em diante, até os 100 anos) tem valor OFICIAL em outra linha da tabela — `resgQuitadoExato()` (bloco `RESGATE-QUITADO-EXATO-V1`), sem ≈.
