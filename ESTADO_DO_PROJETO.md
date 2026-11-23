@@ -2,7 +2,31 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · branch `fix/funil-ordem-etapas-joint-filtro` (commit local, aguarda OK dele pra subir)
+## 🟢 RETOMAR AQUI — fechamento de 23/11/2026 — v8.94 NO AR (PR 345, OK dele: "Pode subir"; Pages conferido por hash `b0afdd817ef4`)
+
+**Estado em 30 segundos:** main = `d0e51da`. Vendas LP v8.94 no ar. Revisão de Proteção com o motor calibrado de 11/11 no ar (PR 344). Nenhum PR de código aberto. Ele fechou todas as sessões em 23/11 pra juntar as pendências numa só e reabrir.
+
+**Aberto desta frente (funil novo):**
+- Ele testar o arrasto de coluna com mouse real (só foi testado por eventos simulados).
+- Marcar os cards de joint com o Rodrigo: "quem toca" do card → "＋ Parceiro de fora (joint)…".
+- Perguntar a ele: em `lp_funil_cfg.fu_vi` a etapa `emitida` está rotulada "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e a carteira caem em `emitida`. É isso mesmo?
+- Da Revisão (bloco de 11/11): PROMPT_CODE menor 0–17 / segurado por plano / produto livre; 4 das 15 cotações de 11/11; Morte Acidental pago em 10 calibrada numa cotação só.
+
+**Lições desta sessão (erro → causa → regra):**
+- Quadro ignorava a ordem do Funil & Etapas → ordem pessoal gravada ganhava sempre → preferência pessoal que deriva de uma configuração guarda a `base` de quando foi feita e cede quando a configuração muda.
+- "Arrastei e não mudou" → só a alça de 14px era arrastável → área de pegar é o cabeçalho inteiro, com marca de onde cai.
+- Preview local: `preview_start` com `python3 -m http.server` morre com PermissionError em `os.getcwd()` nesta pasta → usar `python3 scripts/portao.py --sem-abrir --porta 4612` e abrir `localhost:4612/vendas.html`.
+- A tela "Vida Individual · novo" mora em `modulos/funil-unico.js`, não no `vendas.html` (grep no html não acha os textos).
+
+```
+Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
+1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — fechamento de 23/11/2026").
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.94 ou mais novo).
+3. Perguntar ao Gustavo qual pendência ele puxa primeiro; a lista "Aberto" do bloco é o ponto de partida.
+Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat.
+```
+
+## 🟢 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · NO AR (PR 345 mergeado em 15/11 com OK dele)
 
 - **Queixa dele (print):** "UW EMISSAO é após o N — já mudei nas configurações e tentei arrastar, não muda."
 - **Causa 1 — `COLS-SEGUE-CFG-V1`:** a ordem pessoal das colunas (`lp_user_prefs.fu_cols`, gravada em 26/10) ganhava SEMPRE da ordem do Funil & Etapas. Ele arrumou lá em 15/11 (N → FA → UW EMISSAO → Apólice Emitida) e o quadro seguia na ordem velha (FA → UW EMISSAO → N). Agora a ordem pessoal guarda a `base` (ordem do Funil & Etapas de quando foi feita): mudou lá → o quadro segue a de lá; ordem pessoal antiga sem `base` também cede (as ocultas ficam). Etapa nova entra depois da vizinha dela, não no fim.
@@ -12,7 +36,7 @@
 - **Achado, não mexido:** em `lp_funil_cfg.fu_vi` a etapa de código `emitida` está com o rótulo "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e os clientes da carteira caem em `emitida`. Perguntar a ele se é isso mesmo.
 - **Verificado:** portão aberto (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 4 autotestes novos; chips e modal conferidos em 390 e 1280.
 
-## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR ABERTO, aguarda OK dele)
+## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR 344 MERGEADO em 15/11, no ar)
 
 - **No ar desde hoje (PR 343 mergeado com OK dele):** resgate oficial do Vida Inteira quitado ano a ano até os 100 (`RESGATE-QUITADO-EXATO-V1`) + WL65/70/75/80 param de pagar na idade-limite (`PAGA-ATE-IDADE-V1`). PRs 340, 341 e 342 (anos corridos, "quitado", linha da Renda Familiar) já estavam no ar em 10/11. O bloco de 10/11 abaixo dizia "PR aberto": está mergeado.
 - **Fonte desta calibragem:** cotação ao vivo no LP Business em 11/11/2026, cliente F, 44 anos, Standard, mensal com IOF (mais uma M 36 para o 360).
