@@ -2,7 +2,12 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟢 RETOMAR AQUI — 10/11/2026 (começo do dia) — v8.92 no ar · Rebeca LOGADA · próximo: L2 (aguarda A/B dele)
+## 📌 23/11/2026 — PENDÊNCIAS ABERTAS da sessão Code nuvem (C' / Rebeca / L2) — salvas pra consolidação
+> Sessão `claude/wizardly-sagan-bwghr3` (09–10/11). Fechada em 23/11 só salvando: ele vai juntar as pendências de todas as sessões numa só.
+> ⚠️ Desde então a main andou até **v8.94** (15/11, outras sessões: Início T1, Revisão calibrada, funil ordem/joint). Os blocos abaixo descrevem o estado de 10/11 — conferir antes de agir.
+> Detalhe completo: `docs/FECHAMENTO_SESSAO_CRM_LP_2026-11-23.md`.
+
+## 🟡 10/11/2026 (começo do dia) — sessão Code nuvem — v8.92 no ar · Rebeca LOGADA · próximo: L2 (aguarda A/B dele)
 
 - **Rebeca entrou (09/11 16h35, pelo Google).** O Supabase não deixa conta nova se criar sozinha ("Signups not allowed"): ele criou a conta dela em Authentication › Users › Add user (auto-confirm) e o "Entrar com Google" ligou na mesma conta. **Regra pra próximos usuários: criar a conta no painel antes.**
 - **Acesso dela conferido no banco (simulando o JWT dela):** vê a base inteira do Gustavo (6.437 nomes, 146 clientes, 238 apólices). Funil: **só Vida Individual** (decisão dele) — `fu-mfo` e `funis_extra` desligados. Menu: sem Revisão, Solicitações, Estoque, SitPlan & TA, Telas antigas; Módulos ligado (é o caminho dela pra Conversas/Carteira/Lista de Atraso). Embaixadores desligado até ele revisar.
@@ -13,7 +18,7 @@
 - **Ordem do Code:** L2 → J (detecção na extensão, só leitura, versão nova) → G → F (com L3: títulos `[TIPO] Nome · RC` + `· EMB`/`· KEY`/`· Joint <LP>`). K (transcrição) parado.
 - **Pendências dele:** Google Workspace — liberar compartilhamento externo da agenda com edição pra Rebeca; tirar o Victor da pasta do Drive/agenda; revisar o fluxo do Embaixadores (buracos: sem aviso no "Esquentei", sem botão Agendar na linha).
 
-## (anterior) 09/11/2026 (noite) — v8.92 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
+## 🟡 09/11/2026 (noite) — sessão Code nuvem · v8.92 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
 
 - **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
 - **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
@@ -22,6 +27,82 @@
 - **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
 - **v8.92 no ar (PR #337) — MENU-POR-PESSOA-V1:** 5 chaves de menu no Painel de Acessos (Solicitações, Estoque, SitPlan & TA, Módulos, Telas antigas), nascem ligadas. Rebeca (SQL rodado por ele): sem Revisão, Solicitações, Estoque, SitPlan & TA e Telas antigas; **Módulos religado** porque sem ele ela ficava sem caminho pra Conversas/Carteira/Lista de Atraso (ela não tem 📌 fixados — o "Usar o app como" mostra os 📌 DELE). Ideia guardada: "menu fixo por pessoa" (admin escolhe os 📌 de cada um).
 - **Próximo no Code:** L2 → J → G → F (com L3).
+
+## 🟡 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · branch `fix/funil-ordem-etapas-joint-filtro` (commit local, aguarda OK dele pra subir)
+
+- **Queixa dele (print):** "UW EMISSAO é após o N — já mudei nas configurações e tentei arrastar, não muda."
+- **Causa 1 — `COLS-SEGUE-CFG-V1`:** a ordem pessoal das colunas (`lp_user_prefs.fu_cols`, gravada em 26/10) ganhava SEMPRE da ordem do Funil & Etapas. Ele arrumou lá em 15/11 (N → FA → UW EMISSAO → Apólice Emitida) e o quadro seguia na ordem velha (FA → UW EMISSAO → N). Agora a ordem pessoal guarda a `base` (ordem do Funil & Etapas de quando foi feita): mudou lá → o quadro segue a de lá; ordem pessoal antiga sem `base` também cede (as ocultas ficam). Etapa nova entra depois da vizinha dela, não no fim.
+- **Causa 2 — `COL-ARRASTO-V2`:** só a alça ⠿ de 14px era arrastável; segurar no nome da coluna não fazia nada. Agora o cabeçalho inteiro pega (só no PC), com barra azul do lado em que vai cair, e soltar no vão entre colunas vale. No celular segue por ⋯ / ▥ Colunas.
+- **Rede:** `fu_cols._ts` — cópia do servidor mais velha que a do aparelho não volta por cima; o aparelho sobe de novo.
+- **`TOCA-PESSOAS-V1` (pedido dele: Rodrigo nos casos de joint):** em Filtros · Quem toca, um chip por pessoa marcada, com contagem (substitui o select "Quem toca" do bloco Mais). Parceiro de fora da equipe (sem conta) entra pelo nome em "quem toca" do card → "＋ Parceiro de fora (joint)…"; marcado uma vez, aparece no menu dos outros cards. O Rodrigo NÃO está em `app_settings.equipe`; os cards joint precisam ser marcados com ele (ninguém marcou em lote).
+- **Achado, não mexido:** em `lp_funil_cfg.fu_vi` a etapa de código `emitida` está com o rótulo "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e os clientes da carteira caem em `emitida`. Perguntar a ele se é isso mesmo.
+- **Verificado:** portão aberto (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 4 autotestes novos; chips e modal conferidos em 390 e 1280.
+
+## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR ABERTO, aguarda OK dele)
+
+- **No ar desde hoje (PR 343 mergeado com OK dele):** resgate oficial do Vida Inteira quitado ano a ano até os 100 (`RESGATE-QUITADO-EXATO-V1`) + WL65/70/75/80 param de pagar na idade-limite (`PAGA-ATE-IDADE-V1`). PRs 340, 341 e 342 (anos corridos, "quitado", linha da Renda Familiar) já estavam no ar em 10/11. O bloco de 10/11 abaixo dizia "PR aberto": está mergeado.
+- **Fonte desta calibragem:** cotação ao vivo no LP Business em 11/11/2026, cliente F, 44 anos, Standard, mensal com IOF (mais uma M 36 para o 360).
+- **`CALIBRA-LPB-V1`:**
+  - **DG Plus opcional (DDP):** fator mensal 0,0868 → **0,0856**. F44 140k = 79,57 · 200k = 113,67 (antes 80,68 / 115,26). DIMR, DDR, DD3M e os 5H seguem em 0,0868 (sem cotação que comprove).
+  - **Temporário Decrescente:** BASE = série DT, OPCIONAL = série DR. Nenhuma série mudou; mudou a nota do DT. A "divergência de 25%" de 04/09 era base × opcional: R$ 36,75 é exatamente DR20 M41.
+  - **Vida e Saúde 360 (`WH`):** produto base novo no catálogo, 70 mil a 10 mi, comissão 30%, **sem tabela própria** = WV10 × 1,0318, selo `aproximado`. Diferença medida nas 3 cotações: até R$ 0,17.
+  - **Morte Acidental até 75 anos pago em 10 anos (`ABP`):** produto opcional novo, separado. **Sem tabela própria** = série AB × 2,0279, calibrado em UMA cotação (F44 350k = 69,25). Em outra idade o fator pode não valer — selo `aproximado`, confirmar no app.
+  - Mecanismo novo no catálogo: `serie` (empresta a série de outro produto), `fator` (multiplica a taxa) e `vig` (texto de vigência próprio). Selo novo `aproximado`.
+- **`LIMITE-MQC-AVISO-V1`:** na aba Nova proposta o limite pelo MQC da apólice (Invalidez e Morte Acidental 5×, Perda de Autonomia 2×) **avisa e não mexe mais no capital digitado**. Doenças Graves 2× vira só "Conferir". Na Mudança de Seguro (MS) o teto de 5×/2× **continua aplicado** (é o que a prévia real fez, e há autoteste disso); entrou só o aviso "Conferir" de DG acima de 2× o vitalício novo.
+- **Capturas:** 11 cotações de 11/11 registradas em `capturas` (o pedido falava em 15; só 11 valores vieram escritos). Autoteste 73/73.
+- **Achado, NÃO alterado:** as "divergências" de 04/09 do Temporário (TM30) e da Renda Familiar (FI30) também são base × opcional — TR30 M41 dá 127,28 e FR30 M41 dá 131,23, exatos. As notas/selos de TM e FI seguem como estavam.
+- **Verificado:** autoteste 73/73, 1280 e 390 sem estouro, campos ≥16px no celular, console limpo. **Não verificado:** com cliente real carregado; `portao.py` não cobre esta página.
+- **Pendente:** PROMPT_CODE de menor 0–17 / segurado por plano / produto livre + prêmio manual (T1–T3) — o documento com os 9 testes de aceite ainda não chegou.
+
+## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR ABERTO, NÃO mergeado — aguarda OK dele)
+
+- **O que era pra ser feito e NÃO foi:** simular no LP Business e ler a tabela de resgate ano a ano. **Bloqueado:** o LP Business é app nativo do Mac (`com.prudential.growsales`), não site — o Chrome não alcança; e o acesso de controle de tela ao app **não pode ser aprovado numa execução agendada** (precisa dele presente no chat, ou do app adicionado nas configurações da tarefa agendada). **Zero simulações feitas, nenhum CSV gerado.**
+- **O que saiu no lugar (só com a tabela oficial que já está no repo):** no **Vida Inteira (WL) já quitado** o percentual de resgate depende só de sexo + idade atingida. Conferido: 184 combinações sexo × idade atingida com mais de uma linha oficial, **zero divergência** (WL5/10/20/30/60/65/70/75/80, inclusive entre produtos). Logo o ano saltado (11, 13, 14, 16… e 41º em diante, até os 100 anos) tem valor OFICIAL em outra linha da tabela — `resgQuitadoExato()` (bloco `RESGATE-QUITADO-EXATO-V1`), sem ≈.
+- **Erro medido da interpolação reta nesses anos** (10.610 anos conferidos contra o valor exato): de −0,17% a +1,69% do valor, mediana −0,02%. Era pequeno; o ganho real é tirar o ≈ e preencher do 41º ano até os 100.
+- **Continua estimado (≈) / traço:** Vida e Saúde (WV10/20/30 — a regra da idade atingida NÃO vale, a tabela diverge), WL100, e qualquer WL ainda em pagamento (ex.: WL20 anos 11, 13, 14, 16–19). Referência do erro da reta nesses casos, tirando um ano oficial e reestimando pelos vizinhos (teste mais duro que o uso real, porque o vão dobra): mediana ~2%, até ~25–28% no 3º ano e 50–60% em pontos isolados do WL20/WL30/WL100 — **é aí que a simulação do LP Business faz falta**.
+- **Sem resposta:** se o LP Business mostra resgate depois do 40º ano (não deu pra abrir). Pela tabela, aos 100 anos o resgate é 100% do capital.
+- **Verificação feita:** sintaxe do script da página e a lógica nova (2 invariantes novos do `selfTest`) rodadas no JavaScriptCore do macOS — verdes. **NÃO verificado:** `selfTest()` completo na página, telas 390/1280 e console (o servidor de preview foi recusado na execução agendada). Fazer isso antes do merge.
+
+## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.93 NO AR (PR #338, OK dele: "Pode publicar"; Pages conferido por hash `d078d47372b6`) · Início com paridade Global · T1
+
+- **Críticos fechados (PARIDADE-ATRASO-V1):** conferido apólice a apólice com o Global (Lista de Atraso › Críticas ≥ 50 d = 6 · R$ 2.692,44). O nosso dava 4 · R$ 866,58 por 2 erros em `atV2Dias`, que valem pra Lista de Atraso inteira, não só pro Início:
+  1. a regra "`pago_ate ≥ vencido_em` → em dia" estava ERRADA: no relatório da Prudential o "pago até" é igual ou depois do vencimento da parcela em aberto. Escondia 15 apólices abertas (Cinthia 001494417, George 001596270 e 001856664 entre as críticas; Marcus 001636859, Flavio, Nathalia, Cristiane ×2, Nivaldo, Maria Aparecida, Rafael… todas na lista do Global).
+  2. status "Resolvido" com `resolvido_em` vazio contava como ativa (Felipe 001685046, R$ 142,71, que não está no Global). Há 5 linhas assim na tabela.
+  - Depois do ajuste, a base dele dá 6 · R$ 2.692,44, igual ao Global. Novo `atV2Resolvido(r)`; doc `docs/atraso-v2-central-importacoes.md` corrigido. A Lista de Atraso passa a mostrar MAIS apólices em atraso (as 15) — é o esperado.
+  - Obs.: o Vendas LP usa o Supabase `cjieobmdpqcupzdpckef` (tabela `vendas_atrasos`), não o `kbiinf…` da Captação.
+- **Renovações em 30 dias — sem fonte no banco:** a carteira (353 apólices) não tem data de emissão; `emissao_emitidas` só tem 37 (ago–out/26) e cobre 8 da carteira. O Global tem a data (mostra "Emissão 05/10/2023"). Caminhos pra ele decidir: (A) relatório de Carteira da Prudential com a coluna de emissão/início de vigência, se o export tiver; (B) ler a emissão dos demonstrativos PDF (a skill /apolices já baixa pro Drive); (C) conector do Global (`listar_carteira`), que precisa ser reconectado com o código do celular. Até lá o card segue "—" + "falta data na carteira".
+- **SAUDACAO-V1 (pedido dele):** cabeçalho do Início = "Bom dia/Boa tarde/Boa noite, {1º nome}." + data por extenso, como no Global. No "Usar o app como" sai o nome da pessoa (antes saía GUSTAVO JUCA na tela da Rebeca). Vale pra todos (ajuste do que já existe).
+- **Trava:** os blocos "O seu dia" + "Hoje em 6 números" + o olho agora estão em `NOVO_SO_MEU['inicio-dia']` (só a base dele). Por isso a Rebeca não vê. Liberar pra ela, Daniel ou Victor só com a palavra dele.
+- **Merge da main (v8.92) no branch → v8.93.** Portão verde (55 telas × 6, lpSelfCheck 0). 2 autotestes novos (PARIDADE-ATRASO-V1, SAUDACAO-V1).
+- **Preview com dados reais:** o Google só volta pra endereços liberados no Supabase (localhost não está). O preview foi feito carregando o código da branch num iframe dentro da aba do github.io já logada (só leitura; recarregar volta à produção).
+- **Falta:** decisão da fonte de Renovações (A/B/C acima) · liberar o T1 pra Rebeca só com a palavra dele · print lado a lado com o Global (o Chrome não capturou com o Mac bloqueado) · depois T2 (bloco amarelo "saíram da lista com 60+ dias") → T7.
+
+## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — INÍCIO COM PARIDADE GLOBAL · T1 PRONTO NO BRANCH `claude/busy-galileo-dh6sti` (v8.90, NÃO publicado) · **a sessão do Mac assume T2→T7** (decisão dele: "A, a do Mac assume")
+
+- **Spec:** PROMPT_CODE "Início (painel) com paridade Global CRM · 09/11/2026" (backlog Notion "MELHORIAS DO CRM · por setor", linha "Início completo (paridade Global)"). Tickets: T1 olho global + blocos 1–2 · T2 bloco 3 (confirmar saídas do atraso 60+) · T3 blocos 4 e 10 · T4 bloco 5 · T5 blocos 6–7 (7 só se existir motor de cotação no main) · T6 blocos 8–9 · T7 bloco 11 (mapa, só sem chave). Um ticket por vez, para pra revisão com print lado a lado do Global, nada publicado sem OK dele.
+- **Por que mudou de sessão:** a sessão da nuvem não alcança o Chrome dele; a do Mac (Claude Code local, pasta `crm-captacao-main`, Remote Control ligado) usa o Claude in Chrome com o Global logado. **Global = SÓ LEITURA** (nunca "Pagamento confirmado", "Cancelada por inadimplência", "Importar extratos").
+- **T1 (INICIO-GLOBAL-V1, vendas.html, perto de `inicioAgora`):**
+  - `iniDiaBloco()` "☀️ O seu dia · para resolver hoje" e `iniDiaCardsBloco()` "📋 Hoje em 6 números", 1º e 2º no `pordRender` (chaves `dia`, `dia-cards` em PORD_NOMES/INI_PADRAO; nascem fechados).
+  - Fonte única: atrasos críticos = `iniAtrasoCrit()` → `atV2Kpis` da Lista de Atraso (≥ 50 dias, sumidas e resolvidas fora); reuniões/ligar depois/mensagens = `agendaItens()` (ligar depois = tarefa ligar/whats atrasada ∪ `taDelayTipo==='Retornar'`; mensagens = tarefas `lembrarReuniao` em ≤ 72 h); aniversários = `niverItens`.
+  - **PARIDADE-V2** (base real dele deu 126 · 74 contra 6 · 6 do Global): "para resolver hoje" = SOMA DOS CARDS do dia; "passou da hora" = críticos + ligar depois. Ação única: crítico → `FAT.lente='crit';irPara('lp-atrasos')`; senão o 1º card com número.
+  - **Olho global:** botão "👁 valores" ao lado de "organizar painel"; `olhoAplicar()` mascara todo `R$ …` (texto e title) do #main do Início; `localStorage crmlp_olho_v1`.
+  - Visual aprovado por ele ("gostei do VISUAL T1"). Card crítico com borda vermelha. 5 autotestes `INICIO-GLOBAL-V1 (T1)`; portão verde (55 telas × 6).
+- **Abertos do T1:**
+  1. **Críticos 4 (nosso) × 6 (Global, R$ 2.692)** — listar apólice a apólice no Global (Lista de Atraso › críticos) e no nosso (🔴 Críticas): corte de dias? relatório de atraso mais antigo? apólice faltando? Ajustar só com o porquê na mão.
+  2. **Renovações em 30 dias:** a carteira importada não traz data de emissão/aniversário (conferido 23/10) → card mostra "—" + "falta data na carteira". O Global tem o número (0 em 09/11). **Decisão pendente dele:** de qual relatório vem a data.
+  3. Carteira importada é de 09/09 — paridade numérica completa só depois de importar a carteira atual.
+- **Próximo:** fechar os 2 primeiros abertos → OK dele → T2 (o bloco amarelo do Global "N apólice(s) saíram da lista com 60+ dias… pagamento confirmado ou cancelada?" com contadores resolvidas · canceladas · a confirmar).
+
+## 🟡 RETOMAR AQUI — 09/11/2026 (tarde) — B ✅ · H ✅ (umbler v6 no ar + limpeza rodada) · I pronto no branch (v8.89), AGUARDA 3 OKs
+## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.91 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
+
+- **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
+- **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
+- **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
+- **Ele:** ligar 🌟 Embaixadores pra Rebeca no Painel Master e revisar com "Usar o app como"; mandar a mensagem de boas-vindas; ajustar o compartilhamento externo da agenda no Google Workspace.
+- **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
+- **Próximo no Code:** L2 → J → G → F (com L3).
+- **Anexos no card (v8.83, sessão de 02/11 — fechamento 09/11):** falta só ele: 1º anexo real numa ficha + dar a pasta à Rebeca (botão 📂 em Acessos; ela entrou por SQL e o automático não disparou). Victor nunca teve a pasta. Prompt da sessão GUIADA (Supabase Pro + créditos da API, agora que triagem/copiloto rodam sozinhos): `docs/PROMPT_GUIADO_SUPABASE_PRO_E_CREDITOS.md`.
 
 ## (anterior) 09/11/2026 (noite) — C' (Victor saiu) pronto no branch
 
@@ -181,7 +262,7 @@
 - **Testes:** autotestes `ANEXOS-CARD-V1` e `ANEXOS-CARD-T3`; portão verde (55 telas × 6); simulação no navegador com Drive simulado (soltar 5 → 3 sobem, 25 MB/.exe barrados; colar print; excluir/desfazer; mudar etapa+tarefa e recarregar não perde anexo); prints 390/1280. **Falta:** teste com o Drive real (login Google dele) na prévia.
 - **Acesso à pasta (DRIVE-ACESSO-ASSISTENTE-V1, palavra dele: "compartilha a pasta com o Victor e usuários que add como assistente"):** delegação na base dele (Painel Master · Acessos) → o app compartilha *Histórico de Clientes* como Editor; tirar a delegação tira o acesso; botão "📂 dar acesso à pasta do Drive" na linha do Victor. O conector do Drive da sessão foi RECUSADO ao compartilhar → **falta ele clicar o botão pro Victor** depois do merge (ou compartilhar à mão). Daniel também tem `anexos-drive` ligado, mas a pasta não atende a base dele — decisão dele.
 - **Daniel:** `anexos-drive` DESLIGADO no `lp_perfis` (decisão dele, 02/11: "A, desliga pro Daniel").
-- **Falta dele:** (1) 1º anexo real numa ficha = teste com o Drive de verdade; (2) Victor: compartilhar a pasta à mão (opção A dele) ou pelo botão "📂 dar acesso à pasta do Drive" em Painel Master · Acessos.
+- **Falta dele (atualizado 09/11):** (1) 1º anexo real numa ficha = teste com o Drive de verdade (até 09/11 nenhum arquivo `_card_` no Drive); (2) **Rebeca** (assistente da base dele, `anexos-drive` ligado) ainda SEM acesso à pasta — ela entrou por SQL, então o compartilhamento automático não disparou: Painel Master · Acessos → linha dela → "📂 dar acesso à pasta do Drive" (ou Compartilhar à mão, Editor). Victor: nunca teve acesso à pasta (conferido 09/11) — nada a tirar.
 - **Doc do módulo:** `docs/anexos-card.md`. Portão de acesso = `anexos-drive` (sem trava nova: melhoria em módulo já liberado).
 
 ## 🟢 26/10/2026 (noite) — v8.82 PUBLICADA (OK dele: "publica · T3b A · menu A · agenda ok"): card completo + menu A + T3b (código) · IA da recomendação no Claude · Copiloto OK

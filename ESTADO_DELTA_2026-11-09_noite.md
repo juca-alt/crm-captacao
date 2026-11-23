@@ -1,0 +1,12 @@
+# DELTA do ESTADO — 09/11/2026 (noite) · sessão Claude Code
+> Colar no topo do ESTADO_DO_PROJETO.md do Drive na próxima passada do Cowork. Fonte: repo juca-alt/crm-captacao (branch claude/wizardly-sagan-bwghr3, em dia com a main).
+
+## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.92 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
+
+- **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
+- **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
+- **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
+- **Ele:** mandar a mensagem de boas-vindas pra Rebeca (1º login + aceitar Umbler e agenda); ajustar o compartilhamento externo da agenda no Google Workspace; tirar o Victor da pasta do Drive/agenda à mão.
+- **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
+- **v8.92 no ar (PR #337) — MENU-POR-PESSOA-V1:** 5 chaves de menu no Painel de Acessos (Solicitações, Estoque, SitPlan & TA, Módulos, Telas antigas), nascem ligadas. Rebeca (SQL rodado por ele): sem Revisão, Solicitações, Estoque, SitPlan & TA e Telas antigas; **Módulos religado** porque sem ele ela ficava sem caminho pra Conversas/Carteira/Lista de Atraso (ela não tem 📌 fixados — o "Usar o app como" mostra os 📌 DELE). Ideia guardada: "menu fixo por pessoa" (admin escolhe os 📌 de cada um).
+- **Próximo no Code:** L2 → J → G → F (com L3). K (transcrição) parado.
