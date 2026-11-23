@@ -2,14 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 23/11/2026 — Lista do funil novo · tags, selecionar pra unir e ver duplicados · v8.96 · branch `feat/lista-tags-unir` (PR aberto, aguarda OK dele)
+## 🟡 23/11/2026 — Conversas com cara de WhatsApp Web + correção da linha espremida · v8.97 · branch `feat/conversas-whatsapp-web` (PR aberto, aguarda OK dele)
+
+- **Pedido dele (print da tela Conversas):** corrigir o "bug de quebras" da lista e "ajustar as dimensões pra dar a experiência mais próxima de ver um WhatsApp Web aberto". Perguntou também se o histórico do WhatsApp está vindo e se dá pra agendar mensagem por ali (via Umbler ou WhatsApp).
+- **Bug (`CV-WEB-V1`):** `.cv-lista` é coluna flex com altura limitada e as linhas tinham `flex-shrink` padrão: o navegador espremia cada conversa, e a prévia e os selos saíam cortados e sobrepostos. Correção: `flex:0 0 auto` na linha.
+- **Layout no PC:** lista e conversa viram um bloco só, da altura da janela (`--cv-h`, descontando a barra fixa); a lista rola de um lado, a conversa do outro, o cabeçalho da conversa fica parado. Ao abrir uma conversa o bloco sobe pra ocupar a tela. Balões no padrão do WhatsApp (cliente branco à esquerda, nós verde à direita, hora embaixo à direita, fundo bege), avatar com iniciais (foto do WhatsApp pra quem tem `foto-wa`).
+- **No celular:** a conversa aberta continua em tela cheia, agora com o cabeçalho parado e só as mensagens rolando; os botões ficam numa linha que rola de lado.
+- **Rolagem:** redesenhar não devolve mais a lista ao topo; a conversa abre na última mensagem e só fica onde ele parou se tinha subido pra ler.
+- **Verificado:** portão aberto (55 telas × 6, 0 problema), 1 autoteste novo; com 44 conversas e 60 mensagens de exemplo em 1280 e 390: nenhuma linha cortada, lista preserva a posição, conversa abre no fim, 0 estouro, alvos 44px. **NÃO verificado:** com as conversas reais.
+- **Respostas dadas a ele:** o histórico está vindo (sync da Umbler a cada 10 min; em 23/11 22:10 UTC a última leitura tinha menos de 2 min, 485 conversas no canal dele). **Agendar/enviar mensagem não existe:** o módulo é só leitura por regra dele; virar envio é decisão dele e depende de conferir a API da Umbler. Segue como "Ideia" no Notion (agendar envio de mensagem).
+
+## ✅ 23/11/2026 — Lista do funil novo · tags, selecionar pra unir e ver duplicados · **v8.96 NO AR** (PR 350, main `af5a1c5`)
 
 - **Pedido dele (olhando a lista da v8.95 no ar):** "já nessa tela é bom eu poder add e editar tags" + "selecionar negócios pra unir e ver duplicados, ajuda a limpeza".
 - **`TAGS-LISTA-V1`:** tag é texto livre em `c.tags` ("a, b", o campo que a busca e a planilha já liam; até 24 caracteres, sem repetir). Na linha aparecem como pílulas embaixo do telefone; "＋ tag" / ✎ (desktop) ou 🏷 nas ações (celular) abre o editor: tirar, criar e as já usadas. Vale pra ficha do funil e pro Estoque (`bnSalvar`); cliente sem ficha (card fantasma) não tem. A busca do funil acha por tag. A coluna "Tags" do fim da tabela saiu (virou a pílula).
 - **`UNIR-LISTA-V1`:** caixinha por linha (só ficha do funil) + "selecionar todos" no cabeçalho. Com gente marcada sobe uma barra flutuante no rodapé (acima da barra de baixo no celular): 🔗 Unir (2 ou mais) · 🏷 Tag em todos · Limpar. Unir abre a confirmação com os cards, quem fica de base (o mais antigo, regra do `dupFundir`) e um seletor da **etapa que fica**. Fusão = `dupFundir` (listas somadas, conflito vira nota) + campo vazio preenchido pelo outro + tags somadas + nota "🔗 Unido" no histórico. Desfazer no aviso.
 - **`DUP-LISTA-V1`:** o motor de duplicatas do funil antigo (`dupGrupos`: mesmo telefone ou mesmo nome, dentro do mesmo funil de origem) agora acende "⚠ Possíveis duplicados · N grupos" na lista. A vista agrupa e cada grupo traz 🔗 Unir · 👤 Mesma pessoa, negócios diferentes · Não é a mesma pessoa. Nada se une sozinho.
 - **Gate:** melhoria de tela que quem tem o funil novo já usa → nasce liberada pra eles (sem `NOVO_SO_MEU`).
-- **Verificado:** portão aberto no Chrome (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 3 autotestes novos; no preview com a base de exemplo, em 1280 e 390: pôr e tirar tag, selecionar, unir 2 (14 → 13 cards) e desfazer (13 → 14), vista de duplicados; 0 estouro, alvos 44px e campos 16px no celular. **NÃO verificado:** com a base real e login (sincronização da união entre aparelhos usa o mesmo caminho do `dupUnir` antigo, não foi testada de novo).
+- **Verificado:** portão aberto no Chrome (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 3 autotestes novos; no preview com a base de exemplo, em 1280 e 390: pôr e tirar tag, selecionar, unir 2 (14 → 13 cards) e desfazer (13 → 14), vista de duplicados; 0 estouro, alvos 44px e campos 16px no celular. **No ar (23/11, noite):** OK dele ("Pode publicar") → merge do PR 350; `portao.py --servido` bateu (v8.96, hash `76742d7f44e5`). Na base real, só leitura: 282 linhas, 264 com caixinha, 3 grupos de possíveis duplicados (6 cards), console sem erro. **NÃO verificado:** unir de verdade na base real e a união sincronizando entre aparelhos (mesmo caminho do `dupUnir` antigo).
 - **Ajuste de carona:** o trilho de etapas e o que gruda na lista agora descontam a altura da barra fixa do app (`--fu-tb`).
 - **Não entrou:** filtrar a lista clicando numa tag (hoje é pela busca); tag no card do Kanban e na ficha.
 
@@ -25,7 +35,7 @@
 
 ## 🟢 RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS (todas as sessões fechadas em 23/11, num lugar só)
 
-**Estado em 30 segundos:** Vendas LP **v8.95 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `477d608c852a`; a v8.94 era `b0afdd817ef4`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
+**Estado em 30 segundos:** Vendas LP **v8.96 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `76742d7f44e5`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
 
 **Por que este bloco existe:** em 23/11 cada sessão gravou o próprio fechamento no próprio branch (`docs/estado-2026-11-23`, `claude/wizardly-sagan-bwghr3`, `claude/modest-allen-v64kpu`) e só o dos Anexos chegou à main (PR 346). Aqui estão os quatro juntos. **Regra daqui pra frente:** fechamento de sessão entra na main por PR de docs no mesmo dia; ESTADO parado em branch é ESTADO que a próxima sessão não lê.
 
@@ -62,7 +72,7 @@
 ```
 Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
 1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS").
-2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.95 ou mais novo).
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.96 ou mais novo).
 3. Perguntar ao Gustavo o que ele puxa: a fila do Code começa no L2 (A ou B; recomendar A).
 Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat,
 fechamento de sessão entra na main no mesmo dia. Estilo: veredito primeiro, curto, A/B, um passo por vez.
