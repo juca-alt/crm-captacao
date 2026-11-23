@@ -668,8 +668,30 @@ function shMover(cid,tid){ const p=parDe(cid,tid); if(!p) return {tit:'Mover',co
 function aggMoverPara(cid,tid,k){ fecharTudo(); aggTarSt(cid,tid,k); }
 
 /* ── listas dos alertas ── */
-function shFinLista(){ const l=tx(()=>reunPendentes())||[];
-  return {tit:'🤝 Reuniões a finalizar',corpo:`<div class="agg-dica">A data passou e ninguém disse o que houve. Finalizar gera o próximo passo — o funil anda.</div>`+(l.map(x=>`<div class="agg-srow"><div class="t"><b>${esc(x.c.nome||'')}</b><span class="agg-mut">${esc(x.t.tit||'Reunião')} · ${quandoTxt(x.t.quando,x.t.hora)} · ${tx(()=>reunDiasParada(x.t))||0}d sem desfecho</span></div><button type="button" class="agg-btn p" onclick="aggFinalizar('${J(x.c.id)}','${J(x.t.id)}')">Finalizar</button></div>`).join('')||'<div class="agg-vz">Nada a finalizar. 🎉</div>')}; }
+/* BAIXA-V2 (23/11/2026, pedido dele com print: "revisa e melhora esse sistema de baixa"). A lista era cega e de mão única:
+   cada "Finalizar" fechava tudo e, depois de registrar, era preciso reabrir a lista (33 vezes na base dele). Agora:
+   · a lista é o ponto de volta: registrou, ela reabre com o que sobrou;
+   · cada linha diz a etapa de hoje, se HOUVE MOVIMENTO depois da data (o funil já andou) e se o nome aparece em outro card;
+   · filtros pra atacar por lote mental: mais de 30 dias · com movimento depois · nome repetido.
+   A regra "todo desfecho exige próximo passo ou remarcação" continua intacta (dar baixa sem próximo passo é decisão dele). */
+function finCtx(x,nomes){ const c=x.c, t=x.t; let dep='';
+  (Array.isArray(c.interacoes)?c.interacoes:[]).forEach(i=>{ const d=i&&(i.dia||String(i.ts||'').slice(0,10)); if(d&&d>t.quando&&d>dep) dep=d; });
+  return {dias:tx(()=>reunDiasParada(t))||0, dep, rep:(nomes[tx(()=>normKey(c.nome))||'']||0)>1, et:tx(()=>LBLE(c.etapa))||c.etapa||''}; }
+function finDados(){ const l=tx(()=>reunPendentes())||[], cards={}, nomes={};
+  l.forEach(x=>{ const k=tx(()=>normKey(x.c.nome))||''; (cards[k]=cards[k]||new Set()).add(String(x.c.id)); }); Object.keys(cards).forEach(k=>{ nomes[k]=cards[k].size; });
+  return l.map(x=>Object.assign({},x,{i:finCtx(x,nomes)})); }
+const FIN_F=[['todas','Todas',()=>true],['velhas','Mais de 30 dias',x=>x.i.dias>30],['mov','Com movimento depois',x=>!!x.i.dep],['rep','Nome repetido',x=>x.i.rep]];
+function shFinLista(){ const todos=finDados(), fk=FIN_F.some(f=>f[0]===AGG.finF)?AGG.finF:'todas', fn=FIN_F.find(f=>f[0]===fk)[2], l=todos.filter(fn);
+  const chips=todos.length?`<div class="agg-finf" role="group" aria-label="Filtrar">${FIN_F.map(([k,r,f])=>{ const n=todos.filter(f).length; return `<button type="button" class="agg-btn${fk===k?' on':''}" aria-pressed="${fk===k}" onclick="aggFinF('${k}')" ${!n&&fk!==k?'disabled':''}>${r} <b>${n}</b></button>`; }).join('')}</div>`:'';
+  const lin=x=>`<div class="agg-srow agg-fin"><div class="t"><b>${esc(x.c.nome||'')}</b><span class="agg-mut">${esc(x.t.tit||'Reunião')} · ${quandoTxt(x.t.quando,x.t.hora)} · ${x.i.dias}d sem desfecho</span>
+      <span class="agg-finc">${x.i.et?`<span class="bd">etapa ${esc(x.i.et)}</span>`:''}${x.i.dep?`<span class="bd v" title="Houve registro na ficha depois da data da reunião: o funil provavelmente já andou">💬 movimento depois · ${br(x.i.dep)}</span>`:''}${x.i.rep?`<span class="bd a" title="O mesmo nome aparece em outro card desta lista: pode ser cadastro duplicado">⚠ nome em outro card</span>`:''}</span></div>
+    <button type="button" class="agg-btn" onclick="aggFicha('${J(x.c.id)}')" title="Abrir a ficha">ficha</button><button type="button" class="agg-btn p" onclick="aggFinDaLista('${J(x.c.id)}','${J(x.t.id)}')">Finalizar</button></div>`;
+  return {tit:`🤝 Reuniões a finalizar${todos.length?' · '+todos.length:''}`,corpo:`<div class="agg-dica">A data passou e ninguém disse o que houve. Finalizar gera o próximo passo, e o funil anda. Depois de registrar, você volta pra esta lista.</div>${chips}`
+    +(l.map(lin).join('')||`<div class="agg-vz">${todos.length?'Nenhuma com esse filtro.':'Nada a finalizar. 🎉'}</div>`)}; }
+function aggFinF(k){ AGG.finF=k; repintarSheet(); }
+function aggFinDaLista(cid,tid){ AGG.finVolta={cid:String(cid),tid:String(tid)}; fecharTudo(); tx(()=>reunFinalizar(cid,tid)); }
+function reunDepois(cid,tid){ const v=AGG.finVolta; AGG.finVolta=null; if(!v||v.cid!==String(cid)||v.tid!==String(tid)) return;
+  if((tx(()=>reunPendentes())||[]).length) abrir(shFinLista); }
 function shLembretes(){ const ph=lembsHoje(), aw=lembsAguard();
   const lin=(x,bt)=>`<div class="agg-srow"><div class="t"><b>${esc(x.c.nome||'')}</b><span class="agg-mut">${esc(CAT[x.cat].l)} · ${quandoTxt(x.t.quando,x.t.hora)} · ${x.t.lemb.modo==='confirmar'?'pedir confirmação':'só lembrar'}</span></div>${bt}</div>`, j=x=>`'${J(x.c.id)}','${J(x.t.id)}'`;
   return {tit:'📨 Lembretes pro cliente',corpo:`<div class="agg-dica">O CRM deixa a mensagem pronta no dia certo. Você toca, o WhatsApp abre com o texto e você aperta enviar.</div>
@@ -925,6 +947,9 @@ body.agg-arrastando{user-select:none;-webkit-user-select:none;cursor:grabbing}
 .agg-prog i::after{content:"";position:absolute;inset:0 auto 0 0;width:var(--p);background:var(--verde)}
 .agg-srow{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--linha);padding:8px 0;flex-wrap:wrap}
 .agg-srow:last-child{border-bottom:0}
+.agg-finf{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}.agg-finf .agg-btn{font-weight:500}.agg-finf .agg-btn b{font-weight:700}.agg-finf .agg-btn.on{background:#0f172a;border-color:#0f172a;color:#fff}
+.agg-finc{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}.agg-finc .bd{font-size:11.5px;line-height:1.5;border-radius:999px;padding:1px 8px;background:#f1f5f9;color:#475569;border:1px solid #e2e8f0}
+.agg-finc .bd.v{background:#ecfdf5;border-color:#a7f3d0;color:#047857}.agg-finc .bd.a{background:#fffbeb;border-color:#fde68a;color:#92400e}
 .agg-srow .t{flex:1;min-width:160px}.agg-srow .t b{display:block}
 .agg-srow .t .agg-tnome{display:block}
 /* folha / modal */
@@ -1078,11 +1103,13 @@ function agendaGlobalSelfTests(ok){
   ok('AGENDA-GLOBAL: o link público pro cliente marcar fica "em breve" e desligado', /disabled title="Fase B[^"]*">🔗 Link pro cliente marcar sozinho/.test(gstHTML()));
   ok('AGENDA-GLOBAL: tarefa mostra prioridade, checklist e situação; quadro tem as 3 colunas', /agg-pr alta/.test(ht)&&/☑ 0\/1/.test(ht)&&['pendente','andamento','concluida'].every(k=>hq.includes(`data-st="${k}"`)));
   ok('AGENDA-GLOBAL: mensagem do lembrete é preparada (nunca enviada) e pede confirmação quando o modo é confirmar', /me confirmar/.test(msgLembrete({nome:'Fulano de Tal'},{tipo:'reuniao',quando:'2026-10-27',hora:'10:00'},'confirmar'))&&!/me confirmar/.test(msgLembrete({nome:'Fulano'},{tipo:'reuniao',quando:'2026-10-27'},'lembrar')));
+  ok('BAIXA-V2: a lista "a finalizar" mostra etapa, movimento depois da data e nome repetido; filtra; e quem finaliza a partir dela volta pra ela', (()=>{ const c={id:'fz1',nome:'Fulano de Tal',etapa:'OI/FF',interacoes:[{id:'i',k:'nota',l:'x',dia:'2026-02-10'}]}, x={c,t:{id:'t1',tipo:'reuniao',quando:'2026-01-05'}}, i=finCtx(x,{[tx(()=>normKey('Fulano de Tal'))]:2});
+    return i.dep==='2026-02-10'&&i.rep===true&&i.dias>30&&FIN_F.length===4&&typeof W.aggFinDaLista==='function'&&typeof W.reunDepois==='function'&&/aggFinDaLista/.test(String(shFinLista))&&/reunPendentes/.test(String(reunDepois)); })());
   ok('AGENDA-GLOBAL: toda função chamada nos botões da tela existe no window', (()=>{ const re=/on(?:click|change|input|keydown|dragstart|dragend|dragover|dragleave|drop|mousemove|mouseleave)="(?:[^"]*?;)?\s*(?:event\.[a-zA-Z]+\(\);\s*)*([A-Za-z_$][\w$]*)\(/g; let m, falt=[];
     while((m=re.exec(tudo))){ const f=m[1]; if(['if','return','this','event'].includes(f)) continue; if(typeof W[f]!=='function') falt.push(f); } W.__aggHandlersFaltando=falt; return falt.length===0; })());
 }
 
-Object.assign(W,{viewAgendaGlobal,agendaGlobalSelfTests,aggCss,
+Object.assign(W,{viewAgendaGlobal,agendaGlobalSelfTests,aggCss,aggFinF,aggFinDaLista,reunDepois,
   aggAba,aggModo,aggDia,aggIrDia,aggHoje,aggNavegar,aggTipo,aggDobra,aggTarResp,aggTarModo,aggKtab,aggCkAb,aggNovo,aggTarNova,aggProxima,aggFicha,aggEditar,aggFinalizar,
   aggEvAbrir,aggTarAbrir,aggMandarAbrir,aggConectar,aggAvulsaFeita,aggClickEv,aggSlot,aggFantasma,aggFantasmaSai,aggCliqueMes,
   aggTarSt,aggTarFeita,aggCkTg,aggKStart,aggKEnd,aggKOver,aggKLeave,aggKDrop,

@@ -2,14 +2,26 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 23/11/2026 — Conversas com cara de WhatsApp Web + correção da linha espremida · v8.97 · branch `feat/conversas-whatsapp-web` (PR aberto, aguarda OK dele)
+## 🟡 23/11/2026 — Baixa das reuniões (Reuniões a finalizar) revisada · v8.98 · branch `feat/baixa-reunioes-v2` (PR aberto, aguarda OK dele)
+
+- **Pedido dele (print da lista "Reuniões a finalizar"):** "revisa e melhora esse sistema de baixa".
+- **O que a fila real mostrou (23/11, só leitura):** 33 reuniões sem desfecho; 4 com até 7 dias, 22 de 8 a 30, 7 de 31 a 60; **29 das 33 já tinham registro na ficha depois da data** (o funil andou e a reunião ficou pra trás); 6 pessoas com mais de uma; nomes repetidos são cards duplicados, não a mesma tarefa duas vezes.
+- **`BAIXA-V2` (Agenda nova + formulário de desfecho):**
+  - A lista vira o ponto de volta: registrou o desfecho, ela reabre com o que sobrou (antes fechava tudo e era preciso reabrir a cada reunião). O título leva a contagem.
+  - Cada linha mostra a etapa de hoje, "💬 movimento depois · dd/mm" quando há registro posterior à data, e "⚠ nome em outro card" quando o nome se repete. Botão "ficha" na linha.
+  - Filtros: Todas · Mais de 30 dias · Com movimento depois · Nome repetido.
+  - No formulário, se a pessoa **já tem próximo passo marcado** na agenda, ele aparece ("Usar esse, sem criar outro", marcado por padrão) e não se cria tarefa repetida.
+- **Regra mantida:** "todo desfecho exige próximo passo ou remarcação" (invariante do self-check) segue intacta. **Decisão pendente dele:** criar ou não uma baixa SEM próximo passo ("já resolvida" / "não era reunião"), inclusive em lote — isso muda a regra e a conta de comparecimento, então não entrou.
+- **Verificado:** portão aberto (55 telas × 6, 0 problema), 2 autotestes novos; no preview com a base de exemplo em 1280 e 390: finalizar pela lista e voltar pra ela, filtros, reaproveitar o próximo passo existente (0 tarefa criada), 0 estouro, alvos 44px. **NÃO verificado:** na base real.
+
+## ✅ 23/11/2026 — Conversas com cara de WhatsApp Web + correção da linha espremida · **v8.97 NO AR** (PR 351, main `125e8f3`)
 
 - **Pedido dele (print da tela Conversas):** corrigir o "bug de quebras" da lista e "ajustar as dimensões pra dar a experiência mais próxima de ver um WhatsApp Web aberto". Perguntou também se o histórico do WhatsApp está vindo e se dá pra agendar mensagem por ali (via Umbler ou WhatsApp).
 - **Bug (`CV-WEB-V1`):** `.cv-lista` é coluna flex com altura limitada e as linhas tinham `flex-shrink` padrão: o navegador espremia cada conversa, e a prévia e os selos saíam cortados e sobrepostos. Correção: `flex:0 0 auto` na linha.
 - **Layout no PC:** lista e conversa viram um bloco só, da altura da janela (`--cv-h`, descontando a barra fixa); a lista rola de um lado, a conversa do outro, o cabeçalho da conversa fica parado. Ao abrir uma conversa o bloco sobe pra ocupar a tela. Balões no padrão do WhatsApp (cliente branco à esquerda, nós verde à direita, hora embaixo à direita, fundo bege), avatar com iniciais (foto do WhatsApp pra quem tem `foto-wa`).
 - **No celular:** a conversa aberta continua em tela cheia, agora com o cabeçalho parado e só as mensagens rolando; os botões ficam numa linha que rola de lado.
 - **Rolagem:** redesenhar não devolve mais a lista ao topo; a conversa abre na última mensagem e só fica onde ele parou se tinha subido pra ler.
-- **Verificado:** portão aberto (55 telas × 6, 0 problema), 1 autoteste novo; com 44 conversas e 60 mensagens de exemplo em 1280 e 390: nenhuma linha cortada, lista preserva a posição, conversa abre no fim, 0 estouro, alvos 44px. **NÃO verificado:** com as conversas reais.
+- **Verificado:** portão aberto (55 telas × 6, 0 problema), 1 autoteste novo; com 44 conversas e 60 mensagens de exemplo em 1280 e 390: nenhuma linha cortada, lista preserva a posição, conversa abre no fim, 0 estouro, alvos 44px. **No ar (23/11, noite):** OK dele → merge do PR 351; `portao.py --servido` bateu (v8.97, hash `30180e55afab`). Com as conversas reais, só leitura: 220 conversas na lista, nenhuma linha cortada, 185 com foto, a conversa abre na última mensagem, a lista mantém a posição, console sem erro.
 - **Respostas dadas a ele:** o histórico está vindo (sync da Umbler a cada 10 min; em 23/11 22:10 UTC a última leitura tinha menos de 2 min, 485 conversas no canal dele). **Agendar/enviar mensagem não existe:** o módulo é só leitura por regra dele; virar envio é decisão dele e depende de conferir a API da Umbler. Segue como "Ideia" no Notion (agendar envio de mensagem).
 
 ## ✅ 23/11/2026 — Lista do funil novo · tags, selecionar pra unir e ver duplicados · **v8.96 NO AR** (PR 350, main `af5a1c5`)
@@ -35,7 +47,7 @@
 
 ## 🟢 RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS (todas as sessões fechadas em 23/11, num lugar só)
 
-**Estado em 30 segundos:** Vendas LP **v8.96 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `76742d7f44e5`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
+**Estado em 30 segundos:** Vendas LP **v8.97 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `30180e55afab`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
 
 **Por que este bloco existe:** em 23/11 cada sessão gravou o próprio fechamento no próprio branch (`docs/estado-2026-11-23`, `claude/wizardly-sagan-bwghr3`, `claude/modest-allen-v64kpu`) e só o dos Anexos chegou à main (PR 346). Aqui estão os quatro juntos. **Regra daqui pra frente:** fechamento de sessão entra na main por PR de docs no mesmo dia; ESTADO parado em branch é ESTADO que a próxima sessão não lê.
 
@@ -72,7 +84,7 @@
 ```
 Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
 1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS").
-2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.96 ou mais novo).
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.97 ou mais novo).
 3. Perguntar ao Gustavo o que ele puxa: a fila do Code começa no L2 (A ou B; recomendar A).
 Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat,
 fechamento de sessão entra na main no mesmo dia. Estilo: veredito primeiro, curto, A/B, um passo por vez.
