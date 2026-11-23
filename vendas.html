@@ -12,7 +12,7 @@
      repo: mata o 404 do favicon e dá "adicionar à tela de início" no celular.
      Service worker ficou de fora de propósito: é a única peça capaz de
      prender o app numa versão antiga, e essa decisão é do Gustavo. -->
-<title>CRM SeguroComJucá · v8.97 · Vendas LP</title>
+<title>CRM SeguroComJucá · v8.98 · Vendas LP</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ================================================================
@@ -1862,7 +1862,7 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary)
 <script src="modulos/ver-como.js?v=20261109a"></script>
 <script src="modulos/funil-unico.js?v=20261123b"></script>
 <!-- AGENDA-GLOBAL-V1 (26/10): Agenda & Tarefas no padrão do Global mora em arquivo próprio -->
-<script src="modulos/agenda-global.js?v=20261109c"></script>
+<script src="modulos/agenda-global.js?v=20261123c"></script>
 <script src="modulos/ficha-ux2.js?v=20261123a"></script>
 <script src="modulos/forms-negocio.js?v=20261107a"></script>
 <script src="modulos/nova-rec.js?v=20261025i"></script>
@@ -4228,6 +4228,7 @@ function reunFinalizar(cid,tid){
   const c=tarContato(cid); if(!c) return;
   const t=tarDe(c,tid); if(!t){ toast('Atividade não encontrada — atualize',false); return; }
   const px=funProxEtapa(c), dias=reunDiasParada(t);
+  window._reunCtx={cid:String(cid),tid:String(tid)};   /* BAIXA-V2: o formulário precisa saber de quem é pra achar o próximo passo que já existe */
   const op=d=>`<label class="reun-op">
     <input type="radio" name="reun_d" value="${d.k}" ${d.k==='avancou'?'checked':''} onchange="reunTrocou()">
     <span><b>${d.ico} ${esc(d.l)}</b>${d.k==='avancou'&&px?` <span class="badge b-azul">→ ${esc(LBLE(px))}</span>`:''}
@@ -4256,7 +4257,13 @@ function reunTrocou(){
     box.innerHTML=`<label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px">Nova data da reunião</label>
       <input id="reun_data" type="date" value="${isoAddDias(hojeISO(),7)}" style="width:100%">`;
   } else if(d.proxima){
-    box.innerHTML=`<label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px">Próximo passo com essa pessoa</label>
+    /* BAIXA-V2 (23/11): a regra é "não sair da reunião sem próximo passo" — e se o próximo passo JÁ EXISTE na agenda dessa pessoa,
+       ela está cumprida. Antes o formulário obrigava a criar outro, e reunião velha virava tarefa repetida. */
+    const ja=reunProxExistente(window._reunCtx), el=$('#reun_pusa'), usa=ja&&(el?el.checked:true);
+    const jaHtml=ja?`<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:8px;min-height:44px;cursor:pointer"><input type="checkbox" id="reun_pusa" ${usa?'checked':''} onchange="reunTrocou()" style="width:20px;height:20px;margin-top:2px;flex:0 0 auto">
+      <span>Já tem próximo passo marcado: <b>${esc(ja.tit||tarNomeTipo(ja.tipo))}</b> em ${dataBR(ja.quando)}${ja.hora?' '+esc(ja.hora):''}. <span style="color:var(--muted)">Usar esse, sem criar outro.</span></span></label>`:'';
+    if(usa){ box.innerHTML=jaHtml; return; }
+    box.innerHTML=jaHtml+`<label style="font-size:12.5px;font-weight:600;display:block;margin-bottom:4px">Próximo passo com essa pessoa</label>
       <div style="display:flex;gap:7px;flex-wrap:wrap">
         <select id="reun_ptipo" style="flex:0 0 auto">${TAR_TIPOS.map(t=>`<option value="${t[0]}">${t[1]} ${t[2]}</option>`).join('')}</select>
         <input id="reun_ptit" placeholder="O que fazer" style="flex:1;min-width:130px">
@@ -4265,6 +4272,8 @@ function reunTrocou(){
       <div style="font-size:11.5px;color:var(--muted);margin-top:5px">Sem isso o negócio sai da reunião parado — que é o que o KPI "sem próxima atividade" acusa depois.</div>`;
   } else box.innerHTML='';
 }
+function reunProxExistente(ctx){ try{ if(!ctx) return null; const c=tarContato(ctx.cid); if(!c) return null; const hoje=hojeISO();
+  return tarAbertas(c).filter(t=>t&&String(t.id)!==String(ctx.tid)&&t.quando&&t.quando>=hoje).sort((a,b)=>String(a.quando+(a.hora||'')).localeCompare(String(b.quando+(b.hora||''))))[0]||null; }catch(_){ return null; } }
 function reunSalvar(cid,tid){
   const c=tarContato(cid); if(!c) return;
   const t=tarDe(c,tid); if(!t) return;
@@ -4277,7 +4286,8 @@ function reunSalvar(cid,tid){
      possível. */
   let novaData=null, prox=null;
   if(d.remarca){ novaData=($('#reun_data')||{}).value||''; if(!novaData) return toast('Escolha a data nova'); }
-  if(d.proxima){
+  const usaExistente=!!(d.proxima&&($('#reun_pusa')||{}).checked&&reunProxExistente({cid,tid}));
+  if(d.proxima&&!usaExistente){
     const quando=($('#reun_pdata')||{}).value||'';
     if(!quando) return toast('Marque a data do próximo passo');
     const tipo=($('#reun_ptipo')||{}).value||'ligar';
@@ -4288,6 +4298,7 @@ function reunSalvar(cid,tid){
   if(prox) tarefasDe(c).push({id:uid(),tipo:prox.tipo,tit:prox.tit,quando:prox.quando,hora:'',feito:null,notas:'',criadoEm:hojeISO(),por:quemFez()});
   salvar(); atClose(); render();
   toast(m&&m.para!==m.de ? `${c.nome.split(' ')[0]}: ${LBLE(m.de)} → ${LBLE(m.para)}` : 'Reunião finalizada', true);
+  try{ if(typeof reunDepois==='function') reunDepois(cid,tid); }catch(_){}   /* BAIXA-V2: quem veio da lista "a finalizar" volta pra ela */
 }
 
 function agendaItens(){
@@ -22958,6 +22969,9 @@ ok('reunião: aplicar duas vezes na MESMA tarefa não move duas etapas', (()=>{
       const c={id:'z6',nome:'T',funil:'nn',etapa:ETAPAS_FLUXO[1],interacoes:[],tarefas:[]};
       const t={id:'t6',tipo:'reuniao',quando:'2026-01-01',feito:null};
       return reunAplicar(c,t,'inventado',null)===null && !t.feito && c.etapa===ETAPAS_FLUXO[1]; })());
+    ok('BAIXA-V2: próximo passo que já está na agenda da pessoa conta (não obriga a criar outro); a própria reunião e tarefa vencida não contam', (()=>{
+      const _S=S.contatos; try{ const hj=hojeISO(), c={id:'zb2',nome:'Fulano',funil:'nn',etapa:ETAPAS_FLUXO[1],lp:S.activeUser,interacoes:[],tarefas:[{id:'r1',tipo:'reuniao',quando:'2026-01-01',feito:null},{id:'v1',tipo:'ligar',tit:'velha',quando:'2026-01-02',feito:null},{id:'f1',tipo:'ligar',tit:'Ligar de volta',quando:isoAddDias(hj,3),feito:null}]};
+        S.contatos=[c]; const a=reunProxExistente({cid:'zb2',tid:'r1'}), b2=reunProxExistente({cid:'zb2',tid:'f1'}); return !!a&&a.id==='f1'&&b2===null; }catch(_){ return false; } finally{ S.contatos=_S; } })());
     ok('reunião: todo desfecho exige um próximo passo ou uma remarcação',
        REUN_DESFECHOS.every(d=>d.proxima||d.remarca));
     /* DADOS DA PESSOA V1:SELFCHECK — propagar no campo errado espalha erro
