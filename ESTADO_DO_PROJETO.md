@@ -2,6 +2,90 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟢 RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS (todas as sessões fechadas em 23/11, num lugar só)
+
+**Estado em 30 segundos:** Vendas LP **v8.94 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `b0afdd817ef4`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
+
+**Por que este bloco existe:** em 23/11 cada sessão gravou o próprio fechamento no próprio branch (`docs/estado-2026-11-23`, `claude/wizardly-sagan-bwghr3`, `claude/modest-allen-v64kpu`) e só o dos Anexos chegou à main (PR 346). Aqui estão os quatro juntos. **Regra daqui pra frente:** fechamento de sessão entra na main por PR de docs no mesmo dia; ESTADO parado em branch é ESTADO que a próxima sessão não lê.
+
+### 1. Fila do Code (ordem dele)
+1. **L2 — parceiros nas Conversas.** Aguarda A/B dele. A (recomendado) = botão "🤝 Marcar como parceiro" na conversa, telefone vem do chat, sem SQL. B = telefone + tipo keyman no cadastro `parceiros`, com SQL. Regras da triagem: parceiro → 🔴; agenda/horário → 🟡; nova indicação de keyman/embaixador → 🟡 com aviso pro Gustavo.
+2. **J** — detecção na extensão do WhatsApp, só leitura (vira 2.11.0).
+3. **G**, depois **F com L3** — títulos `[TIPO] Nome · RC` + `· EMB` / `· KEY` / `· Joint <LP>`; relatório mensal por origem.
+4. **Início paridade Global, T2 → T7** (T1 no ar desde a v8.93). T2 = bloco amarelo "saíram da lista com 60+ dias". Card **Renovações em 30 dias** sem fonte de data: ele decide entre (A) relatório de Carteira com coluna de emissão, (B) ler dos demonstrativos PDF, (C) conector do Global.
+5. **Revisão de Proteção T1–T3** (menor 0–17 · segurado por plano · produto livre + prêmio manual): NÃO começou. O PROMPT_CODE com os 9 testes de aceite nunca chegou; sem ele, não commitar.
+6. **Embaixadores** (antes de liberar pra Rebeca): aviso no Início quando o embaixador marca "Esquentei" + botão 📅 Agendar na linha. Opcional: esconder a renda estimada no banco (`emb_leads` ainda manda pro navegador).
+7. **K** (transcrição de áudio): parado por decisão dele; depende de chave Gemini com faturamento.
+8. Faxina do Supabase (sessão própria): tabelas `_bkp_*`, `emb_teste_x()`, usuário de teste, linhas de teste em `copiloto_sugestoes`, renomear "crm-playground". DELETE só com ele presente.
+
+### 2. Perguntas que só ele responde
+- **Funil:** em `lp_funil_cfg.fu_vi` a etapa `emitida` está rotulada "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e a carteira caem em `emitida`. É isso mesmo?
+- **Revisão:** confirma DG Plus opcional como "validado"? Confirma o teto 5×/2× APLICADO na Mudança de Seguro (só a Nova proposta virou aviso)? Corrige o texto dos selos de TM e FI (a "divergência" era base × opcional)?
+- **Revisão:** faltam 4 das 15 cotações de 11/11; Morte Acidental pago em 10 (`ABP`, fator 2,0279) precisa de uma cotação em outra idade.
+- **Liberações** (hoje só na base dele, `NOVO_SO_MEU`): `inicio-dia` ("O seu dia" + 6 números + olho), `etiquetas-gcal`, `forms-neg`, `funil-unico`, `ficha-ux2`. Liberar é palavra dele.
+- **Fila de melhorias (Notion):** decisões pendentes por item seguem lá (percentuais de dedução e repasse do Comissionamento, escopo do InfoClient, Gabi própria: marcar os 15 min no portal).
+
+### 3. À mão, com ele
+- Testar o arrasto de coluna com mouse real (só foi testado por evento simulado). Marcar os cards de joint com o Rodrigo ("quem toca" → "＋ Parceiro de fora (joint)…").
+- 1º anexo real numa ficha (até 23/11 nenhum arquivo `_card_` no Drive). Dar a pasta *Histórico de Clientes* à Rebeca (Painel Master · Acessos → "📂 dar acesso à pasta do Drive").
+- **Supabase Pro NÃO assinado** (cartão Inter PJ travou no ID Check). Depois de assinar: compute Nano → Micro e conferir backup diário. **Crédito da API:** A (US$ 5, teto US$ 10) ou B (US$ 10 + recarga, teto US$ 20).
+- **Segurança:** print com os dados completos do cartão PJ passou no chat → pedir cartão novo no Inter.
+- No ⚙ da Agenda, nomear as 5 cores novas (RCP/FF, RCP/PC, GAEL + FAMÍLIA, CORPORE SANO, OUTROS) e passar os números → fecha o bloco do Pietro (`docs/etiquetas-agenda.md`).
+- Google Workspace: agenda externa com edição pra Rebeca; tirar o Victor do Drive e da agenda (os dois podem já estar feitos; não conferido).
+- Resgate ano a ano do Vida e Saúde (WV) e depois do 40º ano: só com ele presente pra liberar o LP Business (app nativo do Mac).
+
+### 4. Fora do repo
+- Pendências comerciais (retenções, UW, aceites do joint, revisitas pra Rebeca) vivem no Notion: FRENTES → "Produção LP — novos negócios" e LOG "09–23/11 · Operação". Não entram aqui (repo público).
+- `CANONICO_CRM.md` do Drive é de 28/09, com 7 deltas soltos ao lado. Consolidar é passada do Cowork.
+
+```
+Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
+1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS").
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.94 ou mais novo).
+3. Perguntar ao Gustavo o que ele puxa: a fila do Code começa no L2 (A ou B; recomendar A).
+Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat,
+fechamento de sessão entra na main no mesmo dia. Estilo: veredito primeiro, curto, A/B, um passo por vez.
+```
+
+## 📌 23/11/2026 — fechamento das sessões Funil (v8.94) e Revisão de Proteção — detalhe
+
+**Estado em 30 segundos:** main = `d0e51da`. Vendas LP v8.94 no ar. Revisão de Proteção com o motor calibrado de 11/11 no ar (PR 344). Nenhum PR de código aberto. Ele fechou todas as sessões em 23/11 pra juntar as pendências numa só e reabrir.
+
+**Aberto desta frente (funil novo):**
+- Ele testar o arrasto de coluna com mouse real (só foi testado por eventos simulados).
+- Marcar os cards de joint com o Rodrigo: "quem toca" do card → "＋ Parceiro de fora (joint)…".
+- Perguntar a ele: em `lp_funil_cfg.fu_vi` a etapa `emitida` está rotulada "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e a carteira caem em `emitida`. É isso mesmo?
+- Da Revisão (bloco de 11/11): PROMPT_CODE menor 0–17 / segurado por plano / produto livre; 4 das 15 cotações de 11/11; Morte Acidental pago em 10 calibrada numa cotação só.
+
+**Aberto da Revisão de Proteção (sessão de 10–15/11, fechada em 23/11):**
+- **T1–T3 (menor 0–17 · segurado por plano · produto livre + prêmio manual):** NÃO começou. O `claude/PROMPT_CODE_REVISAO_MENOR_PREMIO_MANUAL_2026-11-10.md` não existe no repo, no Mac, no Drive nem no Notion; ele disse "vou colar aqui" e não colou. Sem os 9 testes de aceite do doc, não commitar.
+- **Cotações de 11/11:** 11 registradas em `capturas`; o pedido falava em 15. Pedir as 4 que faltam.
+- **Morte Acidental até 75 pago em 10 (`ABP`):** fator 2,0279 calibrado em UMA cotação (F44). Pedir uma cotação em outra idade pra confirmar ou trocar o fator.
+- **Decisões minhas que ele ainda não confirmou:** DG Plus opcional passou de selo "planilha" pra "validado"; na Mudança de Seguro o teto 5×/2× continua APLICADO (só a Nova proposta virou aviso).
+- **Selos de TM e FI:** seguem "divergente" com a nota antiga de 04/09, mas a diferença é base × opcional (TR30 e FR30 batem exato). Não mexi porque ele mandou não alterar outra série. Perguntar se corrige o texto.
+- **Resgate ano a ano do Vida e Saúde (WV) e depois do 40º ano:** segue ≈ / traço. Só sai com ele presente pra liberar o LP Business (app nativo do Mac) ou exportando a tabela.
+
+**Lições da sessão da Revisão (erro → causa → regra):**
+- Simulação do WL65/70/75/80 cobrava prêmio até os 100 anos → `anosPagamento(cod)` só conhecia prazo em anos → prazo "até a idade X" depende da idade de emissão: usar `anosPagAt(at)`.
+- "Divergência de 25%" do Decrescente durou 2 meses como selo vermelho → a cotação de 04/09 era o produto OPCIONAL comparado com a série BASE → antes de carimbar "divergente", testar a série irmã (DT×DR, TM×TR, FI×FR).
+- O JSON `<script id="DATA">` não regrava idêntico por `json.dumps` → editar por substituição pontual de texto, nunca regravar o bloco inteiro.
+- `revisao-protecao.html` não é coberto pelo `portao.py` → o portão dela é `selfTest()` na página (hoje 73 checks) + 390/1280 à mão.
+- Merge de PR: o OK dele vale por PR. OK do 340 não valeu pro 341.
+
+**Lições desta sessão (erro → causa → regra):**
+- Quadro ignorava a ordem do Funil & Etapas → ordem pessoal gravada ganhava sempre → preferência pessoal que deriva de uma configuração guarda a `base` de quando foi feita e cede quando a configuração muda.
+- "Arrastei e não mudou" → só a alça de 14px era arrastável → área de pegar é o cabeçalho inteiro, com marca de onde cai.
+- Preview local: `preview_start` com `python3 -m http.server` morre com PermissionError em `os.getcwd()` nesta pasta → usar `python3 scripts/portao.py --sem-abrir --porta 4612` e abrir `localhost:4612/vendas.html`.
+- A tela "Vida Individual · novo" mora em `modulos/funil-unico.js`, não no `vendas.html` (grep no html não acha os textos).
+
+```
+Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
+1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — fechamento de 23/11/2026").
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.94 ou mais novo).
+3. Perguntar ao Gustavo qual pendência ele puxa primeiro; a lista "Aberto" do bloco é o ponto de partida.
+Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat.
+```
+
 ## 📌 23/11/2026 — PENDÊNCIAS ABERTAS da sessão "Anexos no card" (v8.83, no ar desde 02/11) — fechamento pra consolidar
 
 Código: nada pendente (tudo na main). Conferido hoje no Drive:
@@ -10,7 +94,65 @@ Código: nada pendente (tudo na main). Conferido hoje no Drive:
 - **Sessão guiada (ele + Code):** Supabase Pro + créditos/teto da API Claude (triagem e copiloto rodam sozinhos) — prompt pronto em `docs/PROMPT_GUIADO_SUPABASE_PRO_E_CREDITOS.md`. Status do Pro não conferido aqui (só ele vê o billing).
 - Detalhes: bloco "02/11/2026 — v8.83 PUBLICADA" mais abaixo · `docs/anexos-card.md`.
 
-## 🟡 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · branch `fix/funil-ordem-etapas-joint-filtro` (commit local, aguarda OK dele pra subir)
+## 📌 23/11/2026 — PENDÊNCIAS ABERTAS da sessão Code nuvem (C' / Rebeca / L2) — salvas pra consolidação
+> Sessão `claude/wizardly-sagan-bwghr3` (09–10/11). Fechada em 23/11 só salvando: ele vai juntar as pendências de todas as sessões numa só.
+> ⚠️ Desde então a main andou até **v8.94** (15/11, outras sessões: Início T1, Revisão calibrada, funil ordem/joint). Os blocos abaixo descrevem o estado de 10/11 — conferir antes de agir.
+> Detalhe completo: `docs/FECHAMENTO_SESSAO_CRM_LP_2026-11-23.md`.
+
+## 🟡 10/11/2026 (começo do dia) — sessão Code nuvem — v8.92 no ar · Rebeca LOGADA · próximo: L2 (aguarda A/B dele)
+
+- **Rebeca entrou (09/11 16h35, pelo Google).** O Supabase não deixa conta nova se criar sozinha ("Signups not allowed"): ele criou a conta dela em Authentication › Users › Add user (auto-confirm) e o "Entrar com Google" ligou na mesma conta. **Regra pra próximos usuários: criar a conta no painel antes.**
+- **Acesso dela conferido no banco (simulando o JWT dela):** vê a base inteira do Gustavo (6.437 nomes, 146 clientes, 238 apólices). Funil: **só Vida Individual** (decisão dele) — `fu-mfo` e `funis_extra` desligados. Menu: sem Revisão, Solicitações, Estoque, SitPlan & TA, Telas antigas; Módulos ligado (é o caminho dela pra Conversas/Carteira/Lista de Atraso). Embaixadores desligado até ele revisar.
+- **L2 — decisão pendente dele (A ou B):** achado: `parceiros` NÃO tem coluna de telefone (1 LP parceiro + 3 embaixadores, nenhum com telefone) e não existe tipo "keyman" (check `tipo in ('lp','embaixador')`). Sem isso a conversa não tem como ser reconhecida como de parceiro.
+  - **A (recomendado):** botão "🤝 Marcar como parceiro" na conversa (admin escolhe LP parceiro/Joint · Embaixador · Keyman); o telefone vem do próprio chat; lista guardada pelo admin; a triagem lê e aplica as regras (parceiro → 🔴; agenda/horário → 🟡; nova indicação de keyman/embaixador → 🟡 com aviso pro Gustavo).
+  - **B:** coluna telefone + tipo keyman em `parceiros` (SQL dele) e campo nas telas Parceiros/Embaixadores.
+- **Outra sessão (local, "O seu dia" / regra de atraso / saudação)** estava mexendo no vendas.html no Mac dele em cima de base velha — foi avisada pra dar `git pull` da main (v8.92) antes de publicar. Conferir se publicou e se não desfez v8.90–v8.92.
+- **Ordem do Code:** L2 → J (detecção na extensão, só leitura, versão nova) → G → F (com L3: títulos `[TIPO] Nome · RC` + `· EMB`/`· KEY`/`· Joint <LP>`). K (transcrição) parado.
+- **Pendências dele:** Google Workspace — liberar compartilhamento externo da agenda com edição pra Rebeca; tirar o Victor da pasta do Drive/agenda; revisar o fluxo do Embaixadores (buracos: sem aviso no "Esquentei", sem botão Agendar na linha).
+
+## 🟡 09/11/2026 (noite) — sessão Code nuvem · v8.92 NO AR · C' feito (Victor suspenso, SQL rodado e conferido) · L0 respondido · L1 feito
+
+- **v8.90** (PR #335) e **triagem v2** no ar. SQL do C' rodado por ele: 0 módulos, 2 delegações suspensas, ban até 2999, fora dos times, foto do antes guardada.
+- **L0:** emb_gestor já reconhece a Rebeca (delegação backoffice + dono admin); todas as RPC `emb_*`, o storage `emb-anexos` e a `emb-acesso` funcionam pra ela. Keyman: `lp_key_contatos` (5285) e `lp_key_leads` (1799) com RLS e SEM policy = ninguém lê pelo app; nenhuma tela existe. Mínimo proposto: campo "Origem: Embaixador / Keyman / Joint <LP>" no card (serve L2 e L3). Joint: 33 cards, os da base dele ela vê; Parceiros: módulo off + RLS só admin/parceiro.
+- **L1 (v8.91):** pra quem não é admin, Embaixadores sem "50% da comissão", sem renda estimada (lista, ordem e formulário) e sem o botão ✏️ E-mail. Obs.: a renda ainda chega no navegador pela `emb_leads` — esconder no banco é outro passo, se ele quiser.
+- **Ele:** mandar a mensagem de boas-vindas pra Rebeca (1º login + aceitar Umbler e agenda); ajustar o compartilhamento externo da agenda no Google Workspace; tirar o Victor da pasta do Drive/agenda à mão. Notion LOG e delta no Drive feitos.
+- **Embaixadores (decisão dele, 09/11 16h):** NÃO libera pra Rebeca hoje — ele vai revisar o fluxo antes. Buracos achados: (1) ninguém é avisado quando o embaixador marca "Esquentei"; (2) da tela Embaixadores não dá pra agendar/levar pro funil (o nome só vira card OI/FF pelo "Agendou" no Estoque/TA). Proposta na mesa: aviso no Início + botão 📅 Agendar na linha esquentada (com "· EMB" no título, junto do L3).
+- **v8.92 no ar (PR #337) — MENU-POR-PESSOA-V1:** 5 chaves de menu no Painel de Acessos (Solicitações, Estoque, SitPlan & TA, Módulos, Telas antigas), nascem ligadas. Rebeca (SQL rodado por ele): sem Revisão, Solicitações, Estoque, SitPlan & TA e Telas antigas; **Módulos religado** porque sem ele ela ficava sem caminho pra Conversas/Carteira/Lista de Atraso (ela não tem 📌 fixados — o "Usar o app como" mostra os 📌 DELE). Ideia guardada: "menu fixo por pessoa" (admin escolhe os 📌 de cada um).
+- **Próximo no Code:** L2 → J → G → F (com L3).
+
+## 🟡 RETOMAR AQUI — 02–03/11/2026 — INFRA (sem código): Copiloto confirmado · Supabase Pro TRAVADO no cartão Inter PJ
+
+> Sessão de operação, modo guiado. Nenhum arquivo de app mudou; `vendas.html` intocado. Checklist da sessão: https://claude.ai/artifact/HHsdkC56FmMZ3SmxTaHYyG
+
+**✅ Feito**
+- **Copiloto (`copiloto-sugerir`) funciona.** `ANTHROPIC_API_KEY` EXISTE nos secrets (9 sugestões reais em 26/10; a linha antiga "a chave ainda NÃO está nos secrets" está superada). Teste 02/11 com conversa inventada ("Fulano" quer marcar): 2/2 ok, categoria agendamento, sem horário inventado, 7,6 s (frio) / 3,2 s, `claude-haiku-5-5`, custo ≈ US$ 0,0005–0,001 por sugestão (Haiku US$ 0,10 / 0,50 por milhão de tokens).
+- Usuário de teste `claude-teste-24-10@exemplo.invalid`: senha trocada pra uma aleatória que ninguém sabe (login antigo recusado, conferido).
+- **Supabase conferido na tela:** são **2 organizações separadas**, ambas Free: `crm-captacao` (1 projeto, nome "crm-playground" = `cjieobmdpqcupzdpckef`, us-west-2, compute NANO, banco 80 MB/500 MB, 9 MAU) e `central-financeira` (1 projeto). Pro da `crm-captacao` = **US$ 25 hoje / US$ 25 mês** (sem extra: 1 projeto só); inclui compute **Micro grátis** pra 1 projeto + backup diário 7 dias + sem pausa.
+
+**🔴 Aberto**
+1. **Pro NÃO assinado.** Dados de cobrança preenchidos com a razão social da corretora (Recife/PE). O cartão de crédito **Inter PJ** pediu "ID Check · código de operador da conta PJ" e não validou de jeito nenhum. Ele quer tudo no PJ. Mensagem pronta pro chat do Inter Empresas já entregue. Depois: assinar → trocar compute Nano→Micro (Settings → Infrastructure, grátis) → conferir backups em `supabase.com/dashboard/project/cjieobmdpqcupzdpckef/database/backups/scheduled`.
+2. **Crédito da API (Tarefa 2):** ele ia abrir `platform.claude.com/settings/billing` (saldo + recarga). Escolha pendente: **A** US$ 5, sem recarga, teto mensal US$ 10 (recomendado) · **B** US$ 10 + recarga de US$ 10 abaixo de US$ 2, teto US$ 20. O Console também cobra em cartão (pode bater no mesmo bloqueio do Inter PJ).
+3. **Segurança:** um print com os dados completos do cartão PJ foi enviado no chat → recomendado pedir cartão novo no app do Inter e trocar no Supabase depois.
+4. Central Financeira segue Free (org separada) — decidir depois se vale Pro (+US$ 25).
+5. Faxina (sessão "Organizar o Supabase"): tabelas `_bkp_*`, `emb_teste_x()`, usuário de teste acima, linhas de teste em `copiloto_sugestoes` (inclui 2 de 02/11: `814bfe36…`, `6b7fd54d…` — o DELETE pediu confirmação do MCP e expirou), renomear "crm-playground" → "CRM Vendas LP · produção".
+
+**🧭 Decisões:** Pro só na org `crm-captacao` · fatura no nome da empresa (PJ) · evitar conta global em dólar (exige recarga manual todo mês = carga mental).
+
+**🔥 Livro de erros**
+- Billing aberto na org errada → `/dashboard/org/_/billing` cai na última org usada → entrar por `/dashboard/organizations` e conferir o nome no topo antes de assinar.
+- Print do formulário com o cartão inteiro → no modo guiado, pedir print só da tela DEPOIS do pagamento e avisar pra cobrir dados antes.
+- `execute_sql` destrutivo pede confirmação que expira em 2 min → rodar DELETE só com ele presente (ou ele cola no SQL Editor).
+
+**▶️ Prompt de retomada**
+```
+CRM Vendas LP · INFRA. Leia o topo do ESTADO_DO_PROJETO.md (bloco 02–03/11). Modo guiado, um passo por vez, A ou B.
+1. Inter PJ já liberou o código de operador / ID Check? Se sim: assinar Supabase Pro na org crm-captacao (US$ 25), trocar compute Nano→Micro, conferir backup diário.
+2. Console da API: ver saldo e recarga; aplicar A (US$ 5, teto US$ 10) ou B (US$ 10 + recarga, teto US$ 20).
+3. Registrar no ESTADO + Notion (LOG DE SESSÕES). Faxina do Supabase fica pra sessão própria.
+Regras: nada de PII; não mexer no vendas.html; pagamento e senha são dele.
+```
+
+## 🟢 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · NO AR (PR 345 mergeado em 15/11 com OK dele)
 
 - **Queixa dele (print):** "UW EMISSAO é após o N — já mudei nas configurações e tentei arrastar, não muda."
 - **Causa 1 — `COLS-SEGUE-CFG-V1`:** a ordem pessoal das colunas (`lp_user_prefs.fu_cols`, gravada em 26/10) ganhava SEMPRE da ordem do Funil & Etapas. Ele arrumou lá em 15/11 (N → FA → UW EMISSAO → Apólice Emitida) e o quadro seguia na ordem velha (FA → UW EMISSAO → N). Agora a ordem pessoal guarda a `base` (ordem do Funil & Etapas de quando foi feita): mudou lá → o quadro segue a de lá; ordem pessoal antiga sem `base` também cede (as ocultas ficam). Etapa nova entra depois da vizinha dela, não no fim.
@@ -20,7 +162,7 @@ Código: nada pendente (tudo na main). Conferido hoje no Drive:
 - **Achado, não mexido:** em `lp_funil_cfg.fu_vi` a etapa de código `emitida` está com o rótulo "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e os clientes da carteira caem em `emitida`. Perguntar a ele se é isso mesmo.
 - **Verificado:** portão aberto (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 4 autotestes novos; chips e modal conferidos em 390 e 1280.
 
-## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR ABERTO, aguarda OK dele)
+## 🟡 11/11/2026 — Revisão de Proteção · motor calibrado com o LP Business · branch `feat/revisao-calibra-lpb-1111` (PR 344 MERGEADO em 15/11, no ar)
 
 - **No ar desde hoje (PR 343 mergeado com OK dele):** resgate oficial do Vida Inteira quitado ano a ano até os 100 (`RESGATE-QUITADO-EXATO-V1`) + WL65/70/75/80 param de pagar na idade-limite (`PAGA-ATE-IDADE-V1`). PRs 340, 341 e 342 (anos corridos, "quitado", linha da Renda Familiar) já estavam no ar em 10/11. O bloco de 10/11 abaixo dizia "PR aberto": está mergeado.
 - **Fonte desta calibragem:** cotação ao vivo no LP Business em 11/11/2026, cliente F, 44 anos, Standard, mensal com IOF (mais uma M 36 para o 360).
@@ -36,7 +178,7 @@ Código: nada pendente (tudo na main). Conferido hoje no Drive:
 - **Verificado:** autoteste 73/73, 1280 e 390 sem estouro, campos ≥16px no celular, console limpo. **Não verificado:** com cliente real carregado; `portao.py` não cobre esta página.
 - **Pendente:** PROMPT_CODE de menor 0–17 / segurado por plano / produto livre + prêmio manual (T1–T3) — o documento com os 9 testes de aceite ainda não chegou.
 
-## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR ABERTO, NÃO mergeado — aguarda OK dele)
+## 🟡 10/11/2026 (tarefa agendada) — Revisão de Proteção · resgate ano a ano · branch `feat/revisao-resgate-anos-corridos` (PR 343 MERGEADO em 11/11 com OK dele, no ar — junto com `PAGA-ATE-IDADE-V1`)
 
 - **O que era pra ser feito e NÃO foi:** simular no LP Business e ler a tabela de resgate ano a ano. **Bloqueado:** o LP Business é app nativo do Mac (`com.prudential.growsales`), não site — o Chrome não alcança; e o acesso de controle de tela ao app **não pode ser aprovado numa execução agendada** (precisa dele presente no chat, ou do app adicionado nas configurações da tarefa agendada). **Zero simulações feitas, nenhum CSV gerado.**
 - **O que saiu no lugar (só com a tabela oficial que já está no repo):** no **Vida Inteira (WL) já quitado** o percentual de resgate depende só de sexo + idade atingida. Conferido: 184 combinações sexo × idade atingida com mais de uma linha oficial, **zero divergência** (WL5/10/20/30/60/65/70/75/80, inclusive entre produtos). Logo o ano saltado (11, 13, 14, 16… e 41º em diante, até os 100 anos) tem valor OFICIAL em outra linha da tabela — `resgQuitadoExato()` (bloco `RESGATE-QUITADO-EXATO-V1`), sem ≈.
@@ -48,8 +190,8 @@ Código: nada pendente (tudo na main). Conferido hoje no Drive:
 ## 🟢 RETOMAR AQUI — 09/11/2026 (noite) — v8.93 NO AR (PR #338, OK dele: "Pode publicar"; Pages conferido por hash `d078d47372b6`) · Início com paridade Global · T1
 
 - **Críticos fechados (PARIDADE-ATRASO-V1):** conferido apólice a apólice com o Global (Lista de Atraso › Críticas ≥ 50 d = 6 · R$ 2.692,44). O nosso dava 4 · R$ 866,58 por 2 erros em `atV2Dias`, que valem pra Lista de Atraso inteira, não só pro Início:
-  1. a regra "`pago_ate ≥ vencido_em` → em dia" estava ERRADA: no relatório da Prudential o "pago até" é igual ou depois do vencimento da parcela em aberto. Escondia 15 apólices abertas (Cinthia 001494417, George 001596270 e 001856664 entre as críticas; Marcus 001636859, Flavio, Nathalia, Cristiane ×2, Nivaldo, Maria Aparecida, Rafael… todas na lista do Global).
-  2. status "Resolvido" com `resolvido_em` vazio contava como ativa (Felipe 001685046, R$ 142,71, que não está no Global). Há 5 linhas assim na tabela.
+  1. a regra "`pago_ate ≥ vencido_em` → em dia" estava ERRADA: no relatório da Prudential o "pago até" é igual ou depois do vencimento da parcela em aberto. Escondia 15 apólices abertas (C. 001…417, G. 001…270 e 001…664 entre as críticas; M. 001…859, F., N., C. ×2, N., M. A., R.… todas na lista do Global).
+  2. status "Resolvido" com `resolvido_em` vazio contava como ativa (F. 001…046, R$ 142,71, que não está no Global). Há 5 linhas assim na tabela.
   - Depois do ajuste, a base dele dá 6 · R$ 2.692,44, igual ao Global. Novo `atV2Resolvido(r)`; doc `docs/atraso-v2-central-importacoes.md` corrigido. A Lista de Atraso passa a mostrar MAIS apólices em atraso (as 15) — é o esperado.
   - Obs.: o Vendas LP usa o Supabase `cjieobmdpqcupzdpckef` (tabela `vendas_atrasos`), não o `kbiinf…` da Captação.
 - **Renovações em 30 dias — sem fonte no banco:** a carteira (353 apólices) não tem data de emissão; `emissao_emitidas` só tem 37 (ago–out/26) e cobre 8 da carteira. O Global tem a data (mostra "Emissão 05/10/2023"). Caminhos pra ele decidir: (A) relatório de Carteira da Prudential com a coluna de emissão/início de vigência, se o export tiver; (B) ler a emissão dos demonstrativos PDF (a skill /apolices já baixa pro Drive); (C) conector do Global (`listar_carteira`), que precisa ser reconectado com o código do celular. Até lá o card segue "—" + "falta data na carteira".
@@ -866,7 +1008,7 @@ Pedido dele (print do SitPlan no iPad): *"Ajusta para eu poder add as listas de 
 
 - **SOLIC-REGISTRAR (v8.18–8.19):** chip 🎯 do negócio (ou sugerido ✓) e 📎 na LISTA de Solicitações; "Nova solicitação" com **✓ Registrar** (sem gerar texto) e **Registrar e gerar texto**; campo 🎯 Negócio com autocompletar (preenche o segurado); segurado que bate com nome do funil já nasce ligado.
 - **SOLIC-KANBAN-V1 (v8.15):** Solicitações com visão Kanban por "com quem está a bola" (Nós · A área · O cliente · Concluídas 30d · Canceladas 30d), arrasto no desktop, "mover →" no celular; ▦/☰ lembrado por aparelho.
-- **SOLIC-NEGOCIO-V1 (v8.16):** *"associar as solicitações aos clientes e oportunidades no funil (Marcus Tulio: ajuste na apólice antiga destrava a emissão)"* — `contato_id` na solicitação (migration `solicitacoes_v3_contato.sql` **rodada em 23/09 via MCP**), 🎯 vincular com sugestão pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 Solicitações na ficha do negócio, "📅 agendar" honra o vínculo. `soContatoDe` = vínculo explícito antes do nome.
+- **SOLIC-NEGOCIO-V1 (v8.16):** *"associar as solicitações aos clientes e oportunidades no funil (M. T.: ajuste na apólice antiga destrava a emissão)"* — `contato_id` na solicitação (migration `solicitacoes_v3_contato.sql` **rodada em 23/09 via MCP**), 🎯 vincular com sugestão pelo nome, chip na Agenda/Kanban/ficha, bloco 📨 Solicitações na ficha do negócio, "📅 agendar" honra o vínculo. `soContatoDe` = vínculo explícito antes do nome.
 - **ANEXOS-DRIVE-V1 (v8.17):** *"colar anexos nas solicitações ou tarefas, tudo salvando em pasta no Google Drive, organizado"* — camada `drv*` (escopo `auth/drive` somado à conexão Google da Agenda; 1ª vez pede consentimento de novo). Pasta: Pipe X / CRM Life Planner / **Histórico de Clientes** / `<cliente>` (a mesma das Revisões) · arquivo `AAAA-MM-DD_HHMM_<solicitacao|atividade>_<nome>`. Solicitação: anexo = evento `anexo` na linha do tempo (sem coluna nova; "＋ anexar arquivo" ou **Ctrl+V** com a ficha aberta). Atividade: `t.anexos` + nota na linha do tempo do lead; botão 📎 na atividade. Chip 📎N na Agenda e no Kanban. Notion (Mapa da Casa) atualizado com o endereço dos anexos.
 
 ### Prova
@@ -2520,7 +2662,7 @@ O item 🔁 Substituições do menu abria uma tela dizendo "o módulo vive no ar
 - Ordenação do kanban (5 modos, default Livre) · contador de recomendações no card · **Sincronizar ≠ Atualizar app** (dados sem reload, preservando rota/modal) · **DnD otimista** (card muda de coluna no mesmo tick do drop).
 
 ### 3. Fix do "Ver no CRM" (PR #60) — achado no uso real dele
-Print do George de Melo Santos: clicar em "Ver no CRM" abria o painel com o nome certo na busca e **"Nenhuma pessoa com esses filtros"**. O `&abrir=1` não bastava — o painel abre na lista padrão **"Prontos p/ ligar"**, que exige `estagio==='lista_ta'`, e cliente da carteira é `estagio==='cliente'` (mais trilha 'seguro' e faixas de idade/renda). Fix = `irParaOndeEstA()`: zera filtros, preenche a busca e **troca a lista** pela que contém a pessoa, antes de abrir a ficha.
+Print do G. M. S.: clicar em "Ver no CRM" abria o painel com o nome certo na busca e **"Nenhuma pessoa com esses filtros"**. O `&abrir=1` não bastava — o painel abre na lista padrão **"Prontos p/ ligar"**, que exige `estagio==='lista_ta'`, e cliente da carteira é `estagio==='cliente'` (mais trilha 'seguro' e faixas de idade/renda). Fix = `irParaOndeEstA()`: zera filtros, preenche a busca e **troca a lista** pela que contém a pessoa, antes de abrir a ficha.
 
 ### 4. Substituição operável de verdade (PR #61, v0.10.2) — pedido no fechamento
 Ele perguntou: *"eu tb posso add os clientes e puxar pela lista de atraso né? quero que seja funcional"*. **Estava capenga:** o "Puxar da Lista de Atraso" só ATUALIZAVA apólices já cadastradas — com o módulo vazio respondia "nada novo" e não fazia nada. Mas quem está em substituição está, por construção, em atraso, e o relatório oficial já traz cliente/apólice/prêmio/vencimento/LP/motivo.
