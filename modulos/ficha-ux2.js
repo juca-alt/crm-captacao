@@ -77,7 +77,7 @@ function cabecalho(c){ const j=esc(jsq(c.id));
   const chips=[`<span class="u2-chip et">● ${esc(et.lbl)}</span>`, st?`<span class="u2-chip">${esc(st)}</span>`:'', tx(()=>isQuente(c))?'<span class="u2-chip">🔥 quente</span>':'',
     tx(()=>congEh(c))?'<span class="u2-chip">❄️ congelado</span>':'', tx(()=>negDelayAtivo(c))?'<span class="u2-chip">⏳ delay</span>':'', (typeof isMaster==='function'&&isMaster()&&c.lp)?`<span class="u2-chip">LP: ${esc(tx(()=>lpNome(c.lp)))}</span>`:'', cicloChip(c), tx(()=>{ if(typeof anxQtd!=='function'||!anxOn()) return ''; const n=anxQtd(c); return n?`<span class="u2-chip" title="${n} anexo${n===1?'':'s'} no Drive (ANEXOS-CARD-V1)">📎 ${n}</span>`:''; }), tx(()=>fuTocaHtml(c))].join('');
   return `<button class="fechar" onclick="fecharDrawer()" aria-label="Fechar ficha">✕</button>
-    <div class="nome">${tx(()=>ehEmpresa(c))?'🏢 ':''}${esc(c.nome||'—')}</div>
+    <div class="nome">${typeof fuAvatarHtml==='function'?tx(()=>fuAvatarHtml(c,'f',true)):''}${tx(()=>ehEmpresa(c))?'🏢 ':''}${esc(c.nome||'—')}</div>
     ${quem.length?`<div class="u2-quem">${quem.map(x=>esc(String(x))).join(' · ')}</div>`:''}
     <div class="u2-l3">${ehMfo(c)?'':(typeof fuStarsHtml==='function'?tx(()=>fuStarsHtml(c)):tx(()=>estrelasHtml(estrelasDe(c))))}${chips}</div>
     ${(()=>{ const o=outrosNegocios(c); return o.length?`<div class="u2-negs"><span>Também:</span>${o.slice(0,4).map(negChip).join('')}${o.length>4?`<span>+${o.length-4}</span>`:''}</div>`:''; })()}
@@ -184,6 +184,9 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&MENU){ fechaMenu()
 function css(){ if(document.getElementById('u2-css')) return; const s=document.createElement('style'); s.id='u2-css'; s.textContent=`
 #drawer.ux2 .drawer-head{display:flex;flex-direction:column;gap:7px;padding-bottom:12px}
 #drawer.ux2 .drawer-head .nome{padding-right:48px;font-size:19px;line-height:1.25}
+/* FOTO-WA-V1 (23/11): foto do WhatsApp ao lado do nome, só quando existe */
+#drawer.ux2 .drawer-head .nome .fu-foto{position:relative;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;overflow:hidden;vertical-align:middle;margin-right:10px;font-size:14px;font-weight:600;color:#fff}
+#drawer.ux2 .drawer-head .nome .fu-foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .u2-quem{font-size:13px;opacity:.85}
 .u2-l3{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .u2-chip{display:inline-flex;align-items:center;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:600;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);white-space:nowrap}

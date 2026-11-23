@@ -22,7 +22,7 @@ const RAPIDOS=['semprox','ta','quente','nunca'];
 const GRUPOS=[['Quem toca',['toca_eu','toca_outro','toca_sem']],['Ação',['semprox','nunca','ta','delay','esfriando']],['Perfil',['quente','alta','niver','cliente','revisar']],['Origem',['o_rec','o_lead','o_parc','o_cart']],['Mercado',['mx','my','mz','msem']]];
 const SO_VI=['quente','ta'];   /* ANCE e TA não existem no MFO */
 const MOTIVOS_SUGESTAO=['Sem interesse','Já é cliente de outro LP','Sem renda / momento financeiro','Não atende mais','Saúde (não passa na análise)'];
-const FU={fid:'vi',modo:'kanban',ordem:'livre',q:'',f:{},origem:'',dono:'',toca:'',linha:'',enc:{},tab:{},cong:false,motivo:null};
+const FU={fid:'vi',modo:'kanban',ordem:'livre',q:'',f:{},origem:'',dono:'',toca:'',linha:'',enc:{},tab:{},cong:false,motivo:null,et:{},ts:null};
 let _qT=null;
 W.FU_STATE=FU;
 
@@ -452,6 +452,51 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
 /* CF-ALINHA-V1 (03/11): sem próximo passo o ✓ some, mas o lugar dele fica — os ícones do Contato rápido não pulam de card pra card */
 .fu-cf .fu-cf-v{display:inline-block;min-width:28px;min-height:30px}
 @media (max-width:760px){.fu-cf .fu-cf-v{min-width:44px;min-height:44px}}
+/* FOTO-WA-V1 */
+.fu-foto{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:38px;height:38px;border-radius:50%;color:#fff;font-size:13px;font-weight:600;letter-spacing:.02em;overflow:hidden;user-select:none}
+.fu-foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;background:#e2e8f0}
+.fu-foto.p{width:26px;height:26px;font-size:10px}.fu-foto.g{width:56px;height:56px;font-size:19px}
+.fu-pc-id{display:flex;align-items:center;gap:12px;min-width:0}.fu-pc-id h2{min-width:0}
+/* LISTA-GLOBAL-V1 */
+.fu-lg{display:grid;grid-template-columns:216px minmax(0,1fr);gap:14px;padding:12px;align-items:start}
+.fu-rail{display:flex;flex-direction:column;gap:2px;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:6px;position:sticky;top:8px;max-height:calc(100vh - 150px);overflow-y:auto}
+.fu-rail button{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:#0f172a;font-size:14px;text-align:left;cursor:pointer}
+.fu-rail button:hover{background:#f1f5f9}.fu-rail button.on{background:#e2e8f0;font-weight:600}
+.fu-rail button.z{color:#94a3b8}.fu-rail .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}.fu-rail button.z .dot{opacity:.45}
+.fu-rail .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fu-rail .q{font-variant-numeric:tabular-nums;color:#64748b;font-size:13px}
+.fu-lg-m{min-width:0}.fu-lg-ord{display:none}.fu-lg-pe{margin-top:8px}
+.fu-lt table{min-width:980px}.fu-lt td{vertical-align:middle}.fu-lt tbody tr{cursor:pointer}
+.fu-th{display:inline-flex;align-items:center;gap:4px;border:0;background:none;padding:2px 0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;cursor:pointer;white-space:nowrap}
+.fu-th span{color:#cbd5e1}.fu-th:hover,.fu-th.on{color:#0f172a}.fu-th.on span{color:var(--primary)}
+.fu-pes{display:flex;align-items:center;gap:10px;min-width:210px}.fu-pes .tx{display:flex;flex-direction:column;min-width:0}
+.fu-pes .nm{border:0;background:none;padding:0;font:inherit;font-weight:600;font-size:14px;color:#0f172a;text-align:left;cursor:pointer;overflow-wrap:anywhere}.fu-pes .nm:hover{text-decoration:underline}
+.fu-pes .tel{font-size:12.5px;color:#475569;font-variant-numeric:tabular-nums}.fu-pes .tel i{color:#94a3b8}
+.fu-stl{color:#cbd5e1;letter-spacing:1px;font-size:14px;white-space:nowrap}.fu-stl b{color:#f59e0b;font-weight:400}
+.fu-lt .c-prob{white-space:nowrap}.fu-lt .c-prob .pc{margin-left:8px;font-size:12px;color:#64748b;font-variant-numeric:tabular-nums}
+.fu-lt .c-et{white-space:nowrap}.fu-lt .c-et .fu-bd{display:block;width:max-content;margin:2px 0}
+.fu-lt .c-px{min-width:150px;font-size:12.5px}.fu-lt .obs{min-width:160px;color:#475569}
+.fu-lt .c-ac{white-space:nowrap}.fu-lt .c-ac button{min-width:32px;min-height:32px;border:1px solid var(--linha);border-radius:8px;background:#fff;cursor:pointer;margin-right:4px;font-size:14px}
+.fu-lt .c-ac button:hover{background:#f1f5f9}.fu-lt tr.vz td{text-align:center;color:var(--muted);padding:28px 12px;cursor:default}
+@media (max-width:760px){
+  .fu-lg{display:block;padding:10px 12px 12px}
+  .fu-rail{flex-direction:row;position:static;max-height:none;overflow-x:auto;overflow-y:hidden;padding:4px;margin-bottom:10px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .fu-rail::-webkit-scrollbar{display:none}
+  .fu-rail button{width:auto;flex:0 0 auto;min-height:44px;padding:0 12px;white-space:nowrap}.fu-rail .nm{overflow:visible}
+  .fu-lg-ord{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;color:#475569}
+  .fu-lg-ord select{flex:1;min-width:0;min-height:44px;font-size:16px;border:1px solid var(--linha);border-radius:10px;background:#fff;padding:0 10px}
+  .fu-qd .fu-lt,.fu-lt{border:0;background:transparent;overflow:visible}
+  .fu-lt table{min-width:0;width:100%;display:block}.fu-lt thead{display:none}.fu-lt tbody{display:flex;flex-direction:column;gap:8px}
+  .fu-lt tbody tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;align-items:center;background:#fff;border:1px solid var(--linha);border-radius:12px;padding:10px 12px}
+  .fu-lt td{display:block;padding:0;border:0}.fu-lt td.x{display:none}.fu-lt tr:hover td{background:transparent}
+  .fu-lt .c-nome{grid-column:1/-1;grid-row:1}.fu-pes{min-width:0}.fu-pes .nm{font-size:15px;min-height:44px;display:flex;align-items:center}.fu-pes .tel{margin-top:-8px}.fu-lt .fu-foto{width:44px;height:44px}
+  .fu-lt .c-et{grid-column:1;grid-row:2;white-space:normal}.fu-lt .c-et .fu-bd{display:inline-block;margin:0 4px 2px 0}
+  .fu-lt .c-prob{grid-column:2;grid-row:2;text-align:right}
+  .fu-lt .c-px{grid-column:1/-1;grid-row:3;min-width:0}
+  .fu-lt .c-ac{grid-column:1/-1;grid-row:4;display:flex;gap:8px;border-top:1px solid var(--linha);padding-top:8px;margin-top:2px}
+  .fu-lt .c-ac button{flex:1;min-width:44px;min-height:44px;margin:0;font-size:17px}
+  .fu-lt tr.vz{display:block}.fu-lt tr.vz td{padding:24px 8px}
+  .fu-foto.g{width:48px;height:48px;font-size:17px}
+}
 `; document.head.appendChild(s); }
 
 /* ── desenho ── */
@@ -517,7 +562,7 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
   const recs=leg?tx(()=>{ const rp=recsPedidas(c), rc=(c.recs||[]).length; return rp||rc?`<span class="nnrec" title="Recomendações pedidas / coletadas">🤝 ${rc}/${rp||rc}</span>`:''; }):'';
   const px=!i.enc?fuProxCol(fid,i.d.etapa_id):null;
   return `<article class="fu-card${i.semProx?' semprox':''}" draggable="true" data-id="${esc(c.id)}" onclick="fuAbrir('${j}')">
-    <div class="fu-l1"><span class="fu-alca" aria-hidden="true" title="Arraste pra mover ou reordenar">⠿</span><div class="fu-nome"><span class="nm">${pj?'🏢 ':''}${esc(c.nome||'—')}</span><button type="button" class="fu-i" onclick="event.stopPropagation();fuInfoPop(event,'${j}')" aria-label="Resumo de ${esc(c.nome||'')}">ⓘ</button></div>${i.semProx?'<span class="fu-avc" title="Sem próximo passo">⚠ Sem próx. passo</span>':''}${leg?tocaHtml(c):''}</div>
+    <div class="fu-l1"><span class="fu-alca" aria-hidden="true" title="Arraste pra mover ou reordenar">⠿</span><div class="fu-nome">${avatarHtml(c,'p',true)}<span class="nm">${pj?'🏢 ':''}${esc(c.nome||'—')}</span><button type="button" class="fu-i" onclick="event.stopPropagation();fuInfoPop(event,'${j}')" aria-label="Resumo de ${esc(c.nome||'')}">ⓘ</button></div>${i.semProx?'<span class="fu-avc" title="Sem próximo passo">⚠ Sem próx. passo</span>':''}${leg?tocaHtml(c):''}</div>
     ${oq?`<div class="fu-oq" title="O que se vende neste negócio">${esc(oq)}</div>`:''}
     ${fid==='vi'?starsHtml(c,i.ance):''}
     <div class="fu-meta2">${fid==='mfo'&&c.produto?`<b>${esc(c.produto)}</b>`:''}${sub?`<span>${sub}</span>`:''}${c.cidade||rv?`<span class="r"><span>${esc(c.cidade||'')}</span>${rv?`<span class="val" title="Renda">R$ ${rv} mil</span>`:''}</span>`:''}${tel?`<span class="tel">${esc(tx(()=>telBR(tel))||tel)}</span>`:''}</div>
@@ -616,20 +661,102 @@ function barraHtml(){ const c=colsDe(FU.fid), nv=c.ordem.length-c.ocultas.length
   return `<div class="fu-acts"><button type="button" class="fu-b" onclick="irPara('sitplan')" title="SitPlan do dia">📅 <span class="tx">SitPlans</span></button><button type="button" class="fu-b" onclick="irPara('bn-recs')" title="Recomendações">🌳 <span class="tx">Recomendações</span></button>
     <button type="button" class="fu-b p" onclick="openNovoContato()">＋ <span class="tx">Novo negócio</span></button>${FU.fid==='vi'&&typeof fuNovaRec==='function'?'<button type="button" class="fu-b" onclick="fuNovaRec()" title="Cole texto, foto, PDF ou contato: a IA lê e você revisa">✨ <span class="tx">Nova recomendação</span></button>':''}
     <button type="button" class="fu-b" onclick="fuOrdemMenu(event)" title="Ordenar">⇅ <span class="tx">${esc(ol)}</span> ▾</button>
-    <span class="fu-vt" role="group" aria-label="Vista"><button type="button" class="${FU.modo==='kanban'?'on':''}" onclick="fuModo('kanban')" title="Kanban" aria-label="Kanban">▦</button><button type="button" class="${FU.modo==='tabela'?'on':''}" onclick="fuModo('tabela')" title="Tabela" aria-label="Tabela">☰</button></span>
+    <span class="fu-vt" role="group" aria-label="Vista"><button type="button" class="${FU.modo==='kanban'?'on':''}" onclick="fuModo('kanban')" title="Quadro (Kanban)" aria-label="Quadro (Kanban)">▦</button><button type="button" class="${FU.modo==='tabela'?'on':''}" onclick="fuModo('tabela')" title="Lista por etapa" aria-label="Lista por etapa">☰</button></span>
     <button type="button" class="fu-b" onclick="fuColunas()" title="Colunas">▥ <span class="tx">Colunas</span> <span class="cn">(${nv}/${c.ordem.length})</span></button>
     <button type="button" class="fu-b" onclick="fuMais(event)" aria-label="Mais opções">⋯</button></div>`; }
 function filtroBarHtml(lista){ const at=ativos(), S2=salvos(), algum=S2.some(x=>fIgual(x.f));
   return `<div class="fu-fb" aria-label="Filtros"><button type="button" class="fu-b" onclick="fuFiltrosAbrir()">⚙ Filtros${at.length?` <span class="fu-cnt">${at.length}</span>`:''}</button>
     ${S2.length?'<span class="fu-fb-l">Salvos</span>':''}${S2.map((x,k)=>`<button type="button" class="fu-sv${fIgual(x.f)?' on':''}" onclick="fuSalvoAplicar(${k})">${esc(x.n)} <span class="q">${contaSalvo(lista,x.f)}</span></button>`).join('')}
     ${at.length&&!algum?'<span class="fu-sep"></span>'+at.map(([k,l])=>`<button type="button" class="fu-fc ativo" onclick="fuTirar('${esc(k)}')">${esc(l)} ✕</button>`).join(''):''}${FU.cong?'<button type="button" class="fu-fc ativo" onclick="fuCong()">❄️ Congelados ✕</button>':''}${at.length?'<button type="button" class="fu-fc txt" onclick="fuLimpar()">limpar</button>':''}</div>`; }
-function tabelaHtml(fid,vis){ const l=fuOrdenar(vis);
-  return `<div class="fu-tw"><table><thead><tr><th><button type="button" class="btn-ghost" onclick="fuOrdem('nome')">Nome</button></th><th>Criado em</th><th><button type="button" class="btn-ghost" onclick="fuOrdem('prob')">Prob. ↓</button></th><th>Etapa</th><th>Recomendante</th><th>Profissão</th><th>Renda</th><th>Cidade</th><th>SitPlan</th><th>Tags</th><th>Observação</th><th>Mercado</th><th>Quem toca</th><th>Ações</th></tr></thead><tbody>
-  ${l.map(({c,i})=>{ const j=esc(jsq(c.id)); let ent=''; try{ ent=entradaFunil(c).iso||''; }catch(_){}
-    return `<tr><td><button type="button" class="btn-ghost" style="font-weight:600;text-align:left" onclick="fuAbrir('${j}')">${esc(c.nome||'—')}</button></td><td>${esc(dataBR(ent))}</td><td class="num">${prob(i.d.etapa_id)}%</td><td><span class="fu-bd" style="color:${corDe(fid,i.d.etapa_id)}">● ${esc(lbl(i.d.etapa_id))}</span></td><td>${esc(c.recomendante||'—')}</td><td>${esc(c.profissao||'—')}</td><td class="num">${esc(c.renda||c.renda_estimada||'—')}</td><td>${esc(c.cidade||'—')}</td><td>${esc(c.sitplan?dataBR(String(c.sitplan).slice(0,10)):'—')}</td><td>${esc(c.tags||'—')}</td><td>${esc(String(c.notas||'').slice(0,60)||'—')}</td><td>${esc(c.mercado||'—')}</td><td>${esc(c.toca?tocaLista(c).map(eqNome).join(' + '):'—')}</td><td><button type="button" class="btn btn-ghost btn-mini" onclick="fuLigar(event,'${j}')">☏</button> <button type="button" class="btn btn-ghost btn-mini" onclick="fuZap(event,'${j}')">💬</button></td></tr>`; }).join('')}
-  </tbody></table></div><div class="sub" style="margin-top:8px">${l.length} card(s) · mesmos filtros do Kanban · ⋯ exporta a planilha</div>`; }
+/* ═══ FOTO-WA-V1 (23/11/2026, pedido dele: "ele traz fotos dos contatos… quero isso também; a Umbler ajuda nisso") ═══
+   A foto de perfil do WhatsApp já vem no sync da Umbler (umbler_chats.bruto.contact.profilePictureUrl, link fixo).
+   Só LEITURA: nada é pedido à Umbler. Casa com o contato pelo telefone (DDD + 8 últimos dígitos, pra não errar o 9º dígito).
+   Sem conversa na Umbler ou foto que não carrega → ficam as iniciais. Nasce só na base dele: novoOn('foto-wa'). */
+const FOTO={m:{},em:0,lido:false,carregando:false};
+const FOTO_CHAVE='crmlp_fu_fotos_v1', FOTO_TTL=6*3600e3;
+const fotoOn=()=>{ try{ return typeof novoOn==='function'&&!!novoOn('foto-wa'); }catch(_){ return false; } };
+function telChave(t){ let d=String(t==null?'':t).replace(/\D/g,''); if(d.length>=12&&d.slice(0,2)==='55') d=d.slice(2);
+  if(d.length<10) return ''; if(d.length>11) return d; return d.slice(0,2)+d.slice(-8); }
+function fotoUrlOk(u){ return typeof u==='string'&&u.length<600&&/^https:\/\/[a-z0-9.-]+\.amazonaws\.com\/[^\s"'<>\\]+$/i.test(u); }
+function fotoMapa(rows){ const m={}; (rows||[]).forEach(r=>{ const k=telChave(r&&r.contato_tel_norm), u=r&&r.foto; if(k&&fotoUrlOk(u)) m[k]=u; }); return m; }
+function fotoCacheLer(){ if(FOTO.lido) return; FOTO.lido=true;
+  try{ const o=JSON.parse(localStorage.getItem(FOTO_CHAVE)||'null'); if(o&&o.m&&typeof o.m==='object'){ const m={}; Object.keys(o.m).forEach(k=>{ if(fotoUrlOk(o.m[k])) m[k]=o.m[k]; }); FOTO.m=m; FOTO.em=+o.em||0; } }catch(_){} }
+async function fotoCarregar(){ if(!fotoOn()) return; fotoCacheLer();
+  if(FOTO.carregando||Date.now()-FOTO.em<FOTO_TTL) return;
+  if(typeof sb==='undefined'||!sb||typeof logado!=='function'||!logado()) return;
+  FOTO.carregando=true;
+  try{ const r=await sb.from('umbler_chats').select('contato_tel_norm,foto:bruto->contact->>profilePictureUrl').not('bruto->contact->>profilePictureUrl','is',null).order('ultima_msg_em',{ascending:true}).limit(3000);
+    if(r&&!r.error&&Array.isArray(r.data)){ const antes=Object.keys(FOTO.m).length, m=fotoMapa(r.data); FOTO.m=m; FOTO.em=Date.now();
+      try{ localStorage.setItem(FOTO_CHAVE,JSON.stringify({em:FOTO.em,m})); }catch(_){}
+      const ae=document.activeElement, digitando=ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName);
+      if(Object.keys(m).length!==antes&&!digitando&&document.querySelector('#main .fu')&&!document.querySelector('.fu-ov')) fuRepinta(); }
+    else FOTO.em=Date.now()-FOTO_TTL+10*60e3;   /* falhou: tenta de novo em 10 min, sem martelar */
+  }catch(_){ FOTO.em=Date.now()-FOTO_TTL+10*60e3; } finally{ FOTO.carregando=false; } }
+function fotoDe(c){ if(!c||!fotoOn()) return ''; fotoCacheLer(); let ts=[]; try{ ts=(typeof pTels==='function'?pTels(c):[])||[]; }catch(_){}
+  ts=[].concat(ts,[c.telefone,c.celular,c.tel]).filter(Boolean);
+  for(const t of ts){ const u=FOTO.m[telChave(t)]; if(u) return u; } return ''; }
+function iniciaisDe(n){ const p=String(n||'').replace(/[^\p{L}\s]/gu,' ').trim().split(/\s+/).filter(Boolean); if(!p.length) return '?';
+  return (p[0][0]+(p.length>1?p[p.length-1][0]:'')).toUpperCase(); }
+/* avatar: iniciais coloridas sempre; a foto entra por cima e, se não carregar, some e ficam as iniciais */
+function avatarHtml(c,cls,soFoto){ const n=String((c&&c.nome)||''), u=fotoDe(c); if(soFoto&&!u) return '';
+  let h=0; for(let k=0;k<n.length;k++) h=(h*31+n.charCodeAt(k))>>>0;
+  return `<span class="fu-foto${cls?' '+cls:''}" style="background:hsl(${h%360} 42% 46%)" aria-hidden="true">${esc(iniciaisDe(n))}${u?`<img src="${esc(u)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">`:''}</span>`; }
+
+/* ═══ LISTA-GLOBAL-V1 (23/11/2026, pedido dele com print do Global: "além do meu formato kanban, add esse formato visual") ═══
+   A vista ☰ deixa de ser a tabela crua: trilho de etapas com contagem à esquerda (Todos + cada etapa do Funil & Etapas),
+   linha com foto/iniciais + nome + telefone, estrelas + probabilidade, etapa + "Cliente · apólice ativa", e cabeçalho que
+   ordena (1º clique sobe, 2º desce, 3º volta à ordem do quadro). Mesmos filtros e mesma busca do Kanban.
+   No celular a tabela vira lista de cartões (sem rolar de lado) e as etapas viram trilho horizontal. */
+const TCOLS=[['nome','Nome'],['criado','Criado em'],['prob','Prob. negócio'],['etapa','Etapa'],['rec','Recomendante'],['prox','Próximo passo'],['prof','Profissão'],['renda','Renda'],['cidade','Cidade'],['toca','Quem toca']];
+const entIso=c=>{ try{ return (entradaFunil(c).iso)||''; }catch(_){ return ''; } };
+function tabValor(x,k,fid,ids){ const c=x.c,i=x.i;
+  if(k==='nome') return String(c.nome||'').toLowerCase();
+  if(k==='criado') return entIso(c);
+  if(k==='prob') return ((fid==='vi'&&i.ance&&+i.ance.n)||0)*1000+prob(i.d.etapa_id);
+  if(k==='etapa'){ const n=ids.indexOf(i.d.etapa_id); return n<0?999:n; }
+  if(k==='rec') return String(c.recomendante||'').toLowerCase();
+  if(k==='prox') return (i.prox&&String(i.prox.quando||''))||'';
+  if(k==='prof') return String(c.profissao||'').replace(/^[—\-\s]+$/,'').toLowerCase();
+  if(k==='renda') return +String(c.renda||c.renda_estimada||'').replace(/\D/g,'')||'';
+  if(k==='cidade') return String(c.cidade||'').toLowerCase();
+  if(k==='toca') return tocaLista(c).map(eqNome).join(' ').toLowerCase();
+  return ''; }
+function tabOrdenar(l,fid){ const s=FU.ts; if(!s||!TCOLS.some(t=>t[0]===s.k)) return fuOrdenar(l);
+  const ids=cfg(fid).map(e=>e.id), d=s.d<0?-1:1;
+  return l.map(x=>[x,tabValor(x,s.k,fid,ids)]).sort((A,B)=>{ const a=A[1], b=B[1], va=a===''||a==null, vb=b===''||b==null;
+    if(va||vb) return va&&vb?0:va?1:-1;   /* vazio sempre no fim, subindo ou descendo */
+    return (typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),'pt-BR'))*d; }).map(p=>p[0]); }
+function fuTabOrd(k){ const s=FU.ts; FU.ts=!k?null:(!s||s.k!==k)?{k,d:1}:s.d>0?{k,d:-1}:null; render(); }
+function fuTabOrdSel(v){ const m=/^([a-z]+):(-?1)$/.exec(String(v||'')); FU.ts=m?{k:m[1],d:+m[2]}:null; render(); }
+function fuEtapaSel(id){ FU.et[FU.fid]=id||''; render(); }
+function estrelasLe(n){ n=Math.max(0,Math.min(5,+n||0)); return `<span class="fu-stl" title="${n} de 5 estrelas" aria-label="${n} de 5 estrelas"><b>${'★'.repeat(n)}</b>${'★'.repeat(5-n)}</span>`; }
+function railHtml(fid,vis){ const sel=FU.et[fid]||'';
+  return `<nav class="fu-rail" aria-label="Etapas"><button type="button" class="${sel?'':'on'}" onclick="fuEtapaSel('')"><span class="nm">Todos</span><span class="q">${vis.length}</span></button>${cfg(fid).map(e=>{ const n=vis.filter(x=>x.i.d.etapa_id===e.id).length;
+    return `<button type="button" class="${sel===e.id?'on':''}${n?'':' z'}" onclick="fuEtapaSel('${esc(jsq(e.id))}')" ${sel===e.id?'aria-current="true"':''}><span class="dot" style="background:${corDe(fid,e.id)}" aria-hidden="true"></span><span class="nm">${esc(lbl(e.id))}</span><span class="q">${n}</span></button>`; }).join('')}</nav>`; }
+function tabelaHtml(fid,vis){ if(FU.et[fid]&&!etapa(fid,FU.et[fid])) FU.et[fid]='';
+  const sel=FU.et[fid]||'', l=tabOrdenar(sel?vis.filter(x=>x.i.d.etapa_id===sel):vis,fid), s=FU.ts, vz=v=>v&&!/^[—\-\s]+$/.test(String(v))?esc(String(v)):'—';
+  const th=(k,r,x)=>{ const on=s&&s.k===k; return `<th${x?' class="x"':''}${on?` aria-sort="${s.d>0?'ascending':'descending'}"`:''}><button type="button" class="fu-th${on?' on':''}" onclick="fuTabOrd('${k}')" title="Ordenar por ${esc(r)}">${esc(r)} <span aria-hidden="true">${on?(s.d>0?'↑':'↓'):'↕'}</span></button></th>`; };
+  const linhas=l.map(({c,i})=>{ const j=esc(jsq(c.id)), tel=fuTel(c), fx=c.funil==='fx', pj=!fx&&c.funil!=='bn'&&!!tx(()=>ehEmpresa(c));
+    const px=i.prox?`📅 ${esc(dataBR(i.prox.quando))}${i.prox.hora?' '+esc(i.prox.hora):''}${i.prox.tit?' · '+esc(i.prox.tit):''}`:(i.semProx?'<span class="fu-avc">⚠ Sem próx. passo</span>':'—');
+    return `<tr onclick="fuAbrir('${j}')">
+      <td class="c-nome"><div class="fu-pes">${avatarHtml(c)}<div class="tx"><button type="button" class="nm" onclick="event.stopPropagation();fuAbrir('${j}')">${pj?'🏢 ':''}${esc(c.nome||'—')}</button><span class="tel">${tel?'☏ '+esc(tx(()=>telBR(tel))||tel):'<i>Sem telefone</i>'}</span></div></div></td>
+      <td class="x">${esc(dataBR(entIso(c)))||'—'}</td>
+      <td class="c-prob">${fid==='vi'?estrelasLe(i.ance&&i.ance.n):''}<span class="pc">${prob(i.d.etapa_id)}%</span></td>
+      <td class="c-et"><span class="fu-bd" style="color:${corDe(fid,i.d.etapa_id)}">● ${esc(lbl(i.d.etapa_id))}</span>${fuEhCliente(c)?'<span class="fu-bd v">Cliente · apólice ativa</span>':''}${i.cong?'<span class="fu-bd b">❄️ congelado</span>':''}</td>
+      <td class="x">${vz(c.recomendante)}</td>
+      <td class="c-px">${px}</td>
+      <td class="x">${vz(c.profissao)}</td><td class="x num">${vz(c.renda||c.renda_estimada)}</td><td class="x">${vz(c.cidade)}</td>
+      <td class="x">${c.toca||c.tocas?esc(tocaLista(c).map(eqNome).join(' + '))||'—':'—'}</td>
+      <td class="x">${c.mercado?esc(c.mercado):'—'}</td><td class="x">${c.sitplan?esc(dataBR(String(c.sitplan).slice(0,10))):'—'}</td><td class="x">${vz(c.tags)}</td><td class="x obs">${vz(String(c.notas||'').slice(0,60))}</td>
+      <td class="c-ac" onclick="event.stopPropagation()"><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar para ${esc(c.nome||'')}">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp de ${esc(c.nome||'')}">💬</button>${fx?'':`<button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover ${esc(c.nome||'')} de etapa">⇄</button>`}</td></tr>`; }).join('');
+  const ordSel=`<label class="fu-lg-ord"><span>Ordenar</span><select onchange="fuTabOrdSel(this.value)" aria-label="Ordenar a lista"><option value="">Ordem do quadro</option>${TCOLS.map(([k,r])=>`<option value="${k}:1" ${s&&s.k===k&&s.d>0?'selected':''}>${esc(r)} ↑</option><option value="${k}:-1" ${s&&s.k===k&&s.d<0?'selected':''}>${esc(r)} ↓</option>`).join('')}</select></label>`;
+  return `<div class="fu-lg">${railHtml(fid,vis)}<div class="fu-lg-m">${ordSel}<div class="fu-tw fu-lt"><table class="fu-lt-t"><thead><tr>${th('nome','Nome')}${th('criado','Criado em',1)}${th('prob','Prob. negócio')}${th('etapa','Etapa')}${th('rec','Recomendante',1)}${th('prox','Próximo passo')}${th('prof','Profissão',1)}${th('renda','Renda',1)}${th('cidade','Cidade',1)}${th('toca','Quem toca',1)}<th class="x">Mercado</th><th class="x">SitPlan</th><th class="x">Tags</th><th class="x">Observação</th><th class="c-ac">Ações</th></tr></thead><tbody>
+  ${linhas||`<tr class="vz"><td colspan="15">Ninguém ${sel?'nesta etapa':'aqui'} com os filtros de agora.</td></tr>`}
+  </tbody></table></div><div class="sub fu-lg-pe">${l.length} ${l.length===1?'pessoa':'pessoas'}${sel?' em '+esc(lbl(sel)):''} · mesmos filtros do Kanban · ⋯ exporta a planilha</div></div></div>`; }
 
 function viewFunilNovo(fid){ fuCss(); if(fid) FU.fid=fid; fid=FU.fid;
+  if(!FU._modoLido){ FU._modoLido=true; if(panPref().modo==='tabela') FU.modo='tabela'; }   /* a vista escolhida (▦ quadro / ☰ lista) fica lembrada no aparelho */
+  fotoCarregar();
   const lista=fuLista(fid), vis=lista.filter(x=>fuPassa(x.c,x.i)), cols=colsVis(fid), adm=podeEditarEtapa();
   FU._tx=tx(()=>fuTaxas(fid,lista))||{};
   if(fid==='vi') fxCarregar();
@@ -973,7 +1100,7 @@ function painelHtml(c){ const d=fuDestino(c), fid=d.funil_id, mfo=fid==='mfo', i
   const opts=cfg(fid).map(e=>`<option value="${esc(e.id)}" ${e.id===d.etapa_id?'selected':''}>${esc(lbl(e.id))}${e.enc?' ✖':''}</option>`).join('');
   return `<div class="fu-pg-in">
    <div class="fu-pg-bar"><button type="button" class="btn btn-ghost fu-voltar" onclick="fuPainelFechar()" aria-label="Voltar ao funil">← Voltar</button><b class="fu-pg-nm">${esc(c.nome||'—')}</b><span class="fu-salvo" id="fu-salvo">Salvo ✓</span><button type="button" class="btn btn-ghost btn-mini fu-hide-m" onclick="fuPainelCheia()">${p.cheia?'⤡ Painel':'⤢ Tela cheia'}</button></div>
-   <section class="fu-pc0"><div class="fu-pc-l"><h2>${esc(c.nome||'—')}</h2>${resumo?`<div class="fu-res">${resumo}</div>`:''}${tel.length||email?`<div class="fu-ct">${tel.map(t=>esc(typeof telBR==='function'?telBR(t):String(t))).join(' · ')}${tel.length&&email?' · ':''}${esc(email)}</div>`:''}
+   <section class="fu-pc0"><div class="fu-pc-l"><div class="fu-pc-id">${avatarHtml(c,'g')}<h2>${esc(c.nome||'—')}</h2></div>${resumo?`<div class="fu-res">${resumo}</div>`:''}${tel.length||email?`<div class="fu-ct">${tel.map(t=>esc(typeof telBR==='function'?telBR(t):String(t))).join(' · ')}${tel.length&&email?' · ':''}${esc(email)}</div>`:''}
      ${fid==='vi'?starsHtml(c,i.ance):''}<div class="fu-bds">${bds}</div></div>
      <div class="fu-pc-a"><button type="button" class="btn btn-p" onclick="fuZap(event,'${j}')">💬 WhatsApp</button><button type="button" class="btn btn-ghost" onclick="fuLigar(event,'${j}')">☏ Ligar</button><button type="button" class="btn btn-ghost" onclick="fuAgendarModal('${j}','${mfo?'agendou_reuniao':'agendou_oi'}')">📅 Agendar</button>${drive?`<a class="btn btn-ghost" href="${esc(drive)}" target="_blank" rel="noopener">📁 Drive</a>`:''}<button type="button" class="btn btn-ghost" onclick="fuFichaCompleta('${j}')">✎ Ficha completa</button></div></section>
    <section class="fu-pc fu-et"><div class="fu-g2"><div class="fu-fld"><label for="fu-p-et">Etapa (${mfo?'MFO':'Vida Individual'})</label><select id="fu-p-et" onchange="fuMover('${j}',this.value)">${opts}</select></div>
@@ -1129,7 +1256,7 @@ function fuDono(v){ FU.dono=v; render(); fuRefiltros(); }
 function fuTocaF(v){ FU.toca=v; render(); fuRefiltros(); }
 function fuLinha(v){ FU.linha=v; render(); fuRefiltros(); }
 function fuCong(){ FU.cong=!FU.cong; render(); }
-function fuModo(m){ FU.modo=m; render(); }
+function fuModo(m){ FU.modo=m==='tabela'?'tabela':'kanban'; FU._modoLido=true; panGravar({modo:FU.modo}); render(); }
 function fuOrdem(o){ FU.ordem=o; render(); }
 function fuEnc(id){ const k=FU.fid+':'+id; FU.enc[k]=!FU.enc[k]; if(FU.enc[k]) FU.tab[FU.fid]=id; render(); }
 function fuTab(id){ FU.tab[FU.fid]=id; render(); }
@@ -1209,6 +1336,23 @@ function fuSelfTests(ok){
       lm==='v@exemplo.invalid,r@exemplo.invalid'&&/fu-toca-mais">\+1</.test(hm)&&ok3&&!cm.toca&&!cm.tocas&&tocaLista({toca:'X@a.b'}).join()==='x@a.b'
       &&FILTROS.toca_eu[1]({tocas:['zz@a.b',String(eqEu()||'eu@x').toLowerCase()]})===!!eqEu());
     EQ.m=_m; EQ.times=_t; }
+  /* LISTA-GLOBAL-V1 + FOTO-WA-V1 (23/11) */
+  { const _ts=FU.ts, _et=FU.et, _fm=FOTO.m, _fl=FOTO.lido, _nv=W.novoOn; let h='', hv='', ord='', av='', av0='', erro='';
+    const mk=(id,nome,et,tel,extra)=>({c:Object.assign({id,nome,funil:'nn',etapa:et,telefone:tel,tarefas:[],interacoes:[]},extra||{}),i:null});
+    const L=[mk('fu-lg1','Fulano de Tal','TA','(81) 99999-0001',{recomendante:'Sicrano'}),mk('fu-lg2','Beltrano Souza','P/C','',{}),mk('fu-lg3','Abel Zeta','TA','81988880003',{renda:'20000'})];
+    try{ L.forEach(x=>x.i=fuInfo(x.c,'vi')); FU.et={}; FU.ts=null; h=tabelaHtml('vi',L);
+      FU.ts={k:'nome',d:1}; ord=tabOrdenar(L,'vi').map(x=>x.c.id).join(); FU.ts={k:'renda',d:-1}; ord+='|'+tabOrdenar(L,'vi')[0].c.id+'|'+tabOrdenar(L,'vi').length;
+      FU.et={vi:L[1].i.d.etapa_id}; FU.ts=null; hv=tabelaHtml('vi',L);
+      W.novoOn=k=>k==='foto-wa'?true:(_nv?_nv(k):false); FOTO.lido=true; FOTO.m=fotoMapa([{contato_tel_norm:'5581999990001',foto:'https://exemplo-wamedia.s3.amazonaws.com/a/b/media.jpg'},{contato_tel_norm:'5581988880003',foto:'javascript:alert(1)'},{contato_tel_norm:'5581977770009',foto:'https://exemplo.s3.amazonaws.com/x" onerror="y'}]);
+      av=avatarHtml(L[0].c); av0=avatarHtml(L[2].c)+'|'+avatarHtml(L[2].c,'p',true)+'|'+Object.keys(FOTO.m).length;
+    }catch(e){ erro=String(e&&e.message||e); } finally{ FU.ts=_ts; FU.et=_et; FOTO.m=_fm; FOTO.lido=_fl; W.novoOn=_nv; }
+    ok('LISTA-GLOBAL-V1: a vista ☰ traz o trilho de etapas com contagem (Todos + cada etapa), linha com iniciais, nome, telefone e "Sem telefone", e cabeçalho que ordena'+(erro?' — '+erro:''),
+      !erro&&/class="fu-rail"/.test(h)&&/<table class="fu-lt-t">/.test(h)&&(typeof T_CARTOES_PULAR==='undefined'||T_CARTOES_PULAR.includes('fu-lt-t'))&&/<span class="nm">Todos<\/span><span class="q">3<\/span>/.test(h)&&(h.match(/fuEtapaSel\(/g)||[]).length===cfg('vi').length+1&&/class="fu-foto"[^>]*>FT</.test(h)&&/Sem telefone/.test(h)&&/fuTabOrd\('nome'\)/.test(h)&&/fu-lg-ord/.test(h)&&(h.match(/<tr onclick/g)||[]).length===3);
+    ok('LISTA-GLOBAL-V1: escolher uma etapa no trilho mostra só quem está nela; ordenar por nome sobe em ordem alfabética e o vazio fica sempre no fim',
+      !erro&&(hv.match(/<tr onclick/g)||[]).length===1&&/Beltrano Souza/.test(hv)&&!/Fulano de Tal<\/button>/.test(hv)&&ord==='fu-lg3,fu-lg2,fu-lg1|fu-lg3|3');
+    ok('FOTO-WA-V1: a foto casa pelo telefone (com ou sem 55 e 9º dígito), só link https da Amazon entra, e sem foto ficam as iniciais (no card do quadro, nada)',
+      !erro&&telChave('+55 (81) 99999-0001')==='8199990001'&&telChave('8199990001')==='8199990001'&&telChave('123')===''&&/<img src="https:\/\/exemplo-wamedia\.s3\.amazonaws\.com\/a\/b\/media\.jpg"/.test(av)&&/onerror="this\.remove\(\)"/.test(av)&&/^<span class="fu-foto"[^>]*>AZ<\/span>\|\|1$/.test(av0)&&!fotoUrlOk('http://x.s3.amazonaws.com/a')&&!fotoUrlOk('https://evil.example/a.jpg'));
+    ok('FOTO-WA-V1: nasce só na base dele (novoOn foto-wa) — sem a chave, nenhuma foto é buscada nem desenhada', /fotoOn\(\)/.test(String(fotoCarregar).slice(0,80))&&/fotoOn\(\)/.test(String(fotoDe).slice(0,60))); }
   /* T4 */
   const A=x=>fuAnce(x);
   ok('FUNIL-UNICO T4: ANCE — nota das estrelas > critérios A·N·C·E > nota copiada na migração > automático', A({ance_manual:2,ance_manual_em:'2026-10-24T10:00:00Z',ance:{a:true,n:true,c:true}}).n===2&&A({ance:{a:true,n:true,c:true},ance_manual:1}).n===3&&A({ance_manual:4,ance_auto:1}).n===4&&A({ance_auto:3}).n===3&&A({ance_auto:3}).manual===false&&A({}).n===0);
@@ -1229,5 +1373,5 @@ Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAg
 Object.assign(W,{fuStarsHtml:starsHtml,fuMfoBlocosHtml:mfoBlocos,fuCss,fuModal,fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuTocaOutro,fuTocaOutroOk,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
 Object.assign(W,{fuTocaHtml:tocaHtml,fuCicloHtml:cicloHtml,fuInfo,fuTocaMenu,fuToca,fuTocaF,fxCriarFicha,fxCarregar,FX_STATE:FX,fuAvancar,fuCiclo,fuTaxas,viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
   fuAbrir,fuMover,fuMotivoOk,fuMoverMenu,fuLigar,fuZap,fuRegistrar,fuDelay,fuFiltrosAbrir,fuColunas,fuColVer,fuColMover,fuColPadrao,fuMais,fuDesempenho,fuExportar,
-  fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca});
+  fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca,fuTabOrd,fuTabOrdSel,fuEtapaSel,fuAvatarHtml:avatarHtml,fuFotoCarregar:fotoCarregar,FU_FOTO:FOTO});
 })();
