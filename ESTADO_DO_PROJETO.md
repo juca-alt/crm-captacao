@@ -2,6 +2,17 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 23/11/2026 — Lista do funil novo · tags, selecionar pra unir e ver duplicados · v8.96 · branch `feat/lista-tags-unir` (PR aberto, aguarda OK dele)
+
+- **Pedido dele (olhando a lista da v8.95 no ar):** "já nessa tela é bom eu poder add e editar tags" + "selecionar negócios pra unir e ver duplicados, ajuda a limpeza".
+- **`TAGS-LISTA-V1`:** tag é texto livre em `c.tags` ("a, b", o campo que a busca e a planilha já liam; até 24 caracteres, sem repetir). Na linha aparecem como pílulas embaixo do telefone; "＋ tag" / ✎ (desktop) ou 🏷 nas ações (celular) abre o editor: tirar, criar e as já usadas. Vale pra ficha do funil e pro Estoque (`bnSalvar`); cliente sem ficha (card fantasma) não tem. A busca do funil acha por tag. A coluna "Tags" do fim da tabela saiu (virou a pílula).
+- **`UNIR-LISTA-V1`:** caixinha por linha (só ficha do funil) + "selecionar todos" no cabeçalho. Com gente marcada sobe uma barra flutuante no rodapé (acima da barra de baixo no celular): 🔗 Unir (2 ou mais) · 🏷 Tag em todos · Limpar. Unir abre a confirmação com os cards, quem fica de base (o mais antigo, regra do `dupFundir`) e um seletor da **etapa que fica**. Fusão = `dupFundir` (listas somadas, conflito vira nota) + campo vazio preenchido pelo outro + tags somadas + nota "🔗 Unido" no histórico. Desfazer no aviso.
+- **`DUP-LISTA-V1`:** o motor de duplicatas do funil antigo (`dupGrupos`: mesmo telefone ou mesmo nome, dentro do mesmo funil de origem) agora acende "⚠ Possíveis duplicados · N grupos" na lista. A vista agrupa e cada grupo traz 🔗 Unir · 👤 Mesma pessoa, negócios diferentes · Não é a mesma pessoa. Nada se une sozinho.
+- **Gate:** melhoria de tela que quem tem o funil novo já usa → nasce liberada pra eles (sem `NOVO_SO_MEU`).
+- **Verificado:** portão aberto no Chrome (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 3 autotestes novos; no preview com a base de exemplo, em 1280 e 390: pôr e tirar tag, selecionar, unir 2 (14 → 13 cards) e desfazer (13 → 14), vista de duplicados; 0 estouro, alvos 44px e campos 16px no celular. **NÃO verificado:** com a base real e login (sincronização da união entre aparelhos usa o mesmo caminho do `dupUnir` antigo, não foi testada de novo).
+- **Ajuste de carona:** o trilho de etapas e o que gruda na lista agora descontam a altura da barra fixa do app (`--fu-tb`).
+- **Não entrou:** filtrar a lista clicando numa tag (hoje é pela busca); tag no card do Kanban e na ficha.
+
 ## ✅ 23/11/2026 — Funil novo · lista estilo Global + foto do WhatsApp · **v8.95 NO AR** (PR 348, main `68f0bd3`)
 
 - **Pedido dele (print do Global ao lado do nosso quadro):** "além do meu formato kanban, add esse formato visual que o Seabra tem" + "ele traz fotos dos contatos… quero isso também; a Umbler ajuda nisso".
