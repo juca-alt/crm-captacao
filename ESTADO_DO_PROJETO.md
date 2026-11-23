@@ -2,6 +2,14 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 📌 23/11/2026 — PENDÊNCIAS ABERTAS da sessão "Anexos no card" (v8.83, no ar desde 02/11) — fechamento pra consolidar
+
+Código: nada pendente (tudo na main). Conferido hoje no Drive:
+- **Ele:** 1º anexo real numa ficha (até 23/11 nenhum arquivo `_card_` no Drive) — é o teste com o Drive de verdade.
+- **Ele:** dar a pasta *Histórico de Clientes* à **Rebeca** — Painel Master · Acessos → linha dela → "📂 dar acesso à pasta do Drive" (ela entrou por SQL; o automático não disparou). Pasta hoje = só ele (Victor nunca teve).
+- **Sessão guiada (ele + Code):** Supabase Pro + créditos/teto da API Claude (triagem e copiloto rodam sozinhos) — prompt pronto em `docs/PROMPT_GUIADO_SUPABASE_PRO_E_CREDITOS.md`. Status do Pro não conferido aqui (só ele vê o billing).
+- Detalhes: bloco "02/11/2026 — v8.83 PUBLICADA" mais abaixo · `docs/anexos-card.md`.
+
 ## 🟡 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · branch `fix/funil-ordem-etapas-joint-filtro` (commit local, aguarda OK dele pra subir)
 
 - **Queixa dele (print):** "UW EMISSAO é após o N — já mudei nas configurações e tentei arrastar, não muda."
