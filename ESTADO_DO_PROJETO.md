@@ -2,6 +2,38 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
+## 🟡 RETOMAR AQUI — 02–03/11/2026 — INFRA (sem código): Copiloto confirmado · Supabase Pro TRAVADO no cartão Inter PJ
+
+> Sessão de operação, modo guiado. Nenhum arquivo de app mudou; `vendas.html` intocado. Checklist da sessão: https://claude.ai/artifact/HHsdkC56FmMZ3SmxTaHYyG
+
+**✅ Feito**
+- **Copiloto (`copiloto-sugerir`) funciona.** `ANTHROPIC_API_KEY` EXISTE nos secrets (9 sugestões reais em 26/10; a linha antiga "a chave ainda NÃO está nos secrets" está superada). Teste 02/11 com conversa inventada ("Fulano" quer marcar): 2/2 ok, categoria agendamento, sem horário inventado, 7,6 s (frio) / 3,2 s, `claude-haiku-5-5`, custo ≈ US$ 0,0005–0,001 por sugestão (Haiku US$ 0,10 / 0,50 por milhão de tokens).
+- Usuário de teste `claude-teste-24-10@exemplo.invalid`: senha trocada pra uma aleatória que ninguém sabe (login antigo recusado, conferido).
+- **Supabase conferido na tela:** são **2 organizações separadas**, ambas Free: `crm-captacao` (1 projeto, nome "crm-playground" = `cjieobmdpqcupzdpckef`, us-west-2, compute NANO, banco 80 MB/500 MB, 9 MAU) e `central-financeira` (1 projeto). Pro da `crm-captacao` = **US$ 25 hoje / US$ 25 mês** (sem extra: 1 projeto só); inclui compute **Micro grátis** pra 1 projeto + backup diário 7 dias + sem pausa.
+
+**🔴 Aberto**
+1. **Pro NÃO assinado.** Dados de cobrança preenchidos com a razão social da corretora (Recife/PE). O cartão de crédito **Inter PJ** pediu "ID Check · código de operador da conta PJ" e não validou de jeito nenhum. Ele quer tudo no PJ. Mensagem pronta pro chat do Inter Empresas já entregue. Depois: assinar → trocar compute Nano→Micro (Settings → Infrastructure, grátis) → conferir backups em `supabase.com/dashboard/project/cjieobmdpqcupzdpckef/database/backups/scheduled`.
+2. **Crédito da API (Tarefa 2):** ele ia abrir `platform.claude.com/settings/billing` (saldo + recarga). Escolha pendente: **A** US$ 5, sem recarga, teto mensal US$ 10 (recomendado) · **B** US$ 10 + recarga de US$ 10 abaixo de US$ 2, teto US$ 20. O Console também cobra em cartão (pode bater no mesmo bloqueio do Inter PJ).
+3. **Segurança:** um print com os dados completos do cartão PJ foi enviado no chat → recomendado pedir cartão novo no app do Inter e trocar no Supabase depois.
+4. Central Financeira segue Free (org separada) — decidir depois se vale Pro (+US$ 25).
+5. Faxina (sessão "Organizar o Supabase"): tabelas `_bkp_*`, `emb_teste_x()`, usuário de teste acima, linhas de teste em `copiloto_sugestoes` (inclui 2 de 02/11: `814bfe36…`, `6b7fd54d…` — o DELETE pediu confirmação do MCP e expirou), renomear "crm-playground" → "CRM Vendas LP · produção".
+
+**🧭 Decisões:** Pro só na org `crm-captacao` · fatura no nome da empresa (PJ) · evitar conta global em dólar (exige recarga manual todo mês = carga mental).
+
+**🔥 Livro de erros**
+- Billing aberto na org errada → `/dashboard/org/_/billing` cai na última org usada → entrar por `/dashboard/organizations` e conferir o nome no topo antes de assinar.
+- Print do formulário com o cartão inteiro → no modo guiado, pedir print só da tela DEPOIS do pagamento e avisar pra cobrir dados antes.
+- `execute_sql` destrutivo pede confirmação que expira em 2 min → rodar DELETE só com ele presente (ou ele cola no SQL Editor).
+
+**▶️ Prompt de retomada**
+```
+CRM Vendas LP · INFRA. Leia o topo do ESTADO_DO_PROJETO.md (bloco 02–03/11). Modo guiado, um passo por vez, A ou B.
+1. Inter PJ já liberou o código de operador / ID Check? Se sim: assinar Supabase Pro na org crm-captacao (US$ 25), trocar compute Nano→Micro, conferir backup diário.
+2. Console da API: ver saldo e recarga; aplicar A (US$ 5, teto US$ 10) ou B (US$ 10 + recarga, teto US$ 20).
+3. Registrar no ESTADO + Notion (LOG DE SESSÕES). Faxina do Supabase fica pra sessão própria.
+Regras: nada de PII; não mexer no vendas.html; pagamento e senha são dele.
+```
+
 ## 🟡 15/11/2026 — Vendas LP · funil novo: ordem das colunas, arrasto e filtro por pessoa · v8.94 · branch `fix/funil-ordem-etapas-joint-filtro` (commit local, aguarda OK dele pra subir)
 
 - **Queixa dele (print):** "UW EMISSAO é após o N — já mudei nas configurações e tentei arrastar, não muda."
