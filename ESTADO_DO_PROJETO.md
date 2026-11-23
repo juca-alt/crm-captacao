@@ -2,19 +2,19 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 23/11/2026 — Funil novo · lista estilo Global + foto do WhatsApp · v8.95 · branch `feat/funil-lista-global-fotos` (PR aberto, aguarda OK dele)
+## ✅ 23/11/2026 — Funil novo · lista estilo Global + foto do WhatsApp · **v8.95 NO AR** (PR 348, main `68f0bd3`)
 
 - **Pedido dele (print do Global ao lado do nosso quadro):** "além do meu formato kanban, add esse formato visual que o Seabra tem" + "ele traz fotos dos contatos… quero isso também; a Umbler ajuda nisso".
 - **`LISTA-GLOBAL-V1` (`modulos/funil-unico.js`):** a vista ☰ (antes uma tabela crua) virou lista por etapa: trilho à esquerda com Todos + cada etapa do Funil & Etapas e a contagem; linha com foto/iniciais, nome, telefone ("Sem telefone" quando falta), estrelas + probabilidade, etapa + "Cliente · apólice ativa", recomendante, próximo passo e as colunas que já existiam; cabeçalho ordena (1º clique sobe, 2º desce, 3º volta à ordem do quadro; vazio sempre no fim). Mesmos filtros e mesma busca do Kanban. A vista escolhida fica lembrada no aparelho. **Celular:** trilho horizontal, seletor "Ordenar" (16px) e cada pessoa num cartão, sem rolar de lado; a tabela saiu do conversor genérico (`T_CARTOES_PULAR` ganhou `fu-lt-t`). Vale pra quem já tem o funil novo (melhoria do que já existe).
 - **`FOTO-WA-V1`:** a foto de perfil do WhatsApp vem do sync da Umbler (`umbler_chats.bruto.contact.profilePictureUrl`, link fixo no S3; 413 de 518 conversas têm). Só leitura, sem SQL novo, sem chamada à Umbler; a RLS de `umbler_chats` já limita por dono. Casa pelo telefone (DDD + 8 últimos dígitos). Aparece na lista (com iniciais de reserva), no card do quadro e na ficha nova (nesses dois, só quando existe foto). Cache de 6 h no aparelho. **Gate: `NOVO_SO_MEU['foto-wa']` — só a base dele.** Cobertura estimada no banco: ~107 de 572 contatos de funil (todas as bases) têm conversa com foto.
-- **Verificado:** portão aberto (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 4 autotestes novos; lista, quadro e ficha conferidos em 1280 e 390 com a base de exemplo (0 estouro, alvos ≥44px, campo 16px). **NÃO verificado:** a consulta das fotos com login real (o preview local não loga) — conferir no ar ao publicar.
+- **Verificado:** portão aberto (375/1024/1280 × cheia/vazia, 55 telas, 0 problema); 4 autotestes novos; lista, quadro e ficha conferidos em 1280 e 390 com a base de exemplo (0 estouro, alvos ≥44px, campo 16px). **No ar (23/11, noite):** OK dele no chat ("Pode publicar") → merge do PR 348; `portao.py --servido` bateu (v8.95, hash `477d608c852a`; os dois módulos também idênticos ao local). **Fotos conferidas com o login dele em produção:** a consulta devolveu 370 fotos; na lista, 282 pessoas, 106 com foto, nenhuma imagem quebrada, 15 etapas no trilho, 0 estouro, console sem erro. **Pendente: ele dizer se libera `foto-wa` pra Rebeca/Daniel** (hoje só a base dele).
 - **Não entrou:** filtro por coluna (o Global tem um funil em cada cabeçalho); aqui o recorte é pelo trilho + filtros + busca.
 - **Lição:** o portão rodado no navegador interno do app acusa estouro em `sitplan`, `bc-funil` e `emissao-diaria` também na main (falso positivo do painel). O portão que vale é `python3 scripts/portao.py` no Chrome.
 - **Fila nova (grupo do Global, 23/10–23/11), lançada no Notion "MELHORIAS DO CRM":** mensagens sem resposta no Início · resumo do dia por WhatsApp · agendar envio de mensagem · atalho "Alterar forma de pagamento" + Pix Automático · filtro de RPU e "anos pra quitar" na Carteira · Mudança de Seguro com duas apólices · campanhas (cancelados, Vida e Saúde) · enviar proposta ao LPI / proposta manual em PDF · transcrição preenchendo o InfoClient · simulador de persistência.
 
 ## 🟢 RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS (todas as sessões fechadas em 23/11, num lugar só)
 
-**Estado em 30 segundos:** Vendas LP **v8.94 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `b0afdd817ef4`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
+**Estado em 30 segundos:** Vendas LP **v8.95 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `477d608c852a`; a v8.94 era `b0afdd817ef4`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
 
 **Por que este bloco existe:** em 23/11 cada sessão gravou o próprio fechamento no próprio branch (`docs/estado-2026-11-23`, `claude/wizardly-sagan-bwghr3`, `claude/modest-allen-v64kpu`) e só o dos Anexos chegou à main (PR 346). Aqui estão os quatro juntos. **Regra daqui pra frente:** fechamento de sessão entra na main por PR de docs no mesmo dia; ESTADO parado em branch é ESTADO que a próxima sessão não lê.
 
@@ -32,7 +32,7 @@
 - **Funil:** em `lp_funil_cfg.fu_vi` a etapa `emitida` está rotulada "SitPlan" (prob. 100, 1ª coluna) e "Apólice Emitida" é a `cst_2` (prob. 40). O mapa das telas antigas e a carteira caem em `emitida`. É isso mesmo?
 - **Revisão:** confirma DG Plus opcional como "validado"? Confirma o teto 5×/2× APLICADO na Mudança de Seguro (só a Nova proposta virou aviso)? Corrige o texto dos selos de TM e FI (a "divergência" era base × opcional)?
 - **Revisão:** faltam 4 das 15 cotações de 11/11; Morte Acidental pago em 10 (`ABP`, fator 2,0279) precisa de uma cotação em outra idade.
-- **Liberações** (hoje só na base dele, `NOVO_SO_MEU`): `inicio-dia` ("O seu dia" + 6 números + olho), `etiquetas-gcal`, `forms-neg`, `funil-unico`, `ficha-ux2`. Liberar é palavra dele.
+- **Liberações** (hoje só na base dele, `NOVO_SO_MEU`): `inicio-dia` ("O seu dia" + 6 números + olho), `etiquetas-gcal`, `forms-neg`, `foto-wa` (foto do WhatsApp no funil novo), `funil-unico`, `ficha-ux2`. Liberar é palavra dele.
 - **Fila de melhorias (Notion):** decisões pendentes por item seguem lá (percentuais de dedução e repasse do Comissionamento, escopo do InfoClient, Gabi própria: marcar os 15 min no portal).
 
 ### 3. À mão, com ele
@@ -51,7 +51,7 @@
 ```
 Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
 1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS").
-2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.94 ou mais novo).
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.95 ou mais novo).
 3. Perguntar ao Gustavo o que ele puxa: a fila do Code começa no L2 (A ou B; recomendar A).
 Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat,
 fechamento de sessão entra na main no mesmo dia. Estilo: veredito primeiro, curto, A/B, um passo por vez.
