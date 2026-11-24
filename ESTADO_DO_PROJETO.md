@@ -2,12 +2,24 @@
 
 > ⚠️ **Nota de reconciliação (19/07/2026):** a cópia versionada deste arquivo estava **ausente do repo** (o CLAUDE.md referencia ela, mas não existia commit). Este arquivo recomeça aqui com o snapshot da sessão de hoje. **Cowork:** na próxima passada, reconciliar com a versão oficial do Drive (pasta "CAPTACAO LIFE PLANNER") — o histórico anterior vive lá.
 
-## 🟡 23/11/2026 — Conversas mais compacta (cabeçalho baixo, botões menores) · v8.99 · branch `feat/conversas-compacto` (PR aberto, aguarda OK dele)
+## 🟡 24/11/2026 — Grupo familiar no funil novo (marido e mulher ligados, andam juntos) · v8.100 · branch `feat/grupo-familiar` (PR aberto, aguarda OK dele)
+
+- **Pedido dele (olhando os "possíveis duplicados" por telefone):** "esses contatos não são a mesma pessoa, são segurados diferentes, porém o mesmo grupo familiar, marido e mulher… às vezes um tomador de decisão bate o martelo… deixar linkado no grupo… quando mover, os cards sempre juntinhos… tem cliente que, apesar de casado, toma decisão diferente, então um botãozinho". Na base real os 2 grupos de "duplicados" eram exatamente isso: mesmo telefone, nomes diferentes.
+- **`FAMILIA-V1` (`modulos/funil-unico.js`):** `c.familiaId` liga os cards; cada um segue sendo um negócio/segurado próprio (nada se funde).
+  - **Como ligar:** na vista de duplicados, botão novo "👨‍👩‍👧 Mesma família" (também para de avisar o par); ou marcar 2+ na lista e "👨‍👩‍👧 Família" na barra de selecionados. Desfazer no aviso.
+  - **Selo** "👨‍👩‍👧 com Fulana" na linha da lista e no card do quadro. O menu do selo mostra quem é do grupo (abre a ficha), troca entre **andam juntos** e **cada um decide**, e tira a pessoa do grupo.
+  - **Andam juntos (padrão):** mover um leva quem do grupo estava na MESMA etapa (arrastar, ⇄, →, encerrar com motivo). Quem já estava em outra etapa fica. **Cada um decide** (`familiaSolto`): movem separados; o selo mostra "· separados".
+  - **Lado a lado:** na coluna do quadro e na lista, quem é da mesma família aparece um embaixo do outro (`famAgrupar`).
+- **Gate:** melhoria dentro do funil novo → liberada pra quem já tem o funil novo. Só muda comportamento de quem for ligado à mão.
+- **Verificado:** portão aberto (55 telas × 6), 2 autotestes novos (o teste troca a base e bloqueia `salvar`); no preview em 1280 e 390: ligar 2 pela seleção, selo, mover um e o outro ir junto (terceiro fica), menu, "cada um decide", cards vizinhos no quadro, 0 estouro, alvos 44px. **NÃO verificado:** na base real; sincronização entre aparelhos (campo novo dentro do contato, mesmo caminho dos demais).
+- **Não entrou:** selo de família na ficha; mover junto pelas telas ANTIGAS do funil; papel de cada um (tomador de decisão).
+
+## ✅ 23/11/2026 — Conversas mais compacta (cabeçalho baixo, botões menores) · **v8.99 NO AR** (PR 353, main `87a4cd9`)
 
 - **Pedido dele (print da v8.97 numa janela de ~1160×720):** "ainda com erros, deixa isso mais ajustado à tela e clean, botões menores". No print o cabeçalho da conversa tomava quase metade do painel (botões de 44px em duas linhas + aviso do copiloto + nota "só leitura") e o nome ficava fora de vista.
 - **`CV-WEB-V2` (só no PC; o celular mantém os alvos de 44px):** botões da conversa com 30px numa linha; cabeçalho sem rolagem própria e sem espremer os filhos (era o que escondia o nome); a nota "Só leitura" sai do cabeçalho no PC (a regra continua escrita no topo da tela); a sugestão/erro do copiloto fica numa caixa de até 26% da altura, com rolagem dela. Lista com 34% da largura (250 a 370px), linha em 3 linhas fixas (72px, antes ~115), selos numa linha só. Balão até 76% da largura.
 - **Medido no preview (1163×717, conversas de exemplo):** cabeçalho 116px sem aviso e 158px com o erro do copiloto (antes 228px e mais), linhas de 72px, nenhuma cortada, 0 estouro. No celular (390): alvos 44px, cabeçalho sem espremer.
-- **Verificado:** portão aberto (55 telas × 6), 1 autoteste novo. **NÃO verificado:** com as conversas reais.
+- **Verificado:** portão aberto (55 telas × 6), 1 autoteste novo. **No ar (24/11):** OK dele → merge do PR 353; `portao.py --servido` bateu (v8.99, hash `c86997d54089`). Com as conversas reais (janela 996×717): cabeçalho 168px sem rolagem, botões 30px, linhas de 70–72px, nenhuma cortada, 0 estouro.
 - **Achado à parte (não corrigido):** no print dele o copiloto respondeu "Edge Function returned a non-2xx status code" no ✨ Sugerir resposta. Causa não investigada; o crédito da API segue pendente na lista "à mão".
 
 ## ✅ 23/11/2026 — Baixa das reuniões (Reuniões a finalizar) revisada · **v8.98 NO AR** (PR 352, main `5668e31`)
@@ -55,7 +67,7 @@
 
 ## 🟢 RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS (todas as sessões fechadas em 23/11, num lugar só)
 
-**Estado em 30 segundos:** Vendas LP **v8.98 no ar** (Pages conferido em 23/11 pelo conteúdo servido, hash `6b4c10df6b1a`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
+**Estado em 30 segundos:** Vendas LP **v8.99 no ar** (Pages conferido em 24/11 pelo conteúdo servido, hash `c86997d54089`). Revisão de Proteção com o motor de 11/11 no ar (PR 344). **Nenhum PR de código aberto, nenhum código pendente em branch.** O que sobra é decisão dele ou trabalho que ainda não começou. Os blocos 📌 logo abaixo são o fechamento de cada sessão, com o detalhe.
 
 **Por que este bloco existe:** em 23/11 cada sessão gravou o próprio fechamento no próprio branch (`docs/estado-2026-11-23`, `claude/wizardly-sagan-bwghr3`, `claude/modest-allen-v64kpu`) e só o dos Anexos chegou à main (PR 346). Aqui estão os quatro juntos. **Regra daqui pra frente:** fechamento de sessão entra na main por PR de docs no mesmo dia; ESTADO parado em branch é ESTADO que a próxima sessão não lê.
 
@@ -92,7 +104,7 @@
 ```
 Retomar o CRM Vendas LP (repo juca-alt/crm-captacao).
 1. git fetch e ler o topo do ESTADO_DO_PROJETO.md (bloco "RETOMAR AQUI — 23/11/2026 — PENDÊNCIAS CONSOLIDADAS").
-2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.98 ou mais novo).
+2. Conferir o que está no ar: python3 scripts/portao.py --servido (esperado v8.99 ou mais novo).
 3. Perguntar ao Gustavo o que ele puxa: a fila do Code começa no L2 (A ou B; recomendar A).
 Regras: branch a partir de origin/main, portão verde antes de subir, merge na main só com OK dele no chat,
 fechamento de sessão entra na main no mesmo dia. Estilo: veredito primeiro, curto, A/B, um passo por vez.
