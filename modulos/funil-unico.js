@@ -198,6 +198,7 @@ function fuOrdenar(l){ const o=FU.ordem, ent=c=>{ try{ return (entradaFunil(c).i
     : o==='prob'?(prob(B.i.d.etapa_id)-prob(A.i.d.etapa_id))||String(A.c.nome||'').localeCompare(String(B.c.nome||''),'pt-BR')
     : o==='ag'?String((A.i.prox&&A.i.prox.quando)||'9').localeCompare(String((B.i.prox&&B.i.prox.quando)||'9'))
     : String(ent(B.c)).localeCompare(String(ent(A.c)))); }
+function fuOrdenarFam(l){ return famAgrupar(fuOrdenar(l)); }
 
 /* ── estilo (escopo .fu) ── */
 function fuCss(){ if(document.getElementById('fu-css')) return; const s=document.createElement('style'); s.id='fu-css'; s.textContent=`
@@ -412,6 +413,9 @@ function fuCss(){ if(document.getElementById('fu-css')) return; const s=document
 .fu-meta2 .tel{color:var(--muted);font-variant-numeric:tabular-nums}
 .fu-ft{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .fu-irm{font-size:11px;color:var(--muted)}
+.fu-fam{display:inline-flex;align-items:center;border:1px solid #fbcfe8;background:#fdf2f8;color:#9d174d;border-radius:999px;padding:1px 8px;font-size:11.5px;line-height:1.5;white-space:nowrap;cursor:pointer;font-family:inherit;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.fu-fam.s{background:#fff;border-style:dashed;color:#64748b;border-color:#cbd5e1}.fu-fam:hover{border-color:#9d174d}
+.fu-menu.fu-famm{max-width:min(340px,calc(100vw - 32px))}.fu-menu.fu-famm button{white-space:normal;line-height:1.35}
 .fu-av{margin-left:auto;border:1px dashed #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:8px;font-size:12px;font-weight:600;padding:3px 9px;cursor:pointer;min-height:28px}
 .fu-av:hover{border-style:solid}
 .fu-taxa{font-weight:700;font-size:11.5px}
@@ -518,6 +522,7 @@ button.fu-tg{cursor:pointer;font-family:inherit}.fu-tg.add{border-style:dashed;b
   .fu-lt .c-nome{grid-column:1;grid-row:1}.fu-lt .c-ck{grid-column:2;grid-row:1;width:auto;align-self:start}.fu-ck{width:44px;height:44px}.fu-ck input{width:22px;height:22px}
   .fu-lt tbody tr.sel{border-color:#60a5fa;background:#eff6ff}.fu-lt tr.sel td{background:transparent}
   .fu-tg.add{display:none}.fu-lt .c-ac .m{display:block}.fu-tgs{margin-top:2px}
+  .fu-fam{min-height:44px;padding:0 12px;font-size:12.5px}.fu-menu.fu-famm button{min-height:44px}
   .fu-lt tbody tr.grp{display:block;background:#fffbeb;border-color:#fde68a;margin-top:6px}.fu-lt tr.grp td{background:transparent;border:0;padding:0}.fu-lt tr.grp td>span{display:block;margin:0 0 8px}
   .fu-lt tr.grp .bt{display:flex}.fu-lt tr.grp button{min-height:44px;flex:1 1 auto;font-size:13px}
   .fu-menu.fu-tgm{width:calc(100vw - 32px);max-width:360px}.fu-menu.fu-tgm .fu-tgm-l button,.fu-menu.fu-tgm .fu-tgm-f button,.fu-menu.fu-tgm .fu-tgm-ok{min-height:44px}.fu-tgm-f input{min-height:44px;font-size:16px}
@@ -586,6 +591,7 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
   const tar=leg?tx(()=>{ const t=tarChipCard(c); return mfo?mfoCardTar(c,t):t; }):(i.prox?`<span class="fu-prox">📅 ${esc(dataBR(i.prox.quando))}${i.prox.hora?' '+esc(i.prox.hora):''}${i.prox.tit?' · '+esc(i.prox.tit):''}</span>`:'');
   const pills=leg&&!i.enc?tx(()=>novoOn('card-ta-status')?cardEtapaInfoHtml(c):etStatusChip(c)):(leg&&i.enc&&(c.motivo_perda||c.status)?`<span class="fu-st">✖ ${esc(c.motivo_perda||c.status)}</span>`:'');
   const irm=leg?tx(()=>{ const n=pessoaIrmaos(c).length; return n?`<span class="fu-irm" title="Esta pessoa tem ${n+1} oportunidades nos funis">👤 1 de ${n+1} desta pessoa</span>`:''; }):'';
+  const fam=leg?tx(()=>famChipHtml(c)):'';
   const recs=leg?tx(()=>{ const rp=recsPedidas(c), rc=(c.recs||[]).length; return rp||rc?`<span class="nnrec" title="Recomendações pedidas / coletadas">🤝 ${rc}/${rp||rc}</span>`:''; }):'';
   const px=!i.enc?fuProxCol(fid,i.d.etapa_id):null;
   return `<article class="fu-card${i.semProx?' semprox':''}" draggable="true" data-id="${esc(c.id)}" onclick="fuAbrir('${j}')">
@@ -601,7 +607,7 @@ function cardHtml(x,fid){ const c=x.c,i=x.i, j=esc(jsq(c.id)), bn=c.funil==='bn'
     ${cli?`<div class="fu-cli">${cli}</div>`:''}
     ${st?`<span class="fu-st">${esc(st)}</span>`:''}
     ${bds?`<div class="fu-bds">${bds}</div>`:''}
-    ${temp||recs||irm||px?`<div class="fu-ft" onclick="event.stopPropagation()">${temp}${recs}${irm}${px?`<button type="button" class="fu-av" onclick="fuAvancar('${j}',event)" title="Avançar para ${esc(lbl(px))} — dá pra desfazer">→ ${esc(lbl(px))}</button>`:''}</div>`:''}
+    ${temp||recs||irm||fam||px?`<div class="fu-ft" onclick="event.stopPropagation()">${temp}${recs}${irm}${fam}${px?`<button type="button" class="fu-av" onclick="fuAvancar('${j}',event)" title="Avançar para ${esc(lbl(px))} — dá pra desfazer">→ ${esc(lbl(px))}</button>`:''}</div>`:''}
     <div class="fu-cf" onclick="event.stopPropagation()"><span class="lb">Contato rápido</span>${i.prox?`<button type="button" onclick="fuFeito('${j}')" title="Feito (conclui o próximo passo)" aria-label="Feito">✓</button>`:'<span class="fu-cf-v" aria-hidden="true"></span>'}<button type="button" onclick="fuDelay('${j}')" title="Delay (remarcou)" aria-label="Delay">✕</button><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp">💬</button><button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover de etapa">⇄</button></div>
   </article>`; }
 function fxCardHtml(c,i){ const j=esc(jsq(c.id)), e=c._fx.extra||{}, tel=fuTel(c);
@@ -748,7 +754,8 @@ function tabValor(x,k,fid,ids){ const c=x.c,i=x.i;
   if(k==='cidade') return String(c.cidade||'').toLowerCase();
   if(k==='toca') return tocaLista(c).map(eqNome).join(' ').toLowerCase();
   return ''; }
-function tabOrdenar(l,fid){ const s=FU.ts; if(!s||!TCOLS.some(t=>t[0]===s.k)) return fuOrdenar(l);
+function tabOrdenar(l,fid){ return famAgrupar(tabOrdenar0(l,fid)); }
+function tabOrdenar0(l,fid){ const s=FU.ts; if(!s||!TCOLS.some(t=>t[0]===s.k)) return fuOrdenar(l);
   const ids=cfg(fid).map(e=>e.id), d=s.d<0?-1:1;
   return l.map(x=>[x,tabValor(x,s.k,fid,ids)]).sort((A,B)=>{ const a=A[1], b=B[1], va=a===''||a==null, vb=b===''||b==null;
     if(va||vb) return va&&vb?0:va?1:-1;   /* vazio sempre no fim, subindo ou descendo */
@@ -760,6 +767,38 @@ function estrelasLe(n){ n=Math.max(0,Math.min(5,+n||0)); return `<span class="fu
 function railHtml(fid,vis){ const sel=FU.et[fid]||'';
   return `<nav class="fu-rail" aria-label="Etapas"><button type="button" class="${sel?'':'on'}" onclick="fuEtapaSel('')"><span class="nm">Todos</span><span class="q">${vis.length}</span></button>${cfg(fid).map(e=>{ const n=vis.filter(x=>x.i.d.etapa_id===e.id).length;
     return `<button type="button" class="${sel===e.id?'on':''}${n?'':' z'}" onclick="fuEtapaSel('${esc(jsq(e.id))}')" ${sel===e.id?'aria-current="true"':''}><span class="dot" style="background:${corDe(fid,e.id)}" aria-hidden="true"></span><span class="nm">${esc(lbl(e.id))}</span><span class="q">${n}</span></button>`; }).join('')}</nav>`; }
+/* ═══ FAMILIA-V1 (24/11/2026, palavra dele olhando os "duplicados" por telefone: "não são a mesma pessoa, são segurados diferentes,
+   porém o mesmo grupo familiar, marido e mulher… às vezes um tomador de decisão bate o martelo… deixar linkado no grupo… quando
+   mover, os cards sempre juntinhos… tem cliente que, apesar de casado, toma decisão diferente, então um botãozinho") ═══
+   · c.familiaId liga os cards (cada um continua um negócio/segurado próprio: nada se funde).
+   · Selo 👨‍👩‍👧 no card e na linha; o menu dele mostra quem é do grupo, liga/desliga "andam juntos" e tira alguém.
+   · Andam juntos (padrão): mover um leva os que estavam NA MESMA etapa. Desligado (c.familiaSolto em todos): cada um decide.
+   · Na coluna e na lista, quem é da mesma família aparece um embaixo do outro. */
+const famDe=c=>(c&&c.familiaId)||'';
+function famMembros(c){ const f=famDe(c); return f?(S.contatos||[]).filter(x=>x&&!x.merged_into&&famDe(x)===f):[]; }
+function famJunto(c){ const l=famMembros(c); return l.length>1&&!l.some(x=>x.familiaSolto===true); }
+function famAgrupar(l){ if(!l.some(x=>famDe(x.c))) return l; const out=[], usado=new Set();
+  l.forEach(x=>{ if(usado.has(x)) return; out.push(x); usado.add(x); const f=famDe(x.c); if(f) l.forEach(y=>{ if(!usado.has(y)&&famDe(y.c)===f){ out.push(y); usado.add(y); } }); }); return out; }
+function famVincular(l){ l=(l||[]).filter(selPode); if(l.length<2) return 0; const antigas=new Set(l.map(famDe).filter(Boolean)), fid=[...antigas][0]||('f-'+uid());
+  (S.contatos||[]).forEach(x=>{ if(x&&antigas.has(famDe(x))) x.familiaId=fid; }); l.forEach(c=>{ c.familiaId=fid; });
+  const g=famMembros(l[0]), solto=g.some(x=>x.familiaSolto===true); g.forEach(x=>{ if(solto) x.familiaSolto=true; else delete x.familiaSolto; }); return g.length; }
+const famPn=c=>String((c&&c.nome)||'').trim().split(/\s+/)[0]||'—';
+function famChipHtml(c){ if(!famDe(c)) return ''; const o=famMembros(c).filter(x=>x!==c); if(!o.length) return ''; const jt=famJunto(c);
+  return `<button type="button" class="fu-fam${jt?'':' s'}" onclick="event.stopPropagation();fuFamMenu(event,'${esc(jsq(c.id))}')" title="${jt?'Grupo familiar: andam juntos (mover um leva o outro)':'Grupo familiar: cada um decide (movem separados)'}">👨‍👩‍👧 com ${esc(o.slice(0,2).map(famPn).join(' e '))}${o.length>2?' +'+(o.length-2):''}${jt?'':' · separados'}</button>`; }
+function fuFamMenu(ev,id){ const c=fuAcha(id); if(!c||!famDe(c)) return; const g=famMembros(c), jt=famJunto(c), j=esc(jsq(id));
+  fuMenu(ev,`<div class="mh">Grupo familiar · ${g.length} pessoas</div>${g.map(x=>`<button type="button" onclick="fuFecharMenu();fuAbrir('${esc(jsq(x.id))}')">${x===c?'● ':''}${esc(x.nome||'—')} <span style="color:var(--muted)">· ${esc(lbl(fuDestino(x).etapa_id))}</span></button>`).join('')}
+    <div class="mh">Decisão</div>
+    <button type="button" onclick="fuFamJunto('${j}',${jt?0:1})" aria-pressed="${jt}">${jt?'🔗 Andam juntos: mover um leva o outro. <b>Trocar pra cada um decide</b>':'↔ Cada um decide: movem separados. <b>Trocar pra andam juntos</b>'}</button>
+    <button type="button" onclick="fuFamSair('${j}')">Tirar ${esc(famPn(c))} do grupo</button>`,'fu-famm'); }
+function famSnap(){ const snap=JSON.parse(JSON.stringify(S.contatos)); return ()=>{ S.contatos=snap; salvar(); fuRepinta(); toast('Desfeito',true); }; }
+function fuFamJunto(id,on){ fuFecharMenu(); const c=fuAcha(id); if(!c) return; famMembros(c).forEach(x=>{ if(on) delete x.familiaSolto; else x.familiaSolto=true; }); salvar(); fuRepinta();
+  toast(on?'Família: andam juntos (mover um leva o outro)':'Família: cada um decide (movem separados)',true); }
+function fuFamSair(id){ fuFecharMenu(); const c=fuAcha(id); if(!c||!famDe(c)) return; const des=famSnap(), resto=famMembros(c).filter(x=>x!==c);
+  delete c.familiaId; delete c.familiaSolto; if(resto.length===1){ delete resto[0].familiaId; delete resto[0].familiaSolto; }
+  salvar(); fuRepinta(); toastDesfazer(`${famPn(c)} saiu do grupo familiar`,des); }
+function fuFamSel(){ const l=selIds().map(fuAcha).filter(selPode); if(l.length<2){ toast('Marque pelo menos duas pessoas pra ligar como família',false); return; }
+  const des=famSnap(), n=famVincular(l); FU.sel={}; salvar(); fuRepinta(); toastDesfazer(`Grupo familiar com ${n} pessoas: ${l.map(famPn).join(', ')}`,des); }
+
 /* ═══ TAGS-LISTA-V1 · UNIR-LISTA-V1 · DUP-LISTA-V1 (23/11/2026, pedido dele olhando a lista nova: "já nessa tela é bom eu poder
    add e editar tags" + "selecionar negócios pra unir e ver duplicados, ajuda a limpeza") ═══
    Tags: texto livre gravado em c.tags ("a, b" — o mesmo campo que a busca e a planilha já liam); ＋ na linha abre o editor.
@@ -794,7 +833,7 @@ function fuSel(id,on){ if(on) FU.sel[String(id)]=1; else delete FU.sel[String(id
 function fuSelTodos(on){ (FU._selVis||[]).forEach(id=>{ if(on) FU.sel[id]=1; else delete FU.sel[id]; }); render(); }
 function fuSelLimpar(){ FU.sel={}; render(); }
 function selBarHtml(){ const n=selIds().length; if(!n) return '';
-  return `<div class="fu-selb" role="region" aria-label="Negócios selecionados"><b>${n} ${n===1?'selecionado':'selecionados'}</b><button type="button" class="p" onclick="fuUnirAbrir()" ${n<2?'disabled title="Marque pelo menos dois pra unir"':''}>🔗 Unir${n>1?' os '+n:''}</button><button type="button" onclick="fuTagMenu(event,'*')">🏷 Tag</button><button type="button" onclick="fuSelLimpar()">✕ Limpar</button></div>`; }
+  return `<div class="fu-selb" role="region" aria-label="Negócios selecionados"><b>${n} ${n===1?'selecionado':'selecionados'}</b><button type="button" class="p" onclick="fuUnirAbrir()" ${n<2?'disabled title="Marque pelo menos dois pra unir"':''}>🔗 Unir${n>1?' os '+n:''}</button><button type="button" onclick="fuFamSel()" ${n<2?'disabled title="Marque pelo menos dois"':'title="Segurados diferentes do mesmo grupo familiar (marido e mulher, pais e filhos)"'}>👨‍👩‍👧 Família</button><button type="button" onclick="fuTagMenu(event,'*')">🏷 Tag</button><button type="button" onclick="fuSelLimpar()">✕ Limpar</button></div>`; }
 /* fusão pura: a do app (dupFundir: base = o mais antigo, listas unidas, conflito vira nota) + campo vazio preenchido pelo outro + tags somadas */
 function fuFundir(a,b){ const r=dupFundir(a,b), base=String(r.id)===String(a.id)?a:b, outro=base===a?b:a, vz=v=>v==null||v===''||v==='—'||(Array.isArray(v)&&!v.length);
   Object.keys(outro).forEach(k=>{ if(k==='id'||k==='tags'||k[0]==='_') return; if(vz(r[k])&&!vz(outro[k])) r[k]=outro[k]; });
@@ -826,15 +865,15 @@ function dupG(fid){ try{ return dupGrupos(fuPopulacao(fid).filter(selPode)); }ca
 function fuDupVer(on){ FU.dup=!!on; render(); }
 function fuDupAcao(gi,k){ const g=(FU._dupG||[])[gi]; if(!g||g.length<2) return; if(k==='unir') return fuUnirAbrir(gi);
   const snap=JSON.parse(JSON.stringify(S.contatos)), des=()=>{ S.contatos=snap; salvar(); render(); toast('Desfeito',true); };
-  if(k==='pessoa') pessoaVincular(g); dupSilenciar(g); salvar(); render();
-  toastDesfazer(k==='pessoa'?`${String(g[0].nome||'').trim().split(/\s+/)[0]}: ${g.length} negócios ligados à mesma pessoa`:'Não aviso mais sobre este par',des); }
+  if(k==='pessoa') pessoaVincular(g); if(k==='familia') famVincular(g); dupSilenciar(g); salvar(); render();
+  toastDesfazer(k==='pessoa'?`${String(g[0].nome||'').trim().split(/\s+/)[0]}: ${g.length} negócios ligados à mesma pessoa`:k==='familia'?`Grupo familiar: ${g.map(famPn).join(' e ')}`:'Não aviso mais sobre este par',des); }
 function tabelaHtml(fid,vis){ if(FU.et[fid]&&!etapa(fid,FU.et[fid])) FU.et[fid]='';
   const G=dupG(fid); FU._dupG=G; if(!G.length) FU.dup=false; const dup=FU.dup, marc=new Set(selIds());
   const sel=FU.et[fid]||'', l=dup?[]:tabOrdenar(sel?vis.filter(x=>x.i.d.etapa_id===sel):vis,fid), s=FU.ts, vz=v=>v&&!/^[—\-\s]+$/.test(String(v))?esc(String(v)):'—';
   const th=(k,r,x)=>{ const on=s&&s.k===k; return `<th${x?' class="x"':''}${on?` aria-sort="${s.d>0?'ascending':'descending'}"`:''}><button type="button" class="fu-th${on?' on':''}" onclick="fuTabOrd('${k}')" title="Ordenar por ${esc(r)}">${esc(r)} <span aria-hidden="true">${on?(s.d>0?'↑':'↓'):'↕'}</span></button></th>`; };
   const lin=({c,i})=>{ const j=esc(jsq(c.id)), tel=fuTel(c), fx=c.funil==='fx', pj=!fx&&c.funil!=='bn'&&!!tx(()=>ehEmpresa(c)), on=marc.has(String(c.id)), tg=tagsDe(c), tp=tagPode(c);
     const px=i.prox?`📅 ${esc(dataBR(i.prox.quando))}${i.prox.hora?' '+esc(i.prox.hora):''}${i.prox.tit?' · '+esc(i.prox.tit):''}`:(i.semProx?'<span class="fu-avc">⚠ Sem próx. passo</span>':'—');
-    const tgH=(tg.length||tp)?`<span class="fu-tgs" onclick="event.stopPropagation()">${tg.map(t=>`<span class="fu-tg">${esc(t)}</span>`).join('')}${tp?`<button type="button" class="fu-tg add" onclick="fuTagMenu(event,'${j}')" title="Adicionar ou editar tags" aria-label="Tags de ${esc(c.nome||'')}">${tg.length?'✎':'＋ tag'}</button>`:''}</span>`:'';
+    const fm=famChipHtml(c), tgH=(tg.length||tp||fm)?`<span class="fu-tgs" onclick="event.stopPropagation()">${fm}${tg.map(t=>`<span class="fu-tg">${esc(t)}</span>`).join('')}${tp?`<button type="button" class="fu-tg add" onclick="fuTagMenu(event,'${j}')" title="Adicionar ou editar tags" aria-label="Tags de ${esc(c.nome||'')}">${tg.length?'✎':'＋ tag'}</button>`:''}</span>`:'';
     return `<tr onclick="fuAbrir('${j}')"${on?' class="sel"':''}>
       <td class="c-ck" onclick="event.stopPropagation()">${selPode(c)?`<label class="fu-ck"><input type="checkbox" ${on?'checked':''} onchange="fuSel('${j}',this.checked)" aria-label="Selecionar ${esc(c.nome||'')}"></label>`:''}</td>
       <td class="c-nome"><div class="fu-pes">${avatarHtml(c)}<div class="tx"><button type="button" class="nm" onclick="event.stopPropagation();fuAbrir('${j}')">${pj?'🏢 ':''}${esc(c.nome||'—')}</button><span class="tel">${tel?'☏ '+esc(tx(()=>telBR(tel))||tel):'<i>Sem telefone</i>'}</span>${tgH}</div></div></td>
@@ -847,7 +886,7 @@ function tabelaHtml(fid,vis){ if(FU.et[fid]&&!etapa(fid,FU.et[fid])) FU.et[fid]=
       <td class="x">${c.toca||c.tocas?esc(tocaLista(c).map(eqNome).join(' + '))||'—':'—'}</td>
       <td class="x">${c.mercado?esc(c.mercado):'—'}</td><td class="x">${c.sitplan?esc(dataBR(String(c.sitplan).slice(0,10))):'—'}</td><td class="x obs">${vz(String(c.notas||'').slice(0,60))}</td>
       <td class="c-ac" onclick="event.stopPropagation()"><button type="button" onclick="fuLigar(event,'${j}')" title="Ligar" aria-label="Ligar para ${esc(c.nome||'')}">☏</button><button type="button" onclick="fuZap(event,'${j}')" title="WhatsApp" aria-label="WhatsApp de ${esc(c.nome||'')}">💬</button>${fx?'':`<button type="button" onclick="fuMoverMenu(event,'${j}')" title="Mover de etapa" aria-label="Mover ${esc(c.nome||'')} de etapa">⇄</button>`}${tp?`<button type="button" class="m" onclick="fuTagMenu(event,'${j}')" title="Tags" aria-label="Tags de ${esc(c.nome||'')}">🏷</button>`:''}</td></tr>`; };
-  const grp=(g,gi)=>`<tr class="grp"><td colspan="15"><span>${g.length} cards com ${tx(()=>telKey(g[0].telefone))?'o mesmo telefone':'o mesmo nome'}</span><span class="bt"><button type="button" class="p" onclick="fuDupAcao(${gi},'unir')" title="É o mesmo negócio cadastrado mais de uma vez">🔗 Unir</button><button type="button" onclick="fuDupAcao(${gi},'pessoa')" title="Mesma pessoa, negócios diferentes: passam a viver ligados">👤 Mesma pessoa, negócios diferentes</button><button type="button" onclick="fuDupAcao(${gi},'nao')" title="Xará ou telefone compartilhado: não avisar mais">Não é a mesma pessoa</button></span></td></tr>`+g.map(c=>lin({c,i:fuInfo(c,fid)})).join('');
+  const grp=(g,gi)=>`<tr class="grp"><td colspan="15"><span>${g.length} cards com ${tx(()=>telKey(g[0].telefone))?'o mesmo telefone':'o mesmo nome'}</span><span class="bt"><button type="button" class="p" onclick="fuDupAcao(${gi},'unir')" title="É o mesmo negócio cadastrado mais de uma vez">🔗 Unir</button><button type="button" onclick="fuDupAcao(${gi},'familia')" title="Segurados diferentes do mesmo grupo familiar (marido e mulher, pais e filhos): ficam ligados e andam juntos">👨‍👩‍👧 Mesma família</button><button type="button" onclick="fuDupAcao(${gi},'pessoa')" title="Mesma pessoa, negócios diferentes: passam a viver ligados">👤 Mesma pessoa, negócios diferentes</button><button type="button" onclick="fuDupAcao(${gi},'nao')" title="Xará ou telefone compartilhado: não avisar mais">Não é a mesma pessoa</button></span></td></tr>`+g.map(c=>lin({c,i:fuInfo(c,fid)})).join('');
   const linhas=dup?G.map(grp).join(''):l.map(lin).join('');
   const eleg=(dup?[].concat(...G):l.map(x=>x.c)).filter(selPode).map(c=>String(c.id)); FU._selVis=eleg; const todos=eleg.length>0&&eleg.every(id=>marc.has(id));
   const nDup=G.reduce((a,g)=>a+g.length,0);
@@ -871,7 +910,7 @@ function viewFunilNovo(fid){ fuCss(); if(fid) FU.fid=fid; fid=FU.fid;
   let body;
   if(FU.modo==='tabela') body=tabelaHtml(fid,vis);
   else body=`<div class="fu-tabs">${cols.map(id=>`<button type="button" class="${FU.tab[fid]===id?'on':''}" onclick="fuTab('${esc(jsq(id))}')">${esc(lbl(id))} · ${vis.filter(x=>x.i.d.etapa_id===id).length}</button>`).join('')}</div>
-    <div class="fu-board" id="fu-board">${cols.map(id=>colHtml(fid,id,fuOrdenar(vis.filter(x=>x.i.d.etapa_id===id)))).join('')}${adm?'<button type="button" class="fu-nova-col" onclick="fuEtapaNova()">＋ Nova etapa</button>':''}</div>`;
+    <div class="fu-board" id="fu-board">${cols.map(id=>colHtml(fid,id,fuOrdenarFam(vis.filter(x=>x.i.d.etapa_id===id)))).join('')}${adm?'<button type="button" class="fu-nova-col" onclick="fuEtapaNova()">＋ Nova etapa</button>':''}</div>`;
   const rol=fuRolGuardar(fid);
   $('#main').innerHTML=`<div class="fu">${topoHtml()}${barraHtml()}${filtroBarHtml(lista)}<div class="fu-qd">${busca}${body}</div></div>`;
   if(FU.modo==='kanban'){ fuWire(); fuAltura(); fuRolRepor(rol); } }
@@ -927,7 +966,7 @@ function fuOrdInserir(fid,X,c,antes){ const pop=fuOrdenar(fuLista(fid).filter(x=
   let k=antes?pop.findIndex(x=>String(x.id)===String(antes)):-1; if(k<0) k=pop.length; pop.splice(k,0,c); pop.forEach((x,n)=>{ x.fu_ord=n; }); }
 
 /* ── mover (com sincronia pro funil antigo) ── */
-function fuMover(id,X,motivo,quieto){ const c=fuAcha(id); if(!c) return; if(c.funil==='fx'){ toast('Crie a ficha primeiro (＋ Criar ficha no card)',false); return; } const fid=fuDestino(c).funil_id; if(!etapa(fid,X)) return;   /* o funil é o do card (a ficha em painel abre negócio do outro funil) */
+function fuMover(id,X,motivo,quieto,_fam){ const c=fuAcha(id); if(!c) return; if(c.funil==='fx'){ toast('Crie a ficha primeiro (＋ Criar ficha no card)',false); return; } const fid=fuDestino(c).funil_id; if(!etapa(fid,X)) return;   /* o funil é o do card (a ficha em painel abre negócio do outro funil) */
   const antes=fuDestino(c).etapa_id; if(antes===X) return;
   if(ehEnc(fid,X)&&!motivo){ fuMotivoAbrir(id,X); return; }
   const nome=String(c.nome||'').split(' ')[0]||'Card';
@@ -943,6 +982,9 @@ function fuMover(id,X,motivo,quieto){ const c=fuAcha(id); if(!c) return; if(c.fu
   if(quieto){}
   else if(X===CLIENTE_COL[fid]&&!fuEhCliente(c)) toast(`${nome}: não achei apólice ativa na carteira — vai como emitida manual`,false);
   else toast(`${nome}: ${lbl(antes)} → ${lbl(X)}${leg?'':' (só no funil novo: o antigo não tem essa etapa)'}`,true);
+  /* FAMILIA-V1: andam juntos → quem do grupo estava na MESMA etapa vai junto (quem já estava em outra fica onde está) */
+  if(!_fam&&famJunto(c)){ const vao=famMembros(c).filter(x=>x!==c&&fuDestino(x).funil_id===fid&&fuDestino(x).etapa_id===antes);
+    vao.forEach(x=>fuMover(x.id,X,motivo||'',true,true)); if(vao.length) toast(`Família junto: ${vao.map(famPn).join(' e ')} também → ${lbl(X)}`,true); }
   salvar(); fuRepinta(); }
 /* redesenha o quadro e, se a ficha em painel estiver aberta, ela também */
 function fuRepinta(){ try{ render(); }catch(_){} if(FU.pan) fuPainelRender();
@@ -1458,6 +1500,24 @@ function fuSelfTests(ok){
     ok('FOTO-WA-V1: a foto casa pelo telefone (com ou sem 55 e 9º dígito), só link https da Amazon entra, e sem foto ficam as iniciais (no card do quadro, nada)',
       !erro&&telChave('+55 (81) 99999-0001')==='8199990001'&&telChave('8199990001')==='8199990001'&&telChave('123')===''&&/<img src="https:\/\/exemplo-wamedia\.s3\.amazonaws\.com\/a\/b\/media\.jpg"/.test(av)&&/onerror="this\.remove\(\)"/.test(av)&&/^<span class="fu-foto"[^>]*>AZ<\/span>\|\|1$/.test(av0)&&!fotoUrlOk('http://x.s3.amazonaws.com/a')&&!fotoUrlOk('https://evil.example/a.jpg'));
     ok('FOTO-WA-V1: nasce só na base dele (novoOn foto-wa) — sem a chave, nenhuma foto é buscada nem desenhada', /fotoOn\(\)/.test(String(fotoCarregar).slice(0,80))&&/fotoOn\(\)/.test(String(fotoDe).slice(0,60))); }
+  { /* FAMILIA-V1 */
+    let erro='', n=0, chip='', chipS='', ord='', movA='', movB='', movC='', movS='', hd=''; const _sc=S.contatos, _fid=FU.fid, _sel=FU.sel, _dup=FU.dup, lp=S.activeUser, _t=W.toast, _r=W.render, _sv=W.salvar;
+    try{ W.toast=()=>{}; W.render=()=>{}; W.salvar=()=>{};   /* base trocada pela de teste: NADA pode gravar */
+      const mk=(id,nome,et)=>({id,nome,funil:'nn',etapa:et,telefone:'81999990077',criadoEm:'2026-01-10',lp,interacoes:[],tarefas:[],recs:[],eventos:[],planos:[]});
+      const a=mk('fa1','Fulano de Tal','TA'), b=mk('fa2','Beltrana de Tal','TA'), c=mk('fa3','Sicrano Souza','TA'), d=mk('fa4','Filho de Tal','P/C');
+      S.contatos=[a,c,b,d]; FU.fid='vi'; FU.sel={}; FU.dup=true;
+      hd=tabelaHtml('vi',S.contatos.map(x=>({c:x,i:fuInfo(x,'vi')})));
+      n=famVincular([a,b,d]); chip=famChipHtml(a);
+      ord=famAgrupar([a,c,b].map(x=>({c:x,i:fuInfo(x,'vi')}))).map(x=>x.c.id).join(',');
+      const X=fuDestino({funil:'nn',etapa:'OI/FF'}).etapa_id; fuMover('fa1',X);
+      movA=fuDestino(a).etapa_id; movB=fuDestino(b).etapa_id; movC=fuDestino(c).etapa_id+'|'+fuDestino(d).etapa_id;
+      famMembros(a).forEach(x=>{ x.familiaSolto=true; }); chipS=famChipHtml(a); const Y=fuDestino({funil:'nn',etapa:'P/C'}).etapa_id; fuMover('fa1',Y); movS=fuDestino(a).etapa_id+'|'+fuDestino(b).etapa_id+'|'+X+'|'+Y;
+    }catch(e){ erro=String(e&&e.message||e); } finally{ S.contatos=_sc; FU.fid=_fid; FU.sel=_sel; FU.dup=_dup; FU._dupG=[]; FU._selVis=[]; W.toast=_t; W.render=_r; W.salvar=_sv; }
+    const pm=movS.split('|');
+    ok('FAMILIA-V1: segurados diferentes viram grupo familiar (nada se funde), o selo diz com quem, e na lista ficam um embaixo do outro; os "duplicados" por telefone oferecem "Mesma família"'+(erro?' — '+erro:''),
+      !erro&&n===3&&/class="fu-fam"/.test(chip)&&/com Beltrana e Filho/.test(chip)&&ord==='fa1,fa2,fa3'&&/fuDupAcao\(0,'familia'\)/.test(hd)&&/fuFamSel\(\)/.test(String(selBarHtml)));
+    ok('FAMILIA-V1: andam juntos = mover um leva quem estava na MESMA etapa (quem estava em outra, e quem não é do grupo, fica); "cada um decide" desliga isso',
+      !erro&&movA===movB&&movA!==movC.split('|')[0]&&movC.split('|')[1]!==movA&&/separados/.test(chipS)&&pm[0]===pm[3]&&pm[1]===pm[2]); }
   { /* TAGS-LISTA-V1 · UNIR-LISTA-V1 · DUP-LISTA-V1 */
     let erro='', r=null, ht='', hb='', hd='', hm='', tg=[]; const _sel=FU.sel, _dup=FU.dup, _sc=S.contatos, _fid=FU.fid, lp=S.activeUser;
     try{ tg=tagsDe({tags:' VIP, médico ;vip,, — ,a"b'});
@@ -1492,5 +1552,5 @@ Object.assign(W,{fuEstrela,fuAnceVoltar,fuAnceCrit,fuInfoPop,fuAgendarModal,fuAg
 Object.assign(W,{fuStarsHtml:starsHtml,fuMfoBlocosHtml:mfoBlocos,fuCss,fuModal,fuColsDe:colsDe,fuColMenu,fuColLado,fuColPara,fuTocaOutro,fuTocaOutroOk,fuColEsconder,fuEtapaNova,fuEtapaCriar,fuEtapaRenomear,fuEtapaRenOk,fuEtapaCor,fuEtapaCorOk,fuSalvoAplicar,fuSalvoApagar,fuSalvoSalvar,fuFeito,fuOrdemMenu,fuSoltar});
 Object.assign(W,{fuTocaHtml:tocaHtml,fuCicloHtml:cicloHtml,fuInfo,fuTocaMenu,fuToca,fuTocaF,fxCriarFicha,fxCarregar,FX_STATE:FX,fuAvancar,fuCiclo,fuTaxas,viewFunilNovo,fuSincLegado,fuSelfTests,fuPrefsSubir,fuPrefsAplicar,fuDestino,fuVoltaLegado,fuPopulacao,
   fuAbrir,fuMover,fuMotivoOk,fuMoverMenu,fuLigar,fuZap,fuRegistrar,fuDelay,fuFiltrosAbrir,fuColunas,fuColVer,fuColMover,fuColPadrao,fuMais,fuDesempenho,fuExportar,
-  fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca,fuTabOrd,fuTabOrdSel,fuEtapaSel,fuTagMenu,fuTagPor,fuTagNova,fuSel,fuSelTodos,fuSelLimpar,fuUnirAbrir,fuUnirOk,fuDupVer,fuDupAcao,fuFundir,fuTagsDe:tagsDe,fuAvatarHtml:avatarHtml,fuFotoCarregar:fotoCarregar,FU_FOTO:FOTO});
+  fuFechar,fuFecharMenu,fuFunil,fuFiltro,fuTirar,fuLimpar,fuOrigem,fuDono,fuLinha,fuCong,fuModo,fuOrdem,fuEnc,fuTab,fuBusca,fuTabOrd,fuTabOrdSel,fuEtapaSel,fuFamMenu,fuFamJunto,fuFamSair,fuFamSel,fuTagMenu,fuTagPor,fuTagNova,fuSel,fuSelTodos,fuSelLimpar,fuUnirAbrir,fuUnirOk,fuDupVer,fuDupAcao,fuFundir,fuTagsDe:tagsDe,fuAvatarHtml:avatarHtml,fuFotoCarregar:fotoCarregar,FU_FOTO:FOTO});
 })();
